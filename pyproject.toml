@@ -52,6 +52,14 @@ select = [
 
 [tool.mypy]
 python_version = "3.12"
+# The plan and the lint target both promise *strict* mypy. The enumerated flags
+# below are the arsenal canonical set, but they are a subset of `strict`, which
+# also brings disallow_any_generics, disallow_untyped_calls,
+# disallow_subclassing_any, no_implicit_reexport and strict_equality. Advertising
+# strict while configuring less is the kind of gap the gate exists to catch, so
+# the preset is enabled and the explicit flags are kept as documentation of the
+# floor we will not drop below.
+strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -61,10 +69,16 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 show_error_codes = true
-# tools/ is repo automation, not shipped code, and drives arsenal scripts that
-# are themselves untyped. Excluded from the package typecheck rather than
-# weakening the flags for src/.
-exclude = ["^tools/"]
+# Same exclusions as ruff, for the same reason: these trees are regenerated
+# (`make update-skills`, `init.py`) so a fix here is reverted, and they are
+# upstream's code to type. tools/ is repo automation rather than shipped code.
+# Excluded rather than weakening the flags for src/, which is what strict is for.
+exclude = [
+    "^tools/",
+    "^\\.claude/skills/",
+    "^claude-arsenal/bin/",
+    "^claude-arsenal/scripts/",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

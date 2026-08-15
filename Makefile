@@ -21,20 +21,25 @@ sync:  ## install the project and its dev dependencies
 build:  ## build the wheel and sdist
 	uv build
 
+# `--extra dev` on every target that needs a dev tool, not just `sync`.
+# Without it `uv run ruff` finds no ruff in the project environment and falls
+# through to whatever is on PATH — which silently works on a machine that has
+# one installed globally and fails on a clean one. The flag makes each target
+# self-contained from a fresh clone.
 lint:  ## ruff check + strict mypy
-	uv run ruff check .
-	uv run mypy .
+	uv run --extra dev ruff check .
+	uv run --extra dev mypy .
 
 format:  ## ruff format + autofix
-	uv run ruff format .
-	uv run ruff check --fix .
+	uv run --extra dev ruff format .
+	uv run --extra dev ruff check --fix .
 
 test:  ## run the test suite
-	uv run pytest
+	uv run --extra dev pytest
 
 gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 	@mkdir -p status/evidence
-	@if $(MAKE) --no-print-directory lint >/dev/null 2>&1; then rc=0; else rc=$$?; fi; \
+	@if $(MAKE) --no-print-directory lint; then rc=0; else rc=$$?; fi; \
 	printf '{\n  "lint_typecheck_exit_code": %s\n}\n' "$$rc" > status/evidence/T1.json; \
 	echo "lint_typecheck_exit_code = $$rc  -> status/evidence/T1.json"; \
 	exit $$rc
