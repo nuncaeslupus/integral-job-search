@@ -9,6 +9,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Only `tools/collect_ads.py` needs these. Reading and validating the committed
+# corpus (`jobsearch.corpus`) is stdlib-only, so the T4b gate runs without them.
+collect = [
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "py3langid>=0.3",
+    "requests>=2.32",
+]
 dev = [
     "mypy>=1.11",
     "pytest>=8.3",
