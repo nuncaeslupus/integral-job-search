@@ -28,7 +28,9 @@ def load_ads(path: Path = DEFAULT_PATH) -> list[dict[str, Any]]:
             continue
         ad = json.loads(line)
         url = str(ad.get("source_url") or "")
-        if not url.startswith(("http://", "https://")):
+        # https only: every board the collector reads serves https, and the acceptance
+        # test asserts it — accepting http here would let a corpus load but fail the gate.
+        if not url.startswith("https://"):
             raise ValueError(f"{path}:{lineno} ad {ad.get('id')!r} has no resolvable source_url")
         if not str(ad.get("text") or "").strip():
             raise ValueError(f"{path}:{lineno} ad {ad.get('id')!r} has no text")
