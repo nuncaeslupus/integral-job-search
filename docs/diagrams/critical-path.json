@@ -1,0 +1,30 @@
+{
+  "$schema": "https://drawspec.dev/schema/drawspec-v1.schema.json",
+  "version": 1,
+  "kind": "flow",
+  "title": "The path to first signal",
+  "description": "The v1 critical path. Collecting ads depends on nothing and starts immediately; scaffolding through the corpus harness is the only thing standing between those ads and the human labelling task that gates both measurable extraction and elicitation.",
+  "caption": "Heavy arrows are the critical path. T5 needs the candidate personally.",
+  "nodes": [
+    { "id": "collect", "text": "T4b Collect 100 raw ads\nES / EN / CA, no labels", "role": "start" },
+    { "id": "scaffold", "text": "T1 Scaffold\nuv, ruff, mypy, pytest", "role": "start" },
+    { "id": "schema", "text": "T2 Dimension schema\n**the shared vocabulary**", "role": "emphasis" },
+    { "id": "model", "text": "T3 Dimension model v0\n20-25 dimensions", "role": "emphasis" },
+    { "id": "harness", "text": "T4 Corpus harness\nlabelling CLI, split", "role": "emphasis" },
+    { "id": "label", "text": "T5 Label the corpus\n**[HUMAN] — the bottleneck**", "role": "decision" },
+    { "id": "extract", "text": "T15 Extraction\nmacro-F1 >= 0.75", "role": "terminal" },
+    { "id": "react", "text": "T9 Reaction elicitation\noverlap == 0", "role": "terminal" },
+    { "id": "why", "text": "Everything numeric queues behind T5. Only the labelling needs judgement — collection does not, which is why it is split out and starts first.", "role": "note" }
+  ],
+  "edges": [
+    { "from": "scaffold", "to": "schema", "role": "strong" },
+    { "from": "schema", "to": "model", "role": "strong" },
+    { "from": "schema", "to": "harness", "role": "strong" },
+    { "from": "model", "to": "label", "role": "strong" },
+    { "from": "harness", "to": "label", "role": "strong" },
+    { "from": "collect", "to": "label", "label": "starts now, no deps" },
+    { "from": "label", "to": "extract", "role": "strong" },
+    { "from": "label", "to": "react", "role": "strong" },
+    { "from": "label", "to": "why", "role": "aside" }
+  ]
+}

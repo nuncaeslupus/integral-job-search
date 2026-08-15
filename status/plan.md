@@ -102,7 +102,8 @@ completed by an agent worker. Tag them `human` when seeding so a worker never cl
 | T2 | Dimension schema (Pydantic) + loader + validator, incl. `methods_ref` anchor resolution | ONTOLOGY | M | T1 | `dimension_schema_violations == 0` | `test_dimension_missing_methods_ref_is_rejected` in `tests/test_dimension_model.py` — a dimension without `methods_ref` fails validation; `test_dimension_duplicate_id_is_rejected` — two files sharing an `id` fail to load |
 | T3 | Dimension model v0: 20–25 dimensions with ES/EN/CA cues and elicitation questions | ONTOLOGY | L | T2 | `dimension_extractor_coverage >= 0.90` | `test_every_dimension_has_cues_in_all_three_languages` in `tests/test_dimension_content.py` — each dimension carries ≥1 cue per language |
 | T4 | Corpus harness: ad store, labelling CLI, split assignment, self-agreement report | ONTOLOGY | M | T2 | `corpus_harness_roundtrip_loss == 0` | `test_corpus_roundtrip_preserves_text_and_offsets` in `tests/test_corpus.py` — writing then reading an ad preserves text byte-for-byte and label offsets |
-| T5 | **[HUMAN]** Label corpus v0: ≥100 ads (≈60 ES, 25 EN, 15 CA), split-assigned | ONTOLOGY | L | T3, T4 | `corpus_size >= 100` | `test_corpus_meets_size_and_language_mix` in `tests/test_corpus_content.py` — corpus has ≥100 ads and the language mix is within ±10% of target |
+| T4b | Collect ≥100 raw ads (≈60 ES, 25 EN, 15 CA) for remote programming roles — text + source URL only, no labels | ONTOLOGY | M | — | `raw_ad_count >= 100` | `test_raw_corpus_meets_size_and_language_mix` in `tests/test_corpus_raw.py` — ≥100 raw ads and language mix within ±10% of target |
+| T5 | **[HUMAN]** Label the collected ads against the dimension model; assign elicitation/evaluation split | ONTOLOGY | L | T3, T4, T4b | `corpus_size >= 100` | `test_corpus_meets_size_and_language_mix` in `tests/test_corpus_content.py` — corpus has ≥100 labelled ads and the language mix is within ±10% of target |
 | T6 | Profile store: append-only `evidence.jsonl` + `rebuild` to byte-identical derived files; two-profile fixture | PROFILE | M | T2 | `profile_rebuild_deterministic == 1` | `test_rebuild_twice_produces_identical_bytes` in `tests/test_profile_store.py` — two rebuilds from one log are byte-identical; `test_second_profile_does_not_leak_into_first` — writing profile B leaves A unchanged |
 | T7 | Question bank generation from the dimension model | PROFILE | M | T3, T6 | `question_dimension_coverage == 1.0` | `test_every_generated_question_maps_to_a_dimension` in `tests/test_question_bank.py` — each generated question carries ≥1 resolvable dimension ID |
 | T8 | Free-text answer extraction → dimension values + story-bank episodes | PROFILE | L | T7 | `story_dimension_linkage == 1.0` | `test_every_episode_links_to_a_dimension` in `tests/test_elicit_extract.py` — no episode is stored without ≥1 dimension ID; `test_episode_defaults_to_private_disclosure` — a new episode is `disclosure: private` |
@@ -123,8 +124,12 @@ completed by an agent worker. Tag them `human` when seeding so a worker never cl
 
 **Status legend**: ☐ not started · ◐ in progress · ☑ merged
 
-**Merge order**: T1 → T2 → {T3, T4, T6, T11} in parallel → T5 (human, start early, blocks
-T9/T15) → the rest by dependency. T22 last, since it audits everything before it.
+**Merge order**: T4b starts immediately — it depends on nothing and takes most of the
+wall-clock time of the corpus. In parallel, T1 → T2 → {T3, T4} is the **critical path**, not
+because those tasks are hard but because they are the only thing standing between the
+collected ads and T5, the human bottleneck that gates both `extraction_macro_f1` and
+`elicitation_eval_overlap`. {T6, T11} fan out alongside. Everything else can wait without
+costing calendar time. T22 last, since it audits everything before it.
 
 **Branch pattern**: `T<N>-short-description` from the default branch.
 
@@ -140,24 +145,28 @@ done until its row is complete and the measured value meets the gate.
 ### Dependency graph
 
 ```
-T1 ─┬─> T2 ─┬─> T3 ─┬────────────> T5* ─┬─> T9 ──> T10 ─┐
-    │       │       │                   │               │
-    │       ├─> T4 ─┘                   │               │
-    │       │                           │               │
-    │       ├─> T6 ─> T7 ─> T8 ─────────┘               │
-    │       │                                           │
-    │       └─> T22 <───────────────────────────┐       │
-    │                                           │       │
-    └─> T11 ─┬─> T12                            │       │
-             ├─> T13                            │       │
-             └─> T14 ─> T15 ─┬─> T16            │       │
-                             ├─> T17            │       │
-                             └─> T18 <──────────┴───────┘
+T4b ────────────────────────────────┐
+                                    │
+T1 ─┬─> T2 ─┬─> T3 ─┬───────────────┴> T5* ─┬─> T9 ──> T10 ─┐
+    │       │       │                       │               │
+    │       ├─> T4 ─┘                       │               │
+    │       │                               │               │
+    │       ├─> T6 ─> T7 ─> T8 ─────────────┘               │
+    │       │                                               │
+    │       └─> T22 <───────────────────────────────┐       │
+    │                                               │       │
+    └─> T11 ─┬─> T12                                │       │
+             ├─> T13                                │       │
+             └─> T14 ─> T15 ─┬─> T16                │       │
+                             ├─> T17                │       │
+                             └─> T18 <──────────────┴───────┘
                                   │
                                   └─> T19 ─┬─> T20*
                                            └─> T21
 
 * T5 and T20 are [HUMAN] — tag `human` so no worker claims them.
+  T4b has no dependencies and should start first: it is most of T5's
+  wall-clock cost and none of its judgement.
 ```
 
 ---
