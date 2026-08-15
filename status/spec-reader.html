@@ -993,6 +993,20 @@ reproduced or invalidated when the profile changes.</p></div>
 <td>Manual-paste path covered by tests independently of any live portal</td>
 </tr>
 <tr>
+<td><strong>Cloud agent sessions cannot reach job boards at all</strong> — confirmed 2026-08-15: the session egress policy returns 403 for <code>remoteok.com</code>, <code>weworkremotely.com</code>, <code>freehire.me</code>, <code>tecnoempleo.com</code>, <code>remotolist.com</code>. Ad collection and live-connector work are physically impossible from a cloud worker</td>
+<td><strong>Certain</strong> (observed)</td>
+<td>Medium</td>
+<td>Tag every task needing job-board egress <code>laptop</code> so a cloud worker never claims it (T4b, T12). Everything else in v1 — schema, model, harness, profile store, ranking — needs no egress and is unaffected. The manual-paste connector exists partly for this</td>
+<td>Attempt from a cloud session returns 403 at the proxy; run these tasks on the laptop</td>
+</tr>
+<tr>
+<td><strong>Synthetic ads used to unblock the corpus</strong></td>
+<td>Medium</td>
+<td><strong>Critical</strong></td>
+<td>Every numeric gate is measured against the corpus, so a corpus of invented ads makes <code>extraction_macro_f1</code>, <code>rank_spearman</code> and <code>ontology_hit_rate</code> all pass while measuring nothing. Ads must be real, verbatim, and carry their source URL. If collection is blocked, the corpus waits — it is never filled in</td>
+<td>Each corpus entry carries a resolvable <code>source_url</code> and fetch timestamp; entries without one are refused at load</td>
+</tr>
+<tr>
 <td>Profile drifts incoherent as feedback accumulates</td>
 <td>Medium</td>
 <td>Medium</td>
