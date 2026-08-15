@@ -127,7 +127,7 @@ h4.sec-h{font-size:16.5px;color:var(--fg)}
     <button class="btn primary" id="btn-export">Save / Export</button>
   </div>
 </div>
-<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 9 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
+<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 18 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
 <div id="warnbar"><div class="wrap"><strong>Heads up —</strong> this browser isn't storing your notes automatically (private/incognito mode or restricted file view). Tap <strong>Save / Export</strong> regularly.</div></div>
 
 <div class="wrap">
@@ -157,6 +157,15 @@ h4.sec-h{font-size:16.5px;color:var(--fg)}
 <li><a href="#s-spec-option-c-full-integral-system-sp">Option C: Full integral system, specced and built in dependency order (Thorough)</a></li>
 <li><a href="#s-spec-comparison">Comparison</a></li>
 <li><a href="#s-spec-4">§4 Recommendation</a></li>
+<li><a href="#s-spec-5">§5 Contracts</a></li>
+<li><a href="#s-spec-5-1">§5.1 Dimension model — dimensions/*.yaml (the spine)</a></li>
+<li><a href="#s-spec-5-2">§5.2 Normalised offer — offers/*.json</a></li>
+<li><a href="#s-spec-5-3">§5.3 Extraction output — extractions/&lt;offer_id&gt;.json</a></li>
+<li><a href="#s-spec-5-4">§5.4 Profile store — profiles/&lt;handle&gt;/</a></li>
+<li><a href="#s-spec-5-5">§5.5 Ranking output — rankings/&lt;run_id&gt;.json</a></li>
+<li><a href="#s-spec-5-6">§5.6 Configuration</a></li>
+<li><a href="#s-spec-5-7">§5.7 Migrations</a></li>
+<li><a href="#s-spec-6">§6 Risks &amp; Validation</a></li>
 </ul></details>
 </details>
   <section class="part">
@@ -685,6 +694,328 @@ requirement in v1, not a v1 feature.</p>
 <p>Sections 5–6 (contracts, risks) are appended by <code>design</code>.</p>
 </blockquote></div>
 <div class="note" data-for="s-spec-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4</span></div><textarea class="note-ta" data-key="s-spec-4" data-label="§4 Recommendation" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5">
+<h3 class="sec-h"><span class="chip">§5</span><span class="sec-title">Contracts</span></h3>
+<div class="sec-body"><p>No HTTP surface: this is a local, single-machine tool. The contracts that matter are the
+<strong>file schemas</strong> each component reads and writes, because those are what let subsystems be
+built independently and what the vocabulary-coherence argument rests on.</p>
+<p>All committed data files are UTF-8. Line-oriented stores are JSONL so appends are atomic and
+diffs are readable.</p></div>
+<div class="note" data-for="s-spec-5"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5</span></div><textarea class="note-ta" data-key="s-spec-5" data-label="§5 Contracts" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-1">
+<h4 class="sec-h"><span class="chip">§5.1</span><span class="sec-title">Dimension model — <code>dimensions/*.yaml</code> (the spine)</span></h4>
+<div class="sec-body"><p>One file per dimension. This is the contract every other component depends on; changing a
+<code>id</code> is a breaking change across the whole system.</p>
+<pre><code class="language-yaml">id: social_intensity              # stable, snake_case, never reused after removal
+kind: soft                        # soft (preference, weighted) | hard (filter, vetoes)
+polarity: bipolar                 # bipolar (-1..1) | unipolar (0..1)
+label:
+  en: Social intensity
+  es: Intensidad social
+  ca: Intensitat social
+definition: &gt;
+  How much of the working week is spent in unstructured group interaction —
+  open-plan presence, socials, offsites — as opposed to solitary focused work.
+elicitation:
+  questions:                      # behavioural, not self-rating (METHODS §2.1)
+    - id: si_q1
+      text:
+        en: Tell me about a working week you enjoyed. Who did you talk to, and how often?
+        es: ...
+        ca: ...
+  reaction_probes:                # stimulus selectors for METHODS §2.4
+    - excerpt_kind: perks
+extraction:
+  cues:
+    en:
+      - pattern: &quot;(team\\s+)?offsites?&quot;
+        value: 0.6
+        negatable: true           # &quot;no offsites&quot; flips sign, does not merely drop
+    es:
+      - pattern: &quot;jornadas\\s+de\\s+equipo&quot;
+        value: 0.6
+        negatable: true
+methods_ref: METHODS.md#21-structured-behavioural-elicitation
+</code></pre>
+<p><code>methods_ref</code> is <strong>required</strong> on every dimension and every computation site. It is what makes
+the <code>undocumented_methods == 0</code> criterion mechanically checkable: walk every dimension file
+and every scoring function, resolve each <code>methods_ref</code> anchor against <code>docs/METHODS.md</code>, and
+fail on any that does not resolve. Documentation enforced by a link check, not by discipline.</p></div>
+<div class="note" data-for="s-spec-5-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.1</span></div><textarea class="note-ta" data-key="s-spec-5-1" data-label="§5.1 Dimension model — dimensions/*.yaml (the spine)" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-2">
+<h4 class="sec-h"><span class="chip">§5.2</span><span class="sec-title">Normalised offer — <code>offers/*.json</code></span></h4>
+<div class="sec-body"><p>Every connector emits this shape regardless of source. Connectors may not invent fields.</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;sha256:9f2c…&quot;,
+  &quot;source&quot;: &quot;infojobs&quot;,
+  &quot;source_ref&quot;: &quot;1234567&quot;,
+  &quot;url&quot;: &quot;https://…&quot;,
+  &quot;fetched_at&quot;: &quot;2026-08-15T14:00:00Z&quot;,
+  &quot;title&quot;: &quot;Backend Engineer (Python)&quot;,
+  &quot;company&quot;: &quot;Acme SL&quot;,
+  &quot;location&quot;: { &quot;raw&quot;: &quot;Barcelona&quot;, &quot;country&quot;: &quot;ES&quot;, &quot;remote&quot;: &quot;hybrid&quot; },
+  &quot;salary&quot;: { &quot;min&quot;: 45000, &quot;max&quot;: 55000, &quot;currency&quot;: &quot;EUR&quot;, &quot;period&quot;: &quot;year&quot;, &quot;stated&quot;: true },
+  &quot;language&quot;: &quot;es&quot;,
+  &quot;text&quot;: &quot;…verbatim full posting text, never a summary…&quot;,
+  &quot;expires_at&quot;: null,
+  &quot;duplicate_of&quot;: null
+}
+</code></pre>
+<p><code>text</code> is verbatim because extraction evidence spans are offsets into it, and a summary would
+invalidate every span. <code>salary.stated</code> distinguishes absent from zero — a distinction the
+whole "best salary" facet depends on in markets where ads routinely omit pay.</p></div>
+<div class="note" data-for="s-spec-5-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.2</span></div><textarea class="note-ta" data-key="s-spec-5-2" data-label="§5.2 Normalised offer — offers/*.json" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-3">
+<h4 class="sec-h"><span class="chip">§5.3</span><span class="sec-title">Extraction output — <code>extractions/&lt;offer_id&gt;.json</code></span></h4>
+<div class="sec-body"><pre><code class="language-json">{
+  &quot;offer_id&quot;: &quot;sha256:9f2c…&quot;,
+  &quot;extractor_version&quot;: &quot;0.1.0&quot;,
+  &quot;dimension_scores&quot;: [
+    {
+      &quot;dimension&quot;: &quot;social_intensity&quot;,
+      &quot;value&quot;: 0.6,
+      &quot;confidence&quot;: 0.82,
+      &quot;evidence&quot;: [
+        { &quot;span&quot;: &quot;team offsites every quarter&quot;, &quot;start&quot;: 412, &quot;end&quot;: 439, &quot;negated&quot;: false }
+      ]
+    }
+  ],
+  &quot;unmapped_concepts&quot;: [&quot;4-day week&quot;, &quot;equity refresh&quot;]
+}
+</code></pre>
+<p><code>unmapped_concepts</code> is not diagnostic output — it is the numerator of <code>ontology_hit_rate</code>, and
+therefore the staleness signal. An extractor that silently discards what it cannot classify
+destroys the project's only automatic warning that the market has moved.</p>
+<p>Every score carries <code>evidence</code>. A score with an empty evidence list is invalid, not weak: it
+is the shape an unexplainable rank would take, and the schema forbids it.</p></div>
+<div class="note" data-for="s-spec-5-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.3</span></div><textarea class="note-ta" data-key="s-spec-5-3" data-label="§5.3 Extraction output — extractions/&lt;offer_id&gt;.json" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-4">
+<h4 class="sec-h"><span class="chip">§5.4</span><span class="sec-title">Profile store — <code>profiles/&lt;handle&gt;/</code></span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>File</th>
+<th>Kind</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>evidence.jsonl</code></td>
+<td><strong>Source of truth</strong>, append-only</td>
+<td>Every answer, reaction, and feedback event. Never edited, never reordered</td>
+</tr>
+<tr>
+<td><code>stories.jsonl</code></td>
+<td>Derived</td>
+<td>Episodes with <code>disclosure: private \| approved_for:&lt;offer_id&gt;</code></td>
+</tr>
+<tr>
+<td><code>profile.json</code></td>
+<td>Derived</td>
+<td>Dimension values with uncertainty</td>
+</tr>
+<tr>
+<td><code>weights.json</code></td>
+<td>Derived</td>
+<td>Part-worth utilities, salary-equivalent scale</td>
+</tr>
+</tbody>
+</table>
+<p>The derived files are regenerable: <code>rebuild</code> reads <code>evidence.jsonl</code> and reproduces all three
+<strong>byte-identically</strong>. That is the mechanical form of "the profile is a derived view, never
+mutated in place" — and it is what makes "why does it believe this about me?" answerable, by
+pointing at the evidence rows that produced a value.</p>
+<p><code>disclosure</code> defaults to <code>private</code>. Promotion to <code>approved_for</code> requires an explicit
+per-offer act by the candidate and is itself recorded in <code>evidence.jsonl</code>.</p></div>
+<div class="note" data-for="s-spec-5-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.4</span></div><textarea class="note-ta" data-key="s-spec-5-4" data-label="§5.4 Profile store — profiles/&lt;handle&gt;/" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-5">
+<h4 class="sec-h"><span class="chip">§5.5</span><span class="sec-title">Ranking output — <code>rankings/&lt;run_id&gt;.json</code></span></h4>
+<div class="sec-body"><pre><code class="language-json">{
+  &quot;run_id&quot;: &quot;2026-08-15T14:00:00Z&quot;,
+  &quot;profile_rev&quot;: &quot;sha256:ab12…&quot;,
+  &quot;pareto&quot;: [&quot;sha256:9f2c…&quot;, &quot;sha256:1d5e…&quot;],
+  &quot;dominated&quot;: { &quot;sha256:77aa…&quot;: &quot;dominated_by:sha256:9f2c…&quot; },
+  &quot;facets&quot;: {
+    &quot;best_salary_equivalent&quot;: [&quot;sha256:9f2c…&quot;],
+    &quot;quiet_environment&quot;: [&quot;sha256:1d5e…&quot;]
+  },
+  &quot;explanations&quot;: {
+    &quot;sha256:9f2c…&quot;: {
+      &quot;salary_equivalent_delta_eur_month&quot;: 450,
+      &quot;drivers&quot;: [
+        { &quot;dimension&quot;: &quot;social_intensity&quot;, &quot;contribution_eur_month&quot;: 210,
+          &quot;evidence_span&quot;: &quot;team offsites every quarter&quot; }
+      ]
+    }
+  }
+}
+</code></pre>
+<p><code>profile_rev</code> pins which profile revision produced the ranking, so a ranking can be
+reproduced or invalidated when the profile changes.</p></div>
+<div class="note" data-for="s-spec-5-5"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.5</span></div><textarea class="note-ta" data-key="s-spec-5-5" data-label="§5.5 Ranking output — rankings/&lt;run_id&gt;.json" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-6">
+<h4 class="sec-h"><span class="chip">§5.6</span><span class="sec-title">Configuration</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JOBSEARCH_PROFILE</code></td>
+<td>—</td>
+<td>Active candidate handle. Required; no default, so a second candidate can never be written by accident</td>
+</tr>
+<tr>
+<td><code>JOBSEARCH_LLM_MODEL</code></td>
+<td><code>claude-sonnet-5</code></td>
+<td>Extraction/elicitation model</td>
+</tr>
+<tr>
+<td><code>JOBSEARCH_EXTRACT_CONFIDENCE_FLOOR</code></td>
+<td><code>0.35</code></td>
+<td>Evidence below this is dropped, not down-weighted</td>
+</tr>
+<tr>
+<td><code>JOBSEARCH_DATA_DIR</code></td>
+<td><code>./data</code></td>
+<td>Root for offers, extractions, rankings</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-5-6"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.6</span></div><textarea class="note-ta" data-key="s-spec-5-6" data-label="§5.6 Configuration" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-7">
+<h4 class="sec-h"><span class="chip">§5.7</span><span class="sec-title">Migrations</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Store</th>
+<th>Change</th>
+<th>Reversible</th>
+<th>Forward-compatible</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>evidence.jsonl</code></td>
+<td>Append-only; new event types added as new <code>kind</code> values</td>
+<td>Yes (truncate)</td>
+<td>Yes — unknown <code>kind</code> is skipped by older readers</td>
+</tr>
+<tr>
+<td><code>dimensions/*.yaml</code></td>
+<td>Add file = additive. <strong>Renaming an <code>id</code> is breaking</strong></td>
+<td>No</td>
+<td>No — requires an explicit id-migration map</td>
+</tr>
+<tr>
+<td>Derived files</td>
+<td>Regenerated wholesale by <code>rebuild</code></td>
+<td>n/a</td>
+<td>n/a</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-5-7"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.7</span></div><textarea class="note-ta" data-key="s-spec-5-7" data-label="§5.7 Migrations" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-6">
+<h3 class="sec-h"><span class="chip">§6</span><span class="sec-title">Risks &amp; Validation</span></h3>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Likelihood</th>
+<th>Impact</th>
+<th>Mitigation</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Corpus labelling stalls; every numeric gate blocks behind it</td>
+<td><strong>High</strong></td>
+<td><strong>High</strong></td>
+<td>Start at T4/T5 in parallel with everything else; 100 ads is the floor, not the target. Label in sittings of 20. If it stalls, the honest response is to re-open the Option A/B decision, not to lower the gate</td>
+<td><code>corpus_size &gt;= 100</code> before any extraction gate is trusted</td>
+</tr>
+<tr>
+<td>Dimension model v0 is wrong — designed before seeing enough ads</td>
+<td>High</td>
+<td>Medium</td>
+<td>Keep v0 small (20-25). <code>ontology_hit_rate</code> makes the wrongness visible rather than silent. Adding a dimension is additive and cheap; renaming is breaking and must be rare</td>
+<td><code>ontology_hit_rate &gt;= 0.85</code>; review unmapped concepts each run</td>
+</tr>
+<tr>
+<td>Extraction accuracy too low for ranking to mean anything</td>
+<td>Medium</td>
+<td><strong>High</strong></td>
+<td>Funnel with a confidence floor; unknown ≠ neutral; negation handled explicitly since it inverts meaning on exactly the dimensions we care about</td>
+<td><code>extraction_macro_f1 &gt;= 0.75</code>, <code>extraction_negation_recall &gt;= 0.80</code></td>
+</tr>
+<tr>
+<td>Ranking gate passes by memorisation (elicitation ads reused for evaluation)</td>
+<td>Medium</td>
+<td><strong>High</strong></td>
+<td>Disjoint split enforced as a gate, not a convention</td>
+<td><code>elicitation_eval_overlap == 0</code></td>
+</tr>
+<tr>
+<td>Wording features drift into astrology</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>No wording feature affects a rank until calibrated against the corpus; METHODS §2.6 states the evidence covers perception, not workplace reality</td>
+<td>Per-feature corpus calibration before enabling</td>
+</tr>
+<tr>
+<td>LLM extraction cost makes daily runs unaffordable</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>Lexical prefilter before LLM; extraction cached per <code>offer_id</code> + <code>extractor_version</code>; re-extraction only on version bump</td>
+<td>Cost-per-run recorded in the evidence log</td>
+</tr>
+<tr>
+<td>Portal blocks the connector or its ToS forbids access</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>One connector in v1 plus a manual-paste path that is always available. Low volume, robots.txt respected. Connector failure degrades to manual, never to a broken pipeline</td>
+<td>Manual-paste path covered by tests independently of any live portal</td>
+</tr>
+<tr>
+<td>Profile drifts incoherent as feedback accumulates</td>
+<td>Medium</td>
+<td>Medium</td>
+<td><code>evidence.jsonl</code> append-only; all derived state regenerable byte-identically; every value traceable to the rows that produced it</td>
+<td><code>profile_rebuild_deterministic == 1</code></td>
+</tr>
+<tr>
+<td>Sensitive personal data leaks into a commit or an employer's inbox</td>
+<td>Low</td>
+<td><strong>High</strong></td>
+<td><code>profiles/</code> gitignored by default; <code>disclosure</code> defaults to private; per-use approval required and itself logged</td>
+<td>Inspection audit; secret-scan over <code>profiles/</code> in the queue doctor</td>
+</tr>
+<tr>
+<td>Second candidate (partner) retrofit turns out expensive</td>
+<td>Low</td>
+<td>Medium</td>
+<td><code>profiles/&lt;handle&gt;/</code> from commit one; <code>JOBSEARCH_PROFILE</code> required with no default</td>
+<td>Two-profile fixture exercised in tests from T6 onward</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-6"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §6</span></div><textarea class="note-ta" data-key="s-spec-6" data-label="§6 Risks &amp; Validation" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 </section>
 </div>

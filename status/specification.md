@@ -259,3 +259,184 @@ requirement in v1, not a v1 feature.
 ---
 
 > Sections 5–6 (contracts, risks) are appended by `design`.
+
+## 5. Contracts
+
+No HTTP surface: this is a local, single-machine tool. The contracts that matter are the
+**file schemas** each component reads and writes, because those are what let subsystems be
+built independently and what the vocabulary-coherence argument rests on.
+
+All committed data files are UTF-8. Line-oriented stores are JSONL so appends are atomic and
+diffs are readable.
+
+### 5.1 Dimension model — `dimensions/*.yaml` (the spine)
+
+One file per dimension. This is the contract every other component depends on; changing a
+`id` is a breaking change across the whole system.
+
+```yaml
+id: social_intensity              # stable, snake_case, never reused after removal
+kind: soft                        # soft (preference, weighted) | hard (filter, vetoes)
+polarity: bipolar                 # bipolar (-1..1) | unipolar (0..1)
+label:
+  en: Social intensity
+  es: Intensidad social
+  ca: Intensitat social
+definition: >
+  How much of the working week is spent in unstructured group interaction —
+  open-plan presence, socials, offsites — as opposed to solitary focused work.
+elicitation:
+  questions:                      # behavioural, not self-rating (METHODS §2.1)
+    - id: si_q1
+      text:
+        en: Tell me about a working week you enjoyed. Who did you talk to, and how often?
+        es: ...
+        ca: ...
+  reaction_probes:                # stimulus selectors for METHODS §2.4
+    - excerpt_kind: perks
+extraction:
+  cues:
+    en:
+      - pattern: "(team\\s+)?offsites?"
+        value: 0.6
+        negatable: true           # "no offsites" flips sign, does not merely drop
+    es:
+      - pattern: "jornadas\\s+de\\s+equipo"
+        value: 0.6
+        negatable: true
+methods_ref: METHODS.md#21-structured-behavioural-elicitation
+```
+
+`methods_ref` is **required** on every dimension and every computation site. It is what makes
+the `undocumented_methods == 0` criterion mechanically checkable: walk every dimension file
+and every scoring function, resolve each `methods_ref` anchor against `docs/METHODS.md`, and
+fail on any that does not resolve. Documentation enforced by a link check, not by discipline.
+
+### 5.2 Normalised offer — `offers/*.json`
+
+Every connector emits this shape regardless of source. Connectors may not invent fields.
+
+```json
+{
+  "id": "sha256:9f2c…",
+  "source": "infojobs",
+  "source_ref": "1234567",
+  "url": "https://…",
+  "fetched_at": "2026-08-15T14:00:00Z",
+  "title": "Backend Engineer (Python)",
+  "company": "Acme SL",
+  "location": { "raw": "Barcelona", "country": "ES", "remote": "hybrid" },
+  "salary": { "min": 45000, "max": 55000, "currency": "EUR", "period": "year", "stated": true },
+  "language": "es",
+  "text": "…verbatim full posting text, never a summary…",
+  "expires_at": null,
+  "duplicate_of": null
+}
+```
+
+`text` is verbatim because extraction evidence spans are offsets into it, and a summary would
+invalidate every span. `salary.stated` distinguishes absent from zero — a distinction the
+whole "best salary" facet depends on in markets where ads routinely omit pay.
+
+### 5.3 Extraction output — `extractions/<offer_id>.json`
+
+```json
+{
+  "offer_id": "sha256:9f2c…",
+  "extractor_version": "0.1.0",
+  "dimension_scores": [
+    {
+      "dimension": "social_intensity",
+      "value": 0.6,
+      "confidence": 0.82,
+      "evidence": [
+        { "span": "team offsites every quarter", "start": 412, "end": 439, "negated": false }
+      ]
+    }
+  ],
+  "unmapped_concepts": ["4-day week", "equity refresh"]
+}
+```
+
+`unmapped_concepts` is not diagnostic output — it is the numerator of `ontology_hit_rate`, and
+therefore the staleness signal. An extractor that silently discards what it cannot classify
+destroys the project's only automatic warning that the market has moved.
+
+Every score carries `evidence`. A score with an empty evidence list is invalid, not weak: it
+is the shape an unexplainable rank would take, and the schema forbids it.
+
+### 5.4 Profile store — `profiles/<handle>/`
+
+| File | Kind | Rule |
+|---|---|---|
+| `evidence.jsonl` | **Source of truth**, append-only | Every answer, reaction, and feedback event. Never edited, never reordered |
+| `stories.jsonl` | Derived | Episodes with `disclosure: private \| approved_for:<offer_id>` |
+| `profile.json` | Derived | Dimension values with uncertainty |
+| `weights.json` | Derived | Part-worth utilities, salary-equivalent scale |
+
+The derived files are regenerable: `rebuild` reads `evidence.jsonl` and reproduces all three
+**byte-identically**. That is the mechanical form of "the profile is a derived view, never
+mutated in place" — and it is what makes "why does it believe this about me?" answerable, by
+pointing at the evidence rows that produced a value.
+
+`disclosure` defaults to `private`. Promotion to `approved_for` requires an explicit
+per-offer act by the candidate and is itself recorded in `evidence.jsonl`.
+
+### 5.5 Ranking output — `rankings/<run_id>.json`
+
+```json
+{
+  "run_id": "2026-08-15T14:00:00Z",
+  "profile_rev": "sha256:ab12…",
+  "pareto": ["sha256:9f2c…", "sha256:1d5e…"],
+  "dominated": { "sha256:77aa…": "dominated_by:sha256:9f2c…" },
+  "facets": {
+    "best_salary_equivalent": ["sha256:9f2c…"],
+    "quiet_environment": ["sha256:1d5e…"]
+  },
+  "explanations": {
+    "sha256:9f2c…": {
+      "salary_equivalent_delta_eur_month": 450,
+      "drivers": [
+        { "dimension": "social_intensity", "contribution_eur_month": 210,
+          "evidence_span": "team offsites every quarter" }
+      ]
+    }
+  }
+}
+```
+
+`profile_rev` pins which profile revision produced the ranking, so a ranking can be
+reproduced or invalidated when the profile changes.
+
+### 5.6 Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `JOBSEARCH_PROFILE` | — | Active candidate handle. Required; no default, so a second candidate can never be written by accident |
+| `JOBSEARCH_LLM_MODEL` | `claude-sonnet-5` | Extraction/elicitation model |
+| `JOBSEARCH_EXTRACT_CONFIDENCE_FLOOR` | `0.35` | Evidence below this is dropped, not down-weighted |
+| `JOBSEARCH_DATA_DIR` | `./data` | Root for offers, extractions, rankings |
+
+### 5.7 Migrations
+
+| Store | Change | Reversible | Forward-compatible |
+|---|---|---|---|
+| `evidence.jsonl` | Append-only; new event types added as new `kind` values | Yes (truncate) | Yes — unknown `kind` is skipped by older readers |
+| `dimensions/*.yaml` | Add file = additive. **Renaming an `id` is breaking** | No | No — requires an explicit id-migration map |
+| Derived files | Regenerated wholesale by `rebuild` | n/a | n/a |
+
+## 6. Risks & Validation
+
+| Risk | Likelihood | Impact | Mitigation | Validation |
+|------|-----------|--------|------------|------------|
+| Corpus labelling stalls; every numeric gate blocks behind it | **High** | **High** | Start at T4/T5 in parallel with everything else; 100 ads is the floor, not the target. Label in sittings of 20. If it stalls, the honest response is to re-open the Option A/B decision, not to lower the gate | `corpus_size >= 100` before any extraction gate is trusted |
+| Dimension model v0 is wrong — designed before seeing enough ads | High | Medium | Keep v0 small (20-25). `ontology_hit_rate` makes the wrongness visible rather than silent. Adding a dimension is additive and cheap; renaming is breaking and must be rare | `ontology_hit_rate >= 0.85`; review unmapped concepts each run |
+| Extraction accuracy too low for ranking to mean anything | Medium | **High** | Funnel with a confidence floor; unknown ≠ neutral; negation handled explicitly since it inverts meaning on exactly the dimensions we care about | `extraction_macro_f1 >= 0.75`, `extraction_negation_recall >= 0.80` |
+| Ranking gate passes by memorisation (elicitation ads reused for evaluation) | Medium | **High** | Disjoint split enforced as a gate, not a convention | `elicitation_eval_overlap == 0` |
+| Wording features drift into astrology | Medium | Medium | No wording feature affects a rank until calibrated against the corpus; METHODS §2.6 states the evidence covers perception, not workplace reality | Per-feature corpus calibration before enabling |
+| LLM extraction cost makes daily runs unaffordable | Medium | Medium | Lexical prefilter before LLM; extraction cached per `offer_id` + `extractor_version`; re-extraction only on version bump | Cost-per-run recorded in the evidence log |
+| Portal blocks the connector or its ToS forbids access | Medium | Medium | One connector in v1 plus a manual-paste path that is always available. Low volume, robots.txt respected. Connector failure degrades to manual, never to a broken pipeline | Manual-paste path covered by tests independently of any live portal |
+| Profile drifts incoherent as feedback accumulates | Medium | Medium | `evidence.jsonl` append-only; all derived state regenerable byte-identically; every value traceable to the rows that produced it | `profile_rebuild_deterministic == 1` |
+| Sensitive personal data leaks into a commit or an employer's inbox | Low | **High** | `profiles/` gitignored by default; `disclosure` defaults to private; per-use approval required and itself logged | Inspection audit; secret-scan over `profiles/` in the queue doctor |
+| Second candidate (partner) retrofit turns out expensive | Low | Medium | `profiles/<handle>/` from commit one; `JOBSEARCH_PROFILE` required with no default | Two-profile fixture exercised in tests from T6 onward |
