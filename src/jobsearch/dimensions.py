@@ -24,6 +24,8 @@ from typing import Annotated, Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from jobsearch.corpus import LANGUAGES
+
 # src-layout repo root, as in `jobsearch.corpus`: valid for the editable install
 # this project is always used through.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -31,10 +33,13 @@ DEFAULT_DIMENSIONS_DIR = _REPO_ROOT / "dimensions"
 DEFAULT_METHODS_PATH = _REPO_ROOT / "docs" / "METHODS.md"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T2.json"
 
-# The corpus languages (`jobsearch.corpus.LANGUAGES`). A dimension carries all
-# three on every human-readable string: a label that exists in one language only
-# produces a question no Catalan-speaking candidate can answer.
-LANGUAGES = ("en", "es", "ca")
+# `LANGUAGES` is imported, not restated: a dimension carries all of them on every
+# human-readable string (a label in one language only produces a question no
+# Catalan-speaking candidate can answer), and a second copy of the tuple drifts
+# from the corpus it is supposed to mirror. The `Literal` below is the one place
+# the languages are spelled out again — Pydantic needs them statically — and
+# `test_schema_languages_match_the_corpus_languages` holds the two in step.
+Language = Literal["en", "es", "ca"]
 
 # `METHODS.md#<github-style-slug>` — a relative link into the methods register,
 # resolved by `methods_anchors`. Any other shape is a link nothing can check.
@@ -129,7 +134,7 @@ class Extraction(Strict):
     so a typo'd `eng:` block cannot sit there matching nothing.
     """
 
-    cues: dict[Literal["en", "es", "ca"], list[Cue]] = Field(default_factory=dict)
+    cues: dict[Language, list[Cue]] = Field(default_factory=dict)
 
 
 class Dimension(Strict):
@@ -182,10 +187,8 @@ def methods_anchors(path: Path = DEFAULT_METHODS_PATH) -> set[str]:
     leaves its two spaces behind as two hyphens, which is why this is computed
     rather than guessed).
     """
-    if not path.exists():
-        raise DimensionError(f"methods register not found: {path}")
     anchors: set[str] = set()
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in _read(path, "methods register").splitlines():
         match = re.match(r"^(#{1,6})\s+(.*?)\s*$", line)
         if not match:
             continue
@@ -195,9 +198,31 @@ def methods_anchors(path: Path = DEFAULT_METHODS_PATH) -> set[str]:
     return anchors
 
 
+def _read(path: Path, what: str) -> str:
+    """Read a UTF-8 file, turning every failure into a `DimensionError`.
+
+    An unreadable or mis-encoded file is a violation like any other, and
+    `collect_violations` promises a count rather than a traceback — so the OS
+    and decoding errors are converted here, at the one place that touches disk,
+    instead of escaping past every caller that catches `DimensionError`.
+    """
+    if not path.exists():
+        raise DimensionError(f"{what} not found: {path}")
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise DimensionError(f"{path.name}: not valid UTF-8: {exc}") from exc
+    except OSError as exc:
+        raise DimensionError(f"{path.name}: cannot be read: {exc}") from exc
+
+
 def _dimension_files(directory: Path) -> list[Path]:
+    try:
+        entries = list(directory.iterdir())
+    except OSError as exc:
+        raise DimensionError(f"dimension directory cannot be read: {exc}") from exc
     return sorted(
-        (p for p in directory.iterdir() if p.suffix in {".yaml", ".yml"}),
+        (p for p in entries if p.suffix in {".yaml", ".yml"}),
         key=lambda p: (p.stem, p.suffix),
     )
 
@@ -205,7 +230,7 @@ def _dimension_files(directory: Path) -> list[Path]:
 def _parse(path: Path) -> Dimension:
     """Read one file into a `Dimension`, or raise `DimensionError` naming it."""
     try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        raw = yaml.safe_load(_read(path, "dimension"))
     except yaml.YAMLError as exc:
         raise DimensionError(f"{path.name}: not valid YAML: {exc}") from exc
     if not isinstance(raw, dict):
@@ -235,13 +260,18 @@ def _format(exc: ValidationError) -> str:
 
 def load_dimensions(
     directory: Path = DEFAULT_DIMENSIONS_DIR,
-    methods_path: Path | None = None,
+    methods_path: Path | None = DEFAULT_METHODS_PATH,
 ) -> list[Dimension]:
     """Load every dimension in `directory`, sorted by id.
 
     Raises `DimensionError` on the first problem: a caller that wants a count of
-    problems instead wants `collect_violations`. When `methods_path` is given,
-    `methods_ref` anchors are resolved against it too.
+    problems instead wants `collect_violations`.
+
+    Anchor resolution is part of loading, not an opt-in extra — §5.1 requires
+    every `methods_ref` to resolve, so a default that skipped the check would let
+    the ordinary load path accept exactly the models the spec forbids. Pass
+    `methods_path=None` only to load a model deliberately detached from a methods
+    register (a fixture that ships no `METHODS.md`).
     """
     if not directory.is_dir():
         raise DimensionError(f"dimension directory not found: {directory}")
@@ -282,7 +312,12 @@ def collect_violations(
     by_id: dict[str, Path] = {}
     parsed: list[Dimension] = []
 
-    for path in _dimension_files(directory):
+    try:
+        files = _dimension_files(directory)
+    except DimensionError as exc:
+        return [str(exc)]
+
+    for path in files:
         try:
             dimension = _parse(path)
         except DimensionError as exc:
@@ -318,7 +353,12 @@ def write_evidence(
 ) -> dict[str, Any]:
     """Measure T2's gate from the committed model and record it."""
     violations = collect_violations(directory, methods_path)
-    dimension_count = len(_dimension_files(directory)) if directory.is_dir() else 0
+    try:
+        dimension_count = len(_dimension_files(directory)) if directory.is_dir() else 0
+    except DimensionError:
+        # Already reported by `collect_violations`; the count is zero because
+        # nothing could be listed, and the writer refuses a zero count anyway.
+        dimension_count = 0
     measured: dict[str, Any] = {
         "dimension_schema_violations": len(violations),
         "dimension_count": dimension_count,

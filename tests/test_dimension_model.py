@@ -17,6 +17,7 @@ from jobsearch.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
     DEFAULT_METHODS_PATH,
     DimensionError,
+    Language,
     collect_violations,
     load_dimensions,
     methods_anchors,
@@ -174,6 +175,64 @@ def test_collect_violations_reports_instead_of_raising(tmp_path: Path) -> None:
 
     assert len(violations) == 1
     assert "social_intensity.yaml" in violations[0]
+
+
+def test_unresolvable_methods_ref_is_rejected_by_the_default_load(tmp_path: Path) -> None:
+    """Anchor resolution is part of loading, not an opt-in extra.
+
+    §5.1 requires every `methods_ref` to resolve; a loader that only checked
+    when asked would accept, on its ordinary path, exactly the models the spec
+    forbids.
+    """
+    body = VALID.replace(
+        "methods_ref: METHODS.md#21-structured-behavioural-elicitation",
+        "methods_ref: METHODS.md#99-a-section-that-does-not-exist",
+    )
+    write_dimension(tmp_path, "social_intensity", body)
+
+    with pytest.raises(DimensionError, match="resolves to no heading"):
+        load_dimensions(tmp_path)
+
+    # …and opting out is explicit, for a model detached from a methods register.
+    assert load_dimensions(tmp_path, methods_path=None)
+
+
+def test_collect_violations_reports_an_unreadable_file(tmp_path: Path) -> None:
+    """A mis-encoded dimension is a counted violation, not a traceback.
+
+    The gate path has to yield a number for every failure mode it can meet, or
+    `dimension_schema_violations` goes unrecorded exactly when it matters.
+    """
+    (tmp_path / "social_intensity.yaml").write_bytes(b"id: social\xff_intensity\n")
+
+    violations = collect_violations(tmp_path, DEFAULT_METHODS_PATH)
+
+    assert len(violations) == 1
+    assert "UTF-8" in violations[0]
+
+
+def test_collect_violations_reports_a_missing_methods_register(tmp_path: Path) -> None:
+    """No `METHODS.md` is a violation of the whole model, reported once."""
+    write_dimension(tmp_path, "social_intensity", VALID)
+
+    violations = collect_violations(tmp_path, tmp_path / "nonexistent" / "METHODS.md")
+
+    assert len(violations) == 1
+    assert "methods register not found" in violations[0]
+
+
+def test_schema_languages_match_the_corpus_languages() -> None:
+    """The schema's language keys and the corpus's language list stay in step.
+
+    Pydantic needs the languages spelled out statically, so they appear twice —
+    once as `Language`, once as `jobsearch.corpus.LANGUAGES`. This is what stops
+    the second copy drifting from the first.
+    """
+    from typing import get_args
+
+    from jobsearch.corpus import LANGUAGES
+
+    assert set(get_args(Language)) == set(LANGUAGES)
 
 
 def test_committed_dimension_model_has_no_violations() -> None:
