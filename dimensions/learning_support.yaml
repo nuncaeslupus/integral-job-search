@@ -1,0 +1,69 @@
+id: learning_support
+kind: soft
+polarity: unipolar
+label:
+  en: Learning support
+  es: Apoyo a la formación
+  ca: Suport a la formació
+definition: >
+  What the employer puts behind learning: paid training, certification budgets,
+  conference or language classes, and time to use them.
+elicitation:
+  questions:
+    - id: ls_q1
+      text:
+        en: >
+          Tell me about the last skill you learned for work. Who paid for it, and when
+          did you study?
+        es: >
+          Cuéntame la última habilidad que aprendiste para el trabajo. ¿Quién la pagó y
+          cuándo estudiabas?
+        ca: >
+          Explica'm l'última habilitat que vas aprendre per a la feina. Qui la va pagar
+          i quan estudiaves?
+extraction:
+  cues:
+    en:
+      - pattern: "training\\s+budget|learning\\s+budget"
+        value: 0.8
+        negatable: true
+      - pattern: "certificat(ion|e)s?"
+        value: 0.6
+        negatable: false
+      - pattern: "conference"
+        value: 0.5
+        negatable: false
+    es:
+      - pattern: "presupuesto\\s+de\\s+formaci[óo]n|plan\\s+de\\s+formaci[óo]n"
+        value: 0.8
+        negatable: true
+      - pattern: "certificaci(ón|ones)"
+        value: 0.6
+        negatable: false
+      - pattern: "clases\\s+de\\s+ingl[ée]s"
+        value: 0.5
+        negatable: false
+    ca:
+      - pattern: "pla\\s+de\\s+formaci[óo]|formaci[óo]\\s+cont[ií]nua"
+        value: 0.8
+        negatable: true
+      - pattern: "certificaci(ó|ons)"
+        value: 0.6
+        negatable: false
+      - pattern: "classes\\s+d'angl[èe]s"
+        value: 0.5
+        negatable: false
+  gold:
+    - ad_id: manfred-8456
+      language: en
+      span: "with **Kafka.**\n* **ISTQB Foundation Level certification**.\n* Experience with **Allure**.\n* Previous experience in **iGaming, fintech or banking**.\n\n**🏖️ 23 vacation days**"
+      value: 0.6
+    - ad_id: manfred-8379
+      language: es
+      span: "te motive.\n* 🏥 **Seguro médico.**\n* 📚 **Presupuesto de formación personal**: 1.000 € para que sigas aprendiendo.\n* 💻 **MacBook** para trabajar cómodamente.\n* 🌍 **Trabajar desde"
+      value: 0.8
+    - ad_id: feinaactiva-FA92322529
+      language: ca
+      span: "d'interès: Contracte indefinit i horari flexible\nFormació contínua i oportunitats de desenvolupament professional\nAmbient de treball col·laboratiu i dinàmic\nIntegració en projectes"
+      value: 0.8
+methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -1,0 +1,69 @@
+id: wellbeing_benefits
+kind: soft
+polarity: unipolar
+label:
+  en: Wellbeing benefits
+  es: Beneficios de bienestar
+  ca: Beneficis de benestar
+definition: >
+  Non-salary provision aimed at health and life outside work: medical cover,
+  psychological support, gym or wellness allowances, extra leave.
+elicitation:
+  questions:
+    - id: wb_q1
+      text:
+        en: >
+          Tell me about a benefit you actually used in a past job, and one that existed
+          on paper but you never touched.
+        es: >
+          Cuéntame un beneficio que sí usaste en un trabajo anterior y otro que existía
+          sobre el papel pero nunca tocaste.
+        ca: >
+          Explica'm un benefici que sí que vas fer servir en una feina anterior i un
+          altre que existia sobre el paper però no vas tocar mai.
+extraction:
+  cues:
+    en:
+      - pattern: "health\\s+insurance|healthcare"
+        value: 0.7
+        negatable: true
+      - pattern: "mental\\s+health|wellbeing"
+        value: 0.6
+        negatable: false
+      - pattern: "gym|wellness"
+        value: 0.4
+        negatable: false
+    es:
+      - pattern: "seguro\\s+m[ée]dico"
+        value: 0.7
+        negatable: true
+      - pattern: "apoyo\\s+psicol[óo]gico|salud\\s+mental"
+        value: 0.6
+        negatable: false
+      - pattern: "gimnasio|ticket\\s+restaurante"
+        value: 0.4
+        negatable: false
+    ca:
+      - pattern: "assegurança\\s+m[èe]dica"
+        value: 0.7
+        negatable: true
+      - pattern: "salut\\s+mental"
+        value: 0.6
+        negatable: false
+      - pattern: "gimn[àa]s|tiquet\\s+restaurant"
+        value: 0.4
+        negatable: false
+  gold:
+    - ad_id: manfred-8456
+      language: en
+      span: "vacation days**\n\n**👩🏾‍⚕️ Health care**: Private health insurance for you and your family.\n\n**🗣️ Continuous learning**: Free English and Spanish lessons and ongoing professional"
+      value: 0.7
+    - ad_id: manfred-8360
+      language: es
+      span: "vacaciones**\n\n**👩🏾‍⚕️Cuidado de tu salud**: Seguro médico privado para ti y para tu familia.\n\n**🗣️ Aprendizaje continuo**: Clases de inglés y español gratuitas y oportunidades"
+      value: 0.7
+    - ad_id: feinaactiva-FA92320466
+      language: ca
+      span: "Orienta és una institució monogràfica en salut mental infantojuvenil. Està adscrita al con-veni SISCAT (III Conveni Col·lectiu de treball dels hospitals d’aguts, centres"
+      value: 0.6
+methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -1,0 +1,65 @@
+id: career_progression
+kind: soft
+polarity: unipolar
+label:
+  en: Career progression
+  es: Progresión profesional
+  ca: Progressió professional
+definition: >
+  Whether a named path upward exists — levels, a career plan, defined promotion criteria
+  — as opposed to an unspecified future.
+elicitation:
+  questions:
+    - id: cp_q1
+      text:
+        en: >
+          Describe the last time your role changed shape. Who decided it, and what was
+          the stated reason?
+        es: >
+          Describe la última vez que tu puesto cambió de forma. ¿Quién lo decidió y cuál
+          fue la razón declarada?
+        ca: >
+          Descriu l'última vegada que el teu lloc va canviar de forma. Qui ho va decidir
+          i quin va ser el motiu declarat?
+extraction:
+  cues:
+    en:
+      - pattern: "career\\s+(path|plan|growth)"
+        value: 0.8
+        negatable: true
+      - pattern: "promotion"
+        value: 0.6
+        negatable: false
+      - pattern: "progression\\s+framework|levelling"
+        value: 0.7
+        negatable: false
+    es:
+      - pattern: "plan\\s+de\\s+carrera"
+        value: 0.8
+        negatable: true
+      - pattern: "promoci[óo]n\\s+interna"
+        value: 0.6
+        negatable: false
+      - pattern: "desarrollo\\s+profesional"
+        value: 0.5
+        negatable: false
+    ca:
+      - pattern: "pla\\s+de\\s+carrera|carrera\\s+a\\s+llarg"
+        value: 0.8
+        negatable: true
+      - pattern: "promoci[óo]\\s+interna"
+        value: 0.6
+        negatable: false
+      - pattern: "desenvolupament\\s+professional"
+        value: 0.5
+        negatable: false
+  gold:
+    - ad_id: tecnoempleo-0e9510e2527fd31cd240
+      language: es
+      span: "intensiva viernes y verano. Desarrollo de plan de carrera personalizado formación y ayuda para el aprendizaje de idiomas. Movilidad nacional e internacional. Vienes de"
+      value: 0.8
+    - ad_id: feinaactiva-FA92317375
+      language: ca
+      span: "Contracte indefinit.\n- Estabilitat laboral. Carrera a llarg termini.\n- Jornada completa, 40 h/setmanals, amb horari flexible d'entrada i sortida.\n- Possibilitat de 95% teletreball."
+      value: 0.8
+methods_ref: METHODS.md#26-ad-wording-as-signal

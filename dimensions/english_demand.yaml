@@ -1,0 +1,65 @@
+id: english_demand
+kind: hard
+polarity: unipolar
+label:
+  en: English demand
+  es: Exigencia de inglés
+  ca: Exigència d'anglès
+definition: >
+  How much working English the role requires, from none through reading documentation to
+  conducting the whole job in it.
+elicitation:
+  questions:
+    - id: ed_q1
+      text:
+        en: >
+          Describe a work situation where the language was not your first. What did you
+          avoid saying because of it?
+        es: >
+          Describe una situación de trabajo en un idioma que no era el tuyo. ¿Qué
+          evitaste decir por ello?
+        ca: >
+          Descriu una situació de feina en una llengua que no era la teva. Què vas
+          evitar dir per això?
+extraction:
+  cues:
+    en:
+      - pattern: "fluent\\s+english|native\\s+english"
+        value: 1.0
+        negatable: false
+      - pattern: "english\\s+is\\s+(our|the)\\s+(working|company)\\s+language"
+        value: 0.9
+        negatable: false
+      - pattern: "english\\s+(b2|c1)"
+        value: 0.7
+        negatable: false
+    es:
+      - pattern: "ingl[ée]s\\s+(alto|fluido|c1|c2)"
+        value: 0.9
+        negatable: true
+      - pattern: "ingl[ée]s\\s+(b1|b2|medio)"
+        value: 0.6
+        negatable: false
+      - pattern: "ingl[ée]s\\s+no\\s+necesario|no\\s+se\\s+requiere\\s+ingl[ée]s"
+        value: 0.0
+        negatable: false
+    ca:
+      - pattern: "angl[èe]s\\s+(alt|c1|c2)"
+        value: 0.9
+        negatable: true
+      - pattern: "angl[èe]s\\s+(b1|b2)"
+        value: 0.6
+        negatable: false
+      - pattern: "angl[èe]s"
+        value: 0.5
+        negatable: false
+  gold:
+    - ad_id: manfred-8389
+      language: es
+      span: "de su capa de persistencia.\n* **Nivel de Inglés Alto**: Tu día a día será completamente en este idioma.💂\n\n**Suma puntos 🎁**\n\n* Experiencia trabajando con bases de"
+      value: 0.9
+    - ad_id: feinaactiva-09202623802
+      language: ca
+      span: "anàlisis estadístics, Python, GIT, Airflow.\nAnglès (B2), català i castellà (C1).\nJornada completa. Retribució 3.085,71*14.\n\n_Gestió de la relació amb els clients"
+      value: 0.5
+methods_ref: METHODS.md#26-ad-wording-as-signal

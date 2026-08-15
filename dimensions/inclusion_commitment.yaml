@@ -1,0 +1,69 @@
+id: inclusion_commitment
+kind: soft
+polarity: unipolar
+label:
+  en: Inclusion commitment
+  es: Compromiso de inclusión
+  ca: Compromís d'inclusió
+definition: >
+  Whether the ad states a concrete commitment on equality, disability or diversity, as
+  opposed to boilerplate or silence.
+elicitation:
+  questions:
+    - id: ic_q1
+      text:
+        en: >
+          Describe a team you worked in that was noticeably mixed or noticeably uniform.
+          What did you notice about how decisions were made?
+        es: >
+          Describe un equipo en el que trabajaste que fuera notablemente diverso o
+          notablemente uniforme. ¿Qué notaste en cómo se tomaban las decisiones?
+        ca: >
+          Descriu un equip on vas treballar que fos notablement divers o notablement
+          uniforme. Què vas notar en com es prenien les decisions?
+extraction:
+  cues:
+    en:
+      - pattern: "equal\\s+opportunit"
+        value: 0.6
+        negatable: false
+      - pattern: "diversity\\s+and\\s+inclusion"
+        value: 0.7
+        negatable: true
+      - pattern: "disabilit(y|ies)"
+        value: 0.8
+        negatable: false
+    es:
+      - pattern: "igualdad\\s+de\\s+oportunidades"
+        value: 0.6
+        negatable: false
+      - pattern: "diversidad\\s+e\\s+inclusi[óo]n"
+        value: 0.7
+        negatable: true
+      - pattern: "discapacidad"
+        value: 0.8
+        negatable: false
+    ca:
+      - pattern: "igualtat\\s+d'oportunitats"
+        value: 0.6
+        negatable: false
+      - pattern: "diversitat"
+        value: 0.7
+        negatable: true
+      - pattern: "discapacitat"
+        value: 0.8
+        negatable: false
+  gold:
+    - ad_id: wwr-clickhouse-ai-product-engineer-clickstack
+      language: en
+      span: "more about what’s happening at ClickHouse.\n\nEqual Opportunity & Privacy\n\nClickHouse provides equal employment opportunities to all employees and applicants and prohibits discrimination"
+      value: 0.6
+    - ad_id: manfred-8400
+      language: es
+      span: "de más que se recuerde que femtasy ofrece igualdad de oportunidades para todos y anima a las personas de todas las nacionalidades, géneros, orientaciones sexuales, antecedentes religiosos,"
+      value: 0.6
+    - ad_id: feinaactiva-09202623802
+      language: ca
+      span: "Administrador/a Base de dades amb discapacitat igual o superior al 33 % (Data Analyst)\nLlicenciatura o Grau en ciències o enginyeria. Experiència de 3 a 5 anys"
+      value: 0.8
+methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -1,0 +1,12 @@
+{
+  "dimension_extractor_coverage": 1.0,
+  "dimension_count": 22,
+  "gold_example_count": 56,
+  "languages_with_cues": {
+    "en": 22,
+    "es": 22,
+    "ca": 22
+  },
+  "dimensions_without_cues_or_gold": [],
+  "gold_violations": []
+}

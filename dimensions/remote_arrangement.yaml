@@ -1,0 +1,69 @@
+id: remote_arrangement
+kind: hard
+polarity: unipolar
+label:
+  en: Remote arrangement
+  es: Modalidad de teletrabajo
+  ca: Modalitat de teletreball
+definition: >
+  How much of the working week is worked away from a company site, from fully remote
+  through hybrid day-quotas to full on-site presence.
+elicitation:
+  questions:
+    - id: ra_q1
+      text:
+        en: >
+          Describe how you worked over the last year: where were you each day, and which
+          part of that arrangement did you have to negotiate?
+        es: >
+          Describe cómo trabajaste el último año: ¿dónde estabas cada día y qué parte de
+          ese acuerdo tuviste que negociar?
+        ca: >
+          Descriu com vas treballar l'últim any: on eres cada dia i quina part d'aquell
+          acord vas haver de negociar?
+extraction:
+  cues:
+    en:
+      - pattern: "fully\\s+remote|100%\\s+remote"
+        value: 1.0
+        negatable: true
+      - pattern: "hybrid"
+        value: 0.5
+        negatable: false
+      - pattern: "on-?site|in\\s+the\\s+office"
+        value: 0.0
+        negatable: false
+    es:
+      - pattern: "100\\s*%\\s*(en\\s+)?remoto|teletrabajo\\s+total"
+        value: 1.0
+        negatable: true
+      - pattern: "h[ií]brid[oa]"
+        value: 0.5
+        negatable: false
+      - pattern: "presencial"
+        value: 0.0
+        negatable: false
+    ca:
+      - pattern: "100\\s*%\\s*teletreball|teletreball\\s+total"
+        value: 1.0
+        negatable: true
+      - pattern: "h[ií]brid"
+        value: 0.5
+        negatable: false
+      - pattern: "presencial"
+        value: 0.0
+        negatable: false
+  gold:
+    - ad_id: manfred-8419
+      language: en
+      span: "before signing off.\n\nThis position is **100% remote**, so as long as you make sure you have a good connection, you can work from wherever you want. Whether by land,"
+      value: 1.0
+    - ad_id: manfred-8379
+      language: es
+      span: "![](https://media-asgard.s3.eu-west-1.amazonaws.com/25/07/08/2dc9c146-1aa0-4aea-91b9-2b7f71e89ae1_6Z8A8175.png)\n\nEste puesto es **100% remoto desde España, aunque se da mucha prioridad a perfiles que estén en Barcelona o Madrid o alrededores de Cataluña.**"
+      value: 1.0
+    - ad_id: feinaactiva-09202624459
+      language: ca
+      span: "dades d'interès: -Modalitat de treball: presencial\n-Horari: fins 15-9-26: 08:15 a 15:00h. A partir del 16-9-26: de 08:15 a 18:30 (1.15h descans) 2 dies a la setmana."
+      value: 0.0
+methods_ref: METHODS.md#26-ad-wording-as-signal

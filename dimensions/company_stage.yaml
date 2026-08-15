@@ -1,0 +1,69 @@
+id: company_stage
+kind: soft
+polarity: bipolar
+label:
+  en: Company stage
+  es: Etapa de la empresa
+  ca: Etapa de l'empresa
+definition: >
+  Where the employer sits between an early-stage startup and a large established
+  organisation, which shapes both risk and how much structure exists.
+elicitation:
+  questions:
+    - id: cs_q1
+      text:
+        en: >
+          Compare the smallest and largest organisations you have worked in. Which
+          decision was easy in one and impossible in the other?
+        es: >
+          Compara la organización más pequeña y la más grande en las que has trabajado.
+          ¿Qué decisión era fácil en una e imposible en la otra?
+        ca: >
+          Compara l'organització més petita i la més gran on has treballat. Quina
+          decisió era fàcil en una i impossible en l'altra?
+extraction:
+  cues:
+    en:
+      - pattern: "startup|scale-?up|series\\s+[abc]\\b"
+        value: -0.7
+        negatable: false
+      - pattern: "multinational|global\\s+leader|fortune"
+        value: 0.7
+        negatable: false
+      - pattern: "\\b\\d{3,}\\s*(\\+\\s*)?employees"
+        value: 0.6
+        negatable: false
+    es:
+      - pattern: "startup|scale-?up"
+        value: -0.7
+        negatable: false
+      - pattern: "multinacional|l[íi]der\\s+(europe[oa]|mundial)"
+        value: 0.7
+        negatable: false
+      - pattern: "m[áa]s\\s+de\\s+\\d{3,}\\s+(personas|empleados)"
+        value: 0.6
+        negatable: false
+    ca:
+      - pattern: "startup|scale-?up"
+        value: -0.7
+        negatable: false
+      - pattern: "multinacional|l[íi]der"
+        value: 0.7
+        negatable: false
+      - pattern: "m[ée]s\\s+de\\s+\\d{3,}\\s+(persones|treballadors)"
+        value: 0.6
+        negatable: false
+  gold:
+    - ad_id: manfred-8419
+      language: en
+      span: "disruption detection engine.\n\nThey operate with a startup culture grounded in FCTG's **core values: irreverence, egalitarianism, ownership, and a find-a-way attitude**."
+      value: -0.7
+    - ad_id: manfred-8379
+      language: es
+      span: "producción,** sobre todo si ha sido en **startups o scale-ups de producto B2C con millones de usuarios recurrentes**\n* sepan resolver problemas complejos y nos"
+      value: -0.7
+    - ad_id: feinaactiva-FA92317375
+      language: ca
+      span: "a consultoria tecnològica en creixement, líder en el seu sector, experts en desenvolupament web i alta motivació per la tecnologia punta.\n\n- Desenvolupar mòduls"
+      value: 0.7
+methods_ref: METHODS.md#26-ad-wording-as-signal

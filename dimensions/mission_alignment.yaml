@@ -1,0 +1,65 @@
+id: mission_alignment
+kind: soft
+polarity: bipolar
+label:
+  en: Mission alignment
+  es: Alineación con la misión
+  ca: Alineació amb la missió
+definition: >
+  How much the stated purpose of the work matters to the candidate — public service,
+  health, climate, education at one end; sectors they would refuse at the other.
+elicitation:
+  questions:
+    - id: ma_q1
+      text:
+        en: >
+          Tell me about work you were proud to explain at a family dinner — and any work
+          you would not take again.
+        es: >
+          Cuéntame un trabajo que te enorgullecía explicar en una cena familiar — y
+          alguno que no volverías a aceptar.
+        ca: >
+          Explica'm una feina que t'enorgullia explicar en un sopar familiar — i alguna
+          que no tornaries a acceptar.
+extraction:
+  cues:
+    en:
+      - pattern: "mission|impact"
+        value: 0.6
+        negatable: true
+      - pattern: "healthcare|education|climate|public\\s+sector"
+        value: 0.7
+        negatable: false
+      - pattern: "gambling|betting|defen[cs]e|tobacco"
+        value: -0.7
+        negatable: false
+    es:
+      - pattern: "misi[óo]n|impacto\\s+social"
+        value: 0.6
+        negatable: true
+      - pattern: "sanidad|educaci[óo]n|sector\\s+p[úu]blico"
+        value: 0.7
+        negatable: false
+      - pattern: "apuestas|juego\\s+online|ciberdefensa|defensa"
+        value: -0.7
+        negatable: false
+    ca:
+      - pattern: "missi[óo]|impacte\\s+social"
+        value: 0.6
+        negatable: true
+      - pattern: "sanitat|educaci[óo]|sector\\s+p[úu]blic"
+        value: 0.7
+        negatable: false
+      - pattern: "apostes|defensa"
+        value: -0.7
+        negatable: false
+  gold:
+    - ad_id: manfred-8456
+      language: en
+      span: "is where you come in. 🫵🏾**\n\n**Your main mission will be to** review their existing automation, pinpoint and analyze improvements and **help them build reliable"
+      value: 0.6
+    - ad_id: manfred-8360
+      language: es
+      span: "GIPHY](https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyY2xkNW8wOGdmem5reW9pcmw3c2I0cGNrZGJpb255Y3Rvc2J1aGdrdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/sAMXV2bsKW8f01vRco/200.gif)\n\nTu misión principal será **liderar los dos productos clave que acaban de aterrizar en el ecosistema**. No se trata solo"
+      value: 0.6
+methods_ref: METHODS.md#24-reaction-elicitation-on-real-ad-text

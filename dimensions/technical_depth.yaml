@@ -1,0 +1,69 @@
+id: technical_depth
+kind: soft
+polarity: bipolar
+label:
+  en: Technical depth
+  es: Profundidad técnica
+  ca: Profunditat tècnica
+definition: >
+  Whether the role is engineering hard problems — architecture, performance, systems
+  design — or operating and supporting what already exists.
+elicitation:
+  questions:
+    - id: td_q1
+      text:
+        en: >
+          Tell me about the hardest technical problem you have owned. What made it hard,
+          and how long were you inside it?
+        es: >
+          Cuéntame el problema técnico más difícil que has llevado. ¿Qué lo hacía
+          difícil y cuánto tiempo estuviste dentro?
+        ca: >
+          Explica'm el problema tècnic més difícil que has portat. Què el feia difícil i
+          quant de temps hi vas ser a dins?
+extraction:
+  cues:
+    en:
+      - pattern: "architect(ure|ing)?|system\\s+design"
+        value: 0.7
+        negatable: false
+      - pattern: "scalab|performance\\s+optimi"
+        value: 0.6
+        negatable: false
+      - pattern: "(level\\s*2|l2)\\s+support|helpdesk|ticket"
+        value: -0.6
+        negatable: false
+    es:
+      - pattern: "arquitectura|dise[ñn]o\\s+de\\s+sistemas"
+        value: 0.7
+        negatable: false
+      - pattern: "escalab|optimizaci[óo]n\\s+de\\s+rendimiento"
+        value: 0.6
+        negatable: false
+      - pattern: "soporte\\s+de\\s+nivel|helpdesk|tickets?"
+        value: -0.6
+        negatable: false
+    ca:
+      - pattern: "arquitectura|disseny\\s+de\\s+sistemes"
+        value: 0.7
+        negatable: false
+      - pattern: "escalab|optimitzaci[óo]"
+        value: 0.6
+        negatable: false
+      - pattern: "suport\\s+de\\s+nivell|tiquets?"
+        value: -0.6
+        negatable: false
+  gold:
+    - ad_id: manfred-8419
+      language: en
+      span: "**Cruising Speed** - By this point, the project's architecture will hold no secrets for you. You'll be actively proposing and implementing system enhancements, handling Backend"
+      value: 0.7
+    - ad_id: manfred-8360
+      language: es
+      span: "un *offset* de **Kafka** o cómo domar una arquitectura orientada a eventos. Si quieres construir el futuro de la plataforma *byte* a *byte*, ¡ponte el cinturón y sigue"
+      value: 0.7
+    - ad_id: feinaactiva-FA92319975
+      language: ca
+      span: "Kestrel en ASP.NET Core.\nConeixement de l'arquitectura i funcionament d'entorns virtualitzats (VMWare, Hyper-V, XenApp).\nConeixements generals de TCP/IP.\nConeixements"
+      value: 0.7
+methods_ref: METHODS.md#26-ad-wording-as-signal

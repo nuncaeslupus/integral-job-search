@@ -1,0 +1,69 @@
+id: process_formality
+kind: soft
+polarity: bipolar
+label:
+  en: Process formality
+  es: Formalidad del proceso
+  ca: Formalitat del procés
+definition: >
+  How much prescribed ceremony the work carries — sprint rituals, formal methodologies,
+  documentation gates — versus lightweight ad-hoc coordination.
+elicitation:
+  questions:
+    - id: pf_q1
+      text:
+        en: >
+          Describe the working rhythm of your last team: which recurring meetings
+          existed, and which one would you have removed?
+        es: >
+          Describe el ritmo de trabajo de tu último equipo: qué reuniones recurrentes
+          había y cuál habrías eliminado.
+        ca: >
+          Descriu el ritme de treball del teu últim equip: quines reunions recurrents hi
+          havia i quina hauries eliminat.
+extraction:
+  cues:
+    en:
+      - pattern: "scrum|sprint|kanban"
+        value: 0.5
+        negatable: false
+      - pattern: "agile\\s+methodolog"
+        value: 0.5
+        negatable: false
+      - pattern: "itil|cmmi|waterfall"
+        value: 0.8
+        negatable: false
+    es:
+      - pattern: "scrum|sprint|kanban"
+        value: 0.5
+        negatable: false
+      - pattern: "metodolog[ií]as?\\s+[áa]giles?"
+        value: 0.5
+        negatable: false
+      - pattern: "itil|cascada"
+        value: 0.8
+        negatable: false
+    ca:
+      - pattern: "scrum|sprint|kanban"
+        value: 0.5
+        negatable: false
+      - pattern: "metodologies?\\s+[àa]gils?"
+        value: 0.5
+        negatable: false
+      - pattern: "itil"
+        value: 0.8
+        negatable: false
+  gold:
+    - ad_id: manfred-8419
+      language: en
+      span: "**30-minute daily stand-ups** and **two-week sprints**. But it's not all high-speed; they've built in a **one-week \"breather\"** for thoughtful planning between cycles,"
+      value: 0.5
+    - ad_id: manfred-8360
+      language: es
+      span: "cuanto a la metodología, se huye de los *sprints* infinitos y las reuniones que podrían haber sido un e-mail. Funcionan con **Kanban** y practican la **Continuous"
+      value: 0.5
+    - ad_id: feinaactiva-FA92319975
+      language: ca
+      span: "l’empresa.\n\nExperiència 3 anys. Bones pràctiques ITIL i/o ISO 20000.\nSQL (Llenguatge de Consulta Estructurat): experiència en l'escriptura de consultes\nSQL per a bases"
+      value: 0.8
+methods_ref: METHODS.md#26-ad-wording-as-signal
