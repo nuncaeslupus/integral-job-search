@@ -202,6 +202,8 @@ their own gates.</p>
 <li>[ ] <code>story_bank_size &gt;= 12</code> — distinct episodes captured at onboarding (projects, failures, decisions, definitions of success)</li>
 <li>[ ] <code>story_dimension_linkage == 1.0</code> — every episode links to ≥1 dimension ID, so the bank is queryable rather than a pile of prose</li>
 <li>[ ] <code>story_failure_fraction &gt;= 0.33</code> — at least a third of episodes are about something that went wrong; success stories are rehearsed and reveal less</li>
+<li>[ ] <code>reaction_elicitation_items &gt;= 15</code> — real ads or ad excerpts reacted to, compared or sorted during onboarding</li>
+<li>[ ] <code>elicitation_eval_overlap == 0</code> — zero overlap between the ads used to elicit preferences and the 20 held-out ads scored for <code>rank_spearman</code>. Without this the ranking gate measures memorisation rather than fit, and would pass while the system is worthless</li>
 <li>[ ] <strong>Profile recognisability</strong> (non-numeric): given their own generated profile plus two
       perturbed variants, unlabelled, the candidate identifies their own. Judged by a single
       blind trial per candidate; failure means the profiler is producing generic output.</li>
@@ -216,7 +218,68 @@ their own gates.</p>
 </article>
 <article class="sec" id="s-spec-2">
 <h3 class="sec-h"><span class="chip">§2</span><span class="sec-title">Systems &amp; Impact</span></h3>
-<div class="sec-body"><p>Greenfield: nearly everything is new. "Needs changes" therefore reads as "in v1 scope".</p>
+<div class="sec-body"><p><strong>Phases</strong> — the table below labels deferred components by phase. Phases are a delivery
+sequence, not a component list: several systems in one phase, and some systems (the
+elicitation engine) are built in an early phase and reused by later ones.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Name</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Foundations</td>
+<td>Dimension model, labelled corpus, multi-user schema decision, research</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Candidate</td>
+<td>Elicitation engine, dimension layer, story bank, feedback log</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Supply</td>
+<td>Source connectors, normalize, dedup, expiry</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Understanding</td>
+<td>Extraction funnel, writing-style features, enrichment</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Matching</td>
+<td>Pareto ranking, facet lists, explanations</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Loop</td>
+<td>Feedback → profile revision; calibration against revealed preference</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Automation</td>
+<td>Scheduled incremental search, new-offer detection</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Application</td>
+<td>Pre-draft gap-fill, CV + cover letter generation, outcome tracking, email sensor</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Guidance</td>
+<td>Interview rehearsal, recommendations (courses, preparation, situational advice)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Phases 0-5 are the v1 thin vertical.</strong> Phases 6-8 are deferred and appear in the table
+below marked as such.</p>
+<p>Greenfield: nearly everything is new. "Needs changes" therefore reads as "in v1 scope".</p>
 <table>
 <thead>
 <tr>
@@ -240,9 +303,9 @@ their own gates.</p>
 <tr>
 <td><code>corpus/</code> — labelled ad corpus</td>
 <td>Shared resource</td>
-<td>Ground truth for every extraction and ranking gate</td>
+<td>Ground truth for extraction and ranking gates, <strong>and</strong> stimulus pool for reaction elicitation</td>
 <td>Yes (v1)</td>
-<td>Without it no quantitative gate can run. Pacing item for the whole project</td>
+<td>Without it no quantitative gate can run. Pacing item for the whole project. Serving three consumers raises its value and makes the labelling effort easier to justify</td>
 <td>High</td>
 </tr>
 <tr>
@@ -251,6 +314,14 @@ their own gates.</p>
 <td>One engine, three consumers: onboarding interview, pre-draft gap-filling, real-interview rehearsal. Generates questions from the dimension model, accepts free text, extracts both dimension values (with uncertainty) and episodes</td>
 <td>Yes (v1)</td>
 <td>Candidate-facing; poor questions produce a generic profile and everything downstream degrades. Splitting this into separate "profiler" and "interview simulator" would duplicate the hardest component</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Reaction elicitation</td>
+<td>Primary</td>
+<td>Second elicitation modality: present real ads and ad excerpts (perks blocks, requirement blocks, how the employer phrases an ask) and capture free-text reaction, comparison and sorting. Draws stimuli from the corpus</td>
+<td>Yes (v1)</td>
+<td>People introspect badly in the abstract and react well to concrete text. Also surfaces ontology gaps, because reactions arrive in the wild vocabulary the extractor must handle. Supplies day-one preference data the system otherwise lacks until outcomes exist</td>
 <td>High</td>
 </tr>
 <tr>
@@ -538,7 +609,9 @@ option's <strong>Tradeoffs</strong> as the real decision content; effort is the 
 </article>
 <article class="sec" id="s-spec-4">
 <h3 class="sec-h"><span class="chip">§4</span><span class="sec-title">Recommendation</span></h3>
-<div class="sec-body"><p><strong>Recommended option</strong>: <strong>Option B</strong> — dimension-model-first thin vertical.</p>
+<div class="sec-body"><p><strong>Recommended option</strong>: <strong>Option B</strong> — dimension-model-first thin vertical.
+<strong>Decided</strong>: Option B, confirmed by the repository owner in spec review on 2026-08-15
+(<code>status/reviews/spec-notes-2026-08-15.md</code>).</p>
 <p>Option A is tempting for speed and would produce tailored CVs this week, but it cannot
 express the thing that makes this project worth doing: one vocabulary carried end to end.
 Bolting soft dimensions onto a tool whose profile is a single Markdown file, whose ranking
@@ -582,8 +655,14 @@ requirement in v1, not a v1 feature.</p>
       tool is usable at twenty applications or only at three.
 - [ ] <strong>Source connector for v1</strong>: which single portal. Needs a market with real ES/CA
       remote programming volume and tolerable access rules.
-- [ ] <strong>Weight elicitation placement</strong>: forced pairwise trade-offs inside the initial
-      interview, or deferred until the candidate has seen real offers to compare?
+- [ ] <strong>Weight elicitation placement</strong>: reaction elicitation largely answers this — the
+      candidate compares real ads rather than synthetic attribute bundles. Remaining
+      question is whether any synthetic pairwise trade-offs are still needed to separate
+      dimensions that real ads happen to correlate (e.g. salary and on-site, which co-vary
+      in the market and so are hard to disentangle from reactions alone).
+- [ ] <strong>Reaction stimulus design</strong>: whole ads, or excerpt blocks (perks / requirements /
+      how the ask is phrased) shown side by side? Excerpts isolate a dimension but strip
+      the context that makes a reaction honest. Probably both, at different stages.
 - [ ] <strong>Confirm</strong>: applications are drafted and require explicit per-item approval; the
       system never submits autonomously. Specced this way pending confirmation.</p>
 <blockquote>
@@ -615,7 +694,7 @@ requirement in v1, not a v1 feature.</p>
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script>var SPEC_SEED_NOTES={};</script>
+<script>var SPEC_SEED_NOTES={"s-spec-2": "About the user evaluating ads, which I think can be an important step to make the tool know them, maybe you should give the user about 5 or 10 or 20 (until needed) ads that could fit and the user can write you some things that doesn't like. For example, it could be similar to this document: a chunk of text from one or multiple ads and the user evaluates them. Or even: sort these similar texts by more according to you and write anything you think of. For example, the perks part of multiple ads. Or what they need. Or how they ask for things... Sometimes offers say that \"if you don't match in everything, don't worry, send us your CV\". How companies tell you what they want is important, and the user reaction to offers can give you very useful insights about the user.", "s-spec-option-c-full-integral-system-sp": "Are phases what is shown in \"Systems & Impact\"?", "s-spec-comparison": "Option B."};</script>
 <script>
 (function(){
   var NS = 'job-search-spec-v1:';

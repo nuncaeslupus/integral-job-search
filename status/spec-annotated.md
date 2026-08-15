@@ -51,6 +51,8 @@ their own gates.
 - [ ] `story_bank_size >= 12` — distinct episodes captured at onboarding (projects, failures, decisions, definitions of success)
 - [ ] `story_dimension_linkage == 1.0` — every episode links to ≥1 dimension ID, so the bank is queryable rather than a pile of prose
 - [ ] `story_failure_fraction >= 0.33` — at least a third of episodes are about something that went wrong; success stories are rehearsed and reveal less
+- [ ] `reaction_elicitation_items >= 15` — real ads or ad excerpts reacted to, compared or sorted during onboarding
+- [ ] `elicitation_eval_overlap == 0` — zero overlap between the ads used to elicit preferences and the 20 held-out ads scored for `rank_spearman`. Without this the ranking gate measures memorisation rather than fit, and would pass while the system is worthless
 - [ ] **Profile recognisability** (non-numeric): given their own generated profile plus two
       perturbed variants, unlabelled, the candidate identifies their own. Judged by a single
       blind trial per candidate; failure means the profiler is producing generic output.
@@ -66,13 +68,33 @@ their own gates.
 
 ## §2 Systems & Impact
 
+**Phases** — the table below labels deferred components by phase. Phases are a delivery
+sequence, not a component list: several systems in one phase, and some systems (the
+elicitation engine) are built in an early phase and reused by later ones.
+
+| Phase | Name | Contents |
+|---|---|---|
+| 0 | Foundations | Dimension model, labelled corpus, multi-user schema decision, research |
+| 1 | Candidate | Elicitation engine, dimension layer, story bank, feedback log |
+| 2 | Supply | Source connectors, normalize, dedup, expiry |
+| 3 | Understanding | Extraction funnel, writing-style features, enrichment |
+| 4 | Matching | Pareto ranking, facet lists, explanations |
+| 5 | Loop | Feedback → profile revision; calibration against revealed preference |
+| 6 | Automation | Scheduled incremental search, new-offer detection |
+| 7 | Application | Pre-draft gap-fill, CV + cover letter generation, outcome tracking, email sensor |
+| 8 | Guidance | Interview rehearsal, recommendations (courses, preparation, situational advice) |
+
+**Phases 0-5 are the v1 thin vertical.** Phases 6-8 are deferred and appear in the table
+below marked as such.
+
 Greenfield: nearly everything is new. "Needs changes" therefore reads as "in v1 scope".
 
 | System | Type | Role | Needs changes? | Impact | Severity |
 |--------|------|------|----------------|--------|----------|
 | `dimensions/` — dimension model | Primary | The spine. Per dimension: ID, definition, elicitation question(s), extraction cues per language, hard-filter vs soft-preference, polarity | Yes (v1) | Every other component is a projection of this. Changing a dimension ID is a breaking change everywhere | High |
-| `corpus/` — labelled ad corpus | Shared resource | Ground truth for every extraction and ranking gate | Yes (v1) | Without it no quantitative gate can run. Pacing item for the whole project | High |
+| `corpus/` — labelled ad corpus | Shared resource | Ground truth for extraction and ranking gates, **and** stimulus pool for reaction elicitation | Yes (v1) | Without it no quantitative gate can run. Pacing item for the whole project. Serving three consumers raises its value and makes the labelling effort easier to justify | High |
 | Elicitation engine | Primary | One engine, three consumers: onboarding interview, pre-draft gap-filling, real-interview rehearsal. Generates questions from the dimension model, accepts free text, extracts both dimension values (with uncertainty) and episodes | Yes (v1) | Candidate-facing; poor questions produce a generic profile and everything downstream degrades. Splitting this into separate "profiler" and "interview simulator" would duplicate the hardest component | High |
+| Reaction elicitation | Primary | Second elicitation modality: present real ads and ad excerpts (perks blocks, requirement blocks, how the employer phrases an ask) and capture free-text reaction, comparison and sorting. Draws stimuli from the corpus | Yes (v1) | People introspect badly in the abstract and react well to concrete text. Also surfaces ontology gaps, because reactions arrive in the wild vocabulary the extractor must handle. Supplies day-one preference data the system otherwise lacks until outcomes exist | High |
 | Profile store — dimension layer | Primary / shared | Per-candidate dimension values as a **derived view** over an append-only evidence log | Yes (v1) | Holds sensitive psychological and personal data. Schema must be multi-user from day one | High |
 | Profile store — story bank | Primary / shared | Verbatim episodes (projects, failures, decisions, definitions of success) tagged to dimension IDs, with a per-use disclosure flag | Yes (v1) | Dimension scores can rank a job but cannot write a sentence; the story bank is what makes a cover letter specific rather than fluent-generic. Most sensitive artefact in the system | High |
 | Feedback log | Primary | Append-only record of "I don't like this because…" and every other preference signal | Yes (v1) | Source of truth for profile evolution; enables recompute and audit | High |
@@ -103,7 +125,7 @@ EU AI Act's employment provisions. Nothing in the architecture prevents that inv
 it is recorded here as an explicit non-goal.
 
 > **✎ Notes** · `SPEC §2`
-> _(your notes here — replace this line)_
+> About the user evaluating ads, which I think can be an important step to make the tool know them, maybe you should give the user about 5 or 10 or 20 (until needed) ads that could fit and the user can write you some things that doesn't like. For example, it could be similar to this document: a chunk of text from one or multiple ads and the user evaluates them. Or even: sort these similar texts by more according to you and write anything you think of. For example, the perks part of multiple ads. Or what they need. Or how they ask for things... Sometimes offers say that "if you don't match in everything, don't worry, send us your CV". How companies tell you what they want is important, and the user reaction to offers can give you very useful insights about the user.
 
 ## §3 Options
 
@@ -173,7 +195,7 @@ option's **Tradeoffs** as the real decision content; effort is the least interes
 - **Compatibility**: n/a
 
 > **✎ Notes** · `SPEC › Option C: Full integral system, specced and built in dependency order (Thorough)`
-> _(your notes here — replace this line)_
+> Are phases what is shown in "Systems & Impact"?
 
 ### Comparison
 
@@ -187,11 +209,13 @@ option's **Tradeoffs** as the real decision content; effort is the least interes
 | Time to first real output | Days | 2-3 weeks | Months |
 
 > **✎ Notes** · `SPEC › Comparison`
-> _(your notes here — replace this line)_
+> Option B.
 
 ## §4 Recommendation
 
 **Recommended option**: **Option B** — dimension-model-first thin vertical.
+**Decided**: Option B, confirmed by the repository owner in spec review on 2026-08-15
+(`status/reviews/spec-notes-2026-08-15.md`).
 
 Option A is tempting for speed and would produce tailored CVs this week, but it cannot
 express the thing that makes this project worth doing: one vocabulary carried end to end.
@@ -242,8 +266,14 @@ requirement in v1, not a v1 feature.
       tool is usable at twenty applications or only at three.
 - [ ] **Source connector for v1**: which single portal. Needs a market with real ES/CA
       remote programming volume and tolerable access rules.
-- [ ] **Weight elicitation placement**: forced pairwise trade-offs inside the initial
-      interview, or deferred until the candidate has seen real offers to compare?
+- [ ] **Weight elicitation placement**: reaction elicitation largely answers this — the
+      candidate compares real ads rather than synthetic attribute bundles. Remaining
+      question is whether any synthetic pairwise trade-offs are still needed to separate
+      dimensions that real ads happen to correlate (e.g. salary and on-site, which co-vary
+      in the market and so are hard to disentangle from reactions alone).
+- [ ] **Reaction stimulus design**: whole ads, or excerpt blocks (perks / requirements /
+      how the ask is phrased) shown side by side? Excerpts isolate a dimension but strip
+      the context that makes a reaction honest. Probably both, at different stages.
 - [ ] **Confirm**: applications are drafted and require explicit per-item approval; the
       system never submits autonomously. Specced this way pending confirmation.
 
