@@ -24,11 +24,11 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "on-?call"
+      - pattern: "on-?call\\s+(rotation|rota|duty|shifts?|schedule)"
         value: 0.8
         negatable: true
-      - pattern: "24/7|out\\s+of\\s+hours"
-        value: 0.7
+      - pattern: "(you|engineers?)\\s+(will\\s+)?(be|are|participate)\\s+[^.]{0,20}on-?call"
+        value: 0.8
         negatable: false
       - pattern: "no\\s+on-?call"
         value: 0.0
@@ -54,12 +54,8 @@ extraction:
         value: 0.0
         negatable: false
   gold:
-    - ad_id: wwr-clickhouse-ai-product-engineer-clickstack
-      language: en
-      span: "2 AM, propose a root cause, and hand the on-call a concise summary by the time they've logged in.\n\nWe're hiring a AI Product Engineer to build agentic capabilities"
-      value: 0.8
     - ad_id: manfred-8389
       language: es
-      span: "proyecto se quede bloqueado.\n\n**🚨 Sobre las Guardias** (On-Call) Manejar transacciones en tiempo real implica estar alerta, pero en Valsea el descanso es sagrado y"
+      span: "bloqueado.\n\n**🚨 Sobre las Guardias** (On-Call) Manejar transacciones en tiempo real implica estar alerta, pero en Valsea el descanso es sagrado y las guardias están extremadamente"
       value: 0.8
 methods_ref: METHODS.md#26-ad-wording-as-signal

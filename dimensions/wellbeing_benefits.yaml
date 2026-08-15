@@ -24,46 +24,42 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "health\\s+insurance|healthcare"
+      - pattern: "(private\\s+)?health\\s+insurance|healthcare\\s+(cover|contribution)"
         value: 0.7
         negatable: true
-      - pattern: "mental\\s+health|wellbeing"
+      - pattern: "mental\\s+health\\s+(support|days?|cover)|wellbeing\\s+(budget|allowance|programme)"
         value: 0.6
         negatable: false
-      - pattern: "gym|wellness"
+      - pattern: "gym\\s+(membership|allowance)|wellness\\s+(budget|allowance)"
         value: 0.4
         negatable: false
     es:
       - pattern: "seguro\\s+m[ée]dico"
         value: 0.7
         negatable: true
-      - pattern: "apoyo\\s+psicol[óo]gico|salud\\s+mental"
+      - pattern: "apoyo\\s+psicol[óo]gico|programa\\s+de\\s+bienestar"
         value: 0.6
         negatable: false
-      - pattern: "gimnasio|ticket\\s+restaurante"
+      - pattern: "gimnasio|ticket\\s+restaurante|retribuci[óo]n\\s+flexible"
         value: 0.4
         negatable: false
     ca:
       - pattern: "assegurança\\s+m[èe]dica"
         value: 0.7
         negatable: true
-      - pattern: "salut\\s+mental"
+      - pattern: "suport\\s+psicol[òo]gic|programa\\s+de\\s+benestar"
         value: 0.6
         negatable: false
-      - pattern: "gimn[àa]s|tiquet\\s+restaurant"
+      - pattern: "gimn[àa]s|tiquet\\s+restaurant|retribuci[óo]\\s+flexible"
         value: 0.4
         negatable: false
   gold:
     - ad_id: manfred-8456
       language: en
-      span: "vacation days**\n\n**👩🏾‍⚕️ Health care**: Private health insurance for you and your family.\n\n**🗣️ Continuous learning**: Free English and Spanish lessons and ongoing professional"
+      span: "**👩🏾‍⚕️ Health care**: Private health insurance for you and your family.\n\n**🗣️ Continuous"
       value: 0.7
     - ad_id: manfred-8360
       language: es
-      span: "vacaciones**\n\n**👩🏾‍⚕️Cuidado de tu salud**: Seguro médico privado para ti y para tu familia.\n\n**🗣️ Aprendizaje continuo**: Clases de inglés y español gratuitas y oportunidades"
+      span: "**👩🏾‍⚕️Cuidado de tu salud**: Seguro médico privado para ti y para tu familia.\n\n**🗣️ Aprendizaje"
       value: 0.7
-    - ad_id: feinaactiva-FA92320466
-      language: ca
-      span: "Orienta és una institució monogràfica en salut mental infantojuvenil. Està adscrita al con-veni SISCAT (III Conveni Col·lectiu de treball dels hospitals d’aguts, centres"
-      value: 0.6
 methods_ref: METHODS.md#26-ad-wording-as-signal

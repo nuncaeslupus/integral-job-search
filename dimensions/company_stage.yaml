@@ -24,46 +24,45 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "startup|scale-?up|series\\s+[abc]\\b"
+      - pattern: "(early[- ]stage|seed[- ]stage|pre-?seed|series\\s+[abc]\\b)"
         value: -0.7
         negatable: false
-      - pattern: "multinational|global\\s+leader|fortune"
+      - pattern: "\\b(we|they)\\s+are\\s+an?\\s+(early[- ]stage\\s+)?(startup|scale-?up)\\b"
+        value: -0.7
+        negatable: false
+      - pattern: "multinational|global\\s+leader|fortune\\s+\\d"
         value: 0.7
         negatable: false
-      - pattern: "\\b\\d{3,}\\s*(\\+\\s*)?employees"
+      - pattern: "\\b\\d[\\d.,]{2,}\\s*(\\+\\s*)?employees"
         value: 0.6
         negatable: false
     es:
-      - pattern: "startup|scale-?up"
+      - pattern: "somos\\s+una\\s+(startup|scale-?up)|fase\\s+(semilla|temprana)"
         value: -0.7
         negatable: false
-      - pattern: "multinacional|l[íi]der\\s+(europe[oa]|mundial)"
+      - pattern: "multinacional|l[íi]der\\s+(europe[oa]|mundial|internacional)"
         value: 0.7
         negatable: false
-      - pattern: "m[áa]s\\s+de\\s+\\d{3,}\\s+(personas|empleados)"
+      - pattern: "m[áa]s\\s+de\\s+\\d[\\d.,]{2,}\\s+(personas|empleados|profesionales)"
         value: 0.6
         negatable: false
     ca:
-      - pattern: "startup|scale-?up"
+      - pattern: "som\\s+una\\s+(startup|scale-?up)"
         value: -0.7
         negatable: false
-      - pattern: "multinacional|l[íi]der"
+      - pattern: "multinacional|l[íi]der\\s+(europe[ua]|mundial|internacional)"
         value: 0.7
         negatable: false
-      - pattern: "m[ée]s\\s+de\\s+\\d{3,}\\s+(persones|treballadors)"
+      - pattern: "m[ée]s\\s+de\\s+\\d[\\d.,]{2,}\\s+(persones|treballadors)"
         value: 0.6
         negatable: false
   gold:
-    - ad_id: manfred-8419
+    - ad_id: wwr-superplane-product-engineer-1
       language: en
-      span: "disruption detection engine.\n\nThey operate with a startup culture grounded in FCTG's **core values: irreverence, egalitarianism, ownership, and a find-a-way attitude**."
+      span: "delivery.\n\nYou want ownership, not a narrow lane.\n\nYou want an early-stage company where the pace is high, the standards are high, and the upside is big.\n\n\n\nHow To Apply\n\nWe"
       value: -0.7
-    - ad_id: manfred-8379
+    - ad_id: tecnoempleo-b2fb182e627ab3455b4c
       language: es
-      span: "producción,** sobre todo si ha sido en **startups o scale-ups de producto B2C con millones de usuarios recurrentes**\n* sepan resolver problemas complejos y nos"
-      value: -0.7
-    - ad_id: feinaactiva-FA92317375
-      language: ca
-      span: "a consultoria tecnològica en creixement, líder en el seu sector, experts en desenvolupament web i alta motivació per la tecnologia punta.\n\n- Desenvolupar mòduls"
-      value: 0.7
+      span: "de la tecnología. Formado por más de 3.000 personas creativas digitales e innovadoras conectadas a un propósito y capaces de generar conexiones con personas de todo el mundo."
+      value: 0.6
 methods_ref: METHODS.md#26-ad-wording-as-signal

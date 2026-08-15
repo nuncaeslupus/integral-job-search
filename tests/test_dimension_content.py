@@ -20,6 +20,7 @@ from jobsearch.dimensions import (
     Dimension,
     extractor_coverage,
     load_dimensions,
+    unmatched_gold,
     verify_gold,
 )
 
@@ -123,6 +124,19 @@ def test_every_dimension_has_a_cue_that_fires_on_a_real_ad(dimensions: list[Dime
             dead.append(dimension.id)
 
     assert not dead, f"dimensions whose cues match no ad in the corpus: {dead}"
+
+
+def test_every_gold_example_is_matched_by_one_of_its_own_cues(
+    dimensions: list[Dimension],
+) -> None:
+    """A gold example no cue reaches counts towards coverage while disproving it.
+
+    Added after review found the reverse case: cues tightened to stop firing on
+    the wrong thing, with their gold left pointing at wording the new cue no
+    longer describes. Coverage stayed at 1.0 throughout, which is exactly the
+    silence this test removes.
+    """
+    assert unmatched_gold(dimensions) == []
 
 
 def test_hard_dimensions_are_filters_not_preferences(dimensions: list[Dimension]) -> None:

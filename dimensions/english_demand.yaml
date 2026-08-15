@@ -24,42 +24,46 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "fluent\\s+english|native\\s+english"
+      - pattern: "fluent\\s+english|native\\s+english|english\\s+is\\s+(our|the)\\s+(working|company)\\s+language"
         value: 1.0
         negatable: false
-      - pattern: "english\\s+is\\s+(our|the)\\s+(working|company)\\s+language"
-        value: 0.9
-        negatable: false
-      - pattern: "english\\s+(b2|c1)"
+      - pattern: "english\\s*\\(?\\s*(b2|c1|c2)"
         value: 0.7
         negatable: false
+      - pattern: "english\\s+(is\\s+)?(not\\s+required|optional)"
+        value: 0.0
+        negatable: false
     es:
-      - pattern: "ingl[ée]s\\s+(alto|fluido|c1|c2)"
+      - pattern: "ingl[ée]s\\s*\\(?\\s*(alto|fluido|c1|c2)"
         value: 0.9
         negatable: true
-      - pattern: "ingl[ée]s\\s+(b1|b2|medio)"
+      - pattern: "ingl[ée]s\\s*\\(?\\s*(b1|b2|medio|intermedio)"
         value: 0.6
         negatable: false
-      - pattern: "ingl[ée]s\\s+no\\s+necesario|no\\s+se\\s+requiere\\s+ingl[ée]s"
+      - pattern: "ingl[ée]s\\s+no\\s+(necesario|requerido)|no\\s+se\\s+requiere\\s+ingl[ée]s"
         value: 0.0
         negatable: false
     ca:
-      - pattern: "angl[èe]s\\s+(alt|c1|c2)"
+      - pattern: "angl[èe]s\\s*\\(?\\s*(c1|c2|alt|parlat\\s+superior)"
         value: 0.9
-        negatable: true
-      - pattern: "angl[èe]s\\s+(b1|b2)"
+        negatable: false
+      - pattern: "angl[èe]s\\s*\\(?\\s*(b1|b2|parlat\\s+(mitj[àa]|b[àa]sic))"
         value: 0.6
         negatable: false
-      - pattern: "angl[èe]s"
-        value: 0.5
+      - pattern: "angl[èe]s\\s+no\\s+(necessari|requerit)"
+        value: 0.0
         negatable: false
   gold:
     - ad_id: manfred-8389
       language: es
-      span: "de su capa de persistencia.\n* **Nivel de Inglés Alto**: Tu día a día será completamente en este idioma.💂\n\n**Suma puntos 🎁**\n\n* Experiencia trabajando con bases de"
+      span: "persistencia.\n* **Nivel de Inglés Alto**: Tu día a día será completamente en este idioma.💂\n\n**Suma puntos 🎁**"
+      value: 0.9
+    - ad_id: feinaactiva-09202624459
+      language: ca
+      span: "anglès (parlat Superior, escrit Superior)\n\ncatalà (parlat Superior, escrit Superior)"
       value: 0.9
     - ad_id: feinaactiva-09202623802
       language: ca
-      span: "anàlisis estadístics, Python, GIT, Airflow.\nAnglès (B2), català i castellà (C1).\nJornada completa. Retribució 3.085,71*14.\n\n_Gestió de la relació amb els clients"
-      value: 0.5
+      span: "Anglès (B2), català i castellà (C1).\nJornada completa. Retribució 3.085,71*14."
+      value: 0.6
 methods_ref: METHODS.md#26-ad-wording-as-signal

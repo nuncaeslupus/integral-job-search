@@ -24,42 +24,46 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "mission|impact"
+      - pattern: "our\\s+mission\\s+is|mission-?driven|social\\s+impact"
         value: 0.6
         negatable: true
-      - pattern: "healthcare|education|climate|public\\s+sector"
+      - pattern: "healthcare|education|climate|public\\s+sector|non-?profit"
         value: 0.7
         negatable: false
-      - pattern: "gambling|betting|defen[cs]e|tobacco"
+      - pattern: "gambling|betting|tobacco|defen[cs]e\\s+(sector|industry|contractor)"
         value: -0.7
         negatable: false
     es:
-      - pattern: "misi[óo]n|impacto\\s+social"
+      - pattern: "nuestra\\s+misi[óo]n|impacto\\s+social"
         value: 0.6
         negatable: true
-      - pattern: "sanidad|educaci[óo]n|sector\\s+p[úu]blico"
+      - pattern: "sanidad|educaci[óo]n|sector\\s+p[úu]blico|administraci[óo]n\\s+p[úu]blica"
         value: 0.7
         negatable: false
-      - pattern: "apuestas|juego\\s+online|ciberdefensa|defensa"
+      - pattern: "apuestas|juego\\s+online|ciberdefensa|sector\\s+defensa"
         value: -0.7
         negatable: false
     ca:
-      - pattern: "missi[óo]|impacte\\s+social"
+      - pattern: "la\\s+nostra\\s+missi[óo]|impacte\\s+social"
         value: 0.6
         negatable: true
-      - pattern: "sanitat|educaci[óo]|sector\\s+p[úu]blic"
+      - pattern: "salut\\s+mental|sanitari|hospital|SISCAT|educaci[óo]"
         value: 0.7
         negatable: false
-      - pattern: "apostes|defensa"
+      - pattern: "apostes|sector\\s+defensa"
         value: -0.7
         negatable: false
   gold:
-    - ad_id: manfred-8456
+    - ad_id: wwr-stripe-backend-engineer-core-technology
       language: en
-      span: "is where you come in. 🫵🏾**\n\n**Your main mission will be to** review their existing automation, pinpoint and analyze improvements and **help them build reliable"
+      span: "Our mission is to increase the GDP of the internet, and we have a staggering amount of work ahead. That means you have an unprecedented"
       value: 0.6
-    - ad_id: manfred-8360
+    - ad_id: tecnoempleo-0e9510e2527fd31cd240
       language: es
-      span: "GIPHY](https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyY2xkNW8wOGdmem5reW9pcmw3c2I0cGNrZGJpb255Y3Rvc2J1aGdrdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/sAMXV2bsKW8f01vRco/200.gif)\n\nTu misión principal será **liderar los dos productos clave que acaban de aterrizar en el ecosistema**. No se trata solo"
-      value: 0.6
+      span: "Estamos ampliando nuestros equipos en el sector defensa para asumir un proyecto relacionado con sistemas UAS/UAV. Nos gusta ir al grano te vamos a contar lo que no está"
+      value: -0.7
+    - ad_id: feinaactiva-FA92320466
+      language: ca
+      span: "Fundació Orienta és una institució monogràfica en salut mental infantojuvenil. Està adscrita al con-veni SISCAT (III Conveni Col·lectiu de"
+      value: 0.7
 methods_ref: METHODS.md#24-reaction-elicitation-on-real-ad-text

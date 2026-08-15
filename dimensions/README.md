@@ -47,13 +47,42 @@ take on it. `verify_gold` asserts each span appears byte-for-byte in the ad it
 cites, so the gold set cannot drift into paraphrase — the same rule the corpus
 README applies to the ads themselves.
 
-**Caveat on gold provenance.** The v0 gold examples were selected by searching
-the corpus for text each dimension's own cues match, then recording the
-surrounding excerpt. That makes them real, but not independent: they demonstrate
-that a cue fires on genuine market language, and they do **not** constitute
-evidence that extraction generalises to phrasings the cues do not already
-anticipate. T5's hand labels are the independent set, and `extraction_macro_f1`
-(T15) must be measured against those, never against this gold.
+`unmatched_gold` additionally asserts that each gold span is matched by one of
+its own dimension's cues. A gold example the extractor cannot reach still counts
+towards `dimension_extractor_coverage` while proving the opposite of what that
+metric claims — and it appears exactly when a cue is tightened without
+revisiting the gold it was written from.
+
+**Caveat on gold provenance.** The v0 gold examples were first selected by
+searching the corpus for text each dimension's own cues match. That makes them
+real, but not independent: they demonstrate that a cue fires on genuine market
+language, and they do **not** constitute evidence that extraction generalises to
+phrasings the cues do not already anticipate. T5's hand labels are the
+independent set, and `extraction_macro_f1` (T15) must be measured against those,
+never against this gold. Tracked as queue task D-2.
+
+Review caught what that mechanical selection cost: seven dimensions had cues
+matching a *word* without requiring it applied to the role or employer, and each
+had inherited a gold example demonstrating the error. "Startup culture" at a
+multinational founded in 1982 scored as early-stage; a staffing marketplace's
+"product teams" scored as own-product; a required ISTQB certificate scored as
+employer-funded learning; a mental-health institution's sector description scored
+as an employee wellbeing benefit; "hand the on-call a summary" — something the
+advertised product does — scored as on-call load on the candidate; "your main
+mission will be" scored as employer mission; and a bare `anglès` matched any
+mention of the word. Those cues now require role or employer attribution, and
+every replacement gold span was read in its full ad before being committed.
+
+## Where the model does not reach
+
+`status/evidence/T3.json` records `language_slices_with_no_corpus_hit` — the
+`<dimension>:<language>` pairs whose cues match no ad in the corpus. Eleven of
+the 66 slices are silent, and most of them are the corpus telling the truth: the
+Catalan slice carries no wellbeing benefits, no company-stage language and no
+on-call language, because those 15 ads are public-sector and health IT roles
+(see the T4b divergence note in `corpus/raw/README.md`). Inventing cue hits to
+close those gaps would make the model look more covered than the market is. The
+list is reported rather than failed so the gaps stay visible.
 
 ## Working on the model
 

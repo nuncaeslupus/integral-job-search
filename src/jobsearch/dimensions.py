@@ -413,6 +413,51 @@ def verify_gold(
     return violations
 
 
+def unmatched_gold(dimensions: list[Dimension]) -> list[str]:
+    """Gold examples that none of their own dimension's cues match.
+
+    A gold example the extractor cannot reach is not a demonstration of
+    anything: it counts towards `dimension_extractor_coverage` while proving
+    the opposite of what that metric claims. This catches the two ways that
+    happens — a cue tightened without revisiting its gold, and a gold span
+    chosen from wording no cue describes.
+    """
+    return [
+        f"{dimension.id}: gold {gold.ad_id} is matched by no {gold.language} cue"
+        for dimension in dimensions
+        for gold in dimension.extraction.gold
+        if not any(
+            re.search(cue.pattern, gold.span, re.IGNORECASE)
+            for cue in dimension.extraction.cues.get(gold.language, [])
+        )
+    ]
+
+
+def silent_language_slices(
+    dimensions: list[Dimension],
+    ads: list[dict[str, Any]],
+) -> list[str]:
+    """`<dimension>:<language>` pairs whose cues match no ad in the corpus.
+
+    Not a failure — Catalan ads in this corpus carry no wellbeing benefits and
+    no company-stage language, and inventing cue hits would be worse than the
+    gap. It is reported so the gap stays visible instead of being mistaken for
+    coverage the model does not have.
+    """
+    return [
+        f"{dimension.id}:{language}"
+        for dimension in dimensions
+        for language in SCHEMA_LANGUAGES
+        if dimension.extraction.cues.get(language)
+        and not any(
+            re.search(cue.pattern, str(ad["text"]), re.IGNORECASE)
+            for cue in dimension.extraction.cues[language]
+            for ad in ads
+            if ad["language"] == language
+        )
+    ]
+
+
 def extractor_coverage(dimensions: list[Dimension]) -> float:
     """`dimension_extractor_coverage` — the T3 gate metric.
 
@@ -441,6 +486,10 @@ def write_coverage_evidence(
     uncovered = sorted(
         d.id for d in dimensions if not any(d.extraction.cues.values()) or not d.extraction.gold
     )
+    try:
+        ads = load_ads()
+    except (OSError, ValueError, json.JSONDecodeError):
+        ads = []
     measured: dict[str, Any] = {
         "dimension_extractor_coverage": round(extractor_coverage(dimensions), 4),
         "dimension_count": len(dimensions),
@@ -450,7 +499,10 @@ def write_coverage_evidence(
             for language in SCHEMA_LANGUAGES
         },
         "dimensions_without_cues_or_gold": uncovered,
-        "gold_violations": verify_gold(dimensions),
+        "gold_violations": verify_gold(dimensions, ads),
+        "gold_unmatched_by_own_cues": unmatched_gold(dimensions),
+        # Reported, not failed: see `silent_language_slices`.
+        "language_slices_with_no_corpus_hit": silent_language_slices(dimensions, ads),
     }
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -503,9 +555,10 @@ def _main(argv: list[str]) -> int:
         if measured["dimension_count"] == 0:
             print(f"no dimensions in {DEFAULT_DIMENSIONS_DIR} — nothing measured", file=sys.stderr)
             return 3
-        for violation in measured["gold_violations"]:
+        problems = [*measured["gold_violations"], *measured["gold_unmatched_by_own_cues"]]
+        for violation in problems:
             print(violation, file=sys.stderr)
-        return 1 if measured["gold_violations"] else 0
+        return 1 if problems else 0
 
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)

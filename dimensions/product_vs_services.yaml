@@ -24,10 +24,10 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "our\\s+product|product\\s+team"
+      - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build"
         value: 0.7
         negatable: false
-      - pattern: "consultanc(y|ies)|client\\s+site|staff\\s+augmentation"
+      - pattern: "consultanc(y|ies)|client\\s+site|staff(ing|\\s+augmentation)|our\\s+client\\s+is"
         value: -0.7
         negatable: false
       - pattern: "end\\s+users?"
@@ -47,19 +47,23 @@ extraction:
       - pattern: "producte\\s+propi|el\\s+nostre\\s+producte"
         value: 0.7
         negatable: false
-      - pattern: "consultora|client\\s+final"
+      - pattern: "consultora|consultoria|client\\s+final"
         value: -0.7
         negatable: false
       - pattern: "assignaci[óo]\\s+a\\s+projecte"
         value: -0.5
         negatable: false
   gold:
-    - ad_id: remotive-1919265
+    - ad_id: wwr-toptal-senior-software-engineer-for-ai-powered-banking-platform
       language: en
-      span: "friends old & new:\nour niche is small/diverse product teams, since clients with larger budgets and higher-impact work tell us they want teams, not individuals. Of course,"
-      value: 0.7
+      span: "Our client is a fast-growing, Series A-backed AI company delivering agentic AI solutions to banks and credit unions. Their platform is already serving over 100 financial"
+      value: -0.7
     - ad_id: tecnoempleo-0ccd13f62257530f7946
       language: es
-      span: "Descripción de la empresa Devoteam es una consultora europea líder enfocada en estrategia digital plataformas tecnológicas ciberseguridad y transformación empresarial"
+      span: "Descripción de la empresa Devoteam es una consultora europea líder enfocada en estrategia digital plataformas tecnológicas ciberseguridad y transformación empresarial a través de la tecnología."
+      value: -0.7
+    - ad_id: feinaactiva-FA92317375
+      language: ca
+      span: "DESENVOLUPADOR .NET (H/D) per a consultoria tecnològica en creixement, líder en el seu sector, experts en desenvolupament web i alta motivació per la tecnologia punta.\n\n- Desenvolupar"
       value: -0.7
 methods_ref: METHODS.md#26-ad-wording-as-signal
