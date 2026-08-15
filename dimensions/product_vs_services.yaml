@@ -1,0 +1,69 @@
+id: product_vs_services
+kind: soft
+polarity: bipolar
+label:
+  en: Product versus services
+  es: Producto frente a servicios
+  ca: Producte enfront de serveis
+definition: >
+  Whether the work is on the employer's own product, or delivered into a client's
+  organisation through a consultancy or staffing arrangement.
+elicitation:
+  questions:
+    - id: pvs_q1
+      text:
+        en: >
+          Describe who used the last thing you built. Did you ever meet them, and who
+          employed you while you built it?
+        es: >
+          Describe quién usaba lo último que construiste. ¿Llegaste a conocerlos y quién
+          te empleaba mientras lo construías?
+        ca: >
+          Descriu qui feia servir l'última cosa que vas construir. Els vas arribar a
+          conèixer i qui et contractava mentre la construïes?
+extraction:
+  cues:
+    en:
+      - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build"
+        value: 0.7
+        negatable: false
+      - pattern: "consultanc(y|ies)|client\\s+site|staff(ing|\\s+augmentation)|our\\s+client\\s+is"
+        value: -0.7
+        negatable: false
+      - pattern: "end\\s+users?"
+        value: 0.4
+        negatable: false
+    es:
+      - pattern: "producto\\s+propio|nuestro\\s+producto"
+        value: 0.7
+        negatable: false
+      - pattern: "consultora|c[áa]rnica|cliente\\s+final"
+        value: -0.7
+        negatable: false
+      - pattern: "asignaci[óo]n\\s+a\\s+proyecto"
+        value: -0.5
+        negatable: false
+    ca:
+      - pattern: "producte\\s+propi|el\\s+nostre\\s+producte"
+        value: 0.7
+        negatable: false
+      - pattern: "consultora|consultoria|client\\s+final"
+        value: -0.7
+        negatable: false
+      - pattern: "assignaci[óo]\\s+a\\s+projecte"
+        value: -0.5
+        negatable: false
+  gold:
+    - ad_id: wwr-toptal-senior-software-engineer-for-ai-powered-banking-platform
+      language: en
+      span: "Our client is a fast-growing, Series A-backed AI company delivering agentic AI solutions to banks and credit unions. Their platform is already serving over 100 financial"
+      value: -0.7
+    - ad_id: tecnoempleo-0ccd13f62257530f7946
+      language: es
+      span: "Descripción de la empresa Devoteam es una consultora europea líder enfocada en estrategia digital plataformas tecnológicas ciberseguridad y transformación empresarial a través de la tecnología."
+      value: -0.7
+    - ad_id: feinaactiva-FA92317375
+      language: ca
+      span: "DESENVOLUPADOR .NET (H/D) per a consultoria tecnològica en creixement, líder en el seu sector, experts en desenvolupament web i alta motivació per la tecnologia punta.\n\n- Desenvolupar"
+      value: -0.7
+methods_ref: METHODS.md#26-ad-wording-as-signal

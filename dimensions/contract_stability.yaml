@@ -1,0 +1,69 @@
+id: contract_stability
+kind: hard
+polarity: unipolar
+label:
+  en: Contract stability
+  es: Estabilidad contractual
+  ca: Estabilitat contractual
+definition: >
+  How durable the engagement is: an open-ended employment contract at one end,
+  fixed-term, freelance or self-employed billing at the other.
+elicitation:
+  questions:
+    - id: cs_q1
+      text:
+        en: >
+          Walk me through the contract types you have worked under. Which one made you
+          change how you planned your life, and how?
+        es: >
+          Repasa los tipos de contrato bajo los que has trabajado. ¿Cuál te hizo cambiar
+          cómo planificabas tu vida, y cómo?
+        ca: >
+          Repassa els tipus de contracte sota els quals has treballat. Quin et va fer
+          canviar com planificaves la teva vida, i com?
+extraction:
+  cues:
+    en:
+      - pattern: "permanent\\s+(contract|position)|full-?time\\s+employee"
+        value: 0.9
+        negatable: true
+      - pattern: "contractor|freelance"
+        value: 0.2
+        negatable: false
+      - pattern: "\\b\\d+\\s*month\\s+contract"
+        value: 0.3
+        negatable: false
+    es:
+      - pattern: "contrato\\s+indefinido"
+        value: 0.9
+        negatable: true
+      - pattern: "aut[óo]nomo|freelance"
+        value: 0.2
+        negatable: false
+      - pattern: "contrato\\s+temporal|obra\\s+y\\s+servicio"
+        value: 0.3
+        negatable: false
+    ca:
+      - pattern: "contracte\\s+indefinit"
+        value: 0.9
+        negatable: true
+      - pattern: "aut[òo]nom|freelance"
+        value: 0.2
+        negatable: false
+      - pattern: "contracte\\s+temporal"
+        value: 0.3
+        negatable: false
+  gold:
+    - ad_id: wwr-gusto-inc-staff-software-engineer-ai-developer-tools
+      language: en
+      span: "that reflects the people we serve.\n\n\nAll full-time employees receive competitive base pay, benefits, and equity (RSUs) — because everyone who helps build Gusto should share"
+      value: 0.9
+    - ad_id: tecnoempleo-08a719c5825dd3fa5043
+      language: es
+      span: "metodologías de referencia. Condiciones Contrato Indefinido Lugar de trabajo Alcobendas (Madrid) Modalidad Híbrido (60 teletrabajo) Horario Jornada completa Salario En función"
+      value: 0.9
+    - ad_id: feinaactiva-FA92317375
+      language: ca
+      span: "Jornada intensiva\n\nAltres dades d'interès: - Contracte indefinit.\n- Estabilitat laboral. Carrera a llarg termini.\n- Jornada completa, 40 h/setmanals, amb horari flexible d'entrada"
+      value: 0.9
+methods_ref: METHODS.md#26-ad-wording-as-signal

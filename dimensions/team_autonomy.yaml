@@ -1,0 +1,65 @@
+id: team_autonomy
+kind: soft
+polarity: bipolar
+label:
+  en: Team autonomy
+  es: Autonomía del equipo
+  ca: Autonomia de l'equip
+definition: >
+  How much the team decides for itself — what to build, in what order, with which tools
+  — as against receiving decisions already made elsewhere.
+elicitation:
+  questions:
+    - id: ta_q1
+      text:
+        en: >
+          Tell me about a technical decision you made that nobody had to approve. And
+          one you wanted to make but could not.
+        es: >
+          Cuéntame una decisión técnica que tomaste sin que nadie tuviera que aprobarla.
+          Y otra que querías tomar y no pudiste.
+        ca: >
+          Explica'm una decisió tècnica que vas prendre sense que ningú l'hagués
+          d'aprovar. I una que volies prendre i no vas poder.
+extraction:
+  cues:
+    en:
+      - pattern: "autonomy|ownership"
+        value: 0.7
+        negatable: true
+      - pattern: "you\\s+will\\s+decide|take\\s+ownership"
+        value: 0.6
+        negatable: false
+      - pattern: "follow\\s+(the\\s+)?(specifications?|instructions)"
+        value: -0.6
+        negatable: false
+    es:
+      - pattern: "autonom[ií]a"
+        value: 0.7
+        negatable: true
+      - pattern: "capacidad\\s+de\\s+decisi[óo]n"
+        value: 0.6
+        negatable: false
+      - pattern: "seguir\\s+(las\\s+)?(especificaciones|directrices)"
+        value: -0.6
+        negatable: false
+    ca:
+      - pattern: "autonomia"
+        value: 0.7
+        negatable: true
+      - pattern: "capacitat\\s+de\\s+decisi[óo]"
+        value: 0.6
+        negatable: false
+      - pattern: "seguir\\s+(les\\s+)?(especificacions|directrius)"
+        value: -0.6
+        negatable: false
+  gold:
+    - ad_id: manfred-8419
+      language: en
+      span: "**core values: irreverence, egalitarianism, ownership, and a find-a-way attitude**.\n\n**Their stack:**\n\n* Their ecosystem revolves around **Python, FastAPI, and SQLAlchemy**"
+      value: 0.7
+    - ad_id: manfred-8360
+      language: es
+      span: "en otra época. En Valsea se respira total autonomía, pero estar conectados a la vez es el truco maestro para que ningún proyecto se quede bloqueado.\n\n![](https://media-asgard.s3.eu-west-1.amazonaws.com/26/05/19/2c97e812-45bf-4521-bef1-ae7a0bf5fdbc_valsea.png)"
+      value: 0.7
+methods_ref: METHODS.md#21-structured-behavioural-elicitation

@@ -1,0 +1,65 @@
+id: mentoring_culture
+kind: soft
+polarity: unipolar
+label:
+  en: Mentoring culture
+  es: Cultura de mentoría
+  ca: Cultura de mentoria
+definition: >
+  Whether people are deliberately brought on by others — mentors, code review as
+  teaching, pairing with seniors — rather than left to sink or swim.
+elicitation:
+  questions:
+    - id: mc_q1
+      text:
+        en: >
+          Tell me about someone who made you better at this job. What did they actually
+          do, and how often?
+        es: >
+          Cuéntame de alguien que te hizo mejor en este trabajo. ¿Qué hacía exactamente
+          y con qué frecuencia?
+        ca: >
+          Explica'm algú que et va fer millor en aquesta feina. Què feia exactament i
+          amb quina freqüència?
+extraction:
+  cues:
+    en:
+      - pattern: "mentor(ing|ship)?"
+        value: 0.8
+        negatable: true
+      - pattern: "code\\s+review"
+        value: 0.5
+        negatable: false
+      - pattern: "buddy|onboarding\\s+plan"
+        value: 0.6
+        negatable: false
+    es:
+      - pattern: "mentor(ing|[íi]a)?|tutor[íi]a"
+        value: 0.8
+        negatable: true
+      - pattern: "revisi[óo]n\\s+de\\s+c[óo]digo"
+        value: 0.5
+        negatable: false
+      - pattern: "plan\\s+de\\s+acogida|onboarding"
+        value: 0.6
+        negatable: false
+    ca:
+      - pattern: "mentor(ia|atge)?|tutoria"
+        value: 0.8
+        negatable: true
+      - pattern: "revisi[óo]\\s+de\\s+codi"
+        value: 0.5
+        negatable: false
+      - pattern: "pla\\s+d'acollida"
+        value: 0.6
+        negatable: false
+  gold:
+    - ad_id: wwr-azumo-data-engineer-databricks-aws-gaming-liveops-latin-america
+      language: en
+      span: "Company benefits include:\nPaid Time Off\nMentored Career Development\nU.S. Holidays\nUSD Remuneration\nProfit Sharing\nMaternity Coverage\n100% Remote\nAbout Azumo"
+      value: 0.8
+    - ad_id: manfred-8360
+      language: es
+      span: "clave para ayudar a Valsea a encontrar y mentorizar a nuevos compañeros, sentando las bases definitivas para el crecimiento del equipo de Go."
+      value: 0.8
+methods_ref: METHODS.md#21-structured-behavioural-elicitation

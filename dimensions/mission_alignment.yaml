@@ -1,0 +1,69 @@
+id: mission_alignment
+kind: soft
+polarity: bipolar
+label:
+  en: Mission alignment
+  es: Alineación con la misión
+  ca: Alineació amb la missió
+definition: >
+  How much the stated purpose of the work matters to the candidate — public service,
+  health, climate, education at one end; sectors they would refuse at the other.
+elicitation:
+  questions:
+    - id: ma_q1
+      text:
+        en: >
+          Tell me about work you were proud to explain at a family dinner — and any work
+          you would not take again.
+        es: >
+          Cuéntame un trabajo que te enorgullecía explicar en una cena familiar — y
+          alguno que no volverías a aceptar.
+        ca: >
+          Explica'm una feina que t'enorgullia explicar en un sopar familiar — i alguna
+          que no tornaries a acceptar.
+extraction:
+  cues:
+    en:
+      - pattern: "our\\s+mission\\s+is|mission-?driven|social\\s+impact"
+        value: 0.6
+        negatable: true
+      - pattern: "healthcare|education|climate|public\\s+sector|non-?profit"
+        value: 0.7
+        negatable: false
+      - pattern: "gambling|betting|tobacco|defen[cs]e\\s+(sector|industry|contractor)"
+        value: -0.7
+        negatable: false
+    es:
+      - pattern: "nuestra\\s+misi[óo]n|impacto\\s+social"
+        value: 0.6
+        negatable: true
+      - pattern: "sanidad|educaci[óo]n|sector\\s+p[úu]blico|administraci[óo]n\\s+p[úu]blica"
+        value: 0.7
+        negatable: false
+      - pattern: "apuestas|juego\\s+online|ciberdefensa|sector\\s+defensa"
+        value: -0.7
+        negatable: false
+    ca:
+      - pattern: "la\\s+nostra\\s+missi[óo]|impacte\\s+social"
+        value: 0.6
+        negatable: true
+      - pattern: "salut\\s+mental|sanitari|hospital|SISCAT|educaci[óo]"
+        value: 0.7
+        negatable: false
+      - pattern: "apostes|sector\\s+defensa"
+        value: -0.7
+        negatable: false
+  gold:
+    - ad_id: wwr-stripe-backend-engineer-core-technology
+      language: en
+      span: "Our mission is to increase the GDP of the internet, and we have a staggering amount of work ahead. That means you have an unprecedented"
+      value: 0.6
+    - ad_id: tecnoempleo-0e9510e2527fd31cd240
+      language: es
+      span: "Estamos ampliando nuestros equipos en el sector defensa para asumir un proyecto relacionado con sistemas UAS/UAV. Nos gusta ir al grano te vamos a contar lo que no está"
+      value: -0.7
+    - ad_id: feinaactiva-FA92320466
+      language: ca
+      span: "Fundació Orienta és una institució monogràfica en salut mental infantojuvenil. Està adscrita al con-veni SISCAT (III Conveni Col·lectiu de"
+      value: 0.7
+methods_ref: METHODS.md#24-reaction-elicitation-on-real-ad-text

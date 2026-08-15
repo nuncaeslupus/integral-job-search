@@ -1,0 +1,61 @@
+id: on_call_load
+kind: soft
+polarity: unipolar
+label:
+  en: On-call load
+  es: Carga de guardias
+  ca: Càrrega de guàrdies
+definition: >
+  How much out-of-hours availability the role carries: on-call rotations, incident duty,
+  and expectations of reachability outside the working day.
+elicitation:
+  questions:
+    - id: ocl_q1
+      text:
+        en: >
+          Tell me about the last time you were called about work outside your hours.
+          What happened, and what did it cost you?
+        es: >
+          Cuéntame la última vez que te llamaron por trabajo fuera de tu horario. ¿Qué
+          pasó y qué te costó?
+        ca: >
+          Explica'm l'última vegada que et van trucar per feina fora del teu horari. Què
+          va passar i què et va costar?
+extraction:
+  cues:
+    en:
+      - pattern: "on-?call\\s+(rotation|rota|duty|shifts?|schedule)"
+        value: 0.8
+        negatable: true
+      - pattern: "(you|engineers?)\\s+(will\\s+)?(be|are|participate)\\s+[^.]{0,20}on-?call"
+        value: 0.8
+        negatable: false
+      - pattern: "no\\s+on-?call"
+        value: 0.0
+        negatable: false
+    es:
+      - pattern: "guardias"
+        value: 0.8
+        negatable: true
+      - pattern: "disponibilidad\\s+24|retenes?|ret[ée]n"
+        value: 0.7
+        negatable: false
+      - pattern: "sin\\s+guardias"
+        value: 0.0
+        negatable: false
+    ca:
+      - pattern: "gu[àa]rdies"
+        value: 0.8
+        negatable: true
+      - pattern: "disponibilitat\\s+24"
+        value: 0.7
+        negatable: false
+      - pattern: "sense\\s+gu[àa]rdies"
+        value: 0.0
+        negatable: false
+  gold:
+    - ad_id: manfred-8389
+      language: es
+      span: "bloqueado.\n\n**🚨 Sobre las Guardias** (On-Call) Manejar transacciones en tiempo real implica estar alerta, pero en Valsea el descanso es sagrado y las guardias están extremadamente"
+      value: 0.8
+methods_ref: METHODS.md#26-ad-wording-as-signal

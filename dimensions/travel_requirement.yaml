@@ -1,0 +1,65 @@
+id: travel_requirement
+kind: hard
+polarity: unipolar
+label:
+  en: Travel requirement
+  es: Exigencia de viajes
+  ca: Exigència de viatges
+definition: >
+  How much physical travel or relocation the role requires — client visits, periodic
+  office presence, or moving to a stated location.
+elicitation:
+  questions:
+    - id: tr_q1
+      text:
+        en: >
+          Tell me about a work trip you were required to make. What did it displace at
+          home?
+        es: >
+          Cuéntame un viaje de trabajo que tuviste que hacer. ¿Qué desplazó en tu vida
+          personal?
+        ca: >
+          Explica'm un viatge de feina que vas haver de fer. Què va desplaçar de la teva
+          vida personal?
+extraction:
+  cues:
+    en:
+      - pattern: "willing(ness)?\\s+to\\s+travel|travel\\s+required"
+        value: 0.8
+        negatable: true
+      - pattern: "relocat(e|ion)"
+        value: 0.9
+        negatable: false
+      - pattern: "no\\s+travel"
+        value: 0.0
+        negatable: false
+    es:
+      - pattern: "disponibilidad\\s+para\\s+viajar|viajes\\s+(frecuentes|puntuales)"
+        value: 0.8
+        negatable: true
+      - pattern: "traslado|reubicaci[óo]n"
+        value: 0.9
+        negatable: false
+      - pattern: "sin\\s+viajes|no\\s+viajes"
+        value: 0.0
+        negatable: false
+    ca:
+      - pattern: "disponibilitat\\s+per\\s+viatjar|viatges"
+        value: 0.8
+        negatable: true
+      - pattern: "trasllat"
+        value: 0.9
+        negatable: false
+      - pattern: "sense\\s+viatges"
+        value: 0.0
+        negatable: false
+  gold:
+    - ad_id: tecnoempleo-450515d772aac3661b41
+      language: es
+      span: "elementos finitos. Nivel alto de inglés (C1). Disponibilidad para viajar. Se valorará Conocimiento de alemán o francés. Residencia en la zona. Dominio de euskera. Perfil competencial"
+      value: 0.8
+    - ad_id: feinaactiva-FA92318000
+      language: ca
+      span: "entorns canviants.\n\nDisponibilitat de vehicle\n\nDisponibilitat per viatjar\n\nPermisos de conduir: b\n\nContracte laboral indefinit\n\nJornada completa\n\nAltres dades d'interès: Departament: Hardware"
+      value: 0.8
+methods_ref: METHODS.md#26-ad-wording-as-signal

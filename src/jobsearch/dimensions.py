@@ -19,12 +19,12 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from jobsearch.corpus import LANGUAGES
+from jobsearch.corpus import LANGUAGES, load_ads
 
 # src-layout repo root, as in `jobsearch.corpus`: valid for the editable install
 # this project is always used through.
@@ -32,6 +32,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DIMENSIONS_DIR = _REPO_ROOT / "dimensions"
 DEFAULT_METHODS_PATH = _REPO_ROOT / "docs" / "METHODS.md"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T2.json"
+DEFAULT_COVERAGE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T3.json"
 
 # `LANGUAGES` is imported, not restated: a dimension carries all of them on every
 # human-readable string (a label in one language only produces a question no
@@ -40,6 +41,8 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T2.json"
 # the languages are spelled out again — Pydantic needs them statically — and
 # `test_schema_languages_match_the_corpus_languages` holds the two in step.
 Language = Literal["en", "es", "ca"]
+# The same three, as a tuple a type checker accepts as cue-dict keys.
+SCHEMA_LANGUAGES: tuple[Language, ...] = get_args(Language)
 
 # `METHODS.md#<github-style-slug>` — a relative link into the methods register,
 # resolved by `methods_anchors`. Any other shape is a link nothing can check.
@@ -125,16 +128,32 @@ class Cue(Strict):
         return pattern
 
 
-class Extraction(Strict):
-    """Cues per language.
+class GoldExample(Strict):
+    """A real ad excerpt and the value this dimension should take on it.
 
-    T2 does not require all three to be present — that is T3's
-    `dimension_extractor_coverage` gate over the finished model. What T2
-    enforces is that any language key present is one of the corpus languages,
-    so a typo'd `eng:` block cannot sit there matching nothing.
+    Anchored to the committed corpus by `ad_id`, with `span` required to appear
+    **verbatim** in that ad's text. An invented excerpt would let every later
+    extraction gate measure the model against fiction — the same failure the
+    corpus README refuses for the ads themselves.
+    """
+
+    ad_id: str = Field(min_length=1)
+    language: Language
+    span: str = Field(min_length=1)
+    value: float = Field(ge=-1.0, le=1.0)
+
+
+class Extraction(Strict):
+    """Cues per language, and gold examples drawn from the corpus.
+
+    T2 does not require all three languages to be present — that is T3's
+    `dimension_extractor_coverage` gate over the finished model. What the schema
+    enforces is that any language key present is one of the corpus languages, so
+    a typo'd `eng:` block cannot sit there matching nothing.
     """
 
     cues: dict[Language, list[Cue]] = Field(default_factory=dict)
+    gold: list[GoldExample] = Field(default_factory=list)
 
 
 class Dimension(Strict):
@@ -164,6 +183,9 @@ class Dimension(Strict):
             for language, cues in self.extraction.cues.items()
             for cue in cues
             if cue.value < 0
+        ]
+        offenders += [
+            f"gold:{gold.ad_id}={gold.value}" for gold in self.extraction.gold if gold.value < 0
         ]
         if offenders:
             raise ValueError(
@@ -343,7 +365,148 @@ def collect_violations(
         for dimension in parsed
         if dimension.anchor not in anchors
     )
+    # Gold examples are part of the contract too: an excerpt that is not really
+    # in the ad it cites is a violation of the model, not a corpus problem.
+    violations.extend(verify_gold(parsed))
     return violations
+
+
+def verify_gold(
+    dimensions: list[Dimension],
+    ads: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    """Check every gold example against the committed corpus.
+
+    A gold span that is not verbatim in the ad it names is worse than no gold at
+    all: it silently turns every downstream extraction measurement into a test
+    against invented text. `ads=None` loads the committed corpus.
+    """
+    if ads is None:
+        try:
+            ads = load_ads()
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            return [f"corpus could not be read to verify gold examples: {exc}"]
+
+    total_gold = sum(len(d.extraction.gold) for d in dimensions)
+    if not ads:
+        if not total_gold:
+            return []
+        return [f"corpus is empty — {total_gold} gold example(s) cannot be verified"]
+
+    by_id = {str(ad["id"]): ad for ad in ads}
+    violations: list[str] = []
+    for dimension in dimensions:
+        for gold in dimension.extraction.gold:
+            ad = by_id.get(gold.ad_id)
+            if ad is None:
+                violations.append(f"{dimension.id}: gold ad {gold.ad_id!r} is not in the corpus")
+                continue
+            if ad["language"] != gold.language:
+                violations.append(
+                    f"{dimension.id}: gold {gold.ad_id} is declared {gold.language!r} but the ad "
+                    f"is {ad['language']!r}"
+                )
+            if gold.span not in str(ad["text"]):
+                violations.append(
+                    f"{dimension.id}: gold span for {gold.ad_id} does not appear verbatim in the ad"
+                )
+    return violations
+
+
+def unmatched_gold(dimensions: list[Dimension]) -> list[str]:
+    """Gold examples that none of their own dimension's cues match.
+
+    A gold example the extractor cannot reach is not a demonstration of
+    anything: it counts towards `dimension_extractor_coverage` while proving
+    the opposite of what that metric claims. This catches the two ways that
+    happens — a cue tightened without revisiting its gold, and a gold span
+    chosen from wording no cue describes.
+    """
+    return [
+        f"{dimension.id}: gold {gold.ad_id} is matched by no {gold.language} cue"
+        for dimension in dimensions
+        for gold in dimension.extraction.gold
+        if not any(
+            re.search(cue.pattern, gold.span, re.IGNORECASE)
+            for cue in dimension.extraction.cues.get(gold.language, [])
+        )
+    ]
+
+
+def silent_language_slices(
+    dimensions: list[Dimension],
+    ads: list[dict[str, Any]],
+) -> list[str]:
+    """`<dimension>:<language>` pairs whose cues match no ad in the corpus.
+
+    Not a failure — Catalan ads in this corpus carry no wellbeing benefits and
+    no company-stage language, and inventing cue hits would be worse than the
+    gap. It is reported so the gap stays visible instead of being mistaken for
+    coverage the model does not have.
+    """
+    return [
+        f"{dimension.id}:{language}"
+        for dimension in dimensions
+        for language in SCHEMA_LANGUAGES
+        if dimension.extraction.cues.get(language)
+        and not any(
+            re.search(cue.pattern, str(ad["text"]), re.IGNORECASE)
+            for cue in dimension.extraction.cues[language]
+            for ad in ads
+            if ad["language"] == language
+        )
+    ]
+
+
+def extractor_coverage(dimensions: list[Dimension]) -> float:
+    """`dimension_extractor_coverage` — the T3 gate metric.
+
+    The fraction of dimensions carrying **both** ≥1 extractor rule and ≥1 gold
+    example, per the spec's success criteria. Either half alone is uncheckable:
+    cues with no gold cannot be shown to fire on real text, and gold with no
+    cues has nothing to fire.
+    """
+    if not dimensions:
+        return 0.0
+    covered = sum(
+        1
+        for d in dimensions
+        if any(d.extraction.cues.values()) and d.extraction.gold
+    )
+    return covered / len(dimensions)
+
+
+def write_coverage_evidence(
+    evidence: Path = DEFAULT_COVERAGE_EVIDENCE_PATH,
+    directory: Path = DEFAULT_DIMENSIONS_DIR,
+    methods_path: Path = DEFAULT_METHODS_PATH,
+) -> dict[str, Any]:
+    """Measure T3's gate from the committed model and record it."""
+    dimensions = load_dimensions(directory, methods_path)
+    uncovered = sorted(
+        d.id for d in dimensions if not any(d.extraction.cues.values()) or not d.extraction.gold
+    )
+    try:
+        ads = load_ads()
+    except (OSError, ValueError, json.JSONDecodeError):
+        ads = []
+    measured: dict[str, Any] = {
+        "dimension_extractor_coverage": round(extractor_coverage(dimensions), 4),
+        "dimension_count": len(dimensions),
+        "gold_example_count": sum(len(d.extraction.gold) for d in dimensions),
+        "languages_with_cues": {
+            language: sum(1 for d in dimensions if d.extraction.cues.get(language))
+            for language in SCHEMA_LANGUAGES
+        },
+        "dimensions_without_cues_or_gold": uncovered,
+        "gold_violations": verify_gold(dimensions, ads),
+        "gold_unmatched_by_own_cues": unmatched_gold(dimensions),
+        # Reported, not failed: see `silent_language_slices`.
+        "language_slices_with_no_corpus_hit": silent_language_slices(dimensions, ads),
+    }
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
 
 
 def write_evidence(
@@ -370,7 +533,34 @@ def write_evidence(
 
 
 def _main(argv: list[str]) -> int:
-    target = Path(argv[1]) if len(argv) > 1 else DEFAULT_EVIDENCE_PATH
+    """Write one of the two gate evidence files.
+
+        python -m jobsearch.dimensions [path]              → T2, schema violations
+        python -m jobsearch.dimensions --coverage [path]    → T3, extractor coverage
+    """
+    coverage = "--coverage" in argv[1:]
+    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+
+    if coverage:
+        target = Path(positional[0]) if positional else DEFAULT_COVERAGE_EVIDENCE_PATH
+        try:
+            measured = write_coverage_evidence(target)
+        except DimensionError as exc:
+            # Coverage is measured over a *loadable* model; a broken one is T2's
+            # gate to report, and reporting a coverage number over it would be a
+            # measurement of something that does not exist.
+            print(f"cannot measure coverage: {exc}", file=sys.stderr)
+            return 3
+        print(json.dumps(measured, ensure_ascii=False))
+        if measured["dimension_count"] == 0:
+            print(f"no dimensions in {DEFAULT_DIMENSIONS_DIR} — nothing measured", file=sys.stderr)
+            return 3
+        problems = [*measured["gold_violations"], *measured["gold_unmatched_by_own_cues"]]
+        for violation in problems:
+            print(violation, file=sys.stderr)
+        return 1 if problems else 0
+
+    target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)
     print(json.dumps(measured, ensure_ascii=False))
     if measured["dimension_count"] == 0:

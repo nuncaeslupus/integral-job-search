@@ -1,0 +1,68 @@
+id: company_stage
+kind: soft
+polarity: bipolar
+label:
+  en: Company stage
+  es: Etapa de la empresa
+  ca: Etapa de l'empresa
+definition: >
+  Where the employer sits between an early-stage startup and a large established
+  organisation, which shapes both risk and how much structure exists.
+elicitation:
+  questions:
+    - id: cs_q1
+      text:
+        en: >
+          Compare the smallest and largest organisations you have worked in. Which
+          decision was easy in one and impossible in the other?
+        es: >
+          Compara la organización más pequeña y la más grande en las que has trabajado.
+          ¿Qué decisión era fácil en una e imposible en la otra?
+        ca: >
+          Compara l'organització més petita i la més gran on has treballat. Quina
+          decisió era fàcil en una i impossible en l'altra?
+extraction:
+  cues:
+    en:
+      - pattern: "(early[- ]stage|seed[- ]stage|pre-?seed|series\\s+[abc]\\b)"
+        value: -0.7
+        negatable: false
+      - pattern: "\\b(we|they)\\s+are\\s+an?\\s+(early[- ]stage\\s+)?(startup|scale-?up)\\b"
+        value: -0.7
+        negatable: false
+      - pattern: "multinational|global\\s+leader|fortune\\s+\\d"
+        value: 0.7
+        negatable: false
+      - pattern: "\\b\\d[\\d.,]{2,}\\s*(\\+\\s*)?employees"
+        value: 0.6
+        negatable: false
+    es:
+      - pattern: "somos\\s+una\\s+(startup|scale-?up)|fase\\s+(semilla|temprana)"
+        value: -0.7
+        negatable: false
+      - pattern: "multinacional|l[íi]der\\s+(europe[oa]|mundial|internacional)"
+        value: 0.7
+        negatable: false
+      - pattern: "m[áa]s\\s+de\\s+\\d[\\d.,]{2,}\\s+(personas|empleados|profesionales)"
+        value: 0.6
+        negatable: false
+    ca:
+      - pattern: "som\\s+una\\s+(startup|scale-?up)"
+        value: -0.7
+        negatable: false
+      - pattern: "multinacional|l[íi]der\\s+(europe[ua]|mundial|internacional)"
+        value: 0.7
+        negatable: false
+      - pattern: "m[ée]s\\s+de\\s+\\d[\\d.,]{2,}\\s+(persones|treballadors)"
+        value: 0.6
+        negatable: false
+  gold:
+    - ad_id: wwr-superplane-product-engineer-1
+      language: en
+      span: "delivery.\n\nYou want ownership, not a narrow lane.\n\nYou want an early-stage company where the pace is high, the standards are high, and the upside is big.\n\n\n\nHow To Apply\n\nWe"
+      value: -0.7
+    - ad_id: tecnoempleo-b2fb182e627ab3455b4c
+      language: es
+      span: "de la tecnología. Formado por más de 3.000 personas creativas digitales e innovadoras conectadas a un propósito y capaces de generar conexiones con personas de todo el mundo."
+      value: 0.6
+methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -1,0 +1,26 @@
+{
+  "dimension_extractor_coverage": 1.0,
+  "dimension_count": 22,
+  "gold_example_count": 56,
+  "languages_with_cues": {
+    "en": 22,
+    "es": 22,
+    "ca": 22
+  },
+  "dimensions_without_cues_or_gold": [],
+  "gold_violations": [],
+  "gold_unmatched_by_own_cues": [],
+  "language_slices_with_no_corpus_hit": [
+    "career_progression:en",
+    "company_stage:ca",
+    "english_demand:en",
+    "mentoring_culture:ca",
+    "on_call_load:en",
+    "on_call_load:ca",
+    "social_intensity:es",
+    "social_intensity:ca",
+    "team_autonomy:ca",
+    "travel_requirement:en",
+    "wellbeing_benefits:ca"
+  ]
+}

@@ -1,0 +1,65 @@
+id: wellbeing_benefits
+kind: soft
+polarity: unipolar
+label:
+  en: Wellbeing benefits
+  es: Beneficios de bienestar
+  ca: Beneficis de benestar
+definition: >
+  Non-salary provision aimed at health and life outside work: medical cover,
+  psychological support, gym or wellness allowances, extra leave.
+elicitation:
+  questions:
+    - id: wb_q1
+      text:
+        en: >
+          Tell me about a benefit you actually used in a past job, and one that existed
+          on paper but you never touched.
+        es: >
+          Cuéntame un beneficio que sí usaste en un trabajo anterior y otro que existía
+          sobre el papel pero nunca tocaste.
+        ca: >
+          Explica'm un benefici que sí que vas fer servir en una feina anterior i un
+          altre que existia sobre el paper però no vas tocar mai.
+extraction:
+  cues:
+    en:
+      - pattern: "(private\\s+)?health\\s+insurance|healthcare\\s+(cover|contribution)"
+        value: 0.7
+        negatable: true
+      - pattern: "mental\\s+health\\s+(support|days?|cover)|wellbeing\\s+(budget|allowance|programme)"
+        value: 0.6
+        negatable: false
+      - pattern: "gym\\s+(membership|allowance)|wellness\\s+(budget|allowance)"
+        value: 0.4
+        negatable: false
+    es:
+      - pattern: "seguro\\s+m[ée]dico"
+        value: 0.7
+        negatable: true
+      - pattern: "apoyo\\s+psicol[óo]gico|programa\\s+de\\s+bienestar"
+        value: 0.6
+        negatable: false
+      - pattern: "gimnasio|ticket\\s+restaurante|retribuci[óo]n\\s+flexible"
+        value: 0.4
+        negatable: false
+    ca:
+      - pattern: "assegurança\\s+m[èe]dica"
+        value: 0.7
+        negatable: true
+      - pattern: "suport\\s+psicol[òo]gic|programa\\s+de\\s+benestar"
+        value: 0.6
+        negatable: false
+      - pattern: "gimn[àa]s|tiquet\\s+restaurant|retribuci[óo]\\s+flexible"
+        value: 0.4
+        negatable: false
+  gold:
+    - ad_id: manfred-8456
+      language: en
+      span: "**👩🏾‍⚕️ Health care**: Private health insurance for you and your family.\n\n**🗣️ Continuous"
+      value: 0.7
+    - ad_id: manfred-8360
+      language: es
+      span: "**👩🏾‍⚕️Cuidado de tu salud**: Seguro médico privado para ti y para tu familia.\n\n**🗣️ Aprendizaje"
+      value: 0.7
+methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -1,0 +1,69 @@
+id: work_intensity
+kind: soft
+polarity: bipolar
+label:
+  en: Work intensity
+  es: Intensidad del trabajo
+  ca: Intensitat de la feina
+definition: >
+  The pace the role expects: sustained delivery pressure, urgency and 'fast-paced'
+  framing at one end, a deliberate and steady pace at the other.
+elicitation:
+  questions:
+    - id: wi_q1
+      text:
+        en: >
+          Describe your busiest month at work. What was still true a year later, and
+          what was not?
+        es: >
+          Describe tu mes más intenso en el trabajo. ¿Qué seguía siendo cierto un año
+          después y qué no?
+        ca: >
+          Descriu el teu mes més intens a la feina. Què continuava sent cert un any
+          després i què no?
+extraction:
+  cues:
+    en:
+      - pattern: "fast-?paced|high-?pressure"
+        value: 0.7
+        negatable: false
+      - pattern: "tight\\s+deadlines"
+        value: 0.6
+        negatable: false
+      - pattern: "sustainable\\s+pace|work-?life\\s+balance"
+        value: -0.6
+        negatable: true
+    es:
+      - pattern: "ritmo\\s+(alto|r[áa]pido)|entorno\\s+din[áa]mico"
+        value: 0.6
+        negatable: false
+      - pattern: "plazos\\s+ajustados|urgencias"
+        value: 0.7
+        negatable: false
+      - pattern: "conciliaci[óo]n|equilibrio\\s+entre\\s+vida"
+        value: -0.6
+        negatable: true
+    ca:
+      - pattern: "ritme\\s+(alt|r[àa]pid)|entorn\\s+din[àa]mic"
+        value: 0.6
+        negatable: false
+      - pattern: "terminis\\s+ajustats"
+        value: 0.7
+        negatable: false
+      - pattern: "conciliaci[óo]"
+        value: -0.6
+        negatable: true
+  gold:
+    - ad_id: manfred-8456
+      language: en
+      span: "**explosive growth** while still maintaining the fast-paced agility of a startup. To fuel this momentum, they are looking to bring in a top-tier **QA Automation** **Engineer**"
+      value: 0.7
+    - ad_id: manfred-8400
+      language: es
+      span: "abierta y la capacidad de adaptarse a un entorno dinámico de start-up.\n* **Inglés fluido (C1):** Necesario para coordinarse de manera efectiva, tanto a nivel oral como"
+      value: 0.6
+    - ad_id: feinaactiva-FA92322289
+      language: ca
+      span: "18:00. Marge d’adaptació segons necessitats i conciliació personal.\n-Contractació: Indefinida.\n\nIncorporació: Immediata o segons la disponibilitat del candidat.\n\n- Residència"
+      value: -0.6
+methods_ref: METHODS.md#26-ad-wording-as-signal

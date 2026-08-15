@@ -71,4 +71,9 @@ extraction:
       - pattern: "treball\\s+aut[oò]nom"
         value: -0.4
         negatable: false
+  gold:
+    - ad_id: wwr-clickhouse-ai-product-engineer-clickstack
+      language: en
+      span: "to engage with colleagues at company-wide offsites.\n\nCulture - We All Shape It\n\nAs part of a rapidly scaling start up, you will be instrumental in shaping our culture."
+      value: 0.6
 methods_ref: METHODS.md#21-structured-behavioural-elicitation
