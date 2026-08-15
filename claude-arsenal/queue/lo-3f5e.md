@@ -8,11 +8,20 @@ evidence: status/evidence/T2.json
 key: dimension_schema_violations
 ```
 
-Write the measured value to `status/evidence/T2.json` as `{"dimension_schema_violations": <number>}`, commit it, then record the row in the plan's Evidence log with the command that produced it.
+```bash
+uv run python -m jobsearch.dimensions status/evidence/T2.json
+uv run --extra dev pytest tests/test_dimension_model.py -q
+```
 
-An evidence gate asserts the number against the threshold, so it cannot pass
-vacuously — a missing evidence file is a hard failure, not a skip. It also runs
-no build tooling, which matters for tasks that run before the scaffold exists.
+The two blocks do different jobs and both are required. The `bash` block
+regenerates `status/evidence/T2.json`; the `gate` block asserts the
+number in it against the threshold. Without the first, a stale or hand-written
+evidence file passes unchallenged; without the second, a command that exits 0
+counts as a gate whatever it measured.
+
+The evidence writer exits non-zero when `dimensions/` is empty: zero violations
+over zero files is a pass over nothing, which is the one way this gate could
+have measured nothing while reporting success.
 
 ## Tests
 
