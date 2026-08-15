@@ -39,12 +39,18 @@ their own gates.
 - [ ] `dedup_precision >= 0.95` — on a seeded set of known cross-posted duplicates
 - [ ] `ontology_hit_rate >= 0.85` — fraction of extracted concepts mapping to a known dimension; this doubles as the **staleness signal** (a sustained drop means the market moved and the model needs new questions)
 - [ ] `corpus_size >= 100` — hand-labelled ads (≈60 ES, ≈25 EN, ≈15 CA)
+- [ ] `story_bank_size >= 12` — distinct episodes captured at onboarding (projects, failures, decisions, definitions of success)
+- [ ] `story_dimension_linkage == 1.0` — every episode links to ≥1 dimension ID, so the bank is queryable rather than a pile of prose
+- [ ] `story_failure_fraction >= 0.33` — at least a third of episodes are about something that went wrong; success stories are rehearsed and reveal less
 - [ ] **Profile recognisability** (non-numeric): given their own generated profile plus two
       perturbed variants, unlabelled, the candidate identifies their own. Judged by a single
       blind trial per candidate; failure means the profiler is producing generic output.
 - [ ] **No autonomous outward action** (non-numeric): audited by inspection — no code path
       submits an application, sends an email, or contacts an employer without explicit
       per-item human approval.
+- [ ] **No undisclosed story reuse** (non-numeric): audited by inspection — no story-bank
+      episode reaches a document destined for an employer without per-use approval.
+      Recounting a failure to the tool is not consent to send it to a company.
 
 ## 2. Systems & Impact
 
@@ -54,8 +60,9 @@ Greenfield: nearly everything is new. "Needs changes" therefore reads as "in v1 
 |--------|------|------|----------------|--------|----------|
 | `dimensions/` — dimension model | Primary | The spine. Per dimension: ID, definition, elicitation question(s), extraction cues per language, hard-filter vs soft-preference, polarity | Yes (v1) | Every other component is a projection of this. Changing a dimension ID is a breaking change everywhere | High |
 | `corpus/` — labelled ad corpus | Shared resource | Ground truth for every extraction and ranking gate | Yes (v1) | Without it no quantitative gate can run. Pacing item for the whole project | High |
-| Profiler (adaptive interview) | Primary | Generates questions from the dimension model, accepts free text, extracts dimension values with uncertainty | Yes (v1) | Candidate-facing; poor questions produce a generic profile and everything downstream degrades | High |
-| Profile store | Primary / shared | Per-candidate profile as a **derived view** over an append-only evidence log | Yes (v1) | Holds sensitive psychological and personal data. Schema must be multi-user from day one | High |
+| Elicitation engine | Primary | One engine, three consumers: onboarding interview, pre-draft gap-filling, real-interview rehearsal. Generates questions from the dimension model, accepts free text, extracts both dimension values (with uncertainty) and episodes | Yes (v1) | Candidate-facing; poor questions produce a generic profile and everything downstream degrades. Splitting this into separate "profiler" and "interview simulator" would duplicate the hardest component | High |
+| Profile store — dimension layer | Primary / shared | Per-candidate dimension values as a **derived view** over an append-only evidence log | Yes (v1) | Holds sensitive psychological and personal data. Schema must be multi-user from day one | High |
+| Profile store — story bank | Primary / shared | Verbatim episodes (projects, failures, decisions, definitions of success) tagged to dimension IDs, with a per-use disclosure flag | Yes (v1) | Dimension scores can rank a job but cannot write a sentence; the story bank is what makes a cover letter specific rather than fluent-generic. Most sensitive artefact in the system | High |
 | Feedback log | Primary | Append-only record of "I don't like this because…" and every other preference signal | Yes (v1) | Source of truth for profile evolution; enables recompute and audit | High |
 | Source connectors | Primary | Per-portal fetch → normalised offer schema. One connector in v1, plus manual-paste | Yes (v1) | ToS and anti-bot exposure lives here and nowhere else | Medium |
 | Normalizer + dedup | Primary | Cross-source identity resolution, expiry detection | Yes (v1) | Duplicates poison every ranked list | Medium |
@@ -63,7 +70,9 @@ Greenfield: nearly everything is new. "Needs changes" therefore reads as "in v1 
 | Enrichment | Primary | Signals not in the ad: employer site, review sites, writing-style features of the ad itself | Partial (v1: writing-style only) | Where the project is genuinely differentiated; also where it can drift into astrology without corpus calibration | Medium |
 | Ranker | Primary | Pareto frontier over dimensions + named facet lists; forced-pairwise-derived weights | Yes (v1) | The user-visible product | High |
 | Explanation layer | Primary | Per-offer justification citing evidence spans | Yes (v1) | Non-negotiable: an unexplained rank is unusable and unfalsifiable | High |
-| Application generator (CV/letter) | Dependent | Tailored documents driven by the same dimensions | No (Phase 7) | Deferred | — |
+| Pre-draft gap-fill | Dependent | Before drafting for a specific job: diff the posting's demands against story-bank coverage, elicit only the gaps, often nothing | No (Phase 7) | Deferred, but its dependency is in v1 — it is the elicitation engine pointed at one job. Keeps per-application effort proportional to what is genuinely missing | — |
+| Application generator (CV/letter) | Dependent | Tailored documents driven by the same dimensions, written from approved story-bank episodes | No (Phase 7) | Deferred | — |
+| Interview rehearsal | Dependent | Company research, likely questions, mock runs against the story bank | No (Phase 8) | Deferred. Thin layer over the v1 elicitation engine rather than a new subsystem | — |
 | Outcome tracker + email sensor | Dependent | Read-only mail scan → application state; pattern analysis across applications | No (Phase 7) | Deferred. Needs volume before it yields signal | — |
 | Recommendations | Dependent | Courses, preparation, situational advice | No (Phase 8) | Deferred. Highest harm potential of any subsystem | — |
 | Scheduler | Infrastructure | Daily incremental search | No (Phase 6) | Deferred | — |
@@ -171,6 +180,11 @@ task. Proposed workspaces: `ONTOLOGY` (dimension model + corpus), `PROFILE` (ada
 profiler + store + feedback log), `SUPPLY` (connectors, normalize, dedup), `MATCH`
 (extraction funnel, ranking, explanations). `ONTOLOGY` blocks the other three.
 
+`PROFILE` owns the elicitation engine, not a "profiler" — the same engine is later pointed at
+a single job (pre-draft gap-fill) and at a scheduled interview (rehearsal). Building those as
+separate subsystems would triplicate the hardest component in the project; building one and
+reusing it is why Phases 7-8 are thin rather than large.
+
 First implementation task under `ONTOLOGY`: dimension model v0 — 20-25 dimensions covering
 hard skills, working environment, social intensity, autonomy, meeting load, remote
 authenticity, schedule/caregiving compatibility, stability-vs-growth, learning demand, and
@@ -193,6 +207,9 @@ requirement in v1, not a v1 feature.
 - [ ] **Adaptive interview stopping rule**: fixed question budget, uncertainty threshold, or
       candidate-controlled. Affects whether profiling feels like a conversation or an
       interrogation.
+- [ ] **Story-bank saturation threshold**: how much coverage counts as "enough" before the
+      pre-draft gap-fill asks nothing. Sets per-application effort, and therefore whether the
+      tool is usable at twenty applications or only at three.
 - [ ] **Source connector for v1**: which single portal. Needs a market with real ES/CA
       remote programming volume and tolerable access rules.
 - [ ] **Weight elicitation placement**: forced pairwise trade-offs inside the initial

@@ -199,12 +199,18 @@ their own gates.</p>
 <li>[ ] <code>dedup_precision &gt;= 0.95</code> — on a seeded set of known cross-posted duplicates</li>
 <li>[ ] <code>ontology_hit_rate &gt;= 0.85</code> — fraction of extracted concepts mapping to a known dimension; this doubles as the <strong>staleness signal</strong> (a sustained drop means the market moved and the model needs new questions)</li>
 <li>[ ] <code>corpus_size &gt;= 100</code> — hand-labelled ads (≈60 ES, ≈25 EN, ≈15 CA)</li>
+<li>[ ] <code>story_bank_size &gt;= 12</code> — distinct episodes captured at onboarding (projects, failures, decisions, definitions of success)</li>
+<li>[ ] <code>story_dimension_linkage == 1.0</code> — every episode links to ≥1 dimension ID, so the bank is queryable rather than a pile of prose</li>
+<li>[ ] <code>story_failure_fraction &gt;= 0.33</code> — at least a third of episodes are about something that went wrong; success stories are rehearsed and reveal less</li>
 <li>[ ] <strong>Profile recognisability</strong> (non-numeric): given their own generated profile plus two
       perturbed variants, unlabelled, the candidate identifies their own. Judged by a single
       blind trial per candidate; failure means the profiler is producing generic output.</li>
 <li>[ ] <strong>No autonomous outward action</strong> (non-numeric): audited by inspection — no code path
       submits an application, sends an email, or contacts an employer without explicit
       per-item human approval.</li>
+<li>[ ] <strong>No undisclosed story reuse</strong> (non-numeric): audited by inspection — no story-bank
+      episode reaches a document destined for an employer without per-use approval.
+      Recounting a failure to the tool is not consent to send it to a company.</li>
 </ul></div>
 <div class="note" data-for="s-spec-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §1</span></div><textarea class="note-ta" data-key="s-spec-1" data-label="§1 Problem statement" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
@@ -240,19 +246,27 @@ their own gates.</p>
 <td>High</td>
 </tr>
 <tr>
-<td>Profiler (adaptive interview)</td>
+<td>Elicitation engine</td>
 <td>Primary</td>
-<td>Generates questions from the dimension model, accepts free text, extracts dimension values with uncertainty</td>
+<td>One engine, three consumers: onboarding interview, pre-draft gap-filling, real-interview rehearsal. Generates questions from the dimension model, accepts free text, extracts both dimension values (with uncertainty) and episodes</td>
 <td>Yes (v1)</td>
-<td>Candidate-facing; poor questions produce a generic profile and everything downstream degrades</td>
+<td>Candidate-facing; poor questions produce a generic profile and everything downstream degrades. Splitting this into separate "profiler" and "interview simulator" would duplicate the hardest component</td>
 <td>High</td>
 </tr>
 <tr>
-<td>Profile store</td>
+<td>Profile store — dimension layer</td>
 <td>Primary / shared</td>
-<td>Per-candidate profile as a <strong>derived view</strong> over an append-only evidence log</td>
+<td>Per-candidate dimension values as a <strong>derived view</strong> over an append-only evidence log</td>
 <td>Yes (v1)</td>
 <td>Holds sensitive psychological and personal data. Schema must be multi-user from day one</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Profile store — story bank</td>
+<td>Primary / shared</td>
+<td>Verbatim episodes (projects, failures, decisions, definitions of success) tagged to dimension IDs, with a per-use disclosure flag</td>
+<td>Yes (v1)</td>
+<td>Dimension scores can rank a job but cannot write a sentence; the story bank is what makes a cover letter specific rather than fluent-generic. Most sensitive artefact in the system</td>
 <td>High</td>
 </tr>
 <tr>
@@ -312,11 +326,27 @@ their own gates.</p>
 <td>High</td>
 </tr>
 <tr>
+<td>Pre-draft gap-fill</td>
+<td>Dependent</td>
+<td>Before drafting for a specific job: diff the posting's demands against story-bank coverage, elicit only the gaps, often nothing</td>
+<td>No (Phase 7)</td>
+<td>Deferred, but its dependency is in v1 — it is the elicitation engine pointed at one job. Keeps per-application effort proportional to what is genuinely missing</td>
+<td>—</td>
+</tr>
+<tr>
 <td>Application generator (CV/letter)</td>
 <td>Dependent</td>
-<td>Tailored documents driven by the same dimensions</td>
+<td>Tailored documents driven by the same dimensions, written from approved story-bank episodes</td>
 <td>No (Phase 7)</td>
 <td>Deferred</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Interview rehearsal</td>
+<td>Dependent</td>
+<td>Company research, likely questions, mock runs against the story bank</td>
+<td>No (Phase 8)</td>
+<td>Deferred. Thin layer over the v1 elicitation engine rather than a new subsystem</td>
 <td>—</td>
 </tr>
 <tr>
@@ -523,6 +553,10 @@ subsystem under <code>claude-arsenal/project/</code>, each with a task DAG and a
 task. Proposed workspaces: <code>ONTOLOGY</code> (dimension model + corpus), <code>PROFILE</code> (adaptive
 profiler + store + feedback log), <code>SUPPLY</code> (connectors, normalize, dedup), <code>MATCH</code>
 (extraction funnel, ranking, explanations). <code>ONTOLOGY</code> blocks the other three.</p>
+<p><code>PROFILE</code> owns the elicitation engine, not a "profiler" — the same engine is later pointed at
+a single job (pre-draft gap-fill) and at a scheduled interview (rehearsal). Building those as
+separate subsystems would triplicate the hardest component in the project; building one and
+reusing it is why Phases 7-8 are thin rather than large.</p>
 <p>First implementation task under <code>ONTOLOGY</code>: dimension model v0 — 20-25 dimensions covering
 hard skills, working environment, social intensity, autonomy, meeting load, remote
 authenticity, schedule/caregiving compatibility, stability-vs-growth, learning demand, and
@@ -543,6 +577,9 @@ requirement in v1, not a v1 feature.</p>
 - [ ] <strong>Adaptive interview stopping rule</strong>: fixed question budget, uncertainty threshold, or
       candidate-controlled. Affects whether profiling feels like a conversation or an
       interrogation.
+- [ ] <strong>Story-bank saturation threshold</strong>: how much coverage counts as "enough" before the
+      pre-draft gap-fill asks nothing. Sets per-application effort, and therefore whether the
+      tool is usable at twenty applications or only at three.
 - [ ] <strong>Source connector for v1</strong>: which single portal. Needs a market with real ES/CA
       remote programming volume and tolerable access rules.
 - [ ] <strong>Weight elicitation placement</strong>: forced pairwise trade-offs inside the initial
