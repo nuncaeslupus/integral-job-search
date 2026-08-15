@@ -8,11 +8,18 @@ evidence: status/evidence/T16.json
 key: extraction_negation_recall
 ```
 
-Write the measured value to `status/evidence/T16.json` as `{"extraction_negation_recall": <number>}`, commit it, then record the row in the plan's Evidence log with the command that produced it.
+```bash
+echo "no gate command defined for T16 — replace this line with the command that writes status/evidence/T16.json" >&2; exit 1
+```
 
-An evidence gate asserts the number against the threshold, so it cannot pass
-vacuously — a missing evidence file is a hard failure, not a skip. It also runs
-no build tooling, which matters for tasks that run before the scaffold exists.
+The two blocks do different jobs and both are required. The `bash` block
+regenerates `status/evidence/T16.json`; the `gate` block asserts the
+number in it against the threshold. Without the first, a stale or hand-written
+evidence file passes unchallenged; without the second, a command that exits 0
+counts as a gate whatever it measured.
+
+The default command fails on purpose. A task whose measurement is undefined has
+not passed its gate — it has not been measured. Replace it as part of the work.
 
 ## Tests
 

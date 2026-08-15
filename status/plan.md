@@ -149,7 +149,7 @@ done until its row is complete and the measured value meets the gate.
 
 | T# | Gate | Measured | Command | SHA | Env | Date |
 |----|------|----------|---------|-----|-----|------|
-| — | — | — | — | — | — | — |
+| T1 | `lint_typecheck_exit_code == 0` | 0 | `make gate` (runs `ruff check .` + `mypy .`) | `9581811` | cloud | 2026-08-15 |
 
 ### Dependency graph
 

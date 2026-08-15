@@ -1,4 +1,4 @@
-.PHONY: help update-skills
+.PHONY: help sync build lint format test gate clean update-skills
 
 ARSENAL_REPO    ?= https://github.com/nuncaeslupus/claude-arsenal.git
 ARSENAL_REF     ?= v0.23.1  # pin to a tag — upgrade deliberately
@@ -14,6 +14,34 @@ ARSENAL_SHA     ?= f84b4eff13a87c29023931147877bc55085466f8
 
 help:  ## list available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+sync:  ## install the project and its dev dependencies
+	uv sync --extra dev
+
+build:  ## build the wheel and sdist
+	uv build
+
+lint:  ## ruff check + strict mypy
+	uv run ruff check .
+	uv run mypy .
+
+format:  ## ruff format + autofix
+	uv run ruff format .
+	uv run ruff check --fix .
+
+test:  ## run the test suite
+	uv run pytest
+
+gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
+	@mkdir -p status/evidence
+	@if $(MAKE) --no-print-directory lint >/dev/null 2>&1; then rc=0; else rc=$$?; fi; \
+	printf '{\n  "lint_typecheck_exit_code": %s\n}\n' "$$rc" > status/evidence/T1.json; \
+	echo "lint_typecheck_exit_code = $$rc  -> status/evidence/T1.json"; \
+	exit $$rc
+
+clean:  ## remove build and tool caches
+	rm -rf dist build .pytest_cache .mypy_cache .ruff_cache *.egg-info
+	find . -type d -name __pycache__ -not -path './.git/*' -exec rm -rf {} +
 
 update-skills:  ## vendor claude-arsenal skills into .claude/skills (for CC web)
 	@tmp=$$(mktemp -d); trap 'rm -rf $$tmp' EXIT; \

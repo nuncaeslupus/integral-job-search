@@ -11,13 +11,20 @@ populated queue appends a second copy of every task. To reseed, clear
 claude-arsenal/queue/ first, and expect the IDs to change; any work already
 claimed or released against the old IDs is lost.
 
-The gate command in each payload is a placeholder (`make lint && make test`).
-The measuring command belongs to the task and should replace it as the task is
-worked, so gate_run.sh executes the check that actually produces the number.
+Each payload carries two blocks, and both are load-bearing: a ```gate block that
+asserts the metric against its threshold from a committed evidence file, and a
+```bash block that regenerates that file. Without the bash block a stale evidence
+file passes unchallenged; without the gate block any command exiting 0 counts as
+a pass whatever it measured. Tasks with no command in GATE_CMD get a block that
+exits 1 — an unmeasured gate must fail, not pass quietly.
+
+Run with --refresh-payloads to rewrite payload bodies for the tasks already in
+the queue without minting new IDs.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -43,6 +50,13 @@ CRITICAL_PATH = {"T1": 100, "T2": 95, "T3": 90, "T4": 90, "T4b": 85}
 # (`laptop` is different: release.sh enforces it at release time via
 # CLAUDE_CODE_REMOTE, so the tag alone is sufficient there.)
 HUMAN_CAPABILITY = "surface:human"
+
+# Per-task command that regenerates the task's evidence file. Filled in as each
+# task's measurement becomes real; anything absent gets a block that fails loudly
+# rather than one that passes for the wrong reason.
+GATE_CMD = {
+    "T1": "make gate",
+}
 
 
 def parse_rows() -> list[dict]:
@@ -88,7 +102,7 @@ def toposort(rows: list[dict]) -> list[dict]:
         for dep in by_id[tid]["deps"]:
             if dep not in by_id:
                 raise SystemExit(f"{tid} depends on unknown {dep}")
-            visit(dep, stack + (tid,))
+            visit(dep, (*stack, tid))
         seen.add(tid)
         out.append(by_id[tid])
 
@@ -112,13 +126,22 @@ def payload(row: dict) -> str:
         f"key: {metric}",
         "```",
         "",
-        f"Write the measured value to `status/evidence/{row['tid']}.json` as "
-        f'`{{"{metric}": <number>}}`, commit it, then record the row in the plan\'s '
-        "Evidence log with the command that produced it.",
+        "```bash",
+        GATE_CMD.get(
+            row["tid"],
+            f'echo "no gate command defined for {row["tid"]} — replace this line with the '
+            f'command that writes status/evidence/{row["tid"]}.json" >&2; exit 1',
+        ),
+        "```",
         "",
-        "An evidence gate asserts the number against the threshold, so it cannot pass",
-        "vacuously — a missing evidence file is a hard failure, not a skip. It also runs",
-        "no build tooling, which matters for tasks that run before the scaffold exists.",
+        "The two blocks do different jobs and both are required. The `bash` block",
+        f"regenerates `status/evidence/{row['tid']}.json`; the `gate` block asserts the",
+        "number in it against the threshold. Without the first, a stale or hand-written",
+        "evidence file passes unchallenged; without the second, a command that exits 0",
+        "counts as a gate whatever it measured.",
+        "",
+        "The default command fails on purpose. A task whose measurement is undefined has",
+        "not passed its gate — it has not been measured. Replace it as part of the work.",
         "",
         "## Tests",
         "",
@@ -154,7 +177,34 @@ def payload(row: dict) -> str:
     return "\n".join(body) + "\n"
 
 
+def refresh_payloads() -> int:
+    """Rewrite payload bodies for the tasks already in the queue, keeping their IDs.
+
+    Seeding is destructive — it mints new IDs and orphans any claim already made
+    against the old ones. When only the payload text needs to change, this maps
+    each plan row to the task that already carries it and rewrites just that file.
+    """
+    rows = {r["tid"]: r for r in parse_rows()}
+    written = 0
+    for line in QUEUE.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        task = json.loads(line)
+        m = re.match(r"^(T\d+[a-z]?):", task["title"])
+        if not m or m.group(1) not in rows:
+            print(f"  ! no plan row for {task['id']} ({task['title'][:40]})", file=sys.stderr)
+            continue
+        (REPO / f"claude-arsenal/queue/{task['payload']}").write_text(
+            payload(rows[m.group(1)]), encoding="utf-8"
+        )
+        written += 1
+    print(f"refreshed {written} payload(s); task IDs unchanged")
+    return 0
+
+
 def main() -> int:
+    if "--refresh-payloads" in sys.argv:
+        return refresh_payloads()
     rows = toposort(parse_rows())
     ids: dict[str, str] = {}
     for row in rows:
