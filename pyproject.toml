@@ -1,0 +1,93 @@
+[project]
+name = "jobsearch"
+version = "0.1.0"
+description = "Candidate-centred integral job search: one dimension model, carried end to end."
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Only `tools/collect_ads.py` needs these. Reading and validating the committed
+# corpus (`jobsearch.corpus`) is stdlib-only, so the T4b gate runs without them.
+collect = [
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "py3langid>=0.3",
+    "requests>=2.32",
+]
+dev = [
+    "mypy>=1.11",
+    "pytest>=8.3",
+    "ruff>=0.6",
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jobsearch"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Vendored, generated trees. `.claude/skills/` is rewritten wholesale by
+# `make update-skills`, and `claude-arsenal/bin|scripts/` is refreshed by
+# init.py whenever a checksum drifts from the plugin source — so a fix applied
+# here is reverted at the next session start. They are upstream's code to lint;
+# defects found in them go to nuncaeslupus/claude-arsenal as issues.
+extend-exclude = [
+    ".claude/skills",
+    "claude-arsenal/bin",
+    "claude-arsenal/scripts",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "RUF", # ruff-specific
+    "B",   # flake8-bugbear (real bug patterns)
+    "SIM", # flake8-simplify (cleaner equivalents)
+    "PTH", # flake8-use-pathlib (prefer Path.open over open)
+]
+
+[tool.mypy]
+python_version = "3.12"
+# The plan and the lint target both promise *strict* mypy. The enumerated flags
+# below are the arsenal canonical set, but they are a subset of `strict`, which
+# also brings disallow_any_generics, disallow_untyped_calls,
+# disallow_subclassing_any, no_implicit_reexport and strict_equality. Advertising
+# strict while configuring less is the kind of gap the gate exists to catch, so
+# the preset is enabled and the explicit flags are kept as documentation of the
+# floor we will not drop below.
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+show_error_codes = true
+# Same exclusions as ruff, for the same reason: these trees are regenerated
+# (`make update-skills`, `init.py`) so a fix here is reverted, and they are
+# upstream's code to type. tools/ is repo automation rather than shipped code.
+# Excluded rather than weakening the flags for src/, which is what strict is for.
+exclude = [
+    "^tools/",
+    "^\\.claude/skills/",
+    "^claude-arsenal/bin/",
+    "^claude-arsenal/scripts/",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

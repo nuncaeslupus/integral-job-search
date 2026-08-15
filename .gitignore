@@ -228,3 +228,11 @@ claude-arsenal/session/worktree_isolation
 claude-arsenal/session/host_branch
 
 claude-arsenal/session/rescue_refs
+
+# Candidate data — the most sensitive artefact in the system (spec §2).
+# The profile store holds psychological dimensions and a story bank of
+# failures; none of it belongs in a repository that may be shared.
+profiles/
+
+# Generated pipeline artefacts (offers, extractions, rankings).
+data/

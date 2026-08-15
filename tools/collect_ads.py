@@ -28,9 +28,12 @@ import py3langid
 import requests
 from bs4 import BeautifulSoup
 
-OUT = Path(__file__).resolve().parents[1] / "corpus" / "raw" / "ads.jsonl"
-UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
-LANGS = ("es", "en", "ca")
+from jobsearch.corpus import LANGUAGES, language_counts, load_ads, save_ads, write_evidence
+
+UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120 Safari/537.36"
+)
 
 # ponytail: title regex, not an LLM classifier. Recall over precision — a wrong-role ad
 # is dropped by hand at labelling (T5), a missed one is invisible.
@@ -69,7 +72,7 @@ def clean(text: str) -> str:
 
 def detect_language(text: str) -> str:
     """Restricted to the three corpus languages; anything else is not collectable here."""
-    py3langid.set_languages(list(LANGS))
+    py3langid.set_languages(list(LANGUAGES))
     lang, _ = py3langid.classify(text)
     return str(lang)
 
@@ -401,37 +404,6 @@ def from_urls(session: requests.Session, urls: list[str], source: str) -> Iterat
             yield rec
 
 
-# ----------------------------------------------------------------------------- store
-
-
-def load_ads(path: Path = OUT) -> list[dict[str, Any]]:
-    """Read the raw corpus. An entry without a source URL is refused at load."""
-    ads = []
-    if not path.exists():
-        return ads
-    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if not line.strip():
-            continue
-        ad = json.loads(line)
-        url = str(ad.get("source_url") or "")
-        if not url.startswith(("http://", "https://")):
-            raise ValueError(f"{path}:{lineno} ad {ad.get('id')!r} has no resolvable source_url")
-        if not str(ad.get("text") or "").strip():
-            raise ValueError(f"{path}:{lineno} ad {ad.get('id')!r} has no text")
-        ads.append(ad)
-    return ads
-
-
-def save_ads(ads: list[dict[str, Any]], path: Path = OUT) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [json.dumps(ad, ensure_ascii=False, sort_keys=True) for ad in sorted(ads, key=lambda a: a["id"])]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def language_counts(ads: list[dict[str, Any]]) -> dict[str, int]:
-    return {lang: sum(1 for a in ads if a["language"] == lang) for lang in LANGS}
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--target-es", type=int, default=60)
@@ -469,7 +441,8 @@ def main() -> int:
             absorb(name, fetch(session, missing))
 
     if args.ca_urls and args.ca_urls.exists():
-        urls = [u.strip() for u in args.ca_urls.read_text().splitlines() if u.strip().startswith("http")]
+        lines = args.ca_urls.read_text().splitlines()
+        urls = [u.strip() for u in lines if u.strip().startswith("http")]
         absorb("ca-urls", from_urls(session, urls, "ca"))
 
     all_ads = list(ads.values())
@@ -477,10 +450,7 @@ def main() -> int:
     counts = language_counts(all_ads)
     print(f"total={len(all_ads)} {counts}")
 
-    args.evidence.parent.mkdir(parents=True, exist_ok=True)
-    args.evidence.write_text(
-        json.dumps({"raw_ad_count": len(all_ads), "language_counts": counts}, indent=2) + "\n"
-    )
+    write_evidence(args.evidence, all_ads)
     return 0
 
 

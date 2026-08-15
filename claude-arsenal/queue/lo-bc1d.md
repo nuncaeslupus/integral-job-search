@@ -35,6 +35,30 @@ Decide one of:
 Whichever is chosen, update `tests/test_corpus_raw.py::TARGET_MIX`,
 `corpus/raw/README.md` ("Known divergence"), and the T4b row in `status/plan.md`.
 
+## Acceptance gate
+
+The three artefacts agree on what the Catalan slice is: `status/plan.md` T4b,
+`tests/test_corpus_raw.py::TARGET_MIX`, and `corpus/raw/README.md` state the same
+target, and the corpus satisfies it.
+
+```bash
+uv run python -m jobsearch.corpus status/evidence/T4b.json
+uv run --extra dev pytest tests/test_corpus_raw.py -q
+```
+
+## Tests
+
+`test_raw_corpus_meets_size_and_language_mix` in `tests/test_corpus_raw.py` — must
+still pass against whichever mix the chosen option settles on, with `TARGET_MIX`
+updated in the same commit as the plan row, so the test and the spec cannot drift.
+
+## Location
+
+Service: **ONTOLOGY** · Size: M
+
+`status/plan.md` (T4b row) · `corpus/raw/README.md` ("Known divergence") ·
+`tests/test_corpus_raw.py` · `tools/collect_ads.py` (`CA_ROLE_RE`, `FEINA_ACTIVA_KEYWORDS`)
+
 ## Blocks
 
 T5 (`lo-d2b2`) labelling should not assume the Catalan ads are remote.

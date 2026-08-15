@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from tools.collect_ads import load_ads  # noqa: E402
+from jobsearch.corpus import load_ads
 
 TARGET_MIX = {"es": 60, "en": 25, "ca": 15}
 TOLERANCE = 0.10

@@ -49,12 +49,21 @@ mixed rather than assumed-remote.
 
 ## Reproducing / extending
 
-```bash
-uv venv .venv && uv pip install --python .venv/bin/python requests py3langid beautifulsoup4 lxml pytest
-.venv/bin/python tools/collect_ads.py --target-es 60 --target-en 25 --target-ca 15
-.venv/bin/python -m pytest tests/test_corpus_raw.py -q
+Reading the corpus needs nothing but the stdlib:
+
+```python
+from jobsearch.corpus import load_ads, language_counts
+ads = load_ads()  # raises on any entry without a resolvable source_url
 ```
 
-Re-running merges by `id` into the existing file and tops up whichever language
+Collecting more needs the scraping stack and egress to the boards:
+
+```bash
+uv run --extra collect python tools/collect_ads.py --target-es 60 --target-en 25 --target-ca 15
+uv run python -m jobsearch.corpus status/evidence/T4b.json   # recount → evidence
+make test
+```
+
+Re-running the collector merges by `id` into the existing file and tops up whichever language
 is short, so collection can happen over several sittings. Requires egress to the
 job boards — cloud sessions are blocked at the proxy, hence the `laptop` tag.
