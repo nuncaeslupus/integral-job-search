@@ -213,6 +213,10 @@ their own gates.</p>
 <li>[ ] <strong>No undisclosed story reuse</strong> (non-numeric): audited by inspection — no story-bank
       episode reaches a document destined for an employer without per-use approval.
       Recounting a failure to the tool is not consent to send it to a company.</li>
+<li>[ ] <code>undocumented_methods == 0</code> — every technique that scores, weights or ranks, and every
+      formula producing a number the candidate sees, has an entry in <code>docs/METHODS.md</code> naming
+      the method, its source and its limits. Checkable by walking the computation sites
+      against the register.</li>
 </ul></div>
 <div class="note" data-for="s-spec-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §1</span></div><textarea class="note-ta" data-key="s-spec-1" data-label="§1 Problem statement" data-part="Specification" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
@@ -306,6 +310,14 @@ below marked as such.</p>
 <td>Ground truth for extraction and ranking gates, <strong>and</strong> stimulus pool for reaction elicitation</td>
 <td>Yes (v1)</td>
 <td>Without it no quantitative gate can run. Pacing item for the whole project. Serving three consumers raises its value and makes the labelling effort easier to justify</td>
+<td>High</td>
+</tr>
+<tr>
+<td><code>docs/METHODS.md</code></td>
+<td>Shared resource</td>
+<td>Register of every technique, instrument and formula, with sources, limits and known evidence gaps</td>
+<td>Yes (v1)</td>
+<td>A tool that scores a person on psychological dimensions and cannot say why should not be trusted. Also the defence against silently adopting a method because it sounded plausible</td>
 <td>High</td>
 </tr>
 <tr>
@@ -639,11 +651,15 @@ and hard-vs-soft classification.</p>
 roles, no current schedule constraints, ES/EN/CA. Second candidate (partner) is a schema
 requirement in v1, not a v1 feature.</p>
 <p><strong>Open questions</strong>:
-- [ ] <strong>Research, blocking <code>ONTOLOGY</code></strong>: which elicitation techniques have real validity
-      evidence for work-environment preference (behavioural/indirect questioning, forced
-      pairwise trade-offs) — and what recruiters and ATS tooling actually reward in CVs in
-      2026. The second must be sourced, not recalled; it moves fast and stale advice here is
-      actively harmful. Feeds backwards into the dimension model.
+- [x] <strong>Research, blocking <code>ONTOLOGY</code></strong> — done 2026-08-15, written up in <code>docs/METHODS.md</code>.
+      Headline: person–environment fit predicts satisfaction, commitment and staying
+      (ρ ≈ .35–.51) but predicts performance only weakly, which sets the tool's objective;
+      structured behavioural elicitation is the instrument to borrow, not its validity
+      coefficient; discrete-choice trade-offs yield salary-equivalent weights, which is what
+      makes explanations arguable; the ranked output is an automated realistic job preview,
+      the mechanism with the best turnover evidence behind it. Type indicators are excluded
+      with reasons. <strong>The ATS/LLM-screening entry is the weak one</strong> — commercial sources
+      only, flagged for re-verification before Phase 7.
 - [ ] <strong>Corpus labelling protocol</strong>: who labels, against what rubric, and how
       inter-annotator agreement is checked with a single annotator (proposal: label a 20-ad
       subset twice, ≥2 weeks apart, report self-agreement).

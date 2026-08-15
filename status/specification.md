@@ -53,6 +53,10 @@ their own gates.
 - [ ] **No undisclosed story reuse** (non-numeric): audited by inspection — no story-bank
       episode reaches a document destined for an employer without per-use approval.
       Recounting a failure to the tool is not consent to send it to a company.
+- [ ] `undocumented_methods == 0` — every technique that scores, weights or ranks, and every
+      formula producing a number the candidate sees, has an entry in `docs/METHODS.md` naming
+      the method, its source and its limits. Checkable by walking the computation sites
+      against the register.
 
 ## 2. Systems & Impact
 
@@ -81,6 +85,7 @@ Greenfield: nearly everything is new. "Needs changes" therefore reads as "in v1 
 |--------|------|------|----------------|--------|----------|
 | `dimensions/` — dimension model | Primary | The spine. Per dimension: ID, definition, elicitation question(s), extraction cues per language, hard-filter vs soft-preference, polarity | Yes (v1) | Every other component is a projection of this. Changing a dimension ID is a breaking change everywhere | High |
 | `corpus/` — labelled ad corpus | Shared resource | Ground truth for extraction and ranking gates, **and** stimulus pool for reaction elicitation | Yes (v1) | Without it no quantitative gate can run. Pacing item for the whole project. Serving three consumers raises its value and makes the labelling effort easier to justify | High |
+| `docs/METHODS.md` | Shared resource | Register of every technique, instrument and formula, with sources, limits and known evidence gaps | Yes (v1) | A tool that scores a person on psychological dimensions and cannot say why should not be trusted. Also the defence against silently adopting a method because it sounded plausible | High |
 | Elicitation engine | Primary | One engine, three consumers: onboarding interview, pre-draft gap-filling, real-interview rehearsal. Generates questions from the dimension model, accepts free text, extracts both dimension values (with uncertainty) and episodes | Yes (v1) | Candidate-facing; poor questions produce a generic profile and everything downstream degrades. Splitting this into separate "profiler" and "interview simulator" would duplicate the hardest component | High |
 | Reaction elicitation | Primary | Second elicitation modality: present real ads and ad excerpts (perks blocks, requirement blocks, how the employer phrases an ask) and capture free-text reaction, comparison and sorting. Draws stimuli from the corpus | Yes (v1) | People introspect badly in the abstract and react well to concrete text. Also surfaces ontology gaps, because reactions arrive in the wild vocabulary the extractor must handle. Supplies day-one preference data the system otherwise lacks until outcomes exist | High |
 | Profile store — dimension layer | Primary / shared | Per-candidate dimension values as a **derived view** over an append-only evidence log | Yes (v1) | Holds sensitive psychological and personal data. Schema must be multi-user from day one | High |
@@ -220,11 +225,15 @@ roles, no current schedule constraints, ES/EN/CA. Second candidate (partner) is 
 requirement in v1, not a v1 feature.
 
 **Open questions**:
-- [ ] **Research, blocking `ONTOLOGY`**: which elicitation techniques have real validity
-      evidence for work-environment preference (behavioural/indirect questioning, forced
-      pairwise trade-offs) — and what recruiters and ATS tooling actually reward in CVs in
-      2026. The second must be sourced, not recalled; it moves fast and stale advice here is
-      actively harmful. Feeds backwards into the dimension model.
+- [x] **Research, blocking `ONTOLOGY`** — done 2026-08-15, written up in `docs/METHODS.md`.
+      Headline: person–environment fit predicts satisfaction, commitment and staying
+      (ρ ≈ .35–.51) but predicts performance only weakly, which sets the tool's objective;
+      structured behavioural elicitation is the instrument to borrow, not its validity
+      coefficient; discrete-choice trade-offs yield salary-equivalent weights, which is what
+      makes explanations arguable; the ranked output is an automated realistic job preview,
+      the mechanism with the best turnover evidence behind it. Type indicators are excluded
+      with reasons. **The ATS/LLM-screening entry is the weak one** — commercial sources
+      only, flagged for re-verification before Phase 7.
 - [ ] **Corpus labelling protocol**: who labels, against what rubric, and how
       inter-annotator agreement is checked with a single annotator (proposal: label a 20-ad
       subset twice, ≥2 weeks apart, report self-agreement).
