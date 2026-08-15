@@ -98,7 +98,11 @@ it is recorded here as an explicit non-goal.
 
 ## §3 Options
 
-
+Three approaches, ordered by how much is built before anything runs. They differ less in
+what they can eventually do than in what they foreclose: A is fastest to a tailored CV but
+fixes the vocabulary fragmentation in place, B builds the shared vocabulary first and defers
+features, C commits now to decisions that need evidence we do not yet have. Read each
+option's **Tradeoffs** as the real decision content; effort is the least interesting column.
 
 > **✎ Notes** · `SPEC §3`
 > _(your notes here — replace this line)_
