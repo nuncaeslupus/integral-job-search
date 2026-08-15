@@ -29,6 +29,21 @@ QUEUE = REPO / "claude-arsenal/queue/tasks.jsonl"
 CREATE = REPO / ".claude/skills/queue-add/scripts/create_task.py"
 PRIORITY = {"S": 10, "M": 5, "L": 1}
 
+# Size-derived priority ranks small work first, which is the arsenal default and
+# is wrong here: it would let a Medium fan-out task (T6, priority 5) be selected
+# ahead of Large critical-path work (T3, priority 1) the moment T2 lands, and the
+# selector sorts strictly by priority descending. The critical path is what
+# unblocks the human bottleneck, so it gets its own band above every size score.
+CRITICAL_PATH = {"T1": 100, "T2": 95, "T3": 90, "T4": 90, "T4b": 85}
+
+# `tags` are informational at selection time — queue_batch.sh only filters on them
+# when LOOP_TAGS is set, so a `human` tag does NOT stop a worker claiming the task.
+# `requires` is enforced by default against the surface profile's capabilities, and
+# no surface declares `surface:human`, so this is what actually keeps a worker off.
+# (`laptop` is different: release.sh enforces it at release time via
+# CLAUDE_CODE_REMOTE, so the tag alone is sufficient there.)
+HUMAN_CAPABILITY = "surface:human"
+
 
 def parse_rows() -> list[dict]:
     rows: list[dict] = []
@@ -82,18 +97,28 @@ def toposort(rows: list[dict]) -> list[dict]:
     return out
 
 
-def payload(row: dict, gate_cmd: str) -> str:
+def payload(row: dict) -> str:
     human = "[HUMAN]" in row["desc"]
+    laptop = "[LAPTOP]" in row["desc"]
+    metric = row["gate"].split()[0]
     body = [
         f"# {row['tid']}: {row['desc']}",
         "",
         "## Acceptance gate",
         "",
-        f"`{row['gate']}` — measured and recorded in the plan's Evidence log.",
-        "",
-        "```bash",
-        gate_cmd,
+        "```gate",
+        row["gate"],
+        f"evidence: status/evidence/{row['tid']}.json",
+        f"key: {metric}",
         "```",
+        "",
+        f"Write the measured value to `status/evidence/{row['tid']}.json` as "
+        f'`{{"{metric}": <number>}}`, commit it, then record the row in the plan\'s '
+        "Evidence log with the command that produced it.",
+        "",
+        "An evidence gate asserts the number against the threshold, so it cannot pass",
+        "vacuously — a missing evidence file is a hard failure, not a skip. It also runs",
+        "no build tooling, which matters for tasks that run before the scaffold exists.",
         "",
         "## Tests",
         "",
@@ -113,8 +138,18 @@ def payload(row: dict, gate_cmd: str) -> str:
             "",
             "## Human-owned",
             "",
-            "This task requires the candidate personally and cannot be completed by an",
-            "agent worker. Tagged `human`. Do not claim it.",
+            "Requires the candidate personally. Carries `requires: [surface:human]`, a",
+            "capability no surface declares, so the selector excludes it by default — the",
+            "`human` tag alone would not, since tags only filter when LOOP_TAGS is set.",
+        ]
+    if laptop:
+        body += [
+            "",
+            "## Laptop-only",
+            "",
+            "Needs egress to job boards, which the cloud session's policy denies (403 at",
+            "the proxy). Tagged `laptop`; release.sh refuses `done` from a cloud session",
+            "via CLAUDE_CODE_REMOTE, so a cloud worker cannot falsely complete it.",
         ]
     return "\n".join(body) + "\n"
 
@@ -125,13 +160,15 @@ def main() -> int:
     for row in rows:
         human = "[HUMAN]" in row["desc"]
         title = f"{row['tid']}: {row['desc'].replace('**[HUMAN]** ', '').replace('**', '')}"
+        laptop = "[LAPTOP]" in row["desc"]
+        priority = CRITICAL_PATH.get(row["tid"], PRIORITY.get(row["size"], 5))
         cmd = [
             sys.executable,
             str(CREATE),
             "--title",
             title,
             "--priority",
-            str(PRIORITY.get(row["size"], 5)),
+            str(priority),
             "--workspace",
             row["service"],
             "--queue",
@@ -140,16 +177,16 @@ def main() -> int:
         for dep in row["deps"]:
             cmd += ["--deps", ids[dep]]
         if human:
-            cmd += ["--tag", "human"]
+            cmd += ["--tag", "human", "--requires", HUMAN_CAPABILITY]
+        if laptop:
+            cmd += ["--tag", "laptop"]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         task_id = result.stdout.strip().split()[-1]
         ids[row["tid"]] = task_id
 
-        gate_cmd = "make lint && make test  # replace with the check that measures the gate"
-        (REPO / f"claude-arsenal/queue/{task_id}.md").write_text(
-            payload(row, gate_cmd), encoding="utf-8"
-        )
-        print(f"{row['tid']:5} -> {task_id}  [{row['service']}]{' human' if human else ''}")
+        (REPO / f"claude-arsenal/queue/{task_id}.md").write_text(payload(row), encoding="utf-8")
+        marks = "".join(m for m, on in ((" human", human), (" laptop", laptop)) if on)
+        print(f"{row['tid']:5} -> {task_id}  p{priority:<3} [{row['service']}]{marks}")
     print(f"\nseeded {len(ids)} task(s)")
     return 0
 

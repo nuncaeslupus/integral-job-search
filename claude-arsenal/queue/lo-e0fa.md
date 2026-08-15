@@ -2,11 +2,17 @@
 
 ## Acceptance gate
 
-`profile_rebuild_deterministic == 1` — measured and recorded in the plan's Evidence log.
-
-```bash
-make lint && make test  # replace with the check that measures the gate
+```gate
+profile_rebuild_deterministic == 1
+evidence: status/evidence/T6.json
+key: profile_rebuild_deterministic
 ```
+
+Write the measured value to `status/evidence/T6.json` as `{"profile_rebuild_deterministic": <number>}`, commit it, then record the row in the plan's Evidence log with the command that produced it.
+
+An evidence gate asserts the number against the threshold, so it cannot pass
+vacuously — a missing evidence file is a hard failure, not a skip. It also runs
+no build tooling, which matters for tasks that run before the scaffold exists.
 
 ## Tests
 

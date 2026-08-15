@@ -2,11 +2,17 @@
 
 ## Acceptance gate
 
-`dimension_schema_violations == 0` — measured and recorded in the plan's Evidence log.
-
-```bash
-make lint && make test  # replace with the check that measures the gate
+```gate
+dimension_schema_violations == 0
+evidence: status/evidence/T2.json
+key: dimension_schema_violations
 ```
+
+Write the measured value to `status/evidence/T2.json` as `{"dimension_schema_violations": <number>}`, commit it, then record the row in the plan's Evidence log with the command that produced it.
+
+An evidence gate asserts the number against the threshold, so it cannot pass
+vacuously — a missing evidence file is a hard failure, not a skip. It also runs
+no build tooling, which matters for tasks that run before the scaffold exists.
 
 ## Tests
 

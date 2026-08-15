@@ -94,7 +94,11 @@ Nothing is mutated in place; the profile is always a pure function of the log.
 The **Gate** column is the objective pass/fail, derived from the spec's success criteria.
 
 Two tasks are marked **[HUMAN]**: they require the candidate personally and cannot be
-completed by an agent worker. Tag them `human` when seeding so a worker never claims them.
+completed by an agent worker. They carry `requires: ["surface:human"]` — a capability no
+surface declares — which `queue_batch.sh` enforces by default, so the selector never returns
+them. **A `human` tag alone would not do this**: the selector only filters on tags when
+`LOOP_TAGS` is set, so tags are informational at selection time. They are tagged as well, for
+`/continue` scoping and legibility.
 
 Two more are marked **[LAPTOP]**: they need network access to job boards, and the cloud
 session's egress policy denies those hosts outright (confirmed 2026-08-15 — 403 at the proxy
