@@ -9,7 +9,8 @@ key: dimension_schema_violations
 ```
 
 ```bash
-echo "no gate command defined for T2 — replace this line with the command that writes status/evidence/T2.json" >&2; exit 1
+uv run python -m jobsearch.dimensions status/evidence/T2.json
+uv run --extra dev pytest tests/test_dimension_model.py -q
 ```
 
 The two blocks do different jobs and both are required. The `bash` block
@@ -18,8 +19,9 @@ number in it against the threshold. Without the first, a stale or hand-written
 evidence file passes unchallenged; without the second, a command that exits 0
 counts as a gate whatever it measured.
 
-The default command fails on purpose. A task whose measurement is undefined has
-not passed its gate — it has not been measured. Replace it as part of the work.
+The evidence writer exits non-zero when `dimensions/` is empty: zero violations
+over zero files is a pass over nothing, which is the one way this gate could
+have measured nothing while reporting success.
 
 ## Tests
 

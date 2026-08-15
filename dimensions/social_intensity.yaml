@@ -1,0 +1,74 @@
+# The worked example from `status/specification.md` §5.1, committed so the T2
+# gate measures a real file rather than passing over an empty directory.
+# The model proper — 20–25 dimensions — is T3; this one is expected to survive
+# into it unchanged apart from added cues.
+id: social_intensity
+kind: soft
+polarity: bipolar
+label:
+  en: Social intensity
+  es: Intensidad social
+  ca: Intensitat social
+definition: >
+  How much of the working week is spent in unstructured group interaction —
+  open-plan presence, socials, offsites — as opposed to solitary focused work.
+elicitation:
+  questions:
+    - id: si_q1
+      text:
+        en: >
+          Tell me about a working week you enjoyed. Who did you talk to, how
+          often, and what were those conversations for?
+        es: >
+          Cuéntame una semana de trabajo que disfrutaste. ¿Con quién hablaste,
+          con qué frecuencia y para qué eran esas conversaciones?
+        ca: >
+          Explica'm una setmana de feina que vas gaudir. Amb qui vas parlar,
+          amb quina freqüència i per a què servien aquelles converses?
+    - id: si_q2
+      text:
+        en: >
+          Describe the last time a day of meetings left you unable to do the
+          work you had planned. What did you do about it?
+        es: >
+          Describe la última vez que un día de reuniones te dejó sin poder
+          hacer el trabajo que tenías planeado. ¿Qué hiciste al respecto?
+        ca: >
+          Descriu l'última vegada que un dia de reunions et va deixar sense
+          poder fer la feina que tenies planificada. Què vas fer?
+  reaction_probes:
+    - excerpt_kind: perks
+    - excerpt_kind: ways_of_working
+extraction:
+  cues:
+    en:
+      - pattern: "(team\\s+)?offsites?"
+        value: 0.6
+        negatable: true
+      - pattern: "pair(ing|ed)?\\s+program(ming)?"
+        value: 0.5
+        negatable: true
+      - pattern: "deep\\s+work|focus\\s+time"
+        value: -0.5
+        negatable: false
+    es:
+      - pattern: "jornadas?\\s+de\\s+equipo"
+        value: 0.6
+        negatable: true
+      - pattern: "programaci[oó]n\\s+en\\s+pareja"
+        value: 0.5
+        negatable: true
+      - pattern: "trabajo\\s+aut[oó]nomo"
+        value: -0.4
+        negatable: false
+    ca:
+      - pattern: "jornades?\\s+d'equip"
+        value: 0.6
+        negatable: true
+      - pattern: "programaci[oó]\\s+en\\s+parella"
+        value: 0.5
+        negatable: true
+      - pattern: "treball\\s+aut[oò]nom"
+        value: -0.4
+        negatable: false
+methods_ref: METHODS.md#21-structured-behavioural-elicitation
