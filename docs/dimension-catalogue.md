@@ -1,7 +1,7 @@
 # Dimension catalogue — candidates for the model beyond candidate zero
 
 **Status: a candidate list, not the model.** Nothing here is committed to
-`dimensions/*.yaml` by existing. This is the pool T24 (candidate attributes) and
+`dimensions/*.yaml` by virtue of appearing here. This is the pool T24 (candidate attributes) and
 T26 (model v1) draw from, and every **matched** dimension in it must earn its
 cues from real ads in the broadened corpus (T25) before it enters the model.
 Writing cues from this document directly would repeat, at four times the scale,
@@ -49,8 +49,8 @@ nor vetoes, and surfaces as something the interview still owes the candidate.
 
 The arrangement the owner described — *work from Spain, be paid by a foreign
 employer at their market rate, in euros, under Spanish rules* — is not one
-dimension. It is five, and conflating them is how a tool tells someone an
-impossible offer is a match.
+dimension. It is the six below, and conflating them is how a tool tells someone
+an impossible offer is a match.
 
 | id | what it holds | why it is separate |
 |----|----------------|--------------------|
