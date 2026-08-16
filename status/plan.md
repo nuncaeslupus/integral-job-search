@@ -266,7 +266,42 @@ a profile contains.
 
 **Not decided here.** Whether the interview is one long session or several
 sittings; whether traits are scored continuously or held as evidence only until
-enough episodes accumulate. Both need a conversation before T27 is claimed.
+enough episodes accumulate. Both need a conversation before T27 is claimed —
+`docs/product-shape.md` states a recommendation for each so they can be argued
+with rather than rediscovered.
+
+### 5. Product shape, and a catalogue to widen from
+
+Two documents were added rather than more code, because both decisions bind
+work that has not started:
+
+- **`docs/product-shape.md`** — how the tool is actually used. A conversation
+  moves it; phases are skills; checkpoints are scripts with numbers; state is
+  files, so it resumes. Packaged as a Claude Code plugin over this repo, the
+  `ai-job-search` precedent. Phases 0-6 are named with the gate that ends each.
+  Three questions are left for the owner, including whether the profile store
+  is multi-user from day one.
+- **`docs/dimension-catalogue.md`** — the pool T24 and T26 draw from, written
+  against a waiter, a nurse, a driver, a teacher, a diving instructor and a
+  field labourer rather than one engineer. It is explicitly *not* the model:
+  every matched dimension in it must earn cues from real ads (T25) before
+  entering `dimensions/`, or PR #8's invented-cue failure repeats at four times
+  the scale.
+
+The catalogue surfaced three findings that change T24's schema rather than its
+content, recorded here so they are not lost:
+
+1. **Hard and soft are not enough.** `pay_floor` is hard and `pay_target` is
+   soft, and they are one subject. An attribute needs to hold a floor and an
+   aspiration without being split into two dimensions.
+2. **Several facts are per-item, not scalar.** A level *per language*, a *set*
+   of licences, an authorisation *per country*. A float cannot carry them, and
+   pretending otherwise is what makes a filter silently pass.
+3. **Some dimensions apply only to some job families.** `split_shift`
+   (`jornada partida`) is decisive in hospitality and meaningless for remote
+   software. Without applicability by family, `ontology_hit_rate` reads as poor
+   coverage where the truth is correct silence — the same lesson T3 recorded as
+   `language_slices_with_no_corpus_hit`.
 
 ---
 
