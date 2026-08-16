@@ -180,6 +180,96 @@ T1 ─┬─> T2 ─┬─> T3 ─┬──────────────�
 
 ---
 
+## Scope extension — 2026-08-16 (owner)
+
+Four changes of scope, recorded here before any of them is built. Requested by the
+repository owner after T2–T4 landed.
+
+### 1. The model must serve everyone, not candidate zero
+
+v0's 22 dimensions were written against remote programming ads for one candidate.
+`ontology_hit_rate` (T17) is designed to make that narrowness visible once real
+ads arrive, but it cannot invent the vocabulary of job families the corpus never
+sampled. Generalising needs ads from more families before the dimensions can be
+widened honestly — writing them first would produce exactly the invented cues
+review already caught once (PR #8).
+
+### 2. Dimensions currently assume a candidate side and an ad side. Not all have both.
+
+This is the structural change, and it is worth stating plainly because the whole
+system rests on §5.1. Today every dimension is implicitly *matched*: the ad
+describes an environment, the candidate holds a preference, and ranking compares
+the two. Three kinds of thing do not fit that shape:
+
+| kind | example | ad side | candidate side |
+|------|---------|---------|----------------|
+| **matched** (today's model) | `social_intensity` | described in the ad | preference | 
+| **candidate fact** | languages spoken, location, ability to relocate, salary floor, availability | — (matches an ad *requirement*) | a fact, not a preference |
+| **candidate trait** | creativity, ambition, learning orientation | no ad cue exists | elicited, never extracted |
+
+A trait has no cue set and can never be extracted from an ad; a fact is compared
+against a *requirement* rather than a preference. Both currently have nowhere to
+live: `Dimension` requires `extraction.cues`, and `dimension_extractor_coverage`
+counts any dimension without cues as uncovered. The schema needs an explicit
+`side` (or `applies_to`) so a trait is not a broken matched dimension, and so
+the coverage metric stops asking ad-side questions of candidate-side entries.
+
+Note that several ad-side halves already exist — `english_demand`,
+`remote_arrangement`, `travel_requirement`, `compensation_transparency`. The new
+work is the candidate side and the comparison rule, not new cues.
+
+### 3. The first interview must be long, directed, and genuinely psychological
+
+T7 generates questions from the dimension model and T8 extracts values from free
+text. Neither is an *interview*: an interview has sequencing, follow-ups that
+depend on the answer, coverage it drives towards, and a manner. The owner's
+brief, recorded verbatim in intent:
+
+- cover the last job — what they did, whether it went well or badly, and why;
+- interests, successes, failures — with failures treated as material to learn
+  from, never as a deficit;
+- personality: creative? ambitious? what they do with their spare time; whether
+  they study their field outside work;
+- the first-job case, where none of the retrospective questions apply;
+- **empathic throughout**: take the positive, and turn the negative into a lesson.
+
+The last point is a manner, which sounds unmeasurable — but the mechanical half
+is checkable: every question that follows a negative episode must be a
+lesson-extraction follow-up rather than a further probe into the failure. That is
+`negative_episode_followup_rate == 1.0`, and it is a real gate.
+
+### 4. The profile fills continuously, in every phase
+
+Not only at onboarding. Anything the candidate says while reviewing a ranking,
+rejecting an offer, or preparing for an interview is evidence about them and
+belongs in the profile — the same way conversational memory accumulates. T6's
+append-only `evidence.jsonl` is the right substrate; what is missing is that
+every candidate-facing surface writes to it.
+
+### Tasks
+
+| T# | Description | Service | Size | Depends | Gate | Tests |
+|----|-------------|---------|------|---------|------|-------|
+| T23 | Dimension `side`: matched / candidate-fact / candidate-trait, and a coverage metric that stops asking ad-side questions of candidate-side entries | ONTOLOGY | M | T2 | `side_coverage_violations == 0` | `test_a_trait_dimension_without_cues_is_valid` in `tests/test_dimension_side.py` — a `candidate_trait` needs no cues; `test_extractor_coverage_counts_only_ad_side_dimensions` — traits do not depress `dimension_extractor_coverage` |
+| T24 | Candidate attribute schema: languages, location, relocation willingness, salary floor and target, availability, work authorisation — with the comparison rule against ad-side requirements | ONTOLOGY | M | T23 | `unsatisfiable_hard_constraint_leaks == 0` | `test_offer_failing_a_hard_constraint_never_ranks` in `tests/test_candidate_attributes.py`; `test_missing_attribute_is_unknown_not_satisfied` — an unstated constraint does not silently pass |
+| T25 | **[LAPTOP]** Broaden the corpus beyond remote programming: ≥6 job families, ≥15 ads each, same three languages | ONTOLOGY | L | — | `corpus_job_family_count >= 6` | `test_corpus_covers_at_least_six_job_families` in `tests/test_corpus_families.py` — no family below 15 ads |
+| T26 | Dimension model v1: widen to the broadened corpus; add candidate-trait dimensions (creativity, ambition, learning orientation, spare-time engagement) | ONTOLOGY | L | T23, T25 | `ontology_hit_rate >= 0.85` on the broadened corpus | `test_every_job_family_reaches_dimension_coverage` in `tests/test_dimension_content.py` — no family below 0.80 |
+| T27 | Onboarding interview protocol: sequencing, answer-dependent follow-ups, coverage tracking, the first-job branch, and empathic framing | PROFILE | L | T7, T8, T24 | `interview_profile_coverage >= 0.90` | `test_scripted_respondent_yields_full_profile_coverage` in `tests/test_interview.py`; `test_every_negative_episode_gets_a_lesson_followup` — `negative_episode_followup_rate == 1.0` |
+| T28 | Continuous profile capture: every candidate-facing surface appends evidence, not just onboarding | PROFILE | M | T6, T27 | `profile_capture_coverage == 1.0` | `test_every_candidate_facing_surface_writes_evidence` in `tests/test_profile_capture.py` — a surface that accepts free text and writes no evidence row fails |
+
+**Ordering.** T23 first and alone — it is a schema change under everything else,
+and doing it after T26 would mean rewriting the trait dimensions it exists to
+hold. T25 is `[LAPTOP]` (board egress) and has no dependencies, so it starts in
+parallel and paces T26 the way T4b paced T5. T27 is the largest piece of
+candidate-facing design in the project and should not begin until T24 fixes what
+a profile contains.
+
+**Not decided here.** Whether the interview is one long session or several
+sittings; whether traits are scored continuously or held as evidence only until
+enough episodes accumulate. Both need a conversation before T27 is claimed.
+
+---
+
 ## Sign-off
 
 - [ ] Design reviewed by second engineer
