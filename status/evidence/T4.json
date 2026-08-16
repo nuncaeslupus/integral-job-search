@@ -7,15 +7,15 @@
   "unknown_dimension_labels": [],
   "splits": {
     "elicitation": {
-      "total": 50,
+      "total": 49,
       "es": 30,
-      "en": 13,
+      "en": 12,
       "ca": 7
     },
     "evaluation": {
-      "total": 50,
+      "total": 51,
       "es": 30,
-      "en": 12,
+      "en": 13,
       "ca": 8
     }
   },

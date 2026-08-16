@@ -22,7 +22,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Literal
 
@@ -156,7 +158,11 @@ def assign_splits(
             (ad for ad in ads if ad["language"] == language),
             key=lambda ad: split_rank(str(ad["id"])),
         )
-        target = round(len(group) * evaluation_share)
+        # Ceiling, not `round`: with an odd slice and a 0.5 share, banker's
+        # rounding hands the extra ad to elicitation (25 → 12 evaluation), and
+        # evaluation is the half that must not be starved — it carries
+        # `extraction_macro_f1` and `rank_spearman`.
+        target = math.ceil(len(group) * evaluation_share)
         held = sum(1 for ad in group if existing.get(str(ad["id"])) == "evaluation")
         for ad in group:
             ad_id = str(ad["id"])
@@ -356,9 +362,19 @@ def self_agreement(store: list[LabelledAd]) -> dict[str, Any]:
     pairs: list[tuple[int, int]] = []
     for ad in store:
         first, second = ad.labels_in_round(1), ad.labels_in_round(2)
+        # Only ads actually revisited count. Within those, a dimension labelled
+        # in one round and not the other is a *disagreement* — present versus
+        # absent — not a pair to drop. Dropping it silently raises agreement by
+        # discarding exactly the cases where the two passes differed most.
+        if not second:
+            continue
         for dimension in sorted(set(first) | set(second)):
-            if dimension in first and dimension in second:
-                pairs.append((_sign(first[dimension]), _sign(second[dimension])))
+            pairs.append(
+                (
+                    _sign(first[dimension]) if dimension in first else 0,
+                    _sign(second[dimension]) if dimension in second else 0,
+                )
+            )
 
     re_labelled = sum(1 for ad in store if ad.labels_in_round(2))
     if not pairs:
@@ -408,12 +424,13 @@ def measure(
     store = load_store(store_path)
     dimensions = load_dimensions(dimensions_dir)
 
-    scratch = store_path.with_suffix(".roundtrip-check")
-    try:
+    # A scratch file beside the store would write into the versioned corpus
+    # directory — which the test suite does on every run — and two concurrent
+    # measurements would share the name. Both go away with a private temp dir.
+    with tempfile.TemporaryDirectory(prefix="jobsearch-roundtrip-") as scratch_dir:
+        scratch = Path(scratch_dir) / "roundtrip-check.jsonl"
         losses = roundtrip_loss(store, scratch)
         losses += roundtrip_loss(probe_labels(store, dimensions), scratch)
-    finally:
-        scratch.unlink(missing_ok=True)
 
     labelled = [ad for ad in store if ad.labels]
     return {
@@ -442,10 +459,20 @@ def write_evidence(
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
-    """Seed the store from the raw corpus, preserving any labels already placed."""
+    """Seed the store from the raw corpus, preserving labels *and splits*.
+
+    Carrying the splits forward is the whole point of `assign_splits(existing=)`
+    — re-seeding without them recomputes every assignment from scratch, so a
+    corpus top-up moves already-labelled ads between halves and puts elicited
+    ads into the evaluation set. Preserving only labels here would have left the
+    stability guarantee true of the function and false of the command.
+    """
     store_path = Path(args.store)
     existing = {ad.id: ad for ad in load_store(store_path)} if store_path.exists() else {}
-    seeded = build_store(load_ads(Path(args.raw)))
+    seeded = build_store(
+        load_ads(Path(args.raw)),
+        existing={ad_id: ad.split for ad_id, ad in existing.items()},
+    )
     merged = [
         ad.model_copy(update={"labels": existing[ad.id].labels}) if ad.id in existing else ad
         for ad in seeded
@@ -626,6 +653,15 @@ def main(argv: list[str] | None = None) -> int:
         result: int = args.func(args)
     except HarnessError as exc:
         print(str(exc), file=sys.stderr)
+        return 2
+    except ValidationError as exc:
+        # `--round 0` and friends reach Pydantic, not argparse. A labeller who
+        # mistypes a flag should get a line of error, not a stack trace.
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in exc.errors()
+        )
+        print(f"invalid input — {problems}", file=sys.stderr)
         return 2
     return result
 

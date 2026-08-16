@@ -22,7 +22,10 @@ T16 measures as `extraction_negation_recall`, and a bare score cannot carry it.
 
 ## Splits
 
-Each language is halved: 30/30 ES, 13/12 EN, 7/8 CA. The elicitation half feeds
+Each language is halved, evaluation taking the ceiling of an odd slice:
+30/30 ES, 12/13 EN, 7/8 CA. (`round()` would hand the spare English ad to
+elicitation under banker's rounding, and evaluation is the half carrying
+`extraction_macro_f1` and `rank_spearman`.) The elicitation half feeds
 reaction elicitation (T9); the evaluation half feeds `extraction_macro_f1` (T15)
 and `rank_spearman` (T20). `elicitation_eval_overlap == 0` is the gate that
 keeps the ranking measurement from scoring memorisation.
@@ -57,6 +60,12 @@ The labelling protocol calls for re-labelling a subset at least two weeks later
 and reporting self-agreement (`status/specification.md`, open questions). Pass
 `--round 2` on the second pass; `agreement` reports **Cohen's kappa** over the
 sign of each value (negative / absent / positive).
+
+Only ads actually revisited are compared. Within those, a dimension labelled in
+one round and not the other counts as a **disagreement** — present versus absent
+— rather than being skipped: comparing only the dimensions both rounds share
+would discard exactly the cases where the two passes differed most, so agreement
+would rise the more the labeller changed their mind.
 
 Kappa rather than raw agreement, because most dimensions are absent on most ads:
 two passes that both score everything zero agree 100% of the time and have

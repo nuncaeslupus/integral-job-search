@@ -8,6 +8,7 @@ protocol calls for.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from jobsearch.harness import (
     assign_splits,
     build_store,
     load_store,
+    main,
     measure,
     probe_labels,
     roundtrip_loss,
@@ -155,6 +157,101 @@ def test_an_existing_split_assignment_is_never_reassigned() -> None:
 
     assert {ad_id: after[ad_id] for ad_id in before} == before
     assert all(after[str(ad["id"])] in ("elicitation", "evaluation") for ad in newcomers)
+
+
+def test_init_preserves_existing_splits_when_the_corpus_grows(tmp_path: Path) -> None:
+    """The CLI must carry splits forward, not just labels.
+
+    `assign_splits` supports this and `test_an_existing_split_assignment_is_
+    never_reassigned` proves the function honours it — but the function is not
+    the thing anyone runs. Re-seeding without passing the existing assignments
+    recomputes every split from scratch, so a corpus top-up migrates ads
+    between halves and the stability guarantee is true of the code and false of
+    the command. Review caught that; this closes it at the level it broke.
+    """
+    raw = tmp_path / "raw.jsonl"
+    store = tmp_path / "store.jsonl"
+
+    def raw_ad(index: int, language: str) -> dict[str, object]:
+        return {
+            "id": f"ad-{language}-{index}",
+            "language": language,
+            "text": f"ad body {index}",
+            "source_url": f"https://example.invalid/{language}/{index}",
+        }
+
+    first_batch = [raw_ad(i, "ca") for i in range(6)]
+    raw.write_text(
+        "\n".join(json.dumps(a, ensure_ascii=False) for a in first_batch) + "\n", encoding="utf-8"
+    )
+    assert main(["--store", str(store), "init", "--raw", str(raw)]) == 0
+    before = {a.id: a.split for a in load_store(store)}
+
+    grown = [*first_batch, *(raw_ad(i, "ca") for i in range(6, 20))]
+    raw.write_text(
+        "\n".join(json.dumps(a, ensure_ascii=False) for a in grown) + "\n", encoding="utf-8"
+    )
+    assert main(["--store", str(store), "init", "--raw", str(raw)]) == 0
+    after = {a.id: a.split for a in load_store(store)}
+
+    assert {ad_id: after[ad_id] for ad_id in before} == before
+    assert len(after) == 20
+
+
+def test_evaluation_receives_the_ceiling_half_of_an_odd_slice() -> None:
+    """25 English ads split 12/13, not 13/12.
+
+    `round(25 * 0.5)` is 12 under banker's rounding, which quietly hands the
+    spare ad to elicitation — and evaluation is the half carrying
+    `extraction_macro_f1` and `rank_spearman`.
+    """
+    counts = split_counts(load_store(DEFAULT_STORE_PATH))
+
+    assert counts["evaluation"]["en"] == 13
+    assert counts["elicitation"]["en"] == 12
+
+
+def test_a_dimension_labelled_in_one_round_only_counts_as_disagreement() -> None:
+    """Present in round 1, absent in round 2 is a disagreement, not a skipped pair.
+
+    Comparing only the dimensions both rounds share discards exactly the cases
+    where the two passes differed most, so agreement rises the more the
+    labeller changed their mind.
+    """
+    dropped = ad(labels=[
+        Label(dimension="on_call_load", value=0.8, spans=[Span(start=0, end=2)],
+              labeller="owner", round=1),
+        Label(dimension="remote_arrangement", value=0.8, spans=[Span(start=0, end=2)],
+              labeller="owner", round=2),
+    ])
+
+    report = self_agreement([dropped])
+
+    assert report["compared_labels"] == 2
+    assert report["raw_agreement"] == 0.0
+
+
+def test_an_ad_never_revisited_is_left_out_of_the_agreement() -> None:
+    """Round-1-only ads are unrevisited, not disagreed with."""
+    report = self_agreement([ad(ad_id="once", labels=[Label(
+        dimension="on_call_load", value=0.8, spans=[Span(start=0, end=2)], labeller="owner",
+    )])])
+
+    assert report["compared_labels"] == 0
+    assert report["undefined_because"] == "nothing has been labelled twice"
+
+
+def test_invalid_cli_input_exits_cleanly_instead_of_raising(tmp_path: Path) -> None:
+    """`--round 0` reaches Pydantic, not argparse — it must not print a traceback."""
+    store = tmp_path / "store.jsonl"
+    save_store([ad(ad_id="x", text="Sense guàrdies aquí")], store)
+
+    code = main([
+        "--store", str(store), "set", "x", "on_call_load", "0.0",
+        "--quote", "Sense guàrdies", "--round", "0",
+    ])
+
+    assert code == 2
 
 
 def test_the_two_splits_are_disjoint_and_cover_the_corpus() -> None:
