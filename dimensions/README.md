@@ -38,6 +38,40 @@ everywhere; adding a file is additive.
 a bipolar filter has no defensible cut-off. Direction on them is expressed by
 the candidate's threshold, not by the sign of the score.
 
+## Sides
+
+Every dimension above is `side: matched` — the ad describes it, the candidate
+has a preference about it, and ranking compares the two. Two other sides exist
+so that things which are *not* that shape do not have to pretend:
+
+| side | example | ad cues | how it is used |
+|------|---------|---------|----------------|
+| `matched` (default) | `social_intensity` | required | preference vs description |
+| `candidate_fact` | languages spoken, location, salary floor | none of its own | filtered against the ad-side requirement named in `compares_against` |
+| `candidate_trait` | creativity, ambition | **refused** | elicited in the interview; never extracted from an ad |
+
+A cue on a trait asserts that an ad's wording evidences the *candidate's*
+ambition — it evidences the employer's prose — so the loader rejects it rather
+than warning. And `dimension_extractor_coverage` counts only ad-side
+dimensions: asking "can this be extracted from an ad" of a trait scores the
+model down for holding the thing the interview exists to elicit, which is
+pressure on a future author to delete traits to keep a gate green.
+
+`side` is not an escape hatch from writing cues. `side_coverage_violations`
+(gate T23) counts every dimension whose side and content disagree:
+
+- a `matched` dimension with no cues — the original defect the coverage gate
+  exists to catch;
+- a `candidate_fact` naming no comparison target, or one that does not resolve;
+- a `candidate_fact` whose target is not `matched` — comparing a fact against
+  another candidate-side dimension compares the candidate with themselves, so
+  the filter reads as a constraint and behaves as a no-op;
+- a `candidate_fact` carrying **its own** cues or gold — the ad-side evidence
+  belongs to the requirement it compares against, and cues on both halves score
+  the same ad wording twice;
+- `compares_against` set anywhere but a `candidate_fact`, where it is a silent
+  no-op.
+
 ## Cues and gold examples
 
 Every dimension carries cues in all three corpus languages (es / en / ca) and at

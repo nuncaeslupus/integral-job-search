@@ -33,6 +33,7 @@ DEFAULT_DIMENSIONS_DIR = _REPO_ROOT / "dimensions"
 DEFAULT_METHODS_PATH = _REPO_ROOT / "docs" / "METHODS.md"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T2.json"
 DEFAULT_COVERAGE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T3.json"
+DEFAULT_SIDE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T23.json"
 
 # `LANGUAGES` is imported, not restated: a dimension carries all of them on every
 # human-readable string (a label in one language only produces a question no
@@ -43,6 +44,19 @@ DEFAULT_COVERAGE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T3.json"
 Language = Literal["en", "es", "ca"]
 # The same three, as a tuple a type checker accepts as cue-dict keys.
 SCHEMA_LANGUAGES: tuple[Language, ...] = get_args(Language)
+
+# Which half of the comparison a dimension lives on (`status/plan.md`, scope
+# extension 2026-08-16 §2). Everything in v0 is `matched` and stays so by
+# default — the field is additive.
+#
+#   matched          the ad describes it, the candidate has a preference about
+#                    it, and ranking compares the two. Needs cues.
+#   candidate_fact   a fact about the person — languages, location, salary
+#                    floor — filtered against an ad-side *requirement* named by
+#                    `compares_against`, not weighed against a preference.
+#   candidate_trait  creativity, ambition, learning orientation. No ad wording
+#                    evidences these, so they are elicited and never extracted.
+Side = Literal["matched", "candidate_fact", "candidate_trait"]
 
 # `METHODS.md#<github-style-slug>` — a relative link into the methods register,
 # resolved by `methods_anchors`. Any other shape is a link nothing can check.
@@ -162,11 +176,32 @@ class Dimension(Strict):
     id: DimensionId
     kind: Literal["soft", "hard"]
     polarity: Literal["bipolar", "unipolar"]
+    side: Side = "matched"
+    compares_against: str = ""
     label: LocalisedText
     definition: str = Field(min_length=1)
     elicitation: Elicitation
     extraction: Extraction = Field(default_factory=Extraction)
     methods_ref: str = Field(pattern=METHODS_REF.pattern)
+
+    @model_validator(mode="after")
+    def _a_trait_cannot_be_read_from_an_ad(self) -> Dimension:
+        """A `candidate_trait` carrying cues is a contradiction, not a warning.
+
+        A cue on `ambition` asserts that an ad's wording evidences the
+        *candidate's* ambition. It evidences the employer's prose. Permitted, it
+        would let the extractor score a personality trait from marketing copy —
+        which is the failure METHODS §2.6 warns about, applied to the person
+        rather than the job.
+        """
+        if self.side == "candidate_trait" and (
+            any(self.extraction.cues.values()) or self.extraction.gold
+        ):
+            raise ValueError(
+                f"{self.id}: a candidate_trait must not carry ad cues or gold — "
+                "a trait is elicited, never extracted from an ad"
+            )
+        return self
 
     @model_validator(mode="after")
     def _cue_values_fit_the_polarity(self) -> Dimension:
@@ -458,22 +493,97 @@ def silent_language_slices(
     ]
 
 
+def ad_side(dimensions: list[Dimension]) -> list[Dimension]:
+    """The dimensions that something in an ad could evidence.
+
+    `matched` dimensions and the ad-side requirements a `candidate_fact` is
+    filtered against. Traits are excluded because no ad wording evidences them.
+    """
+    return [d for d in dimensions if d.side == "matched"]
+
+
+def side_violations(dimensions: list[Dimension]) -> list[str]:
+    """Dimensions whose declared side and actual content disagree.
+
+    `side` must not become a way to opt out of writing cues, so each side is
+    held to what it claims:
+
+    * `matched` with no cues is the original defect `dimension_extractor_coverage`
+      exists to catch, and stays a violation;
+    * `candidate_fact` naming no `compares_against` — or naming one that does
+      not resolve — is a value collected and never used, which is
+      indistinguishable, from every metric's point of view, from a filter that
+      matched everything;
+    * `candidate_trait` carrying cues is refused at load, so it cannot reach here.
+    """
+    by_id = {d.id: d for d in dimensions}
+    violations: list[str] = []
+    for dimension in dimensions:
+        if dimension.side == "matched" and not any(dimension.extraction.cues.values()):
+            violations.append(f"{dimension.id}: a matched dimension with no cues")
+        if dimension.side == "candidate_fact":
+            if any(dimension.extraction.cues.values()) or dimension.extraction.gold:
+                # A fact's ad-side evidence belongs to the requirement it is
+                # compared against, not to the fact. Cues here would score the
+                # same ad wording twice, once on each side of the comparison.
+                owner = dimension.compares_against or "the requirement it compares against"
+                violations.append(
+                    f"{dimension.id}: a candidate_fact carries its own cues or gold — "
+                    f"ad-side evidence belongs to {owner}"
+                )
+            if not dimension.compares_against:
+                violations.append(
+                    f"{dimension.id}: a candidate_fact names no compares_against, so nothing "
+                    "filters on it"
+                )
+            elif dimension.compares_against not in by_id:
+                violations.append(
+                    f"{dimension.id}: compares_against {dimension.compares_against!r} "
+                    "resolves to no dimension"
+                )
+            elif by_id[dimension.compares_against].side != "matched":
+                # Comparing a fact against another candidate-side dimension
+                # compares the candidate with themselves: no ad is consulted, so
+                # the filter can never reject an offer.
+                target = by_id[dimension.compares_against]
+                violations.append(
+                    f"{dimension.id}: compares_against {target.id!r} is {target.side}, not an "
+                    "ad-side requirement"
+                )
+        if dimension.side != "candidate_fact" and dimension.compares_against:
+            violations.append(
+                f"{dimension.id}: compares_against is only meaningful on a candidate_fact, "
+                f"not on a {dimension.side} dimension"
+            )
+        if dimension.compares_against == dimension.id:
+            violations.append(f"{dimension.id}: compares_against points at itself")
+    return violations
+
+
 def extractor_coverage(dimensions: list[Dimension]) -> float:
     """`dimension_extractor_coverage` — the T3 gate metric.
 
-    The fraction of dimensions carrying **both** ≥1 extractor rule and ≥1 gold
-    example, per the spec's success criteria. Either half alone is uncheckable:
-    cues with no gold cannot be shown to fire on real text, and gold with no
-    cues has nothing to fire.
+    The fraction of **ad-side** dimensions carrying both ≥1 extractor rule and
+    ≥1 gold example, per the spec's success criteria. Either half alone is
+    uncheckable: cues with no gold cannot be shown to fire on real text, and
+    gold with no cues has nothing to fire.
+
+    Candidate-side dimensions are excluded rather than counted as uncovered.
+    The metric asks "can this be extracted from an ad", and asking it of
+    ambition scores the model down for holding the thing the interview exists to
+    elicit — pressure on a future author to delete traits to keep a gate green.
+    A model with no ad-side dimensions at all returns 0.0, not 1.0: nothing to
+    report is not the same as full coverage.
     """
-    if not dimensions:
+    extractable = ad_side(dimensions)
+    if not extractable:
         return 0.0
     covered = sum(
         1
-        for d in dimensions
+        for d in extractable
         if any(d.extraction.cues.values()) and d.extraction.gold
     )
-    return covered / len(dimensions)
+    return covered / len(extractable)
 
 
 def write_coverage_evidence(
@@ -509,6 +619,32 @@ def write_coverage_evidence(
     return measured
 
 
+def write_side_evidence(
+    evidence: Path = DEFAULT_SIDE_EVIDENCE_PATH,
+    directory: Path = DEFAULT_DIMENSIONS_DIR,
+    methods_path: Path = DEFAULT_METHODS_PATH,
+) -> dict[str, Any]:
+    """Measure T23's gate: every dimension's side agrees with its content."""
+    dimensions = load_dimensions(directory, methods_path)
+    violations = side_violations(dimensions)
+    extractable = ad_side(dimensions)
+    measured: dict[str, Any] = {
+        "side_coverage_violations": len(violations),
+        "violations": violations,
+        "dimension_count": len(dimensions),
+        "by_side": {
+            side: sum(1 for d in dimensions if d.side == side) for side in get_args(Side)
+        },
+        # Reported next to the coverage number so a model that is all traits and
+        # no cues cannot show full coverage over an empty ad-side set.
+        "ad_side_count": len(extractable),
+        "dimension_extractor_coverage": round(extractor_coverage(dimensions), 4),
+    }
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     directory: Path = DEFAULT_DIMENSIONS_DIR,
@@ -537,9 +673,26 @@ def _main(argv: list[str]) -> int:
 
         python -m jobsearch.dimensions [path]              → T2, schema violations
         python -m jobsearch.dimensions --coverage [path]    → T3, extractor coverage
+        python -m jobsearch.dimensions --sides [path]       → T23, side agreement
     """
     coverage = "--coverage" in argv[1:]
+    sides = "--sides" in argv[1:]
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+
+    if sides:
+        target = Path(positional[0]) if positional else DEFAULT_SIDE_EVIDENCE_PATH
+        try:
+            measured = write_side_evidence(target)
+        except DimensionError as exc:
+            print(f"cannot measure sides: {exc}", file=sys.stderr)
+            return 3
+        print(json.dumps(measured, ensure_ascii=False))
+        if measured["dimension_count"] == 0:
+            print(f"no dimensions in {DEFAULT_DIMENSIONS_DIR} — nothing measured", file=sys.stderr)
+            return 3
+        for violation in measured["violations"]:
+            print(violation, file=sys.stderr)
+        return 1 if measured["violations"] else 0
 
     if coverage:
         target = Path(positional[0]) if positional else DEFAULT_COVERAGE_EVIDENCE_PATH
