@@ -9,7 +9,8 @@ key: corpus_harness_roundtrip_loss
 ```
 
 ```bash
-echo "no gate command defined for T4 — replace this line with the command that writes status/evidence/T4.json" >&2; exit 1
+uv run python -m jobsearch.harness gate --evidence status/evidence/T4.json
+uv run --extra dev pytest tests/test_corpus.py -q
 ```
 
 The two blocks do different jobs and both are required. The `bash` block
@@ -18,8 +19,11 @@ number in it against the threshold. Without the first, a stale or hand-written
 evidence file passes unchallenged; without the second, a command that exits 0
 counts as a gate whatever it measured.
 
-The default command fails on purpose. A task whose measurement is undefined has
-not passed its gate — it has not been measured. Replace it as part of the work.
+The committed store is unlabelled until T5, so a roundtrip over it alone would
+preserve offsets vacuously — having none to preserve. `gate` therefore measures
+twice: once over the store as committed, and once over a copy carrying a probe
+label per ad whose offsets come from a real cue match in real ad text. Both must
+come back with zero loss.
 
 ## Tests
 
