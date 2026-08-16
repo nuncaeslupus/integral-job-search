@@ -198,7 +198,7 @@ class Dimension(Strict):
             any(self.extraction.cues.values()) or self.extraction.gold
         ):
             raise ValueError(
-                f"{self.id}: a candidate_trait carries no ad cues or gold — "
+                f"{self.id}: a candidate_trait must not carry ad cues or gold — "
                 "a trait is elicited, never extracted from an ad"
             )
         return self
@@ -516,23 +516,46 @@ def side_violations(dimensions: list[Dimension]) -> list[str]:
       matched everything;
     * `candidate_trait` carrying cues is refused at load, so it cannot reach here.
     """
-    known = {d.id for d in dimensions}
+    by_id = {d.id: d for d in dimensions}
     violations: list[str] = []
     for dimension in dimensions:
         if dimension.side == "matched" and not any(dimension.extraction.cues.values()):
             violations.append(f"{dimension.id}: a matched dimension with no cues")
         if dimension.side == "candidate_fact":
+            if any(dimension.extraction.cues.values()) or dimension.extraction.gold:
+                # A fact's ad-side evidence belongs to the requirement it is
+                # compared against, not to the fact. Cues here would score the
+                # same ad wording twice, once on each side of the comparison.
+                owner = dimension.compares_against or "the requirement it compares against"
+                violations.append(
+                    f"{dimension.id}: a candidate_fact carries its own cues or gold — "
+                    f"ad-side evidence belongs to {owner}"
+                )
             if not dimension.compares_against:
                 violations.append(
                     f"{dimension.id}: a candidate_fact names no compares_against, so nothing "
                     "filters on it"
                 )
-            elif dimension.compares_against not in known:
+            elif dimension.compares_against not in by_id:
                 violations.append(
                     f"{dimension.id}: compares_against {dimension.compares_against!r} "
                     "resolves to no dimension"
                 )
-        if dimension.side != "matched" and dimension.compares_against == dimension.id:
+            elif by_id[dimension.compares_against].side != "matched":
+                # Comparing a fact against another candidate-side dimension
+                # compares the candidate with themselves: no ad is consulted, so
+                # the filter can never reject an offer.
+                target = by_id[dimension.compares_against]
+                violations.append(
+                    f"{dimension.id}: compares_against {target.id!r} is {target.side}, not an "
+                    "ad-side requirement"
+                )
+        if dimension.side != "candidate_fact" and dimension.compares_against:
+            violations.append(
+                f"{dimension.id}: compares_against is only meaningful on a candidate_fact, "
+                f"not on a {dimension.side} dimension"
+            )
+        if dimension.compares_against == dimension.id:
             violations.append(f"{dimension.id}: compares_against points at itself")
     return violations
 

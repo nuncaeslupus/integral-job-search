@@ -58,9 +58,19 @@ model down for holding the thing the interview exists to elicit, which is
 pressure on a future author to delete traits to keep a gate green.
 
 `side` is not an escape hatch from writing cues. `side_coverage_violations`
-(gate T23) counts every dimension whose side and content disagree — a `matched`
-dimension with no cues, a `candidate_fact` naming no comparison target or one
-that does not resolve.
+(gate T23) counts every dimension whose side and content disagree:
+
+- a `matched` dimension with no cues — the original defect the coverage gate
+  exists to catch;
+- a `candidate_fact` naming no comparison target, or one that does not resolve;
+- a `candidate_fact` whose target is not `matched` — comparing a fact against
+  another candidate-side dimension compares the candidate with themselves, so
+  the filter reads as a constraint and behaves as a no-op;
+- a `candidate_fact` carrying **its own** cues or gold — the ad-side evidence
+  belongs to the requirement it compares against, and cues on both halves score
+  the same ad wording twice;
+- `compares_against` set anywhere but a `candidate_fact`, where it is a silent
+  no-op.
 
 ## Cues and gold examples
 

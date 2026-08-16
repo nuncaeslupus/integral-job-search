@@ -156,6 +156,56 @@ def test_a_candidate_fact_comparing_against_an_unknown_dimension_is_a_violation(
     assert "no_such_dimension" in violations[0]
 
 
+def test_a_candidate_fact_carrying_its_own_cues_is_a_violation(tmp_path: Path) -> None:
+    """A fact's ad-side evidence belongs to the requirement, not to the fact.
+
+    `languages_spoken` and `english_demand` describe the two halves of one
+    comparison. Cues on both would score the same ad wording twice — once as
+    the requirement and once as the candidate's own attribute — which is
+    double-counting dressed as thoroughness.
+    """
+    cues = (
+        "extraction:\n"
+        "  cues:\n"
+        "    en:\n"
+        '      - pattern: "english"\n'
+        "        value: 0.6\n"
+    )
+    write(tmp_path, "languages_spoken", FACT.replace("methods_ref:", cues + "methods_ref:"))
+
+    violations = side_violations(load_dimensions(tmp_path))
+
+    assert any("carries its own cues" in v for v in violations)
+
+
+def test_a_candidate_fact_comparing_against_another_candidate_side_is_a_violation(
+    tmp_path: Path,
+) -> None:
+    """Comparing a fact against a trait compares the candidate with themselves.
+
+    No ad is consulted, so the filter can never reject an offer — it reads as a
+    constraint and behaves as a no-op.
+    """
+    write(tmp_path, "ambition", TRAIT)
+    write(tmp_path, "languages_spoken", FACT.replace("english_demand", "ambition"))
+
+    violations = side_violations(load_dimensions(tmp_path))
+
+    assert any("not an ad-side requirement" in v for v in violations)
+
+
+def test_compares_against_on_a_matched_dimension_is_a_violation(tmp_path: Path) -> None:
+    """The field is only meaningful on a fact; elsewhere it is a silent no-op."""
+    body = TRAIT.replace(
+        "side: candidate_trait", "side: candidate_trait\ncompares_against: ambition"
+    )
+    write(tmp_path, "ambition", body)
+
+    violations = side_violations(load_dimensions(tmp_path))
+
+    assert any("only meaningful on a candidate_fact" in v for v in violations)
+
+
 def test_extractor_coverage_counts_only_ad_side_dimensions(tmp_path: Path) -> None:
     """Adding traits must not depress `dimension_extractor_coverage`.
 
