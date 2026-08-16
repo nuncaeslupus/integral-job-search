@@ -8,11 +8,22 @@ evidence: status/evidence/T4.json
 key: corpus_harness_roundtrip_loss
 ```
 
-Write the measured value to `status/evidence/T4.json` as `{"corpus_harness_roundtrip_loss": <number>}`, commit it, then record the row in the plan's Evidence log with the command that produced it.
+```bash
+uv run python -m jobsearch.harness gate --evidence status/evidence/T4.json
+uv run --extra dev pytest tests/test_corpus.py -q
+```
 
-An evidence gate asserts the number against the threshold, so it cannot pass
-vacuously — a missing evidence file is a hard failure, not a skip. It also runs
-no build tooling, which matters for tasks that run before the scaffold exists.
+The two blocks do different jobs and both are required. The `bash` block
+regenerates `status/evidence/T4.json`; the `gate` block asserts the
+number in it against the threshold. Without the first, a stale or hand-written
+evidence file passes unchallenged; without the second, a command that exits 0
+counts as a gate whatever it measured.
+
+The committed store is unlabelled until T5, so a roundtrip over it alone would
+preserve offsets vacuously — having none to preserve. `gate` therefore measures
+twice: once over the store as committed, and once over a copy carrying a probe
+label per ad whose offsets come from a real cue match in real ad text. Both must
+come back with zero loss.
 
 ## Tests
 
