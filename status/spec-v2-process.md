@@ -227,6 +227,11 @@ This is not a licence to under-ask. It is what makes the non-insistence rule
 (§5.4) safe to obey: when someone does not want to answer, there is always a
 path forward that does not require them to.
 
+**The claim has to hold in the graph, not only here.** Every input a required
+step reads must be produced by another required step or marked optional (§3.1),
+or "declining an offered step blocks nothing" is false the first time someone
+declines Intake. The trace is 0 → 2 → 7 → 8 → 9.
+
 ### 2.6 Three steps the table under-describes
 
 **Sourcing (7) is a research problem, not a fetch.** Where the offers come from
@@ -267,22 +272,41 @@ mechanism. **Each step declares what it reads and what it produces**, and the
 graph of those declarations is what decides whether a step can run:
 
 ```
-0 identify  → handle, session state
-1 intake    → cv/master.json, claimed facts        [reads: handle]
-2 constraints → constraints.json, currency, locale [reads: claimed facts]
-3 history   → stories.jsonl, trait evidence        [reads: master.json]
-4 traits    → traits.json                          [reads: trait evidence]
-5 reactions → reaction evidence                    [reads: constraints (to pick stimuli)]
-6 preferences → weights.json                       [reads: reaction evidence]
-7 sourcing  → offers/*.json                        [reads: constraints]
-8 understanding → extractions                      [reads: offers, dimension model]
-9 ranking   → rankings/<ts>.json                   [reads: extractions, constraints, weights?]
-10 feedback → reaction + outcome evidence          [reads: a ranking]
-11 application → cv + letter per offer             [reads: master.json, one offer]
-12 interview → preparation, then lessons           [reads: stories, one offer]
+0  identify      → handle, session state       [reads: —]
+1  intake        → cv/master.json, claimed facts [reads: handle]
+2  constraints   → constraints.json, currency, locale [reads: claimed facts?]
+3  history       → stories.jsonl, trait evidence [reads: cv/master.json?]
+4  traits        → traits.json                  [reads: trait evidence]
+5  reactions     → reaction evidence            [reads: constraints.json]
+6  preferences   → weights.json                 [reads: reaction evidence]
+7  sourcing      → offers/*.json                [reads: constraints.json]
+8  understanding → extractions                  [reads: offers/*.json, dimension model]
+9  ranking       → rankings/<ts>.json           [reads: extractions, constraints.json, weights.json?]
+10 feedback      → reaction + outcome evidence  [reads: a ranking]
+11 application   → cv + letter per offer        [reads: cv/master.json, one offer]
+12 interview     → preparation, then lessons    [reads: stories.jsonl, one offer]
 ```
 
-Two things follow, and both are the point of writing it this way.
+**A `?` marks an optional input**, and those marks are what make §2.5 true rather
+than merely stated. Every required step must be runnable from the outputs of
+required steps alone, or "any offered step may be declined" is a promise the
+graph breaks:
+
+- **Constraints reads `claimed facts?`.** Intake is offered, so a candidate with
+  no CV — or one who would rather just talk — arrives at Constraints with
+  nothing pre-filled. The step then asks from scratch instead of confirming.
+  What it must never do is treat an absent claim as a confirmed fact: unstated
+  stays `unknown`, which neither passes nor vetoes.
+- **History reads `cv/master.json?`** for the same reason — a CV makes the
+  conversation better, and its absence makes it longer, not impossible.
+- **Ranking reads `weights.json?`** — without weights it ranks on hard filters
+  and defaults, and says so (L1, §3.1).
+
+Trace the required steps alone — 0 → 2 → 7 → 8 → 9 — and every input is either
+external or produced by another required step. That is the property that has to
+hold, and it is worth re-checking whenever a step's inputs change.
+
+Two more things follow, and both are the point of writing it this way.
 
 **The order can bend.** A conversation that wanders into last year's redundancy
 is doing step 3's work; the tool follows it rather than steering back, because
@@ -292,8 +316,7 @@ arrived. What must never bend is a step running without its inputs.
 **What is still owed is computable.** At any moment the tool can say which
 outputs are missing and which step would produce them — that is what makes
 "where were we?" answerable, and it is what keeps a long conversation from
-losing the thread. A `?` above marks an optional input: a ranking without
-`weights.json` is produced, and labelled.
+losing the thread.
 
 Three **sufficiency levels** are named milestones over that graph, recorded in
 `session/state.json` and stamped onto anything derived:

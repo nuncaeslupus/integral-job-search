@@ -17,8 +17,8 @@
   ],
   "gates_implemented": 0,
   "required_item_words": {
-    "step-list": 1997,
-    "connections": 1273,
+    "step-list": 2049,
+    "connections": 1448,
     "artefact-tree": 719,
     "offer-lifecycle": 1770,
     "resumption": 983,
