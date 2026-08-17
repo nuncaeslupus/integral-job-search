@@ -169,3 +169,42 @@ def test_regenerating_the_reader_produces_no_diff(tmp_path: Path) -> None:
 
 def _without_dates(text: str) -> list[str]:
     return [line for line in text.split("\n") if not re.search(r"\d{4}-\d{2}-\d{2}", line)]
+
+
+def test_a_duplicated_step_heading_is_reported(tmp_path: Path) -> None:
+    """Only the last section under a repeated number is checked, so without this
+    an earlier duplicate could be empty and the gate would still read 1.0."""
+    doc = tmp_path / "steps.md"
+    body = " ".join(["word"] * (MIN_FIELD_WORDS + 2))
+    filled = "\n\n".join(f"**{f}.** {body}" for f in REQUIRED_FIELDS)
+    doc.write_text(
+        f"## Step 0 — Identify\n\n**Purpose.** thin\n\n## Step 0 — Identify\n\n{filled}\n",
+        encoding="utf-8",
+    )
+
+    violations = collect_violations(doc=doc)
+
+    assert any("headed 2 times" in violation for violation in violations)
+
+
+def test_an_unloadable_step_list_is_a_violation_not_a_traceback(tmp_path: Path) -> None:
+    """A gate that crashes records no number — the run that cannot measure must
+    still leave evidence saying why."""
+    broken = tmp_path / "steps.json"
+    broken.write_text("{ not json", encoding="utf-8")
+
+    violations = collect_violations(steps_path=broken)
+    measured = measure(steps_path=broken)
+
+    assert any("step list could not be loaded" in violation for violation in violations)
+    assert measured["step_specs_complete_fraction"] == 0.0
+    assert measured["step_count"] == 0
+
+
+def test_a_missing_step_list_writes_evidence_rather_than_failing(tmp_path: Path) -> None:
+    evidence = tmp_path / "S2.json"
+
+    measured = write_evidence(evidence=evidence, steps_path=tmp_path / "absent.json")
+
+    assert evidence.is_file()
+    assert measured["step_specs_complete_fraction"] == 0.0

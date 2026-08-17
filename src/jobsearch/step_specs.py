@@ -23,7 +23,9 @@ import re
 import sys
 from pathlib import Path
 
-from jobsearch.process_spec import load_steps
+from pydantic import ValidationError
+
+from jobsearch.process_spec import StepList, load_steps
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STEP_SPECS_DOC = _REPO_ROOT / "status" / "spec-v2-steps.md"
@@ -60,8 +62,23 @@ _FIELD_RE = re.compile(r"^\*\*(?P<name>[A-Z][^.*]*)\.\*\*", re.MULTILINE)
 _WORD_RE = re.compile("\\b[\\w'\\u2019-]+\\b")
 
 
+def step_heading_numbers(document: str) -> list[int]:
+    """Every `## Step N —` heading, in order, duplicates included.
+
+    Kept separate from `split_steps` because that keys by number and so cannot
+    show a repeat: a document with two `## Step 4` headings would be checked
+    against the second and the first would vanish, complete or not.
+    """
+    return [int(m.group(1)) for m in _STEP_HEADING_RE.finditer(document)]
+
+
 def split_steps(document: str) -> dict[int, str]:
-    """The document's step sections, keyed by step number."""
+    """The document's step sections, keyed by step number.
+
+    On a duplicated heading the last occurrence wins. That is harmless only
+    because `collect_violations` reports the duplicate — see
+    `step_heading_numbers`.
+    """
     matches = list(_STEP_HEADING_RE.finditer(document))
     sections: dict[int, str] = {}
     for index, match in enumerate(matches):
@@ -82,19 +99,51 @@ def field_words(section: str) -> dict[str, int]:
     return counts
 
 
+def _load_steps_or_none(steps_path: Path | None) -> StepList | None:
+    """The settled step list, or `None` when it cannot be loaded."""
+    try:
+        return load_steps() if steps_path is None else load_steps(steps_path)
+    except (OSError, ValidationError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _load_steps_error(steps_path: Path | None) -> str:
+    """Why the step list could not be loaded, for the violation message."""
+    try:
+        load_steps() if steps_path is None else load_steps(steps_path)
+    except (OSError, ValidationError, ValueError, json.JSONDecodeError) as exc:
+        return str(exc).replace("\n", " ")[:300]
+    return "it loaded on retry"  # pragma: no cover - only reachable on a racing edit
+
+
 def collect_violations(
     doc: Path = DEFAULT_STEP_SPECS_DOC,
     steps_path: Path | None = None,
 ) -> list[str]:
-    """Every reason the step specifications are incomplete. Reports, never raises."""
+    """Every reason the step specifications are incomplete. Reports, never raises.
+
+    A gate that crashes records no number, so a missing or malformed step list
+    becomes a violation string rather than a traceback — the same contract
+    `jobsearch.process_spec.collect_violations` holds.
+    """
     violations: list[str] = []
 
-    steps = load_steps() if steps_path is None else load_steps(steps_path)
+    steps = _load_steps_or_none(steps_path)
+    if steps is None:
+        return [f"step list could not be loaded: {_load_steps_error(steps_path)}"]
     expected = {step.n: step for step in steps.steps}
 
     if not doc.is_file():
         return [f"step specification document missing: {doc}"]
-    sections = split_steps(doc.read_text(encoding="utf-8"))
+    document = doc.read_text(encoding="utf-8")
+    sections = split_steps(document)
+
+    headings = step_heading_numbers(document)
+    for n in sorted({n for n in headings if headings.count(n) > 1}):
+        violations.append(
+            f"step {n} is headed {headings.count(n)} times — only the last is checked, "
+            "so the others could be empty and nothing would say so"
+        )
 
     for n in sorted(set(sections) - set(expected)):
         violations.append(f"step {n} is specified but is not in the settled step list")
@@ -123,7 +172,18 @@ def measure(
     steps_path: Path | None = None,
 ) -> dict[str, object]:
     """The S2 gate reading, as it is written to evidence."""
-    steps = load_steps() if steps_path is None else load_steps(steps_path)
+    steps = _load_steps_or_none(steps_path)
+    if steps is None:
+        # No divisor means no fraction. Recording 0.0 with the reason beats
+        # crashing: the run that cannot measure still leaves evidence saying so.
+        return {
+            "step_specs_complete_fraction": 0.0,
+            "steps_specified": 0,
+            "step_count": 0,
+            "incomplete_steps": {},
+            "violations": collect_violations(doc, steps_path),
+            "required_fields": list(REQUIRED_FIELDS),
+        }
     divisor = steps.step_count
 
     sections = split_steps(doc.read_text(encoding="utf-8")) if doc.is_file() else {}
