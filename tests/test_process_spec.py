@@ -107,14 +107,31 @@ def test_a_stale_step_count_is_rejected(tmp_path: Path) -> None:
     assert any("step list is invalid" in violation for violation in violations)
 
 
-def test_a_step_with_a_blank_gate_metric_is_rejected(tmp_path: Path) -> None:
+@pytest.mark.parametrize("metric", ["", "   ", "\t\n"])
+def test_a_step_with_a_blank_gate_metric_is_rejected(tmp_path: Path, metric: str) -> None:
+    """Whitespace included: a metric of `" "` reads as a value to a schema and as
+    an omission to everyone else, and the two readings must never disagree."""
     raw = json.loads(DEFAULT_STEPS_PATH.read_text(encoding="utf-8"))
-    raw["steps"][0]["gate"]["metric"] = ""
+    raw["steps"][0]["gate"]["metric"] = metric
     blank = tmp_path / "steps.json"
     blank.write_text(json.dumps(raw), encoding="utf-8")
 
     with pytest.raises(ValidationError):
         load_steps(blank)
+
+    violations = collect_violations(process_doc=DEFAULT_PROCESS_DOC, steps_path=blank)
+    assert any("step list is invalid" in violation for violation in violations)
+
+
+def test_evidence_counts_named_gate_metrics_rather_than_restating_the_step_count() -> None:
+    """`steps_with_named_gate_metric` is a measurement, not a copy of its own denominator."""
+    measured = measure()
+    steps = load_steps()
+
+    assert measured["steps_with_named_gate_metric"] == sum(
+        1 for step in steps.steps if step.gate.metric.strip()
+    )
+    assert measured["steps_with_named_gate_metric"] == steps.step_count
 
 
 def test_evidence_records_the_step_count_s2_divides_by(tmp_path: Path) -> None:

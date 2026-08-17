@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 # src-layout repo root, as in `jobsearch.dimensions`.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -64,7 +64,21 @@ Phase = Literal["first_run", "loop", "per_opportunity"]
 GateState = Literal["implemented", "not_implemented"]
 GateOp = Literal["==", ">=", "<=", ">", "<"]
 
-NonEmptyStr = Annotated[str, Field(min_length=1)]
+
+def _reject_blank(value: str) -> str:
+    """Refuse a string that is technically present and says nothing.
+
+    `min_length=1` admits `" "`, which reads as a value to the schema and as an
+    omission to every human and to `collect_violations`. One rule, applied at
+    the schema, keeps those two readings from ever disagreeing — a gate metric
+    of `" "` must fail at load, not survive to be counted as named.
+    """
+    if not value.strip():
+        raise ValueError("must not be blank or whitespace-only")
+    return value
+
+
+NonEmptyStr = Annotated[str, Field(min_length=1), AfterValidator(_reject_blank)]
 
 
 class Gate(BaseModel):
@@ -228,6 +242,11 @@ def measure(
     step_count = 0
     steps_by_phase: dict[str, int] = {}
     gates_implemented = 0
+    # Counted, never assumed equal to step_count. Evidence that restates its own
+    # denominator measures nothing, and a reader debugging a failed gate would
+    # be told every step names a metric by the very file meant to show which
+    # one does not.
+    named_gate_metrics = 0
     if steps_path.is_file():
         try:
             steps = load_steps(steps_path)
@@ -237,6 +256,8 @@ def measure(
             step_count = steps.step_count
             for step in steps.steps:
                 steps_by_phase[step.phase] = steps_by_phase.get(step.phase, 0) + 1
+                if step.gate.metric.strip():
+                    named_gate_metrics += 1
                 if step.gate.state == "implemented":
                     gates_implemented += 1
 
@@ -245,7 +266,7 @@ def measure(
         "violations": violations,
         "step_count": step_count,
         "steps_by_phase": steps_by_phase,
-        "steps_with_named_gate_metric": step_count,
+        "steps_with_named_gate_metric": named_gate_metrics,
         "gates_implemented": gates_implemented,
         "required_item_words": {item: counts.get(item, 0) for item in REQUIRED_ITEMS},
     }
