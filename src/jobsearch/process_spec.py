@@ -104,6 +104,10 @@ class Step(BaseModel):
     id: NonEmptyStr
     name: NonEmptyStr
     phase: Phase
+    # Required steps are the ones without which there is nothing to show the
+    # candidate. Everything else is offered, which is what makes the
+    # non-insistence rule safe: declining a step always leaves a way forward.
+    required: bool
     goal: NonEmptyStr
     # Requirement 2.2 of the brief: a step that only fills internal state has no
     # visible output and will feel like an interrogation. Making it a required
@@ -227,6 +231,12 @@ def collect_violations(
         if not step.gate.metric.strip():
             violations.append(f"step {step.n} ({step.id}) names no gate metric")
 
+    if not any(step.required for step in steps.steps):
+        violations.append(
+            "no step is marked required — a process every part of which may be declined "
+            "cannot put an offer in front of anyone"
+        )
+
     return violations
 
 
@@ -247,6 +257,7 @@ def measure(
     # be told every step names a metric by the very file meant to show which
     # one does not.
     named_gate_metrics = 0
+    required_steps: list[str] = []
     if steps_path.is_file():
         try:
             steps = load_steps(steps_path)
@@ -260,6 +271,8 @@ def measure(
                     named_gate_metrics += 1
                 if step.gate.state == "implemented":
                     gates_implemented += 1
+                if step.required:
+                    required_steps.append(step.id)
 
     return {
         "process_spec_complete": 1 if not violations else 0,
@@ -267,6 +280,7 @@ def measure(
         "step_count": step_count,
         "steps_by_phase": steps_by_phase,
         "steps_with_named_gate_metric": named_gate_metrics,
+        "required_steps": required_steps,
         "gates_implemented": gates_implemented,
         "required_item_words": {item: counts.get(item, 0) for item in REQUIRED_ITEMS},
     }

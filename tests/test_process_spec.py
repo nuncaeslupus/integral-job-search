@@ -56,6 +56,27 @@ def test_every_step_promises_the_candidate_something_visible() -> None:
         assert step.visible_output.strip(), f"step {step.n} ({step.id}) has no visible output"
 
 
+def test_the_required_steps_are_the_five_the_owner_settled() -> None:
+    """Identify, Constraints, Sourcing, Understanding, Ranking — the minimum to
+    put a real offer in front of someone. Everything else is offered, which is
+    what makes declining a step safe rather than a dead end."""
+    required = {step.id for step in load_steps().steps if step.required}
+
+    assert required == {"identify", "constraints", "sourcing", "understanding", "ranking"}
+
+
+def test_a_process_with_no_required_step_does_not_pass(tmp_path: Path) -> None:
+    raw = json.loads(DEFAULT_STEPS_PATH.read_text(encoding="utf-8"))
+    for step in raw["steps"]:
+        step["required"] = False
+    all_optional = tmp_path / "steps.json"
+    all_optional.write_text(json.dumps(raw), encoding="utf-8")
+
+    violations = collect_violations(process_doc=DEFAULT_PROCESS_DOC, steps_path=all_optional)
+
+    assert any("no step is marked required" in violation for violation in violations)
+
+
 def test_the_gate_passes_on_the_committed_specification() -> None:
     measured = measure()
     assert measured["violations"] == []
