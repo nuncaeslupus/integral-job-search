@@ -1,0 +1,20 @@
+{
+  "process_spec_complete": 1,
+  "violations": [],
+  "step_count": 13,
+  "steps_by_phase": {
+    "first_run": 7,
+    "loop": 4,
+    "per_opportunity": 2
+  },
+  "steps_with_named_gate_metric": 13,
+  "gates_implemented": 0,
+  "required_item_words": {
+    "step-list": 1072,
+    "connections": 717,
+    "artefact-tree": 445,
+    "offer-lifecycle": 902,
+    "resumption": 715,
+    "capture-scoring": 355
+  }
+}

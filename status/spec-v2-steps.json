@@ -1,0 +1,235 @@
+{
+  "spec_version": "2.0",
+  "settled_on": "2026-08-17",
+  "source": "status/spec-v2-process.md",
+  "note": "The machine-readable step list. S2's gate divides by step_count, so the count lives here and not only in prose. Every step carries a named gate metric; `not_implemented` is a valid state, a blank metric is not.",
+  "step_count": 13,
+  "phases": {
+    "first_run": "Steps 0-6. Run once, in order, the first time a candidate uses the tool. Re-entered later by revision or by a freshness trigger, never repeated wholesale.",
+    "loop": "Steps 7-10. The recurring cycle the candidate lives in once a profile exists.",
+    "per_opportunity": "Steps 11-12. Run per offer the candidate pursues, any number of times, in parallel across offers."
+  },
+  "steps": [
+    {
+      "n": 0,
+      "id": "identify",
+      "name": "Identify",
+      "phase": "first_run",
+      "goal": "Know whose tree we are in, and where they left off, before anything is read or written.",
+      "visible_output": "A greeting that names the candidate, the date of their last activity, and where they stopped.",
+      "automatic": false,
+      "gate": {
+        "metric": "cross_user_leaks",
+        "op": "==",
+        "threshold": 0,
+        "state": "not_implemented",
+        "task": "S3"
+      },
+      "reentry_events": []
+    },
+    {
+      "n": 1,
+      "id": "intake",
+      "name": "Intake",
+      "phase": "first_run",
+      "goal": "Get the CV that exists into the store, or build a first one with someone who has none.",
+      "visible_output": "A parsed CV the candidate can read back, with every fact showing where it came from.",
+      "automatic": false,
+      "gate": {
+        "metric": "intake_field_provenance",
+        "op": "==",
+        "threshold": 1.0,
+        "state": "not_implemented",
+        "task": "S4"
+      },
+      "reentry_events": ["cv_updated", "new_role_started", "certification_obtained"]
+    },
+    {
+      "n": 2,
+      "id": "constraints",
+      "name": "Constraints",
+      "phase": "first_run",
+      "goal": "Settle the facts that filter — place, permits, languages, hours, pay floor, mobility, cross-border — by confirming what the CV already implied and asking only for what it could not.",
+      "visible_output": "A constraints summary the candidate corrects in place, with anything still unknown listed as unknown.",
+      "automatic": false,
+      "gate": {
+        "metric": "constraint_field_resolution",
+        "op": "==",
+        "threshold": 1.0,
+        "state": "not_implemented",
+        "task": "T24"
+      },
+      "reentry_events": ["moved_house", "permit_changed", "pay_floor_changed", "availability_changed"]
+    },
+    {
+      "n": 3,
+      "id": "history",
+      "name": "History",
+      "phase": "first_run",
+      "goal": "The last job and the ones before it: what they did, what went well, what did not, and why they left.",
+      "visible_output": "A story bank of episodes, each one readable, each one linked to what it evidences.",
+      "automatic": false,
+      "gate": {
+        "metric": "story_dimension_linkage",
+        "op": "==",
+        "threshold": 1.0,
+        "state": "not_implemented",
+        "task": "T8"
+      },
+      "reentry_events": ["left_job", "lost_job", "new_role_started", "long_absence"]
+    },
+    {
+      "n": 4,
+      "id": "traits",
+      "name": "Traits",
+      "phase": "first_run",
+      "goal": "Score the traits the accumulated evidence can support, and ask only about the ones it cannot.",
+      "visible_output": "A trait profile showing, per trait, the score or `insufficient`, and the episodes behind it.",
+      "automatic": false,
+      "gate": {
+        "metric": "trait_evidence_sufficiency",
+        "op": "==",
+        "threshold": 1.0,
+        "state": "not_implemented",
+        "task": "T28"
+      },
+      "reentry_events": ["long_absence", "interests_changed", "scoring_batch_threshold_reached"]
+    },
+    {
+      "n": 5,
+      "id": "reactions",
+      "name": "Reactions",
+      "phase": "first_run",
+      "goal": "Show real ads and real ad fragments and capture what the candidate makes of them — what repels, what attracts, how an employer's way of asking lands.",
+      "visible_output": "The candidate's own words against each stimulus, and the first sight of what the tool inferred from them.",
+      "automatic": false,
+      "gate": {
+        "metric": "elicitation_eval_overlap",
+        "op": "==",
+        "threshold": 0,
+        "state": "not_implemented",
+        "task": "T9"
+      },
+      "reentry_events": ["weights_stale", "market_shifted"]
+    },
+    {
+      "n": 6,
+      "id": "preferences",
+      "name": "Preferences",
+      "phase": "first_run",
+      "goal": "Turn reactions and forced choices into weights the ranking can use, expressed in salary-equivalent terms.",
+      "visible_output": "What each dimension is worth to them per month, in euros, ordered — a list they can argue with.",
+      "automatic": false,
+      "gate": {
+        "metric": "weight_salary_equivalent_roundtrip_error",
+        "op": "<=",
+        "threshold": 0.01,
+        "state": "not_implemented",
+        "task": "T10"
+      },
+      "reentry_events": ["weights_stale", "rejection_reason_recorded", "reaction_contradicts_weights"]
+    },
+    {
+      "n": 7,
+      "id": "sourcing",
+      "name": "Sourcing",
+      "phase": "loop",
+      "goal": "Bring offers in, deduped against everything ever seen, with the stale ones retired.",
+      "visible_output": "A count of what arrived, what was a duplicate, and what expired since last time.",
+      "automatic": false,
+      "gate": {
+        "metric": "offer_schema_violations",
+        "op": "==",
+        "threshold": 0,
+        "state": "not_implemented",
+        "task": "T11"
+      },
+      "reentry_events": ["scheduled_run", "candidate_requested_search", "constraints_changed"]
+    },
+    {
+      "n": 8,
+      "id": "understanding",
+      "name": "Understanding",
+      "phase": "loop",
+      "goal": "Extract dimension values and the verbatim spans evidencing them from every new offer.",
+      "visible_output": "Per offer, what the ad was found to say — and what it did not say, which is not the same as saying no.",
+      "automatic": true,
+      "gate": {
+        "metric": "extraction_macro_f1",
+        "op": ">=",
+        "threshold": 0.75,
+        "state": "not_implemented",
+        "task": "T15"
+      },
+      "reentry_events": ["new_offers_collected", "dimension_model_updated"]
+    },
+    {
+      "n": 9,
+      "id": "ranking",
+      "name": "Ranking",
+      "phase": "loop",
+      "goal": "Order the live offers and explain every position in the candidate's own terms.",
+      "visible_output": "A ranked list where each entry cites the words in the ad that moved it, and what it cost or gained per month.",
+      "automatic": false,
+      "gate": {
+        "metric": "explained_fraction",
+        "op": "==",
+        "threshold": 1.0,
+        "state": "not_implemented",
+        "task": "T19"
+      },
+      "reentry_events": ["profile_revision_bumped", "new_offers_extracted", "candidate_requested_ranking"]
+    },
+    {
+      "n": 10,
+      "id": "feedback",
+      "name": "Feedback",
+      "phase": "loop",
+      "goal": "Capture what the candidate thinks of the offers in front of them, and show the ranking move because of it.",
+      "visible_output": "A re-ordered list, and a plain statement of which position changed and which sentence they said caused it.",
+      "automatic": false,
+      "gate": {
+        "metric": "feedback_traceability",
+        "op": "==",
+        "threshold": 1.0,
+        "state": "not_implemented",
+        "task": "T21"
+      },
+      "reentry_events": ["ranking_presented", "offer_status_changed", "rejection_received"]
+    },
+    {
+      "n": 11,
+      "id": "application",
+      "name": "Application",
+      "phase": "per_opportunity",
+      "goal": "Produce a CV and a letter targeted at one offer, drawn only from what the store already holds.",
+      "visible_output": "The two documents, per offer, versioned so an earlier one that was actually sent is never overwritten.",
+      "automatic": false,
+      "gate": {
+        "metric": "cv_generation_traceability",
+        "op": "==",
+        "threshold": 1.0,
+        "state": "not_implemented",
+        "task": "S4"
+      },
+      "reentry_events": ["offer_shortlisted", "cv_updated", "candidate_requested_regeneration"]
+    },
+    {
+      "n": 12,
+      "id": "interview_log",
+      "name": "Interview log",
+      "phase": "per_opportunity",
+      "goal": "Record what happened in the interview and turn it into preparation for the next one.",
+      "visible_output": "The questions they were asked, what they wish they had said, and what to rehearse before the next interview.",
+      "automatic": false,
+      "gate": {
+        "metric": "interview_lesson_linkage",
+        "op": "==",
+        "threshold": 1.0,
+        "state": "not_implemented",
+        "task": "S6"
+      },
+      "reentry_events": ["interview_scheduled", "interview_happened", "outcome_received"]
+    }
+  ]
+}
