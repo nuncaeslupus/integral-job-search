@@ -3,9 +3,9 @@
 ## Acceptance gate
 
 ```gate
-step_specs_complete >= 12
+step_specs_complete_fraction == 1.0
 evidence: status/evidence/S2.json
-key: step_specs_complete
+key: step_specs_complete_fraction
 ```
 
 ```bash
@@ -21,8 +21,16 @@ rule, outputs, gate, resume, re-run, privacy.
 Reviewable as HTML, one document per step or one document with a section per
 step — S1 decides which.
 
-**The threshold is the step count S1 settles**, not necessarily 12. Update it
-to match, and do not lower it to match what got written.
+**The gate is a fraction, not a count, on purpose.** The step count is whatever
+S1 settles — 12 is a proposal, and S1 may merge Intake with Constraints or fold
+Traits into History. A hard-coded threshold would either block this task when
+the count came out lower, or pass while a step went unwritten when it came out
+higher. `step_specs_complete_fraction` = specs filling every template field ÷
+the step count S1 recorded, and it must reach 1.0.
+
+The divisor comes from S1's machine-readable step list, never from counting the
+files that happen to exist — dividing by what was written makes any amount of
+work look complete.
 
 ## The two fields most likely to be skipped
 
