@@ -31,11 +31,10 @@ different title than the one it was written against. Re-anchoring stays a human
 decision — the note follows the section it was written on, which is not always
 the section that now answers it — but it can no longer happen silently.
 
-**2. The committed reader can be stale.** `spec-reader.html` and
-`spec-annotated.md` are generated but committed. Editing the Markdown and
-forgetting to regenerate leaves a reviewer reading a document that no longer
-matches the specification, with nothing failing. Add a `make reader` target and
-a check that regenerating produces no diff.
+**2. ~~The committed reader can be stale.~~** **Done in S2** (#17): `make reader`
+regenerates both readers, and `test_regenerating_the_reader_produces_no_diff`
+fails when a Markdown edit has not been regenerated. Verified by editing the
+source and watching it fail. Left here for the record; nothing remains to do.
 
 ## Why it matters more than it looks
 
@@ -48,11 +47,11 @@ existing gate, and both were found by a reviewer rather than a check.
 
 `test_a_note_whose_section_title_changed_is_reported`;
 `test_a_note_on_an_unchanged_section_is_not_reported` — a warning on every note
-is the same as no warning; `test_regenerating_the_reader_produces_no_diff`.
+is the same as no warning.
 
 ## Location
 
-Service: **ONTOLOGY** · Size: S · Depends: —
+Service: **ONTOLOGY** · Size: S · Depends: — (scope reduced after S2 landed the staleness half)
 
 Source: PR #16 review thread · `docs/spec-v2/notes.json` ·
 `.claude/skills/specify/scripts/create_reader.py`
