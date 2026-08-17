@@ -127,7 +127,7 @@ h4.sec-h{font-size:16.5px;color:var(--fg)}
     <button class="btn primary" id="btn-export">Save / Export</button>
   </div>
 </div>
-<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 32 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
+<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 36 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
 <div id="warnbar"><div class="wrap"><strong>Heads up —</strong> this browser isn't storing your notes automatically (private/incognito mode or restricted file view). Tap <strong>Save / Export</strong> regularly.</div></div>
 
 <div class="wrap">
@@ -152,17 +152,20 @@ h4.sec-h{font-size:16.5px;color:var(--fg)}
 <li><a href="#s-spec-1">§1 What this settles</a></li>
 <li><a href="#s-spec-2">§2 The step list</a></li>
 <li><a href="#s-spec-2-1">§2.1 Why Intake and Constraints stay separate</a></li>
-<li><a href="#s-spec-2-2">§2.2 Why Traits is its own step</a></li>
+<li><a href="#s-spec-2-2">§2.2 What a trait is, and why it gets its own step</a></li>
 <li><a href="#s-spec-2-3">§2.3 Why Reactions is a step and not part of Preferences</a></li>
 <li><a href="#s-spec-2-4">§2.4 Why Feedback (10) is not the same step as Reactions (5)</a></li>
+<li><a href="#s-spec-2-5">§2.5 Required and offered steps</a></li>
+<li><a href="#s-spec-2-6">§2.6 Three steps the table under-describes</a></li>
 <li><a href="#s-spec-3">§3 How the steps connect</a></li>
-<li><a href="#s-spec-3-1">§3.1 Forward: sufficiency, not sequence for its own sake</a></li>
+<li><a href="#s-spec-3-1">§3.1 Forward: a dependency graph, not a queue</a></li>
 <li><a href="#s-spec-3-2">§3.2 What each step must leave behind</a></li>
 <li><a href="#s-spec-3-3">§3.3 The offered skip</a></li>
 <li><a href="#s-spec-3-4">§3.4 Backwards: revision propagates, it does not discard</a></li>
 <li><a href="#s-spec-3-5">§3.5 The three named re-entries</a></li>
 <li><a href="#s-spec-4">§4 Capture and scoring</a></li>
 <li><a href="#s-spec-4-1">§4.1 Capture — cheap, always on</a></li>
+<li><a href="#s-spec-4-3">§4.3 Deletion — of a fact, and of a person</a></li>
 <li><a href="#s-spec-4-2">§4.2 Scoring — expensive, at defined points only</a></li>
 <li><a href="#s-spec-5">§5 Freshness, proactive re-entry, and resumption</a></li>
 <li><a href="#s-spec-5-1">§5.1 Session state</a></li>
@@ -177,19 +180,21 @@ h4.sec-h{font-size:16.5px;color:var(--fg)}
 <li><a href="#s-spec-7-2">§7.2 Retention</a></li>
 <li><a href="#s-spec-7-3">§7.3 Purge</a></li>
 <li><a href="#s-spec-7-4">§7.4 Tombstones</a></li>
-<li><a href="#s-spec-8">§8 Where the gates come from</a></li>
-<li><a href="#s-spec-9">§9 What S2 inherits</a></li>
-<li><a href="#s-spec-10">§10 Open, and deliberately so</a></li>
+<li><a href="#s-spec-8">§8 What the tool owes beyond matching</a></li>
+<li><a href="#s-spec-9">§9 Where the gates come from</a></li>
+<li><a href="#s-spec-10">§10 What S2 inherits</a></li>
+<li><a href="#s-spec-11">§11 Open, and deliberately so</a></li>
 </ul></details>
 </details>
   <section class="part">
 <h2 class="part-title"><span class="badge spec">Specification</span>Spec V2 Process</h2>
 <article class="sec" id="s-spec-intro">
 <h3 class="sec-h"><span class="chip">overview</span><span class="sec-title">Preamble &amp; scope</span></h3>
-<div class="sec-body"><p><strong>Date</strong>: 2026-08-17
+<div class="sec-body"><p><strong>Version</strong>: 2.1 — revised 2026-08-17 after the owner's review round
 <strong>Author</strong>: nuncaeslupus
 <strong>Supersedes</strong>: the step table in <code>docs/product-shape.md</code>
-<strong>Source</strong>: <code>status/spec-v2-brief.md</code> (owner's decisions), owner's answers of 2026-08-17
+<strong>Source</strong>: <code>status/spec-v2-brief.md</code> (owner's decisions), owner's answers of
+2026-08-17, and the sixteen review annotations in <code>docs/spec-v2/notes.json</code>
 <strong>Companion</strong>: <code>status/spec-v2-steps.json</code> — the same step list, machine-readable</p>
 <p>This document specifies the <strong>process</strong>: which steps exist, where their
 boundaries fall, how they connect forwards and backwards, what is on disk, how
@@ -240,6 +245,33 @@ are decisions now, not proposals.</p>
 </tr>
 </tbody>
 </table>
+<p>Three more were settled in the review round of 2026-08-17:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6</td>
+<td>How is a candidate identified?</td>
+<td><strong>A short handle they choose</strong>, confirmed by display name at every later session. Not a legal name — the first thing the tool asks should be answerable the way a person introduces themselves. §6.1.</td>
+</tr>
+<tr>
+<td>7</td>
+<td>May a session delete another profile's data?</td>
+<td><strong>Yes, after confirming the target by name.</strong> Whoever is at the keyboard can delete the folder anyway; the tool adds a named confirmation rather than a refusal. §4.3.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Which steps are required?</td>
+<td><strong>Identify, Constraints, Sourcing, Understanding, Ranking.</strong> Every other step is offered, improves the result, and may be declined or deferred without blocking. §2.5.</td>
+</tr>
+</tbody>
+</table>
 <p>Two consequences worth stating up front, because they change the brief:</p>
 <ul>
 <li><strong>The step count is 13, not 12.</strong> Reactions is a step of its own, and the
@@ -264,6 +296,7 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <th>step</th>
 <th>name</th>
+<th>req</th>
 <th>goal</th>
 <th>visible output</th>
 <th>gate metric</th>
@@ -273,6 +306,7 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <td>0</td>
 <td><strong>Identify</strong></td>
+<td>●</td>
 <td>know whose tree we are in, and where they left off</td>
 <td>a greeting naming them, their last activity, and where they stopped</td>
 <td><code>cross_user_leaks == 0</code></td>
@@ -280,13 +314,15 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <td>1</td>
 <td><strong>Intake</strong></td>
-<td>the CV that exists, or a first one built with someone who has none</td>
-<td>a parsed CV, every fact showing where it came from</td>
+<td>○</td>
+<td>the CV that exists, or the same store built with someone who has none</td>
+<td>a readable profile of their working life, every fact showing where it came from</td>
 <td><code>intake_field_provenance == 1.0</code></td>
 </tr>
 <tr>
 <td>2</td>
 <td><strong>Constraints</strong></td>
+<td>●</td>
 <td>the facts that filter, confirmed rather than re-asked</td>
 <td>a constraints summary they correct in place</td>
 <td><code>constraint_field_resolution == 1.0</code></td>
@@ -294,6 +330,7 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <td>3</td>
 <td><strong>History</strong></td>
+<td>○</td>
 <td>the last job and the ones before: what they did, what went wrong, why they left</td>
 <td>a story bank of episodes</td>
 <td><code>story_dimension_linkage == 1.0</code></td>
@@ -301,13 +338,15 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <td>4</td>
 <td><strong>Traits</strong></td>
+<td>○</td>
 <td>score what the evidence supports, ask only about what it does not</td>
-<td>a trait profile with <code>insufficient</code> where it belongs</td>
+<td>how they work, with the episodes behind each line</td>
 <td><code>trait_evidence_sufficiency == 1.0</code></td>
 </tr>
 <tr>
 <td>5</td>
 <td><strong>Reactions</strong></td>
+<td>○</td>
 <td>real ads and ad fragments, and what the candidate makes of them</td>
 <td>their own words against each stimulus</td>
 <td><code>elicitation_eval_overlap == 0</code></td>
@@ -315,13 +354,15 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <td>6</td>
 <td><strong>Preferences</strong></td>
+<td>○</td>
 <td>reactions and forced choices become weights</td>
-<td>what each dimension is worth per month, in euros</td>
+<td>what each dimension is worth per month, in their currency</td>
 <td><code>weight_salary_equivalent_roundtrip_error &lt;= 0.01</code></td>
 </tr>
 <tr>
 <td>7</td>
 <td><strong>Sourcing</strong></td>
+<td>●</td>
 <td>offers in, deduped, stale ones retired</td>
 <td>what arrived, what duplicated, what expired</td>
 <td><code>offer_schema_violations == 0</code></td>
@@ -329,6 +370,7 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <td>8</td>
 <td><strong>Understanding</strong></td>
+<td>●</td>
 <td>extract dimensions and evidence spans (automatic)</td>
 <td>per offer, what the ad was found to say</td>
 <td><code>extraction_macro_f1 &gt;= 0.75</code></td>
@@ -336,13 +378,15 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <td>9</td>
 <td><strong>Ranking</strong></td>
-<td>order the live offers and explain every position</td>
+<td>●</td>
+<td>order the live offers and explain every position, legibly</td>
 <td>a ranked list citing the ad's own words</td>
 <td><code>explained_fraction == 1.0</code></td>
 </tr>
 <tr>
 <td>10</td>
 <td><strong>Feedback</strong></td>
+<td>○</td>
 <td>what they think of the offers in front of them</td>
 <td>a re-ordered list, and why it moved</td>
 <td><code>feedback_traceability == 1.0</code></td>
@@ -350,24 +394,37 @@ phases in <code>status/plan.md</code>, which are about build order.</p>
 <tr>
 <td>11</td>
 <td><strong>Application</strong></td>
+<td>○</td>
 <td>a CV and letter targeted at one offer</td>
 <td>the documents, versioned per offer</td>
 <td><code>cv_generation_traceability == 1.0</code></td>
 </tr>
 <tr>
 <td>12</td>
-<td><strong>Interview log</strong></td>
-<td>what happened, turned into preparation for the next one</td>
-<td>questions asked, and what to rehearse</td>
+<td><strong>Interview</strong></td>
+<td>○</td>
+<td>prepare for the interview, then record what actually happened</td>
+<td>what to rehearse beforehand; afterwards, the lessons</td>
 <td><code>interview_lesson_linkage == 1.0</code></td>
 </tr>
 </tbody>
 </table>
+<p>● required · ○ offered — see §2.5.</p>
 <p>Steps <strong>0–6</strong> are the first run. Steps <strong>7–10</strong> are the loop the candidate
 lives in afterwards. Steps <strong>11–12</strong> run per opportunity, any number of times,
 in parallel across offers.</p>
 <p>Every step writes evidence (T28). The profile therefore deepens throughout,
-rather than only during onboarding.</p></div>
+rather than only during onboarding.</p>
+<p>Two things the table now says that the first version got wrong:</p>
+<ul>
+<li><strong>Step 6 is in the candidate's currency, not euros.</strong> Currency is a profile
+  field set from residence during Intake and overridable. Every
+  salary-equivalent figure anywhere in the system is in it.</li>
+<li><strong>Step 12 is preparation first and a log second.</strong> Its value is what the
+  candidate rehearses <em>before</em> walking in; the record of what happened is how
+  the next preparation gets better. Naming it "Interview log" described the
+  file rather than the step.</li>
+</ul></div>
 <div class="note" data-for="s-spec-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2</span></div><textarea class="note-ta" data-key="s-spec-2" data-label="§2 The step list" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-2-1">
@@ -386,33 +443,62 @@ asks the candidate to correct it rather than restate it.</p>
 inferences. "Barcelona" extracted from a CV header is a claim the document
 makes, not an established residence. Constraints promotes claims to confirmed
 facts by asking, and anything the candidate does not confirm stays <code>unknown</code> —
-which, per the inherited rule, neither passes nor vetoes.</p></div>
+which, per the inherited rule, neither passes nor vetoes.</p>
+<p><strong>Intake never produces a document.</strong> A candidate who arrives with no CV does
+not get a PDF generated for them; they get the same structured store that
+parsing a real CV would have produced, built by conversation instead. Document
+generation happens once, at step 11, targeted at one advert. A CV written before
+there is an advert to write it for is a worse CV than the one that step produces.</p>
+<p><strong>Residence is Intake's job, and it is not a formality.</strong> Where someone lives
+decides their currency, their work authorisation, which borders they could
+commute across, and how they would be taxed by an employer in another country.
+Every one of those constrains the search, so the fact has to be established
+early rather than inferred from a postcode on a document.</p></div>
 <div class="note" data-for="s-spec-2-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.1</span></div><textarea class="note-ta" data-key="s-spec-2-1" data-label="§2.1 Why Intake and Constraints stay separate" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-2-2">
-<h4 class="sec-h"><span class="chip">§2.2</span><span class="sec-title">Why Traits is its own step</span></h4>
-<div class="sec-body"><p>Trait <em>capture</em> is continuous and happens in every step, History most of all.
-Trait <em>scoring</em> is potentially LLM-backed and cannot run per utterance (§7).
-Those two facts together define what the Traits step is for:</p>
+<h4 class="sec-h"><span class="chip">§2.2</span><span class="sec-title">What a trait is, and why it gets its own step</span></h4>
+<div class="sec-body"><p><strong>A trait is how someone works and what drives them.</strong> How much autonomy they
+need. How social they want the place to be. Whether they are pulled by learning
+or by stability. How much process and ceremony they can stand before it grates.
+Not skills, and not facts.</p>
+<p>The distinction is structural, not a matter of taste (T23). A <strong>fact</strong> —
+languages, location, salary floor — is compared against something the advert
+<em>states</em>, so an ad can satisfy or violate it. A <strong>trait</strong> has no ad-side wording
+to compare against: no job advert says "we want someone whose ambition is 0.7".
+Traits therefore cannot be extracted from anything. They can only be inferred
+from how a person talks about the work they have done — which is exactly what
+the History step produces.</p>
+<p>So the step is not an interrogation about personality. It is:</p>
 <ol>
-<li>it is the defined point where scoring runs over everything accumulated; and</li>
-<li>it asks only about traits the evidence cannot yet support.</li>
+<li>the defined point where <strong>scoring runs</strong> over everything already said —
+   History's stories evidence most of these without anyone being asked directly;</li>
+<li>a short conversation about the <strong>few traits nothing yet supports</strong>.</li>
 </ol>
-<p>Folded into History, the step would have no stop rule other than "keep telling
-stories until coverage" — which is the interrogation the owner asked to avoid.
-As its own step it is short by construction: with a good History behind it, most
-traits are already scored and it asks about the few that are not.</p>
-<p>A trait is scored only from <strong>at least two independent episodes recorded on at
-least two separate occasions</strong>. Below that it reports <code>insufficient</code>, with the
-count, and the step may ask for another episode. A trait scored from a single
-anecdote is a stereotype, and the profile would be confidently wrong in exactly
-the way that makes a person distrust the whole tool.</p>
+<p>With a good History behind it, most of the work is already done and the step is
+brief. Folded into History, it would have no stop rule other than "keep telling
+stories until coverage" — the interrogation this design exists to avoid.</p>
+<p><strong>The floor.</strong> A trait is scored from at least two independent episodes recorded
+on at least two separate occasions. One anecdote is a stereotype, and a profile
+that is confidently wrong about someone is what makes them distrust everything
+else the tool says.</p>
+<p><strong>What the floor does is ask, not refuse.</strong> Below it the trait reads
+<code>insufficient</code> internally and the step looks for one more episode — in the
+ordinary way, by asking about another job or another moment, never by announcing
+a quota. Whether something sounds like a stereotype is a judgement made in the
+conversation and acted on by asking a better question. It is never voiced. "Is
+there another case like that, or are you a stereotype?" is not a question anyone
+should ever be asked.</p>
+<p><strong>What the candidate sees is not the word "traits".</strong> Internally the term
+matches the dimension model and stays. On screen this step is about <em>how you
+work</em>, and it shows the episodes behind each line so the person can disagree
+with it.</p>
 <blockquote>
-<p><strong>Owner decision needed if this is wrong.</strong> Two episodes on two occasions is
-my number, not the owner's. It is the one threshold in this document that was
-not given to me.</p>
+<p><strong>Owner decision if this is wrong.</strong> Two episodes on two occasions is my
+number, not the owner's. It is the one threshold in this document that was not
+given to me.</p>
 </blockquote></div>
-<div class="note" data-for="s-spec-2-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.2</span></div><textarea class="note-ta" data-key="s-spec-2-2" data-label="§2.2 Why Traits is its own step" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+<div class="note" data-for="s-spec-2-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.2</span></div><textarea class="note-ta" data-key="s-spec-2-2" data-label="§2.2 What a trait is, and why it gets its own step" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-2-3">
 <h4 class="sec-h"><span class="chip">§2.3</span><span class="sec-title">Why Reactions is a step and not part of Preferences</span></h4>
@@ -445,8 +531,55 @@ stimuli the candidate has no stake in, to learn what they value. Feedback shows
 offers they might actually apply to, and its output changes both the weights
 <em>and</em> the offers' lifecycle status. One is elicitation; the other is a decision
 point. A single step would need two stop rules and two gates.</p>
-<!-- required-item: connections --></div>
+<p><strong>Stimuli are never invented.</strong> Fetched live by preference, drawn from the
+elicitation split of the corpus otherwise — but written by no one. An imagined
+advert reads plausibly and represents nothing, which is precisely the failure
+that put eight wrong cues into the dimension model with gold examples
+demonstrating their own error (PR #8). A reaction to a fabricated advert teaches
+the tool about the fabrication.</p></div>
 <div class="note" data-for="s-spec-2-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.4</span></div><textarea class="note-ta" data-key="s-spec-2-4" data-label="§2.4 Why Feedback (10) is not the same step as Reactions (5)" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2-5">
+<h4 class="sec-h"><span class="chip">§2.5</span><span class="sec-title">Required and offered steps</span></h4>
+<div class="sec-body"><p>Five steps are required, because without them there is nothing to show: <strong>0
+Identify</strong>, <strong>2 Constraints</strong>, <strong>7 Sourcing</strong>, <strong>8 Understanding</strong>, <strong>9
+Ranking</strong>. Know who this is, know what vetoes a job, fetch, read, order.</p>
+<p>The other eight are <strong>offered</strong>. Each improves the result and each may be
+declined or deferred without blocking anything downstream. A candidate who
+answers nothing but the constraints still gets a ranked list — a rougher one,
+and labelled as such (§3.1).</p>
+<p>This is not a licence to under-ask. It is what makes the non-insistence rule
+(§5.4) safe to obey: when someone does not want to answer, there is always a
+path forward that does not require them to.</p></div>
+<div class="note" data-for="s-spec-2-5"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.5</span></div><textarea class="note-ta" data-key="s-spec-2-5" data-label="§2.5 Required and offered steps" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2-6">
+<h4 class="sec-h"><span class="chip">§2.6</span><span class="sec-title">Three steps the table under-describes</span></h4>
+<div class="sec-body"><p><strong>Sourcing (7) is a research problem, not a fetch.</strong> Where the offers come from
+determines everything downstream, and the obvious portals are the worst of the
+available sources. The step must reach specialised boards for the candidate's
+field, and it must establish — at the moment it becomes relevant, not as an
+opening questionnaire — how far the search can travel: remote, cross-border
+commuting, relocation, working for an employer in another country while living
+here. That last one is often where the money is, and it carries the questions
+nobody enjoys: how would they be paid, employed or contracting, and taxed where.
+Those answers change which offers are even legal to take, so they belong to
+Sourcing's inputs rather than to a footnote at the application stage.</p>
+<p><strong>Understanding (8) needs a rule for the ads that say nothing.</strong> Plenty of
+adverts are four lines and a salary band. When extraction yields few dimensions
+the step does not simply record a sparse result: it may look outside the advert
+— what the company does, how it is spoken about, what former employees say —
+and add what it finds. <strong>Anything sourced that way is marked as not from the
+ad.</strong> It never appears as a verbatim evidence span, because <code>explained_fraction</code>
+means the ad's own words, and an explanation citing a review site as though the
+employer had written it is a lie about provenance.</p>
+<p><strong>Ranking (9) is half presentation.</strong> An ordering nobody can read is not a
+result. What the candidate sees — how many, in what order, how much of the
+reasoning at once, what is offered next — is as much a part of the step's
+specification as the arithmetic, and S2 specifies it rather than leaving it to
+whatever the model does that day.</p>
+<!-- required-item: connections --></div>
+<div class="note" data-for="s-spec-2-6"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.6</span></div><textarea class="note-ta" data-key="s-spec-2-6" data-label="§2.6 Three steps the table under-describes" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-3">
 <h3 class="sec-h"><span class="chip">§3</span><span class="sec-title">How the steps connect</span></h3>
@@ -454,9 +587,35 @@ point. A single step would need two stop rules and two gates.</p>
 <div class="note" data-for="s-spec-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3</span></div><textarea class="note-ta" data-key="s-spec-3" data-label="§3 How the steps connect" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-3-1">
-<h4 class="sec-h"><span class="chip">§3.1</span><span class="sec-title">Forward: sufficiency, not sequence for its own sake</span></h4>
-<div class="sec-body"><p>Steps run in order on a first run, but what actually gates a later step is
-whether the state it needs exists. Three sufficiency levels, recorded in
+<h4 class="sec-h"><span class="chip">§3.1</span><span class="sec-title">Forward: a dependency graph, not a queue</span></h4>
+<div class="sec-body"><p>Steps run in order on a first run, but the order is a default, not the
+mechanism. <strong>Each step declares what it reads and what it produces</strong>, and the
+graph of those declarations is what decides whether a step can run:</p>
+<pre><code>0 identify  → handle, session state
+1 intake    → cv/master.json, claimed facts        [reads: handle]
+2 constraints → constraints.json, currency, locale [reads: claimed facts]
+3 history   → stories.jsonl, trait evidence        [reads: master.json]
+4 traits    → traits.json                          [reads: trait evidence]
+5 reactions → reaction evidence                    [reads: constraints (to pick stimuli)]
+6 preferences → weights.json                       [reads: reaction evidence]
+7 sourcing  → offers/*.json                        [reads: constraints]
+8 understanding → extractions                      [reads: offers, dimension model]
+9 ranking   → rankings/&lt;ts&gt;.json                   [reads: extractions, constraints, weights?]
+10 feedback → reaction + outcome evidence          [reads: a ranking]
+11 application → cv + letter per offer             [reads: master.json, one offer]
+12 interview → preparation, then lessons           [reads: stories, one offer]
+</code></pre>
+<p>Two things follow, and both are the point of writing it this way.</p>
+<p><strong>The order can bend.</strong> A conversation that wanders into last year's redundancy
+is doing step 3's work; the tool follows it rather than steering back, because
+the graph says History's inputs are satisfied and its outputs are what just
+arrived. What must never bend is a step running without its inputs.</p>
+<p><strong>What is still owed is computable.</strong> At any moment the tool can say which
+outputs are missing and which step would produce them — that is what makes
+"where were we?" answerable, and it is what keeps a long conversation from
+losing the thread. A <code>?</code> above marks an optional input: a ranking without
+<code>weights.json</code> is produced, and labelled.</p>
+<p>Three <strong>sufficiency levels</strong> are named milestones over that graph, recorded in
 <code>session/state.json</code> and stamped onto anything derived:</p>
 <table>
 <thead>
@@ -487,7 +646,7 @@ whether the state it needs exists. Three sufficiency levels, recorded in
 <p>A ranking records the level that produced it and is labelled with it wherever
 it is shown. A provisional ranking that is not labelled provisional is a defect,
 not a shortcut.</p></div>
-<div class="note" data-for="s-spec-3-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.1</span></div><textarea class="note-ta" data-key="s-spec-3-1" data-label="§3.1 Forward: sufficiency, not sequence for its own sake" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+<div class="note" data-for="s-spec-3-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.1</span></div><textarea class="note-ta" data-key="s-spec-3-1" data-label="§3.1 Forward: a dependency graph, not a queue" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-3-2">
 <h4 class="sec-h"><span class="chip">§3.2</span><span class="sec-title">What each step must leave behind</span></h4>
@@ -495,7 +654,16 @@ not a shortcut.</p></div>
 something the next step can read. A step that only fills internal state has no
 visible output and will feel like an interrogation; a step whose visible output
 is not also machine-readable state cannot be resumed or revised. Both columns
-of the §2 table are requirements, not description.</p></div>
+of the §2 table are requirements, not description.</p>
+<p><strong>The boundary is said out loud, and it is warm.</strong> A step ends by naming what
+was gained, offering the next thing, and offering to stop — <em>"Good, I have your
+preferences now. Want to go and look at some jobs, or leave it here for today?"</em>
+Two things are wrong with ending silently: the candidate cannot tell that
+anything happened, and they are given no moment at which stopping is a normal
+choice rather than an abandonment.</p>
+<p><strong>Gates are never mentioned.</strong> <code>constraint_field_resolution</code> is how the
+engineers know the step is done. What the candidate hears is that we have what
+we need. A number quoted at a person turns a conversation into an assessment.</p></div>
 <div class="note" data-for="s-spec-3-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.2</span></div><textarea class="note-ta" data-key="s-spec-3-2" data-label="§3.2 What each step must leave behind" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-3-3">
@@ -587,12 +755,27 @@ propagation, and each is an ordinary forward move from that point:</p>
 </tr>
 <tr>
 <td>"I got rejected, and here is why"</td>
-<td>10 Feedback or 12 Interview log</td>
+<td>10 Feedback or 12 Interview</td>
 <td>6 (weights) → 9 (recompute) → the offer's lifecycle status</td>
 </tr>
 </tbody>
 </table>
 <p><code>reentry_events</code> in <code>spec-v2-steps.json</code> carries the full list per step.</p>
+<p><strong>These three are examples, not the set.</strong> "I moved", "I finished the course",
+"I've started thinking about the public sector instead", "I had a child" — each
+one changes something, and the tool's job is to work out <em>what</em> it changed and
+which steps therefore have stale inputs. The graph in §3.1 is what makes that a
+computation rather than a guess: name the outputs the news invalidates, and the
+steps that read them are the ones to revisit.</p>
+<p><strong>A change of mind is a legitimate input.</strong> Someone who came in looking for
+private-sector work and leaves wanting a public-sector post has not wasted the
+process; they have used it. What they are looking for may be stated outright or
+inferred from a run of answers, and either way it is evidence like any other —
+recorded, revisable, never assumed permanent.</p>
+<p><strong>Some propagation is advice, not recomputation.</strong> If the path they now want
+needs a qualification they do not have, the honest response is to say so with a
+number attached — <em>"that route would mean about six months of study first; is
+that something you'd take on?"</em> — and let them decide. See §8.</p>
 <!-- required-item: capture-scoring --></div>
 <div class="note" data-for="s-spec-3-5"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.5</span></div><textarea class="note-ta" data-key="s-spec-3-5" data-label="§3.5 The three named re-entries" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
@@ -631,6 +814,24 @@ asking what is known about them gets the derived profile, and a candidate asking
 for something to be forgotten gets it suppressed everywhere derived, in the same
 turn.</p></div>
 <div class="note" data-for="s-spec-4-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4.1</span></div><textarea class="note-ta" data-key="s-spec-4-1" data-label="§4.1 Capture — cheap, always on" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-4-3">
+<h4 class="sec-h"><span class="chip">§4.3</span><span class="sec-title">Deletion — of a fact, and of a person</span></h4>
+<div class="sec-body"><p>Retraction handles one fact. <strong>Deleting a person is a different operation and
+must exist</strong>: "delete everything you have about me" removes
+<code>profiles/&lt;handle&gt;/</code> entirely — evidence log, stories, CV store, offers,
+rankings, applications, interviews. Nothing is retained, including tombstones,
+which are per-profile.</p>
+<p>Deletion is confirmed once, by naming what goes, and it is not reversible. That
+is the point of it.</p>
+<p><strong>Deleting another profile is permitted, after confirming the target by name.</strong>
+Anyone who can run the tool can delete the directory with a file manager, so a
+refusal would protect nothing and would merely make the tool useless to a
+household that shares a laptop. What the tool adds is that the target is stated
+before it happens — <em>"this will permanently delete everything for Ana: profile,
+stories, offers, applications. Confirm by typing her name."</em> An instruction that
+does not name a profile deletes nothing.</p></div>
+<div class="note" data-for="s-spec-4-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4.3</span></div><textarea class="note-ta" data-key="s-spec-4-3" data-label="§4.3 Deletion — of a fact, and of a person" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-4-2">
 <h4 class="sec-h"><span class="chip">§4.2</span><span class="sec-title">Scoring — expensive, at defined points only</span></h4>
@@ -671,7 +872,15 @@ command.</p></div>
 </code></pre>
 <p><code>position</code> is what makes an interrupted step resume at the right question rather
 than at the top. It is written continuously during a step, not only at its end —
-a session that dies mid-interview must not lose its place.</p></div>
+a session that dies mid-interview must not lose its place.</p>
+<p><strong><code>last_activity</code> is rewritten at every step boundary, and this is a line every
+step specification repeats.</strong> Stated once as a general principle it will be
+forgotten by whichever step spec is written last; stated per step it is a thing
+that either is in the document or is not. The same holds for the writing rule
+behind it: <strong>state is written when something new is known, not at the end.</strong> A
+session that closes and never returns must leave behind everything that was
+learned before it closed — the files are the memory, and a memory written only
+at the end is not one.</p></div>
 <div class="note" data-for="s-spec-5-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.1</span></div><textarea class="note-ta" data-key="s-spec-5-1" data-label="§5.1 Session state" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-5-2">
@@ -741,19 +950,37 @@ asked the same questions twice.</p></div>
 <h4 class="sec-h"><span class="chip">§5.4</span><span class="sec-title">Manner and disclosure</span></h4>
 <div class="sec-body"><p>These are protocol rules for every step, stated once here so S2 does not restate
 them thirteen times.</p>
+<p><strong>The non-insistence rule comes first, because it overrides the others.</strong></p>
+<blockquote>
+<p>When cooperation drops, stop asking. A subject declined once is not raised
+again in that step; a subject declined twice is not raised again at all unless
+the candidate reopens it. <strong>It is better to find a worse job than to make
+someone feel bad about the questions.</strong> Coverage is a target, never a
+requirement to be extracted from a person — and §2.5 guarantees there is
+always a path forward without the answer.</p>
+</blockquote>
+<p>The rest:</p>
 <ul>
 <li><strong>Say why.</strong> Each step opens with what it is for and what it will store — once
   per step, not per question.</li>
 <li><strong>Knowing them is how it helps them.</strong> The tool says so, and means it: every
   question exists because an answer improves the offers they get. A question
   that cannot be justified that way should not be asked.</li>
+<li><strong>A friend, not an assessor.</strong> The candidate's advocate — their lawyer, not
+  the prosecution. Sincerity produces a better search, and it is only offered to
+  someone who does not feel judged. Negative episodes get a follow-up about what
+  was learned, never a verdict (T27).</li>
+<li><strong>Ask warmly and concretely.</strong> "How's your English?" rather than "Which
+  languages do you speak, and at what level?" — the first gets an honest answer
+  and the second gets a form filled in. Vary the phrasing; a question asked the
+  same way twice reads as a script.</li>
+<li><strong>Their language.</strong> The conversation happens in whatever language the
+  candidate uses. Evidence keeps their own words, verbatim, in that language.</li>
 <li><strong>Nothing covert.</strong> An evidence row exists only for something said in a step
   the candidate knew was recording. There is no silent capture.</li>
-<li><strong>A buddy, not a recruiter.</strong> Directed, warm, interested in the person's
-  working life rather than in filling a form. Negative episodes get a
-  follow-up about what was learned, never a judgement (T27).</li>
-<li><strong>Always answerable.</strong> "What do you know about me?" and "forget that" work at
-  any point in any step, and are answered before the step continues.</li>
+<li><strong>Always answerable.</strong> "What do you know about me?", "forget that", and
+  "delete everything" work at any point in any step, and are answered before the
+  step continues.</li>
 </ul>
 <!-- required-item: artefact-tree --></div>
 <div class="note" data-for="s-spec-5-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.4</span></div><textarea class="note-ta" data-key="s-spec-5-4" data-label="§5.4 Manner and disclosure" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
@@ -804,7 +1031,20 @@ how one person's evidence ends up in another person's history — and because th
 log is append-only, that is a mess to unpick rather than a mistake to undo.
 <code>cross_user_leaks == 0</code> (S3) measures exactly this: every store function takes
 the handle and resolves paths beneath it, so a test can point one candidate's
-operations at another's tree and prove they fail.</p></div>
+operations at another's tree and prove they fail.</p>
+<p><strong>The key is a handle the candidate chooses, not a legal name.</strong> On a first run
+the tool asks what to call them, and derives a directory-safe handle from the
+answer; <code>identity.json</code> keeps the display name they gave, their language and
+their locale. Later sessions greet by display name and ask for confirmation.</p>
+<p>A full name is not required and is not asked for as an opening. The first thing
+the tool says should be answerable the way a person introduces themselves, and
+"what is your full legal name and profession" is a form. If two profiles would
+collide on one handle, the tool asks for something to tell them apart rather
+than inventing a suffix.</p>
+<p><strong>The candidate must be identified before the tool answers anything at all.</strong>
+Not merely before writing — before reading. A session that begins by answering a
+question about "my CV" has already guessed whose CV it is. The opening move is
+always to establish who this is, and it is a short, friendly one.</p></div>
 <div class="note" data-for="s-spec-6-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §6.1</span></div><textarea class="note-ta" data-key="s-spec-6-1" data-label="§6.1 Identification precedes everything" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-6-2">
@@ -820,6 +1060,15 @@ operations at another's tree and prove they fail.</p></div>
 <li><strong>No autonomous outward action.</strong> Nothing applies, emails, or contacts an
   employer without explicit per-item approval (inherited).</li>
 </ul>
+<p><strong>If sending is ever built, the gate is a summary of everything that would go.</strong>
+Not "shall I apply?" but the actual payload — which documents, which claims,
+which contact details, to whom — approved once per application, never as a
+standing permission.</p>
+<p><strong>The default is to stop one step short of sending</strong>, and that is not a
+limitation. Prepare the text to paste into the employer's form, produce the
+files to attach, write the email and leave it in drafts. The candidate presses
+send. That keeps the last decision with the person whose name is on the
+application, and it costs them a few seconds.</p>
 <!-- required-item: offer-lifecycle --></div>
 <div class="note" data-for="s-spec-6-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §6.2</span></div><textarea class="note-ta" data-key="s-spec-6-2" data-label="§6.2 What may leave the machine" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
@@ -900,7 +1149,12 @@ application happened, and the record of it is historical.</p></div>
 <li>anything <code>archived</code> (archiving is the candidate saying "keep this, hide it").</li>
 </ul>
 <p>These are the ads that explain a candidate's own history. Deleting them would
-make their story unreconstructable.</p></div>
+make their story unreconstructable.</p>
+<p><strong>What the employer said back is part of that history.</strong> A rejection, a silence
+that ran past a stated date, an invitation, an offer, the reason given —
+recorded against the application and kept with it. Half of what an application
+teaches is in the reply, and it is also the evidence that feeds the next
+ranking's weights (step 10).</p></div>
 <div class="note" data-for="s-spec-7-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §7.2</span></div><textarea class="note-ta" data-key="s-spec-7-2" data-label="§7.2 Retention" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-7-3">
@@ -933,6 +1187,26 @@ before it happens.</p></div>
 </code></pre>
 <p>A tombstone carries <strong>no ad body</strong> — that is the point of purging, and it is
 what keeps a purge a privacy improvement rather than a bookkeeping trick.</p>
+<p><strong><code>text_sha256</code> is over normalised text, and the normalisation is part of the
+contract</strong>, because a hash is only useful if the same advert hashes the same way
+every time it is seen. The rule: strip the source's chrome (navigation, cookie
+banners, "similar jobs", the application form), strip volatile stamps ("posted 3
+days ago", view counts, expiry countdowns), strip tracking parameters from any
+embedded URL, collapse whitespace, lowercase, then hash the remainder. It is
+declared once and versioned — changing it invalidates every existing tombstone,
+so the version travels with the hash.</p>
+<p><strong>And it must be said plainly what this does not catch.</strong> Two portals carrying
+the same job rarely carry byte-identical text: one truncates, one adds its own
+summary, one translates the title. Those hash differently and the tombstone will
+miss them. Exact-hash matching catches re-collection of <em>the same listing</em>;
+cross-posted near-duplicates are a similarity problem and remain T13's
+(<code>dedup_precision &gt;= 0.95</code>). A tombstone consults both, and the honest summary
+is that the hash is the cheap half.</p>
+<p><strong>Which URL is canonical.</strong> Sources are normalised — tracking parameters and
+session ids removed — and when one role is found at several, a single offer is
+kept carrying all of them. The employer's own posting is preferred as canonical
+when it is among them: a company careers page outlives an aggregator's listing,
+and an ad that expires at one source is not an ad that no longer exists.</p>
 <p>On collection, an incoming ad matching a tombstone by <code>url_canonical</code> or by
 <code>text_sha256</code> is <strong>not re-added as <code>new</code></strong>. Its <code>resightings</code> counter increments
 and it is dropped. Without this, the next collection run re-adds everything just
@@ -946,7 +1220,37 @@ how an accidental screen-out becomes permanent.</p>
 <div class="note" data-for="s-spec-7-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §7.4</span></div><textarea class="note-ta" data-key="s-spec-7-4" data-label="§7.4 Tombstones" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-8">
-<h3 class="sec-h"><span class="chip">§8</span><span class="sec-title">Where the gates come from</span></h3>
+<h3 class="sec-h"><span class="chip">§8</span><span class="sec-title">What the tool owes beyond matching</span></h3>
+<div class="sec-body"><p>A ranked list is the mechanism, not the job. The job is that someone ends up in
+better work than they would have found alone, and three of the ways that happens
+are not matching at all.</p>
+<p><strong>Widen the field.</strong> Someone arrives with a job title in mind — the one they
+last held. The profile that accumulates over the first run frequently implies
+others they never considered, in adjacent fields or built on a part of their
+experience they think of as incidental. Naming those is one of the most valuable
+things the tool can do, and it costs a sentence: <em>"given what you've said about
+X, there's a whole kind of role you haven't mentioned — want to see some?"</em> An
+offered widening, never a substitution for what they asked for.</p>
+<p><strong>Be honest in both directions.</strong> Someone who is sure they are ready for
+something they are not should be told, kindly and specifically — what is
+missing, and what would close it. Someone convinced they are not good enough for
+a job they would plainly get should be told that too, and encouraged to apply.
+The second is more common than the first and does more damage: people rule
+themselves out of work they could do, and a tool that quietly ranks around that
+belief has confirmed it. Both are said with the evidence attached, from the
+profile and from what the adverts actually ask for.</p>
+<p><strong>Say what it would take.</strong> When a role is out of reach today but reachable, the
+useful answer is the route — the certificate, the six months, the one project
+that would change the reading — offered as a question rather than a homework
+assignment. <em>"That path needs about six months of study first. Is that something
+you'd take on?"</em></p>
+<p>Realistic but positive is the standard: never flattery, never discouragement,
+always the reason and the evidence. This is process-level because every step can
+do it, and because a tool that only ever ranks will never do it at all.</p></div>
+<div class="note" data-for="s-spec-8"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §8</span></div><textarea class="note-ta" data-key="s-spec-8" data-label="§8 What the tool owes beyond matching" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-9">
+<h3 class="sec-h"><span class="chip">§9</span><span class="sec-title">Where the gates come from</span></h3>
 <div class="sec-body"><p>Every step in §2 names one gate metric. Ten reuse metrics that already exist in
 <code>status/plan.md</code>; three are new and are named here for the first time:</p>
 <table>
@@ -984,35 +1288,47 @@ how an accidental screen-out becomes permanent.</p>
 truthful statement of a specification that has not yet been built against — and
 <code>not_implemented</code> is a recorded value, not a blank. <code>spec-v2-steps.json</code> carries
 the state per step, and S2 may not leave one empty.</p></div>
-<div class="note" data-for="s-spec-8"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §8</span></div><textarea class="note-ta" data-key="s-spec-8" data-label="§8 Where the gates come from" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+<div class="note" data-for="s-spec-9"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §9</span></div><textarea class="note-ta" data-key="s-spec-9" data-label="§9 Where the gates come from" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
-<article class="sec" id="s-spec-9">
-<h3 class="sec-h"><span class="chip">§9</span><span class="sec-title">What S2 inherits</span></h3>
+<article class="sec" id="s-spec-10">
+<h3 class="sec-h"><span class="chip">§10</span><span class="sec-title">What S2 inherits</span></h3>
 <div class="sec-body"><p>S2 writes one specification per step, filling the template in
 <code>status/spec-v2-brief.md</code> §4. From this document it inherits, and must not
 re-decide:</p>
 <ul>
 <li>the <strong>thirteen steps</strong>, their boundaries, and their order;</li>
+<li>which five are <strong>required</strong> and which eight are offered (§2.5);</li>
 <li>the <strong>visible output</strong> each step owes the candidate;</li>
 <li>the <strong>gate metric</strong> each step is measured by;</li>
+<li>the <strong>inputs and outputs</strong> each step declares (§3.1) — a step's preconditions
+  are its inputs, not a position in a queue;</li>
 <li>the artefact classes (§3.4) — so "what a re-run preserves and what it
   replaces" is answered per output by which class it belongs to;</li>
-<li>the manner and disclosure rules (§5.4), which no step restates;</li>
-<li>the sufficiency levels (§3.1), which are what a step's preconditions refer to.</li>
+<li>the manner and disclosure rules (§5.4), which no step restates — above all
+  the <strong>non-insistence rule</strong>, which overrides every coverage target.</li>
 </ul>
 <p>S2 must decide, per step: the conversation protocol, the coverage requirement,
 the <strong>stop rule</strong> (coverage reached, candidate declines, or a hard cap — a step
 with no cap runs until the candidate gives up), the elapsed-time thresholds for
 proactive re-entry into that step, the batch threshold N for scoring, and
 exactly what leaves the machine.</p>
+<p>Three lines every step specification repeats verbatim, because a rule stated
+only in this document is a rule the last step spec written will not have:</p>
+<ol>
+<li><strong><code>last_activity</code> is rewritten when this step ends</strong> (§5.1).</li>
+<li><strong>What this step says out loud at its boundary</strong> — what was gained, what is
+   next, and that stopping here is fine (§3.2).</li>
+<li><strong>What this step does when the candidate declines</strong> — which is never to ask
+   again in the same breath (§5.4).</li>
+</ol>
 <p><code>step_count</code> is 13. S2's gate is <code>step_specs_complete_fraction</code>, whose divisor
 is that number read from <code>spec-v2-steps.json</code> — never from counting the files
 that happen to exist, because dividing by what was written makes any amount of
 work look complete.</p></div>
-<div class="note" data-for="s-spec-9"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §9</span></div><textarea class="note-ta" data-key="s-spec-9" data-label="§9 What S2 inherits" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+<div class="note" data-for="s-spec-10"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §10</span></div><textarea class="note-ta" data-key="s-spec-10" data-label="§10 What S2 inherits" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
-<article class="sec" id="s-spec-10">
-<h3 class="sec-h"><span class="chip">§10</span><span class="sec-title">Open, and deliberately so</span></h3>
+<article class="sec" id="s-spec-11">
+<h3 class="sec-h"><span class="chip">§11</span><span class="sec-title">Open, and deliberately so</span></h3>
 <div class="sec-body"><ol>
 <li><strong>Two episodes on two occasions</strong> as the trait-scoring minimum (§2.2) is my
    number. If the owner wants three, or wants it per-trait, S2 is the place.</li>
@@ -1023,8 +1339,19 @@ work look complete.</p></div>
    relevant — is settled; the source list is not.</li>
 <li><strong>CV templates</strong> remain out of v1 (brief §2.7). The store is designed to feed
    templates rather than one layout, which is all that is owed now.</li>
+<li><strong>How this is distributed</strong> is undecided, and it decides one thing here. A
+   public repository with private per-person copies, a fork per candidate, or an
+   application with a UI all keep <code>profiles/</code> off the internet in different
+   ways. <code>.gitignore</code> is sufficient for a repository someone clones; it is not a
+   plan for anything else. The tree in §6 does not depend on the answer, so the
+   question can wait — but not past the point where someone other than the owner
+   installs this.</li>
+<li><strong>Which sources Sourcing uses</strong> (§2.6) is the same shape of question as (3):
+   the requirement — specialised boards, cross-border reach, the payment and tax
+   questions asked at the right moment — is settled, and the list of connectors
+   arrives with T11/T12.</li>
 </ol></div>
-<div class="note" data-for="s-spec-10"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §10</span></div><textarea class="note-ta" data-key="s-spec-10" data-label="§10 Open, and deliberately so" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+<div class="note" data-for="s-spec-11"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §11</span></div><textarea class="note-ta" data-key="s-spec-11" data-label="§11 Open, and deliberately so" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 </section>
 </div>
@@ -1050,7 +1377,7 @@ work look complete.</p></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script>var SPEC_SEED_NOTES={};</script>
+<script>var SPEC_SEED_NOTES={"s-spec-2": "Identify: Since the user must be the first one to write to an LLM, we must give him a basic instruction on how to start. Or rather you must have a rule to ask him who he is before answering or continuing. The language of the conversation is the one the user uses \nIntake: if the user has no CV, it must not be created as a CV but as the result of reading it in the user profile. I mean, don't create a PDF or DOCX file but extract the info in a CV-style JSON or whatever, the same that would result from parsing a real CV document. About getting info from the user, it's important to tell him you are his friend, not his evaluator. The more sincerity, the better job you will find. You are his lawyer, not the attorney. You must discover where the user lives. That will decide his currency, job restrictions, taxes   \nConstraints: Ask the user about its hardest believings, but in a way you can get that info in a natural way. For example, someone who hates poverty maybe doesn't want to work for a bank, or a vegetarian for a farm or related jobs.\nHistory: you must go deep into user stories, but in a natural way, never as interrogation. You must ask for other jobs, for good or bad moments in their life. You are not an inquisitor, so don't insist too much if you see no cooperation. This must be a rule for all the process. Get info but don't be too insisting. It's better to find a worse job than making the user feel bad about your questions. Wishes, hobbies, ways to do things, manias...\nTraits: I don't get what you mean.\nReactions: okay, just we need to choose the right texts to show, where to get them, use a corpus, inventing or getting fresh ads, etc.\nPreferences: okay, but be careful. Not everyone uses euros. It is in the user profile.\nSourcing: it's very important to find good sources. This may include looking for specialized job search engines, knowing if mobility and finding jobs in other countries is okay... Sometimes, working for other countries jobs paying to your country can give you better salaries, or digital nomads... Ask the user about that in the right moment, same as remote possibility.The different paying ways must be stated and asked to the user. That is important for taxes or legality.\nUnderstanding: We must define what to do when we can't get many dimensions for a job. Looking for outside info (opinions, company info, etc.) can help adding more dimensions.\nRanking: This step must be treated very carefully, not only ranking but the way to show  the info to the user.\nFeedback: Not sure if it should be optional. As before, don't insist to the user or ask him what they think about a step: \"Do you want to review some offers and give me some more feedback?\". We have some very important steps and other ones that can be optional. We need to identify them.\nApplication: okay.\nInterview: This step is a real interview preparation, logging is correct, but the interview process must be very well thought and specified.", "s-spec-2-2": "Common sense is the rule here. You must evaluate from the conversation if something sounds like a stereotype and ask the right questions to clarify it. Always in a natural manner, not \"Is there another similar case or you are a stereotype?\".", "s-spec-3-1": "We should have a kind of DAG with outputs and inputs, so at some point order of steps can change and you'll have control of what's still needed to continue. Given most of the process is conversation, it can lose focus at some point or derive to the wrong place and make you choose another step instead.", "s-spec-3-2": "Between-steps conversation could be something like \"Great! We have your preferences now! Do you want to go to X or do you want to make a pause?\" or similar positive chatting.\nAnd instead of \"Which languages do you speak?\", better \"How is your English?\". You know, positive style, but using your common sense and variations in each new question.", "s-spec-3-4": "The whole process can make the user expectations change and that can change what the user is looking for. For example, private job to a public job. That's okay.\nBTW, the kind of job a user is looking for can be resulting of him saying that or deduced after some questions.\nAlso, remember we can have advice for the user for different paths: \"For this job you'll need to study a lot during about 6 months. Is it okay with you?\".", "s-spec-3-5": "Everything must be stored, so a new session can start knowing nothing about past chats.\n\nThese are only three examples, but much more can come in. You'll need to evaluate what that info changes and which next steps are needed to review. Of course, if we have each step measured and with clear gates (which the user must not notice), that's even better.", "s-spec-4-1": "Of course, if the user wants to delete his profile and data from disk, it must be done. Given it is multi-user, I don't know what to do if a user A session tells to delete user B data. If a user has access to the computer or session, should we assume the computer or session are his?", "s-spec-5": "Every update to logs, profile, etc. should include the date in which it was added. I think you already had that idea.", "s-spec-5-2": "Again  last_activity must be updated right after each step, this must be a rule in every description of steps. That way, it will always be updated. Mire, taking note of everything must be done just when some new info is known, in the sense that docs are the memory of the project.", "s-spec-5-3": "Good. With this and my claude-arsenal skill-creator skill, we'll get something very interesting, efficient and well-designed.", "s-spec-6": "profile gitignored will depend on the way we define the app: a public repo with private copies per users? Forks? Some kind of app with UI? Not sure yet. Offer I'd is an internal I'd, right? When duplicate offers are found, will we try to find the canonical URL or anyone will be used?", "s-spec-6-1": "How will we identify the candidate? Full name? Full name and profession/studies?\nShould sessions be logged too? With a summary of what was done? That is a problem if the user just closes the session and never comes back. Updating the log at each step could help. Logging for LLMs is complex due to timing. Do it same as you update your memory files, constantly (I guess).", "s-spec-6-2": "User data is never shared with anyone. If we finally decide that you can send applications in the name of the user, confirmation gates must be set, with summaries of all data sent. Another option, if the user doesn't want to, is to prepare for example the text or files to paste or attach to a form, or write an email without sending it. Claude has a lot of tool access now, so drafting an email is a real option.", "s-spec-7-2": "Answers to an application must be part of the user's history too.", "s-spec-7-4": "text_sha256 has some rules to be generated? I mean, the text is webscraped always with the same rules so all times it is found the text will be the same, even from different source pages?", "s-spec-10": "Last comment: LLM must give the user more options he has in mind at the beginning. For example, opening new unexpected jobs based on what's learned from him. If you see the user is over-confident about his knowledge, you must tell him. And if he has enough knowledge about something but he thinks he is not good enough, you must encourage him to apply to a job. You can tell him what he needs to reinforce or study or prepare before the interview to be able to get the job. You must be realistic but positive."};</script>
 <script>
 (function(){
   var NS = 'job-search-specification-v2-spec-v1:';

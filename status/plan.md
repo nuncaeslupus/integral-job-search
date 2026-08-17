@@ -342,6 +342,39 @@ in the conversation reopens the right earlier step; and the **profile
 revision** (`rows` + `sha256` of `evidence.jsonl`), which makes staleness
 computed rather than tracked.
 
+### 6b. Specification v2.1 — the owner's review round (S1r, 2026-08-17)
+
+Sixteen annotations, saved at `docs/spec-v2/notes.json` and folded back in. Three
+further decisions: identification is **a handle the candidate chooses**, not a
+legal name; **cross-profile deletion is permitted after confirming the target by
+name**; and five steps are **required** — Identify, Constraints, Sourcing,
+Understanding, Ranking — with the other eight offered.
+
+The changes that alter what gets built, rather than how it reads:
+
+- **The non-insistence rule** (§5.4) overrides every coverage target. When
+  cooperation drops, stop asking. Better a worse job than a person who felt
+  interrogated. §2.5 is what makes it safe: declining any offered step still
+  leaves a path to a ranked list.
+- **A step dependency graph** (§3.1) replaces sequence-as-mechanism. Each step
+  declares inputs and outputs, so a wandering conversation can be followed
+  rather than steered, and what is still owed is computable.
+- **Currency is a profile field**, set from residence at Intake. Every
+  salary-equivalent figure is in the candidate's currency — the first draft said
+  euros throughout.
+- **`text_sha256` gets a versioned normalisation rule** (§7.4), and an honest
+  statement that it catches re-collection of the same listing and *not*
+  cross-posted near-duplicates, which stay T13's problem.
+- **Step 12 is preparation first**, a log second; **Intake produces no
+  document**; **profile deletion** exists alongside fact retraction; **employer
+  replies are history** (§7.2).
+- **§8 is new**: widening the candidate's options, challenging over-confidence,
+  encouraging under-confidence, and naming what it would take. A tool that only
+  ranks never does any of it.
+
+`required` is now a field on every step in `spec-v2-steps.json`, and a process
+in which no step is required is a gate violation.
+
 ---
 
 ## Sign-off

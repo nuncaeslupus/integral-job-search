@@ -8,13 +8,20 @@
     "per_opportunity": 2
   },
   "steps_with_named_gate_metric": 13,
+  "required_steps": [
+    "identify",
+    "constraints",
+    "sourcing",
+    "understanding",
+    "ranking"
+  ],
   "gates_implemented": 0,
   "required_item_words": {
-    "step-list": 1072,
-    "connections": 717,
-    "artefact-tree": 445,
-    "offer-lifecycle": 902,
-    "resumption": 715,
-    "capture-scoring": 355
+    "step-list": 1997,
+    "connections": 1273,
+    "artefact-tree": 719,
+    "offer-lifecycle": 1770,
+    "resumption": 983,
+    "capture-scoring": 509
   }
 }
