@@ -150,6 +150,7 @@ done until its row is complete and the measured value meets the gate.
 | T# | Gate | Measured | Command | SHA | Env | Date |
 |----|------|----------|---------|-----|-----|------|
 | T1 | `lint_typecheck_exit_code == 0` | 0 | `make gate` (runs `ruff check .` + `mypy .`) | `9581811` | cloud | 2026-08-15 |
+| S1 | `process_spec_complete == 1` | 1 | `uv run python -m jobsearch.process_spec status/evidence/S1.json` | `0a64da9` | cloud | 2026-08-17 |
 
 ### Dependency graph
 
@@ -270,6 +271,12 @@ enough episodes accumulate. Both need a conversation before T27 is claimed —
 `docs/product-shape.md` states a recommendation for each so they can be argued
 with rather than rediscovered.
 
+> **Both decided since**, by the owner on 2026-08-16 and specified in
+> `status/spec-v2-process.md`: several short conversations, one per step, with
+> feedback loops back; and traits captured continuously but *scored* only at
+> defined points. T27 is now scoped by the step specifications S2 produces, not
+> by this table.
+
 ### 5. Product shape, and a catalogue to widen from
 
 Two documents were added rather than more code, because both decisions bind
@@ -302,6 +309,38 @@ content, recorded here so they are not lost:
    software. Without applicability by family, `ontology_hit_rate` reads as poor
    coverage where the truth is correct silence — the same lesson T3 recorded as
    `language_slices_with_no_corpus_hit`.
+
+### 6. Specification v2 — the process settled (S1, 2026-08-17)
+
+`status/spec-v2-process.md` is the process-level specification, with
+`status/spec-v2-steps.json` carrying the same step list machine-readably and
+`docs/spec-v2/spec-reader.html` rendering it for review. It supersedes the step
+table in `docs/product-shape.md`; the contracts in `status/specification.md` §5
+are unchanged.
+
+**Thirteen steps**, not the twelve the brief proposed. Reactions is an
+onboarding step of its own, distinct from the loop's Feedback step, and its
+stimuli are fetched live from multiple sources rather than drawn from the
+committed corpus — a corpus is limited and ageing, and reacting to an ad that
+could never be yours teaches the wrong thing.
+
+Four gate metrics are named there for the first time and have no owning task
+yet beyond the S-series:
+
+| metric | step | owner |
+|--------|------|-------|
+| `intake_field_provenance == 1.0` | 1 Intake | S4 |
+| `constraint_field_resolution == 1.0` | 2 Constraints | T24 |
+| `trait_evidence_sufficiency == 1.0` | 4 Traits | T28 |
+| `interview_lesson_linkage == 1.0` | 12 Interview log | S6 (seeded by S1) |
+
+Three process-level mechanisms belong to no step and are specified there rather
+than in any step's spec: the **artefact classes** (derived recomputed, authored
+marked stale and versioned, historical immutable) that make going back revise
+rather than discard; **proactive re-entry**, where elapsed time or a life event
+in the conversation reopens the right earlier step; and the **profile
+revision** (`rows` + `sha256` of `evidence.jsonl`), which makes staleness
+computed rather than tracked.
 
 ---
 

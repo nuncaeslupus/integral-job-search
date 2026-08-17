@@ -1,0 +1,1194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Job Search — Specification v2 — Specification (annotatable)</title>
+<style>
+:root{
+  --bg:#fbfaf7;--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;
+  --card:#ffffff;--accent:#0f766e;--accent2:#b45309;--chip:#eef2f1;
+  --note:#fff8ec;--note-line:#f0cf94;--code:#f3f1ec;--link:#0f766e;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#16151a;--fg:#e9e7e2;--muted:#a09c95;--line:#2e2c33;
+    --card:#1e1d23;--accent:#5eead4;--accent2:#fbbf24;--chip:#26313055;
+    --note:#251f10;--note-line:#6b531c;--code:#26242b;--link:#5eead4;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:17px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding-bottom:96px;
+}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+a{color:var(--link)}
+code{background:var(--code);padding:.08em .35em;border-radius:5px;font-size:.86em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+pre{background:var(--code);padding:12px;border-radius:8px;overflow:auto}
+pre code{background:none;padding:0}
+.topbar{position:sticky;top:0;z-index:30;background:var(--bg);
+  border-bottom:1px solid var(--line);backdrop-filter:saturate(120%) blur(6px)}
+.topbar .wrap{display:flex;align-items:center;gap:8px;padding-top:10px;padding-bottom:10px}
+.brand{font-weight:700;font-size:16px;margin-right:auto;letter-spacing:.2px}
+.brand small{font-weight:500;color:var(--muted);display:block;font-size:11px;letter-spacing:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--fg);
+  border-radius:9px;padding:8px 11px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media(prefers-color-scheme:dark){.btn.primary{color:#06201d}}
+.count{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:600}
+.savestate{font-size:12px;font-weight:700;white-space:nowrap;transition:color .2s}
+.savestate.ok{color:var(--accent)}
+.savestate.warn{color:#b45309}
+@media(prefers-color-scheme:dark){.savestate.warn{color:#fbbf24}}
+.statusbar{border-bottom:1px solid var(--line);background:var(--card)}
+.statusbar .wrap{padding:7px 16px;font-size:12px;color:var(--muted)}
+#warnbar{display:none;background:#fff4e5;border-bottom:1px solid var(--note-line);color:#7c2d12}
+#warnbar .wrap{padding:10px 16px;font-size:13px;line-height:1.45}
+@media(prefers-color-scheme:dark){#warnbar{background:#3a2a0e;color:#fde68a;border-color:#6b531c}}
+.hero{padding:22px 0 6px}
+.hero h1{font-size:25px;line-height:1.2;margin:.1em 0 .3em}
+.hero p{color:var(--muted);margin:.3em 0}
+.help{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.help summary{cursor:pointer;font-weight:600;padding:10px 0}
+.help ul{margin:.2em 0 1em;padding-left:1.2em}
+.help li{margin:.3em 0}
+.toc{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.toc>summary{cursor:pointer;font-weight:700;padding:11px 0;font-size:15px}
+.toc-part{margin:2px 0;border-top:1px solid var(--line)}
+.toc-part>summary{cursor:pointer;padding:9px 2px;font-weight:600;font-size:14px}
+.toc-part ul{margin:.1em 0 .7em;padding-left:1.1em}
+.toc-part li{margin:.22em 0;font-size:13.5px;line-height:1.4}
+.toc-part a{text-decoration:none}
+.toc-part a:hover{text-decoration:underline}
+.part{margin:26px 0}
+.part-title{font-size:21px;line-height:1.25;border-bottom:2px solid var(--accent);
+  padding-bottom:8px;margin:18px 0 8px;position:sticky;top:54px;background:var(--bg);z-index:10}
+.badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  vertical-align:middle;padding:3px 7px;border-radius:6px;margin-right:8px}
+.badge.spec{background:var(--chip);color:var(--accent)}
+.badge.workspace{background:var(--chip);color:var(--accent2)}
+.sec{padding:6px 0 2px;border-bottom:1px solid var(--line);scroll-margin-top:100px}
+.sec:last-child{border-bottom:none}
+.sec-h{margin:10px 0 6px;line-height:1.3;position:sticky;top:94px;background:var(--bg);z-index:5;padding-top:6px}
+h3.sec-h{font-size:18.5px}
+h4.sec-h{font-size:16.5px;color:var(--fg)}
+.chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;
+  color:var(--accent);background:var(--chip);border-radius:6px;padding:2px 7px;margin-right:8px;vertical-align:middle}
+.sec-title{vertical-align:middle}
+.sec-body{margin:.2em 0 .4em}
+.sec-body p{margin:.55em 0}
+.sec-body ul,.sec-body ol{margin:.5em 0;padding-left:1.35em}
+.sec-body li{margin:.3em 0}
+.sec-body blockquote{margin:.7em 0;padding:.5em .9em;border-left:3px solid var(--accent2);
+  background:var(--code);border-radius:0 8px 8px 0;color:var(--fg)}
+.sec-body blockquote p{margin:.3em 0}
+.sec-body table{border-collapse:collapse;width:100%;font-size:13.5px;margin:.6em 0;display:block;overflow-x:auto}
+.sec-body th,.sec-body td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+.sec-body th{background:var(--chip);font-weight:700}
+.sec-body strong{font-weight:700}
+.note{background:var(--note);border:1px solid var(--note-line);border-radius:10px;
+  padding:8px 11px;margin:10px 0 16px}
+.note-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.note-ico{color:var(--accent2);font-weight:800}
+.note-label{font-size:12px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.05em}
+.note-ref{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted)}
+.note-ta{width:100%;border:none;background:transparent;color:var(--fg);font:inherit;font-size:15.5px;
+  resize:none;outline:none;line-height:1.5;padding:2px 0;overflow:hidden;min-height:1.6em}
+.note-ta::placeholder{color:var(--muted);opacity:.8}
+.note.filled{box-shadow:0 0 0 2px var(--note-line) inset}
+.fab{position:fixed;right:14px;bottom:16px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.fab .btn{box-shadow:0 4px 14px #0003}
+.modal{position:fixed;inset:0;z-index:60;background:#0008;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.modal-card{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;
+  max-height:86vh;display:flex;flex-direction:column;padding:16px}
+.modal-card h3{margin:.1em 0 .5em}
+.modal-card p{color:var(--muted);font-size:13.5px;margin:.2em 0 .6em}
+.modal-card textarea{width:100%;flex:1;min-height:220px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,Menlo,monospace;padding:10px;resize:vertical}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hidden-input{display:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:70;background:#111;color:#fff;
+  padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:.96}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">Job Search — Specification v2 — Specification<small>annotatable reader · 2026-08-17</small></div>
+    <span class="savestate ok" id="savestate">✓ Auto-saving</span>
+    <button class="btn primary" id="btn-export">Save / Export</button>
+  </div>
+</div>
+<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 32 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
+<div id="warnbar"><div class="wrap"><strong>Heads up —</strong> this browser isn't storing your notes automatically (private/incognito mode or restricted file view). Tap <strong>Save / Export</strong> regularly.</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Job Search — Specification v2 specification</h1>
+    <p>Read at your own pace and leave a note on any point you want to discuss.</p>
+  </div>
+  <details class="help">
+    <summary>How to annotate (tap)</summary>
+    <ul>
+      <li>Tap the note field under any section and type. Each note is tagged so your feedback maps to an exact point.</li>
+      <li><strong>Notes save automatically</strong> in this browser as you type.</li>
+      <li><strong>Save / Export</strong> downloads a Markdown file of your notes — the copy to send back. Tap whenever you pause, especially on a phone.</li>
+      <li><strong>Import</strong> reloads notes from a file you exported earlier (after clearing the browser or switching devices).</li>
+      <li><strong>Clear</strong> erases every note in this browser. Export first.</li>
+    </ul>
+  </details>
+  <details class="toc" open><summary>Contents</summary>
+<details class="toc-part">
+<summary>Spec V2 Process</summary><ul>
+<li><a href="#s-spec-intro">Preamble &amp; scope</a></li>
+<li><a href="#s-spec-1">§1 What this settles</a></li>
+<li><a href="#s-spec-2">§2 The step list</a></li>
+<li><a href="#s-spec-2-1">§2.1 Why Intake and Constraints stay separate</a></li>
+<li><a href="#s-spec-2-2">§2.2 Why Traits is its own step</a></li>
+<li><a href="#s-spec-2-3">§2.3 Why Reactions is a step and not part of Preferences</a></li>
+<li><a href="#s-spec-2-4">§2.4 Why Feedback (10) is not the same step as Reactions (5)</a></li>
+<li><a href="#s-spec-3">§3 How the steps connect</a></li>
+<li><a href="#s-spec-3-1">§3.1 Forward: sufficiency, not sequence for its own sake</a></li>
+<li><a href="#s-spec-3-2">§3.2 What each step must leave behind</a></li>
+<li><a href="#s-spec-3-3">§3.3 The offered skip</a></li>
+<li><a href="#s-spec-3-4">§3.4 Backwards: revision propagates, it does not discard</a></li>
+<li><a href="#s-spec-3-5">§3.5 The three named re-entries</a></li>
+<li><a href="#s-spec-4">§4 Capture and scoring</a></li>
+<li><a href="#s-spec-4-1">§4.1 Capture — cheap, always on</a></li>
+<li><a href="#s-spec-4-2">§4.2 Scoring — expensive, at defined points only</a></li>
+<li><a href="#s-spec-5">§5 Freshness, proactive re-entry, and resumption</a></li>
+<li><a href="#s-spec-5-1">§5.1 Session state</a></li>
+<li><a href="#s-spec-5-2">§5.2 Proactive re-entry — the tool notices, the candidate does not have to</a></li>
+<li><a href="#s-spec-5-3">§5.3 Resumption — inferred, not commanded</a></li>
+<li><a href="#s-spec-5-4">§5.4 Manner and disclosure</a></li>
+<li><a href="#s-spec-6">§6 The per-user tree, and identification</a></li>
+<li><a href="#s-spec-6-1">§6.1 Identification precedes everything</a></li>
+<li><a href="#s-spec-6-2">§6.2 What may leave the machine</a></li>
+<li><a href="#s-spec-7">§7 The offer lifecycle</a></li>
+<li><a href="#s-spec-7-1">§7.1 Status</a></li>
+<li><a href="#s-spec-7-2">§7.2 Retention</a></li>
+<li><a href="#s-spec-7-3">§7.3 Purge</a></li>
+<li><a href="#s-spec-7-4">§7.4 Tombstones</a></li>
+<li><a href="#s-spec-8">§8 Where the gates come from</a></li>
+<li><a href="#s-spec-9">§9 What S2 inherits</a></li>
+<li><a href="#s-spec-10">§10 Open, and deliberately so</a></li>
+</ul></details>
+</details>
+  <section class="part">
+<h2 class="part-title"><span class="badge spec">Specification</span>Spec V2 Process</h2>
+<article class="sec" id="s-spec-intro">
+<h3 class="sec-h"><span class="chip">overview</span><span class="sec-title">Preamble &amp; scope</span></h3>
+<div class="sec-body"><p><strong>Date</strong>: 2026-08-17
+<strong>Author</strong>: nuncaeslupus
+<strong>Supersedes</strong>: the step table in <code>docs/product-shape.md</code>
+<strong>Source</strong>: <code>status/spec-v2-brief.md</code> (owner's decisions), owner's answers of 2026-08-17
+<strong>Companion</strong>: <code>status/spec-v2-steps.json</code> — the same step list, machine-readable</p>
+<p>This document specifies the <strong>process</strong>: which steps exist, where their
+boundaries fall, how they connect forwards and backwards, what is on disk, how
+an interrupted candidate is picked back up, and when an offer dies. It does not
+specify any individual step — that is S2, and a step specified before the
+process is settled gets the wrong boundaries.</p>
+<p>Contracts inherited from <code>status/specification.md</code> §5 (dimension model, offer
+schema, extraction output, ranking output) are unchanged and not restated here.</p></div>
+<div class="note" data-for="s-spec-intro"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC · intro</span></div><textarea class="note-ta" data-key="s-spec-intro" data-label="Preamble &amp; scope" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-1">
+<h3 class="sec-h"><span class="chip">§1</span><span class="sec-title">What this settles</span></h3>
+<div class="sec-body"><p>The brief left two questions open and the owner answered four. All four answers
+are decisions now, not proposals.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Question</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Do Intake and Constraints merge, since a parsed CV answers several constraint questions?</td>
+<td><strong>Separate.</strong> Constraints becomes confirm-and-fill: it consumes what Intake inferred and asks only for what a CV cannot state.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Is Traits its own step, or folded into History with a coverage requirement?</td>
+<td><strong>Its own step</strong> — and the tool must additionally notice, on its own, when what it knows has gone out of date, and reopen the right earlier step. §5.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>When does the candidate first see a ranked list?</td>
+<td><strong>After the full first run, by default</strong> — but the tool explains the sequence and <em>offers</em> to skip ahead and search with what it has. The candidate elects the shortcut; the tool never takes it silently. §3.3.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Where does reacting to real ads live?</td>
+<td><strong>Its own onboarding step (5)</strong>, with stimuli fetched live from multiple sources so the candidate reacts to ads that could plausibly be theirs. The committed corpus is the fallback, not the primary. §2.3.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Purge horizon for an ad never shortlisted</td>
+<td><strong>60 days</strong> from collection. §7.3.</td>
+</tr>
+</tbody>
+</table>
+<p>Two consequences worth stating up front, because they change the brief:</p>
+<ul>
+<li><strong>The step count is 13, not 12.</strong> Reactions is a step of its own, and the
+  loop's feedback step is a different instrument from it — different stimuli,
+  different consequences — so they are not merged. §3.3.</li>
+<li><strong>Some of the tool's work is not a step at all.</strong> Noticing that a profile has
+  aged, or that a life event just landed in the conversation, is a mechanism
+  that <em>chooses</em> which step to reopen. It is specified in §5 and belongs to no
+  step.</li>
+</ul>
+<!-- required-item: step-list --></div>
+<div class="note" data-for="s-spec-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §1</span></div><textarea class="note-ta" data-key="s-spec-1" data-label="§1 What this settles" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2">
+<h3 class="sec-h"><span class="chip">§2</span><span class="sec-title">The step list</span></h3>
+<div class="sec-body"><p>Thirteen steps. Each is a short directed conversation or an automatic pass with
+one goal, one visible output, and one named gate metric. Numbered as <strong>steps</strong>
+— the candidate's journey — and deliberately not aligned with the delivery
+phases in <code>status/plan.md</code>, which are about build order.</p>
+<table>
+<thead>
+<tr>
+<th>step</th>
+<th>name</th>
+<th>goal</th>
+<th>visible output</th>
+<th>gate metric</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td><strong>Identify</strong></td>
+<td>know whose tree we are in, and where they left off</td>
+<td>a greeting naming them, their last activity, and where they stopped</td>
+<td><code>cross_user_leaks == 0</code></td>
+</tr>
+<tr>
+<td>1</td>
+<td><strong>Intake</strong></td>
+<td>the CV that exists, or a first one built with someone who has none</td>
+<td>a parsed CV, every fact showing where it came from</td>
+<td><code>intake_field_provenance == 1.0</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Constraints</strong></td>
+<td>the facts that filter, confirmed rather than re-asked</td>
+<td>a constraints summary they correct in place</td>
+<td><code>constraint_field_resolution == 1.0</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>History</strong></td>
+<td>the last job and the ones before: what they did, what went wrong, why they left</td>
+<td>a story bank of episodes</td>
+<td><code>story_dimension_linkage == 1.0</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Traits</strong></td>
+<td>score what the evidence supports, ask only about what it does not</td>
+<td>a trait profile with <code>insufficient</code> where it belongs</td>
+<td><code>trait_evidence_sufficiency == 1.0</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>Reactions</strong></td>
+<td>real ads and ad fragments, and what the candidate makes of them</td>
+<td>their own words against each stimulus</td>
+<td><code>elicitation_eval_overlap == 0</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Preferences</strong></td>
+<td>reactions and forced choices become weights</td>
+<td>what each dimension is worth per month, in euros</td>
+<td><code>weight_salary_equivalent_roundtrip_error &lt;= 0.01</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Sourcing</strong></td>
+<td>offers in, deduped, stale ones retired</td>
+<td>what arrived, what duplicated, what expired</td>
+<td><code>offer_schema_violations == 0</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td><strong>Understanding</strong></td>
+<td>extract dimensions and evidence spans (automatic)</td>
+<td>per offer, what the ad was found to say</td>
+<td><code>extraction_macro_f1 &gt;= 0.75</code></td>
+</tr>
+<tr>
+<td>9</td>
+<td><strong>Ranking</strong></td>
+<td>order the live offers and explain every position</td>
+<td>a ranked list citing the ad's own words</td>
+<td><code>explained_fraction == 1.0</code></td>
+</tr>
+<tr>
+<td>10</td>
+<td><strong>Feedback</strong></td>
+<td>what they think of the offers in front of them</td>
+<td>a re-ordered list, and why it moved</td>
+<td><code>feedback_traceability == 1.0</code></td>
+</tr>
+<tr>
+<td>11</td>
+<td><strong>Application</strong></td>
+<td>a CV and letter targeted at one offer</td>
+<td>the documents, versioned per offer</td>
+<td><code>cv_generation_traceability == 1.0</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td><strong>Interview log</strong></td>
+<td>what happened, turned into preparation for the next one</td>
+<td>questions asked, and what to rehearse</td>
+<td><code>interview_lesson_linkage == 1.0</code></td>
+</tr>
+</tbody>
+</table>
+<p>Steps <strong>0–6</strong> are the first run. Steps <strong>7–10</strong> are the loop the candidate
+lives in afterwards. Steps <strong>11–12</strong> run per opportunity, any number of times,
+in parallel across offers.</p>
+<p>Every step writes evidence (T28). The profile therefore deepens throughout,
+rather than only during onboarding.</p></div>
+<div class="note" data-for="s-spec-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2</span></div><textarea class="note-ta" data-key="s-spec-2" data-label="§2 The step list" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2-1">
+<h4 class="sec-h"><span class="chip">§2.1</span><span class="sec-title">Why Intake and Constraints stay separate</span></h4>
+<div class="sec-body"><p>A CV states where someone lived and what they have done. It does not state the
+salary they will refuse, whether they hold a work permit for a neighbouring
+country, whether they would cross a border daily, or how many hours they can
+actually work now. Those are precisely the constraints that veto an offer, and
+none of them can be parsed.</p>
+<p>Merging would produce one step whose first half is document handling and whose
+second half is an interview, with a stop rule that has to cover both. Keeping
+them separate makes each short — and makes Constraints <em>shorter than it would
+otherwise be</em>, because it opens by showing what Intake already established and
+asks the candidate to correct it rather than restate it.</p>
+<p><strong>The rule that makes this work:</strong> Intake writes facts with provenance, never
+inferences. "Barcelona" extracted from a CV header is a claim the document
+makes, not an established residence. Constraints promotes claims to confirmed
+facts by asking, and anything the candidate does not confirm stays <code>unknown</code> —
+which, per the inherited rule, neither passes nor vetoes.</p></div>
+<div class="note" data-for="s-spec-2-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.1</span></div><textarea class="note-ta" data-key="s-spec-2-1" data-label="§2.1 Why Intake and Constraints stay separate" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2-2">
+<h4 class="sec-h"><span class="chip">§2.2</span><span class="sec-title">Why Traits is its own step</span></h4>
+<div class="sec-body"><p>Trait <em>capture</em> is continuous and happens in every step, History most of all.
+Trait <em>scoring</em> is potentially LLM-backed and cannot run per utterance (§7).
+Those two facts together define what the Traits step is for:</p>
+<ol>
+<li>it is the defined point where scoring runs over everything accumulated; and</li>
+<li>it asks only about traits the evidence cannot yet support.</li>
+</ol>
+<p>Folded into History, the step would have no stop rule other than "keep telling
+stories until coverage" — which is the interrogation the owner asked to avoid.
+As its own step it is short by construction: with a good History behind it, most
+traits are already scored and it asks about the few that are not.</p>
+<p>A trait is scored only from <strong>at least two independent episodes recorded on at
+least two separate occasions</strong>. Below that it reports <code>insufficient</code>, with the
+count, and the step may ask for another episode. A trait scored from a single
+anecdote is a stereotype, and the profile would be confidently wrong in exactly
+the way that makes a person distrust the whole tool.</p>
+<blockquote>
+<p><strong>Owner decision needed if this is wrong.</strong> Two episodes on two occasions is
+my number, not the owner's. It is the one threshold in this document that was
+not given to me.</p>
+</blockquote></div>
+<div class="note" data-for="s-spec-2-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.2</span></div><textarea class="note-ta" data-key="s-spec-2-2" data-label="§2.2 Why Traits is its own step" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2-3">
+<h4 class="sec-h"><span class="chip">§2.3</span><span class="sec-title">Why Reactions is a step and not part of Preferences</span></h4>
+<div class="sec-body"><p>Preferences fits weights. Reactions produces the material weights are fitted
+from, and it produces more besides: how an employer's phrasing lands, which
+perks read as insulting, what "if you don't match everything, apply anyway"
+signals about a company. That is profile evidence in its own right, useful even
+if no weight is ever fitted from it.</p>
+<p><strong>Stimuli come from a live, quick, multi-source fetch of ads plausibly relevant
+to this candidate</strong>, chosen using the constraints already established. The
+committed corpus is the fallback for when fetching is unavailable, not the
+primary source — a corpus is by construction limited and ageing, and reacting
+to an ad that could never be yours teaches the tool the wrong thing.</p>
+<p>Two rules protect the measurements:</p>
+<ul>
+<li>Stimuli fetched live enter the offer store as ordinary offers with status
+  <code>new</code>, subject to the same dedup, lifecycle and purge rules. They are not a
+  parallel universe of ads.</li>
+<li>When the corpus is used, stimuli are drawn <strong>only from the elicitation
+  split</strong> (T9). <code>elicitation_eval_overlap == 0</code> is inherited and non-negotiable:
+  an ad used to elicit preferences can never be one the ranking is later scored
+  against, or the ranking gate measures memorisation.</li>
+</ul></div>
+<div class="note" data-for="s-spec-2-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.3</span></div><textarea class="note-ta" data-key="s-spec-2-3" data-label="§2.3 Why Reactions is a step and not part of Preferences" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2-4">
+<h4 class="sec-h"><span class="chip">§2.4</span><span class="sec-title">Why Feedback (10) is not the same step as Reactions (5)</span></h4>
+<div class="sec-body"><p>Same instrument, different position, different consequence. Reactions shows
+stimuli the candidate has no stake in, to learn what they value. Feedback shows
+offers they might actually apply to, and its output changes both the weights
+<em>and</em> the offers' lifecycle status. One is elicitation; the other is a decision
+point. A single step would need two stop rules and two gates.</p>
+<!-- required-item: connections --></div>
+<div class="note" data-for="s-spec-2-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2.4</span></div><textarea class="note-ta" data-key="s-spec-2-4" data-label="§2.4 Why Feedback (10) is not the same step as Reactions (5)" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3">
+<h3 class="sec-h"><span class="chip">§3</span><span class="sec-title">How the steps connect</span></h3>
+<div class="sec-body"></div>
+<div class="note" data-for="s-spec-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3</span></div><textarea class="note-ta" data-key="s-spec-3" data-label="§3 How the steps connect" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3-1">
+<h4 class="sec-h"><span class="chip">§3.1</span><span class="sec-title">Forward: sufficiency, not sequence for its own sake</span></h4>
+<div class="sec-body"><p>Steps run in order on a first run, but what actually gates a later step is
+whether the state it needs exists. Three sufficiency levels, recorded in
+<code>session/state.json</code> and stamped onto anything derived:</p>
+<table>
+<thead>
+<tr>
+<th>level</th>
+<th>reached when</th>
+<th>what it unlocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>L0</strong></td>
+<td>a handle is identified</td>
+<td>reading and writing that candidate's tree, and nothing else</td>
+</tr>
+<tr>
+<td><strong>L1</strong></td>
+<td>constraints resolved (every field <code>stated</code>, <code>declined</code> or <code>unknown</code>)</td>
+<td>sourcing, extraction, and a <strong>provisional</strong> ranking: hard filters plus default weights</td>
+</tr>
+<tr>
+<td><strong>L2</strong></td>
+<td>traits scored and weights fitted</td>
+<td>a full ranking, with explanations in salary-equivalent terms</td>
+</tr>
+</tbody>
+</table>
+<p>A ranking records the level that produced it and is labelled with it wherever
+it is shown. A provisional ranking that is not labelled provisional is a defect,
+not a shortcut.</p></div>
+<div class="note" data-for="s-spec-3-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.1</span></div><textarea class="note-ta" data-key="s-spec-3-1" data-label="§3.1 Forward: sufficiency, not sequence for its own sake" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3-2">
+<h4 class="sec-h"><span class="chip">§3.2</span><span class="sec-title">What each step must leave behind</span></h4>
+<div class="sec-body"><p>Every step ends with something the candidate can see (brief §2.2) <em>and</em>
+something the next step can read. A step that only fills internal state has no
+visible output and will feel like an interrogation; a step whose visible output
+is not also machine-readable state cannot be resumed or revised. Both columns
+of the §2 table are requirements, not description.</p></div>
+<div class="note" data-for="s-spec-3-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.2</span></div><textarea class="note-ta" data-key="s-spec-3-2" data-label="§3.2 What each step must leave behind" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3-3">
+<h4 class="sec-h"><span class="chip">§3.3</span><span class="sec-title">The offered skip</span></h4>
+<div class="sec-body"><p>The default path is the full first run, and the tool says plainly why: <strong>the
+more it knows, the better the results.</strong> But at the end of every first-run step
+it offers the alternative — <em>"we can stop here and go look at real jobs with
+what I have; the list will be rougher and I'll tell you what would sharpen it."</em></p>
+<p>If the candidate takes it:</p>
+<ul>
+<li>the ranking produced is L1 and labelled provisional;</li>
+<li>the skipped steps are recorded as <strong>pending</strong>, not cancelled;</li>
+<li>the ranking is shown alongside a short statement of what completing each
+  pending step would change — not a nag, a single line;</li>
+<li>returning to a pending step later is a normal forward move, not a repair.</li>
+</ul>
+<p>The tool never elects the skip on the candidate's behalf, and never hides that
+a shortcut was taken.</p></div>
+<div class="note" data-for="s-spec-3-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.3</span></div><textarea class="note-ta" data-key="s-spec-3-3" data-label="§3.3 The offered skip" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3-4">
+<h4 class="sec-h"><span class="chip">§3.4</span><span class="sec-title">Backwards: revision propagates, it does not discard</span></h4>
+<div class="sec-body"><p>Going back with new information must revise what later steps produced rather
+than throw it away (brief §1.1). What happens depends on which of three classes
+the downstream artefact belongs to.</p>
+<table>
+<thead>
+<tr>
+<th>class</th>
+<th>examples</th>
+<th>on an upstream change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Derived</strong></td>
+<td><code>constraints.json</code>, <code>traits.json</code>, <code>weights.json</code>, extractions, rankings</td>
+<td>recomputed from the evidence log; never edited in place; recomputation is always safe because nothing was hand-authored into them</td>
+</tr>
+<tr>
+<td><strong>Authored</strong></td>
+<td>generated CVs and letters, interview preparation notes</td>
+<td>marked <strong>stale</strong>, with the reason and the fields that changed; kept exactly as they are; regeneration is offered and never automatic</td>
+</tr>
+<tr>
+<td><strong>Historical</strong></td>
+<td><code>evidence.jsonl</code> rows, <code>applications/</code>, <code>interviews/</code>, tombstones</td>
+<td>immutable. Never revised, only appended to. What was sent was sent; what happened happened</td>
+</tr>
+</tbody>
+</table>
+<p>The distinction that matters is <strong>authored</strong>: a CV may already have been sent to
+an employer. Silently regenerating it would leave the candidate unable to answer
+a question about their own application. So it is versioned, the old version
+survives, and the stale marker says what changed and why it might matter.</p>
+<p><strong>The mechanism is a profile revision.</strong> Because the profile is a pure function
+of the append-only evidence log (T6), a revision needs no separate file:</p>
+<pre><code>profile_revision = { &quot;rows&quot;: &lt;count of evidence.jsonl&gt;, &quot;sha256&quot;: &lt;hash of the file&gt; }
+</code></pre>
+<p>Everything derived records the revision it was computed from. Anything whose
+recorded revision is behind the current one is stale, by definition, and
+staleness is computed rather than tracked. A ranking pinned to revision 412
+shown while the profile is at 419 is displayed as out of date, with a one-click
+recompute.</p></div>
+<div class="note" data-for="s-spec-3-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.4</span></div><textarea class="note-ta" data-key="s-spec-3-4" data-label="§3.4 Backwards: revision propagates, it does not discard" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3-5">
+<h4 class="sec-h"><span class="chip">§3.5</span><span class="sec-title">The three named re-entries</span></h4>
+<div class="sec-body"><p>The brief names three events. Each has a defined entry step and a defined
+propagation, and each is an ordinary forward move from that point:</p>
+<table>
+<thead>
+<tr>
+<th>event</th>
+<th>re-enters at</th>
+<th>propagates to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"I updated my CV"</td>
+<td>1 Intake</td>
+<td>2 (confirm changed facts) → 4 (rescore if new episodes) → 11 (generated CVs marked stale)</td>
+</tr>
+<tr>
+<td>"I left my job"</td>
+<td>3 History</td>
+<td>2 (availability, pay floor) → 4 (rescore) → 6 (weights may have moved) → 9 (recompute)</td>
+</tr>
+<tr>
+<td>"I got rejected, and here is why"</td>
+<td>10 Feedback or 12 Interview log</td>
+<td>6 (weights) → 9 (recompute) → the offer's lifecycle status</td>
+</tr>
+</tbody>
+</table>
+<p><code>reentry_events</code> in <code>spec-v2-steps.json</code> carries the full list per step.</p>
+<!-- required-item: capture-scoring --></div>
+<div class="note" data-for="s-spec-3-5"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3.5</span></div><textarea class="note-ta" data-key="s-spec-3-5" data-label="§3.5 The three named re-entries" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-4">
+<h3 class="sec-h"><span class="chip">§4</span><span class="sec-title">Capture and scoring</span></h3>
+<div class="sec-body"><p>Traits update continuously (brief §1.2), but the cost of inference cannot be
+paid on every message. Two mechanisms, deliberately separated.</p></div>
+<div class="note" data-for="s-spec-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4</span></div><textarea class="note-ta" data-key="s-spec-4" data-label="§4 Capture and scoring" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-4-1">
+<h4 class="sec-h"><span class="chip">§4.1</span><span class="sec-title">Capture — cheap, always on</span></h4>
+<div class="sec-body"><p>Every step appends rows to <code>profile/evidence.jsonl</code>. A row is written for
+anything the candidate says that bears on a dimension, an episode, a
+constraint, or a preference. Capture performs no scoring and no inference beyond
+what the step was already doing.</p>
+<pre><code class="language-jsonc">{
+  &quot;id&quot;: &quot;ev-000412&quot;,
+  &quot;recorded_at&quot;: &quot;2026-08-17T10:04:11Z&quot;,   // when we learned it
+  &quot;occurred_at&quot;: &quot;2026-03-01&quot;,             // when it happened, if known; null if not
+  &quot;occurred_precision&quot;: &quot;month&quot;,           // day | month | year | null
+  &quot;step&quot;: &quot;history&quot;,
+  &quot;kind&quot;: &quot;episode&quot;,                       // episode | statement | reaction | constraint | outcome | retraction
+  &quot;dimensions&quot;: [&quot;team_autonomy&quot;],
+  &quot;text&quot;: &quot;…the candidate's own words…&quot;,
+  &quot;source&quot;: &quot;conversation&quot;,                // conversation | cv_document | offer_reaction | interview
+  &quot;disclosure&quot;: &quot;private&quot;                  // private by default; never leaves without per-use approval
+}
+</code></pre>
+<p><code>occurred_at</code> is separate from <code>recorded_at</code> on purpose. It is what makes "two
+years have passed since that job ended" computable, and §5 depends on it.</p>
+<p><strong>Retraction.</strong> The log is append-only, so "forget that" is a <code>retraction</code> row
+naming the row it suppresses — never a deletion. Derived artefacts honour
+retractions when rebuilt; the original row survives so a rebuild remains
+deterministic and so an accidental retraction can itself be undone. A candidate
+asking what is known about them gets the derived profile, and a candidate asking
+for something to be forgotten gets it suppressed everywhere derived, in the same
+turn.</p></div>
+<div class="note" data-for="s-spec-4-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4.1</span></div><textarea class="note-ta" data-key="s-spec-4-1" data-label="§4.1 Capture — cheap, always on" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-4-2">
+<h4 class="sec-h"><span class="chip">§4.2</span><span class="sec-title">Scoring — expensive, at defined points only</span></h4>
+<div class="sec-body"><p><code>traits.json</code>, <code>weights.json</code> and <code>constraints.json</code> are recomputed at exactly
+three triggers, never per message:</p>
+<ol>
+<li><strong>A step boundary</strong> — any step ending recomputes what its evidence touched.</li>
+<li><strong>An explicit request</strong> — "what do you know about me now?"</li>
+<li><strong>A batch threshold</strong> — N new trait-bearing evidence rows since the last
+   scoring run. N is set in the Traits step spec (S2).</li>
+</ol>
+<p>Each derived file records <code>scored_at</code> and the <code>profile_revision</code> it was computed
+from, so freshness is visible. Because the profile is a pure function of the
+log, deferring scoring costs freshness and nothing else: <strong>the log is never
+behind, and no evidence is ever lost to a scoring run that did not happen.</strong></p>
+<!-- required-item: resumption --></div>
+<div class="note" data-for="s-spec-4-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4.2</span></div><textarea class="note-ta" data-key="s-spec-4-2" data-label="§4.2 Scoring — expensive, at defined points only" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5">
+<h3 class="sec-h"><span class="chip">§5</span><span class="sec-title">Freshness, proactive re-entry, and resumption</span></h3>
+<div class="sec-body"><p>Three related things: what is recorded, how the tool notices the profile has
+aged, and how a returning candidate lands in the right place without typing a
+command.</p></div>
+<div class="note" data-for="s-spec-5"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5</span></div><textarea class="note-ta" data-key="s-spec-5" data-label="§5 Freshness, proactive re-entry, and resumption" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-1">
+<h4 class="sec-h"><span class="chip">§5.1</span><span class="sec-title">Session state</span></h4>
+<div class="sec-body"><p><code>profiles/&lt;handle&gt;/session/state.json</code>, rewritten at every step boundary:</p>
+<pre><code class="language-jsonc">{
+  &quot;handle&quot;: &quot;marcos&quot;,
+  &quot;current_step&quot;: &quot;history&quot;,
+  &quot;position&quot;: { &quot;covered&quot;: [&quot;last_job&quot;, &quot;reason_for_leaving&quot;], &quot;outstanding&quot;: [&quot;earlier_roles&quot;] },
+  &quot;last_activity&quot;: &quot;2026-08-16T18:22:04Z&quot;,
+  &quot;pending_steps&quot;: [&quot;traits&quot;, &quot;reactions&quot;, &quot;preferences&quot;],   // skipped, not cancelled
+  &quot;open_questions&quot;: [&quot;salary floor was declined — ask again if they raise money&quot;],
+  &quot;sufficiency&quot;: &quot;L1&quot;
+}
+</code></pre>
+<p><code>position</code> is what makes an interrupted step resume at the right question rather
+than at the top. It is written continuously during a step, not only at its end —
+a session that dies mid-interview must not lose its place.</p></div>
+<div class="note" data-for="s-spec-5-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.1</span></div><textarea class="note-ta" data-key="s-spec-5-1" data-label="§5.1 Session state" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-2">
+<h4 class="sec-h"><span class="chip">§5.2</span><span class="sec-title">Proactive re-entry — the tool notices, the candidate does not have to</span></h4>
+<div class="sec-body"><p>The owner's requirement, and the part that separates this from a form: <strong>if
+something could have changed, ask.</strong> A candidate who returns after two years
+saying "I lost my job" should not be handed a stale ranking. They should be
+asked what happened — why the job ended, what they did there, what they
+achieved, what went wrong, what they learned in those two years — because that
+is both the most useful thing to know and the most human thing to say.</p>
+<p>Three trigger kinds, evaluated at session start after identification:</p>
+<table>
+<thead>
+<tr>
+<th>trigger</th>
+<th>detected from</th>
+<th>reopens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Elapsed time</strong></td>
+<td><code>last_activity</code>, and <code>occurred_at</code> on the most recent role evidence</td>
+<td>3 History (what happened since), 2 Constraints (what changed), 4 Traits (rescore)</td>
+</tr>
+<tr>
+<td><strong>Life event in the conversation</strong></td>
+<td>the candidate says it: lost/left/started a job, moved, had a child, finished a course, changed field</td>
+<td>the step in §3.5 for that event</td>
+</tr>
+<tr>
+<td><strong>Gap</strong></td>
+<td>a trait below sufficiency, a constraint still <code>unknown</code>, a pending step</td>
+<td>the step that owns the gap</td>
+</tr>
+</tbody>
+</table>
+<p>Thresholds for "elapsed" belong to each step's spec (S2). The process-level rule
+is that <strong>a trigger produces an offer, never an action</strong>: the tool says what it
+noticed and what it would like to ask, and the candidate can decline. Declining
+is recorded so it is not asked again next week.</p>
+<p>What proactive re-entry must never become is an audit. "It has been eight
+months, let's update your file" is a form. "You said you left in March — how did
+that end up?" is a conversation, and it is the one that gets an answer.</p></div>
+<div class="note" data-for="s-spec-5-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.2</span></div><textarea class="note-ta" data-key="s-spec-5-2" data-label="§5.2 Proactive re-entry — the tool notices, the candidate does not have to" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-3">
+<h4 class="sec-h"><span class="chip">§5.3</span><span class="sec-title">Resumption — inferred, not commanded</span></h4>
+<div class="sec-body"><p>Skills are not always invoked (brief §2.5). At the start of a session, after
+identification and before anything else, the tool reads <code>state.json</code> and states
+where the candidate is. Where to resume is decided by this order, highest first:</p>
+<ol>
+<li><strong>An explicit request</strong> — a command, or "let's do the interview again".</li>
+<li><strong>A conversational cue</strong> — "let's carry on" resumes <code>current_step</code> at
+   <code>position</code>; a life event (§5.2) re-enters its own step.</li>
+<li><strong>A recorded position</strong> — an unfinished step is offered first.</li>
+<li><strong>A freshness trigger</strong> — the highest-value gap or the oldest stale artefact.</li>
+<li><strong>The next step in sequence</strong>, or the loop if the first run is complete.</li>
+</ol>
+<p>Two rules constrain all five: the tool <strong>says which step it is resuming and
+why</strong>, and it never resumes into a step silently. Being dropped back into a
+half-finished interview with no explanation is indistinguishable from being
+asked the same questions twice.</p></div>
+<div class="note" data-for="s-spec-5-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.3</span></div><textarea class="note-ta" data-key="s-spec-5-3" data-label="§5.3 Resumption — inferred, not commanded" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-4">
+<h4 class="sec-h"><span class="chip">§5.4</span><span class="sec-title">Manner and disclosure</span></h4>
+<div class="sec-body"><p>These are protocol rules for every step, stated once here so S2 does not restate
+them thirteen times.</p>
+<ul>
+<li><strong>Say why.</strong> Each step opens with what it is for and what it will store — once
+  per step, not per question.</li>
+<li><strong>Knowing them is how it helps them.</strong> The tool says so, and means it: every
+  question exists because an answer improves the offers they get. A question
+  that cannot be justified that way should not be asked.</li>
+<li><strong>Nothing covert.</strong> An evidence row exists only for something said in a step
+  the candidate knew was recording. There is no silent capture.</li>
+<li><strong>A buddy, not a recruiter.</strong> Directed, warm, interested in the person's
+  working life rather than in filling a form. Negative episodes get a
+  follow-up about what was learned, never a judgement (T27).</li>
+<li><strong>Always answerable.</strong> "What do you know about me?" and "forget that" work at
+  any point in any step, and are answered before the step continues.</li>
+</ul>
+<!-- required-item: artefact-tree --></div>
+<div class="note" data-for="s-spec-5-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.4</span></div><textarea class="note-ta" data-key="s-spec-5-4" data-label="§5.4 Manner and disclosure" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-6">
+<h3 class="sec-h"><span class="chip">§6</span><span class="sec-title">The per-user tree, and identification</span></h3>
+<div class="sec-body"><p>Multi-user from day one (brief §1.3). A handful of people, file-based, not a
+multi-tenant service.</p>
+<pre><code>profiles/&lt;handle&gt;/
+  identity.json                 handle, display name, locale, created_at
+  session/
+    state.json                  current step, position, pending steps, sufficiency
+  cv/
+    source/                     originals as supplied (pdf, docx) — never modified
+    master.json                 the CV on steroids: the store (S4)
+    generated/&lt;offer_id&gt;/v&lt;N&gt;/  cv + letter produced for one offer, versioned
+  profile/
+    evidence.jsonl              append-only; written by every step; retractions included
+    constraints.json            derived
+    traits.json                 derived, with evidence row references
+    weights.json                derived, salary-equivalent
+    stories.jsonl               derived episodes, linked to dimensions
+  offers/
+    &lt;offer_id&gt;.json             normalised offer + lifecycle status + history
+    tombstones.jsonl            purged ids, urls, hashes — dedup must not resurrect
+  rankings/&lt;timestamp&gt;.json     pinned to a profile revision and a sufficiency level
+  applications/&lt;offer_id&gt;/      what was sent, and when — immutable
+  interviews/&lt;offer_id&gt;/        questions asked, outcome, lessons — immutable
+</code></pre>
+<p><code>profiles/</code> is gitignored (T1) and stays so. Every derived file is regenerable
+from <code>evidence.jsonl</code> plus the offer store; <strong>nothing derived is ever edited in
+place</strong>, because an edit that is not an evidence row is lost at the next
+rebuild and produces a profile that cannot be explained.</p></div>
+<div class="note" data-for="s-spec-6"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §6</span></div><textarea class="note-ta" data-key="s-spec-6" data-label="§6 The per-user tree, and identification" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-6-1">
+<h4 class="sec-h"><span class="chip">§6.1</span><span class="sec-title">Identification precedes everything</span></h4>
+<div class="sec-body"><p><strong>No path under <code>profiles/</code> is read or written before a handle is resolved.</strong>
+Resolution, in order:</p>
+<ol>
+<li>the candidate names themselves, or a handle is supplied explicitly;</li>
+<li>exactly one profile exists → the tool names it and asks for confirmation;</li>
+<li>otherwise the tool asks who this is, listing the display names it has;</li>
+<li>no match → offer to create a new profile, which is an explicit act.</li>
+</ol>
+<p>Case 2 is a confirmation, never a default. Silently assuming the only profile is
+how one person's evidence ends up in another person's history — and because the
+log is append-only, that is a mess to unpick rather than a mistake to undo.
+<code>cross_user_leaks == 0</code> (S3) measures exactly this: every store function takes
+the handle and resolves paths beneath it, so a test can point one candidate's
+operations at another's tree and prove they fail.</p></div>
+<div class="note" data-for="s-spec-6-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §6.1</span></div><textarea class="note-ta" data-key="s-spec-6-1" data-label="§6.1 Identification precedes everything" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-6-2">
+<h4 class="sec-h"><span class="chip">§6.2</span><span class="sec-title">What may leave the machine</span></h4>
+<div class="sec-body"><ul>
+<li><code>evidence.jsonl</code>, <code>master.json</code> and <code>stories.jsonl</code> are <strong>never sent anywhere
+  as-is</strong>. Not to an employer, not to a model, not in a document.</li>
+<li>A story-bank episode reaches an employer-bound document only with <strong>per-use
+  approval</strong>. Recounting a failure to the tool is not consent to send it to a
+  company (inherited, v1 success criteria).</li>
+<li>Ad text may be sent to a model for extraction; candidate text sent to a model
+  is minimised and each step's spec states exactly what it sends.</li>
+<li><strong>No autonomous outward action.</strong> Nothing applies, emails, or contacts an
+  employer without explicit per-item approval (inherited).</li>
+</ul>
+<!-- required-item: offer-lifecycle --></div>
+<div class="note" data-for="s-spec-6-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §6.2</span></div><textarea class="note-ta" data-key="s-spec-6-2" data-label="§6.2 What may leave the machine" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-7">
+<h3 class="sec-h"><span class="chip">§7</span><span class="sec-title">The offer lifecycle</span></h3>
+<div class="sec-body"><p>Ads go stale, and a tool that accumulates them forever becomes unusable
+(brief §2.4).</p></div>
+<div class="note" data-for="s-spec-7"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §7</span></div><textarea class="note-ta" data-key="s-spec-7" data-label="§7 The offer lifecycle" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-7-1">
+<h4 class="sec-h"><span class="chip">§7.1</span><span class="sec-title">Status</span></h4>
+<div class="sec-body"><p>Seven statuses, one per offer, with <code>status_changed_at</code> and an append-only
+<code>history</code> array on the offer record.</p>
+<table>
+<thead>
+<tr>
+<th>status</th>
+<th>meaning</th>
+<th>terminal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>new</code></td>
+<td>collected, not yet judged</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>screened_out</code></td>
+<td>failed a hard constraint, or the candidate said no</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>shortlisted</code></td>
+<td>the candidate wants this one</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>applied</code></td>
+<td>documents were sent</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>rejected</code></td>
+<td>closed unsuccessfully; <code>closed_reason</code> distinguishes employer rejection from candidate withdrawal</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>expired</code></td>
+<td>no longer live at source</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>archived</code></td>
+<td>hidden by the candidate, kept in full</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+<p>Allowed transitions:</p>
+<pre><code>new         → screened_out | shortlisted | expired | archived
+screened_out→ shortlisted | expired | archived          (a screen-out is reversible)
+shortlisted → applied | screened_out | expired | archived
+applied     → rejected | archived
+rejected    → archived
+expired     → archived
+</code></pre>
+<p>Anything else is a defect. Notably <code>applied</code> cannot go back to <code>new</code>: an
+application happened, and the record of it is historical.</p></div>
+<div class="note" data-for="s-spec-7-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §7.1</span></div><textarea class="note-ta" data-key="s-spec-7-1" data-label="§7.1 Status" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-7-2">
+<h4 class="sec-h"><span class="chip">§7.2</span><span class="sec-title">Retention</span></h4>
+<div class="sec-body"><p>Kept <strong>in full, indefinitely</strong>, regardless of age:</p>
+<ul>
+<li>anything ever <code>shortlisted</code>, <code>applied</code> or <code>rejected</code>;</li>
+<li>anything with an <code>applications/</code> or <code>interviews/</code> record;</li>
+<li>anything <code>archived</code> (archiving is the candidate saying "keep this, hide it").</li>
+</ul>
+<p>These are the ads that explain a candidate's own history. Deleting them would
+make their story unreconstructable.</p></div>
+<div class="note" data-for="s-spec-7-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §7.2</span></div><textarea class="note-ta" data-key="s-spec-7-2" data-label="§7.2 Retention" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-7-3">
+<h4 class="sec-h"><span class="chip">§7.3</span><span class="sec-title">Purge</span></h4>
+<div class="sec-body"><p>An offer is purge-eligible when <strong>all</strong> hold:</p>
+<ul>
+<li>status is <code>new</code>, <code>screened_out</code> or <code>expired</code>;</li>
+<li>it has never been <code>shortlisted</code> or <code>applied</code>, at any point in its history;</li>
+<li><code>collected_at</code> is more than <strong>60 days</strong> ago;</li>
+<li>no <code>applications/</code> or <code>interviews/</code> record references it.</li>
+</ul>
+<p>Purging <strong>deletes the offer body and keeps a tombstone</strong>. It is reported, not
+silent: the candidate is told how many were retired and can look at the list
+before it happens.</p></div>
+<div class="note" data-for="s-spec-7-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §7.3</span></div><textarea class="note-ta" data-key="s-spec-7-3" data-label="§7.3 Purge" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-7-4">
+<h4 class="sec-h"><span class="chip">§7.4</span><span class="sec-title">Tombstones</span></h4>
+<div class="sec-body"><pre><code class="language-jsonc">{
+  &quot;offer_id&quot;: &quot;of-8823&quot;,
+  &quot;url&quot;: &quot;https://…&quot;,
+  &quot;url_canonical&quot;: &quot;…&quot;,           // normalised: no tracking params, no session ids
+  &quot;text_sha256&quot;: &quot;…&quot;,             // over normalised ad text
+  &quot;first_seen&quot;: &quot;2026-04-02&quot;,
+  &quot;purged_at&quot;: &quot;2026-06-03&quot;,
+  &quot;last_status&quot;: &quot;screened_out&quot;,
+  &quot;resightings&quot;: 3,
+  &quot;last_resighting&quot;: &quot;2026-07-11&quot;
+}
+</code></pre>
+<p>A tombstone carries <strong>no ad body</strong> — that is the point of purging, and it is
+what keeps a purge a privacy improvement rather than a bookkeeping trick.</p>
+<p>On collection, an incoming ad matching a tombstone by <code>url_canonical</code> or by
+<code>text_sha256</code> is <strong>not re-added as <code>new</code></strong>. Its <code>resightings</code> counter increments
+and it is dropped. Without this, the next collection run re-adds everything just
+deleted and the candidate sees the same rejected ads forever.</p>
+<p><strong>Revival is possible and explicit.</strong> If the candidate pastes or asks for a
+tombstoned ad, it is restored as <code>new</code>, the revival is recorded, and the
+tombstone survives so the ad's history stays continuous. A rule with no exit is
+how an accidental screen-out becomes permanent.</p>
+<p><code>resurrected_purged_offers == 0</code> (S5) counts purged offers that reappeared as
+<code>new</code> without an explicit revival. Zero is the only acceptable value.</p></div>
+<div class="note" data-for="s-spec-7-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §7.4</span></div><textarea class="note-ta" data-key="s-spec-7-4" data-label="§7.4 Tombstones" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-8">
+<h3 class="sec-h"><span class="chip">§8</span><span class="sec-title">Where the gates come from</span></h3>
+<div class="sec-body"><p>Every step in §2 names one gate metric. Ten reuse metrics that already exist in
+<code>status/plan.md</code>; three are new and are named here for the first time:</p>
+<table>
+<thead>
+<tr>
+<th>metric</th>
+<th>step</th>
+<th>owner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>intake_field_provenance</code></td>
+<td>1 Intake</td>
+<td>S4 — every field in <code>master.json</code> traces to a document span or a conversation turn</td>
+</tr>
+<tr>
+<td><code>constraint_field_resolution</code></td>
+<td>2 Constraints</td>
+<td>T24 — every constraint field is <code>stated</code>, <code>declined</code> or <code>unknown</code>, never blank</td>
+</tr>
+<tr>
+<td><code>trait_evidence_sufficiency</code></td>
+<td>4 Traits</td>
+<td>T28 — every trait carries either a score with ≥2 independent episodes, or <code>insufficient</code></td>
+</tr>
+<tr>
+<td><code>interview_lesson_linkage</code></td>
+<td>12 Interview log</td>
+<td>S6 (to be seeded) — every interview produces ≥1 evidence row linked to a dimension or a story</td>
+</tr>
+</tbody>
+</table>
+<p>Every metric is currently <code>not_implemented</code> at the step level, which is a
+truthful statement of a specification that has not yet been built against — and
+<code>not_implemented</code> is a recorded value, not a blank. <code>spec-v2-steps.json</code> carries
+the state per step, and S2 may not leave one empty.</p></div>
+<div class="note" data-for="s-spec-8"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §8</span></div><textarea class="note-ta" data-key="s-spec-8" data-label="§8 Where the gates come from" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-9">
+<h3 class="sec-h"><span class="chip">§9</span><span class="sec-title">What S2 inherits</span></h3>
+<div class="sec-body"><p>S2 writes one specification per step, filling the template in
+<code>status/spec-v2-brief.md</code> §4. From this document it inherits, and must not
+re-decide:</p>
+<ul>
+<li>the <strong>thirteen steps</strong>, their boundaries, and their order;</li>
+<li>the <strong>visible output</strong> each step owes the candidate;</li>
+<li>the <strong>gate metric</strong> each step is measured by;</li>
+<li>the artefact classes (§3.4) — so "what a re-run preserves and what it
+  replaces" is answered per output by which class it belongs to;</li>
+<li>the manner and disclosure rules (§5.4), which no step restates;</li>
+<li>the sufficiency levels (§3.1), which are what a step's preconditions refer to.</li>
+</ul>
+<p>S2 must decide, per step: the conversation protocol, the coverage requirement,
+the <strong>stop rule</strong> (coverage reached, candidate declines, or a hard cap — a step
+with no cap runs until the candidate gives up), the elapsed-time thresholds for
+proactive re-entry into that step, the batch threshold N for scoring, and
+exactly what leaves the machine.</p>
+<p><code>step_count</code> is 13. S2's gate is <code>step_specs_complete_fraction</code>, whose divisor
+is that number read from <code>spec-v2-steps.json</code> — never from counting the files
+that happen to exist, because dividing by what was written makes any amount of
+work look complete.</p></div>
+<div class="note" data-for="s-spec-9"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §9</span></div><textarea class="note-ta" data-key="s-spec-9" data-label="§9 What S2 inherits" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-10">
+<h3 class="sec-h"><span class="chip">§10</span><span class="sec-title">Open, and deliberately so</span></h3>
+<div class="sec-body"><ol>
+<li><strong>Two episodes on two occasions</strong> as the trait-scoring minimum (§2.2) is my
+   number. If the owner wants three, or wants it per-trait, S2 is the place.</li>
+<li><strong>Elapsed-time thresholds</strong> for proactive re-entry (§5.2) are per step and
+   belong to S2. "Two years" is the owner's example, not a configured value.</li>
+<li><strong>Which sources</strong> the Reactions step fetches stimuli from (§2.3) depends on
+   the connectors T11/T12 deliver. The requirement — live, quick, multi-source,
+   relevant — is settled; the source list is not.</li>
+<li><strong>CV templates</strong> remain out of v1 (brief §2.7). The store is designed to feed
+   templates rather than one layout, which is all that is owed now.</li>
+</ol></div>
+<div class="note" data-for="s-spec-10"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §10</span></div><textarea class="note-ta" data-key="s-spec-10" data-label="§10 Open, and deliberately so" data-part="Spec V2 Process" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+</section>
+</div>
+
+<div class="fab">
+  <button class="btn" id="btn-top" title="Back to top">↑ Top</button>
+  <button class="btn" id="btn-import">Import</button>
+  <button class="btn" id="btn-clear">Clear</button>
+  <button class="btn primary" id="btn-export2">💾 Save / Export</button>
+</div>
+<input type="file" id="file-import" class="hidden-input" accept=".md,.markdown,.json,text/markdown,application/json">
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <h3>Your notes</h3>
+    <p>Downloaded as a Markdown file. You can also copy the text below and paste it back.</p>
+    <textarea id="modal-ta" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn primary" id="modal-copy">Copy</button>
+      <button class="btn" id="modal-dl">Download again</button>
+      <button class="btn" id="modal-close">Close</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>var SPEC_SEED_NOTES={};</script>
+<script>
+(function(){
+  var NS = 'job-search-specification-v2-spec-v1:';
+  var tas = Array.prototype.slice.call(document.querySelectorAll('.note-ta'));
+
+  function autoGrow(t){t.style.height='auto';t.style.height=(t.scrollHeight)+'px';}
+  function setFilled(t){var box=t.closest('.note');if(box){box.classList.toggle('filled',t.value.trim()!=='');}}
+  function updateCount(){
+    var n=0;tas.forEach(function(t){if(t.value.trim()!=='')n++;});
+    var el=document.getElementById('count');if(el){el.textContent=n+' / '+tas.length+' notes';}
+    return n;
+  }
+  var lsOK=true,dirty=false;
+  try{localStorage.setItem('__vs__','1');localStorage.removeItem('__vs__');}catch(e){lsOK=false;}
+  var WARN='⚠ Not saving — tap Save / Export';
+  function nowStamp(){var d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+  function setState(txt,cls){var el=document.getElementById('savestate');if(el){el.textContent=txt;el.className='savestate '+(cls||'');}}
+  window.addEventListener('beforeunload',function(e){if(!lsOK&&dirty){e.preventDefault();e.returnValue='';}});
+
+  var saveTimers={};
+  function save(t){
+    if(!lsOK){dirty=true;setState(WARN,'warn');return;}
+    var k=NS+t.dataset.key;
+    try{
+      if(t.value.trim()===''){localStorage.removeItem(k);}else{localStorage.setItem(k,t.value);}
+      dirty=true;setState('✓ Saved '+nowStamp(),'ok');
+    }catch(e){lsOK=false;document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+  }
+  var SEED=(typeof SPEC_SEED_NOTES!=='undefined')?SPEC_SEED_NOTES:{};
+  tas.forEach(function(t){
+    try{var v=localStorage.getItem(NS+t.dataset.key);
+        if(v!=null){t.value=v;}else if(Object.prototype.hasOwnProperty.call(SEED,t.dataset.key)){t.value=SEED[t.dataset.key];}}catch(e){}
+    autoGrow(t);setFilled(t);
+    t.addEventListener('input',function(){
+      autoGrow(t);setFilled(t);updateCount();
+      clearTimeout(saveTimers[t.dataset.key]);
+      saveTimers[t.dataset.key]=setTimeout(function(){save(t);},350);
+    });
+    t.addEventListener('blur',function(){save(t);});
+  });
+  updateCount();
+  if(lsOK){setState('✓ Auto-saving','ok');}else{document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+
+  function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},1900);}
+  function pad(n){return n<10?'0'+n:''+n;}
+  function today(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+
+  function buildExport(){
+    var byPart={},order=[],data={},n=0;
+    tas.forEach(function(t){
+      var v=t.value.trim();if(v==='')return;n++;
+      data[t.dataset.key]=t.value;
+      var part=t.dataset.part||'Other';
+      if(!byPart[part]){byPart[part]=[];order.push(part);}
+      byPart[part].push({label:t.dataset.label,ref:keyFromDom(t.dataset.key,t),note:t.value});
+    });
+    var lines=['# Specification notes','','_Exported '+today()+' · '+n+' note'+(n===1?'':'s')+'._','',
+      '> Send this file back to continue the review. Notes are embedded as data at the bottom','> so importing this file restores them in the reader.',''];
+    order.forEach(function(part){
+      lines.push('## '+part,'');
+      byPart[part].forEach(function(it){
+        lines.push('**'+it.label+'**  `'+it.ref+'`');
+        it.note.split('\n').forEach(function(ln){lines.push('> '+ln);});
+        lines.push('');
+      });
+    });
+    lines.push('<!-- SPEC-NOTES-DATA');
+    lines.push(JSON.stringify(data));
+    lines.push('-->');
+    return{text:lines.join('\n'),n:n};
+  }
+  function keyFromDom(domkey,t){var box=t.closest('.note');var r=box?box.querySelector('.note-ref'):null;return r?r.textContent:domkey;}
+
+  function download(name,text){
+    try{var blob=new Blob([text],{type:'text/markdown'});var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');a.href=url;a.download=name;
+        document.body.appendChild(a);a.click();
+        setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);return true;}catch(e){return false;}
+  }
+
+  var modal=document.getElementById('modal');
+  var modalTa=document.getElementById('modal-ta');
+  function openModal(text){modalTa.value=text;modal.classList.add('open');}
+  function closeModal(){modal.classList.remove('open');}
+
+  document.getElementById('btn-export').addEventListener('click',function(){
+    var r=buildExport();
+    if(r.n===0){toast('No notes yet — add some first.');return;}
+    var name='spec-notes-'+today()+'.md';
+    download(name,r.text);openModal(r.text);
+    if(navigator.clipboard){navigator.clipboard.writeText(r.text).then(function(){},function(){});}
+    dirty=false;setState('✓ Backup saved '+nowStamp(),'ok');
+    toast('Exported '+r.n+' note'+(r.n===1?'':'s'));
+  });
+  document.getElementById('btn-export2').addEventListener('click',function(){document.getElementById('btn-export').click();});
+
+  document.getElementById('modal-copy').addEventListener('click',function(){
+    modalTa.select();var ok=false;try{ok=document.execCommand('copy');}catch(e){}
+    if(navigator.clipboard){navigator.clipboard.writeText(modalTa.value).then(function(){},function(){});ok=true;}
+    toast(ok?'Copied to clipboard':'Select the text and copy');
+  });
+  document.getElementById('modal-dl').addEventListener('click',function(){download('spec-notes-'+today()+'.md',modalTa.value);toast('Download started');});
+  document.getElementById('modal-close').addEventListener('click',closeModal);
+  modal.addEventListener('click',function(e){if(e.target===modal)closeModal();});
+
+  function applyData(obj){
+    var applied=0;
+    tas.forEach(function(t){
+      if(Object.prototype.hasOwnProperty.call(obj,t.dataset.key)){t.value=obj[t.dataset.key];save(t);autoGrow(t);setFilled(t);applied++;}
+    });
+    updateCount();return applied;
+  }
+  document.getElementById('file-import').addEventListener('change',function(e){
+    var f=e.target.files[0];if(!f)return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      var txt=String(rd.result||'');var obj=null;
+      var m=txt.lastIndexOf('SPEC-NOTES-DATA');
+      try{
+        if(m>=0){var after=txt.slice(m+15);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
+                  if(jstart>=0&&jend>jstart){obj=JSON.parse(after.slice(jstart,jend+1));}}
+        else{obj=JSON.parse(txt);}
+      }catch(err){obj=null;}
+      if(!obj){toast('Could not read notes from that file');return;}
+      var k=applyData(obj);toast('Imported '+k+' note'+(k===1?'':'s'));
+    };
+    rd.readAsText(f);e.target.value='';
+  });
+  document.getElementById('btn-import').addEventListener('click',function(){document.getElementById('file-import').click();});
+
+  document.getElementById('btn-clear').addEventListener('click',function(){
+    if(!confirm('Clear ALL notes from this browser? Export first if you want to keep them.'))return;
+    tas.forEach(function(t){t.value='';save(t);autoGrow(t);setFilled(t);});
+    updateCount();toast('All notes cleared');
+  });
+
+  document.getElementById('btn-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+})();
+</script>
+</body>
+</html>
