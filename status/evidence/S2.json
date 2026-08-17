@@ -1,0 +1,21 @@
+{
+  "step_specs_complete_fraction": 1.0,
+  "steps_specified": 13,
+  "step_count": 13,
+  "incomplete_steps": {},
+  "violations": [],
+  "required_fields": [
+    "Purpose",
+    "Preconditions",
+    "Inputs",
+    "Protocol",
+    "Stop rule",
+    "When declined",
+    "Outputs",
+    "Boundary",
+    "Gate",
+    "Resume",
+    "Re-run",
+    "Privacy"
+  ]
+}

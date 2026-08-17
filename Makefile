@@ -1,4 +1,4 @@
-.PHONY: help sync build lint format test gate clean update-skills
+.PHONY: help sync build lint format test gate reader clean update-skills
 
 ARSENAL_REPO    ?= https://github.com/nuncaeslupus/claude-arsenal.git
 ARSENAL_REF     ?= v0.23.1  # pin to a tag — upgrade deliberately
@@ -43,6 +43,18 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 	printf '{\n  "lint_typecheck_exit_code": %s\n}\n' "$$rc" > status/evidence/T1.json; \
 	echo "lint_typecheck_exit_code = $$rc  -> status/evidence/T1.json"; \
 	exit $$rc
+
+# The readers are generated but committed, so a spec edit without a regenerate
+# leaves a reviewer annotating text that has changed underneath them — and
+# nothing fails. `test_regenerating_the_reader_produces_no_diff` catches it;
+# this is the one-line fix it tells you to run.
+READER_NAME ?= Job Search — Specification v2
+
+reader:  ## regenerate the annotatable spec readers from their Markdown sources
+	uv run --with markdown python3 .claude/skills/specify/scripts/create_reader.py \
+		--input status/spec-v2-process.md --output-dir docs/spec-v2 --name "$(READER_NAME)"
+	uv run --with markdown python3 .claude/skills/specify/scripts/create_reader.py \
+		--input status/spec-v2-steps.md --output-dir docs/spec-v2-steps --name "$(READER_NAME)"
 
 clean:  ## remove build and tool caches
 	rm -rf dist build .pytest_cache .mypy_cache .ruff_cache *.egg-info

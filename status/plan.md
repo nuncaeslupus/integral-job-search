@@ -151,6 +151,7 @@ done until its row is complete and the measured value meets the gate.
 |----|------|----------|---------|-----|-----|------|
 | T1 | `lint_typecheck_exit_code == 0` | 0 | `make gate` (runs `ruff check .` + `mypy .`) | `9581811` | cloud | 2026-08-15 |
 | S1 | `process_spec_complete == 1` | 1 | `uv run python -m jobsearch.process_spec status/evidence/S1.json` | `0a64da9` | cloud | 2026-08-17 |
+| S2 | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m jobsearch.step_specs status/evidence/S2.json` | `258b2de` | cloud | 2026-08-17 |
 
 ### Dependency graph
 
@@ -374,6 +375,37 @@ The changes that alter what gets built, rather than how it reads:
 
 `required` is now a field on every step in `spec-v2-steps.json`, and a process
 in which no step is required is a gate violation.
+
+### 7. Specification v2 — every step specified (S2, 2026-08-17)
+
+`status/spec-v2-steps.md` writes one specification per step, thirteen of them,
+each filling the brief's §4 template plus the two fields `spec-v2-process.md` §10
+requires every step to repeat. Reviewable at `docs/spec-v2-steps/spec-reader.html`.
+
+**Twelve fields per step**, not ten. `Boundary` (what the step says out loud when
+it ends, and the `last_activity` write) and `When declined` (non-insistence, for
+this step specifically) are checked per step, because a rule stated only in the
+process document is a rule the last step spec written will not have.
+
+**The gate divides by the settled count, not by what was written.**
+`step_specs_complete_fraction` = steps whose twelve fields are all answered ÷
+`step_count` from `spec-v2-steps.json`. A document specifying one step flawlessly
+scores 1/13, never 1/1 — there is a test for exactly that, because dividing by
+what exists is how a partial job reads as a finished one.
+
+Decisions taken while writing, each recorded in the step it belongs to rather
+than as a general principle: what is never asked (legal name, address, identity
+number, date of birth, photograph — none improve a search); the trait scoring
+batch threshold (20 new trait-bearing rows); per-step hard caps, marked in the
+document as first settings rather than findings, since they are the least
+evidenced thing in it; and that the tool stops one step short of sending an
+application — documents, text to paste, or an unsent draft, with the candidate
+pressing send.
+
+`make reader` regenerates both readers, and
+`test_regenerating_the_reader_produces_no_diff` fails when a Markdown edit has
+not been regenerated. The readers are committed but generated, so without that
+check a reviewer can annotate text that has since changed, and nothing fails.
 
 ---
 

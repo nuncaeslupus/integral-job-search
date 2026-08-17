@@ -4,107 +4,133 @@
 
 ## Next session starts here
 
-**The job is specification v2, not code.** Read `status/spec-v2-brief.md` first
-— it carries the owner's decisions, the requirements they imply, a proposed
-twelve-step process to argue with, and the template each step's specification
-must fill.
+**Specification v2 is written.** The process (S1, S1r) and all thirteen step
+specifications (S2) are done and gated. What remains is the three S-tasks the
+specifications describe but do not build, and the T-series they depend on.
 
-Then work **S1 before S2**: the whole process first, then one specification per
-step. A step specified before the process is settled gets the wrong boundaries.
-Both are to be delivered as **reviewable HTML documents** (plus Markdown
-source), which the owner asked for explicitly.
+Read in this order:
 
-| task | id | what |
-|------|-----|------|
-| S1 | `lo-6928` | Whole process: steps, connections, artefact tree, lifecycle, resumption |
-| S2 | `lo-aa45` | One spec per step, filling the template (depends S1) |
-| S3 | `lo-a4bf` | Multi-user tree, identify-at-session-start, session state |
-| S4 | `lo-cb1c` | CV store: import pdf/docx, build-from-nothing, per-ad generation |
-| S5 | `lo-a95d` | Offer lifecycle: status, purge, tombstones, retention |
+1. `status/spec-v2-process.md` (v2.1) — the process: steps, the dependency
+   graph, artefact classes, resumption, offer lifecycle, manner rules.
+2. `status/spec-v2-steps.md` — one specification per step, twelve fields each.
+3. `status/spec-v2-steps.json` — the same step list, machine-readable.
+   `step_count` is 13 and is the divisor any completeness metric must use.
 
-S1 has two questions to settle that the brief deliberately left open: whether
-Intake and Constraints merge (a parsed CV answers several constraint questions
-already), and whether Traits is its own step or folds into History with its own
-coverage requirement.
+| task | id | what | blocked on |
+|------|-----|------|-----------|
+| S3 | `lo-a4bf` | Multi-user tree, identify-at-session-start, session state | — |
+| S4 | `lo-cb1c` | CV store: import pdf/docx, build-from-nothing, per-ad generation | — |
+| S5 | `lo-a95d` | Offer lifecycle: status, purge, tombstones, retention | — |
+| S6 | `lo-1f98` | Interview: preparation, then the log and its lessons | — |
+| T30 | `lo-c5ad` | Step inputs/outputs in JSON, gated on required-subset closure | S2 |
+| T31 | `lo-eb2d` | Detect note-key rebinding when spec sections renumber | — |
+
+S3/S4/S5 were seeded before the specifications existed and now have step
+specifications to build against: S3 is step 0, S4 is steps 1 and 11, S5 is the
+retention and purge rules in `spec-v2-process.md` §7 plus step 7. Their payloads
+predate that and should be read alongside the step specs, not instead of them.
+
+**If the owner wants code rather than more specification**, T24 (candidate
+attributes), T6 (profile store) and T11 (offer schema) are unblocked and are
+what S3–S5 rest on. **T5 remains `[HUMAN]`** and still paces every extraction
+and ranking gate.
 
 ## Decisions taken this session — do not re-litigate
 
-1. **Several short conversations, one per step**, each with a clear goal and an
-   end, and the ability to go back to an earlier step with new information. Going
-   back **revises** later outputs rather than discarding them.
-2. **Traits update continuously** — with capture (cheap, always on) separated
-   from scoring (potentially LLM-backed, at defined points, never per message).
-3. **Multi-user from day one.** A directory tree per person; the user is
-   identified at the start of every session before anything is read or written.
-   A handful of users, not a multi-tenant service.
+From the owner, 2026-08-17:
 
-Also settled earlier and inherited: dimension `side` (T23, merged); unknown ≠
-satisfied; evidence append-only with the profile derived; cue-derived gold is
-not evaluation data (D-2); the corpus broadens before the model widens.
+1. **Intake and Constraints stay separate.** Constraints is confirm-and-fill:
+   it consumes what Intake inferred and asks only what a CV cannot state.
+2. **Traits is its own step** — and the tool must notice on its own when what it
+   knows has aged, and reopen the right earlier step.
+3. **No automatic early ranking.** The default is the full first run, explained,
+   with an *offered* skip to a provisional search. The candidate elects it.
+4. **Reactions is its own onboarding step**, with stimuli fetched live from
+   multiple sources. The corpus is fallback, not primary.
+5. **Purge at 60 days** for an advert never shortlisted.
+6. **Identification is a handle the candidate chooses**, confirmed by display
+   name later. Not a legal name.
+7. **Cross-profile deletion is permitted** after confirming the target by name.
+8. **Five steps are required** — Identify, Constraints, Sourcing, Understanding,
+   Ranking. The other eight are offered.
+
+Decided by me and flagged in the documents as mine, so they can be overturned:
+the two-episode/two-occasion trait floor; retraction rows rather than deletion
+for a single fact; revival of a tombstoned offer; the per-step hard caps (marked
+as first settings, not findings); the 20-row batch threshold for trait scoring.
+
+**The non-insistence rule outranks every coverage target** (process §5.4): when
+cooperation drops, stop asking. Better a worse job than a person who felt
+interrogated. Marking five steps required is what makes it safe to obey rather
+than merely kind.
 
 ## What was done this session
 
-Seven PRs, all merged, each through a Qodo review round.
+| PR | task | what | gate |
+|----|------|------|------|
+| #15 | S1 | the whole process: 13 steps, connections, tree, lifecycle, resumption | `process_spec_complete` 1 |
+| #16 | S1r | the owner's 16 review annotations folded in | `process_spec_complete` 1 |
+| #17 | S2 | thirteen step specifications, twelve fields each | `step_specs_complete_fraction` 1.0 |
 
-| PR | what | gate |
-|----|------|------|
-| #7 | **T2** dimension schema, loader, `methods_ref` anchor resolution | `dimension_schema_violations` 0 |
-| #8 | **T3** 22-dimension model v0 with ES/EN/CA cues and corpus-verified gold | `dimension_extractor_coverage` 1.0 |
-| #9 | **T4** corpus harness: labelled store, stratified splits, labelling CLI, self-agreement | `corpus_harness_roundtrip_loss` 0 |
-| #10 | session handover, D-2 ported to `main` | — |
-| #11 | scope extension recorded: T23–T28 seeded | — |
-| #12 | **T23** dimension `side` — matched / candidate fact / candidate trait | `side_coverage_violations` 0 |
-| #13 | dimension catalogue (~100 entries) and product shape | — |
+**#15 and #16 are merged. #17 is open, clean, and Qodo-green** — it was left for
+the owner to merge rather than self-merged.
 
-Findings worth carrying forward, because each passed every green check before
-someone looked:
+Findings worth carrying forward, because each survived a green check:
 
-- **T3's cues matched words, not claims about the role.** "Startup culture" at a
-  1982 multinational scored as early-stage; a staffing marketplace's "product
-  teams" as own-product; a required ISTQB certificate as employer-funded
-  learning. Eight of them, all with gold examples demonstrating their own error,
-  because the gold was mined from cue hits. Coverage read 1.0 throughout.
-- **T4's split put 1 of 15 Catalan ads in evaluation.** The aggregate 49/51
-  looked healthy. Catalan extraction would have been measured on one ad.
-- **T4's `_cmd_init` preserved labels but not splits.** `assign_splits` supports
-  stability and a test proved it — but the command nobody could avoid running
-  did not pass the argument, so the guarantee was true of the function and false
-  of the tool.
-- **T23's coverage metric would have penalised traits.** Adding `ambition`
-  lowered `dimension_extractor_coverage`, quietly pressuring a future author to
-  delete traits to keep a gate green.
+- **The required-only path was broken in the PR that introduced the graph.**
+  Constraints is required and read `claimed facts`, which only the *offered*
+  Intake produces — so the first candidate to decline Intake, the person with no
+  CV, hits a required step with a missing input. Optional inputs are marked `?`
+  now, and the closure property is stated in both §2.5 and §3.1. **T30 makes it
+  mechanical**; until then it is prose and can rot.
+- **`steps_with_named_gate_metric` restated its own denominator** — hardcoded to
+  `step_count`, so the field meant to say *which* step lacks a metric would have
+  said all of them had one.
+- **The S2 checker promised "Reports, never raises" and did not.** A malformed
+  step list produced a traceback and no evidence file — indistinguishable from a
+  run that never happened.
+- **Two `## Step N` headings collapsed to the second one.** A duplicate whose
+  earlier copy was a stub still scored 13/13.
+- **A renumbered section silently re-bound the owner's note** to a section they
+  had never commented on. Fixed by hand; T31 makes it detectable.
 
 ## Queue state
 
-37 tasks: 6 merged (T1, T4b, T2, T3, T4, T23), 31 open.
-`queue_doctor.sh`: 0 error, 0 warn, 0 info.
-
-Unblocked and machine-workable if the owner wants code rather than specs: T24
-(candidate attributes, including the six-part cross-border cluster), T6 (profile
-store), T11 (offer schema). **T5 is `[HUMAN]`** and remains the pacing item for
-every extraction and ranking gate — dimensions, splits and a labelling CLI all
-exist for it now: `uv run python -m jobsearch.harness next --language es`.
+41 tasks: 8 merged, 1 done (S2, pending #17), 32 open. `queue_doctor.sh`:
+0 error, 0 warn, 0 info.
 
 ## Environment notes that cost time to rediscover
 
 - Pushes go to the designated session branch only, and **GitHub deletes it on
   merge**. After a PR lands: `git fetch --prune origin && git checkout -B
-  <branch> origin/main`, or the next push is rejected with stale-info.
-- `gh` is unavailable in the cloud session, so `reconcile_merged.sh` cannot run.
-  Flip `done` → `merged` with `claude-arsenal/scripts/update_task_row.py` and
-  commit on the coordination branch.
-- Queue rows live on `arsenal-queue`; new tasks authored on a feature branch
-  must be mirrored there or the orchestrator never sees them.
-- Qodo re-reviews on every push and marks resolved findings struck through.
-  Three of its platform rules were declined with reasons on the threads
-  (structured logging for a local gate CLI; a test-naming convention that
-  conflicts with names `status/plan.md` fixes verbatim; seeded-task conventions
-  where a placeholder gate and a missing evidence file are the point). Those
-  arguments are on #7, #9, #12 and #13 — reuse them rather than re-deriving.
+  <branch> origin/main`, then `git branch --unset-upstream`, or the next push is
+  rejected.
+- `gh` is unavailable in the cloud session. Flip `done` → `merged` with
+  `claude-arsenal/scripts/update_task_row.py` and commit on `arsenal-queue`.
+- Queue rows live on `arsenal-queue`; a task authored on a feature branch is
+  invisible to the orchestrator until mirrored there.
+- `gate_run.sh` runs with a hardened PATH that has no `uv`, so the reader
+  staleness test skips under it and runs under `make test`. That is the
+  `skipif` doing its job, not a silent hole — but check the skip count.
+- **Regenerate the readers after any spec edit**: `make reader`. A test fails if
+  you forget, which is the only reason this is not a recurring trap.
+
+## Qodo review notes
+
+Three platform rules have been declined with reasons, consistently, and Qodo now
+reports them as previously rejected here: docs-and-code in one change set (the
+specification *is* the deliverable and the checker exists only to gate it —
+splitting produces a document whose gate cannot run and a checker with nothing to
+check); the `test_<what>_<condition>_<result>` naming convention; and placeholder
+gate blocks on freshly seeded tasks, where an unwritten gate command is the
+honest state of unstarted work. Reuse those arguments rather than re-deriving
+them — they are on #7, #9, #12, #13, #15, #16 and #17.
+
+Qodo's bug findings, by contrast, have been right nearly every time this session.
+Four of the five real defects above came from it.
 
 ## Surface profile at handover
 
 Cloud session (`CLAUDE_CODE_REMOTE=true`), so `laptop`-tagged tasks (T4b, T12,
 T25) cannot be released `done` from here. GitHub work goes through MCP tools.
-`worktree_probe.sh` reported `available`, but the loop ran serialised in-place
-rather than fanning out workers.
+Ran serialised in-place; no worker fan-out.

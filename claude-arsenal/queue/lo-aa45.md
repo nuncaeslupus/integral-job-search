@@ -9,7 +9,8 @@ key: step_specs_complete_fraction
 ```
 
 ```bash
-echo "no gate command defined for S2 — replace this line with the command that writes status/evidence/S2.json" >&2; exit 1
+uv run python -m jobsearch.step_specs status/evidence/S2.json
+uv run --extra dev pytest tests/test_step_specs.py -q
 ```
 
 ## What this is
