@@ -1,0 +1,1049 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Job Search — Specification v2 — Specification (annotatable)</title>
+<style>
+:root{
+  --bg:#fbfaf7;--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;
+  --card:#ffffff;--accent:#0f766e;--accent2:#b45309;--chip:#eef2f1;
+  --note:#fff8ec;--note-line:#f0cf94;--code:#f3f1ec;--link:#0f766e;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#16151a;--fg:#e9e7e2;--muted:#a09c95;--line:#2e2c33;
+    --card:#1e1d23;--accent:#5eead4;--accent2:#fbbf24;--chip:#26313055;
+    --note:#251f10;--note-line:#6b531c;--code:#26242b;--link:#5eead4;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:17px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding-bottom:96px;
+}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+a{color:var(--link)}
+code{background:var(--code);padding:.08em .35em;border-radius:5px;font-size:.86em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+pre{background:var(--code);padding:12px;border-radius:8px;overflow:auto}
+pre code{background:none;padding:0}
+.topbar{position:sticky;top:0;z-index:30;background:var(--bg);
+  border-bottom:1px solid var(--line);backdrop-filter:saturate(120%) blur(6px)}
+.topbar .wrap{display:flex;align-items:center;gap:8px;padding-top:10px;padding-bottom:10px}
+.brand{font-weight:700;font-size:16px;margin-right:auto;letter-spacing:.2px}
+.brand small{font-weight:500;color:var(--muted);display:block;font-size:11px;letter-spacing:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--fg);
+  border-radius:9px;padding:8px 11px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media(prefers-color-scheme:dark){.btn.primary{color:#06201d}}
+.count{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:600}
+.savestate{font-size:12px;font-weight:700;white-space:nowrap;transition:color .2s}
+.savestate.ok{color:var(--accent)}
+.savestate.warn{color:#b45309}
+@media(prefers-color-scheme:dark){.savestate.warn{color:#fbbf24}}
+.statusbar{border-bottom:1px solid var(--line);background:var(--card)}
+.statusbar .wrap{padding:7px 16px;font-size:12px;color:var(--muted)}
+#warnbar{display:none;background:#fff4e5;border-bottom:1px solid var(--note-line);color:#7c2d12}
+#warnbar .wrap{padding:10px 16px;font-size:13px;line-height:1.45}
+@media(prefers-color-scheme:dark){#warnbar{background:#3a2a0e;color:#fde68a;border-color:#6b531c}}
+.hero{padding:22px 0 6px}
+.hero h1{font-size:25px;line-height:1.2;margin:.1em 0 .3em}
+.hero p{color:var(--muted);margin:.3em 0}
+.help{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.help summary{cursor:pointer;font-weight:600;padding:10px 0}
+.help ul{margin:.2em 0 1em;padding-left:1.2em}
+.help li{margin:.3em 0}
+.toc{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.toc>summary{cursor:pointer;font-weight:700;padding:11px 0;font-size:15px}
+.toc-part{margin:2px 0;border-top:1px solid var(--line)}
+.toc-part>summary{cursor:pointer;padding:9px 2px;font-weight:600;font-size:14px}
+.toc-part ul{margin:.1em 0 .7em;padding-left:1.1em}
+.toc-part li{margin:.22em 0;font-size:13.5px;line-height:1.4}
+.toc-part a{text-decoration:none}
+.toc-part a:hover{text-decoration:underline}
+.part{margin:26px 0}
+.part-title{font-size:21px;line-height:1.25;border-bottom:2px solid var(--accent);
+  padding-bottom:8px;margin:18px 0 8px;position:sticky;top:54px;background:var(--bg);z-index:10}
+.badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  vertical-align:middle;padding:3px 7px;border-radius:6px;margin-right:8px}
+.badge.spec{background:var(--chip);color:var(--accent)}
+.badge.workspace{background:var(--chip);color:var(--accent2)}
+.sec{padding:6px 0 2px;border-bottom:1px solid var(--line);scroll-margin-top:100px}
+.sec:last-child{border-bottom:none}
+.sec-h{margin:10px 0 6px;line-height:1.3;position:sticky;top:94px;background:var(--bg);z-index:5;padding-top:6px}
+h3.sec-h{font-size:18.5px}
+h4.sec-h{font-size:16.5px;color:var(--fg)}
+.chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;
+  color:var(--accent);background:var(--chip);border-radius:6px;padding:2px 7px;margin-right:8px;vertical-align:middle}
+.sec-title{vertical-align:middle}
+.sec-body{margin:.2em 0 .4em}
+.sec-body p{margin:.55em 0}
+.sec-body ul,.sec-body ol{margin:.5em 0;padding-left:1.35em}
+.sec-body li{margin:.3em 0}
+.sec-body blockquote{margin:.7em 0;padding:.5em .9em;border-left:3px solid var(--accent2);
+  background:var(--code);border-radius:0 8px 8px 0;color:var(--fg)}
+.sec-body blockquote p{margin:.3em 0}
+.sec-body table{border-collapse:collapse;width:100%;font-size:13.5px;margin:.6em 0;display:block;overflow-x:auto}
+.sec-body th,.sec-body td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+.sec-body th{background:var(--chip);font-weight:700}
+.sec-body strong{font-weight:700}
+.note{background:var(--note);border:1px solid var(--note-line);border-radius:10px;
+  padding:8px 11px;margin:10px 0 16px}
+.note-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.note-ico{color:var(--accent2);font-weight:800}
+.note-label{font-size:12px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.05em}
+.note-ref{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted)}
+.note-ta{width:100%;border:none;background:transparent;color:var(--fg);font:inherit;font-size:15.5px;
+  resize:none;outline:none;line-height:1.5;padding:2px 0;overflow:hidden;min-height:1.6em}
+.note-ta::placeholder{color:var(--muted);opacity:.8}
+.note.filled{box-shadow:0 0 0 2px var(--note-line) inset}
+.fab{position:fixed;right:14px;bottom:16px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.fab .btn{box-shadow:0 4px 14px #0003}
+.modal{position:fixed;inset:0;z-index:60;background:#0008;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.modal-card{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;
+  max-height:86vh;display:flex;flex-direction:column;padding:16px}
+.modal-card h3{margin:.1em 0 .5em}
+.modal-card p{color:var(--muted);font-size:13.5px;margin:.2em 0 .6em}
+.modal-card textarea{width:100%;flex:1;min-height:220px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,Menlo,monospace;padding:10px;resize:vertical}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hidden-input{display:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:70;background:#111;color:#fff;
+  padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:.96}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">Job Search — Specification v2 — Specification<small>annotatable reader · 2026-08-17</small></div>
+    <span class="savestate ok" id="savestate">✓ Auto-saving</span>
+    <button class="btn primary" id="btn-export">Save / Export</button>
+  </div>
+</div>
+<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 15 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
+<div id="warnbar"><div class="wrap"><strong>Heads up —</strong> this browser isn't storing your notes automatically (private/incognito mode or restricted file view). Tap <strong>Save / Export</strong> regularly.</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Job Search — Specification v2 specification</h1>
+    <p>Read at your own pace and leave a note on any point you want to discuss.</p>
+  </div>
+  <details class="help">
+    <summary>How to annotate (tap)</summary>
+    <ul>
+      <li>Tap the note field under any section and type. Each note is tagged so your feedback maps to an exact point.</li>
+      <li><strong>Notes save automatically</strong> in this browser as you type.</li>
+      <li><strong>Save / Export</strong> downloads a Markdown file of your notes — the copy to send back. Tap whenever you pause, especially on a phone.</li>
+      <li><strong>Import</strong> reloads notes from a file you exported earlier (after clearing the browser or switching devices).</li>
+      <li><strong>Clear</strong> erases every note in this browser. Export first.</li>
+    </ul>
+  </details>
+  <details class="toc" open><summary>Contents</summary>
+<details class="toc-part">
+<summary>Spec V2 Steps</summary><ul>
+<li><a href="#s-spec-intro">Preamble &amp; scope</a></li>
+<li><a href="#s-spec-how-to-read-a-step">How to read a step</a></li>
+<li><a href="#s-spec-step-0-identify">Step 0 — Identify</a></li>
+<li><a href="#s-spec-step-1-intake">Step 1 — Intake</a></li>
+<li><a href="#s-spec-step-2-constraints">Step 2 — Constraints</a></li>
+<li><a href="#s-spec-step-3-history">Step 3 — History</a></li>
+<li><a href="#s-spec-step-4-traits">Step 4 — Traits</a></li>
+<li><a href="#s-spec-step-5-reactions">Step 5 — Reactions</a></li>
+<li><a href="#s-spec-step-6-preferences">Step 6 — Preferences</a></li>
+<li><a href="#s-spec-step-7-sourcing">Step 7 — Sourcing</a></li>
+<li><a href="#s-spec-step-8-understanding">Step 8 — Understanding</a></li>
+<li><a href="#s-spec-step-9-ranking">Step 9 — Ranking</a></li>
+<li><a href="#s-spec-step-10-feedback">Step 10 — Feedback</a></li>
+<li><a href="#s-spec-step-11-application">Step 11 — Application</a></li>
+<li><a href="#s-spec-step-12-interview">Step 12 — Interview</a></li>
+</ul></details>
+</details>
+  <section class="part">
+<h2 class="part-title"><span class="badge spec">Specification</span>Spec V2 Steps</h2>
+<article class="sec" id="s-spec-intro">
+<h3 class="sec-h"><span class="chip">overview</span><span class="sec-title">Preamble &amp; scope</span></h3>
+<div class="sec-body"><p><strong>Version</strong>: 1.0 — written 2026-08-17
+<strong>Author</strong>: nuncaeslupus
+<strong>Requires</strong>: <code>status/spec-v2-process.md</code> v2.1 — the process this specifies steps within
+<strong>Companion</strong>: <code>status/spec-v2-steps.json</code> — the settled step list; <code>step_count</code> is this
+document's divisor</p>
+<p>Thirteen steps, each filling the template in <code>status/spec-v2-brief.md</code> §4 plus the
+two fields <code>spec-v2-process.md</code> §10 requires every step to carry. Nothing here
+re-decides the process: the step boundaries, the required/offered split, the
+inputs and outputs, the artefact classes and the manner rules are all inherited.</p></div>
+<div class="note" data-for="s-spec-intro"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC · intro</span></div><textarea class="note-ta" data-key="s-spec-intro" data-label="Preamble &amp; scope" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-how-to-read-a-step">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">How to read a step</span></h3>
+<div class="sec-body"><p>Twelve fields, in this order, every time:</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>what it answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Purpose</strong></td>
+<td>what the candidate gets — not what the system does</td>
+</tr>
+<tr>
+<td><strong>Preconditions</strong></td>
+<td>what must exist, and what happens when it does not</td>
+</tr>
+<tr>
+<td><strong>Inputs</strong></td>
+<td>files and state read, and which are optional</td>
+</tr>
+<tr>
+<td><strong>Protocol</strong></td>
+<td>how the conversation goes: opening, coverage, follow-ups, what is never asked</td>
+</tr>
+<tr>
+<td><strong>Stop rule</strong></td>
+<td>how the step ends — coverage, decline, or a hard cap</td>
+</tr>
+<tr>
+<td><strong>When declined</strong></td>
+<td>the non-insistence rule (§5.4) for this step specifically</td>
+</tr>
+<tr>
+<td><strong>Outputs</strong></td>
+<td>files written, and what the candidate sees</td>
+</tr>
+<tr>
+<td><strong>Boundary</strong></td>
+<td>what is said out loud when the step ends, and the <code>last_activity</code> write</td>
+</tr>
+<tr>
+<td><strong>Gate</strong></td>
+<td>metric, threshold, and what measures it</td>
+</tr>
+<tr>
+<td><strong>Resume</strong></td>
+<td>what is recorded so an interruption continues in the right place</td>
+</tr>
+<tr>
+<td><strong>Re-run</strong></td>
+<td>what a second pass preserves and what it replaces</td>
+</tr>
+<tr>
+<td><strong>Privacy</strong></td>
+<td>what is stored, what is derived, what may ever leave the machine</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Every hard cap in this document is a first setting, not a finding.</strong> Caps exist
+because a step with no cap runs until the candidate gives up; the specific
+numbers are the least evidenced thing here and should be revised against real
+sessions rather than defended.</p>
+<p>Two rules apply to every step and are not repeated in each:</p>
+<ul>
+<li><strong>Non-insistence overrides coverage.</strong> A subject declined once is not raised
+  again in that step; declined twice, not raised again at all unless the
+  candidate reopens it. Better a worse job than a person who felt interrogated.</li>
+<li><strong>Gates are never mentioned.</strong> The metrics below are how the build knows a step
+  works. The candidate hears what was learned and what is next.</li>
+</ul></div>
+<div class="note" data-for="s-spec-how-to-read-a-step"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › How to read a step</span></div><textarea class="note-ta" data-key="s-spec-how-to-read-a-step" data-label="How to read a step" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-0-identify">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 0 — Identify</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate is greeted by name, told when they were last here and
+where they stopped, and can carry on without explaining themselves.</p>
+<p><strong>Preconditions.</strong> None — this is the step that has no preconditions, because
+everything else has this one. The tool may not read or write anything under
+<code>profiles/</code> before it completes, including on a question that seems to need no
+identity ("what does this ad look like?"). Answering first and identifying
+afterwards has already guessed whose data to use.</p>
+<p><strong>Inputs.</strong> <code>profiles/*/identity.json</code> — display names only, to offer a list. No
+other file in any profile is opened until a handle resolves.</p>
+<p><strong>Protocol.</strong> Open by asking who this is, in one short friendly line. Resolve in
+the §6.1 order: an explicit handle or name; exactly one profile exists, in which
+case name it and ask for confirmation; otherwise ask, listing display names; no
+match, offer to create a profile. On a first run, ask what to call them and
+derive a directory-safe handle from the answer — a nickname is fine, a legal
+name is not required and is not asked for. Record the language they wrote in;
+the rest of the process happens in it. Never guess from one profile existing,
+and never invent a suffix to resolve a collision — ask for something that tells
+the two apart.</p>
+<p><strong>Stop rule.</strong> A handle is resolved and confirmed, or a new profile is created.
+Hard cap: three attempts, after which the tool says it cannot tell who this is
+and stops rather than guessing.</p>
+<p><strong>When declined.</strong> A candidate who will not identify themselves cannot be
+served, and this is the one place where that is true — say so plainly and
+without pressure, and offer to answer general questions that touch no stored
+data. No evidence row is written for an unidentified session.</p>
+<p><strong>Outputs.</strong> <code>identity.json</code> (handle, display name, language, locale, created_at)
+on a first run; <code>session/state.json</code> touched on every run. The candidate sees a
+greeting naming them, the date of their last activity, and the step they stopped
+in.</p>
+<p><strong>Boundary.</strong> <em>"Hello again, Marcos — last time we were partway through your work
+history, about three weeks ago. Pick up there, or something else?"</em> Writes
+<code>last_activity</code> immediately, before any other step begins, so a session that
+dies in the next minute still records that someone was here.</p>
+<p><strong>Gate.</strong> <code>cross_user_leaks == 0</code> — every store operation resolves paths beneath
+the identified handle, proven by pointing one profile's operations at another's
+tree and requiring them to fail. Owner: S3. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> This step has no interior to resume; it is the thing that makes
+resuming possible. What it reads back is <code>session/state.json</code>: <code>current_step</code>,
+<code>position</code>, <code>pending_steps</code>, <code>open_questions</code>, <code>sufficiency</code>.</p>
+<p><strong>Re-run.</strong> Every session. Preserves everything; replaces nothing except
+<code>last_activity</code>. Re-running with a <em>different</em> handle is a profile switch, never
+a merge — no state crosses.</p>
+<p><strong>Privacy.</strong> Display names are the only cross-profile data any session reads,
+and only to offer a choice. Nothing here leaves the machine.</p></div>
+<div class="note" data-for="s-spec-step-0-identify"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 0 — Identify</span></div><textarea class="note-ta" data-key="s-spec-step-0-identify" data-label="Step 0 — Identify" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-1-intake">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 1 — Intake</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate sees their working life written down — from the CV
+they already have, or built with them if they have none — and can correct it.</p>
+<p><strong>Preconditions.</strong> A resolved handle (step 0). Nothing else: this step is where
+someone with no document, no recent CV, and no idea where to start is expected
+to arrive, and it must work for them without apology.</p>
+<p><strong>Inputs.</strong> <code>cv/source/*</code> if the candidate supplies a PDF or DOCX;
+<code>cv/master.json</code> if a previous run built one. Both optional.</p>
+<p><strong>Protocol.</strong> Say what this is for — that everything captured here makes the
+search better, that it stays on this machine, and that the tool is on their side
+rather than assessing them. Then take whatever exists: a document to parse, or a
+conversation. Parsing writes <strong>claims with provenance</strong>, never established
+facts: "Barcelona" from a CV header is what the document says, not where they
+live. With no document, work backwards from the last job through the ones before,
+asking for what a CV would carry — dates, employers, what the work actually
+involved — and stop when the shape of a career is there, not when a form is
+full. Establish <strong>where they live</strong>, because it decides currency, work
+authorisation, which borders are commutable and how a foreign employer would tax
+them. Never ask for a legal name, an address, an identity number, a date of
+birth, or a photograph: none of them improve a search, and a tool that collects
+them looks like every recruiter the candidate is tired of.</p>
+<p><strong>Stop rule.</strong> Every role in the supplied document is represented, or — with no
+document — the current or last role plus at least two earlier ones, or the
+candidate says that is enough. Hard cap: 25 questions.</p>
+<p><strong>When declined.</strong> Intake is offered, and declining it is ordinary: skip to
+Constraints, which then asks from scratch instead of confirming (§3.1). Say what
+is lost in one line — the search will lean more on questions later — and never
+repeat it.</p>
+<p><strong>Outputs.</strong> <code>cv/master.json</code>, the store: roles with dates and context, tools,
+certifications, languages, and every claim's provenance. <code>profile/evidence.jsonl</code>
+rows for everything said. The candidate sees a readable summary of their own
+working life, with anything uncertain marked as uncertain. <strong>No document is
+produced here</strong> — no PDF, no DOCX. A CV written before there is an advert to
+write it for is a worse CV than step 11 produces.</p>
+<p><strong>Boundary.</strong> <em>"That's your history down — twelve years, four roles, and the
+Catalan I nearly missed. Want to keep going to what would rule a job out, or
+leave it here?"</em> Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>intake_field_provenance == 1.0</code> — every field in <code>master.json</code> names
+where it came from: a document span, or the turn in which it was said. A field
+with no provenance is a field the tool invented. Owner: S4. State:
+<code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> <code>position</code> records which roles are covered and which the candidate
+mentioned but has not described. An interrupted Intake resumes at the next
+undescribed role, named: <em>"you'd mentioned the years at the hospital — want to
+pick that up?"</em></p>
+<p><strong>Re-run.</strong> Preserves every existing entry and its evidence; replaces nothing.
+A newer CV <strong>adds</strong> claims and marks superseded ones rather than overwriting, so
+a role removed from a candidate's public CV survives in the store — the store is
+the CV plus everything it omits, and omission is often the point. Marks generated
+CVs (step 11) stale.</p>
+<p><strong>Privacy.</strong> <code>cv/source/*</code> is stored unmodified and never sent anywhere.
+<code>master.json</code> is never transmitted as-is, to a model or an employer. Parsing a
+document may use a local extractor; if a model is used, it sees the document text
+and nothing from any other profile.</p></div>
+<div class="note" data-for="s-spec-step-1-intake"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 1 — Intake</span></div><textarea class="note-ta" data-key="s-spec-step-1-intake" data-label="Step 1 — Intake" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-2-constraints">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 2 — Constraints</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate settles what would rule a job out — and sees it as a
+short list they can correct, not a form they filled in.</p>
+<p><strong>Preconditions.</strong> A resolved handle. Runs whether or not Intake did; this is
+required and Intake is not, so it cannot depend on Intake's output existing
+(§2.5).</p>
+<p><strong>Inputs.</strong> <code>cv/master.json</code> and its claims — <strong>optional</strong>. <code>constraints.json</code>
+from a previous run, optional.</p>
+<p><strong>Protocol.</strong> With claims available, open by showing what was inferred and ask
+for corrections; with none, ask directly. Cover residence and the currency that
+follows from it, work authorisation per country, languages and the level of
+each, hours and availability, pay floor, mobility (remote, commute, relocation,
+cross-border), and notice period. Ask warmly and one thing at a time: <em>"how's
+your English?"</em> rather than a language table. <strong>Ask about the things that quietly
+rule out whole employers</strong> — the work someone will not do, and who they will not
+do it for — and get there naturally rather than by questionnaire: a person who
+cares about poverty may not want a bank, a vegetarian may not want an abattoir's
+logistics contract, and neither will volunteer it unprompted. An unconfirmed
+claim stays <code>unknown</code>; <strong>unknown neither passes nor vetoes</strong> and surfaces later
+as something still owed.</p>
+<p><strong>Stop rule.</strong> Every constraint field is <code>stated</code>, <code>declined</code> or <code>unknown</code> —
+never blank. Hard cap: 20 questions, after which whatever is unresolved stays
+<code>unknown</code> and the step ends.</p>
+<p><strong>When declined.</strong> A declined field records <code>declined</code>, which is distinct from
+<code>unknown</code>: it means do not ask again. The step continues to the next field. A
+candidate who declines everything still leaves with a valid constraints file in
+which nothing filters, and the ranking that follows says so.</p>
+<p><strong>Outputs.</strong> <code>profile/constraints.json</code> (derived), evidence rows for each
+answer. The candidate sees a summary they can correct in place, with unknowns
+listed as unknowns rather than hidden.</p>
+<p><strong>Boundary.</strong> <em>"Right — remote or Barcelona, nothing under €45k, and you'd rather
+not do defence work. That's enough to start looking. Shall I?"</em> Writes
+<code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>constraint_field_resolution == 1.0</code> — every field carries one of the
+three states. A blank field is indistinguishable from a question nobody asked.
+Owner: T24. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> <code>position</code> lists fields covered and outstanding. Resumes at the first
+outstanding field, naming what is left: <em>"three things left — hours, notice, and
+whether you'd move."</em></p>
+<p><strong>Re-run.</strong> Recomputed from evidence, so a re-run replaces <code>constraints.json</code>
+entirely and preserves every answer that produced it. A changed constraint marks
+rankings stale and may retire offers that no longer pass (step 7). <code>declined</code>
+survives a re-run — declining is an answer.</p>
+<p><strong>Privacy.</strong> Constraints are derived and local. Only the filters needed to
+search are ever expressed outward, and never as a profile: a query for remote
+roles in a salary band carries no statement about the person.</p></div>
+<div class="note" data-for="s-spec-step-2-constraints"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 2 — Constraints</span></div><textarea class="note-ta" data-key="s-spec-step-2-constraints" data-label="Step 2 — Constraints" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-3-history">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 3 — History</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate tells the story of the work they have done — including
+what went wrong — and ends with a story bank they own and can see.</p>
+<p><strong>Preconditions.</strong> A resolved handle. Better with Intake behind it, and does not
+require it: with no CV the step asks about roles as it goes.</p>
+<p><strong>Inputs.</strong> <code>cv/master.json</code> — <strong>optional</strong>, used to ask about specific roles
+rather than in general. <code>profile/stories.jsonl</code> from previous runs.</p>
+<p><strong>Protocol.</strong> This is the step most likely to feel like an interrogation and the
+one that must not. Ask about one role at a time, starting with the most recent.
+For each: what the work actually was, what went well, what went badly, and why
+it ended. Follow the candidate rather than the checklist — someone who starts
+talking about the manager who left is giving you the episode; take it. Ask about
+the things a CV never holds: what they are proud of, what they would do
+differently, how they like to work, what they do outside work, the small
+insistences that make a job bearable or not. <strong>Every negative episode gets a
+follow-up about what was learned, never a judgement</strong> (T27), and a candidate who
+does not want to discuss a departure is not pressed on it — the fact that a job
+ended badly is already useful without the details. Never ask why a gap exists in
+a tone that requires an excuse; ask what they were doing then.</p>
+<p><strong>Stop rule.</strong> The current or last role plus two earlier ones have an episode
+each, or the candidate says that is enough. Hard cap: 12 episodes or 40
+questions, whichever first.</p>
+<p><strong>When declined.</strong> History is offered. A candidate who does not want to tell
+stories keeps a working profile — traits will read <code>insufficient</code> and the
+ranking leans on constraints and stated preferences, which is worse but not
+broken. Say that once, in a sentence, and drop it.</p>
+<p><strong>Outputs.</strong> <code>profile/stories.jsonl</code> (derived episodes, each linked to what it
+evidences), evidence rows including trait evidence. The candidate sees their own
+episodes written back, in their words.</p>
+<p><strong>Boundary.</strong> <em>"That's a good bank — nine episodes, and the one about the failed
+migration will be worth having when someone asks about pressure. Enough for
+today?"</em> Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>story_dimension_linkage == 1.0</code> — every episode links to at least one
+dimension id, so the bank is queryable rather than a pile of prose. Paired with
+<code>story_failure_fraction &gt;= 0.33</code>: success stories are rehearsed and reveal less.
+Owner: T8. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> <code>position</code> records roles covered, roles mentioned but not explored,
+and any thread the candidate left open. Resumes by naming the thread rather than
+restarting the role.</p>
+<p><strong>Re-run.</strong> Append-only in effect: new episodes are added, existing ones are
+never rewritten. A re-entry after "I left my job" starts with the role that
+ended and works forward. Marks <code>traits.json</code> stale.</p>
+<p><strong>Privacy.</strong> Episodes default to <code>disclosure: private</code>. <strong>Recounting a failure to
+the tool is not consent to send it to a company</strong>: no episode reaches an
+employer-bound document without per-use approval (step 11). If a model is used to
+extract dimensions from an answer, it sees that answer, not the bank.</p></div>
+<div class="note" data-for="s-spec-step-3-history"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 3 — History</span></div><textarea class="note-ta" data-key="s-spec-step-3-history" data-label="Step 3 — History" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-4-traits">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 4 — Traits</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate sees how they work — described from what they have
+said rather than from a personality quiz — with the episodes behind each line.</p>
+<p><strong>Preconditions.</strong> Trait evidence exists, which History normally supplies. With
+no evidence at all the step says so and offers to go to History instead of
+asking a person to rate themselves out of ten.</p>
+<p><strong>Inputs.</strong> <code>profile/evidence.jsonl</code> rows bearing on trait dimensions;
+<code>profile/stories.jsonl</code>; <code>traits.json</code> from a previous scoring run.</p>
+<p><strong>Protocol.</strong> Score first, ask second — most of the work is already done and the
+candidate should see that before being asked anything. Present the scored traits
+with their evidence, invite disagreement, and then ask about the traits still
+below the floor: <strong>two independent episodes recorded on two separate occasions</strong>.
+Ask for those by asking for another situation, never by announcing a quota.
+Whether an inference sounds like a stereotype is a judgement made silently and
+acted on by asking a better question; it is never voiced. A candidate who
+disagrees with a score is right by default — record the disagreement as evidence
+and rescore, because a profile they do not recognise is worse than no profile.</p>
+<p><strong>Stop rule.</strong> Every trait is either scored or explicitly <code>insufficient</code> with its
+count, and the candidate has seen the profile. Hard cap: 10 questions.</p>
+<p><strong>When declined.</strong> Traits is offered, and it is the step people are most likely
+to find odd. Declining leaves every trait <code>insufficient</code>, which the ranking
+handles by not weighting them — never by assuming an average, which would be an
+invented person.</p>
+<p><strong>Outputs.</strong> <code>profile/traits.json</code> (derived; per trait a score with evidence row
+ids, or <code>insufficient</code> with a count). The candidate sees a description of how
+they work, each line traceable to something they said.</p>
+<p><strong>Boundary.</strong> <em>"That's what I've got: you like a lot of autonomy, you're happier
+fixing than launching, and I don't have enough yet on how you take pressure.
+Leave it there?"</em> Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>trait_evidence_sufficiency == 1.0</code> — every trait carries either a
+score backed by ≥2 independent episodes or <code>insufficient</code> with its count. A
+scored trait below the floor is a stereotype presented as a finding. Owner: T28.
+State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> Scoring is idempotent, so an interruption re-runs it. <code>position</code>
+records which insufficient traits were already asked about, so a resumed step
+does not re-ask.</p>
+<p><strong>Re-run.</strong> Always recomputed from the evidence log — <code>traits.json</code> is derived
+and never edited. A re-run replaces every score and preserves every episode.
+Scoring is also triggered outside this step: at any step boundary, on request,
+or when the batch threshold of <strong>20</strong> new trait-bearing evidence rows is reached
+(§4.2).</p>
+<p><strong>Privacy.</strong> Trait scores are the most inferential thing the tool holds and the
+least appropriate to share. They never appear in a generated CV or letter, and
+never leave the machine. If scoring uses a model, it sees episode text without
+the candidate's identity attached.</p></div>
+<div class="note" data-for="s-spec-step-4-traits"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 4 — Traits</span></div><textarea class="note-ta" data-key="s-spec-step-4-traits" data-label="Step 4 — Traits" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-5-reactions">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 5 — Reactions</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate reads real adverts and says what they make of them —
+and discovers what they actually care about, including things they would not
+have thought to state.</p>
+<p><strong>Preconditions.</strong> <code>constraints.json</code> exists, because stimuli must be adverts
+that could plausibly be theirs. Without constraints the step does not run: a
+reaction to an irrelevant advert teaches the tool the wrong thing.</p>
+<p><strong>Inputs.</strong> <code>profile/constraints.json</code>. Stimuli — <strong>fetched live</strong> from multiple
+sources by preference; the corpus <strong>elicitation split</strong> as fallback when
+fetching is unavailable.</p>
+<p><strong>Protocol.</strong> Show adverts and fragments of adverts, and ask open questions
+rather than ratings: what puts you off here, what would you want to know,
+which of these two would you rather work at and why. Mix whole adverts with
+fragments, because the interesting reactions are often to one part — the perks
+list, the way requirements are phrased, the "if you don't meet everything, apply
+anyway" line, the tone of the section about the team. Vary the question; the
+same prompt fifteen times reads as a form. Capture their words verbatim and
+extract afterwards — never ask them to categorise their own reaction. <strong>Stimuli
+are never invented.</strong> An imagined advert reads plausibly and represents nothing,
+which is how eight wrong cues once entered the dimension model with gold
+examples demonstrating their own error.</p>
+<p><strong>Stop rule.</strong> Fifteen stimuli reacted to, or the candidate stops. Hard cap: 25
+stimuli — past that, reactions get shorter and less useful, which is a worse
+outcome than fewer of them.</p>
+<p><strong>When declined.</strong> Offered. Declining means weights are fitted from forced
+choices alone (step 6) or not at all, and the ranking says it is working from
+less. This is also the step to stop early without comment: someone giving
+one-word answers has finished whether or not the count says so.</p>
+<p><strong>Outputs.</strong> Evidence rows of kind <code>reaction</code>, each tied to the offer id of its
+stimulus; fetched stimuli enter <code>offers/</code> as ordinary offers with status <code>new</code>.
+The candidate sees the first read of what their reactions imply — the earliest
+point at which the tool tells them something about themselves.</p>
+<p><strong>Boundary.</strong> <em>"That's telling. You didn't mention money once, and you flinched
+at every mention of 'fast-paced'. Want to turn that into weights, or pause?"</em>
+Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>elicitation_eval_overlap == 0</code> — no advert used to elicit preferences
+is ever one the ranking is later scored against. Without it, <code>rank_spearman</code>
+measures memorisation and would pass while the system is worthless. Owner: T9.
+State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> <code>position</code> records which stimuli have been shown and which are
+pending, so a resumed step does not repeat an advert — reacting twice to the
+same text produces agreement with oneself, not evidence.</p>
+<p><strong>Re-run.</strong> Additive. Old reactions are never discarded; a re-run draws new
+stimuli, excluding everything already shown. Marks <code>weights.json</code> stale.</p>
+<p><strong>Privacy.</strong> Reactions are strong evidence about a person's values and stay
+local. Fetching stimuli sends a search shaped by constraints — a role, a
+location, a salary band — and never a profile, an episode, or a trait.</p></div>
+<div class="note" data-for="s-spec-step-5-reactions"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 5 — Reactions</span></div><textarea class="note-ta" data-key="s-spec-step-5-reactions" data-label="Step 5 — Reactions" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-6-preferences">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 6 — Preferences</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate sees what each thing is worth to them per month, in
+their own currency, as a list they can argue with.</p>
+<p><strong>Preconditions.</strong> Reaction evidence, or enough constraint and history evidence
+to seed the choices. With neither, the step explains that it would be guessing
+and offers Reactions instead.</p>
+<p><strong>Inputs.</strong> Reaction evidence rows; <code>profile/constraints.json</code> for the currency
+and the pay floor; <code>weights.json</code> from a previous fit.</p>
+<p><strong>Protocol.</strong> Forced pairwise choices between two realistic packages that differ
+on a few dimensions — never sliders, never "rate how important autonomy is out
+of ten", both of which measure what someone believes about themselves. Draw the
+pairs from what reactions suggested is contested. Show the trade in their own
+currency. When a choice contradicts a stated preference, do not correct them:
+record both and let the fit reconcile it, because what people choose is better
+evidence than what they say they value. Present the fitted weights as a claim
+they can reject.</p>
+<p><strong>Stop rule.</strong> Enough choices for the part-worths to be identifiable, or the
+candidate stops. Hard cap: 20 choices.</p>
+<p><strong>When declined.</strong> Offered. Without weights the ranking is L1: hard filters and
+defaults, explicitly labelled provisional (§3.1). That is a real result, and
+saying so is more honest than implying the list is worthless.</p>
+<p><strong>Outputs.</strong> <code>profile/weights.json</code> (derived; part-worths in salary-equivalent
+terms, in the candidate's currency). The candidate sees an ordered list of what
+each dimension is worth per month.</p>
+<p><strong>Boundary.</strong> <em>"So a shorter commute is worth about €200 a month to you, and
+remote about €600. Does that sound like you? We can look at real jobs now."</em>
+Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>weight_salary_equivalent_roundtrip_error &lt;= 0.01</code> — converting a
+dimension to currency and back recovers the part-worth within 1%, so the number
+the candidate is shown is the number the ranking uses. Owner: T10. State:
+<code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> <code>position</code> records choices made and the pairs still queued. Resumes
+mid-sequence; a partial fit is usable and is marked as partial.</p>
+<p><strong>Re-run.</strong> Recomputed from all reaction and choice evidence, so a re-run
+replaces <code>weights.json</code> and preserves every choice behind it. Triggered by new
+reactions, by a recorded rejection reason (step 10), and on request. Marks
+rankings stale.</p>
+<p><strong>Privacy.</strong> Weights are derived, local, and never transmitted. A salary
+expectation may be shared with an employer only through step 11, and only with
+per-item approval.</p></div>
+<div class="note" data-for="s-spec-step-6-preferences"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 6 — Preferences</span></div><textarea class="note-ta" data-key="s-spec-step-6-preferences" data-label="Step 6 — Preferences" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-7-sourcing">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 7 — Sourcing</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate gets live offers worth looking at, with the stale ones
+retired and nothing they have already rejected coming back.</p>
+<p><strong>Preconditions.</strong> <code>constraints.json</code>, which decides where and what to search
+for. Required step; runs on a schedule, on request, or when constraints change.</p>
+<p><strong>Inputs.</strong> <code>profile/constraints.json</code>; <code>offers/*.json</code> and
+<code>offers/tombstones.jsonl</code> for dedup; connector configuration.</p>
+<p><strong>Protocol.</strong> Mostly automatic, with one conversational duty: <strong>establish how far
+the search can travel, at the moment it becomes relevant.</strong> Remote, commuting
+distance, relocation, and — the one worth real care — working for an employer in
+another country while living here. That last is often where the money is and it
+carries the questions nobody enjoys: employed or contracting, paid where, taxed
+where. Those answers change which offers are legal to take, so they belong here
+rather than as a surprise at the application stage. Reach beyond the obvious
+portals to boards specialised in the candidate's field; the general aggregators
+are the worst of the available sources and the easiest to over-rely on.</p>
+<p><strong>Stop rule.</strong> All configured sources have been polled and results normalised.
+Hard cap: a per-run offer ceiling, so one badly-scoped query cannot deliver
+four hundred adverts nobody will read.</p>
+<p><strong>When declined.</strong> Not applicable to the fetch, which is required. The
+conversational part is declinable per question: an unanswered mobility question
+leaves the reach at its current setting and searches accordingly.</p>
+<p><strong>Outputs.</strong> <code>offers/&lt;offer_id&gt;.json</code> (normalised, status <code>new</code>), tombstone
+updates, expiry marks on offers no longer live at source. The candidate sees a
+count: what arrived, what duplicated, what expired, what was retired.</p>
+<p><strong>Boundary.</strong> <em>"Fourteen new, six duplicates, and four have closed since last
+week. Want to see the new ones ranked?"</em> Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>offer_schema_violations == 0</code>, with <code>dedup_precision &gt;= 0.95</code> (T13)
+alongside. Owner: T11. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> Per-source progress is recorded, so an interrupted run resumes at the
+unpolled source rather than re-fetching everything and re-tripping rate limits.</p>
+<p><strong>Re-run.</strong> Every run is additive and idempotent: an advert already stored is
+updated, not duplicated, and an advert matching a tombstone by canonical URL or
+normalised text hash is <strong>not re-added as new</strong> (§7.4). Purge runs here: offers
+never shortlisted and older than 60 days lose their body and keep their
+tombstone, reported rather than done silently.</p>
+<p><strong>Privacy.</strong> Queries carry constraints only — a role, a place, a band. No
+profile, episode, trait or CV content is ever sent to a job source. Adverts are
+public text and are stored in full.</p></div>
+<div class="note" data-for="s-spec-step-7-sourcing"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 7 — Sourcing</span></div><textarea class="note-ta" data-key="s-spec-step-7-sourcing" data-label="Step 7 — Sourcing" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-8-understanding">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 8 — Understanding</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> Automatic. The candidate gets offers described in the same
+vocabulary as their profile, with the ad's own words as evidence.</p>
+<p><strong>Preconditions.</strong> New or changed offers to read, and a dimension model that
+loads and validates. A model that fails validation stops this step rather than
+extracting against a broken vocabulary — a bad extraction is worse than none,
+because it looks like a result.</p>
+<p><strong>Inputs.</strong> <code>offers/*.json</code>; <code>dimensions/*.yaml</code>; previous extractions, so
+unchanged offers are not re-extracted.</p>
+<p><strong>Protocol.</strong> No conversation. Prefilter for recall, then extract dimension
+values with verbatim evidence spans, handling negation as inversion rather than
+absence — "no on-call" is evidence <em>against</em>, not missing evidence. Record
+<code>unmapped_concepts</code> rather than discarding what the model has no dimension for;
+that count is the staleness signal for the model itself. <strong>When an advert yields
+very little</strong> — four lines and a salary band is common — the step may look
+outside it: what the company does, how it is spoken about, what former employees
+say. <strong>Anything found that way is marked as not from the advert</strong>, and never
+appears as a verbatim evidence span: <code>explained_fraction</code> means the employer's
+own words, and citing a review site as though the employer wrote it is a lie
+about provenance.</p>
+<p><strong>Stop rule.</strong> Every new or changed offer has an extraction. Hard cap: a
+per-run extraction budget, since this is the step that costs model calls.</p>
+<p><strong>When declined.</strong> Not applicable — nothing is asked. A candidate may skip
+outside-information lookups as a standing preference, recorded in
+<code>constraints.json</code>.</p>
+<p><strong>Outputs.</strong> <code>extractions/&lt;offer_id&gt;.json</code> — per dimension a score, evidence
+spans, and a provenance marker distinguishing the advert from outside sources.
+The candidate sees, per offer, what it was found to say — and what it did not
+say, which is not the same as saying no.</p>
+<p><strong>Boundary.</strong> Usually silent, folded into step 9's presentation. When run alone:
+<em>"Read the fourteen new ones. Three don't say anything about how they work,
+which is itself worth knowing."</em> Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>extraction_macro_f1 &gt;= 0.75</code> on the evaluation split, with
+<code>extraction_negation_recall &gt;= 0.80</code> and <code>ontology_hit_rate &gt;= 0.85</code>. Owner:
+T15, T16, T17. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> Extraction is per offer and idempotent, so an interrupted run
+resumes at the first offer without a current extraction.</p>
+<p><strong>Re-run.</strong> Replaces the extraction for any offer whose text changed or whose
+extraction predates the current dimension model version. Preserves extractions
+still current — re-extracting unchanged adverts spends money to reproduce a
+result.</p>
+<p><strong>Privacy.</strong> Advert text goes to the extraction model. <strong>Nothing from the
+candidate's profile is sent with it</strong> — extraction reads the advert, and
+matching happens locally afterwards. That separation is what keeps the profile
+from leaving the machine one advert at a time.</p></div>
+<div class="note" data-for="s-spec-step-8-understanding"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 8 — Understanding</span></div><textarea class="note-ta" data-key="s-spec-step-8-understanding" data-label="Step 8 — Understanding" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-9-ranking">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 9 — Ranking</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate sees the live offers in order, each with the reason it
+sits where it does, in words from the advert and numbers in their currency.</p>
+<p><strong>Preconditions.</strong> Extractions for the live offers, and <code>constraints.json</code>.
+Weights are optional: without them the ranking is L1 and says so.</p>
+<p><strong>Inputs.</strong> <code>extractions/*</code>; <code>profile/constraints.json</code>;
+<code>profile/weights.json</code> — <strong>optional</strong>; <code>profile/traits.json</code> where a dimension
+is trait-side.</p>
+<p><strong>Protocol.</strong> No questions; this step presents. <strong>Presentation is half the
+specification</strong>, not a rendering detail. Show a handful at a time, not forty.
+Lead with the offer and the one thing that most moved it, not with a score.
+Make the reason concrete: the sentence in the advert, and what it is worth per
+month. Show what is <em>unknown</em> about an offer as unknown rather than as neutral —
+an advert silent on hours is not an advert promising good ones. Say when the
+ranking is provisional and what would sharpen it, in one line, once. Where an
+offer is out of reach today but reachable, say what it would take and ask
+whether that is of interest rather than assigning homework.</p>
+<p><strong>Stop rule.</strong> A ranking is produced and presented. Hard cap: the number shown
+at once, so the list stays readable; the rest are available on request.</p>
+<p><strong>When declined.</strong> A candidate can ask not to see rankings for now; the run
+still computes and stores one, so it is there when they come back.</p>
+<p><strong>Outputs.</strong> <code>rankings/&lt;timestamp&gt;.json</code>, pinned to the <code>profile_revision</code> and
+the sufficiency level that produced it. The candidate sees the ordered list with
+its reasons.</p>
+<p><strong>Boundary.</strong> <em>"Here are the top five. The Girona one is first mostly because
+they say 'we don't do on-call' outright, which is worth about €400 a month to
+you. Want to react to any of these?"</em> Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>explained_fraction == 1.0</code> — every ranked offer cites at least one
+verbatim span per contributing dimension. Calibrated by <code>rank_spearman &gt;= 0.60</code>
+against a blind manual ranking (T20). Owner: T18, T19. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> Rankings are computed, not conversational. A ranking whose pinned
+revision is behind the current one is shown as out of date with a one-click
+recompute.</p>
+<p><strong>Re-run.</strong> Produces a new timestamped ranking and preserves every earlier one —
+they are the record of how the candidate's ordering changed as the profile
+deepened, which is the evidence that any of this worked.</p>
+<p><strong>Privacy.</strong> Entirely local: extractions and profile are both on the machine and
+the ordering is arithmetic. Nothing about the ranking is transmitted anywhere.</p></div>
+<div class="note" data-for="s-spec-step-9-ranking"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 9 — Ranking</span></div><textarea class="note-ta" data-key="s-spec-step-9-ranking" data-label="Step 9 — Ranking" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-10-feedback">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 10 — Feedback</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate says what they think of the offers in front of them,
+and watches the list move because of it.</p>
+<p><strong>Preconditions.</strong> A ranking has been presented. Nothing else — this step exists
+to catch what someone says while looking at real jobs, which is the most
+informative moment in the whole process and the easiest to waste.</p>
+<p><strong>Inputs.</strong> The current <code>rankings/&lt;timestamp&gt;.json</code> and the offers it names, with
+their extractions so a reaction can be attributed to what the advert actually
+said; <code>profile/weights.json</code>, which this step's output revises.</p>
+<p><strong>Protocol.</strong> Follow, do not survey. Most feedback arrives unprompted — "not
+another agency", "this one's interesting but the commute" — and the step's main
+job is to be listening when it does. When prompting, prompt once and lightly:
+<em>"anything here you'd rule out straight away?"</em> Never work down the list asking
+for an opinion on each. Capture their words, extract afterwards, and <strong>show the
+consequence immediately</strong>: which offer moved, and which sentence of theirs
+caused it. That is the moment the tool stops feeling like a search box. Record
+offer status changes as they fall out of the conversation — ruled out is
+<code>screened_out</code>, interested is <code>shortlisted</code> — and never infer a status from
+silence.</p>
+<p><strong>Stop rule.</strong> The candidate stops talking about the offers, or every offer they
+raised has a recorded reaction. Hard cap: no prompt is issued more than twice in
+a session.</p>
+<p><strong>When declined.</strong> Offered, and the most declinable step in the process —
+someone who wants to read a list without being asked about it should be able to.
+Decline is recorded so the prompt does not return next session. Unprompted
+feedback is still captured, because that is them volunteering it.</p>
+<p><strong>Outputs.</strong> Evidence rows of kind <code>reaction</code> and <code>outcome</code>; offer status
+changes with <code>status_changed_at</code>; a recomputed ranking. The candidate sees the
+re-ordered list and a plain statement of what changed and why.</p>
+<p><strong>Boundary.</strong> <em>"Noted — agencies out. That dropped three of them and pushed the
+Girona role to the top. Anything else, or leave it?"</em> Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>feedback_traceability == 1.0</code> — every derived value names the evidence
+rows that produced it, so "the ranking changed because you said X" is checkable
+rather than a story. Owner: T21. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> Feedback is naturally interruptible: rows are appended as they
+arrive, so there is nothing partial to resume. <code>open_questions</code> carries anything
+they raised that has not been followed up.</p>
+<p><strong>Re-run.</strong> Every ranking presentation is an opportunity for it. Additive:
+reactions accumulate, statuses change forward through the transition table
+(§7.1), and a rejection reason recorded here triggers a weight refit.</p>
+<p><strong>Privacy.</strong> Reactions are local. A rejection reason given to an employer is
+different from one given here, and this step captures the second — the candid
+version, which is exactly why it never leaves.</p></div>
+<div class="note" data-for="s-spec-step-10-feedback"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 10 — Feedback</span></div><textarea class="note-ta" data-key="s-spec-step-10-feedback" data-label="Step 10 — Feedback" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-11-application">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 11 — Application</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate gets a CV and a covering letter written for one
+specific advert, drawn only from things they actually said.</p>
+<p><strong>Preconditions.</strong> An offer with status <code>shortlisted</code>, and <code>cv/master.json</code> with
+enough in it to draw on. With a thin store the step says what is missing and
+offers Intake or History rather than producing a document padded with invention.</p>
+<p><strong>Inputs.</strong> <code>cv/master.json</code>; the offer and its extraction;
+<code>profile/stories.jsonl</code> for episodes the letter might use; previous versions in
+<code>cv/generated/&lt;offer_id&gt;/</code>.</p>
+<p><strong>Protocol.</strong> Select from the store against what the advert asks for, draft, and
+show the candidate what was chosen and what was left out — the omissions are as
+much a decision as the inclusions. <strong>Every claim traces to a store entry</strong>;
+nothing is written that the candidate did not say. Where the advert asks for
+something they lack, say so and offer the options honestly: apply anyway and
+address it, or leave this one. <strong>Any story-bank episode proposed for the letter
+needs per-use approval</strong> — recounting a failure to the tool was never consent to
+send it to a company. The tool stops one step short of sending: the documents,
+the text to paste into the employer's form, or an email left in drafts. The
+candidate presses send.</p>
+<p><strong>Stop rule.</strong> A CV and a letter exist for this offer and the candidate has
+approved them, or has parked them. Hard cap: three regeneration rounds per
+offer, after which the useful move is to talk about what is wrong rather than
+generate a fourth.</p>
+<p><strong>When declined.</strong> Offered per offer. Declining generates nothing and leaves the
+offer <code>shortlisted</code>. A candidate who wants to write their own letter and only
+use the CV gets exactly that.</p>
+<p><strong>Outputs.</strong> <code>cv/generated/&lt;offer_id&gt;/v&lt;N&gt;/</code> — CV and letter, <strong>versioned</strong>, plus
+a manifest of which store entries each claim came from. On send,
+<code>applications/&lt;offer_id&gt;/</code> records what went and when, and is immutable
+thereafter. Offer status moves to <code>applied</code>.</p>
+<p><strong>Boundary.</strong> <em>"That's the CV and letter for the Girona role. I've led with the
+migration work and left out the teaching — say if that's wrong. Ready to send,
+or sit on it?"</em> Writes <code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>cv_generation_traceability == 1.0</code> — the fraction of claims in a
+generated document tracing to a specific store entry. Anything less is the tool
+inventing experience on a candidate's behalf, which is the single worst thing
+this project could ship. Owner: S4. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> A draft in progress is saved as an unapproved version, so an
+interrupted session resumes at review rather than regenerating.</p>
+<p><strong>Re-run.</strong> <strong>Never overwrites.</strong> A regeneration writes <code>v&lt;N+1&gt;</code> and preserves
+every earlier version, because an earlier one may already be with an employer
+and a candidate must be able to answer a question about their own application.
+An updated CV store marks existing versions stale with the reason; regeneration
+is offered, never automatic.</p>
+<p><strong>Privacy.</strong> This is the only step that produces something intended to leave the
+machine, and everything in it is per-item approved. The store is never sent
+as-is. If a model drafts, it receives the advert and <strong>the selected entries
+only</strong> — not the store, not the trait profile, not the episodes that were not
+chosen.</p></div>
+<div class="note" data-for="s-spec-step-11-application"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 11 — Application</span></div><textarea class="note-ta" data-key="s-spec-step-11-application" data-label="Step 11 — Application" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-step-12-interview">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step 12 — Interview</span></h3>
+<div class="sec-body"><p><strong>Purpose.</strong> The candidate walks in prepared, and afterwards turns what happened
+into better preparation for the next one.</p>
+<p><strong>Preconditions.</strong> An offer with status <code>applied</code> and an interview arranged, for
+the preparation half; a completed interview for the recording half. Either half
+runs without the other — someone who arrives having already interviewed can
+still log it.</p>
+<p><strong>Inputs.</strong> The offer and its extraction; <code>cv/generated/&lt;offer_id&gt;/</code>, so
+preparation matches what was actually sent; <code>profile/stories.jsonl</code>;
+<code>interviews/*</code> from earlier interviews, including for other offers.</p>
+<p><strong>Protocol.</strong> <em>Before:</em> work out what this employer is likely to press on — from
+the advert's emphases, from what the application claimed, from what previous
+interviews asked — and rehearse the episodes that answer it, using the bank
+rather than inventing. Name the weak points honestly and prepare an answer for
+each; a candidate ambushed by an obvious question was failed by the preparation,
+not by themselves. <em>After:</em> record what was actually asked, what went well, what
+they wish they had said, and the outcome when it comes. Ask about it gently and
+soon, and not at all if they clearly do not want to relive it — a bad interview
+is a bad day, and the lesson can wait until the next preparation.</p>
+<p><strong>Stop rule.</strong> <em>Before:</em> the likely questions have an answer each, or the
+candidate says they are ready. Hard cap: 10 rehearsed questions. <em>After:</em> the
+questions asked and the outcome are recorded, or the candidate stops.</p>
+<p><strong>When declined.</strong> Both halves are offered. Declining preparation is common and
+fine. Declining to log an interview loses the lesson and nothing else; ask once,
+later, and never twice.</p>
+<p><strong>Outputs.</strong> <code>interviews/&lt;offer_id&gt;/</code> — preparation notes, questions asked,
+outcome, lessons — <strong>immutable</strong>, and exempt from purge regardless of the
+offer's status. Evidence rows linking each lesson to a dimension or an episode.
+The candidate sees, beforehand, what to rehearse; afterwards, what to carry into
+the next one.</p>
+<p><strong>Boundary.</strong> <em>"Logged. They pushed hard on on-call and you didn't have much —
+worth building that into a story before the next one. How did it feel?"</em> Writes
+<code>last_activity</code>.</p>
+<p><strong>Gate.</strong> <code>interview_lesson_linkage == 1.0</code> — every logged interview produces at
+least one evidence row linked to a dimension or a story-bank episode. An
+interview that produces only prose is a diary entry; the point is that the next
+one goes better. Owner: S6. State: <code>not_implemented</code>.</p>
+<p><strong>Resume.</strong> Preparation records which questions have been rehearsed. The
+recording half resumes at the first unanswered part — questions, then outcome,
+then lessons — and the outcome commonly arrives days later, in a different
+session, which the step expects rather than treats as an interruption.</p>
+<p><strong>Re-run.</strong> Preparation may run any number of times before the interview and
+replaces its notes each time. The record of what happened is historical: never
+revised, only appended to. A later interview for the same offer is a new record,
+not an edit of the old one.</p>
+<p><strong>Privacy.</strong> Interview records are among the most sensitive things stored —
+what someone was asked, what they fumbled, why they were turned down — and they
+never leave the machine. Nothing here reaches a future employer-bound document
+without per-use approval, and a rejection reason is never quoted back to any
+employer.</p></div>
+<div class="note" data-for="s-spec-step-12-interview"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 12 — Interview</span></div><textarea class="note-ta" data-key="s-spec-step-12-interview" data-label="Step 12 — Interview" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+</section>
+</div>
+
+<div class="fab">
+  <button class="btn" id="btn-top" title="Back to top">↑ Top</button>
+  <button class="btn" id="btn-import">Import</button>
+  <button class="btn" id="btn-clear">Clear</button>
+  <button class="btn primary" id="btn-export2">💾 Save / Export</button>
+</div>
+<input type="file" id="file-import" class="hidden-input" accept=".md,.markdown,.json,text/markdown,application/json">
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <h3>Your notes</h3>
+    <p>Downloaded as a Markdown file. You can also copy the text below and paste it back.</p>
+    <textarea id="modal-ta" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn primary" id="modal-copy">Copy</button>
+      <button class="btn" id="modal-dl">Download again</button>
+      <button class="btn" id="modal-close">Close</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>var SPEC_SEED_NOTES={};</script>
+<script>
+(function(){
+  var NS = 'job-search-specification-v2-spec-v1:';
+  var tas = Array.prototype.slice.call(document.querySelectorAll('.note-ta'));
+
+  function autoGrow(t){t.style.height='auto';t.style.height=(t.scrollHeight)+'px';}
+  function setFilled(t){var box=t.closest('.note');if(box){box.classList.toggle('filled',t.value.trim()!=='');}}
+  function updateCount(){
+    var n=0;tas.forEach(function(t){if(t.value.trim()!=='')n++;});
+    var el=document.getElementById('count');if(el){el.textContent=n+' / '+tas.length+' notes';}
+    return n;
+  }
+  var lsOK=true,dirty=false;
+  try{localStorage.setItem('__vs__','1');localStorage.removeItem('__vs__');}catch(e){lsOK=false;}
+  var WARN='⚠ Not saving — tap Save / Export';
+  function nowStamp(){var d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+  function setState(txt,cls){var el=document.getElementById('savestate');if(el){el.textContent=txt;el.className='savestate '+(cls||'');}}
+  window.addEventListener('beforeunload',function(e){if(!lsOK&&dirty){e.preventDefault();e.returnValue='';}});
+
+  var saveTimers={};
+  function save(t){
+    if(!lsOK){dirty=true;setState(WARN,'warn');return;}
+    var k=NS+t.dataset.key;
+    try{
+      if(t.value.trim()===''){localStorage.removeItem(k);}else{localStorage.setItem(k,t.value);}
+      dirty=true;setState('✓ Saved '+nowStamp(),'ok');
+    }catch(e){lsOK=false;document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+  }
+  var SEED=(typeof SPEC_SEED_NOTES!=='undefined')?SPEC_SEED_NOTES:{};
+  tas.forEach(function(t){
+    try{var v=localStorage.getItem(NS+t.dataset.key);
+        if(v!=null){t.value=v;}else if(Object.prototype.hasOwnProperty.call(SEED,t.dataset.key)){t.value=SEED[t.dataset.key];}}catch(e){}
+    autoGrow(t);setFilled(t);
+    t.addEventListener('input',function(){
+      autoGrow(t);setFilled(t);updateCount();
+      clearTimeout(saveTimers[t.dataset.key]);
+      saveTimers[t.dataset.key]=setTimeout(function(){save(t);},350);
+    });
+    t.addEventListener('blur',function(){save(t);});
+  });
+  updateCount();
+  if(lsOK){setState('✓ Auto-saving','ok');}else{document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+
+  function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},1900);}
+  function pad(n){return n<10?'0'+n:''+n;}
+  function today(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+
+  function buildExport(){
+    var byPart={},order=[],data={},n=0;
+    tas.forEach(function(t){
+      var v=t.value.trim();if(v==='')return;n++;
+      data[t.dataset.key]=t.value;
+      var part=t.dataset.part||'Other';
+      if(!byPart[part]){byPart[part]=[];order.push(part);}
+      byPart[part].push({label:t.dataset.label,ref:keyFromDom(t.dataset.key,t),note:t.value});
+    });
+    var lines=['# Specification notes','','_Exported '+today()+' · '+n+' note'+(n===1?'':'s')+'._','',
+      '> Send this file back to continue the review. Notes are embedded as data at the bottom','> so importing this file restores them in the reader.',''];
+    order.forEach(function(part){
+      lines.push('## '+part,'');
+      byPart[part].forEach(function(it){
+        lines.push('**'+it.label+'**  `'+it.ref+'`');
+        it.note.split('\n').forEach(function(ln){lines.push('> '+ln);});
+        lines.push('');
+      });
+    });
+    lines.push('<!-- SPEC-NOTES-DATA');
+    lines.push(JSON.stringify(data));
+    lines.push('-->');
+    return{text:lines.join('\n'),n:n};
+  }
+  function keyFromDom(domkey,t){var box=t.closest('.note');var r=box?box.querySelector('.note-ref'):null;return r?r.textContent:domkey;}
+
+  function download(name,text){
+    try{var blob=new Blob([text],{type:'text/markdown'});var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');a.href=url;a.download=name;
+        document.body.appendChild(a);a.click();
+        setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);return true;}catch(e){return false;}
+  }
+
+  var modal=document.getElementById('modal');
+  var modalTa=document.getElementById('modal-ta');
+  function openModal(text){modalTa.value=text;modal.classList.add('open');}
+  function closeModal(){modal.classList.remove('open');}
+
+  document.getElementById('btn-export').addEventListener('click',function(){
+    var r=buildExport();
+    if(r.n===0){toast('No notes yet — add some first.');return;}
+    var name='spec-notes-'+today()+'.md';
+    download(name,r.text);openModal(r.text);
+    if(navigator.clipboard){navigator.clipboard.writeText(r.text).then(function(){},function(){});}
+    dirty=false;setState('✓ Backup saved '+nowStamp(),'ok');
+    toast('Exported '+r.n+' note'+(r.n===1?'':'s'));
+  });
+  document.getElementById('btn-export2').addEventListener('click',function(){document.getElementById('btn-export').click();});
+
+  document.getElementById('modal-copy').addEventListener('click',function(){
+    modalTa.select();var ok=false;try{ok=document.execCommand('copy');}catch(e){}
+    if(navigator.clipboard){navigator.clipboard.writeText(modalTa.value).then(function(){},function(){});ok=true;}
+    toast(ok?'Copied to clipboard':'Select the text and copy');
+  });
+  document.getElementById('modal-dl').addEventListener('click',function(){download('spec-notes-'+today()+'.md',modalTa.value);toast('Download started');});
+  document.getElementById('modal-close').addEventListener('click',closeModal);
+  modal.addEventListener('click',function(e){if(e.target===modal)closeModal();});
+
+  function applyData(obj){
+    var applied=0;
+    tas.forEach(function(t){
+      if(Object.prototype.hasOwnProperty.call(obj,t.dataset.key)){t.value=obj[t.dataset.key];save(t);autoGrow(t);setFilled(t);applied++;}
+    });
+    updateCount();return applied;
+  }
+  document.getElementById('file-import').addEventListener('change',function(e){
+    var f=e.target.files[0];if(!f)return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      var txt=String(rd.result||'');var obj=null;
+      var m=txt.lastIndexOf('SPEC-NOTES-DATA');
+      try{
+        if(m>=0){var after=txt.slice(m+15);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
+                  if(jstart>=0&&jend>jstart){obj=JSON.parse(after.slice(jstart,jend+1));}}
+        else{obj=JSON.parse(txt);}
+      }catch(err){obj=null;}
+      if(!obj){toast('Could not read notes from that file');return;}
+      var k=applyData(obj);toast('Imported '+k+' note'+(k===1?'':'s'));
+    };
+    rd.readAsText(f);e.target.value='';
+  });
+  document.getElementById('btn-import').addEventListener('click',function(){document.getElementById('file-import').click();});
+
+  document.getElementById('btn-clear').addEventListener('click',function(){
+    if(!confirm('Clear ALL notes from this browser? Export first if you want to keep them.'))return;
+    tas.forEach(function(t){t.value='';save(t);autoGrow(t);setFilled(t);});
+    updateCount();toast('All notes cleared');
+  });
+
+  document.getElementById('btn-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+})();
+</script>
+</body>
+</html>
