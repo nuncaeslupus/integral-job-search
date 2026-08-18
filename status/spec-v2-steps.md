@@ -1,6 +1,6 @@
 # Specification v2 — one specification per step
 
-**Version**: 1.0 — written 2026-08-17
+**Version**: 1.1 — revised 2026-08-18 after the owner's review round
 **Author**: nuncaeslupus
 **Requires**: `status/spec-v2-process.md` v2.1 — the process this specifies steps within
 **Companion**: `status/spec-v2-steps.json` — the settled step list; `step_count` is this
@@ -33,15 +33,27 @@ Twelve fields, in this order, every time:
 **Every hard cap in this document is a first setting, not a finding.** Caps exist
 because a step with no cap runs until the candidate gives up; the specific
 numbers are the least evidenced thing here and should be revised against real
-sessions rather than defended.
+sessions rather than defended. The v1.0 caps were too high — 40 questions in one
+step reads as an interrogation to someone who came here to find work — and have
+come down.
 
-Two rules apply to every step and are not repeated in each:
+Four rules apply to every step and are not repeated in each:
 
 - **Non-insistence overrides coverage.** A subject declined once is not raised
   again in that step; declined twice, not raised again at all unless the
   candidate reopens it. Better a worse job than a person who felt interrogated.
 - **Gates are never mentioned.** The metrics below are how the build knows a step
   works. The candidate hears what was learned and what is next.
+- **The path should be enjoyable, not merely tolerable.** The prize is a job, and
+  most of the time is spent getting there — so the getting there has to be worth
+  something on its own. Light, a bit playful, genuinely interested in the person.
+  Never a form with a progress bar, and never a quiz with a score.
+- **Invite forward, do not offer an exit.** A step ends by naming what was gained,
+  saying what the next one buys them, and asking whether to carry on — *"good,
+  your history's in decent shape. Traits next: that's what stops me sending you
+  jobs full of people you'd hate. Keep going?"* Stopping is always allowed and
+  never the default suggestion. And **say at the outset that this takes a while
+  and why**: the more it knows, the better the work it finds.
 
 ---
 
@@ -62,12 +74,16 @@ other file in any profile is opened until a handle resolves.
 **Protocol.** Open by asking who this is, in one short friendly line. Resolve in
 the §6.1 order: an explicit handle or name; exactly one profile exists, in which
 case name it and ask for confirmation; otherwise ask, listing display names; no
-match, offer to create a profile. On a first run, ask what to call them and
+match, offer to create a profile. On a first run, ask what they would like to be called and
 derive a directory-safe handle from the answer — a nickname is fine, a legal
-name is not required and is not asked for. Record the language they wrote in;
+name is not required and is not asked for. **The name they choose is the
+identifier**, unless it is already taken, in which case ask for something that
+tells the two apart. It carries no obligation to match the name on their
+documents: what appears on a generated CV is the CV's business (step 11), and
+someone may reasonably want to be "Marcos" here and "Marcos Iglesias Vázquez"
+on an application. Record the language they wrote in;
 the rest of the process happens in it. Never guess from one profile existing,
-and never invent a suffix to resolve a collision — ask for something that tells
-the two apart.
+and never invent a suffix to resolve a collision.
 
 **Stop rule.** A handle is resolved and confirmed, or a new profile is created.
 Hard cap: three attempts, after which the tool says it cannot tell who this is
@@ -103,6 +119,16 @@ a merge — no state crosses.
 **Privacy.** Display names are the only cross-profile data any session reads,
 and only to offer a choice. Nothing here leaves the machine.
 
+**Enforce the boundary below the tool, not only inside it.** The owner asked
+whether access to files can be blocked automatically, without blocking ordinary
+operation: it can. A `PreToolUse` hook can refuse any read or write under
+`profiles/` outside the identified handle, and refuse them regardless of what
+the conversation believes it is doing. That is worth having precisely because
+the in-tool rule is the one a confused session breaks — a rule the process cannot
+violate is stronger than one it is asked to respect. The hook belongs to S3
+alongside `cross_user_leaks`, and must be written so a correct operation never
+trips it; a guard that fires on ordinary use gets disabled within a week.
+
 ---
 
 ## Step 1 — Intake
@@ -127,13 +153,22 @@ asking for what a CV would carry — dates, employers, what the work actually
 involved — and stop when the shape of a career is there, not when a form is
 full. Establish **where they live**, because it decides currency, work
 authorisation, which borders are commutable and how a foreign employer would tax
-them. Never ask for a legal name, an address, an identity number, a date of
-birth, or a photograph: none of them improve a search, and a tool that collects
-them looks like every recruiter the candidate is tired of.
+them. Residence is also what makes a salary comparable at all: a gross figure in
+one country and a gross figure in another are not the same offer, and the
+candidate should be shown roughly what each would leave them per month (T33). **Do not ask here for a legal name, an address, a telephone number, an identity
+number, a date of birth or a photograph.** None of them improve a *search*, and
+a tool that opens by collecting them looks like every recruiter the candidate is
+tired of. This is not a rule that they are never needed — a real CV often carries
+several — but that they are collected by **step 11, for the document that
+actually needs them, when it needs them**. Asking early for something used
+months later is how a tool ends up holding a pile of personal data it never had a
+use for.
 
 **Stop rule.** Every role in the supplied document is represented, or — with no
 document — the current or last role plus at least two earlier ones, or the
-candidate says that is enough. Hard cap: 25 questions.
+candidate says that is enough. Hard cap: 12 questions — a CV parses in seconds
+and a career sketches in a handful of exchanges; past that this stops feeling
+like help.
 
 **When declined.** Intake is offered, and declining it is ordinary: skip to
 Constraints, which then asks from scratch instead of confirming (§3.1). Say what
@@ -193,14 +228,22 @@ each, hours and availability, pay floor, mobility (remote, commute, relocation,
 cross-border), and notice period. Ask warmly and one thing at a time: *"how's
 your English?"* rather than a language table. **Ask about the things that quietly
 rule out whole employers** — the work someone will not do, and who they will not
-do it for — and get there naturally rather than by questionnaire: a person who
-cares about poverty may not want a bank, a vegetarian may not want an abattoir's
-logistics contract, and neither will volunteer it unprompted. An unconfirmed
+do it for. Most people have never articulated these and will not volunteer them,
+so the step carries a prepared list of **usual suspects** to draw on: sectors
+(arms, gambling, tobacco, fossil fuels, banking, religious institutions), causes
+someone might be drawn to or away from (animals, nature, care of the elderly,
+teaching), employer kinds (political parties, unions, the state, family firms),
+and countries whose companies they would rather not work for. The list is
+material to reach for, **never a checklist to read out**: pick what fits what
+they have already said, ask it as curiosity — *"is there work you just wouldn't
+take?"* — and follow where it goes. A person who cares about poverty may not want
+a bank; a vegetarian may not want an abattoir's logistics contract; neither will
+say so unprompted, and both would be furious to be shown those jobs. An unconfirmed
 claim stays `unknown`; **unknown neither passes nor vetoes** and surfaces later
 as something still owed.
 
 **Stop rule.** Every constraint field is `stated`, `declined` or `unknown` —
-never blank. Hard cap: 20 questions, after which whatever is unresolved stays
+never blank. Hard cap: 14 questions, after which whatever is unresolved stays
 `unknown` and the step ends.
 
 **When declined.** A declined field records `declined`, which is distinct from
@@ -213,8 +256,17 @@ answer. The candidate sees a summary they can correct in place, with unknowns
 listed as unknowns rather than hidden.
 
 **Boundary.** *"Right — remote or Barcelona, nothing under €45k, and you'd rather
-not do defence work. That's enough to start looking. Shall I?"* Writes
-`last_activity`.
+not do defence work. That's already enough to search on. It'll be a rough list
+though: the next few steps are what turn it into a good one. Carry on, or shall
+I show you a first pass now?"* — the shortcut offered honestly, with what it
+costs. Writes `last_activity`.
+
+**Pre-sourcing starts here.** Once country, field and reach are settled, the
+work of reaching sources can begin **in the background while the conversation
+continues** — resolving which boards matter for this field, preparing the
+connectors for them (T32). Nothing is shown and nothing waits on it; by the time
+Reactions needs live adverts they are there, and by the time Sourcing runs it is
+a fetch rather than a research project.
 
 **Gate.** `constraint_field_resolution == 1.0` — every field carries one of the
 three states. A blank field is indistinguishable from a question nobody asked.
@@ -249,19 +301,26 @@ rather than in general. `profile/stories.jsonl` from previous runs.
 **Protocol.** This is the step most likely to feel like an interrogation and the
 one that must not. Ask about one role at a time, starting with the most recent.
 For each: what the work actually was, what went well, what went badly, and why
-it ended. Follow the candidate rather than the checklist — someone who starts
+it ended. **Successes carry as much as failures.** The v1.0 draft leaned on what
+went wrong, because a gate asks for a third of episodes to be failures — but how
+someone reached a thing they are proud of evidences their traits just as
+precisely, and is far pleasanter to tell. Ask what they are proudest of and how
+they got there; take the failure when it comes rather than digging for it. Follow the candidate rather than the checklist — someone who starts
 talking about the manager who left is giving you the episode; take it. Ask about
 the things a CV never holds: what they are proud of, what they would do
 differently, how they like to work, what they do outside work, the small
 insistences that make a job bearable or not. **Every negative episode gets a
-follow-up about what was learned, never a judgement** (T27), and a candidate who
+follow-up about what was learned or what they would do differently** (T27) —
+which is the reason to ask at all, and never a judgement — and a candidate who
 does not want to discuss a departure is not pressed on it — the fact that a job
 ended badly is already useful without the details. Never ask why a gap exists in
 a tone that requires an excuse; ask what they were doing then.
 
 **Stop rule.** The current or last role plus two earlier ones have an episode
-each, or the candidate says that is enough. Hard cap: 12 episodes or 40
-questions, whichever first.
+each, or the candidate says that is enough. Hard cap: 8 episodes or 18
+questions, whichever first. Halfway to the cap, check in rather than pressing
+on: *"we've got a lot here. A couple more would sharpen it — keep going, or move
+on?"*
 
 **When declined.** History is offered. A candidate who does not want to tell
 stories keeps a working profile — traits will read `insufficient` and the
@@ -272,14 +331,25 @@ broken. Say that once, in a sentence, and drop it.
 evidences), evidence rows including trait evidence. The candidate sees their own
 episodes written back, in their words.
 
-**Boundary.** *"That's a good bank — nine episodes, and the one about the failed
-migration will be worth having when someone asks about pressure. Enough for
-today?"* Writes `last_activity`.
+**Boundary.** *"That's a good bank — seven episodes, and the one about the failed
+migration will earn its keep the first time someone asks how you handle pressure.
+Traits next, which is where those stories turn into something I can match on.
+Carry on?"* Writes `last_activity`.
 
 **Gate.** `story_dimension_linkage == 1.0` — every episode links to at least one
-dimension id, so the bank is queryable rather than a pile of prose. Paired with
-`story_failure_fraction >= 0.33`: success stories are rehearsed and reveal less.
-Owner: T8. State: `not_implemented`.
+dimension id, so the bank is queryable rather than a pile of prose. Owner: T8.
+State: `not_implemented`.
+
+**`story_failure_fraction >= 0.33` is superseded and must not be gated on.** The
+v1 criterion asked for a third of episodes to be failures, and the concern behind
+it is sound: a bank of nothing but rehearsed successes reveals very little. But a
+*floor* makes the tool dig for failures to satisfy a number, which is exactly the
+protocol above forbidding it — an implementation would have to break one or the
+other. What replaces it is a shape requirement, not a quota: once a bank holds
+four or more episodes it should contain **both kinds**, and the fraction is
+**reported rather than floored** so a monotone bank is visible without anyone
+being interrogated into fixing it. Reconciling `status/specification.md` and
+`docs/METHODS.md` with this is D-3.
 
 **Resume.** `position` records roles covered, roles mentioned but not explored,
 and any thread the candidate left open. Resumes by naming the thread rather than
@@ -318,6 +388,13 @@ acted on by asking a better question; it is never voiced. A candidate who
 disagrees with a score is right by default — record the disagreement as evidence
 and rescore, because a profile they do not recognise is worse than no profile.
 
+**Weight recent and relevant experience above the rest.** A doctor's first job
+waiting tables says almost nothing about the doctor, and a trait resting mainly
+on it is resting on the wrong decade. Episodes carry their `occurred_at`, so age
+is computable: evidence from long ago, or from a field the candidate has left
+behind, counts for less and is never the sole support for a score. It is not
+deleted — someone may return to an old field, and the episode is still theirs.
+
 **Stop rule.** Every trait is either scored or explicitly `insufficient` with its
 count, and the candidate has seen the profile. Hard cap: 10 questions.
 
@@ -328,7 +405,9 @@ invented person.
 
 **Outputs.** `profile/traits.json` (derived; per trait a score with evidence row
 ids, or `insufficient` with a count). The candidate sees a description of how
-they work, each line traceable to something they said.
+they work, each line traceable to something they said — and phrased so it could
+survive into a letter if they chose: *"works well under pressure"* is a claim an
+employer understands, `stress_tolerance: 0.72` is not.
 
 **Boundary.** *"That's what I've got: you like a lot of autonomy, you're happier
 fixing than launching, and I don't have enough yet on how you take pressure.
@@ -434,7 +513,14 @@ and the pay floor; `weights.json` from a previous fit.
 on a few dimensions — never sliders, never "rate how important autonomy is out
 of ten", both of which measure what someone believes about themselves. Draw the
 pairs from what reactions suggested is contested. Show the trade in their own
-currency. When a choice contradicts a stated preference, do not correct them:
+currency.
+
+**This is the step most at risk of being tedious**, and twenty rounds of "€200 or
+your afternoons?" is a survey, not a conversation. Dress the pairs as real jobs
+rather than attribute lists — two plausible offers, described the way an advert
+would describe them, differing in the few things being tested. Keep it moving,
+say what the answers are revealing as they go, and stop early when the fit is
+identifiable rather than running the full set for completeness. When a choice contradicts a stated preference, do not correct them:
 record both and let the fit reconcile it, because what people choose is better
 evidence than what they say they value. Present the fitted weights as a claim
 they can reject.
@@ -492,7 +578,25 @@ carries the questions nobody enjoys: employed or contracting, paid where, taxed
 where. Those answers change which offers are legal to take, so they belong here
 rather than as a surprise at the application stage. Reach beyond the obvious
 portals to boards specialised in the candidate's field; the general aggregators
-are the worst of the available sources and the easiest to over-rely on.
+are the worst of the available sources and the easiest to over-rely on. **Go to
+employers directly** where the field has obvious ones — a company careers page
+carries the job before the aggregator does, carries it without a recruiter in
+between, and keeps it after the listing expires elsewhere. Work out where this
+candidate's jobs actually get posted rather than searching where searching is
+easy.
+
+**Some sites need a login**, and that is the candidate's account, not ours. Where
+a source requires authentication, drive **their own browser session** rather than
+storing credentials: nothing to leak, nothing to rotate, and the candidate can
+see exactly what is being done in their name. A connector file never contains a
+credential (T32).
+
+**Deduplication is by similarity, not by hash.** The same job at two boards is
+rarely byte-identical — one truncates, one adds its own summary, one rewrites the
+title — so `text_sha256` catches re-collection of one listing and nothing else
+(process §7.4). Cross-posted near-duplicates need a similarity measure over
+normalised text, which is T13's problem and should not be papered over with a
+model call per pair.
 
 **Stop rule.** All configured sources have been polled and results normalised.
 Hard cap: a per-run offer ceiling, so one badly-scoped query cannot deliver
@@ -538,11 +642,32 @@ extracting against a broken vocabulary — a bad extraction is worse than none,
 because it looks like a result.
 
 **Inputs.** `offers/*.json`; `dimensions/*.yaml`; previous extractions, so
-unchanged offers are not re-extracted.
+unchanged offers are not re-extracted. For the local annotation pass only:
+`profile/constraints.json` and `profile/weights.json` — **read on this machine
+and never sent with the advert**.
 
-**Protocol.** No conversation. Prefilter for recall, then extract dimension
-values with verbatim evidence spans, handling negation as inversion rather than
-absence — "no on-call" is evidence *against*, not missing evidence. Record
+**Protocol.** No conversation, and **the model is the last resort rather than the
+first**. Extraction runs in stages, each cheaper than the next: normalise the
+advert into the same fields every offer carries; take what patterns and keyword
+rules can take outright — salary figures, contract type, hours, location, named
+technologies; and send to a model only the dimensions those could not settle,
+for the offers where it matters. Reading every advert with a model is what makes
+this expensive enough to stop using, and most of what an advert states is stated
+plainly. Handle negation as inversion rather than absence — "no on-call" is
+evidence *against*, not missing evidence.
+
+**Annotate the offer against the candidate immediately afterwards — locally.**
+An extraction that records `salary: 48000` leaves ranking to work out what that
+means; an annotation recording *and* that it sits inside the candidate's expected
+band, that private insurance was explicitly asked for and is present, that the
+required Catalan is held, turns ranking into comparison rather than computation.
+
+This runs as a **second pass over the extraction, on this machine**, and the
+separation matters more than the convenience: the model sees the advert and
+nothing else, and the profile is never sent one advert at a time. So the
+annotation is a distinct artefact — `annotations/<offer_id>.json`, derived,
+recomputed whenever constraints or weights change — and never a field inside the
+extraction, whose schema stays candidate-independent and shareable. Record
 `unmapped_concepts` rather than discarding what the model has no dimension for;
 that count is the staleness signal for the model itself. **When an advert yields
 very little** — four lines and a salary band is common — the step may look
@@ -560,7 +685,10 @@ outside-information lookups as a standing preference, recorded in
 `constraints.json`.
 
 **Outputs.** `extractions/<offer_id>.json` — per dimension a score, evidence
-spans, and a provenance marker distinguishing the advert from outside sources.
+spans, and a provenance marker distinguishing the advert from outside sources;
+candidate-independent, so it could be shared or cached across profiles without
+leaking anything. Alongside it `annotations/<offer_id>.json` — the same offer
+read against *this* candidate's constraints, derived and never shared.
 The candidate sees, per offer, what it was found to say — and what it did not
 say, which is not the same as saying no.
 
@@ -576,14 +704,18 @@ T15, T16, T17. State: `not_implemented`.
 resumes at the first offer without a current extraction.
 
 **Re-run.** Replaces the extraction for any offer whose text changed or whose
-extraction predates the current dimension model version. Preserves extractions
+extraction predates the current dimension model version. Annotations are cheaper
+and staler: they are recomputed whenever constraints or weights move, without
+re-reading the advert. Preserves extractions
 still current — re-extracting unchanged adverts spends money to reproduce a
 result.
 
 **Privacy.** Advert text goes to the extraction model. **Nothing from the
-candidate's profile is sent with it** — extraction reads the advert, and
-matching happens locally afterwards. That separation is what keeps the profile
-from leaving the machine one advert at a time.
+candidate's profile is sent with it** — extraction reads the advert, and the
+annotation pass that compares it to the candidate runs locally, afterwards, with
+no model call. That separation is what keeps the profile from leaving the machine
+one advert at a time, and it is why the comparison lives in a separate file
+rather than as fields inside the extraction.
 
 ---
 
@@ -603,7 +735,17 @@ is trait-side.
 specification**, not a rendering detail. Show a handful at a time, not forty.
 Lead with the offer and the one thing that most moved it, not with a score.
 Make the reason concrete: the sentence in the advert, and what it is worth per
-month. Show what is *unknown* about an offer as unknown rather than as neutral —
+month.
+
+**The shape of an offer on screen is specified, not improvised.** A card: the
+title and employer, the facts as bullets — pay (gross, and roughly what it
+leaves per month, T33), hours, location and arrangement, contract — and then
+**one line of what actually matters about this one**, in plain words and
+including the bad part: *"full remote, pay is good, but it is a gun factory."*
+That sentence is the thing a candidate reads; the bullets are what they check
+afterwards. Where the list is rendered as a page rather than spoken, it is a
+**template filled from the normalised offer JSON** — built once, filled fast,
+never assembled a paragraph at a time by a model. Show what is *unknown* about an offer as unknown rather than as neutral —
 an advert silent on hours is not an advert promising good ones. Say when the
 ranking is provisional and what would sharpen it, in one line, once. Where an
 offer is out of reach today but reachable, say what it would take and ask
@@ -664,6 +806,13 @@ offer status changes as they fall out of the conversation — ruled out is
 `screened_out`, interested is `shortlisted` — and never infer a status from
 silence.
 
+**Expect the conversation to leave the list.** *"I didn't know this kind of job
+existed — can we look for more like that?"* is the most valuable sentence in the
+whole process: it is a discovered preference, a new search, and often a widening
+of what the candidate thought they were allowed to want. Take it. Record it as
+evidence, adjust constraints or weights as it warrants, and run a fresh search
+rather than steering back to the list already on screen.
+
 **Stop rule.** The candidate stops talking about the offers, or every offer they
 raised has a recorded reaction. Hard cap: no prompt is issued more than twice in
 a session.
@@ -714,9 +863,25 @@ offers Intake or History rather than producing a document padded with invention.
 **Protocol.** Select from the store against what the advert asks for, draft, and
 show the candidate what was chosen and what was left out — the omissions are as
 much a decision as the inclusions. **Every claim traces to a store entry**;
-nothing is written that the candidate did not say. Where the advert asks for
-something they lack, say so and offer the options honestly: apply anyway and
-address it, or leave this one. **Any story-bank episode proposed for the letter
+nothing is written that the candidate did not say.
+
+**Use the advert's own language, with restraint.** Where what it asks for genuinely
+matches what the candidate has, saying it in their words helps — it is what the
+reader is scanning for, and increasingly what a filter is scanning for. Where the
+match is partial or absent, borrowing the phrase is a lie with good vocabulary.
+Mirror the wording only over ground the candidate actually holds.
+
+**Where the advert asks for something they lack**, say so and offer the options
+honestly: apply anyway and address the gap in the letter, or leave this one. A
+gap named plainly and briefly costs less than a gap the reader discovers; a gap
+dressed up is what ends an interview badly. Never claim a qualification, a year
+of experience or a language the store does not hold — the generated document is
+the candidate's word, and it is the one thing here that reaches a stranger.
+
+**This is where personal details are collected**, not at Intake: the name to
+print, contact details, whatever this employer's form requires. Asked for the
+document being produced, used for it, and not gathered speculatively months
+earlier. **Any story-bank episode proposed for the letter
 needs per-use approval** — recounting a failure to the tool was never consent to
 send it to a company. The tool stops one step short of sending: the documents,
 the text to paste into the employer's form, or an email left in drafts. The
@@ -781,10 +946,25 @@ the advert's emphases, from what the application claimed, from what previous
 interviews asked — and rehearse the episodes that answer it, using the bank
 rather than inventing. Name the weak points honestly and prepare an answer for
 each; a candidate ambushed by an obvious question was failed by the preparation,
-not by themselves. *After:* record what was actually asked, what went well, what
-they wish they had said, and the outcome when it comes. Ask about it gently and
-soon, and not at all if they clearly do not want to relive it — a bad interview
-is a bad day, and the lesson can wait until the next preparation.
+not by themselves.
+
+**The mock interview is a role-play, and it is strict.** Say so before it starts:
+from that point the tool is the interviewer and nothing else — no coaching
+mid-answer, no encouragement, no breaking character to explain a question, no
+chat. It ends when it ends, and only then does the ordinary voice come back, with
+the feedback. A rehearsal interrupted every third answer to be helpful rehearses
+nothing; the discomfort of an unhelped answer is the entire exercise. Interview
+the way recruiters actually do for this field and seniority — competency
+questions, the follow-ups that test whether a story is real, the silence after an
+answer — rather than from a generic list. **Offer dictation**: speaking an answer
+aloud is far closer to the real thing than typing one, and the difference shows.
+
+*After:* record what was actually asked, what went well, what
+they wish they had said, and the outcome when it comes — and **give the feedback
+then**, while it is fresh: what landed, what rambled, which answer needs a better
+story behind it. Ask about a real interview gently and soon, and not at all if
+they clearly do not want to relive it — a bad interview is a bad day, and the
+lesson can wait until the next preparation.
 
 **Stop rule.** *Before:* the likely questions have an answer each, or the
 candidate says they are ready. Hard cap: 10 rehearsed questions. *After:* the

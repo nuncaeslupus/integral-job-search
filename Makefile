@@ -1,4 +1,4 @@
-.PHONY: help sync build lint format test gate reader clean update-skills
+.PHONY: help sync build lint format test gate reader reader-process reader-steps clean update-skills
 
 ARSENAL_REPO    ?= https://github.com/nuncaeslupus/claude-arsenal.git
 ARSENAL_REF     ?= v0.23.1  # pin to a tag — upgrade deliberately
@@ -50,9 +50,17 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 # this is the one-line fix it tells you to run.
 READER_NAME ?= Job Search — Specification v2
 
-reader:  ## regenerate the annotatable spec readers from their Markdown sources
+# Regenerating both on every edit stamps a fresh date into the one you did not
+# touch, which turns a one-document change into a two-document diff nobody can
+# trace. `make reader` still does both for a release; `reader-steps` and
+# `reader-process` do one, and one is what a normal edit needs.
+reader: reader-process reader-steps  ## regenerate both annotatable spec readers
+
+reader-process:  ## regenerate the process-spec reader only
 	uv run --with markdown python3 .claude/skills/specify/scripts/create_reader.py \
 		--input status/spec-v2-process.md --output-dir docs/spec-v2 --name "$(READER_NAME)"
+
+reader-steps:  ## regenerate the step-spec reader only
 	uv run --with markdown python3 .claude/skills/specify/scripts/create_reader.py \
 		--input status/spec-v2-steps.md --output-dir docs/spec-v2-steps --name "$(READER_NAME)"
 

@@ -132,6 +132,15 @@ def test_regenerating_the_reader_produces_no_diff(tmp_path: Path) -> None:
     if not (committed / "spec-reader.html").is_file():
         pytest.skip("reader has not been generated yet")
 
+    # The generator seeds reviewer notes from `notes.json` in its output
+    # directory, so regenerating into an empty one produces a reader with empty
+    # note fields and a spurious diff. Same inputs or the comparison is
+    # meaningless — this check exists to catch a stale document, not to
+    # rediscover that two different inputs give two different outputs.
+    seed = committed / "notes.json"
+    if seed.is_file():
+        shutil.copy(seed, tmp_path / "notes.json")
+
     # Run it the way `make reader` does. Invoking it with a bare interpreter
     # skips for a missing `markdown` import, and a check that always skips is a
     # check that never runs — which is how a guarantee ends up true of the
