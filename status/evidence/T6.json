@@ -1,0 +1,10 @@
+{
+  "profile_rebuild_deterministic": 1,
+  "derived_files": [
+    "constraints.json",
+    "stories.jsonl",
+    "traits.json",
+    "weights.json"
+  ],
+  "failures": []
+}
