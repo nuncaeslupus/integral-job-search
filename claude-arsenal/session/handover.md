@@ -4,168 +4,175 @@
 
 ## Next session starts here
 
-**Plan v2 is written and the queue is reconciled against it.** `status/plan.md`
-is now the build order for specification v2; `status/plan-v1.md` keeps the v1
-plan unedited as the record of what it planned and why. The whole board — 62
-tasks — is in one table with a measurable gate on every row, and a checker
-(`jobsearch.plan_v2`, gate `plan_queue_task_drift == 0`) fails if the plan and
-the queue ever disagree again.
+**Plan v2 is merged (#20, `548c3a2`) and the queue is ready to be worked.**
+Nothing is in flight: no open PR, no `in_progress` task, `queue_doctor` 0/0/0,
+`plan_queue_task_drift == 0`.
 
-Read in this order:
+The intent for the next session is a **long worker-loop run against M1**. Start
+it with:
 
-1. `status/plan.md` — six layers, the task table by layer, four milestones, the
-   risk register, and the reconciliation with v1.
-2. `status/spec-v2-process.md` (v2.1) and `status/spec-v2-steps.md` (v1.1) —
-   unchanged; the plan builds against them and re-decides nothing.
+```bash
+/continue m1
+```
 
-### The recommended next task
+That sets `LOOP_TAGS=m1`, and `queue_batch.sh` then returns only M1's unblocked
+tasks. **Do not run a bare `/continue`** for this stretch: the selector orders by
+priority alone, so it hands back T29 (M4) and `[LAPTOP]` T25 alongside S3 on the
+very first round.
 
-**M1, the spine** — the milestone that makes everything else possible, and the
-only one not paced by the [HUMAN] corpus labelling (T5):
+Read before dispatching:
+
+1. `status/plan.md` — six layers, the 63-row task table, four milestones, the
+   risk register, the reconciliation with v1, and the Step gate ownership table.
+2. `status/spec-v2-process.md` (v2.1) and `status/spec-v2-steps.md` (v1.1) — the
+   settled specifications. The plan builds against them and re-decides nothing.
+
+### M1, the spine — what the loop will work through
+
+Ten tasks. The first round returns **S3** (`lo-a4bf`) and **T30** (`lo-c5ad`);
+everything else unblocks behind them.
 
 | order | task | id | what |
 |-------|------|-----|------|
-| 1 | S3 | `lo-a4bf` | profile tree, handle resolution, the `PreToolUse` hook |
+| 1 | S3 | `lo-a4bf` | profile tree, handle resolution, the `PreToolUse` guard |
+| 1 | T30 | `lo-c5ad` | declared step inputs/outputs, required-subset closure |
 | 2 | T6 | `lo-e0fa` | append-only evidence log + deterministic rebuild |
 | 3 | T35 | `lo-4730` | session state + the five-rule resumption order |
-| 4 | T30 → T34 | `lo-c5ad`, `lo-485e` | declared step inputs, then the runtime that reads them |
-| 5 | T37 → T36, T39 | `lo-67f4`, `lo-5080`, `lo-99de` | revision + staleness, then triggers and scoring points |
+| 4 | T34 | `lo-485e` | the step graph runtime, and L0/L1/L2 |
+| 4 | T37 | `lo-67f4` | profile revision + staleness across the three classes |
+| 5 | T36 | `lo-5080` | freshness triggers, each an offer and never an action |
 | — | T38, T40, T48 | `lo-dddd`, `lo-da9c`, `lo-bd03` | retraction/deletion, decline ledger, gate-state register |
 
-**S7 is deliberately not next**, and the previous handover recommended it. Each
-of its thirteen skills carries a checkpoint *script* that reads session state
-and writes gate evidence; none of that exists until T35 and T34 land. S7's
-payload now records the dependency.
+**T39** (scoring triggers, `lo-99de`) is *not* in this run. It depends on T37,
+which is M1, but the plan schedules it in **M3** alongside the traits and
+weights it exists to pace — there is nothing to defer scoring of until they
+exist. `/continue m1` will not return it, and that is correct.
 
-**T5 (`lo-d2b2`, [HUMAN]) still paces everything measured on the evaluation
-split** — `extraction_macro_f1`, `elicitation_eval_overlap`, `rank_spearman` —
-and nothing in M1 touches the corpus. The two run in parallel.
+**Why M1 first.** It is the only milestone not paced by T5 (`lo-d2b2`,
+`[HUMAN]` corpus labelling), which gates everything measured on the evaluation
+split — `extraction_macro_f1`, `elicitation_eval_overlap`, `rank_spearman`.
+Nothing in M1 touches the corpus, so the spine and the labelling run in
+parallel.
 
-## Decisions taken this session
+**S7 is deliberately not next**, and an older handover recommended it. Its
+thirteen skills each carry a checkpoint *script* that reads session state and
+writes gate evidence; none of that exists until T35 and T34 land. The queue now
+enforces this — S7 blocks on `lo-485e` and `lo-4730` as well as S2r.
 
-1. **`status/plan.md` is rewritten as v2 rather than added beside v1.** One
-   plan, one task table, one namespace; the arsenal seeding protocol reads
-   `status/plan.md` by name. v1 is archived at `status/plan-v1.md` with a
-   superseded banner and is not to be added to.
-2. **Two new layers.** RUNTIME (identity, session state, step graph, freshness,
-   revision, retraction, scoring triggers, decline ledger, the step skills) and
-   DOCUMENT (the CV store, generated documents, applications, interviews). The
-   v1 four-layer architecture had no home for either, which is why fourteen
-   process-spec requirements had no task.
-3. **Four milestones.** M1 the spine · M2 an L1 ranking end to end · M3 the full
-   first run at L2 · M4 per-opportunity documents and interviews. Required steps
-   first, so an unbuilt offered step is a declined step rather than a hole.
-4. **Fifteen new tasks (T34–T48) and S8.** Seeded with payloads carrying an
-   evidence gate each. Nothing was invented to fill the table: every row traces
-   to a numbered requirement in the process or step specifications.
+## Before the first dispatch
 
-Everything in the previous handover's "do not re-litigate" list still stands and
-was not touched: the eight owner decisions of 2026-08-17, the three corrections
-of 2026-08-18, and the standing constraints on what may leave the machine.
+1. `export ARSENAL_QUEUE_DIR="$(claude-arsenal/bin/queue_branch.sh)"` — the
+   coordination worktree is at `/home/user/job-search-arsenal-queue-wt` and
+   **pushes to `arsenal-queue` work from a cloud session** (verified this
+   session, four pushes).
+2. `queue_sync.sh` is **already done** for the v2 round. Note its one limit,
+   which cost time here: it ports rows that are *absent*, and never updates a
+   row that already exists. The dependency reconciliation therefore did not
+   travel with it and had to be ported by hand — if a future round changes
+   `deps`, `status` or `tags` on existing rows on main, port those fields
+   explicitly.
+3. The main working tree must be clean before the loop starts, and must stay
+   clean while it runs — `worker_postcheck.sh` is destructive by design.
+4. `worktree_probe.sh` reports **available** here, so dispatch a lone first
+   worker and check the postcheck result before ramping to `ARSENAL_MAX_WORKERS`.
+
+## Decisions taken — do not re-litigate
+
+All of the owner's earlier decisions stand untouched: the eight of 2026-08-17,
+the three corrections of 2026-08-18, and the standing constraints on what may
+leave the machine (profile store never sent as-is, per-use approval for story
+episodes, no autonomous outward action, advert text only to a model, connectors
+are data and never credentials, `profiles/` gitignored, unknown ≠ satisfied).
+
+From the planning round (#20):
+
+1. **`status/plan.md` is the v2 plan**; `status/plan-v1.md` is the archived v1
+   and is not to be added to.
+2. **Six layers.** RUNTIME and DOCUMENT are new — a process specification needs
+   a process engine, and generated documents rebuild under different rules from
+   a derived profile.
+3. **The plan's Gate column mirrors the payload's `gate` block.** `gate_run.sh`
+   executes the payload; the plan is what a human reads. A disagreement is drift
+   and fails S8's gate.
+4. **Milestones are queue tags** (`m1`…`m4`, `cross`), because the selector
+   orders by priority and knows nothing about build order.
+5. **A settled specification is never overridden from the plan.** Where the work
+   disagrees with it, seed a `D-N` divergence — which is what **D-4** is.
+
+## Open questions for the owner
+
+- **D-4** (`lo-4ca5`): `spec-v2-process.md` §9 assigns `trait_evidence_sufficiency`
+  to T28 (continuous capture); the two-episode floor that produces the
+  measurement is specified in T27 (the interview protocol); and neither task's
+  own gate is the step metric. Three candidate fixes are in the payload. The
+  same shape holds for `constraint_field_resolution` (T24 owns it, T41 resolves
+  the fields), so a decision here probably settles both.
+- **T29** (`lo-2293`): the distribution question at process spec §11.5 is still
+  open. It blocks nothing today and blocks everything the first time someone
+  other than the owner installs this.
 
 ## What was done this session
 
-| artefact | what | gate |
-|----------|------|------|
-| `status/plan-v1.md` | v1 plan archived unedited, banner added | — |
-| `status/plan.md` | plan v2: six layers, 62-row task table, milestones, risks, reconciliation | `plan_queue_task_drift == 0` |
-| `src/jobsearch/plan_v2.py` + `tests/test_plan_v2.py` | the drift checker, 11 tests | recorded in `status/evidence/S8.json` |
-| queue | 15 new tasks seeded with payloads; 12 existing payloads annotated with their scope change; ledger synced from `arsenal-queue` | `queue_doctor` 0/0/0 |
+| PR | what | gate |
+|----|------|------|
+| #20 | plan v2, 63-row task table, 16 new tasks, 12 payload scope notes, queue reconciled | `plan_queue_task_drift == 0` |
 
-**Reconciliation, in short.** Refined: T24 (pins the `constraints.json` field
-set; gains step 7's reach and legality fields), T27 (owns
-`trait_evidence_sufficiency`), T9 (live stimuli, corpus as fallback), T13
-(similarity dedup; the hash is the cheap half), T15 (staged, model last;
-candidate-independent), T18 (records revision + level), T21 (moves lifecycle
-status too), T29 (partly delivered; what remains is the distribution decision),
-S4 (narrowed to the store — generation splits to T45), S6 (narrowed — the mock
-splits to T47), S3 (narrowed — session state splits to T35), S7 (now depends on
-T34/T35). Superseded: the `story_failure_fraction` floor (D-3 reconciles the v1
-documents) and the step table in `docs/product-shape.md`.
-
-## The review round on #20
-
-Qodo found three real classes of drift the first draft of the S8 checker could
-not see, and each is now measured rather than argued about:
-
-1. **Dependency drift.** The plan's `Depends` cells and the queue's blocking
-   `deps` disagreed on 27 edges. `queue_batch.sh` dispatches from the queue
-   alone, so **S7 could have been dispatched before T34 and T35** — the exact
-   out-of-order build the milestones exist to prevent. Reconciled as the union
-   of both sides, cycle-checked, and now gated.
-2. **Gate drift.** Eight plan rows named a different metric from the `gate`
-   block in the task's own payload — including T32 (`== 0` against `== 1`, a
-   polarity flip). The rule now is that **the plan's Gate column mirrors the
-   payload**, because `gate_run.sh` executes the payload. S4's payload was the
-   one changed instead: its gate moved to T45 with the generation work.
-3. **A settled specification contradicted.** The plan had reassigned
-   `trait_evidence_sufficiency` to T27; `spec-v2-process.md` §9 and
-   `spec-v2-steps.json` assign it to T28. Seeded as **D-4** (`lo-4ca5`) rather
-   than edited: §9 names T28 (continuous capture), the two-episode floor that
-   produces the measurement is specified in T27, and neither task's own gate is
-   the step metric. The plan now records §9's answer and points at D-4.
-
-Also fixed: the checker crashed on a JSONL line parsing to `null`, a list or a
-scalar (breaking its own "reports, never raises" contract); it collapsed labels
-into sets, so a duplicated row read as agreement; and its column state was
-cleared only by a blank line, which made the Evidence-log trap safe by
-typography rather than by logic.
-
-Declined, with the reasons already on #7, #9, #12–#18: placeholder gate blocks
-on unstarted tasks, a `size` field the queue schema does not carry, docs-and-code
-in one change set, and a gate-result field on `merged` rows that `release.sh`
-already enforces at the choke point. The inline-numeric-gate rule was declined
-too — the prose names which task owns a *step's* metric, and every payload still
-carries exactly one fenced gate block.
+Post-merge, on `arsenal-queue`: the 17 new rows synced, the 16 reconciled
+dependency edges ported by hand, payload scope notes copied across, S8 released
+`merged`, and every task tagged with its milestone.
 
 ## Findings worth carrying forward
 
-- **The drift checker read the Evidence log as a task table.** It has a `T#`
-  column and a `Gate` column of its own, so its rows satisfied the plan side of
-  the check — a task that had been *measured* but never sequenced would have
-  scored zero drift, which is the one thing the gate exists to catch. Fixed by
-  requiring `Description` in the header, and the test names the reason.
-- **The gate column was read by index and every gate looked malformed.** The
-  plan groups tasks into one table per layer; the column is found from each
-  table's own header now.
-- **The default branch's task ledger was nine rows and eight statuses behind**
-  `arsenal-queue`. Synced additively (no payload was overwritten — main's
-  payload text is newer than the coordination branch's).
+- **`queue_sync.sh` only ports absent rows.** The v2 dependency reconciliation
+  sat on main while `queue_batch.sh` — which dispatches from `arsenal-queue`
+  alone — still had S7 blocked only on S2r. A plan that reconciles the queue is
+  not reconciled until the coordination ref carries it.
+- **A drift checker that compares membership is not comparing agreement.**
+  Review found 27 dependency edges and 8 gate metrics disagreeing between the
+  plan and the queue while the first draft of `plan_queue_task_drift` reported
+  zero. It now measures membership, gate and dependency.
+- **The Evidence log has a `T#` column and a `Gate` column**, so a plan parser
+  reads it as a task table unless it also requires `Description` — and a task
+  that was *measured* but never sequenced would then score zero drift.
+- **`gate_run.sh` takes a task id, not a payload path.**
+- Regenerate the readers after any spec edit: `make reader-process` or
+  `make reader-steps`. No specification was edited this session.
 
 ## Queue state
 
-63 tasks: 10 merged, 53 open, 0 `in_progress`, 0 `escalated`. S8 is this
-round's own row and stays `open` until the orchestrator releases it against
-this PR; **D-4** was seeded by the review round.
-`queue_doctor.sh`: 0 error, 0 warn, 0 info. New rows are on this feature branch,
-so the next orchestrator session must run `queue_sync.sh` to port them onto
-`arsenal-queue` before dispatching workers.
+63 tasks: 11 merged, 52 open, 0 `in_progress`, 0 `escalated`. `queue_doctor.sh`
+0 error, 0 warn, 0 info. No open PRs.
+
+By milestone: **m1** 10 · **m2** 16 · **m3** 14 · **m4** 10 · **cross** 3.
+Also tagged: `human` (T5, T20) and `laptop` (T4b, T12, T25).
 
 ## Environment notes that cost time to rediscover
 
-- Pushes go to the designated session branch only, and **GitHub deletes it on
-  merge**. After a PR lands: `git fetch --prune origin && git checkout -B
-  <branch> origin/main`, then `git branch --unset-upstream`.
-- `gh` is unavailable in the cloud session; merge PRs through the GitHub MCP
+- Pushes go to the designated session branch **and** to `arsenal-queue`; both
+  work. GitHub deletes the session branch on merge — afterwards
+  `git fetch --prune origin && git checkout -B <branch> origin/main`, then
+  `git branch --unset-upstream`.
+- `gh` is unavailable in the cloud session. Merge PRs through the GitHub MCP
   tools and flip `done` → `merged` with
-  `claude-arsenal/scripts/update_task_row.py`.
-- Queue rows authored on a feature branch are invisible to the orchestrator
-  until `queue_sync.sh` runs. That is the documented path and the one used here,
-  because the coordination branch cannot be pushed from this session.
-- `gate_run.sh` takes a **task id**, not a payload path.
-- **Regenerate the readers after any spec edit**: `make reader-process` or
-  `make reader-steps`. No spec was edited this session, so neither was run.
+  `claude-arsenal/scripts/update_task_row.py <id> merged <queue> <pr> ""`.
+- A cloud session (`CLAUDE_CODE_REMOTE=true`) cannot release a `laptop`-tagged
+  task `done` — T4b, T12, T25. `[HUMAN]` tasks T5 and T20 carry
+  `requires: surface:human`, so the selector never returns them.
+- `gate_run.sh` runs with a hardened PATH that has no `uv`, so tests needing it
+  skip there and run under `make test`. Check the skip count.
 
 ## Qodo review notes
 
-Three platform rules have been declined with reasons on #7, #9, #12, #13, #15,
-#16, #17 and #18 — docs-and-code in one change set, the
-`test_<what>_<condition>_<result>` naming convention, and placeholder gate blocks
-on freshly seeded tasks. Reuse those arguments rather than re-deriving them; this
-PR is the same shape (the plan is the deliverable and the checker exists only to
-gate it). Qodo's *bug* findings have been right nearly every time.
+Its **bug** findings have been right nearly every time, including the three that
+reshaped #20. Its **platform-rule** findings have been declined with reasons on
+#7, #9, #12–#18 and #20, consistently: docs-and-code in one change set (the
+document is the deliverable and the checker exists only to gate it); the
+`test_<what>_<condition>_<result>` naming convention; placeholder gate blocks on
+freshly seeded tasks; a `size` field the queue schema does not carry; and a
+gate-result field on `merged` rows that `release.sh` already enforces at the
+choke point. Reuse those arguments rather than re-deriving them.
 
 ## Surface profile at handover
 
-Cloud session (`CLAUDE_CODE_REMOTE=true`), so `laptop`-tagged tasks (T4b, T12,
-T25) cannot be released `done` from here. Ran solo; no worker fan-out.
+Cloud session (`CLAUDE_CODE_REMOTE=true`). `worktree_probe.sh`: **available**.
+Ran solo; no worker fan-out this session.

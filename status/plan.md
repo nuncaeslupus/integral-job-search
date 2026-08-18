@@ -226,7 +226,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
 |----|-------------|------|------|---------|------|-------|----|
-| S3 | Multi-user profile tree + identify-at-session-start + handle resolution, with a `PreToolUse` hook refusing reads and writes under another handle's tree | 0 | L | S1, T1 | `cross_user_leaks == 0` | `test_store_operation_under_another_handle_is_refused` in `tests/test_identity.py`; `test_single_existing_profile_is_confirmed_not_assumed` — one profile is offered for confirmation, never selected silently; `test_correct_operation_never_trips_the_hook` | ☐ |
+| S3 | Multi-user profile tree, identify-at-session-start, and handle resolution, with a `PreToolUse` hook refusing reads and writes under another handle's tree. **Session state is T35** | 0 | L | S1, T1 | `cross_user_leaks == 0` | `test_store_operation_under_another_handle_is_refused` in `tests/test_identity.py`; `test_single_existing_profile_is_confirmed_not_assumed` — one profile is offered for confirmation, never selected silently; `test_correct_operation_never_trips_the_hook` | ☐ |
 | T35 | Session state and resumption: `session/state.json` written whenever something new is known, and the five-rule resumption order that announces which step it resumes and why | 0 | M | S3, T6 | `resumption_position_loss == 0` | `test_interrupted_step_resumes_at_recorded_position` in `tests/test_session_state.py`; `test_state_survives_a_session_that_never_reaches_a_boundary`; `test_resumption_names_the_step_and_the_reason` | ☐ |
 | T34 | Step graph runtime: read declared inputs/outputs, answer *which steps may run* and *what is still owed*, and compute the sufficiency level L0/L1/L2 | — | M | T30, T35 | `unrunnable_step_dispatches == 0` | `test_step_without_its_required_inputs_is_never_offered` in `tests/test_step_graph_runtime.py`; `test_declining_every_offered_step_still_reaches_a_ranking`; `test_ranking_without_weights_is_l1` | ☐ |
 | T37 | Profile revision and staleness: everything derived records the revision it was computed from; derived is recomputed, authored is marked stale with the reason, historical is never touched | — | M | T6 | `stale_artefact_detection_recall == 1.0` | `test_artefact_behind_current_revision_reads_stale` in `tests/test_revision.py`; `test_authored_artefact_is_marked_not_regenerated`; `test_historical_artefact_is_never_revised` | ☐ |
@@ -335,6 +335,12 @@ labelling) still paces `extraction_macro_f1`, `elicitation_eval_overlap` and
 everything that measures against the evaluation split — but nothing in M1
 touches the corpus. The two run in parallel: the spine is built while the
 labelling happens, and M2's extraction gates land when T5 does.
+
+**Milestones are queue tags.** Every task carries `m1`, `m2`, `m3`, `m4` or
+`cross`, so a worker session scopes to the milestone rather than to raw
+priority: `/continue m1`, which sets `LOOP_TAGS` and makes `queue_batch.sh`
+return only that milestone's unblocked tasks. Without the tag the selector is
+ordered by priority alone and will hand back an M4 task beside an M1 one.
 
 **Branch pattern**: `T<N>-short-description` from the default branch.
 
