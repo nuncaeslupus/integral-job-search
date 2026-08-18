@@ -48,6 +48,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, in every job. Two checks here read git history
+          # to answer their question, and a shallow checkout does not make
+          # them fail — it makes them stop measuring:
+          #
+          #   verify-subtree proves the prefix is a real subtree by finding
+          #     the `git-subtree-dir:` trailer in a commit message. At
+          #     depth 1 there is no such commit, so it reports "cannot
+          #     tell" and skips the check.
+          #   reader_notes (T31) resolves each note back to the commit that
+          #     last set its text, then reparses the spec there. At depth 1
+          #     that walk finds only the tip, so every note trivially
+          #     resolves to today's title and all 28 report `unchanged` —
+          #     a clean result over nothing, which is the one thing a gate
+          #     in this repository may never do.
+          #
+          # Both stay green either way, which is exactly why this is pinned
+          # by a test rather than left to whoever edits this file next.
+          # actions/checkout defaults to depth 1; confirmed by cloning this
+          # repository --depth 1 and reproducing both behaviours.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -60,6 +81,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, in every job. Two checks here read git history
+          # to answer their question, and a shallow checkout does not make
+          # them fail — it makes them stop measuring:
+          #
+          #   verify-subtree proves the prefix is a real subtree by finding
+          #     the `git-subtree-dir:` trailer in a commit message. At
+          #     depth 1 there is no such commit, so it reports "cannot
+          #     tell" and skips the check.
+          #   reader_notes (T31) resolves each note back to the commit that
+          #     last set its text, then reparses the spec there. At depth 1
+          #     that walk finds only the tip, so every note trivially
+          #     resolves to today's title and all 28 report `unchanged` —
+          #     a clean result over nothing, which is the one thing a gate
+          #     in this repository may never do.
+          #
+          # Both stay green either way, which is exactly why this is pinned
+          # by a test rather than left to whoever edits this file next.
+          # actions/checkout defaults to depth 1; confirmed by cloning this
+          # repository --depth 1 and reproducing both behaviours.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -71,6 +113,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, in every job. Two checks here read git history
+          # to answer their question, and a shallow checkout does not make
+          # them fail — it makes them stop measuring:
+          #
+          #   verify-subtree proves the prefix is a real subtree by finding
+          #     the `git-subtree-dir:` trailer in a commit message. At
+          #     depth 1 there is no such commit, so it reports "cannot
+          #     tell" and skips the check.
+          #   reader_notes (T31) resolves each note back to the commit that
+          #     last set its text, then reparses the spec there. At depth 1
+          #     that walk finds only the tip, so every note trivially
+          #     resolves to today's title and all 28 report `unchanged` —
+          #     a clean result over nothing, which is the one thing a gate
+          #     in this repository may never do.
+          #
+          # Both stay green either way, which is exactly why this is pinned
+          # by a test rather than left to whoever edits this file next.
+          # actions/checkout defaults to depth 1; confirmed by cloning this
+          # repository --depth 1 and reproducing both behaviours.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
@@ -87,14 +150,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history, unlike every other job here. The verifier proves the
-          # prefix is a real subtree by finding the `git-subtree-dir:` trailer
-          # in a commit message, and checkout's default depth-1 clone contains
-          # no such commit. On a shallow checkout the verifier reports "cannot
-          # tell" and skips that sub-check rather than failing — correct
-          # behaviour for a developer's shallow clone, and exactly the wrong
-          # thing to let happen in CI, where it would leave the check silently
-          # inert in the one place it is supposed to run.
+          # Full history, in every job. Two checks here read git history
+          # to answer their question, and a shallow checkout does not make
+          # them fail — it makes them stop measuring:
+          #
+          #   verify-subtree proves the prefix is a real subtree by finding
+          #     the `git-subtree-dir:` trailer in a commit message. At
+          #     depth 1 there is no such commit, so it reports "cannot
+          #     tell" and skips the check.
+          #   reader_notes (T31) resolves each note back to the commit that
+          #     last set its text, then reparses the spec there. At depth 1
+          #     that walk finds only the tip, so every note trivially
+          #     resolves to today's title and all 28 report `unchanged` —
+          #     a clean result over nothing, which is the one thing a gate
+          #     in this repository may never do.
+          #
+          # Both stay green either way, which is exactly why this is pinned
+          # by a test rather than left to whoever edits this file next.
+          # actions/checkout defaults to depth 1; confirmed by cloning this
+          # repository --depth 1 and reproducing both behaviours.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         with:
@@ -107,6 +181,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, in every job. Two checks here read git history
+          # to answer their question, and a shallow checkout does not make
+          # them fail — it makes them stop measuring:
+          #
+          #   verify-subtree proves the prefix is a real subtree by finding
+          #     the `git-subtree-dir:` trailer in a commit message. At
+          #     depth 1 there is no such commit, so it reports "cannot
+          #     tell" and skips the check.
+          #   reader_notes (T31) resolves each note back to the commit that
+          #     last set its text, then reparses the spec there. At depth 1
+          #     that walk finds only the tip, so every note trivially
+          #     resolves to today's title and all 28 report `unchanged` —
+          #     a clean result over nothing, which is the one thing a gate
+          #     in this repository may never do.
+          #
+          # Both stay green either way, which is exactly why this is pinned
+          # by a test rather than left to whoever edits this file next.
+          # actions/checkout defaults to depth 1; confirmed by cloning this
+          # repository --depth 1 and reproducing both behaviours.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true

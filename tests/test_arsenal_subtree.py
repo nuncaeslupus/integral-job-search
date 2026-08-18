@@ -16,7 +16,6 @@ against the real repository can only be tested on a state that already passes.
 from __future__ import annotations
 
 import json
-import re
 import shutil
 import subprocess
 import sys
@@ -239,31 +238,37 @@ def test_a_hand_copied_directory_is_not_accepted_as_a_subtree(tmp_path: Path) ->
     assert measured["subtree_recorded_in_history"] is False
 
 
-def test_ci_gives_the_subtree_job_the_history_the_check_needs() -> None:
-    """The one place the real-subtree check must run is the one place it would
-    silently not.
+def test_every_ci_job_checks_out_full_history() -> None:
+    """The one place these checks must run is the one place they would silently
+    not run.
 
-    `subtree_is_real` proves a subtree by finding a `git-subtree-dir:` trailer
-    in a commit message, and reports "cannot tell" — a skip, not a failure —
-    when the checkout is shallow, because failing there would make the check
-    permanently red in any shallow clone for a reason unrelated to the
-    repository's state. `actions/checkout` clones at depth 1 by default, which
-    is shallow: confirmed by cloning this repository `--depth 1`, where
-    `git rev-parse --is-shallow-repository` reports true and the trailer search
-    returns zero commits.
+    Two of them answer their question by reading git history, and a shallow
+    checkout does not make either fail — it makes them stop measuring:
 
-    So without `fetch-depth: 0` on that job, CI takes the skip branch on every
-    run and the check is inert exactly where it is supposed to bite. Pinned
-    here because the failure is invisible: the job stays green either way.
+    - `subtree_is_real` proves a subtree by finding a `git-subtree-dir:`
+      trailer in a commit message. At depth 1 there is no such commit, so it
+      reports "cannot tell" and skips, which is correct for a developer's
+      shallow clone and useless in CI.
+    - `reader_notes` (T31) resolves each note back to the commit that last set
+      its text and reparses the spec there. At depth 1 the walk finds only the
+      tip, so every note trivially resolves to today's title and all 28 report
+      `unchanged` — a clean result over nothing.
+
+    Both reproduced by cloning this repository `--depth 1`, which
+    `git rev-parse --is-shallow-repository` confirms is what `actions/checkout`
+    produces by default. Asserted over *every* job rather than the two that
+    need it today, because the next history-reading check will be added by
+    somebody who has never read this docstring, and because both failure modes
+    leave the job green.
     """
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    # Slice out just this job: everything from its key to the next job key
-    # (two-space indent, at the start of a line). Asserting against the whole
-    # file would pass on a `fetch-depth: 0` belonging to some other job.
-    rest = workflow.split("\n  verify-subtree:", 1)
-    assert len(rest) == 2, "no verify-subtree job in the workflow"
-    job = re.split(r"\n  [a-z][\w-]*:", rest[1], maxsplit=1)[0]
-    assert "fetch-depth: 0" in job, "verify-subtree needs full history or its check goes inert"
+    checkouts = workflow.count("uses: actions/checkout@")
+    assert checkouts > 0, "no checkout steps found — has the workflow been restructured?"
+    assert workflow.count("fetch-depth: 0") == checkouts, (
+        f"{checkouts} checkout step(s) but "
+        f"{workflow.count('fetch-depth: 0')} with full history — "
+        "a shallow job silently stops measuring rather than failing"
+    )
 
 
 def test_the_verifier_exits_zero_on_the_real_repository() -> None:
