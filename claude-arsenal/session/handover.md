@@ -1,86 +1,92 @@
-# Session handover — 2026-08-18 (T29 session)
+# Session handover — 2026-08-18 (T51 session)
 
 ## State
 
-**T29 is done and merged. The last owner-gated decision in M4 is settled.**
+**T51 is done against PR #36 — but the session's real finding was in the queue,
+not in the code.**
 
-| PR | what landed |
-|----|-------------|
-| #33 | T29 — the distribution decision, and a real gate to replace its placeholder |
-| #34 | the name settled as `integral-job-search`, T55 seeded for the rename |
+| what | where |
+|------|-------|
+| T51 — `$INTEGRAL_HOME` resolver, candidate state refused inside any git work tree | PR #36 (open) |
+| 17 stale queue rows advanced to `merged` | `arsenal-queue` commit `6c271e8` |
+| S10 (`lo-5efb`) recorded `blocked` — it is waiting on an upstream change, not on work here | `arsenal-queue` commit `f48627c` |
 
-`lo-2293` is recorded `done` against #33 — `release.sh` re-ran the gate as a
-hard precondition, so it is measured rather than asserted. Both PRs are merged;
-`reconcile_merged.sh` has not run (no `gh` in the cloud session), so the row
-still reads `done` rather than the terminal `merged`. Flip it from a laptop.
+## Read this first: the ledger had drifted, and the loop was about to re-do merged work
 
-## The decision, in one paragraph
+`queue_eval.sh` handed out **S7 (`lo-9ff0`) — merged in PR #23 in July.** It was
+not a fluke. Comparing `origin/main`'s `tasks.jsonl` against `arsenal-queue`'s
+found **17 rows** that main records as `merged` (PRs #23, #24, #25, #27, #28)
+and the coordination branch still recorded as `open`, plus one (`lo-2293`,
+T29) that the coordination branch had `done` and main still has `open`.
 
-The tool is installed by **cloning**. A clone already carries both halves — the
-thirteen step skills under `.claude/skills/` and the checkpoint code in `src/` —
-so the only missing piece is installed dependencies, and the tool installs those
-itself on first run. The structural rule everything rests on: **candidate state
-lives outside the clone**, resolved from `$INTEGRAL_HOME` by a resolver that
-*refuses* any path inside a git work tree. That makes "candidate data never
-reaches a repository" a property of the code rather than a `.gitignore` line,
-and it keeps a plugin, a wheel or a UI a delivery change later rather than a
-migration. Job-site connectors get their own repository and enter as a
-dependency. Full record: `docs/distribution.md`.
+The cause is structural, not a slip: **`queue_sync.sh` ports rows that are
+*absent* and by design "never touches existing claim/release state."** So a
+status recorded on main — by a laptop session running `reconcile_merged.sh`, or
+by session-end housekeeping that commits `tasks.jsonl` — never reaches the
+coordination branch, and nothing detects it. `queue_doctor.sh` reported **0
+findings** both before and after: it audits one ledger for internal
+consistency, and cross-branch divergence is outside what it looks at.
 
-## Newly claimable — four unblocked tasks where there were none
+**Both are worth an upstream issue** (`claude-arsenal`): a `queue_sync.sh
+--reconcile-status` that advances a row when the default branch's status is
+strictly further along the lifecycle, and a `queue_doctor.sh` check that
+compares the two ledgers at all. Until then, **diff the two ledgers by hand at
+session start** — the reconcile script used here is a dozen lines and worth
+carrying upstream rather than rewriting.
 
-The queue was empty of cloud-doable work at the last handover. It is not now:
+`lo-2293` (T29) is still `open` on main while the coordination branch says
+`done`. A laptop session should run `reconcile_merged.sh` and commit the
+result, which also flips it to `merged`.
 
-| task | id | note |
-|------|-----|------|
-| T51 | `lo-4b79` | `$INTEGRAL_HOME` resolver — **do this first**, every other M4 task is cheaper after it |
-| T52 | `lo-b2de` | first-run bootstrap; blocked on T51 |
-| T53 | `lo-803e` | connector contract pack; builds on the merged T32 format |
-| T54 | `lo-892b` | connector exchange, with consent; blocked on T53 |
-| T55 | `lo-9f72` | the rename — wide, mechanical, best landed before T51–T54 build on the old name |
+## T51, in one paragraph
 
-## Still the owner's, and still blocking nothing
+`jobsearch.state_home` resolves the store root from `$INTEGRAL_HOME`, then
+`$XDG_DATA_HOME/integral-job-search`, then `~/.integral-job-search` — and
+**refuses any path inside a git work tree**, with `--dev` / `INTEGRAL_DEV=1` as
+the single explicit escape. Containment walks the resolved path's own ancestry
+rather than comparing against this repository (a store inside *any* checkout is
+the failure), and `.git` is tested with `exists()` because a linked work tree
+and a submodule carry it as a file. Every call site now resolves through it:
+`identity.DEFAULT_PROFILES_ROOT` became the lazy `default_profiles_root()`, and
+the thirteen step checkpoints default `--input-dir` to the resolver. Gate:
+`state_paths_inside_a_repo == 0` over `paths_checked = 22` (8 probes + 14 call
+sites). Spec §6 now states where the tree actually roots.
+
+## Two lessons worth carrying
+
+1. **Evidence must be a function of the repository, not of the run.** T51's
+   probes build a throwaway git work tree, and `mkdtemp`'s name landed in the
+   committed evidence — so CI's "evidence is current" failed on a repository
+   nobody had touched. It passed locally only because `make evidence` compares
+   with `git diff`, which **does not see untracked files**: the check has no
+   teeth until the evidence is committed. Temp paths are now redacted to
+   `<tmp>`, with a test that two measurements are equal.
+2. **An audit that reads source has to read *code*.** The call-site scanner
+   first reported `identity.py`'s own paragraph explaining what T51 removed as
+   an instance of it. `tokenize` now blanks comments and docstrings — but
+   deliberately *not* ordinary string literals, because the construction being
+   hunted ends in one (`… / "profiles"`). And a file that cannot be tokenised
+   is a finding, never a silent pass: `SiteCheck.passes` reads "no recorded
+   reason", after the flag-based version let an unparseable file through clean.
+
+## Queue state
+
+`queue_batch.sh` now offers, in order: **T25 (`lo-1af2`, `[LAPTOP]`)** — skip in
+a cloud session — then **T14 (`lo-3100`)**, **T52 (`lo-b2de`, now unblocked by
+T51)**, **T53 (`lo-803e`)**, **T55 (`lo-9f72`, the rename)**.
+
+S10 is `blocked`, not open: `LISTING_BUDGET_CHARS = 8000` is still a module
+constant in the vendored `audit_library.py` with no override, so
+`claude-arsenal` issue #143 has to land first. Confirmed against the subtree
+this session — do not re-dispatch it.
+
+## Still the owner's
 
 Whether the sources repository is public from the start, and whether this
 repository is public. Neither gates any task above.
 
-## What this session was actually about
-
-**A gate that counts survivors is not a gate.** T29's own gate block was a
-placeholder that `exit 1`s, so the task could never have been recorded `done` —
-and the first real version I wrote had the deeper form of the same bug: it
-filtered malformed entries away and compared nothing against a declared total,
-so deleting the twelfth step or the fourth question would have left a clean
-sheet. Review (Qodo) caught all three variants. Both sides now declare their own
-length — `step_count` in the JSON, a `shape-questions` marker in the Markdown —
-and the register's numbering is checked as well as counted.
-
-Two smaller lessons:
-
-1. **A resolution must be made, not mentioned.** The marker regex matched
-   `**Decided`/`**Blocked` anywhere in an item's prose, so a sentence describing
-   a blocker resolved the question it described. Anchored to line start, and a
-   bare `**Blocked:**` with no reason no longer counts.
-2. **`ruff format .` reformats ~40 files this repo has committed unformatted.**
-   CI only runs `ruff check`, so it is invisible until someone runs
-   `make format` and produces an enormous unrelated diff. Not fixed — worth its
-   own housekeeping change.
-
-## Upstream
-
-Commented on `claude-arsenal#144` in support of its fix (2) — moving
-host-owned state (`queue/`, `session/`, `project/`) out of the bundle prefix —
-with this repo's own `profiles/` move as the supporting case, and offered to
-prototype it. #142, #143, #145, #146, #147 remain open and untouched.
-
-The owner has said they dislike the queue-coordination *branch* specifically.
-Worth noting for a future upstream issue: that branch exists because a shared
-remote ref is git's only cross-session channel, so a push race becomes the lock.
-Where coordination is single-machine, a local lockfile buys the same guarantee
-with none of the ceremony — but that is a separate argument from #144's, and
-moving host state out does **not** remove the branch.
-
 ## Next action
 
-Start T51 (`lo-4b79`), or T55 (`lo-9f72`) first if you would rather not build
-the resolver twice under two names. Both are cloud-doable.
+Watch PR #36 to green and merge, then **T52** (first-run bootstrap — T51 is its
+dependency and just landed) or **T55** (the rename, best done before T52–T54
+build on the old name).
