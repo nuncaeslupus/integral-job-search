@@ -9,7 +9,7 @@ key: intake_field_provenance
 ```
 
 ```bash
-echo "no gate command defined for S4 — replace this line with the command that writes status/evidence/S4.json" >&2; exit 1
+uv run python -m jobsearch.cv_store --write-evidence status/evidence/S4.json
 ```
 
 ## What this is

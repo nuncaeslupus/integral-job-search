@@ -7,6 +7,11 @@ from the live step model and fails loudly on drift, "no free text" and "not
 yet built" are kept distinct from "built and dropping input", non-insistence
 reaches incidental capture, and retraction reaches a captured row with no
 extra code.
+
+D-8's own three RED tests live in their own section below: `EvidenceRow.about`
+lets two rejections of two different offers stay distinguishable in the log,
+a captured reason's subject survives T6's rebuild, and an answer to a bank
+question is not made to carry a subject nothing asked it to.
 """
 
 from __future__ import annotations
@@ -18,24 +23,31 @@ import pytest
 
 from jobsearch.decline import DeclineLedger
 from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.lifecycle import save_lifecycle_offer, track_new_offer, transition
-from jobsearch.offers import connect_manual
+from jobsearch.lifecycle import LifecycleRecord, save_lifecycle_offer, track_new_offer, transition
+from jobsearch.offers import Offer, connect_manual
 from jobsearch.process_spec import load_steps
-from jobsearch.profile import EvidenceLog
+from jobsearch.profile import EvidenceLog, EvidenceSubject, rebuild
 from jobsearch.profile_capture import (
     ACCEPTS_CANDIDATE_FREE_TEXT,
     MINIMUM_CHECKS,
+    MINIMUM_SUBJECT_CHECKS,
     SURFACE_DRIVERS,
     CoverageResult,
     ProfileCaptureError,
     _classification_problems,
+    _drive_history,
     capture,
     capture_offer_decision_reason,
+    captures_without_a_subject,
     measure,
     measure_coverage,
+    measure_subject_gate,
     probe_capture,
     probe_deliberate_break,
+    probe_deliberate_subject_break,
+    probe_subject_linkage,
     write_evidence,
+    write_subject_evidence,
 )
 
 
@@ -463,4 +475,288 @@ def test_probe_capture_runs_at_least_the_minimum_checks(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     report = probe_capture(root)
     assert report["checks_run"] >= MINIMUM_CHECKS
+    assert report["failures"] == []
+
+
+# =============================================================================
+# D-8 — a captured reason names the artefact it was about
+#
+# `EvidenceRow` carried `step`, `source` and `recorded_at`, but nothing named
+# *which* offer a captured decision reason was about — "in response to what"
+# was unmet for exactly the one surface this module wires (feedback). The
+# payload's three RED tests are first; the rest of this section covers the
+# gate's own exclusion (a question needs no subject), the required
+# verification, and the CLI contract around `captures_without_a_subject`.
+
+
+TwoOffers = tuple[
+    ProfileStore, tuple[Offer, LifecycleRecord], tuple[Offer, LifecycleRecord]
+]
+
+
+@pytest.fixture
+def two_offers(store_for: Callable[[str], ProfileStore]) -> TwoOffers:
+    """One store, two collected-and-saved offers, ready to be transitioned."""
+    store = store_for("subject-two-offers")
+    offer_a = connect_manual("Warehouse Operative. Nights, on-site, permanent.")
+    record_a = track_new_offer(offer_a, at="2026-08-18T09:00:00Z")
+    save_lifecycle_offer(store, offer_a, record_a)
+    offer_b = connect_manual("Data Entry Clerk. Hybrid, three days on-site.")
+    record_b = track_new_offer(offer_b, at="2026-08-18T09:00:30Z")
+    save_lifecycle_offer(store, offer_b, record_b)
+    return store, (offer_a, record_a), (offer_b, record_b)
+
+
+def test_two_rejections_of_different_offers_are_distinguishable_in_the_log(
+    two_offers: TwoOffers,
+) -> None:
+    """The failure D-8 exists for, invisible while only one offer has ever
+    been rejected: the same wording, about two different offers, must not
+    collapse into two indistinguishable rows."""
+    store, (offer_a, record_a), (offer_b, record_b) = two_offers
+
+    _, _, row_a = capture_offer_decision_reason(
+        store, offer_a, record_a, "screened_out",
+        at="2026-08-18T09:01:00Z", reason="Too far from home.",
+    )
+    _, _, row_b = capture_offer_decision_reason(
+        store, offer_b, record_b, "screened_out",
+        at="2026-08-18T09:01:30Z", reason="Too far from home.",
+    )
+
+    assert row_a is not None and row_b is not None
+    assert row_a.text == row_b.text, "test setup: the wording must be identical"
+    assert row_a.about is not None and row_b.about is not None
+    assert row_a.about.id != row_b.about.id, "two different offers read as the same subject"
+    assert row_a.about == EvidenceSubject(kind="offer", id=offer_a.id)
+    assert row_b.about == EvidenceSubject(kind="offer", id=offer_b.id)
+    assert captures_without_a_subject(EvidenceLog(store).effective_rows()) == []
+
+
+def test_a_captured_reason_survives_rebuild_with_its_subject(
+    store_for: Callable[[str], ProfileStore],
+) -> None:
+    """Provenance that does not survive T6's rebuild is not provenance."""
+    store = store_for("subject-survives-rebuild")
+    offer = connect_manual("Retail Assistant, weekends.")
+    record = track_new_offer(offer, at="2026-08-18T09:00:00Z")
+    save_lifecycle_offer(store, offer, record)
+
+    _, _, row = capture_offer_decision_reason(
+        store, offer, record, "screened_out",
+        at="2026-08-18T09:01:00Z", reason="Weekends don't work for me any more.",
+    )
+    assert row is not None
+
+    rebuild(store)
+
+    reread = [r for r in EvidenceLog(store).rows() if r.id == row.id]
+    assert reread, "the captured row did not reach disk"
+    assert reread[0].about == EvidenceSubject(kind="offer", id=offer.id), (
+        "the row's subject did not survive a rebuild"
+    )
+
+
+def test_an_answer_to_a_question_needs_no_subject_field(
+    store_for: Callable[[str], ProfileStore],
+) -> None:
+    """The exclusion the gate's own docstring names: an answer to a bank
+    question has its subject in the bank entry already, so demanding one
+    here would make the gate unsatisfiable rather than meaningful."""
+    store = store_for("subject-question-excluded")
+    row = _drive_history(store)
+    assert row is not None
+    assert row.about is None, "an answer to a bank question was made to carry a subject"
+    assert captures_without_a_subject(EvidenceLog(store).effective_rows()) == [], (
+        "an answer to a question was wrongly counted as a capture with no subject"
+    )
+
+
+# --- captures_without_a_subject: the metric itself --------------------------
+
+
+def test_captures_without_a_subject_flags_an_offer_reaction_with_no_about(
+    profile: tuple[EvidenceLog, DeclineLedger],
+) -> None:
+    """A row whose `source` ties it to a specific artefact, but which carries
+    no `about`, is exactly what the gate exists to catch — built by calling
+    `capture()` directly, the shape a caller bug that forgot to pass `about`
+    would take."""
+    log, ledger = profile
+    row = capture(
+        log, ledger,
+        step="feedback", kind="statement",
+        text="Too far from home.",
+        source="offer_reaction",
+        recorded_at="2026-08-18T09:00:00Z",
+    )
+    assert row is not None and row.about is None
+    assert captures_without_a_subject(log.effective_rows()) == [row.id]
+
+
+def test_captures_without_a_subject_ignores_non_artefact_sources(
+    profile: tuple[EvidenceLog, DeclineLedger],
+) -> None:
+    """A row from any source other than `offer_reaction` (an elicited answer,
+    a CV import, an interview note) is not counted — each already answers
+    "in response to what" its own way."""
+    log, ledger = profile
+    row = capture(
+        log, ledger,
+        step="history", kind="statement",
+        text="I've only ever worked in small teams.",
+        source="conversation",
+        recorded_at="2026-08-18T09:00:00Z",
+    )
+    assert row is not None
+    assert captures_without_a_subject(log.effective_rows()) == []
+
+
+# --- retraction (T38) and revision (T37) carry the subject through ---------
+
+
+def test_retraction_does_not_strip_a_captured_rows_subject(
+    store_for: Callable[[str], ProfileStore],
+) -> None:
+    """The row is suppressed from what a rebuild uses; the row itself,
+    subject included, is unchanged in the append-only log."""
+    store = store_for("subject-survives-retraction")
+    offer = connect_manual("Junior Analyst, hybrid, ES.")
+    record = track_new_offer(offer, at="2026-08-18T09:00:00Z")
+    save_lifecycle_offer(store, offer, record)
+    _, _, row = capture_offer_decision_reason(
+        store, offer, record, "screened_out",
+        at="2026-08-18T09:01:00Z", reason="The pay band is too low.",
+    )
+    assert row is not None
+
+    log = EvidenceLog(store)
+    log.append(
+        recorded_at="2026-08-18T09:02:00Z",
+        step="feedback",
+        kind="retraction",
+        text="Forget that.",
+        source="conversation",
+        retracts=row.id,
+    )
+
+    fresh = EvidenceLog(store)
+    survivor = next(r for r in fresh.rows() if r.id == row.id)
+    assert survivor.about == EvidenceSubject(kind="offer", id=offer.id), (
+        "retraction stripped the subject instead of only suppressing the row"
+    )
+    assert row.id not in {r.id for r in fresh.effective_rows()}
+
+
+def test_revision_refresh_does_not_lose_a_captured_rows_subject(
+    store_for: Callable[[str], ProfileStore],
+) -> None:
+    """T37's `refresh` reads the same log; a subject-carrying row must come
+    out the other side of it unchanged."""
+    from jobsearch.revision import refresh
+
+    store = store_for("subject-survives-refresh")
+    offer = connect_manual("Site Supervisor, contract.")
+    record = track_new_offer(offer, at="2026-08-18T09:00:00Z")
+    save_lifecycle_offer(store, offer, record)
+    _, _, row = capture_offer_decision_reason(
+        store, offer, record, "screened_out",
+        at="2026-08-18T09:01:00Z", reason="Contract, not permanent — no thanks.",
+    )
+    assert row is not None
+
+    refresh(store)
+
+    reread = [r for r in EvidenceLog(store).rows() if r.id == row.id]
+    assert reread and reread[0].about == EvidenceSubject(kind="offer", id=offer.id)
+
+
+# --- backward compatibility: a pre-D-8 row loads and rebuilds cleanly ------
+
+
+def test_a_pre_d8_row_with_no_about_key_loads_and_rebuilds(
+    store_for: Callable[[str], ProfileStore],
+) -> None:
+    """`EvidenceRow` is `extra="forbid"` and frozen, but that polices keys
+    *present* in the data — a row minted before `about` existed simply lacks
+    the key, and must load exactly like every other row with an optional
+    field left unset."""
+    import json
+
+    from jobsearch.profile import EVIDENCE_PARTS, ProfileError
+
+    store = store_for("subject-legacy-row")
+    legacy = {
+        "dimensions": [],
+        "id": "ev-000001",
+        "kind": "statement",
+        "recorded_at": "2026-08-01T09:00:00Z",
+        "source": "offer_reaction",
+        "step": "feedback",
+        "text": "Too far from home.",
+    }
+    path = store.path(*EVIDENCE_PARTS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(legacy, sort_keys=True) + "\n", encoding="utf-8")
+
+    log = EvidenceLog(store)
+    try:
+        rows = log.rows()
+    except ProfileError as exc:  # pragma: no cover - the property under test
+        pytest.fail(f"a pre-D-8 row with no 'about' key failed to load: {exc}")
+    assert rows[0].about is None
+
+    once = rebuild(store)
+    twice = rebuild(store)
+    assert once == twice, "a log holding a legacy row did not rebuild deterministically"
+
+
+# --- the required verification: deliberately drop a subject ----------------
+
+
+def test_deliberately_dropped_subject_moves_the_metric_above_zero(tmp_path: Path) -> None:
+    """The payload's required verification, as a test: call `capture()`
+    directly for an offer-reaction row, skipping `about`, and watch
+    `captures_without_a_subject` rise from a clean baseline."""
+    root = tmp_path / "profiles"
+    details = probe_deliberate_subject_break(root)
+
+    assert details["captures_without_a_subject_before_break"] == 0
+    assert details["captures_without_a_subject_after_break"] > 0
+    assert details["broken_row_id"] in details["violation_ids_after_break"]
+
+
+def test_cli_subject_gate_exits_nonzero_when_a_capture_has_no_subject(tmp_path: Path) -> None:
+    """`_main --subject-gate`'s own contract: `captures_without_a_subject != 0`
+    is a violation, exit code 1 — the real (correctly-wired) code passes."""
+    from jobsearch.profile_capture import _main
+
+    evidence_path = tmp_path / "D8.json"
+    exit_code = _main(["prog", "--subject-gate", "--write-evidence", str(evidence_path)])
+    assert exit_code == 0, "the real capture_offer_decision_reason call site should pass the gate"
+    assert evidence_path.exists()
+
+
+# --- module-level sanity: measure_subject_gate()/write_subject_evidence() --
+
+
+def test_measure_subject_gate_reports_minimum_checks_floor() -> None:
+    measured = measure_subject_gate()
+    assert measured["checks_run"] >= MINIMUM_SUBJECT_CHECKS
+    assert measured["failures"] == []
+    assert measured["captures_without_a_subject"] == 0
+
+
+def test_write_subject_evidence_writes_the_measured_json(tmp_path: Path) -> None:
+    target = tmp_path / "D8.json"
+    measured = write_subject_evidence(target)
+    assert target.exists()
+    on_disk = target.read_text(encoding="utf-8")
+    assert str(measured["captures_without_a_subject"]) in on_disk
+
+
+def test_probe_subject_linkage_runs_at_least_the_minimum_checks(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    report = probe_subject_linkage(root)
+    assert report["checks_run"] >= MINIMUM_SUBJECT_CHECKS
     assert report["failures"] == []

@@ -24,11 +24,14 @@ import pytest
 from jobsearch.identity import ProfileStore, create_profile
 from jobsearch.profile import (
     DERIVED,
+    EVIDENCE_PARTS,
     EvidenceLog,
     EvidenceRow,
+    EvidenceSubject,
     ProfileError,
     ProfileRevision,
     derived_bytes,
+    probe_legacy_rows_load_without_a_subject,
     rebuild,
     tree_bytes,
 )
@@ -400,3 +403,83 @@ def test_an_episode_stays_private_unless_it_was_approved(
     stories = [json.loads(line) for line in rebuild(first.store)["stories.jsonl"].splitlines()]
     assert stories, "the fixture has an episode in it"
     assert all(story["disclosure"] == "private" for story in stories)
+
+
+# --- D-8: `about` — a capture can name the artefact it was about -----------
+
+
+def test_a_row_carrying_a_subject_round_trips_through_the_log(
+    two_profiles: tuple[EvidenceLog, EvidenceLog],
+) -> None:
+    first, _ = two_profiles
+    subject = EvidenceSubject(kind="offer", id=f"sha256:{'c' * 64}")
+    row = first.append(
+        recorded_at="2026-08-18T09:00:00Z",
+        step="feedback",
+        kind="statement",
+        text="Too far from home.",
+        source="offer_reaction",
+        about=subject,
+    )
+    assert row.about == subject
+    reread = next(r for r in EvidenceLog(first.store).rows() if r.id == row.id)
+    assert reread.about == subject
+
+
+def test_a_row_with_no_subject_defaults_to_none(
+    two_profiles: tuple[EvidenceLog, EvidenceLog],
+) -> None:
+    first, _ = two_profiles
+    row = first.append(
+        recorded_at="2026-08-18T09:00:00Z",
+        step="history",
+        kind="statement",
+        text="I've only ever worked in small teams.",
+        source="conversation",
+    )
+    assert row.about is None
+    assert "about" not in row.canonical()
+
+
+def test_evidence_subject_rejects_a_malformed_offer_id() -> None:
+    with pytest.raises(ValueError, match="not a T11 offer id"):
+        EvidenceSubject(kind="offer", id="not-an-offer-id")
+
+
+def test_a_pre_d8_row_with_no_about_key_on_disk_still_loads(tmp_path: Path) -> None:
+    """`EvidenceRow` is `extra="forbid"` and frozen, but that polices keys
+    *present* in the data — a row minted before `about` existed has no such
+    key on disk at all, and must parse exactly as it always did."""
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Probe Legacy Direct", handle="probe-legacy-direct")
+    store = ProfileStore(root, identity.handle)
+    legacy_line = json.dumps(
+        {
+            "dimensions": [],
+            "id": "ev-000001",
+            "kind": "statement",
+            "recorded_at": "2026-08-01T09:00:00Z",
+            "source": "offer_reaction",
+            "step": "feedback",
+            "text": "Too far from home.",
+        },
+        sort_keys=True,
+    )
+    path = store.path(*EVIDENCE_PARTS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(legacy_line + "\n", encoding="utf-8")
+
+    log = EvidenceLog(store)
+    rows = log.rows()
+    assert rows[0].about is None
+    assert rebuild(store) == rebuild(store)
+
+
+def test_probe_legacy_rows_load_without_a_subject_reports_no_failures(
+    tmp_path: Path,
+) -> None:
+    """T6's own adversarial probe for D-8's backward-compatibility claim —
+    wired into `probe_rebuild` so a regression here fails
+    `profile_rebuild_deterministic`, the shipped gate, not just this test."""
+    failures = probe_legacy_rows_load_without_a_subject(tmp_path / "profiles")
+    assert failures == []

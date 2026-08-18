@@ -48,7 +48,7 @@
         "metric": "intake_field_provenance",
         "op": "==",
         "threshold": 1.0,
-        "state": "not_implemented",
+        "state": "implemented",
         "task": "S4"
       },
       "reentry_events": [

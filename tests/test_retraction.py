@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from jobsearch.identity import IdentityError, ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog, rebuild
+from jobsearch.profile import EvidenceLog, EvidenceSubject, rebuild
 from jobsearch.retraction import (
     DeletionRefused,
     delete_profile,
@@ -319,3 +319,34 @@ def test_the_probe_cleans_nothing_up_by_hand(tmp_path: Path) -> None:
     result = probe_retraction(tmp_path / "profiles")
     assert result["failures"] == []
     assert result["retracted_rows_surviving_rebuild"] == 0
+
+
+def test_retracting_a_subject_carrying_row_does_not_strip_its_subject(
+    tmp_path: Path,
+) -> None:
+    """D-8: a retraction suppresses a row from what a rebuild uses; it must
+    not, in the process, lose the `about` field that names what the row was
+    about. `retract` calls `rebuild`, and T6's `rebuild` never rewrites the
+    log itself — this proves that holds for a subject-carrying row too,
+    rather than assuming it because it holds for every other field.
+    """
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Ada Lovelace", language="en")
+    store = ProfileStore(root, identity.handle)
+    log = EvidenceLog(store)
+    subject = EvidenceSubject(kind="offer", id=f"sha256:{'b' * 64}")
+    row = log.append(
+        recorded_at="2026-08-17T10:00:00Z",
+        step="feedback",
+        kind="statement",
+        text="Too far from home.",
+        source="offer_reaction",
+        about=subject,
+    )
+
+    retract(log, row.id, at="2026-08-18T09:00:00Z")
+
+    fresh = EvidenceLog(store)
+    survivor = next(r for r in fresh.rows() if r.id == row.id)
+    assert survivor.about == subject, "retraction stripped the subject instead of only suppressing"
+    assert row.id not in {r.id for r in fresh.effective_rows()}

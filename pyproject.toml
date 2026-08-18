@@ -17,6 +17,15 @@ collect = [
     "py3langid>=0.3",
     "requests>=2.32",
 ]
+# Only `jobsearch.cv_store`'s PDF importer needs this. DOCX is a zip of XML —
+# stdlib `zipfile` + `xml.etree` read it directly — and the S4 gate
+# (`intake_field_provenance`) is measured over the DOCX-import and
+# build-from-nothing paths, neither of which needs it, so it runs without
+# this extra. Installing it enables PDF import too; without it, importing a
+# PDF reports a clean "unavailable" outcome instead of crashing.
+cv = [
+    "pypdf>=4.0",
+]
 dev = [
     "mypy>=1.11",
     "pytest>=8.3",

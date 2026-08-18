@@ -115,13 +115,19 @@ takes toward its own guarantee.
 
 Every row carries `step` (which surface), `recorded_at` (when) and `source`
 (the four-way `conversation | cv_document | offer_reaction | interview` split
-T6 already defines) — "in response to what", to the resolution the existing
-schema affords. `EvidenceRow` is `extra="forbid"` (T6) and this task's brief is
-explicit that `profile.py` needs no change, so a finer-grained "which specific
-offer/ad this was about" field is out of scope here; it would be a schema
-widening (§5.7), not a capture-path fix, and is named as a limitation in this
-task's report rather than smuggled in as a silent addition to a file another
-task owns.
+T6 already defines) — the first two of T28's own "which surface, when, in
+response to what". The third was unmet, for any capture whose subject is a
+specific artefact rather than a question, until **D-8**: `EvidenceRow.about`
+(`jobsearch.profile.EvidenceSubject`) now names it, and `capture_offer_decision_
+reason` sets it unconditionally. The function already holds the `Offer` it is
+transitioning, so building `EvidenceSubject(kind="offer", id=offer.id)` costs
+nothing at the call site and — unlike a parameter a caller would have to
+remember to pass — cannot be forgotten. `capture()`'s own generic primitive
+takes `about` too, for the one caller here that has an artefact to name; a
+caller answering a bank question passes nothing, and `captures_without_a_
+subject` (below) is built to leave that case alone rather than demand a
+subject nothing names — see that function's own docstring for the line it
+draws between the two.
 """
 
 from __future__ import annotations
@@ -129,7 +135,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -152,7 +158,15 @@ from jobsearch.identity import ProfileStore, create_profile
 from jobsearch.lifecycle import LifecycleRecord, save_lifecycle_offer, track_new_offer, transition
 from jobsearch.offers import Offer, OfferStatus, connect_manual
 from jobsearch.process_spec import StepList, load_steps
-from jobsearch.profile import EvidenceLog, EvidenceRow, Kind, Precision, Source
+from jobsearch.profile import (
+    EvidenceLog,
+    EvidenceRow,
+    EvidenceSubject,
+    Kind,
+    Precision,
+    Source,
+    rebuild,
+)
 from jobsearch.question_bank import build_bank
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -257,6 +271,7 @@ def capture(
     recorded_at: str,
     occurred_at: str | None = None,
     occurred_precision: Precision | None = None,
+    about: EvidenceSubject | None = None,
 ) -> EvidenceRow | None:
     """Append one row of free text as evidence, or refuse — never widen anything.
 
@@ -266,6 +281,13 @@ def capture(
     `kind="retraction"` is refused: a retraction names the row it suppresses
     (`jobsearch.profile.EvidenceRow`) and has no business going through a
     generic "the candidate said something" primitive.
+
+    `about` (D-8) names the artefact this capture was in response to, when
+    there is one — see the module docstring's Provenance section. It is a
+    caller-supplied `EvidenceSubject`, never derived here: this primitive has
+    no way to know what a candidate's words were about, only the caller that
+    prompted them does (`capture_offer_decision_reason`, below, always
+    supplies one because it always holds the `Offer` in question).
     """
     if kind == "retraction":
         raise ProfileCaptureError("capture() does not write retractions — use jobsearch.retraction")
@@ -284,6 +306,7 @@ def capture(
         dimensions=kept,
         occurred_at=occurred_at,
         occurred_precision=occurred_precision,
+        about=about,
     )
 
 
@@ -313,6 +336,9 @@ def capture_offer_decision_reason(
 
     `source="offer_reaction"` — the row is in response to a decision about an
     offer, T6's own vocabulary for exactly this (`jobsearch.profile.Source`).
+    `about=EvidenceSubject(kind="offer", id=offer.id)` (D-8) — *which* offer,
+    set unconditionally rather than left to a caller, since this function
+    already holds the one artefact the reason could possibly be about.
     """
     new_offer, new_record = transition(offer, record, to_status, at=at, reason=reason)
     row: EvidenceRow | None = None
@@ -327,6 +353,7 @@ def capture_offer_decision_reason(
             text=reason,
             source="offer_reaction",
             recorded_at=at,
+            about=EvidenceSubject(kind="offer", id=offer.id),
         )
     return new_offer, new_record, row
 
@@ -789,6 +816,275 @@ def create_profile_store_for_break(root: Path, *, suffix: str = "baseline") -> P
     return ProfileStore(root, identity.handle)
 
 
+# ---------------------------------------------------------------------------
+# D-8: a capture whose subject is a specific artefact must name it
+#
+# `captures_without_a_subject` — a separate, independent gate over the same
+# capture surface, the same "second flag, second evidence file, one module"
+# shape `jobsearch.profile`'s `--constraint-survival` already uses for D-6.
+
+DEFAULT_D8_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D8.json"
+
+# Which `source` values name a capture "about" one specific external
+# artefact, as opposed to an answer to a bank question (whose subject is
+# already the question's own dimension — the exclusion the D-8 payload's gate
+# names). Only `offer_reaction` qualifies today: every row this codebase
+# writes with that source is a reaction to one particular `Offer` — a
+# rejection reason via `capture_offer_decision_reason` today, a reactions
+# free-text answer (T17) tomorrow. `conversation` (an elicited bank answer,
+# or free-standing intake speech), `cv_document` (a parsed CV span — S4
+# already names its own document/span provenance) and `interview` (S6's own
+# prep/record, not built yet) each already answer "in response to what" a
+# different way, none of them needing this field.
+_SOURCES_REQUIRING_A_SUBJECT: frozenset[Source] = frozenset({"offer_reaction"})
+
+
+def captures_without_a_subject(rows: Iterable[EvidenceRow]) -> list[str]:
+    """D-8's `captures_without_a_subject` — ids of rows whose capture is about
+    one specific artefact and names no way to identify it.
+
+    The line is drawn on `source`, not on `kind` or `step`: `source` already
+    answers "was this in response to a question, or to something else"
+    (`jobsearch.profile.Source`'s own four-way split), and
+    `_SOURCES_REQUIRING_A_SUBJECT` is the one value this codebase can
+    currently produce that means "something else, a specific artefact".
+    Demanding a subject from every row would make the gate unsatisfiable — a
+    bank-question answer has no artefact to name, and
+    `test_an_answer_to_a_question_needs_no_subject_field` exercises exactly
+    that excluded case; demanding one from none would make the gate vacuous.
+    Takes rows as data, not a store, the same posture `trait_evidence_
+    sufficiency` takes toward `readings` — a violation produced by a caller
+    that bypassed `capture()` entirely must be caught exactly as if the real
+    pipeline had produced it.
+    """
+    return [
+        row.id for row in rows if row.source in _SOURCES_REQUIRING_A_SUBJECT and row.about is None
+    ]
+
+
+def probe_deliberate_subject_break(root: Path) -> dict[str, Any]:
+    """The required verification: capture a reason about a specific offer
+    without recording its subject, on purpose.
+
+    Calls `capture()` directly with `source="offer_reaction"` and no `about`
+    — the shape a caller bug would take if it forgot to build the
+    `EvidenceSubject` `capture_offer_decision_reason` now always supplies
+    (mirroring exactly `probe_deliberate_break`'s own shape for T28's gate,
+    over this gate instead).
+    """
+    store = create_profile_store_for_break(root, suffix="subject")
+    log = EvidenceLog(store)
+    ledger = DeclineLedger(store)
+
+    offer = connect_manual("Overnight Stocking Associate. Permanent nights.")
+    record = track_new_offer(offer, at="2026-08-18T09:10:00Z")
+    save_lifecycle_offer(store, offer, record)
+
+    before = captures_without_a_subject(log.effective_rows())
+
+    broken_row = capture(
+        log,
+        ledger,
+        step="feedback",
+        kind="statement",
+        text="Nights again — no.",
+        source="offer_reaction",
+        recorded_at="2026-08-18T09:10:30Z",
+        # `about` deliberately omitted — the failure this gate exists to catch.
+    )
+
+    after = captures_without_a_subject(log.effective_rows())
+
+    return {
+        "captures_without_a_subject_before_break": len(before),
+        "captures_without_a_subject_after_break": len(after),
+        "broken_row_id": broken_row.id if broken_row is not None else None,
+        "violation_ids_after_break": after,
+    }
+
+
+def probe_subject_linkage(root: Path) -> dict[str, Any]:
+    """D-8's adversarial probe: every scenario the payload and the gate name.
+
+    One fresh store carries scenarios 1-5 in sequence (each building on what
+    came before, the way `elicit_extract.probe_extraction` replays declines
+    across scenarios); the required-verification break runs against its own
+    store, the same isolation `probe_deliberate_break` uses for T28's gate.
+    """
+    from jobsearch.revision import refresh
+
+    failures: list[str] = []
+    checks = 0
+
+    def check(condition: bool, message: str) -> None:
+        nonlocal checks
+        checks += 1
+        if not condition:
+            failures.append(message)
+
+    def fresh_store(handle: str) -> ProfileStore:
+        identity = create_profile(root, handle.replace("-", " ").title(), handle=handle)
+        return ProfileStore(root, identity.handle)
+
+    # 1. Two rejections of two different offers are distinguishable in the
+    #    log — the failure this exists for, invisible while only one offer
+    #    has ever been rejected. Identical wording on purpose: only the
+    #    subject can tell the two rows apart.
+    store = fresh_store("subject-two-offers")
+    offer_a = connect_manual("Warehouse Operative. Nights, on-site, permanent.")
+    record_a = track_new_offer(offer_a, at="2026-08-18T09:00:00Z")
+    save_lifecycle_offer(store, offer_a, record_a)
+    offer_b = connect_manual("Data Entry Clerk. Hybrid, three days on-site.")
+    record_b = track_new_offer(offer_b, at="2026-08-18T09:00:30Z")
+    save_lifecycle_offer(store, offer_b, record_b)
+
+    _, _, row_a = capture_offer_decision_reason(
+        store,
+        offer_a,
+        record_a,
+        "screened_out",
+        at="2026-08-18T09:01:00Z",
+        reason="Too far from home.",
+    )
+    _, _, row_b = capture_offer_decision_reason(
+        store,
+        offer_b,
+        record_b,
+        "screened_out",
+        at="2026-08-18T09:01:30Z",
+        reason="Too far from home.",
+    )
+    check(row_a is not None and row_b is not None, "both rejections should have written a row")
+    check(
+        row_a is not None
+        and row_b is not None
+        and row_a.about is not None
+        and row_b.about is not None
+        and row_a.about.id != row_b.about.id,
+        "two rejections carrying the identical wording were not distinguishable by subject",
+    )
+    check(
+        row_a is not None
+        and row_a.about == EvidenceSubject(kind="offer", id=offer_a.id),
+        f"the first rejection's subject did not name the offer it was about: {row_a}",
+    )
+    check(
+        row_b is not None
+        and row_b.about == EvidenceSubject(kind="offer", id=offer_b.id),
+        f"the second rejection's subject did not name the offer it was about: {row_b}",
+    )
+    check(
+        captures_without_a_subject(EvidenceLog(store).effective_rows()) == [],
+        "two properly-subjected rejections were flagged by captures_without_a_subject",
+    )
+
+    # 2. A captured reason survives rebuild with its subject — provenance that
+    #    does not survive T6's rebuild is not provenance.
+    rebuild(store)
+    reread = [r for r in EvidenceLog(store).rows() if row_a is not None and r.id == row_a.id]
+    check(bool(reread), "the captured row did not reach disk")
+    check(
+        bool(reread) and reread[0].about == EvidenceSubject(kind="offer", id=offer_a.id),
+        "a captured reason's subject did not survive a rebuild",
+    )
+
+    # 3. An answer to a question needs no subject field — the exclusion,
+    #    asserted directly so the gate cannot be satisfied by demanding a
+    #    subject everywhere. Driven through the real T8 path (`store_answer`,
+    #    via this module's own `history` driver), never asserted by hand.
+    question_row = _drive_history(store)
+    check(question_row is not None, "the history driver did not write a row to test against")
+    check(
+        question_row is not None and question_row.about is None,
+        "an answer to a bank question carried a subject nobody asked it to",
+    )
+    check(
+        captures_without_a_subject(EvidenceLog(store).effective_rows()) == [],
+        "an answer to a question was wrongly counted as a capture with no subject",
+    )
+
+    # 4. Retraction (T38) does not strip a captured row's subject: the
+    #    suppressed row disappears from what a rebuild uses, but the row
+    #    itself, subject included, is still in the append-only log.
+    EvidenceLog(store).append(
+        recorded_at="2026-08-18T09:02:00Z",
+        step="feedback",
+        kind="retraction",
+        text="Forget that.",
+        source="conversation",
+        retracts=row_a.id if row_a is not None else "ev-000000",
+    )
+    after_retraction = [
+        r for r in EvidenceLog(store).rows() if row_a is not None and r.id == row_a.id
+    ]
+    check(
+        bool(after_retraction) and after_retraction[0].about is not None,
+        "a retraction stripped the subject from the row it suppressed, instead of only "
+        "suppressing it",
+    )
+    check(
+        row_a is not None
+        and row_a.id not in {r.id for r in EvidenceLog(store).effective_rows()},
+        "test setup: the retraction did not actually suppress the row",
+    )
+
+    # 5. Revision (T37) reads the same rows — a subject-carrying row does not
+    #    make `refresh` choke, and the subject is still there afterwards.
+    refresh(store)
+    still_there = [r for r in EvidenceLog(store).rows() if row_b is not None and r.id == row_b.id]
+    check(
+        bool(still_there) and still_there[0].about == EvidenceSubject(kind="offer", id=offer_b.id),
+        "a subject-carrying row lost its subject across T37's refresh",
+    )
+
+    # 6. The required verification: capture a reason about a specific offer
+    #    without recording its subject, and watch the metric — and only that
+    #    row — go non-zero.
+    break_details = probe_deliberate_subject_break(root)
+    check(
+        break_details["captures_without_a_subject_before_break"] == 0,
+        f"the break scenario's own baseline was not clean: {break_details}",
+    )
+    check(
+        break_details["captures_without_a_subject_after_break"] > 0,
+        "captures_without_a_subject did not rise when a subject was dropped",
+    )
+    check(
+        break_details["broken_row_id"] in break_details["violation_ids_after_break"],
+        f"the broken row was not named in the violations: {break_details}",
+    )
+
+    all_rows = EvidenceLog(store).effective_rows()
+    violations = captures_without_a_subject(all_rows)
+
+    return {
+        "captures_without_a_subject": len(violations),
+        "violation_ids": violations,
+        "deliberate_break_demonstration": break_details,
+        "checks_run": checks,
+        "failures": failures,
+    }
+
+
+def measure_subject_gate() -> dict[str, Any]:
+    """Run D-8's adversarial probe in a throwaway tree and report its gate."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="jobsearch-d8-") as tmp:
+        return probe_subject_linkage(Path(tmp) / "profiles")
+
+
+def write_subject_evidence(evidence: Path = DEFAULT_D8_EVIDENCE_PATH) -> dict[str, Any]:
+    """Measure D-8's `captures_without_a_subject` gate and record it."""
+    measured = measure_subject_gate()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+MINIMUM_SUBJECT_CHECKS = 12
+
+
 MINIMUM_CHECKS = 15
 
 
@@ -808,8 +1104,22 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+_WRITE_EVIDENCE_DEFAULT = "__default__"
+# Sentinel, not a real path: `--subject-gate` changes which file "the
+# default" means (`D8.json` instead of `T28.json`), and a fixed string
+# default could not tell "the caller wants that mode's own default" apart
+# from "the caller happened to pass that exact path".
+
+
 def _main(argv: list[str]) -> int:
-    """`python -m jobsearch.profile_capture [--check] [--write-evidence [PATH]]` -> T28's gate."""
+    """`python -m jobsearch.profile_capture [--check] [--write-evidence [PATH]]`
+    -> T28's gate (`profile_capture_coverage`).
+
+    `--subject-gate` measures D-8's gate instead (`captures_without_a_
+    subject`), and `--write-evidence`'s own default path switches with it —
+    the same one-flag-picks-a-second-gate-over-the-same-module shape
+    `jobsearch.profile`'s `--constraint-survival` already uses for D-6.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",
@@ -817,16 +1127,51 @@ def _main(argv: list[str]) -> int:
         help="measure and report only; do not write the evidence file",
     )
     parser.add_argument(
+        "--subject-gate",
+        action="store_true",
+        help="measure D-8's captures_without_a_subject gate instead of T28's own",
+    )
+    parser.add_argument(
         "--write-evidence",
         nargs="?",
-        const=str(DEFAULT_EVIDENCE_PATH),
-        default=str(DEFAULT_EVIDENCE_PATH),
+        const=_WRITE_EVIDENCE_DEFAULT,
+        default=_WRITE_EVIDENCE_DEFAULT,
         metavar="PATH",
-        help="write evidence JSON to PATH (default: status/evidence/T28.json)",
+        help="write evidence JSON to PATH (default: status/evidence/T28.json, "
+        "or D8.json with --subject-gate)",
     )
     args = parser.parse_args(argv[1:])
 
-    measured = measure() if args.check else write_evidence(Path(args.write_evidence))
+    default_path = DEFAULT_D8_EVIDENCE_PATH if args.subject_gate else DEFAULT_EVIDENCE_PATH
+    write_path = (
+        default_path
+        if args.write_evidence == _WRITE_EVIDENCE_DEFAULT
+        else Path(args.write_evidence)
+    )
+
+    if args.subject_gate:
+        measured = measure_subject_gate() if args.check else write_subject_evidence(write_path)
+        print(json.dumps(measured, ensure_ascii=False))
+
+        if measured["checks_run"] < MINIMUM_SUBJECT_CHECKS:
+            print(
+                f"only {measured['checks_run']} checks ran (floor {MINIMUM_SUBJECT_CHECKS}) — "
+                "a clean score without exercising the scenarios is not a measurement",
+                file=sys.stderr,
+            )
+            return 3
+
+        violations = list(measured["failures"])
+        if measured["captures_without_a_subject"] != 0:
+            violations.append(
+                f"captures_without_a_subject = {measured['captures_without_a_subject']} "
+                f"(want 0) — {measured['violation_ids']}"
+            )
+        for violation in violations:
+            print(violation, file=sys.stderr)
+        return 1 if violations else 0
+
+    measured = measure() if args.check else write_evidence(write_path)
     print(json.dumps(measured, ensure_ascii=False))
 
     if measured["checks_run"] < MINIMUM_CHECKS:

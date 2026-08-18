@@ -21,7 +21,7 @@ import pytest
 from jobsearch.constraints_step import CandidateTurn
 from jobsearch.constraints_step import resolve as resolve_constraints
 from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog, ProfileRevision, rebuild
+from jobsearch.profile import EvidenceLog, EvidenceSubject, ProfileRevision, rebuild
 from jobsearch.revision import (
     STALE_SUFFIX,
     classify,
@@ -338,3 +338,31 @@ def test_an_unknown_field_survives_a_rebuild(tmp_path: Path) -> None:
         "a refresh after a constraints step dropped an unaddressed pinned field entirely"
     )
     assert after["fields"]["location"]["state"] == "unknown"
+
+
+def test_a_subject_carrying_row_survives_a_refresh(tmp_path: Path) -> None:
+    """D-8: `refresh` reads the same log every other T37 function does — a
+    row carrying `about` (T28's offer-decision-reason capture) must come out
+    the other side of a refresh unchanged, not just unregressed on the fields
+    this module itself computes.
+    """
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Ada Lovelace", language="en")
+    store = ProfileStore(root, identity.handle)
+    log = EvidenceLog(store)
+    subject = EvidenceSubject(kind="offer", id=f"sha256:{'a' * 64}")
+    row = log.append(
+        recorded_at="2026-08-18T09:00:00Z",
+        step="feedback",
+        kind="statement",
+        text="Too far from home.",
+        source="offer_reaction",
+        about=subject,
+    )
+
+    refresh(store)
+
+    reread = [r for r in EvidenceLog(store).rows() if r.id == row.id]
+    assert reread and reread[0].about == subject, (
+        "a subject-carrying row lost its subject across a refresh"
+    )

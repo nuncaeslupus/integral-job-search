@@ -44,6 +44,43 @@ what is on disk for this profile, so `profile_rebuild_deterministic` holds:
 two rebuilds of one unchanged tree still produce identical bytes, only "the
 log" now means the evidence log *and* the decline ledger together for this one
 derived file.
+
+**D-8: a capture can name the artefact it was about.** T28's own brief asks
+continuous capture to record provenance as "which surface, when, in response
+to what" — `step` and `recorded_at` give the first two, but nothing on this
+row named the third for a capture whose subject is a specific artefact rather
+than a question. Concretely: a rejection reason recorded at `step="feedback"`,
+`source="offer_reaction"` was true of *every* offer decision ever captured, so
+two rejections of two different jobs produced two rows a reader could not
+tell apart — and a reason read back without its subject keeps the words and
+loses the meaning ("too far from home" says nothing without the posting it
+was about). `EvidenceRow.about` (`EvidenceSubject`, below) closes that gap.
+
+It is `Optional`, defaulting to `None`, because the alternative — required —
+would break every row already on disk. `extra="forbid"` (`Strict`, below)
+polices keys *present* in the data; it says nothing about a key the schema
+merely allows that a line happens not to carry. A row minted before this
+field existed has no `about` key at all, and it parses exactly the way this
+row's other optional fields (`occurred_at`, `retracts`) already parse a
+missing key — as `None`, not as a validation error. `probe_legacy_rows_
+load_without_a_subject` proves this over a hand-written pre-D-8 line rather
+than arguing it from the schema, and its result feeds `profile_rebuild_
+deterministic` (`probe_rebuild`, below): a rebuild over a log mixing an
+old-shaped row and a subject-carrying new one must still be byte-identical
+across two runs, or the backward-compatibility claim this paragraph makes is
+false. The alternative the D-8 payload also weighed — a companion file keyed
+by row id, the shape S5 uses for lifecycle state (`offers/lifecycle/<id>
+.json`) — was rejected once this property held: a companion file buys nothing
+here that an optional field does not already buy more simply, and it would be
+a second thing to keep in step with the log, which is exactly the drift this
+module's derived files are built to avoid.
+
+The one option ruled out on inspection, not merely by preference: reusing
+`dimensions` with a namespaced id (`"offer:sha256:…"`) needs no schema change
+at all, but `dimensions` already means "which dimension this bears on" to two
+shipped gates that count it — `elicit_extract.story_dimension_linkage` and
+`trait_sufficiency`'s own floor — and folding a subject reference into the
+same tuple would corrupt both without either gate's code changing a line.
 """
 
 from __future__ import annotations
@@ -97,6 +134,51 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+# D-8. Which kind of artefact `EvidenceRow.about` names. `offer` is the only
+# value today: the only capture surface shipped so far that ties a row to one
+# specific external artefact, rather than to a bank question, is
+# `profile_capture.capture_offer_decision_reason` (T28), reacting to one
+# `Offer` (T11). A reaction (T17) or an interview record (S6) will each add
+# their own kind when they land — additive to this `Literal` and to nothing
+# else, since `EvidenceRow.about` is already `Optional[EvidenceSubject]`.
+SubjectKind = Literal["offer"]
+
+# T11's own offer-id shape (`jobsearch.offers._OFFER_ID_PATTERN`), duplicated
+# rather than imported. `profile.py` is imported by nearly every other module
+# in this codebase (`retraction`, `revision`, `elicit_extract`,
+# `trait_sufficiency`, `profile_capture`, `cv_store`) and depends on none of
+# them; reaching into `offers.py` for one regex would be a new edge in that
+# graph for no real gain, the same reasoning `_last_pinned_value` gives for
+# keeping its own copy of a T41 encoding rather than importing it back.
+_OFFER_SUBJECT_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+class EvidenceSubject(Strict):
+    """D-8: the artefact one capture was in response to.
+
+    "In response to what" — the third element of T28's own provenance brief
+    that no field on `EvidenceRow` previously carried. `kind` names what sort
+    of artefact; `id` names which one. Deliberately not free text: a label a
+    human can read but nothing downstream can look up would not let T21 trace
+    a rejection reason back to the offer it changed a ranking about, which is
+    the whole reason this field exists (`status/plan.md`'s T21 row,
+    `feedback_traceability == 1.0`).
+
+    Only `kind="offer"` is validated against a real id shape today — see
+    `_OFFER_SUBJECT_ID` — because it is the only kind any writer produces yet.
+    A future kind defines its own id shape when it lands, not this one.
+    """
+
+    kind: SubjectKind
+    id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check(self) -> EvidenceSubject:
+        if self.kind == "offer" and not _OFFER_SUBJECT_ID.match(self.id):
+            raise ValueError(f"{self.id!r} is not a T11 offer id (sha256:<64 lowercase hex>)")
+        return self
+
+
 class EvidenceRow(Strict):
     """One row of `profile/evidence.jsonl` — process specification §4.1.
 
@@ -105,6 +187,16 @@ class EvidenceRow(Strict):
     triggers of §5.2 depend on it. It is optional because most of what a
     candidate says has no date attached, and inventing one would make an
     elapsed-time trigger fire on a number nobody stated.
+
+    `about` (D-8) is the artefact this row was in response to — the third
+    element of "which surface, when, in response to what" that `step` and
+    `recorded_at` alone could not answer for a capture whose subject is a
+    specific artefact rather than a question. It is optional for the same
+    reason `occurred_at` and `retracts` already are: most rows (an answer to
+    a bank question, a CV import, a constraint statement) have their subject
+    named some other way already, and a row written before this field existed
+    has no `about` key on disk at all — see the module docstring's D-8
+    paragraph for why that must, and does, still load.
     """
 
     id: str = Field(pattern=EVIDENCE_ID.pattern)
@@ -119,6 +211,7 @@ class EvidenceRow(Strict):
     disclosure: Disclosure = "private"
     # Set only on a `retraction` row: the id of the row it suppresses (§4.1).
     retracts: str | None = None
+    about: EvidenceSubject | None = None
 
     @model_validator(mode="after")
     def _check(self) -> EvidenceRow:
@@ -252,6 +345,7 @@ class EvidenceLog:
         occurred_precision: Precision | None = None,
         disclosure: Disclosure = "private",
         retracts: str | None = None,
+        about: EvidenceSubject | None = None,
     ) -> EvidenceRow:
         """Add one row. The only writer, and it never rewrites what is there."""
         if retracts is not None and not self._has(retracts):
@@ -268,6 +362,7 @@ class EvidenceLog:
             source=source,
             disclosure=disclosure,
             retracts=retracts,
+            about=about,
         )
         path = self.store.path(*EVIDENCE_PARTS)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -691,6 +786,74 @@ def probe_rebuild(root: Path) -> list[str]:
     if tree_bytes(first.store) != before:
         failures.append("writing the second profile changed the first")
 
+    failures.extend(probe_legacy_rows_load_without_a_subject(root))
+
+    return failures
+
+
+def probe_legacy_rows_load_without_a_subject(root: Path) -> list[str]:
+    """D-8: a row minted before `EvidenceSubject` existed has no `about` key.
+
+    `EvidenceRow` is `extra="forbid"` and frozen, which polices keys *present*
+    in the data — never keys the schema merely allows a line not to carry. A
+    JSONL line written before this field existed simply lacks the key, and
+    `about: EvidenceSubject | None = None` parses a missing key exactly the
+    way `occurred_at` or `retracts` already do. This is the check the D-8
+    payload asks for before choosing the optional field over a companion
+    file: a hand-written pre-D-8 line is written straight to a fresh log's
+    file — bypassing `EvidenceLog.append`, which would always write the
+    current shape — and a rebuild over a log mixing that legacy row with a
+    subject-carrying new one must still be deterministic, the same property
+    `profile_rebuild_deterministic` already guards, now exercised over
+    exactly the row shape that motivated D-8.
+    """
+    from jobsearch.identity import create_profile
+
+    failures: list[str] = []
+    identity = create_profile(root, "Probe Legacy", handle="probe-legacy")
+    store = ProfileStore(root, identity.handle)
+    log = EvidenceLog(store)
+
+    legacy_line = json.dumps(
+        {
+            "dimensions": [],
+            "id": "ev-000001",
+            "kind": "statement",
+            "recorded_at": "2026-08-01T09:00:00Z",
+            "source": "offer_reaction",
+            "step": "feedback",
+            "text": "Too far from home.",
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    path = store.path(*EVIDENCE_PARTS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(legacy_line + "\n", encoding="utf-8")
+
+    try:
+        legacy_rows = log.rows()
+    except ProfileError as exc:
+        failures.append(f"a pre-D-8 row with no 'about' key failed to load: {exc}")
+        return failures
+    if legacy_rows[0].about is not None:
+        failures.append("a row with no 'about' key on disk read back with a non-None subject")
+
+    log.append(
+        recorded_at="2026-08-18T09:00:00Z",
+        step="feedback",
+        kind="statement",
+        text="Too far from the new one, too.",
+        source="offer_reaction",
+        about=EvidenceSubject(kind="offer", id=f"sha256:{'0' * 64}"),
+    )
+    once = rebuild(store)
+    twice = rebuild(store)
+    if once != twice:
+        failures.append(
+            "a log mixing a pre-D-8 row and a subject-carrying row did not rebuild "
+            "deterministically"
+        )
     return failures
 
 
