@@ -3,9 +3,9 @@
 ## Acceptance gate
 
 ```gate
-cv_generation_traceability == 1.0
+intake_field_provenance == 1.0
 evidence: status/evidence/S4.json
-key: cv_generation_traceability
+key: intake_field_provenance
 ```
 
 ```bash
@@ -27,10 +27,15 @@ The CV is three things the current specification conflates (brief §2.6):
 
 ## The gate
 
-`cv_generation_traceability` = the fraction of claims in a generated CV that
-trace to a specific entry in the store. It must be 1.0. A generated CV
-containing anything not in the store is the tool inventing experience on a
-candidate's behalf, which is the single worst thing this project could ship.
+`intake_field_provenance` = the fraction of fields in `master.json` that name
+where they came from — a span in a supplied document, or a turn in the
+conversation. It must be 1.0. A field with no provenance is a claim nobody can
+check, and step 2 promotes claims to facts by asking about them, which it
+cannot do for a claim whose origin is unknown.
+
+**The generation gate moved with the generation work.**
+`cv_generation_traceability == 1.0` is now T45's, measured over the claim
+manifest of a generated document rather than over the store.
 
 ## Not now, but design for it
 
@@ -40,7 +45,7 @@ should feed templates rather than one fixed layout.
 
 ## Tests
 
-`test_every_generated_claim_traces_to_the_store`;
+`test_every_master_field_names_its_source`;
 `test_a_candidate_with_no_cv_can_still_reach_a_first_version`;
 `test_the_store_is_never_sent_verbatim`.
 

@@ -28,7 +28,8 @@ state, resumption, freshness triggers, the annotation pass, document generation
 or the interview. Meanwhile every one of the thirteen step gates reads
 `not_implemented`, and four of them (`intake_field_provenance`,
 `constraint_field_resolution`, `trait_evidence_sufficiency`,
-`interview_lesson_linkage`) were attributed to a task in prose only.
+`interview_lesson_linkage`) were attributed to a task in prose only — and one of
+those attributions turns out to contradict where the work actually sits (D-4).
 
 This plan closes that: one task table covering both generations of work, a gate
 per task, and a named owner for every step gate. §"Reconciliation with v1"
@@ -216,16 +217,16 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T24 | Candidate attribute schema — languages, location, relocation, salary floor/target, availability, work authorisation, **and the reach and legality fields step 7 needs**: employed or contracting, paid where, taxed where. Pins the `constraints.json` field set and its `stated`/`declined`/`unknown` states | 2, 7 | M | T23 | `unsatisfiable_hard_constraint_leaks == 0` | `test_offer_failing_a_hard_constraint_never_ranks` in `tests/test_candidate_attributes.py`; `test_missing_attribute_is_unknown_not_satisfied` — an unstated constraint does not silently pass | ☐ |
 | T25 | **[LAPTOP]** Broaden the corpus beyond remote programming: ≥6 job families, ≥15 ads each, same three languages | 5, 8 | L | — | `corpus_job_family_count >= 6` | `test_corpus_covers_at_least_six_job_families` in `tests/test_corpus_families.py` — no family below 15 ads | ☐ |
 | T26 | Dimension model v1: widen to the broadened corpus; add candidate-trait dimensions (creativity, ambition, learning orientation, spare-time engagement) | 4, 8 | L | T23, T25 | `ontology_hit_rate >= 0.85` | `test_every_job_family_reaches_dimension_coverage` in `tests/test_dimension_content.py` — no family below 0.80 | ☐ |
-| T29 | Record the product shape — packaging, phase skills, checkpoint scripts, and the distribution decision left open at process spec §11.5 | — | S | — | `product_shape_open_questions_unanswered == 0` | `test_every_open_shape_question_has_a_recorded_answer` in `tests/test_product_shape.py` — each question in the shape doc carries a decision or a named blocker | ◐ |
-| T30 | Encode step inputs/outputs in `spec-v2-steps.json` and gate on required-subset closure | — | M | — | `required_step_input_closure_violations == 0` | `test_required_step_reads_only_required_or_optional_inputs` in `tests/test_step_graph.py` — a required step reading a required-absent input fails the check | ☐ |
-| T31 | Detect note-key rebinding and a stale spec reader | — | S | — | `rebound_note_keys == 0` | `test_renumbered_section_does_not_rebind_a_note` in `tests/test_spec_reader.py` — moving a section leaves its note unbound rather than re-bound | ☐ |
+| T29 | Record the product shape — packaging, phase skills, checkpoint scripts, and the distribution decision left open at process spec §11.5 | — | S | — | `phase_checkpoints_defined == 1` | `test_every_open_shape_question_has_a_recorded_answer` in `tests/test_product_shape.py` — each question in the shape doc carries a decision or a named blocker | ◐ |
+| T30 | Encode step inputs/outputs in `spec-v2-steps.json` and gate on required-subset closure | — | M | — | `required_subset_closure_violations == 0` | `test_required_step_reads_only_required_or_optional_inputs` in `tests/test_step_graph.py` — a required step reading a required-absent input fails the check | ☐ |
+| T31 | Detect note-key rebinding and a stale spec reader | — | S | — | `reader_note_rebindings == 0` | `test_renumbered_section_does_not_rebind_a_note` in `tests/test_spec_reader.py` — moving a section leaves its note unbound rather than re-bound | ☐ |
 | T48 | Step gate state register: derive each step's `state` in `spec-v2-steps.json` from `status/evidence/*.json` instead of hand-editing it | — | S | T30 | `step_gate_state_drift == 0` | `test_step_state_matches_recorded_evidence` in `tests/test_step_gates.py` — a step whose evidence file records a passing measurement cannot read `not_implemented`; `test_missing_evidence_reads_not_implemented` | ☐ |
 
 ### RUNTIME — the process engine (new in v2)
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
 |----|-------------|------|------|---------|------|-------|----|
-| S3 | Multi-user profile tree + identify-at-session-start + handle resolution, with a `PreToolUse` hook refusing reads and writes under another handle's tree | 0 | L | T1 | `cross_user_leaks == 0` | `test_store_operation_under_another_handle_is_refused` in `tests/test_identity.py`; `test_single_existing_profile_is_confirmed_not_assumed` — one profile is offered for confirmation, never selected silently; `test_correct_operation_never_trips_the_hook` | ☐ |
+| S3 | Multi-user profile tree + identify-at-session-start + handle resolution, with a `PreToolUse` hook refusing reads and writes under another handle's tree | 0 | L | S1, T1 | `cross_user_leaks == 0` | `test_store_operation_under_another_handle_is_refused` in `tests/test_identity.py`; `test_single_existing_profile_is_confirmed_not_assumed` — one profile is offered for confirmation, never selected silently; `test_correct_operation_never_trips_the_hook` | ☐ |
 | T35 | Session state and resumption: `session/state.json` written whenever something new is known, and the five-rule resumption order that announces which step it resumes and why | 0 | M | S3, T6 | `resumption_position_loss == 0` | `test_interrupted_step_resumes_at_recorded_position` in `tests/test_session_state.py`; `test_state_survives_a_session_that_never_reaches_a_boundary`; `test_resumption_names_the_step_and_the_reason` | ☐ |
 | T34 | Step graph runtime: read declared inputs/outputs, answer *which steps may run* and *what is still owed*, and compute the sufficiency level L0/L1/L2 | — | M | T30, T35 | `unrunnable_step_dispatches == 0` | `test_step_without_its_required_inputs_is_never_offered` in `tests/test_step_graph_runtime.py`; `test_declining_every_offered_step_still_reaches_a_ranking`; `test_ranking_without_weights_is_l1` | ☐ |
 | T37 | Profile revision and staleness: everything derived records the revision it was computed from; derived is recomputed, authored is marked stale with the reason, historical is never touched | — | M | T6 | `stale_artefact_detection_recall == 1.0` | `test_artefact_behind_current_revision_reads_stale` in `tests/test_revision.py`; `test_authored_artefact_is_marked_not_regenerated`; `test_historical_artefact_is_never_revised` | ☐ |
@@ -233,20 +234,20 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T38 | Retraction rows, and deletion of a person: "forget that" suppresses everywhere derived while the row survives; "delete everything about me" removes the tree, named once and irreversible, including another profile after confirming it by name | — | M | T6 | `retracted_rows_surviving_rebuild == 0` | `test_retracted_row_is_absent_from_every_derived_file` in `tests/test_retraction.py`; `test_retraction_is_itself_reversible`; `test_deletion_without_a_named_target_deletes_nothing` | ☐ |
 | T39 | Scoring triggers: recompute at a step boundary, on explicit request, and after N new trait-bearing rows — never per message | 4, 6 | S | T37 | `unscheduled_scoring_runs == 0` | `test_scoring_does_not_run_per_message` in `tests/test_scoring_triggers.py`; `test_deferred_scoring_loses_no_evidence` — the log is never behind | ☐ |
 | T40 | Decline ledger: a subject declined once is not raised again in that step, declined twice is not raised again at all unless the candidate reopens it | — | S | T6 | `repeat_asks_after_decline == 0` | `test_subject_declined_twice_is_never_asked_again` in `tests/test_non_insistence.py`; `test_candidate_reopening_a_subject_clears_the_ledger` | ☐ |
-| S7 | One skill per step, thirteen of them, each carrying its checkpoint as a **script** rather than prose | all | L | T34, T35 | `steps_with_a_skill_fraction == 1.0` | `test_every_step_has_a_skill`; `test_every_skill_names_its_gate_metric`; `test_every_skill_checkpoint_is_a_script_not_prose`; `test_no_skill_contradicts_its_step_specification` | ☐ |
+| S7 | One skill per step, thirteen of them, each carrying its checkpoint as a **script** rather than prose | all | L | S2r, T34, T35 | `steps_with_a_skill_fraction == 1.0` | `test_every_step_has_a_skill`; `test_every_skill_names_its_gate_metric`; `test_every_skill_checkpoint_is_a_script_not_prose`; `test_no_skill_contradicts_its_step_specification` | ☐ |
 
 ### PROFILE — evidence, constraints, stories, traits, weights
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
 |----|-------------|------|------|---------|------|-------|----|
-| T6 | Profile store: append-only `evidence.jsonl` + `rebuild` to byte-identical derived files; two-profile fixture | — | M | T2, S3 | `profile_rebuild_deterministic == 1` | `test_rebuild_twice_produces_identical_bytes` in `tests/test_profile_store.py`; `test_second_profile_does_not_leak_into_first` | ☐ |
-| T41 | Constraints step engine: confirm-and-fill from Intake's claims when they exist, ask from scratch when they do not, and never promote an unconfirmed claim | 2 | M | T24, T6 | `constraint_field_resolution == 1.0` | `test_every_constraint_field_resolves_to_one_of_three_states` in `tests/test_constraints_step.py`; `test_unconfirmed_claim_stays_unknown`; `test_step_runs_with_no_claims_present` — the required-only path | ☐ |
+| T6 | Profile store: append-only `evidence.jsonl` + `rebuild` to byte-identical derived files; two-profile fixture | — | M | S3, T2 | `profile_rebuild_deterministic == 1` | `test_rebuild_twice_produces_identical_bytes` in `tests/test_profile_store.py`; `test_second_profile_does_not_leak_into_first` | ☐ |
+| T41 | Constraints step engine: confirm-and-fill from Intake's claims when they exist, ask from scratch when they do not, and never promote an unconfirmed claim | 2 | M | T6, T24 | `constraint_field_resolution == 1.0` | `test_every_constraint_field_resolves_to_one_of_three_states` in `tests/test_constraints_step.py`; `test_unconfirmed_claim_stays_unknown`; `test_step_runs_with_no_claims_present` — the required-only path | ☐ |
 | T7 | Question bank generation from the dimension model | 3, 4 | M | T3, T6 | `question_dimension_coverage == 1.0` | `test_every_generated_question_maps_to_a_dimension` in `tests/test_question_bank.py` | ☐ |
 | T8 | Free-text answer extraction → dimension values + story-bank episodes | 1, 3 | L | T7 | `story_dimension_linkage == 1.0` | `test_every_episode_links_to_a_dimension` in `tests/test_elicit_extract.py`; `test_episode_defaults_to_private_disclosure` | ☐ |
-| T27 | Onboarding interview protocol: sequencing, answer-dependent follow-ups, coverage tracking, the first-job branch, empathic framing, and the two-episode/two-occasion trait floor reading `insufficient` rather than refusing | 3, 4 | L | T7, T8, T24 | `trait_evidence_sufficiency == 1.0` | `test_every_trait_is_scored_or_explicitly_insufficient` in `tests/test_interview.py`; `test_scripted_respondent_yields_full_profile_coverage`; `test_every_negative_episode_gets_a_lesson_followup` | ☐ |
+| T27 | Onboarding interview protocol: sequencing, answer-dependent follow-ups, coverage tracking, the first-job branch, empathic framing, and the two-episode/two-occasion trait floor reading `insufficient` rather than refusing | 3, 4 | L | T7, T8, T24 | `interview_profile_coverage >= 0.90` | `test_every_trait_is_scored_or_explicitly_insufficient` in `tests/test_interview.py`; `test_scripted_respondent_yields_full_profile_coverage`; `test_every_negative_episode_gets_a_lesson_followup` | ☐ |
 | T9 | Reaction elicitation: live multi-source stimuli by preference, corpus elicitation split as fallback, disjoint-split enforcement | 5 | M | T5, T8, T11 | `elicitation_eval_overlap == 0` | `test_elicitation_never_draws_from_evaluation_split` in `tests/test_reaction_elicit.py`; `test_live_stimuli_enter_the_offer_store_as_new`; `test_no_stimulus_is_invented` | ☐ |
 | T10 | Preference weights: forced pairwise choices → part-worths → salary-equivalent scale | 6 | M | T9 | `weight_salary_equivalent_roundtrip_error <= 0.01` | `test_partworth_to_salary_equivalent_roundtrips` in `tests/test_weights.py` — converting a dimension to €/month and back recovers the part-worth within 1% | ☐ |
-| T21 | Feedback loop: rejection reason → `evidence.jsonl` → rebuild → changed ranking, and the offer's lifecycle status moves with it | 10 | M | T6, T19, S5 | `feedback_traceability == 1.0` | `test_every_profile_value_traces_to_evidence_rows` in `tests/test_feedback.py`; `test_rejection_moves_offer_status_and_marks_weights_stale` | ☐ |
+| T21 | Feedback loop: rejection reason → `evidence.jsonl` → rebuild → changed ranking, and the offer's lifecycle status moves with it | 10 | M | S5, T6, T19 | `feedback_traceability == 1.0` | `test_every_profile_value_traces_to_evidence_rows` in `tests/test_feedback.py`; `test_rejection_moves_offer_status_and_marks_weights_stale` | ☐ |
 | T28 | Continuous profile capture: every candidate-facing surface appends evidence, not just onboarding | — | M | T6, T27 | `profile_capture_coverage == 1.0` | `test_every_candidate_facing_surface_writes_evidence` in `tests/test_profile_capture.py` — a surface that accepts free text and writes no evidence row fails | ☐ |
 
 ### SUPPLY — connectors, offers, lifecycle
@@ -254,11 +255,11 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
 |----|-------------|------|------|---------|------|-------|----|
 | T11 | Normalised offer schema + manual-paste connector | 7 | M | T1 | `offer_schema_violations == 0` | `test_pasted_text_produces_valid_offer` in `tests/test_connect_manual.py` — a pasted ad yields a schema-valid offer with verbatim `text` | ☐ |
-| T32 | Declarative connector format and a shared connector library — data, never code, never a credential; authenticated sources drive the candidate's own browser session | 7 | M | T11 | `connector_files_containing_code_or_credentials == 0` | `test_connector_file_is_data_only` in `tests/test_connectors.py`; `test_no_connector_stores_a_credential`; `test_authenticated_source_uses_the_candidate_session` | ☐ |
+| T32 | Declarative connector format and a shared connector library — data, never code, never a credential; authenticated sources drive the candidate's own browser session | 7 | M | T11 | `connector_executes_no_shared_code == 1` | `test_connector_file_is_data_only` in `tests/test_connectors.py`; `test_no_connector_stores_a_credential`; `test_authenticated_source_uses_the_candidate_session` | ☐ |
 | T12 | **[LAPTOP]** One live portal connector against recorded fixtures | 7 | L | T11, T32 | `connector_fixture_parse_f1 >= 0.95` | `test_connector_parses_fixture_pages_to_offers` in `tests/test_connect_portal.py` | ☐ |
 | T13 | Cross-source dedup by similarity over normalised text + expiry detection | 7 | M | T11 | `dedup_precision >= 0.95` | `test_crossposted_duplicates_are_collapsed` in `tests/test_dedup.py`; `test_distinct_roles_at_same_company_are_not_merged` | ☐ |
-| S5 | Offer lifecycle: seven statuses and their allowed transitions, retention, the 60-day purge, and tombstones dedup cannot resurrect | 7 | L | T11, T13 | `resurrected_purged_offers == 0` | `test_purged_offer_is_not_re_added_as_new` in `tests/test_offer_lifecycle.py`; `test_shortlisted_offer_is_never_purge_eligible`; `test_applied_cannot_return_to_new`; `test_explicit_revival_restores_and_keeps_the_tombstone` | ☐ |
-| T33 | Net-from-gross pay estimation per country, generated when the advert states only gross | 9 | M | T24 | `net_pay_estimate_error <= 0.10` | `test_net_estimate_within_ten_percent_of_reference` in `tests/test_pay.py`; `test_absent_country_rules_yield_unknown_not_a_guess` | ☐ |
+| S5 | Offer lifecycle: seven statuses and their allowed transitions, retention, the 60-day purge, and tombstones dedup cannot resurrect | 7 | L | S1, T11, T13 | `resurrected_purged_offers == 0` | `test_purged_offer_is_not_re_added_as_new` in `tests/test_offer_lifecycle.py`; `test_shortlisted_offer_is_never_purge_eligible`; `test_applied_cannot_return_to_new`; `test_explicit_revival_restores_and_keeps_the_tombstone` | ☐ |
+| T33 | Net-from-gross pay estimation per country, generated when the advert states only gross | 9 | M | T24 | `generated_tax_rules_marked_unverified == 1.0` | `test_net_estimate_within_ten_percent_of_reference` in `tests/test_pay.py`; `test_absent_country_rules_yield_unknown_not_a_guess` | ☐ |
 
 ### MATCH — extraction, annotation, ranking
 
@@ -279,10 +280,10 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
 |----|-------------|------|------|---------|------|-------|----|
-| S4 | CV store: import pdf/docx into `cv/master.json`, or build the same store by conversation with someone who has no CV. Pins the `master.json` contract | 1 | L | T6, T8 | `intake_field_provenance == 1.0` | `test_every_master_field_names_its_source` in `tests/test_cv_store.py` — every field traces to a document span or a conversation turn; `test_candidate_with_no_cv_reaches_the_same_store`; `test_source_document_is_never_modified` | ☐ |
-| T45 | Per-advert generation: CV and letter drawn only from store entries, versioned `v<N>` and never overwritten, with a claim→store manifest | 11 | L | S4, T15, S5 | `cv_generation_traceability == 1.0` | `test_every_claim_traces_to_a_store_entry` in `tests/test_generate.py`; `test_regeneration_writes_a_new_version`; `test_advert_wording_is_mirrored_only_over_held_ground` | ☐ |
+| S4 | CV store: import pdf/docx into `cv/master.json`, or build the same store by conversation with someone who has no CV. Pins the `master.json` contract | 1 | L | S1, T6, T8 | `intake_field_provenance == 1.0` | `test_every_master_field_names_its_source` in `tests/test_cv_store.py` — every field traces to a document span or a conversation turn; `test_candidate_with_no_cv_reaches_the_same_store`; `test_source_document_is_never_modified` | ☐ |
+| T45 | Per-advert generation: CV and letter drawn only from store entries, versioned `v<N>` and never overwritten, with a claim→store manifest | 11 | L | S4, S5, T15 | `cv_generation_traceability == 1.0` | `test_every_claim_traces_to_a_store_entry` in `tests/test_generate.py`; `test_regeneration_writes_a_new_version`; `test_advert_wording_is_mirrored_only_over_held_ground` | ☐ |
 | T46 | Personal details collected at the point of use, per-use approval for story episodes, and the send boundary: prepared documents, text to paste, an email left in drafts | 11 | M | T45 | `unapproved_episode_disclosures == 0` | `test_episode_without_per_use_approval_never_enters_a_document` in `tests/test_approval.py`; `test_personal_details_are_asked_at_step_eleven_not_at_intake`; `test_nothing_is_sent_without_an_explicit_per_item_approval` | ☐ |
-| S6 | Interview: preparation from the advert, the application and earlier interviews; then the log — questions asked, outcome, lessons — immutable and exempt from purge | 12 | L | T8, T45 | `interview_lesson_linkage == 1.0` | `test_every_logged_interview_produces_a_linked_evidence_row` in `tests/test_interview_log.py`; `test_interview_record_is_immutable`; `test_outcome_arriving_days_later_resumes_the_record` | ☐ |
+| S6 | Interview: preparation from the advert, the application and earlier interviews; then the log — questions asked, outcome, lessons — immutable and exempt from purge | 12 | L | S1, T8, T45 | `interview_lesson_linkage == 1.0` | `test_every_logged_interview_produces_a_linked_evidence_row` in `tests/test_interview_log.py`; `test_interview_record_is_immutable`; `test_outcome_arriving_days_later_resumes_the_record` | ☐ |
 | T47 | The mock interview: a strict role-play announced before it starts, no coaching mid-answer, no breaking character, with dictation offered and feedback only at the end | 12 | M | S6 | `mock_interview_character_breaks == 0` | `test_no_coaching_turn_occurs_inside_the_roleplay` in `tests/test_mock_interview.py`; `test_roleplay_is_announced_before_it_begins`; `test_feedback_is_given_only_after_it_ends` | ☐ |
 
 ### Specification — the documents this plan is built on
@@ -294,9 +295,9 @@ plan is a complete ledger of the queue rather than of the implementation only.
 |----|-------------|------|------|---------|------|-------|----|
 | S1 | Specification v2 — the whole process: steps, connections, artefact tree, lifecycle, resumption | all | L | — | `process_spec_complete == 1` | `test_every_required_item_is_present` in `tests/test_process_spec.py` | ☑ |
 | S1r | Specification v2.1 — the owner's sixteen review annotations folded in | all | M | S1 | `process_spec_complete == 1` | `test_required_subset_closure_is_stated` in `tests/test_process_spec.py` | ☑ |
-| S2 | One specification per step, twelve fields each | all | L | S1r | `step_specs_complete_fraction == 1.0` | `test_every_step_carries_every_field` in `tests/test_step_specs.py`; `test_divisor_is_the_settled_step_count` | ☑ |
+| S2 | One specification per step, twelve fields each | all | L | S1, S1r | `step_specs_complete_fraction == 1.0` | `test_every_step_carries_every_field` in `tests/test_step_specs.py`; `test_divisor_is_the_settled_step_count` | ☑ |
 | S2r | The owner's twelve step-spec annotations folded in | all | M | S2 | `step_specs_complete_fraction == 1.0` | `test_duplicate_step_heading_does_not_collapse` in `tests/test_step_specs.py` | ☑ |
-| S8 | This plan — the build order for the thirteen-step process, and the queue reconciled against it | all | M | S2r | `plan_queue_task_drift == 0` | `test_task_in_the_queue_without_a_plan_row_is_drift` in `tests/test_plan_v2.py`; `test_evidence_log_is_not_read_as_a_task_table`; `test_a_missing_plan_records_minus_one_not_zero` | ◐ |
+| S8 | This plan — the build order for the thirteen-step process, and the queue reconciled against it | all | M | S2r | `plan_queue_task_drift == 0` | `test_task_in_the_queue_without_a_plan_row_is_drift` in `tests/test_plan_v2.py`; `test_a_payload_gate_differing_from_the_plan_is_drift`; `test_a_plan_dependency_missing_from_the_queue_is_drift`; `test_evidence_log_is_not_read_as_a_task_table` | ◐ |
 
 ### Divergences
 
@@ -304,7 +305,8 @@ plan is a complete ledger of the queue rather than of the implementation only.
 |----|-------------|------|------|---------|------|-------|----|
 | D-1 | Catalan corpus slice covers IT roles at large, not remote programming as T4b specifies | 8 | S | — | `corpus_language_slice_mismatch == 0` | `test_every_language_slice_matches_its_declared_scope` in `tests/test_corpus_raw.py` | ☐ |
 | D-2 | v0 gold examples are cue-derived, not independent — T15 must measure `extraction_macro_f1` against independent labels | 8 | S | T5 | `cue_derived_gold_in_evaluation_split == 0` | `test_no_evaluation_example_is_derived_from_a_cue` in `tests/test_corpus_content.py` | ☐ |
-| D-3 | `story_failure_fraction` floor contradicts the revised History protocol; reconcile `status/specification.md` and `docs/METHODS.md` | 3 | S | — | `superseded_gates_still_documented == 0` | `test_no_document_states_a_superseded_gate` in `tests/test_spec_consistency.py` — the floor appears nowhere as a gate, and the fraction is reported | ☐ |
+| D-3 | `story_failure_fraction` floor contradicts the revised History protocol; reconcile `status/specification.md` and `docs/METHODS.md` | 3 | S | — | `spec_gate_contradictions == 0` | `test_no_document_states_a_superseded_gate` in `tests/test_spec_consistency.py` — the floor appears nowhere as a gate, and the fraction is reported | ☐ |
+| D-4 | The Traits gate is assigned to T28 by the specification and to T27 by the work; neither task's own gate is the step metric | 4 | S | — | `trait_gate_owner_contradictions == 0` | `test_step_gate_metric_is_some_task_gate` in `tests/test_step_gates.py` — every step gate metric is some task's acceptance gate; `test_no_two_documents_name_different_owners_for_one_step_gate` | ☐ |
 
 **Status legend**: ☐ open · ◐ in progress · ☑ merged
 
@@ -316,7 +318,7 @@ listed; every open task appears in exactly one milestone.
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44 |
-| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T20, D-1, D-2, D-3 |
+| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T20, D-1, D-2, D-3, D-4 |
 | **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
@@ -335,6 +337,30 @@ touches the corpus. The two run in parallel: the spine is built while the
 labelling happens, and M2's extraction gates land when T5 does.
 
 **Branch pattern**: `T<N>-short-description` from the default branch.
+
+### Step gate ownership
+
+Every step of specification v2 names one gate metric. This table mirrors
+`status/spec-v2-process.md` §9 **exactly** — the plan does not reassign a metric
+the specification has settled, and where the plan's work disagrees with §9 that
+is a divergence, not an edit.
+
+A step's gate metric is not the same thing as the owning task's own acceptance
+gate. Ten metrics belong to a task whose gate they already are; four are step
+metrics whose owner must additionally measure and record them.
+
+| step metric | §9 owner | that task's own gate |
+|-------------|----------|----------------------|
+| `intake_field_provenance` | S4 | `intake_field_provenance == 1.0` — the same |
+| `constraint_field_resolution` | T24 | `unsatisfiable_hard_constraint_leaks == 0` — T41 resolves the fields |
+| `trait_evidence_sufficiency` | T28 | `profile_capture_coverage == 1.0` — **contested, see D-4** |
+| `interview_lesson_linkage` | S6 | `interview_lesson_linkage == 1.0` — the same |
+
+**D-4** records the one contradiction this plan found and did not resolve: §9
+assigns the Traits metric to T28 (continuous capture), while the two-episode
+floor that produces the measurement is specified in T27 (the interview
+protocol). The plan records §9's answer and points at the divergence rather than
+quietly overriding a settled specification.
 
 ## Evidence log
 
@@ -427,7 +453,7 @@ by side with the overlap unresolved. This is that reconciliation.
 | task | change |
 |------|--------|
 | T24 | Now also pins the `constraints.json` field set and its three resolution states, and gains step 7's reach and legality fields (employed or contracting, paid where, taxed where). It owns `constraint_field_resolution` per process spec §9, but the *step engine* that resolves the fields is T41 |
-| T27 | Now owns `trait_evidence_sufficiency` — the two-episode/two-occasion floor reading `insufficient` rather than refusing to score, and never voiced to the candidate |
+| T27 | Carries the two-episode/two-occasion trait floor — reading `insufficient` rather than refusing to score, and never voiced to the candidate. Its own gate stays `interview_profile_coverage >= 0.90`; **the step 4 metric is not reassigned here** (see D-4) |
 | T9 | Stimuli are **fetched live** by preference with the corpus as fallback (process §2.3); live stimuli enter the offer store as ordinary `new` offers |
 | T13 | Dedup is a similarity problem over normalised text; `text_sha256` catches re-collection of one listing and is explicitly the cheap half (process §7.4) |
 | T15 | Staged — normalise, rules, then a model only on the remainder. Extraction stays candidate-independent; relating an offer to the candidate moves to T42 |
@@ -453,8 +479,6 @@ T25, T26, T28, T30, T31, T32, T33, S5, S7, D-1, D-2.
 ## Sign-off
 
 - [ ] Owner has read the task table and the milestones
-- [ ] The four step gates without an implementing task in v1 now have one:
-      `intake_field_provenance` → S4, `constraint_field_resolution` → T24/T41,
-      `trait_evidence_sufficiency` → T27, `interview_lesson_linkage` → S6
+- [ ] Step gate ownership read and the D-4 divergence resolved
 - [ ] Queue reconciled against this table
 - [ ] Ready for execution

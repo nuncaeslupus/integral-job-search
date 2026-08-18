@@ -83,6 +83,41 @@ splits to T47), S3 (narrowed — session state splits to T35), S7 (now depends o
 T34/T35). Superseded: the `story_failure_fraction` floor (D-3 reconciles the v1
 documents) and the step table in `docs/product-shape.md`.
 
+## The review round on #20
+
+Qodo found three real classes of drift the first draft of the S8 checker could
+not see, and each is now measured rather than argued about:
+
+1. **Dependency drift.** The plan's `Depends` cells and the queue's blocking
+   `deps` disagreed on 27 edges. `queue_batch.sh` dispatches from the queue
+   alone, so **S7 could have been dispatched before T34 and T35** — the exact
+   out-of-order build the milestones exist to prevent. Reconciled as the union
+   of both sides, cycle-checked, and now gated.
+2. **Gate drift.** Eight plan rows named a different metric from the `gate`
+   block in the task's own payload — including T32 (`== 0` against `== 1`, a
+   polarity flip). The rule now is that **the plan's Gate column mirrors the
+   payload**, because `gate_run.sh` executes the payload. S4's payload was the
+   one changed instead: its gate moved to T45 with the generation work.
+3. **A settled specification contradicted.** The plan had reassigned
+   `trait_evidence_sufficiency` to T27; `spec-v2-process.md` §9 and
+   `spec-v2-steps.json` assign it to T28. Seeded as **D-4** (`lo-4ca5`) rather
+   than edited: §9 names T28 (continuous capture), the two-episode floor that
+   produces the measurement is specified in T27, and neither task's own gate is
+   the step metric. The plan now records §9's answer and points at D-4.
+
+Also fixed: the checker crashed on a JSONL line parsing to `null`, a list or a
+scalar (breaking its own "reports, never raises" contract); it collapsed labels
+into sets, so a duplicated row read as agreement; and its column state was
+cleared only by a blank line, which made the Evidence-log trap safe by
+typography rather than by logic.
+
+Declined, with the reasons already on #7, #9, #12–#18: placeholder gate blocks
+on unstarted tasks, a `size` field the queue schema does not carry, docs-and-code
+in one change set, and a gate-result field on `merged` rows that `release.sh`
+already enforces at the choke point. The inline-numeric-gate rule was declined
+too — the prose names which task owns a *step's* metric, and every payload still
+carries exactly one fenced gate block.
+
 ## Findings worth carrying forward
 
 - **The drift checker read the Evidence log as a task table.** It has a `T#`
@@ -99,9 +134,9 @@ documents) and the step table in `docs/product-shape.md`.
 
 ## Queue state
 
-62 tasks: 10 merged, 52 open, 0 `in_progress`, 0 `escalated`. S8 is this
+63 tasks: 10 merged, 53 open, 0 `in_progress`, 0 `escalated`. S8 is this
 round's own row and stays `open` until the orchestrator releases it against
-this PR.
+this PR; **D-4** was seeded by the review round.
 `queue_doctor.sh`: 0 error, 0 warn, 0 info. New rows are on this feature branch,
 so the next orchestrator session must run `queue_sync.sh` to port them onto
 `arsenal-queue` before dispatching workers.
