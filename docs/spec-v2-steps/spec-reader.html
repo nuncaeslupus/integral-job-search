@@ -173,7 +173,10 @@ h4.sec-h{font-size:16.5px;color:var(--fg)}
 <strong>Author</strong>: nuncaeslupus
 <strong>Requires</strong>: <code>status/spec-v2-process.md</code> v2.1 — the process this specifies steps within
 <strong>Companion</strong>: <code>status/spec-v2-steps.json</code> — the settled step list; <code>step_count</code> is this
-document's divisor</p>
+document's divisor. S12 added <code>accepts_candidate_free_text</code> per step there —
+whether that step's protocol (below) puts free text about the candidate in
+front of a writer at all — replacing a hand-maintained map that used to live
+in <code>jobsearch.profile_capture</code> and had to be kept in sync by hand.</p>
 <p>Thirteen steps, each filling the template in <code>status/spec-v2-brief.md</code> §4 plus the
 two fields <code>spec-v2-process.md</code> §10 requires every step to carry. Nothing here
 re-decides the process: the step boundaries, the required/offered split, the

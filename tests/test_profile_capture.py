@@ -12,12 +12,21 @@ D-8's own three RED tests live in their own section below: `EvidenceRow.about`
 lets two rejections of two different offers stay distinguishable in the log,
 a captured reason's subject survives T6's rebuild, and an answer to a bank
 question is not made to carry a subject nothing asked it to.
+
+S12's own three tests live in their own section further below: every step in
+the live model declares whether it takes candidate free text, this module
+reads that declaration rather than keeping a local map (proven by flipping a
+declaration in the JSON and watching `measure_coverage` follow it), and the
+migration leaves the five currently-measured surfaces — `constraints`,
+`feedback`, `history`, `intake`, `traits` — exactly as they were.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -25,10 +34,9 @@ from jobsearch.decline import DeclineLedger
 from jobsearch.identity import ProfileStore, create_profile
 from jobsearch.lifecycle import LifecycleRecord, save_lifecycle_offer, track_new_offer, transition
 from jobsearch.offers import Offer, connect_manual
-from jobsearch.process_spec import load_steps
+from jobsearch.process_spec import DEFAULT_STEPS_PATH, StepList, load_steps
 from jobsearch.profile import EvidenceLog, EvidenceSubject, rebuild
 from jobsearch.profile_capture import (
-    ACCEPTS_CANDIDATE_FREE_TEXT,
     MINIMUM_CHECKS,
     MINIMUM_SUBJECT_CHECKS,
     SURFACE_DRIVERS,
@@ -41,12 +49,15 @@ from jobsearch.profile_capture import (
     captures_without_a_subject,
     measure,
     measure_coverage,
+    measure_step_declarations,
     measure_subject_gate,
     probe_capture,
     probe_deliberate_break,
     probe_deliberate_subject_break,
     probe_subject_linkage,
+    unclassified_free_text_steps,
     write_evidence,
+    write_step_declaration_evidence,
     write_subject_evidence,
 )
 
@@ -338,32 +349,45 @@ def test_lifecycle_transition_alone_still_does_not_write_evidence(
 # --- the derived surface set: classification completeness and the 3-way split
 
 
+def _steps_with_raw_edit(
+    tmp_path: Path, edit: Callable[[list[dict[str, Any]]], None]
+) -> StepList:
+    """A `StepList` loaded from a copy of the committed JSON after `edit`
+    mutates its raw `steps` array in place — used to prove a declaration (or
+    its absence) drives measurement, without touching the committed file."""
+    raw = json.loads(DEFAULT_STEPS_PATH.read_text(encoding="utf-8"))
+    edit(raw["steps"])
+    path = tmp_path / "steps.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    return load_steps(path)
+
+
 def test_classification_is_complete_against_the_live_step_model() -> None:
-    """`_classification_problems` is the drift guard: every step id the live
-    JSON names has a classification, and vice versa — the same shape
-    `step_runtime.unknown_artefacts` checks for artefact presence."""
+    """`_classification_problems` is the drift guard: every step in the live
+    JSON declares `accepts_candidate_free_text` (S12: on the model itself,
+    not a Python map) — the same shape `step_runtime.unknown_artefacts`
+    checks for artefact presence."""
     steps = load_steps()
     assert _classification_problems(steps) == []
-    assert set(ACCEPTS_CANDIDATE_FREE_TEXT) == {step.id for step in steps.steps}
+    assert unclassified_free_text_steps(steps) == []
+    assert all(step.accepts_candidate_free_text is not None for step in steps.steps)
 
 
-def test_a_step_removed_from_classification_is_reported_as_drift() -> None:
-    """If this module's classification ever falls behind the live step model
-    — a step added to the JSON with no entry here — the drift is a reported
-    violation, not a silently-shrunk denominator."""
-    steps = load_steps()
-    trimmed = dict(ACCEPTS_CANDIDATE_FREE_TEXT)
-    del trimmed["feedback"]
+def test_a_step_missing_its_declaration_is_reported_as_drift(tmp_path: Path) -> None:
+    """If a step ever lands in the JSON with `accepts_candidate_free_text`
+    unset, that is drift — a reported violation, not a silently-shrunk
+    denominator. Before S12 this was a Python dict falling behind the live
+    step list; now it is a field missing on the step itself."""
 
-    import jobsearch.profile_capture as pc
+    def drop_feedbacks_declaration(steps: list[dict[str, Any]]) -> None:
+        for step in steps:
+            if step["id"] == "feedback":
+                del step["accepts_candidate_free_text"]
 
-    original = pc.ACCEPTS_CANDIDATE_FREE_TEXT
-    pc.ACCEPTS_CANDIDATE_FREE_TEXT = trimmed
-    try:
-        problems = pc._classification_problems(steps)
-    finally:
-        pc.ACCEPTS_CANDIDATE_FREE_TEXT = original
+    steps = _steps_with_raw_edit(tmp_path, drop_feedbacks_declaration)
 
+    assert unclassified_free_text_steps(steps) == ["feedback"]
+    problems = _classification_problems(steps)
     assert any("feedback" in problem for problem in problems)
 
 
@@ -387,6 +411,80 @@ def test_no_free_text_and_pending_implementation_are_distinct_from_dropped(
 
     assert result.no_free_text != result.pending_implementation
     assert set(result.no_free_text) & set(result.pending_implementation) == set()
+
+
+# --- S12: the free-text declaration moved from a Python map onto the model -
+
+
+def test_profile_capture_reads_the_declaration_not_a_local_map(
+    store_for: Callable[[str], ProfileStore], tmp_path: Path
+) -> None:
+    """A module that reads the model but keeps a fallback map has not moved
+    anything (the payload's own words). Proven, not asserted: flip `history`'s
+    declaration to `False` in a copy of the JSON and drive `measure_coverage`
+    off that copy — with no Python constant left anywhere to fall back to,
+    `history` must follow the JSON into `no_free_text` rather than stay
+    `captured` by an old default. The real, unedited step model is checked
+    last, so the same call also proves nothing about the committed file itself
+    changed underneath this test.
+    """
+
+    def free_history_of_its_declaration(steps: list[dict[str, Any]]) -> None:
+        for step in steps:
+            if step["id"] == "history":
+                step["accepts_candidate_free_text"] = False
+
+    flipped = _steps_with_raw_edit(tmp_path, free_history_of_its_declaration)
+    store = store_for("declaration-drives-measurement")
+
+    # Passing the real SURFACE_DRIVERS (not the module default `None`) skips
+    # `_classification_problems`, which would otherwise flag `history` as a
+    # driver-vs-declaration contradiction — a real, separate finding this
+    # test is not about; see `test_surface_drivers_only_registered_for_free_
+    # text_steps` for that check instead.
+    result = measure_coverage(store, steps=flipped, drivers=SURFACE_DRIVERS)
+    assert "history" in result.no_free_text
+    assert "history" not in result.captured and "history" not in result.dropped
+
+    # The unedited model still classifies history as free-text-accepting and
+    # measured — proof the flip above came from the JSON, not from a change
+    # to the committed file or to this module's own logic.
+    unflipped = measure_coverage(store_for("declaration-unflipped"), steps=load_steps())
+    assert "history" in unflipped.captured
+
+
+def test_coverage_is_unchanged_by_the_migration(
+    store_for: Callable[[str], ProfileStore],
+) -> None:
+    """The schema change must not, by itself, alter what is counted — this is
+    deliberately not `test_classification_is_complete_against_the_live_step_
+    model` (drift) or `test_a_step_missing_its_declaration_is_reported_as_
+    drift` (a bad edit): it is that a *correct* migration of the existing
+    declarations leaves `profile_capture_coverage` and every surface bucket
+    exactly as they were.
+
+    T50 moved `intake` from pending to measured after this payload was
+    written, so there are five captured surfaces today
+    (`constraints`, `feedback`, `history`, `intake`, `traits`), not the four
+    named when S12 was scoped — see this file's own module docstring and
+    `claude-arsenal/queue/lo-9261.md`'s corrected acceptance gate.
+    """
+    store = store_for("coverage-unchanged-by-migration")
+
+    result = measure_coverage(store)
+
+    assert result.coverage == 1.0
+    assert set(result.captured) == {"constraints", "feedback", "history", "intake", "traits"}
+    assert set(result.no_free_text) == {
+        "identify",
+        "preferences",
+        "sourcing",
+        "understanding",
+        "ranking",
+    }
+    assert set(result.pending_implementation) == {"reactions", "application", "interview_log"}
+    assert result.dropped == ()
+    assert result.problems == ()
 
 
 # --- T50: intake becomes a measured surface, S4 having built it a driver ---
@@ -439,11 +537,12 @@ def test_a_conversational_intake_answer_reaches_the_evidence_log(
 
 def test_surface_drivers_only_registered_for_free_text_steps() -> None:
     """A driver implies the step accepts free text — a driver registered for
-    a `False`-classified step would be self-contradicting, and the drift
-    guard treats it as a violation rather than silently trusting the driver
-    table over the classification."""
+    a step declared `False` (or left undeclared) would be self-contradicting,
+    and the drift guard treats it as a violation rather than silently
+    trusting the driver table over the model's own declaration."""
+    declared = {step.id: step.accepts_candidate_free_text for step in load_steps().steps}
     for step_id in SURFACE_DRIVERS:
-        assert ACCEPTS_CANDIDATE_FREE_TEXT.get(step_id) is True
+        assert declared.get(step_id) is True
 
 
 # --- the required verification: deliberately break a surface ---------------
@@ -499,6 +598,47 @@ def test_write_evidence_writes_the_measured_json(tmp_path: Path) -> None:
     assert target.exists()
     on_disk = target.read_text(encoding="utf-8")
     assert str(measured["profile_capture_coverage"]) in on_disk or "1.0" in on_disk
+
+
+def test_unclassified_free_text_steps_is_zero_on_the_committed_model() -> None:
+    """S12's gate metric, over the real committed file — the number
+    `gate_run.sh lo-9261` actually checks."""
+    measured = measure_step_declarations()
+
+    assert measured["unclassified_free_text_steps"] == 0
+    assert measured["unclassified_step_ids"] == []
+    assert measured["step_count"] == load_steps().step_count
+
+
+def test_a_step_missing_its_declaration_is_counted_by_measure_step_declarations(
+    tmp_path: Path,
+) -> None:
+    """The failure S12's gate exists to catch: a step landing with the field
+    unset must move `unclassified_free_text_steps` off zero and name the step
+    — not be silently read as `False` ("no free text")."""
+
+    def drop_reactions_declaration(steps: list[dict[str, Any]]) -> None:
+        for step in steps:
+            if step["id"] == "reactions":
+                del step["accepts_candidate_free_text"]
+
+    steps = _steps_with_raw_edit(tmp_path, drop_reactions_declaration)
+
+    measured = measure_step_declarations(steps)
+
+    assert measured["unclassified_free_text_steps"] == 1
+    assert measured["unclassified_step_ids"] == ["reactions"]
+
+
+def test_write_step_declaration_evidence_writes_s12_json(tmp_path: Path) -> None:
+    target = tmp_path / "S12.json"
+
+    measured = write_step_declaration_evidence(target)
+
+    assert target.exists()
+    on_disk = json.loads(target.read_text(encoding="utf-8"))
+    assert on_disk == measured
+    assert on_disk["unclassified_free_text_steps"] == 0
 
 
 def test_probe_capture_result_type_matches_coverage_result_shape(tmp_path: Path) -> None:

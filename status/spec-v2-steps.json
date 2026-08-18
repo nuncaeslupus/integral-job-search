@@ -2,7 +2,7 @@
   "spec_version": "2.1",
   "settled_on": "2026-08-17",
   "source": "status/spec-v2-process.md",
-  "note": "The machine-readable step list. S2's gate divides by step_count, so the count lives here and not only in prose. Every step carries a named gate metric; `not_implemented` is a valid state, a blank metric is not. `required` marks the five steps without which there is nothing to show the candidate; every other step is offered and may be declined or deferred without blocking.",
+  "note": "The machine-readable step list. S2's gate divides by step_count, so the count lives here and not only in prose. Every step carries a named gate metric; `not_implemented` is a valid state, a blank metric is not. `required` marks the five steps without which there is nothing to show the candidate; every other step is offered and may be declined or deferred without blocking. S12: every step also carries `accepts_candidate_free_text` — whether that step's protocol puts free text about the candidate in front of a writer at all; `null` means undeclared and is caught by jobsearch.profile_capture's own gate, never silently treated as false.",
   "step_count": 13,
   "phases": {
     "first_run": "Steps 0-6. Run once, in order, the first time a candidate uses the tool. Re-entered later by revision or by a freshness trigger, never repeated wholesale.",
@@ -33,7 +33,8 @@
       "produces": [
         "handle",
         "session_state"
-      ]
+      ],
+      "accepts_candidate_free_text": false
     },
     {
       "n": 1,
@@ -65,7 +66,8 @@
       "produces": [
         "cv_master",
         "claimed_facts"
-      ]
+      ],
+      "accepts_candidate_free_text": true
     },
     {
       "n": 2,
@@ -99,7 +101,8 @@
         "constraints",
         "currency",
         "locale"
-      ]
+      ],
+      "accepts_candidate_free_text": true
     },
     {
       "n": 3,
@@ -132,7 +135,8 @@
       "produces": [
         "stories",
         "trait_evidence"
-      ]
+      ],
+      "accepts_candidate_free_text": true
     },
     {
       "n": 4,
@@ -164,7 +168,8 @@
       ],
       "produces": [
         "traits"
-      ]
+      ],
+      "accepts_candidate_free_text": true
     },
     {
       "n": 5,
@@ -194,7 +199,8 @@
       ],
       "produces": [
         "reaction_evidence"
-      ]
+      ],
+      "accepts_candidate_free_text": true
     },
     {
       "n": 6,
@@ -225,7 +231,8 @@
       ],
       "produces": [
         "weights"
-      ]
+      ],
+      "accepts_candidate_free_text": false
     },
     {
       "n": 7,
@@ -257,7 +264,8 @@
       ],
       "produces": [
         "offers"
-      ]
+      ],
+      "accepts_candidate_free_text": false
     },
     {
       "n": 8,
@@ -291,7 +299,8 @@
       ],
       "produces": [
         "extractions"
-      ]
+      ],
+      "accepts_candidate_free_text": false
     },
     {
       "n": 9,
@@ -330,7 +339,8 @@
       ],
       "produces": [
         "rankings"
-      ]
+      ],
+      "accepts_candidate_free_text": false
     },
     {
       "n": 10,
@@ -362,7 +372,8 @@
       "produces": [
         "reaction_evidence",
         "outcome_evidence"
-      ]
+      ],
+      "accepts_candidate_free_text": true
     },
     {
       "n": 11,
@@ -398,7 +409,8 @@
       ],
       "produces": [
         "generated_documents"
-      ]
+      ],
+      "accepts_candidate_free_text": true
     },
     {
       "n": 12,
@@ -434,7 +446,8 @@
       "produces": [
         "interview_preparation",
         "interview_lessons"
-      ]
+      ],
+      "accepts_candidate_free_text": true
     }
   ],
   "external_artefacts": [

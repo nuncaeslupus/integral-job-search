@@ -21,6 +21,18 @@ next task:
 Every step must name a gate metric. `not_implemented` is a valid state while a
 step is unbuilt; a blank metric is not, because a step with an empty metric is
 indistinguishable from a step whose gate was forgotten.
+
+**S12** moved one more judgement into this schema: `Step.accepts_candidate_free_text`
+records whether a step's protocol puts free text about the candidate in front
+of a writer at all. It used to live as a hand-maintained Python dict in
+`jobsearch.profile_capture` (`ACCEPTS_CANDIDATE_FREE_TEXT`), checked against
+this file's live step ids on every measurement so it could not silently go
+stale — now the fact is declared beside the step it describes instead of in a
+second file a step author has to remember to edit. The field is optional
+(`bool | None`, default `None`) rather than required: an undeclared step still
+loads here so S1/S2/T30/S7 — which have nothing to do with free-text capture —
+are unaffected; only `jobsearch.profile_capture`'s own gate
+(`unclassified_free_text_steps`) notices and fails on a step left undeclared.
 """
 
 from __future__ import annotations
@@ -80,6 +92,21 @@ def _reject_blank(value: str) -> str:
 
 NonEmptyStr = Annotated[str, Field(min_length=1), AfterValidator(_reject_blank)]
 
+#: A boolean that must arrive as a JSON boolean, not as something Pydantic can
+#: talk into one. Pydantic's ordinary `bool` is lax: `1`, `0`, `"true"`,
+#: `"false"` and `"yes"` all validate and silently become `True`/`False`. That
+#: is wrong for every flag in this file, because this file is the settled model
+#: other modules read instead of keeping their own copy — a typo that still
+#: parses is precisely the failure the model exists to prevent, and the value
+#: it produces looks entirely legitimate downstream.
+#:
+#: It matters most for `accepts_candidate_free_text`, whose S12 gate counts only
+#: *absent* declarations on the stated grounds that a present non-boolean would
+#: already have failed loading. Lax `bool` made that claim false: `"yes"` landed
+#: as a declaration and was counted as one. `2` was already rejected, so only
+#: the values that look deliberate got through.
+StrictBool = Annotated[bool, Field(strict=True)]
+
 
 class Gate(BaseModel):
     """A step's acceptance gate: a named metric, and whether it is built yet."""
@@ -107,7 +134,7 @@ class Read(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artefact: NonEmptyStr
-    optional: bool = False
+    optional: StrictBool = False
 
 
 class Step(BaseModel):
@@ -122,13 +149,27 @@ class Step(BaseModel):
     # Required steps are the ones without which there is nothing to show the
     # candidate. Everything else is offered, which is what makes the
     # non-insistence rule safe: declining a step always leaves a way forward.
-    required: bool
+    required: StrictBool
     goal: NonEmptyStr
     # Requirement 2.2 of the brief: a step that only fills internal state has no
     # visible output and will feel like an interrogation. Making it a required
     # field is the cheapest enforcement available.
     visible_output: NonEmptyStr
-    automatic: bool
+    automatic: StrictBool
+    # S12: whether this step's protocol puts free text *about the candidate*
+    # in front of a writer at all. Not derivable from `automatic` — only
+    # `understanding` is `automatic: true`, and that field answers "is a
+    # candidate present", not "does this step take free text about them"
+    # (Ranking is an ordinary, non-automatic conversation that only presents).
+    # `None` is deliberately a real state, not a default that reads as an
+    # answer: a step landing here with the declaration unset must be
+    # `None`, not silently `False`, so `jobsearch.profile_capture`'s own gate
+    # (`unclassified_free_text_steps`) can name it rather than mistake "not
+    # yet decided" for "decided no". Optional rather than required so an
+    # undeclared step still loads here (and every gate that has nothing to do
+    # with free-text capture — S1, S2, T30, S7 — is unaffected); only the
+    # capture gate that actually cares about this field fails on it.
+    accepts_candidate_free_text: StrictBool | None = None
     gate: Gate
     reentry_events: list[str]
     # §3.1's declarations, moved out of the prose code block so the graph can be
