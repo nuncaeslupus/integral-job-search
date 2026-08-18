@@ -76,11 +76,12 @@ def store_for(tmp_path: Path) -> Callable[[str], ProfileStore]:
 def test_every_candidate_facing_surface_writes_evidence(
     store_for: Callable[[str], ProfileStore],
 ) -> None:
-    """Every surface this module measures — constraints, history, traits, and
-    the new offer-decision-reason integration — appends >= 1 evidence row when
-    driven with a real, scripted candidate answer through unmodified
-    production code. A surface that took input and wrote nothing would show
-    up in `dropped_surfaces` and the coverage fraction would be < 1.0.
+    """Every surface this module measures — intake, constraints, history,
+    traits, and the offer-decision-reason integration — appends >= 1 evidence
+    row when driven with a real, scripted candidate answer through
+    unmodified production code. A surface that took input and wrote nothing
+    would show up in `dropped_surfaces` and the coverage fraction would be
+    < 1.0.
     """
     store = store_for("full-coverage")
     steps = load_steps()
@@ -88,7 +89,7 @@ def test_every_candidate_facing_surface_writes_evidence(
 
     assert result.coverage == 1.0, f"dropped: {result.dropped}"
     assert result.dropped == ()
-    assert set(result.captured) == {"constraints", "history", "traits", "feedback"}
+    assert set(result.captured) == {"intake", "constraints", "history", "traits", "feedback"}
 
 
 def test_captured_evidence_records_its_surface(profile: tuple[EvidenceLog, DeclineLedger]) -> None:
@@ -372,19 +373,68 @@ def test_no_free_text_and_pending_implementation_are_distinct_from_dropped(
     """Item 3 of the payload's 'also think about': a surface that legitimately
     takes no free text (identify: no evidence row for an unidentified
     session) must not be counted the same as a surface the spec expects to
-    take free text but that has not been built yet (intake) — and neither may
-    be folded into the measured denominator alongside a genuine drop."""
+    take free text but that has not been built yet (reactions, as of this
+    task — intake moved out of this bucket in T50) — and neither may be
+    folded into the measured denominator alongside a genuine drop."""
     store = store_for("three-way-split")
     result = measure_coverage(store)
 
     assert "identify" in result.no_free_text
     assert "identify" not in result.captured and "identify" not in result.dropped
 
-    assert "intake" in result.pending_implementation
-    assert "intake" not in result.captured and "intake" not in result.dropped
+    assert "reactions" in result.pending_implementation
+    assert "reactions" not in result.captured and "reactions" not in result.dropped
 
     assert result.no_free_text != result.pending_implementation
     assert set(result.no_free_text) & set(result.pending_implementation) == set()
+
+
+# --- T50: intake becomes a measured surface, S4 having built it a driver ---
+
+
+def test_intake_is_a_measured_surface_not_a_pending_one(
+    store_for: Callable[[str], ProfileStore],
+) -> None:
+    """T50: S4 (`jobsearch.cv_store`) now gives intake a real free-text path
+    (`add_conversation_entry`/`set_conversation_scalar`), so it belongs among
+    the measured surfaces rather than the pending ones — the only thing that
+    distinguishes this task from a no-op, per the payload."""
+    store = store_for("intake-measured")
+    result = measure_coverage(store)
+
+    assert "intake" in result.captured
+    assert "intake" not in result.pending_implementation
+    assert "intake" not in result.dropped
+
+
+def test_a_conversational_intake_answer_reaches_the_evidence_log(
+    store_for: Callable[[str], ProfileStore],
+) -> None:
+    """The behaviour, driven through the real `cv_store` entry point rather
+    than a test seam — the rule that let T28 find this gap in the first
+    place (`SURFACE_DRIVERS['intake']` runs unmodified `cv_store.
+    add_conversation_entry`). The row it returns must be the one row
+    `add_conversation_entry` already wrote for the one scripted utterance —
+    exactly one, never two: a driver that also routed the same statement
+    through `capture()` would double it, which the payload says to decide
+    about deliberately rather than default into.
+    """
+    store = store_for("intake-evidence")
+    driver = SURFACE_DRIVERS["intake"]
+
+    row = driver(store)
+
+    assert row is not None
+    assert row.step == "intake"
+    assert row.source == "conversation"
+    log_rows = list(EvidenceLog(store).rows())
+    assert row.id in {r.id for r in log_rows}
+    intake_rows = [r for r in log_rows if r.step == "intake"]
+    assert len(intake_rows) == 1, (
+        f"expected exactly one evidence row for the one scripted intake "
+        f"utterance, found {len(intake_rows)} — a driver that also called "
+        "capture() on top of add_conversation_entry's own write would double it"
+    )
 
 
 def test_surface_drivers_only_registered_for_free_text_steps() -> None:

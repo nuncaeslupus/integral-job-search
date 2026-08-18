@@ -142,6 +142,7 @@ from typing import Any, Literal
 
 from jobsearch.constraints_step import CandidateTurn
 from jobsearch.constraints_step import resolve as resolve_constraints
+from jobsearch.cv_store import ConversationTurn, CVMaster, add_conversation_entry
 from jobsearch.decline import DeclineLedger
 from jobsearch.dimensions import (
     Cue,
@@ -394,6 +395,67 @@ def _capture_fixture_dimension(dimension_id: str, *, side: Side) -> Dimension:
     )
 
 
+def _drive_intake(store: ProfileStore) -> EvidenceRow | None:
+    """Step 1 — S4's real `cv_store.add_conversation_entry`, over one
+    experience entry told by a candidate who arrived with no CV.
+
+    **This driver does not write a row — one already exists by the time it
+    runs.** `add_conversation_entry`'s own module docstring settles the
+    question this task's payload raised on purpose ("does intake capture
+    actually reach the evidence log, or only `master.json`?"): every
+    conversation-sourced section entry already appends a row to
+    `profile/evidence.jsonl` through `jobsearch.profile.EvidenceLog`
+    directly, as an unconditional part of building `cv/master.json` — S4
+    shipped that wiring; this task only had to notice it was there. So the
+    driver calls the real production function and reads back the row it
+    already wrote, via `ConversationTurn.evidence_id` on the entry
+    `add_conversation_entry` hands back — the same "run the real function,
+    then find the row it produced" shape `_drive_constraints` uses for
+    `resolve_constraints`'s own `evidence_id`.
+
+    **Why this does not also call `capture()`.** Every driver that wraps a
+    production path with *no* write of its own routes it through `capture()`
+    so non-insistence (T40) and the private disclosure default apply — that
+    is what `capture_offer_decision_reason` is, the one new integration this
+    module's docstring names, for a surface (`lifecycle.transition`) that
+    genuinely wrote nothing before T28. Intake is not that case:
+    `add_conversation_entry` already appends the row itself. Calling
+    `capture()` here too would file the *same* candidate statement twice —
+    exactly the "write the row twice just to satisfy a counter" duplication
+    the payload says to decide about deliberately rather than default into.
+    One utterance, one row; `test_a_conversational_intake_answer_reaches_the_
+    evidence_log` pins the count, not just the presence.
+
+    **The real gap this surfaces, reported rather than patched here:**
+    `add_conversation_entry`/`set_conversation_scalar` (`jobsearch.cv_store`)
+    write straight to `EvidenceLog.append` with no `DeclineLedger` filtering
+    at all — unlike `elicit_extract.store_answer` and `constraints_step.
+    resolve`, which both filter every dimension through `DeclineLedger`
+    before writing (`elicit_extract._undeclined`). So non-insistence is not
+    yet honoured on this specific surface: a candidate who has twice declined
+    a subject and then, while building their CV from nothing, volunteers
+    something touching it anyway, gets it filed regardless. Closing that
+    means adding decline-filtering to S4's own write path in `cv_store.py` —
+    a change to that module's established contract and beyond a size-S "wire
+    a driver into `SURFACE_DRIVERS`" task — so it is named here, in the
+    driver that found it, rather than silently absorbed into this change.
+    """
+    master = add_conversation_entry(
+        store,
+        CVMaster(),
+        "experience",
+        {"title": "Warehouse Team Lead", "organisation": "Northgate Logistics"},
+        said="I ran the night shift at Northgate Logistics for about two "
+        "years, mostly warehouse work, before the site closed down.",
+        recorded_at="2026-08-18T09:00:30Z",
+    )
+    turn = master.experience[-1].provenance[0]
+    if not isinstance(turn, ConversationTurn):
+        return None
+    log = EvidenceLog(store)
+    return next((row for row in log.rows() if row.id == turn.evidence_id), None)
+
+
 def _drive_constraints(store: ProfileStore) -> EvidenceRow | None:
     """Step 2 — T41's real `resolve`, one stated field."""
     result = resolve_constraints(
@@ -475,6 +537,7 @@ def _drive_feedback(store: ProfileStore) -> EvidenceRow | None:
 # `True`-classified step "measured" rather than "pending_implementation" —
 # see the module docstring.
 SURFACE_DRIVERS: dict[str, Callable[[ProfileStore], EvidenceRow | None]] = {
+    "intake": _drive_intake,
     "constraints": _drive_constraints,
     "history": _drive_history,
     "traits": _drive_traits,
@@ -589,8 +652,9 @@ def probe_capture(root: Path) -> dict[str, Any]:
     check(not problems, f"classification drifted from the live step model: {problems}")
 
     # 2. The real measurement: every currently-implemented free-text surface
-    #    (constraints, history, traits, feedback) writes evidence when driven
-    #    with a real scripted answer through unmodified production code.
+    #    (intake, constraints, history, traits, feedback) writes evidence
+    #    when driven with a real scripted answer through unmodified
+    #    production code.
     main_store = fresh_store("probe-capture-main")
     result = measure_coverage(main_store, steps=steps)
     check(
@@ -598,7 +662,7 @@ def probe_capture(root: Path) -> dict[str, Any]:
         f"profile_capture_coverage = {result.coverage}, not 1.0 — dropped: {result.dropped}",
     )
     check(
-        set(result.captured) == {"constraints", "history", "traits", "feedback"},
+        set(result.captured) == {"intake", "constraints", "history", "traits", "feedback"},
         f"unexpected captured set: {result.captured}",
     )
 
@@ -611,8 +675,7 @@ def probe_capture(root: Path) -> dict[str, Any]:
         f"unexpected no_free_text set: {result.no_free_text}",
     )
     check(
-        set(result.pending_implementation)
-        == {"intake", "reactions", "application", "interview_log"},
+        set(result.pending_implementation) == {"reactions", "application", "interview_log"},
         f"unexpected pending_implementation set: {result.pending_implementation}",
     )
     check(
@@ -620,9 +683,16 @@ def probe_capture(root: Path) -> dict[str, Any]:
         "a surface with no free text was folded into the measured denominator",
     )
     check(
-        "intake" not in result.captured and "intake" not in result.dropped,
+        "reactions" not in result.captured and "reactions" not in result.dropped,
         "a not-yet-built surface was folded into the measured denominator, "
         "conflating 'not built' with 'built and dropping input'",
+    )
+    # T50: intake moved from pending_implementation to measured now that S4
+    # gives it a real driver — this is the one thing that distinguishes this
+    # task from a no-op, per the payload.
+    check(
+        "intake" in result.captured and "intake" not in result.pending_implementation,
+        f"intake is still reported pending_implementation: {result.pending_implementation}",
     )
 
     # 4. Non-insistence at incidental capture (payload "also think about" #1):

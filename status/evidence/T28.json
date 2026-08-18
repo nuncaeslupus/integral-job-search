@@ -4,6 +4,7 @@
     "constraints",
     "feedback",
     "history",
+    "intake",
     "traits"
   ],
   "dropped_surfaces": [],
@@ -16,14 +17,13 @@
   ],
   "pending_implementation_surfaces": [
     "application",
-    "intake",
     "interview_log",
     "reactions"
   ],
   "classification_problems": [],
   "deliberate_break_demonstration": {
     "coverage_before_break": 1.0,
-    "coverage_after_break": 0.75,
+    "coverage_after_break": 0.8,
     "broken_surface": "feedback",
     "dropped_after_break": [
       "feedback"
@@ -31,9 +31,10 @@
     "captured_after_break": [
       "constraints",
       "history",
+      "intake",
       "traits"
     ]
   },
-  "checks_run": 19,
+  "checks_run": 20,
   "failures": []
 }
