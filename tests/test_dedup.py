@@ -15,12 +15,14 @@ from pathlib import Path
 import pytest
 
 from jobsearch.dedup import (
+    MINIMUM_CLUSTER_PAIRS,
     MINIMUM_PAIRS,
     SIMILARITY_THRESHOLD,
     DedupError,
     ExpiryFinding,
     Tombstone,
     _fixture_batch,
+    _majority_cluster_fixture,
     detect_expired,
     find_duplicates,
     jaccard,
@@ -140,6 +142,42 @@ def test_shared_boilerplate_does_not_merge_distinct_ads() -> None:
         )
 
 
+def test_majority_duplicate_cluster_is_not_erased_as_boilerplate() -> None:
+    """Regression for the finding-1 review note: a single-pass frequency
+    filter that counts boilerplate over raw offers cannot tell a shared
+    template fragment from a popular role's own crossposts. Three
+    independently reworded copies of one DevOps Engineer ad are 3 of 5
+    offers in `_majority_cluster_fixture` (60%, over the 50% boilerplate
+    line) — a popular role is *more* likely to dominate a small batch, not
+    less, so this is the case the boilerplate filter exists to survive, not
+    an edge case. Under the single-pass version this replaced, every one of
+    the three true-duplicate pairs below scored exactly 0.0: the ads' own
+    shared body was reclassified as template text and their similarity
+    signal erased along with it. The two-pass fix
+    (`_cluster_representatives` + `_boilerplate_shingles` over cluster
+    representatives, see the module docstring) must find all three."""
+    offers, duplicate_pairs = _majority_cluster_fixture()
+    assert len(duplicate_pairs) >= MINIMUM_CLUSTER_PAIRS, "fixture sanity: needs 3+ seeded pairs"
+
+    matches = find_duplicates(offers)
+    predicted = {frozenset((m.offer_a, m.offer_b)) for m in matches}
+    assert duplicate_pairs.issubset(predicted), (
+        "a majority-of-the-batch duplicate cluster was erased as boilerplate: "
+        f"missed {duplicate_pairs - predicted}"
+    )
+
+
+def test_probe_dedup_reports_majority_cluster_recall_without_changing_the_declared_gate() -> None:
+    """The recall-side probe finding 1's review note asked for: recorded
+    alongside `dedup_precision` in the same evidence dict, not in place of
+    it — `dedup_precision` stays the declared gate."""
+    measured = probe_dedup()
+    assert measured["majority_cluster_pairs_seeded"] >= MINIMUM_CLUSTER_PAIRS
+    assert measured["majority_cluster_recall"] == 1.0
+    assert measured["majority_cluster_missed"] == 0
+    assert "dedup_precision" in measured  # the gate itself is still reported
+
+
 def test_normalisation_does_not_mutate_the_stored_offer() -> None:
     """T11 keeps `Offer.text` verbatim because T15's evidence spans are
     offsets into it. `normalise_for_comparison` must return a new string and
@@ -184,6 +222,50 @@ def test_source_with_no_completed_pass_is_not_treated_as_delisting_everything() 
     offer = _offer_hex(133, "Contract role.", source_ref="abc-123")
     now = datetime(2026, 8, 18, tzinfo=UTC)
     findings = detect_expired([offer], now=now, still_listed={"other-portal": frozenset()})
+    assert findings == []
+
+
+def test_naive_now_raises_instead_of_silently_assuming_utc() -> None:
+    """Regression for finding 2: an ISO `expires_at` ending in 'Z' parses to
+    a timezone-aware datetime, so comparing it against a naive `now` used to
+    raise a bare `TypeError` from deep inside the loop — and the only tests
+    that existed passed an explicitly aware `now`, so the public function's
+    naive path was untested. This repo's habit is to refuse an ambiguous
+    input rather than guess (§7.4's own posture on tombstone rules), so a
+    naive `now` must raise a clear, actionable error up front instead of
+    either crashing confusingly or silently treating naive as UTC."""
+    offer = _offer_hex(134, "Contract role.", expires_at="2026-01-01T00:00:00Z")
+    naive_now = datetime(2026, 8, 18)  # no tzinfo
+    with pytest.raises(ValueError, match="timezone-aware"):
+        detect_expired([offer], now=naive_now)
+
+
+def test_offset_bearing_non_utc_expiry_is_compared_correctly() -> None:
+    """An `expires_at` carrying an explicit non-UTC offset must compare
+    correctly against an aware `now`, not just the 'Z'-suffixed UTC case the
+    other tests exercise. 2026-08-18T23:30:00+05:00 is 2026-08-18T18:30:00Z —
+    already past an aware `now` of 2026-08-18T19:00:00Z, even though the
+    naive wall-clock hour (23:30) reads *after* the naive wall-clock hour of
+    `now` (19:00). A fix that merely stripped tzinfo instead of comparing the
+    aware instants correctly would get this backwards."""
+    offer = _offer_hex(135, "Contract role.", expires_at="2026-08-18T23:30:00+05:00")
+    now = datetime(2026, 8, 18, 19, 0, tzinfo=UTC)
+    findings = detect_expired([offer], now=now)
+    assert findings == [
+        ExpiryFinding(offer.id, "expires_at_passed", "expired at 2026-08-18T23:30:00+05:00")
+    ]
+
+
+def test_naive_expires_at_is_treated_as_ambiguous_and_skipped() -> None:
+    """An `expires_at` with no 'Z' and no offset parses fine but names no
+    zone — genuinely ambiguous, not malformed. Guessing "the same zone as
+    `now`" is the silent assumption finding 2 exists to remove, so this is
+    skipped for the offer rather than guessed at, the same treatment as an
+    unparseable value (and unlike the previous behaviour, which replaced the
+    missing tzinfo with `now`'s)."""
+    offer = _offer_hex(136, "Contract role.", expires_at="2020-01-01T00:00:00")
+    now = datetime(2026, 8, 18, tzinfo=UTC)
+    findings = detect_expired([offer], now=now)
     assert findings == []
 
 

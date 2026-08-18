@@ -221,22 +221,48 @@ and quadratic in text length besides. Standard library only: no new dependency.
 **How we use it.** Text is lowercased and word-tokenised into a comparison key that is never
 written back to the stored offer (`Offer.text` stays byte-for-byte verbatim, per T11 — T15's
 extraction evidence spans are offsets into it). The key is split into overlapping 8-word
-shingles and compared by `|intersection| / |union|`. Shingles common to more than half of the
-batch being compared are excluded from every pair's score before it is computed — same-source
+shingles and compared by `|intersection| / |union|`. Shingles common to more than half of a
+reference population are excluded from every pair's score before it is computed — same-source
 template text (a cookie notice, an equal-opportunity statement) recurs across most of an
-arbitrary batch, while genuine duplicate content is specific to one pair, so a bare-majority
-frequency threshold separates the two without needing a template denylist. See §4.6 for the
-formula and the threshold's calibration.
+arbitrary batch, while genuine duplicate content is specific to one crosspost cluster, so a
+bare-majority frequency threshold separates the two without needing a template denylist. See
+§4.6 for the formula and the threshold's calibration.
+
+**Two passes, not one — the majority-cluster fix.** That reference population is *cluster
+representatives*, not raw offers, and it took a review finding to establish why raw offers is
+wrong: a frequency threshold cannot, on its own, distinguish shared template text from shared
+*duplicate* content, because both recur across a batch by construction. Counting frequency over
+raw offers means a popular role's own crossposts inflate their own content's frequency exactly
+the way boilerplate does — three or more copies of one ad in a batch of five puts their shared
+genuine body over the 50% line, and the filter erases the very content it exists to match on. A
+popular role is *more* likely to dominate a small batch, not less, so this was the exact case
+the feature exists for, not an edge case, and the gate's precision-only metric could not see it
+(recall is not measured — see below). The fix runs the comparison in two passes: pass one scores
+every pair on raw, unfiltered shingles against a stricter cutoff
+(`jobsearch.dedup._RAW_CLUSTER_THRESHOLD`, calibrated so shared-template overlap alone never
+crosses it) purely to find which offers are copies of the same ad, and collapses each such
+cluster to one representative (the union of its members' shingle sets). Pass two counts
+boilerplate frequency over those representatives — so three copies of one ad contribute one
+entry to the corpus, the same as a genuinely unique ad — and re-scores every pair with that
+filter. See `jobsearch.dedup._cluster_representatives` and
+`tests/test_dedup.py::test_majority_duplicate_cluster_is_not_erased_as_boilerplate`.
 
 **Limits.** The 0.25 similarity threshold and the 8-word shingle width are calibrated against a
 seven-offer, twenty-one-pair seeded fixture (`jobsearch.dedup._fixture_batch`), not a broad
-corpus — flagged in §5. Boilerplate filtering needs at least three offers in a batch to define
-"common" against; a bare pair falls back to unfiltered similarity, so a two-offer comparison
-sharing a long boilerplate block is not protected by this mechanism (`jobsearch.dedup.similarity`
-vs. `jobsearch.dedup.find_duplicates`, whose docstrings say so). The gate measures precision,
-never recall — see the module docstring's asymmetry argument, echoed in §4.4's `dedup_precision`
-row: a false merge silently drops a role from the candidate's list with nothing to tell them it
-happened, while a missed duplicate is only noise.
+corpus — flagged in §5. Boilerplate filtering needs at least three items in its reference
+population to define "common" against; a bare pair falls back to unfiltered similarity, so a
+two-offer comparison sharing a long boilerplate block is not protected by this mechanism
+(`jobsearch.dedup.similarity` vs. `jobsearch.dedup.find_duplicates`, whose docstrings say so).
+The gate measures precision, never recall — see the module docstring's asymmetry argument,
+echoed in §4.4's `dedup_precision` row: a false merge silently drops a role from the candidate's
+list with nothing to tell them it happened, while a missed duplicate is only noise. Because a
+missed-duplicate defect (the majority-cluster case above) is structurally invisible to a
+precision-only gate, `jobsearch.dedup.probe_dedup` also runs a dedicated recall probe over a
+second, majority-cluster fixture (`jobsearch.dedup._majority_cluster_fixture`, at least three
+near-identical copies) and records `majority_cluster_recall` / `majority_cluster_missed`
+alongside `dedup_precision` in the same evidence file — a measurement, not a prose note, so the
+defect coming back would be caught. `dedup_precision` remains the sole declared gate; the recall
+probe does not change what "pass" means.
 
 **Sources.** Broder, A. (1997), *On the resemblance and containment of documents* — the
 w-shingling technique for near-duplicate detection this module's shingle width follows.
@@ -381,15 +407,24 @@ precision the calculation does not have.
 ### 4.6 Near-duplicate detection — shingled Jaccard similarity
 
 Two ads' normalised texts are each split into overlapping 8-word shingles (§2.8); similarity is
-plain Jaccard over the two shingle sets, after a batch-relative boilerplate filter removes
-shingles common to more than half the batch being compared:
+plain Jaccard over the two shingle sets, after a two-pass boilerplate filter removes shingles
+common to more than half a reference population of cluster representatives (§2.8's
+"majority-cluster fix" — not the raw batch; see below for why):
 
 ```
-shingles(text)        = { word[i:i+8] for i in range(len(words) - 7) }   # 8-word windows
-boilerplate(batch)     = { s : |{ o in batch : s in shingles(o) }| > 0.5 × |batch| }
-similarity(a, b, batch) = |shingles(a)\boilerplate − shingles(b)\boilerplate|
-                           ────────────────────────────────────────────────
-                           |shingles(a)\boilerplate ∪ shingles(b)\boilerplate|
+shingles(text)             = { word[i:i+8] for i in range(len(words) - 7) }   # 8-word windows
+
+# pass 1 — cluster offers into copies of the same ad, on RAW (unfiltered) shingles
+cluster_threshold          = 0.30                                    # jobsearch.dedup._RAW_CLUSTER_THRESHOLD
+same_ad(a, b)               = jaccard(shingles(a), shingles(b)) > cluster_threshold
+clusters(batch)             = connected components of `batch` under `same_ad` (union-find)
+representative(cluster)     = ⋃ { shingles(o) : o in cluster }       # one entry per cluster, not per offer
+
+# pass 2 — boilerplate frequency over representatives, then the final score
+boilerplate(batch)          = { s : |{ r in representatives(batch) : s in r }| > 0.5 × |representatives(batch)| }
+similarity(a, b, batch)     = |shingles(a)\boilerplate − shingles(b)\boilerplate|
+                               ────────────────────────────────────────────────
+                               |shingles(a)\boilerplate ∪ shingles(b)\boilerplate|
 ```
 
 Two offers are reported as the same ad when `similarity > 0.25`
@@ -397,10 +432,18 @@ Two offers are reported as the same ad when `similarity > 0.25`
 midway between the lowest score any seeded duplicate pair reached (0.489, after boilerplate
 filtering) and the highest score any seeded non-duplicate pair reached (0.0) in the calibration
 fixture referenced in §2.8 — comfortable margin on both sides of the observed gap, rather than a
-value fit to the exact boundary. Boilerplate filtering itself needs at least three offers in the
-batch to define "common" against (with two, any shingle either shares is, trivially, in "all of
-them"); below that population no filtering is applied and the two shingle sets are compared as
-they stand.
+value fit to the exact boundary. Fixing the majority-cluster defect (§2.8) did not move this
+threshold or either observed score: `_fixture_batch`'s own largest crosspost cluster is 3 of 7
+offers (43%), under the 50% boilerplate line even under the single-pass filter this replaced, so
+the fix changes nothing on that fixture — it is recorded here as a fact that was checked, not
+assumed. `cluster_threshold = 0.30` (pass 1) is calibrated separately, deliberately stricter than
+`0.25`: pass 1 has no boilerplate filter yet to protect it, and two unrelated ads sharing only a
+long template footer can score up to 0.268 on raw Jaccard alone in the calibration fixture, so
+0.30 sits above every such footer-only confounder and below the weakest genuine crosspost's raw
+score (0.331). Boilerplate filtering itself needs at least three items in its reference
+population to define "common" against (with two, any shingle either shares is, trivially, in
+"all of them"); below that population no filtering is applied and the two shingle sets are
+compared as they stand.
 
 ---
 
@@ -441,6 +484,7 @@ Recorded so they are not mistaken for settled.
 
 | Date | Change |
 |---|---|
+| 2026-08-18 | §2.8/§4.6 updated: near-duplicate detection reworked to two passes — boilerplate frequency is now counted over crosspost-cluster representatives, not raw offers, fixing a majority-duplicate-cluster blind spot a precision-only gate could not see (T13 review finding). `SIMILARITY_THRESHOLD` unchanged; new `_RAW_CLUSTER_THRESHOLD = 0.30` calibrated for pass 1. |
 | 2026-08-18 | §2.8/§4.6 added: cross-source near-duplicate detection by shingled Jaccard similarity, and its threshold's calibration (T13). |
 | 2026-08-18 | §4.5 added: net-from-gross pay estimation, and its committed/generated rule-source split (T33). |
 | 2026-08-15 | Created. Sections 1–5 from the pre-`ONTOLOGY` research pass. |

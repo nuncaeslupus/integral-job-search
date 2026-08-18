@@ -48,13 +48,35 @@ statement, "similar jobs" navigation — that has nothing to do with the role.
 Naive shingle-Jaccard over raw text scores two *unrelated* ads from the same
 template as near-duplicates, because the shared boilerplate dominates the
 intersection. `_boilerplate_shingles` addresses this by frequency within the
-batch being compared: a shingle common enough across the batch (more than half
-the offers) is far more likely to be a shared template fragment than shared
-*content* — genuine duplicate content is specific to one pair, not distributed
-across most of an arbitrary batch — and is excluded from every pair's Jaccard
-score. See `SIMILARITY_THRESHOLD` below for how the cutoff was picked, and
-`tests/test_dedup.py::test_shared_boilerplate_does_not_merge_distinct_ads` for
-the case this exists to fix.
+batch being compared: a shingle common enough (more than half the population
+it is counted against) is far more likely to be a shared template fragment
+than shared *content*. See `SIMILARITY_THRESHOLD` below for how the cutoff was
+picked, and `tests/test_dedup.py::test_shared_boilerplate_does_not_merge_distinct_ads`
+for the case this exists to fix.
+
+**Why frequency alone is counted over clusters, not raw offers.** A frequency
+threshold cannot, by itself, tell shared template text from shared duplicate
+content — both recur across the batch by construction. The distinguishing
+fact is *what* is recurring: one popular role cross-posted to three portals
+recurs across *copies of the same ad*, while a footer recurs across *distinct*
+ads. Counting frequency over raw offers conflates the two, because a genuine
+crosspost cluster inflates its own content's frequency exactly the way
+boilerplate does — and the more of a small batch a popular role's crossposts
+happen to fill, the worse this gets: three or more copies of one ad in a batch
+of five puts their shared genuine body over the 50% line, `_boilerplate_shingles`
+classifies it as template text, and `find_duplicates` erases the very content
+it should have matched on. That is the case this module exists to catch, not
+an edge case — a popular role is *more* likely to dominate a small batch, not
+less. `find_duplicates` therefore runs two passes: pass one scores every pair
+on raw, unfiltered shingles at `_RAW_CLUSTER_THRESHOLD` (a stricter cutoff than
+`SIMILARITY_THRESHOLD`, calibrated so template overlap alone never crosses it)
+to find which offers are copies of the same ad, and collapses each such
+cluster to one representative shingle set. Pass two counts frequency over
+those representatives — so three copies of one ad contribute one entry to the
+corpus, the same as a genuinely unique ad — and re-scores every pair with
+*that* boilerplate set. See `_cluster_representatives`,
+`tests/test_dedup.py::test_majority_duplicate_cluster_is_not_erased_as_boilerplate`
+and the payload for T13's finding-1 review note.
 
 **Expiry is detected here, not acted on.** §7.1 defines seven statuses and the
 transitions between them, and §7.3's purge rule and §7.4's tombstones belong to
@@ -167,53 +189,131 @@ def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
 
 
 _BOILERPLATE_CORPUS_FRACTION = 0.5
-# A shingle carried by more than half of the batch being compared is treated
-# as shared template text rather than shared content. Reasoning: genuine
-# duplicate content is specific to *one pair* in a batch of unrelated ads, so
-# even a batch that happens to contain several duplicate pairs should not
-# push any single shingle past a bare majority — while a source's cookie
-# notice or EOE statement is stamped onto every ad the source template
-# renders, easily a majority of a same-source batch. Calibrated against
-# `tests/test_dedup.py`'s seeded fixture (also `write_evidence`'s fixture
-# below): 0.5 is the value at which every seeded non-duplicate pair — the
-# same-company/different-role pair and the shared-boilerplate/different-job
-# pair specifically — scores under `SIMILARITY_THRESHOLD` while every seeded
-# duplicate pair stays over it.
+# A shingle carried by more than half of the population it is counted against
+# is treated as shared template text rather than shared content. That
+# population is cluster *representatives* (see `_cluster_representatives`),
+# not raw offers — a shingle genuinely specific to one crosspost cluster's
+# content should not be able to out-vote the rest of an arbitrary batch no
+# matter how many copies of that one ad the batch happens to contain, while a
+# source's cookie notice or EOE statement is stamped onto every ad the source
+# template renders and stays a majority once each cluster counts once.
+# Calibrated against `tests/test_dedup.py`'s seeded fixture (also
+# `write_evidence`'s fixture below): 0.5 is the value at which every seeded
+# non-duplicate pair — the same-company/different-role pair and the
+# shared-boilerplate/different-job pair specifically — scores under
+# `SIMILARITY_THRESHOLD` while every seeded duplicate pair stays over it.
 
 
 def _boilerplate_shingles(
     shingle_sets: Sequence[frozenset[str]], *, corpus_fraction: float = _BOILERPLATE_CORPUS_FRACTION
 ) -> frozenset[str]:
-    """Shingles common enough across a batch to be shared template text.
+    """Shingles common enough across a population to be shared template text.
 
-    Needs at least three offers to mean anything: with only two, any shingle
-    the pair happens to share is definitionally in "all of them", which would
+    Needs at least three items to mean anything: with only two, any shingle
+    they happen to share is definitionally in "all of them", which would
     reclassify the exact signal a genuine duplicate pair is found by as
     boilerplate and erase it. Below that population this returns the empty
-    set — no filtering — rather than guess.
+    set — no filtering — rather than guess. `find_duplicates` calls this over
+    cluster representatives, not raw offers, so "population" here means
+    distinct listings, not distinct records — see the module docstring's
+    "why frequency alone is counted over clusters" section.
     """
     if len(shingle_sets) < 3:
         return frozenset()
     counts: dict[str, int] = {}
-    for one_offer_shingles in shingle_sets:
-        for shingle in one_offer_shingles:
+    for one_item_shingles in shingle_sets:
+        for shingle in one_item_shingles:
             counts[shingle] = counts.get(shingle, 0) + 1
     floor = corpus_fraction * len(shingle_sets)
     return frozenset(shingle for shingle, count in counts.items() if count > floor)
 
 
+_RAW_CLUSTER_THRESHOLD = 0.30
+# Pass-one cutoff (see the module docstring) for "these offers are copies of
+# the same ad" on *unfiltered* shingles — deliberately stricter than
+# `SIMILARITY_THRESHOLD` because pass one has no boilerplate filter yet to
+# protect it: two unrelated ads sharing only a long template footer can score
+# surprisingly high on raw Jaccard alone (the seeded fixture's
+# Data-Engineer/Frontend-Engineer pair, both carrying the shared footer,
+# raw-scores 0.268 with nothing else in common), and clustering them together
+# here would feed a false "one listing" into the representative set. 0.30 sits
+# above every such footer-only raw score this fixture produces (0.268) and
+# below every genuine crosspost's raw score, including the weakest
+# (Backend-Developer/Backend-Engineer-Acme at 0.331) — comfortable margin on
+# both sides. Like `SIMILARITY_THRESHOLD`, this is a property of the fixture
+# and shingle width, not a universal constant.
+
+
+def _cluster_representatives(
+    shingle_sets: Sequence[frozenset[str]], *, cluster_threshold: float = _RAW_CLUSTER_THRESHOLD
+) -> list[frozenset[str]]:
+    """Group near-identical copies of the same ad and collapse each group to
+    one representative shingle set, so a listing collected many times counts
+    once toward boilerplate frequency instead of once per copy.
+
+    Union-find over raw (unfiltered) pairwise Jaccard at `cluster_threshold`:
+    any two offers scoring above it are the same ad and are merged into one
+    group, transitively (a scores with b, b scores with c -> all three group
+    together even if a and c's own score is weaker, which is expected for a
+    3-way crosspost where the middle copy is a maximally-reworded bridge). A
+    group's representative is the *union* of its members' shingle sets, not
+    an arbitrarily chosen member — a reworded opening line missing from one
+    copy is present in another, and the union keeps the cluster's boilerplate
+    footer visible even if only one member happens to carry it (see the
+    shared-footer hard negative in `_fixture_batch`, where only one of the
+    three Backend-Engineer copies has the footer appended). An offer with no
+    near-duplicate in the batch is its own singleton group.
+    """
+    n = len(shingle_sets)
+    parent = list(range(n))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(a: int, b: int) -> None:
+        root_a, root_b = find(a), find(b)
+        if root_a != root_b:
+            parent[root_b] = root_a
+
+    for i, j in combinations(range(n), 2):
+        if jaccard(shingle_sets[i], shingle_sets[j]) > cluster_threshold:
+            union(i, j)
+
+    groups: dict[int, list[int]] = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+
+    representatives: list[frozenset[str]] = []
+    for members in groups.values():
+        representative: frozenset[str] = frozenset()
+        for member in members:
+            representative = representative | shingle_sets[member]
+        representatives.append(representative)
+    return representatives
+
+
 SIMILARITY_THRESHOLD = 0.25
 # Calibrated against `_fixture_batch` below (shared by the tests and the
 # gate, so the number enforced in production is the number the tests check),
-# after boilerplate filtering: the lowest seeded duplicate pair scores 0.489
-# (two independent rewordings of the same Data Engineer ad) and every seeded
-# non-duplicate pair — including both hard negatives, same-company/
-# different-role and shared-boilerplate/different-job — scores 0.0. 0.25 sits
-# near the midpoint of that gap rather than hugging either edge: comfortable
-# margin below the weakest real duplicate, and a wide margin above the
-# strongest confounder this fixture could produce. It is a property of *this*
-# corpus and shingle width, not a universal constant — recalibrate if either
-# changes materially (a much larger candidate pool, a different `SHINGLE_SIZE`).
+# after the two-pass boilerplate filtering described in the module docstring:
+# the lowest seeded duplicate pair scores 0.489 (two independent rewordings of
+# the same Data Engineer ad) and every seeded non-duplicate pair — including
+# both hard negatives, same-company/different-role and
+# shared-boilerplate/different-job — scores 0.0. 0.25 sits near the midpoint
+# of that gap rather than hugging either edge: comfortable margin below the
+# weakest real duplicate, and a wide margin above the strongest confounder
+# this fixture could produce. These are the same observed scores the
+# single-pass filter produced on this fixture — the majority-cluster failure
+# the two-pass rework fixes (see `_majority_cluster_fixture`) does not arise
+# in `_fixture_batch` itself (its largest crosspost cluster is 3 of 7 offers,
+# 43%, under the 50% boilerplate line even single-pass), so fixing it did not
+# move this threshold; it is documented here rather than silently left
+# unchanged because that is a property of this fixture, not a proof the two
+# algorithms always agree — recalibrate if `_fixture_batch` changes materially
+# (a much larger candidate pool, a different `SHINGLE_SIZE`).
 
 
 def similarity(offer_a: Offer, offer_b: Offer) -> float:
@@ -242,7 +342,10 @@ class DuplicateMatch:
 
 
 def find_duplicates(
-    offers: Sequence[Offer], *, threshold: float = SIMILARITY_THRESHOLD
+    offers: Sequence[Offer],
+    *,
+    threshold: float = SIMILARITY_THRESHOLD,
+    cluster_threshold: float = _RAW_CLUSTER_THRESHOLD,
 ) -> list[DuplicateMatch]:
     """Every pair in `offers` that looks like the same ad, batch-aware.
 
@@ -252,9 +355,23 @@ def find_duplicates(
     twice or two connections that happened to produce identical text). What
     this finds is the near-duplicate: different id, similar enough normalised
     text once shared template shingles are discounted.
+
+    Two-pass, per the module docstring's "why frequency alone is counted over
+    clusters" section: pass one (`_cluster_representatives`) groups raw
+    near-duplicates so a crosspost cluster counts once toward boilerplate
+    frequency no matter how many copies of it the batch contains; pass two
+    scores every pair after subtracting the boilerplate found over those
+    representatives. A three-or-more-way crosspost cluster that would
+    otherwise dominate a small batch (and have its own shared content
+    misclassified as template text — the failure this replaces a single-pass
+    frequency filter to fix) is what `cluster_threshold` exists to protect.
     """
     prepared = [(offer, shingles(normalise_for_comparison(offer.text))) for offer in offers]
-    boilerplate = _boilerplate_shingles([one_offer_shingles for _, one_offer_shingles in prepared])
+    representatives = _cluster_representatives(
+        [one_offer_shingles for _, one_offer_shingles in prepared],
+        cluster_threshold=cluster_threshold,
+    )
+    boilerplate = _boilerplate_shingles(representatives)
     matches: list[DuplicateMatch] = []
     for (offer_a, shingles_a), (offer_b, shingles_b) in combinations(prepared, 2):
         if offer_a.id == offer_b.id:
@@ -298,7 +415,36 @@ def detect_expired(
     silence as delisting would expire every offer on the first missed run.
     `still_listed=None` skips the delisting check entirely, for callers with
     only `expires_at` to go on (T12's single connector, for instance).
+
+    **`now` must be timezone-aware.** An ISO `expires_at` ending in `Z` (or
+    carrying an explicit offset) parses to an *aware* `datetime.fromisoformat`
+    result; comparing that against a naive `now` raises `TypeError` from the
+    stdlib rather than a message that points at the cause. Rather than catch
+    that and silently assume `now` is UTC — the wrong guess is invisible and
+    expires a listing a day early or late for anyone not in UTC, and this
+    repo's habit is to refuse rather than guess (see `normalise_for_comparison`
+    and `load_tombstones` for the same posture elsewhere in this module) —
+    this raises a clear `ValueError` up front, once, rather than a confusing
+    `TypeError` from inside the per-offer loop the first time an aware
+    `expires_at` is compared. Pass e.g. `datetime.now(UTC)`.
+
+    A per-offer `expires_at` that parses but has **no** timezone (no `Z`, no
+    offset) is a different case: it is not malformed, but which zone it means
+    is genuinely ambiguous from the string alone, and guessing "the same zone
+    as `now`" (the previous behaviour) is exactly the kind of silent
+    assumption this function now refuses to make elsewhere. It is treated the
+    same as an unparseable value — skipped for this offer, not raised for the
+    whole batch, since one record's ambiguous data should not stop every
+    other offer in the batch from being checked.
     """
+    if now.tzinfo is None:
+        raise ValueError(
+            "detect_expired requires a timezone-aware `now` — a naive timestamp "
+            "cannot be safely compared against an aware `expires_at` (e.g. one "
+            "ending in 'Z'), and assuming it means UTC would expire a listing a "
+            "day early or late for anyone not in UTC. Pass an aware datetime, "
+            "e.g. `datetime.now(UTC)`."
+        )
     findings: list[ExpiryFinding] = []
     for offer in offers:
         expired_by_date = False
@@ -309,8 +455,8 @@ def detect_expired(
                 pass  # malformed expires_at is a schema problem, not this function's to judge
             else:
                 if expires.tzinfo is None:
-                    expires = expires.replace(tzinfo=now.tzinfo)
-                if expires <= now:
+                    pass  # ambiguous zone — refuse to guess; see the docstring above
+                elif expires <= now:
                     detail = f"expired at {offer.expires_at}"
                     findings.append(ExpiryFinding(offer.id, "expires_at_passed", detail))
                     expired_by_date = True
@@ -555,12 +701,149 @@ def _fixture_batch() -> tuple[list[Offer], frozenset[frozenset[str]]]:
     return offers, duplicate_pairs
 
 
+MINIMUM_CLUSTER_PAIRS = 3
+# The review note behind the majority-duplicate-cluster fix (finding 1) is
+# explicit: the regression fixture needs "at least three near-identical
+# copies" — two copies cannot demonstrate the failure at all (a pair is never
+# a majority of anything smaller than itself), so this floor is 3, matching
+# `C(3, 2)` = 3 judged pairs at minimum. Same purpose as `MINIMUM_PAIRS`: a
+# clean recall number over a fixture too small to exercise the bug is not a
+# measurement.
+
+
+def _majority_cluster_fixture() -> tuple[list[Offer], frozenset[frozenset[str]]]:
+    """A batch where one role's crossposts are a majority of the population —
+    the case finding 1's review note describes and `_fixture_batch` does not
+    exercise (its own largest cluster tops out at 3 of 7 offers, 43%, under
+    the 50% boilerplate line even before the two-pass fix).
+
+    Three independently reworded DevOps Engineer postings (`t13-maj-1/2/3`,
+    genuinely the same role, sharing a long unreworded core paragraph) plus
+    two unrelated single ads (Marketing Manager, Warehouse Supervisor) — 5
+    offers total, so the DevOps cluster is 3/5 = 60% of the batch, over the
+    boilerplate line. None of the five carry a shared template footer: this
+    fixture isolates the majority-cluster failure from the boilerplate case
+    `_fixture_batch` already covers, so a regression here cannot be masked by
+    (or mistaken for) that other mechanism. Under the single-pass filter this
+    reworked from, every one of the three true-duplicate pairs below scored
+    exactly 0.0 — the shared genuine content was reclassified as boilerplate
+    and erased. See
+    `tests/test_dedup.py::test_majority_duplicate_cluster_is_not_erased_as_boilerplate`.
+    """
+    devops_body = (
+        "We are hiring a DevOps Engineer to own our deployment and "
+        "infrastructure automation. You will build and maintain CI/CD "
+        "pipelines, manage our Kubernetes clusters, and drive observability "
+        "across services with Prometheus and Grafana. Experience with "
+        "Terraform, AWS and container orchestration is required. You should "
+        "be comfortable writing Bash and Python tooling, running incident "
+        "response, and improving deployment safety through canary releases "
+        "and automated rollbacks for a growing platform team."
+    )
+    devops_reworded_1 = (
+        "Great opportunity for a DevOps Engineer to join our platform group. "
+        "You will build and maintain CI/CD pipelines, manage our Kubernetes "
+        "clusters, and drive observability across services with Prometheus "
+        "and Grafana. Experience with Terraform, AWS and container "
+        "orchestration is required. You should be comfortable writing Bash "
+        "and Python tooling, running incident response, and improving "
+        "deployment safety through canary releases. Remote-friendly with a "
+        "flexible schedule."
+    )
+    devops_reworded_2 = (
+        "Exciting DevOps Engineer opening on a fast-moving infrastructure "
+        "team. You will build and maintain CI/CD pipelines, manage our "
+        "Kubernetes clusters, and drive observability across services with "
+        "Prometheus and Grafana. Experience with Terraform, AWS and "
+        "container orchestration is required. You should be comfortable "
+        "writing Bash and Python tooling, running incident response, and "
+        "improving deployment safety through canary releases. Competitive "
+        "equity and unlimited PTO."
+    )
+    marketing_body = (
+        "We are looking for a Marketing Manager to lead campaign strategy "
+        "across paid and organic channels. You will own our content "
+        "calendar, manage agency relationships, and report on campaign "
+        "performance to leadership. Experience with marketing automation "
+        "tooling, A/B testing and budget forecasting is required. You should "
+        "be comfortable presenting results to stakeholders and coordinating "
+        "with sales on lead handoff for a growing demand generation "
+        "function."
+    )
+    warehouse_body = (
+        "We need a Warehouse Supervisor to run day-to-day operations across "
+        "two shifts. You will manage inventory accuracy, coordinate with "
+        "logistics on inbound and outbound shipments, and lead a team of "
+        "pickers and packers. Experience with warehouse management systems, "
+        "safety compliance and shift scheduling is required. You should be "
+        "comfortable handling escalations and improving throughput for a "
+        "busy distribution centre."
+    )
+
+    offers = [
+        Offer(
+            id=f"sha256:{101:064x}",
+            source="portal-a",
+            title="DevOps Engineer",
+            company="Nimbus",
+            text=devops_body,
+        ),
+        Offer(
+            id=f"sha256:{102:064x}",
+            source="portal-b",
+            title="DevOps Engineer (Infra)",
+            company="Nimbus Cloud",
+            text=devops_reworded_1,
+        ),
+        Offer(
+            id=f"sha256:{103:064x}",
+            source="portal-c",
+            title="Infrastructure / DevOps Engineer",
+            company="Nimbus",
+            text=devops_reworded_2,
+        ),
+        Offer(
+            id=f"sha256:{104:064x}",
+            source="portal-d",
+            title="Marketing Manager",
+            company="Acme Retail",
+            text=marketing_body,
+        ),
+        Offer(
+            id=f"sha256:{105:064x}",
+            source="portal-e",
+            title="Warehouse Supervisor",
+            company="Acme Retail",
+            text=warehouse_body,
+        ),
+    ]
+    duplicate_pairs = frozenset(
+        frozenset(pair)
+        for pair in (
+            (offers[0].id, offers[1].id),
+            (offers[0].id, offers[2].id),
+            (offers[1].id, offers[2].id),
+        )
+    )
+    return offers, duplicate_pairs
+
+
 def probe_dedup() -> dict[str, Any]:
     """Measure `dedup_precision` over the seeded fixture, and report what
     went wrong if anything did. `failures` records false positives — a false
-    negative (a missed duplicate) hurts recall, which this gate does not
-    measure, and is not treated as a module failure; it is still visible in
-    `predicted_positive` vs. `duplicate_pairs_seeded` for a human to notice.
+    negative (a missed duplicate) hurts recall, which the declared gate does
+    not measure, and a miss in `_fixture_batch` alone is not treated as a
+    module failure; it is still visible in `predicted_positive` vs.
+    `duplicate_pairs_seeded` for a human to notice.
+
+    Alongside `dedup_precision`, this also runs `_majority_cluster_fixture`
+    and reports its recall (`majority_cluster_recall`,
+    `majority_cluster_missed`) — the recall-side probe finding 1's review
+    note asked for. `dedup_precision` stays the payload's declared gate
+    (unchanged); the majority-cluster numbers are recorded alongside it in
+    the same evidence file so the fix that finding 1 required has a
+    measurement that would catch it coming back, without redefining what the
+    declared gate means.
     """
     offers, duplicate_pairs = _fixture_batch()
     total_pairs = len(offers) * (len(offers) - 1) // 2
@@ -578,6 +861,14 @@ def probe_dedup() -> dict[str, Any]:
 
     precision = len(true_positives) / len(predicted) if predicted else 0.0
 
+    majority_offers, majority_pairs = _majority_cluster_fixture()
+    majority_matches = find_duplicates(majority_offers)
+    majority_predicted = {frozenset((match.offer_a, match.offer_b)) for match in majority_matches}
+    majority_missed = majority_pairs - majority_predicted
+    majority_recall = (
+        len(majority_pairs & majority_predicted) / len(majority_pairs) if majority_pairs else 0.0
+    )
+
     return {
         "dedup_precision": precision,
         "pairs_judged": total_pairs,
@@ -587,11 +878,15 @@ def probe_dedup() -> dict[str, Any]:
         "false_positives": len(false_positives),
         "missed_duplicates": len(missed),
         "failures": failures,
+        "majority_cluster_pairs_seeded": len(majority_pairs),
+        "majority_cluster_recall": majority_recall,
+        "majority_cluster_missed": len(majority_missed),
     }
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
-    """Measure `dedup_precision` over the fixture and record it."""
+    """Measure `dedup_precision` (the declared gate) and the majority-cluster
+    recall probe over their fixtures, and record both."""
     measured = probe_dedup()
     if measured["failures"]:
         # A false positive elsewhere must not be reported behind a clean
@@ -617,9 +912,25 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 3
+    if measured["majority_cluster_pairs_seeded"] < MINIMUM_CLUSTER_PAIRS:
+        print(
+            f"only {measured['majority_cluster_pairs_seeded']} majority-cluster pair(s) were "
+            f"judged (floor {MINIMUM_CLUSTER_PAIRS}) — the recall probe needs at least three "
+            "near-identical copies to exercise the bug it guards against",
+            file=sys.stderr,
+        )
+        return 3
     for failure in measured["failures"]:
         print(failure, file=sys.stderr)
-    return 1 if measured["failures"] else 0
+    if measured["majority_cluster_missed"]:
+        print(
+            f"majority-cluster recall regression: {measured['majority_cluster_missed']} of "
+            f"{measured['majority_cluster_pairs_seeded']} seeded crosspost pair(s) were not "
+            "found — a duplicate cluster large enough to dominate its batch is being erased "
+            "as boilerplate again",
+            file=sys.stderr,
+        )
+    return 1 if measured["failures"] or measured["majority_cluster_missed"] else 0
 
 
 if __name__ == "__main__":
