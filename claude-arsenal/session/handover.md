@@ -69,6 +69,22 @@ sites). Spec §6 now states where the tree actually roots.
    is a finding, never a silent pass: `SiteCheck.passes` reads "no recorded
    reason", after the flag-based version let an unparseable file through clean.
 
+3. **A guarantee enforced on one path, while a second path walks around it.**
+   Review (Qodo) found both halves of this, and both were real. The thirteen
+   checkpoints took `--input-dir` as a bare `Path`, so `--input-dir ./profiles`
+   wrote a candidate's session file into the clone with nobody passing `--dev` —
+   the resolver was airtight and the flag beside it was not. Worse, **the gate
+   had the same hole one level up**: the audit asked only "does this file
+   resolve through the resolver?", which all thirteen satisfied while every one
+   of them took the flag unguarded, so it measured 0 over a live leak. The
+   containment rule is now a function (`ensure_outside_a_work_tree`) both ways
+   in must call, and a site that accepts an explicit root must name it.
+   The second half: the leak count read the dev escape as "the variable is
+   present" while `dev_mode` authorises only `1/true/yes/on`, and the exit
+   status keyed on the metric while `shortfalls` was already populated and
+   ignored — so a demonstrably broken gate could exit 0. **When adding a gate,
+   ask what a *second* way in would do to it.**
+
 ## Queue state
 
 `queue_batch.sh` now offers, in order: **T25 (`lo-1af2`, `[LAPTOP]`)** — skip in
