@@ -311,6 +311,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | S10 | The skill listing budget (8,000 chars, a per-turn context cost) is exceeded at 11,140 once the thirteen step skills land. **Decided: raise it.** The constant is hardcoded upstream with no override, so this is an upstream change first (`claude-arsenal` issue #143) and a re-measure here after | all | M | S7 | `skill_listing_budget_overage_chars == 0` | `test_the_library_is_within_its_listing_budget` in `tests/test_step_skills.py`; `test_every_step_is_still_reachable_after_the_change` — the saving may not come from dropping a step | ☐ |
 | S11 | Test mode — an orthogonal meta channel (`[[...]]`) for capturing notes about the tool during a live session, without disturbing it; notes are shown at the end and seeded only once confirmed | all | M | S7, S10 | `test_notes_reaching_candidate_evidence == 0` | `test_a_meta_note_never_reaches_the_evidence_log` in `tests/test_test_mode.py`; `test_a_pasted_advert_containing_brackets_is_not_eaten`; `test_the_visible_conversation_is_byte_identical_with_and_without_notes` | ☐ |
 | S12 | Move "does this step take candidate free text" into `spec-v2-steps.json` so `profile_capture`'s denominator is fully machine-derived, instead of a hand-made map T28 guards but cannot derive | all | M | T28 | `unclassified_free_text_steps == 0` | `test_every_step_declares_whether_it_takes_candidate_free_text` in `tests/test_profile_capture.py`; `test_profile_capture_reads_the_declaration_not_a_local_map`; `test_coverage_is_unchanged_by_the_migration` | ☐ |
+| T55 | Rename the project to `integral-job-search`: package path, imports, distribution and entry points, repository name and the documents that spell it out — while `$INTEGRAL_HOME`, the arsenal bundle and the thirteen step-skill directories keep their names | — | M | — | `old_name_references == 0` | `test_no_module_imports_the_old_package_name` in `tests/test_naming.py`; `test_no_document_names_the_old_repository`; `test_the_preserved_names_are_not_swept` | ☐ |
 
 ### Divergences
 
@@ -336,7 +337,7 @@ listed; every open task appears in exactly one milestone.
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
 | **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T50, T20, D-1, D-2, D-3, D-4, D-8 |
-| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, D-9, T45, T46, S6, T47, T43, T22, T26, T25, T29, T51, T52, T53, T54, S9, S10, S11, S12 |
+| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, D-9, T45, T46, S6, T47, T43, T22, T26, T25, T29, T51, T52, T53, T54, T55, S9, S10, S11, S12 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
 **S7 is deliberately not first.** The handover recommended it as the next task,

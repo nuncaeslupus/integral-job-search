@@ -151,7 +151,9 @@ fourth — distribution — was the remaining scope of T29.
    flow the candidate may decline without consequence.
 
 5. **What is the tool called?**
-   **Blocked: the owner has not settled the name.** "integral" is the agreed
-   direction — `integral-job-search` or similar. Nothing depends on it: no path,
-   gate or contract in this document or in `docs/distribution.md` is named after
-   the project, and the rename is mechanical whenever it is settled.
+   **Decided: `integral-job-search`.** "integral" carries both senses the tool
+   needs — whole, and accumulated over time, which is what the evidence log
+   actually does. Nothing in the design depended on the string, so the rename is
+   mechanical: it is tracked as T55 and touches the package path, the imports,
+   the environment variable already written as `$INTEGRAL_HOME`, and the
+   documents that name the repository.
