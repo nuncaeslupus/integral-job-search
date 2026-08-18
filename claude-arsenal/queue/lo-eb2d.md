@@ -9,7 +9,7 @@ key: reader_note_rebindings
 ```
 
 ```bash
-echo "no gate command defined for T31 — replace this line with the command that writes status/evidence/T31.json" >&2; exit 1
+uv run python -m jobsearch.reader_notes
 ```
 
 ## What this is
