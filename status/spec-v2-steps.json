@@ -114,7 +114,7 @@
         "metric": "story_dimension_linkage",
         "op": "==",
         "threshold": 1.0,
-        "state": "not_implemented",
+        "state": "implemented",
         "task": "T8"
       },
       "reentry_events": [
