@@ -250,6 +250,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T21 | Feedback loop: rejection reason → `evidence.jsonl` → rebuild → changed ranking, and the offer's lifecycle status moves with it | 10 | M | S5, T6, T19 | `feedback_traceability == 1.0` | `test_every_profile_value_traces_to_evidence_rows` in `tests/test_feedback.py`; `test_rejection_moves_offer_status_and_marks_weights_stale` | ☐ |
 | T28 | Continuous profile capture: every candidate-facing surface appends evidence, not just onboarding | — | M | T6, T27 | `profile_capture_coverage == 1.0` | `test_every_candidate_facing_surface_writes_evidence` in `tests/test_profile_capture.py` — a surface that accepts free text and writes no evidence row fails | ☑ |
 | T49 | Trait evidence sufficiency: score a trait only when its evidence floor is met, report `insufficient` otherwise — never refuse, never voice the floor to the candidate | 4 | M | T6, T27 | `trait_evidence_sufficiency == 1.0` | `test_a_trait_below_the_floor_is_insufficient_not_scored` in `tests/test_trait_sufficiency.py`; `test_insufficient_does_not_stop_the_step`; `test_the_floor_counts_occasions_not_repetitions` | ☑ |
+| T50 | Wire an intake capture driver: S4 gave intake a real conversational free-text surface, so it should move from `pending_implementation` to a measured surface rather than sitting in the bucket that means "nothing was built" | 1 | S | T28, S4 | `profile_capture_coverage == 1.0` | `test_intake_is_a_measured_surface_not_a_pending_one` in `tests/test_profile_capture.py` — the number alone cannot show this was done, since it already read 1.0 over four surfaces; `test_a_conversational_intake_answer_reaches_the_evidence_log` | ☐ |
 
 ### SUPPLY — connectors, offers, lifecycle
 
@@ -326,7 +327,7 @@ listed; every open task appears in exactly one milestone.
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
-| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T20, D-1, D-2, D-3, D-4, D-8 |
+| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T50, T20, D-1, D-2, D-3, D-4, D-8 |
 | **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9, S10, S11, S12 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
