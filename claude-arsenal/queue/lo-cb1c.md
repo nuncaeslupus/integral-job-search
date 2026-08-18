@@ -3,9 +3,9 @@
 ## Acceptance gate
 
 ```gate
-cv_generation_traceability == 1.0
+intake_field_provenance == 1.0
 evidence: status/evidence/S4.json
-key: cv_generation_traceability
+key: intake_field_provenance
 ```
 
 ```bash
@@ -27,10 +27,15 @@ The CV is three things the current specification conflates (brief §2.6):
 
 ## The gate
 
-`cv_generation_traceability` = the fraction of claims in a generated CV that
-trace to a specific entry in the store. It must be 1.0. A generated CV
-containing anything not in the store is the tool inventing experience on a
-candidate's behalf, which is the single worst thing this project could ship.
+`intake_field_provenance` = the fraction of fields in `master.json` that name
+where they came from — a span in a supplied document, or a turn in the
+conversation. It must be 1.0. A field with no provenance is a claim nobody can
+check, and step 2 promotes claims to facts by asking about them, which it
+cannot do for a claim whose origin is unknown.
+
+**The generation gate moved with the generation work.**
+`cv_generation_traceability == 1.0` is now T45's, measured over the claim
+manifest of a generated document rather than over the store.
 
 ## Not now, but design for it
 
@@ -40,7 +45,7 @@ should feed templates rather than one fixed layout.
 
 ## Tests
 
-`test_every_generated_claim_traces_to_the_store`;
+`test_every_master_field_names_its_source`;
 `test_a_candidate_with_no_cv_can_still_reach_a_first_version`;
 `test_the_store_is_never_sent_verbatim`.
 
@@ -49,3 +54,25 @@ should feed templates rather than one fixed layout.
 Service: **PROFILE** · Size: L · Depends: S1
 
 Source: `status/spec-v2-brief.md` §2.6, §2.7
+
+---
+
+## Scope change — v2 plan, 2026-08-18
+
+**Narrowed.** S4 is the CV **store**: importing pdf/docx into
+`cv/master.json`, building the same store by conversation with someone who has
+no CV, and pinning the `master.json` contract — which nothing else pins. It owns
+step 1's gate, `intake_field_provenance == 1.0`: every field names the document
+span or the conversation turn it came from.
+
+**Per-advert generation splits out as T45.** Its gate
+(`cv_generation_traceability == 1.0`) is a different measurement on a different
+artefact, and it depends on an offer and an extraction that step 1 has no
+business knowing about.
+
+**Intake never produces a document.** A candidate arriving with no CV does not
+get a PDF generated for them; they get the same structured store that parsing a
+real CV would have produced. `cv/source/*` is stored unmodified and never sent
+anywhere. Personal details — date of birth, address, telephone — are **not**
+collected here; they are collected at step 11, by T46, for the document that
+requires them.

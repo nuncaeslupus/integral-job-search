@@ -8,11 +8,18 @@ evidence: status/evidence/T18.json
 key: pareto_dominance_violations
 ```
 
-Write the measured value to `status/evidence/T18.json` as `{"pareto_dominance_violations": <number>}`, commit it, then record the row in the plan's Evidence log with the command that produced it.
+```bash
+echo "no gate command defined for T18 — replace this line with the command that writes status/evidence/T18.json" >&2; exit 1
+```
 
-An evidence gate asserts the number against the threshold, so it cannot pass
-vacuously — a missing evidence file is a hard failure, not a skip. It also runs
-no build tooling, which matters for tasks that run before the scaffold exists.
+The two blocks do different jobs and both are required. The `bash` block
+regenerates `status/evidence/T18.json`; the `gate` block asserts the
+number in it against the threshold. Without the first, a stale or hand-written
+evidence file passes unchallenged; without the second, a command that exits 0
+counts as a gate whatever it measured.
+
+The default command fails on purpose. A task whose measurement is undefined has
+not passed its gate — it has not been measured. Replace it as part of the work.
 
 ## Tests
 
@@ -25,3 +32,21 @@ Write these RED before any production code:
 Service: **MATCH** · Size: L
 
 Design: `status/plan.md` (T18) · Spec: `status/specification.md` §5 contracts · Methods: `docs/METHODS.md`
+
+---
+
+## Scope change — v2 plan, 2026-08-18
+
+A ranking now **records the `profile_revision` and the sufficiency level that
+produced it** (`status/spec-v2-process.md` §3.1, §3.4), and is labelled with the
+level wherever it is shown. Without weights the ranking is **L1** — hard filters
+plus default weights — and says so. A provisional ranking that is not labelled
+provisional is a defect, not a shortcut.
+
+A ranking whose pinned revision is behind the current one is displayed as out of
+date with a one-click recompute; staleness is computed by T37 rather than
+tracked here.
+
+Presentation — the offer card, the handful at a time, unknown shown as unknown —
+is **T44**, and it is half of step 9's specification rather than a rendering
+detail.

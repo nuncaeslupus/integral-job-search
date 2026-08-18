@@ -63,3 +63,18 @@ the required/offered flag, which are the two a drifting skill gets wrong first.
 Service: **ONTOLOGY** · Size: L · Depends: S2r
 
 Source: `docs/spec-v2-steps/notes.json` (step 12, final note) · `status/spec-v2-steps.md`
+
+---
+
+## Scope change — v2 plan, 2026-08-18
+
+**Sequencing, from the v2 plan.** S7 now depends on **T34 and T35**, not only on
+S2r.
+
+Each of the thirteen skills carries a checkpoint **script** that reads session
+state, decides whether coverage is met, and writes the step's gate evidence.
+None of that exists until T35 (session state) and T34 (the step graph runtime)
+land. Written before them, the scripts have nothing to read and the skills
+become exactly the prose transcription this payload already warns against.
+
+The rest of the task is unchanged.
