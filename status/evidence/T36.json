@@ -1,0 +1,10 @@
+{
+  "unoffered_reentries": 0,
+  "offers_raised": 5,
+  "trigger_kinds": [
+    "elapsed",
+    "gap",
+    "life_event"
+  ],
+  "failures": []
+}
