@@ -265,7 +265,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
 |----|-------------|------|------|---------|------|-------|----|
-| T14 | Lexical prefilter (recall-oriented) ahead of LLM extraction | 8 | M | T3, T11 | `prefilter_recall >= 0.98` | `test_prefilter_retains_all_corpus_positives` in `tests/test_prefilter.py` | ☐ |
+| T14 | Lexical prefilter (recall-oriented) ahead of LLM extraction | 8 | M | T3, T5, T11 | `prefilter_recall >= 0.98` | `test_prefilter_retains_all_corpus_positives` in `tests/test_prefilter.py` | ☐ |
 | T15 | Staged extraction — normalise, then rules, then a model only on what they could not settle: dimension scores, evidence spans, `unmapped_concepts` | 8 | L | T5, T14 | `extraction_macro_f1 >= 0.75` | `test_extraction_matches_corpus_labels` in `tests/test_extract.py` — macro-F1 ≥ 0.75 on the evaluation split; `test_score_without_evidence_span_is_rejected`; `test_model_is_not_called_for_a_dimension_rules_settled` | ☐ |
 | T16 | Negation handling in extraction | 8 | M | T15 | `extraction_negation_recall >= 0.80` | `test_negated_cue_inverts_not_drops_score` in `tests/test_negation.py` — "no on-call" yields a negative score, not a missing one | ☐ |
 | T17 | `ontology_hit_rate` reporting and staleness signal | 8 | S | T15 | `ontology_hit_rate >= 0.85` | `test_unmapped_concepts_are_counted_not_discarded` in `tests/test_ontology_health.py` | ☐ |
