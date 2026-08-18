@@ -1,0 +1,39 @@
+{
+  "profile_capture_coverage": 1.0,
+  "captured_surfaces": [
+    "constraints",
+    "feedback",
+    "history",
+    "traits"
+  ],
+  "dropped_surfaces": [],
+  "no_free_text_surfaces": [
+    "identify",
+    "preferences",
+    "ranking",
+    "sourcing",
+    "understanding"
+  ],
+  "pending_implementation_surfaces": [
+    "application",
+    "intake",
+    "interview_log",
+    "reactions"
+  ],
+  "classification_problems": [],
+  "deliberate_break_demonstration": {
+    "coverage_before_break": 1.0,
+    "coverage_after_break": 0.75,
+    "broken_surface": "feedback",
+    "dropped_after_break": [
+      "feedback"
+    ],
+    "captured_after_break": [
+      "constraints",
+      "history",
+      "traits"
+    ]
+  },
+  "checks_run": 19,
+  "failures": []
+}
