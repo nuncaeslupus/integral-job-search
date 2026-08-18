@@ -1,144 +1,70 @@
-# Session Handover
+# Session handover — 2026-08-18
 
-<!-- Written at session end. A new session reading this file can resume without additional context. -->
+## State
 
-## Next session starts here
+| | |
+|---|---|
+| Board | 45 merged · 1 done (D-9, pending #30) · 27 open |
+| Open PR | **#30** (D-9) — CI running at handover, Qodo reviewing |
+| Branch | `claude/spec-2-implementation-44lflb`, clean, pushed |
+| Merged this session | #24–#29 |
 
-**Five PRs merged this session** (#24–#27) and **#28 is open** with S4. The board
-reads **42 merged, 1 done, 28 open**. `make ci` is green across five jobs, 693
-tests, **42 of 42 terminal gates asserted**.
+## Next actions
 
-**Six of thirteen steps now read `implemented`** with zero register drift:
-constraints, history, identify, intake, sourcing, traits.
+1. **Drive #30 to green and merge.** Then reset the branch from main
+   (`git fetch origin main && git checkout -B claude/spec-2-implementation-44lflb origin/main`
+   — the remote branch is deleted on merge, so push fresh rather than force-pushing)
+   and flip `lo-6c2f` to `merged`.
+2. **S12 (`lo-9261`) is then the last cloud-doable task.**
+3. Dispatch **ONE** worker only — see the isolation note below.
 
-**T5 is still the one thing that matters most, and it is not code.** The corpus
-has 100 ads and zero labels, and it is `[HUMAN]`. Every remaining M2 task chains
-off it:
+## Owner-blocked (not dispatchable)
 
-```
-T14 ← T5        T15 ← T5, T14
-T16 T17 T42 T18 ← T15        T19 ← T18        T44 ← T18, T19
-```
+- **T29** (`lo-2293`) — product-shape decision
+- **T5** (`lo-d2b2`) — `[HUMAN]` corpus labelling
+- **T25** (`lo-1af2`), **T12** (`lo-277b`) — `[LAPTOP]`
+- **S10** (`lo-5efb`), **S11** — wait on upstream claude-arsenal #143
 
-The labelling aid is built and committed (`tools/labelling_page.py` writes a
-self-contained `corpus/labelled/label.html`). **Read `corpus/labelled/README.md`
-first** — D-1 landed a warning there that the Catalan ads are *not* all remote.
+## Traps this session actually hit — read before repeating them
 
-## What landed
+- **`isolation: worktree` does not work here.** Workers report the
+  orchestrator's own `git rev-parse --show-toplevel`. One worker at a time;
+  never `git add -A` while one is running. Every git problem this session
+  traced to two things sharing one tree — including a worker that reverted an
+  orchestrator commit believing it was stray automation.
+- **`tasks.jsonl` has mixed formatting**: 69 rows compact (`"id":"x"`), 4
+  spaced (`"id": "x"`). A compact-only pattern edit **silently no-ops and
+  reports success**; re-serialising the whole file reformats all 73 lines for a
+  1-line change. Parse per line, preserve that line's own separators.
+- **Use `get_check_runs`, not `get_status`.** Actions populates check runs;
+  `get_status` returns `total_count: 0` regardless. Misread twice.
+- **Check Qodo findings against current HEAD.** It reviews the cumulative diff
+  and re-surfaced an already-fixed finding on #28.
+- **Verify workers, don't trust reports.** The T50 worker claimed 3 tests went
+  red; the real number was 6. Correct direction, understated.
 
-| PR | tasks |
-|----|-------|
-| #24 | S9 (arsenal as a real subtree), T7, T31, D-3, D-4/D-7 via **T49** |
-| #25 | T8 (answers → episodes), T27 (the interview), D-1 (Catalan slice) |
-| #26 | T49 (trait sufficiency) |
-| #27 | T28 (continuous capture); seeded **D-8** and **S12** |
-| #28 | S4 (CV store) — open |
+## Known gap worth a task
 
-## Cloud-doable work still on the board
+`plan_v2.measure()` checks that plan and queue agree on **which tasks exist and
+what they depend on** — it caught D-9 twice during seeding. It does **not**
+check that a row's Step number matches `spec-v2-steps.json`, nor that an open
+task appears in a milestone list. Both slipped past it on #29 and were caught by
+review instead. The plan states outright that "every open task appears in
+exactly one milestone", so it is mechanically checkable. Not seeded yet —
+deliberately, to avoid folding it into an unrelated PR.
 
-**D-8** and **S12**, both seeded this session. Everything else is blocked on the
-owner (see below). Do these before reporting the queue empty.
+Note the Step column is **0-indexed**: `identify`=0, `intake`=1, `constraints`=2,
+`history`=3, `traits`=4, `reactions`=5.
 
-## The pattern this session kept hitting: green is not measured
+## Upstream issues filed (claude-arsenal), all open
 
-Nearly every real defect was invisible to a passing check, and several were found
-only by **degrading the environment** rather than by reading code.
-
-- **A shallow CI checkout made two checks stop measuring rather than fail.**
-  `actions/checkout` clones at depth 1; the subtree check reported "cannot tell"
-  and skipped, and T31's note check found only the tip commit so all 28 notes
-  trivially read `unchanged`. Neither turned a job red. Every job now checks out
-  full history, pinned by a test.
-- **A task was recorded `done` with no ```gate block**, so `verify_gates.py`
-  skipped it entirely — 38 of 39 asserted, with the missing one invisible in a
-  green run.
-- **A denial and an affirmation of the same subject came out byte-identical**
-  until the sign was carried beside the link.
-- **A validator accepted any non-empty evidence tuple**, so a reading claiming
-  two episodes while naming one row passed.
-- **The quota-never-voiced check was a word list**, but a leaked quota is usually
-  a number: "1 of 2 required examples" passed it.
-
-**Prefer degrading the environment — shallow clone, empty directory, missing
-extra, hand-built violation — over re-reading the code.** And put the fix in the
-*probe*, not only in a test.
-
-## Decisions taken this session
-
-1. **The Traits gate got a task, not an edit (T49).** Neither T27 nor T28 is
-   measured on `trait_evidence_sufficiency`, so no reassignment between them
-   could make the register true.
-2. **`story_failure_fraction` is reported, never gated on (D-3).**
-3. **The Catalan slice is Catalan IT ads, stated as such (D-1).** Six of fifteen
-   mention teletreball/remot but only **two** offer it; four use the word for
-   remote support *delivered to users*, and one is explicitly on-site. A keyword
-   filter would have called six remote.
-4. **Test mode's four questions are answered** (`lo-5530.md`); only the marker is
-   open — recommendation `[[...]]` / `[[! ...]]`, meta parsing suspended inside a
-   paste.
-5. **The listing budget is to be raised (S10), upstream.** **Do not patch it
-   under `vendor/`** — the next subtree pull reverts it silently.
-6. **PDF import sits behind an optional `cv` extra; DOCX is stdlib** (S4). The
-   gate runs green without extras, and a missing importer *reports* unavailable
-   rather than returning an empty store.
-
-## Filed upstream (nuncaeslupus/claude-arsenal)
-
-- **#142** — the queue never reads GitHub issues (owner's request).
-- **#143** — `LISTING_BUDGET_CHARS` is not configurable. **Blocks S10 and S11.**
-- **#144** — the bundle cannot be consumed as a subtree.
-
-## Review
-
-Qodo reviewed #24–#28. Real findings were fixed with a test confirmed failing
-first; the rest were declined with reasoning on each thread. Two declines worth
-carrying forward, because they will be raised again:
-
-- **"The gate measures a synthetic probe, not production data."** That is the
-  repo-wide convention and deliberate — `profile`, `constraints_step` and
-  `identity` all measure in throwaway trees, and `identity` says why: doing it to
-  a real candidate's tree *"would be its own kind of leak"*. There is also no
-  real profile to measure until T5 runs.
-- **`size` field / split the PR / housekeeping mixed.** The queue schema has no
-  `size` (it is encoded in `priority`), and the one-branch constraint forbids a
-  second PR. Leaving merged work reading `open` is worse — that gap already had
-  to be repaired once.
-
-## Environment notes
-
-- `gh` is unavailable; PRs go through the GitHub MCP tools, and `done` →
-  `merged` flips through `claude-arsenal/scripts/update_task_row.py`.
-- **`isolation: worktree` does NOT take on this surface.** Confirmed: a worker
-  reported `git rev-parse --show-toplevel` as the main tree. **Run one worker at
-  a time** — two concurrent workers clobbered each other earlier.
-- **While a worker shares the tree: stage explicit paths, never `git add -A`.**
-  It swept a worker's unfinished files into a housekeeping commit.
-- **Re-check `git log` before committing after any push.** An automated reset
-  moved HEAD past a just-pushed commit (`reset: moving to HEAD^` in the reflog),
-  so the next commit built on the wrong parent and the push was rejected.
-  Recovery: verify by sha256 that the remote holds the work, then reset to it.
-- **Do not `git checkout <path>` to undo a scratch experiment** on a file you
-  have edited but not committed — it reverts to the committed version.
-- **The `PreToolUse` guard blocks its own commit messages** when they quote the
-  paths it protects. Pass messages through a file (`git commit -F`).
-- `update_task_row.py` rewrites every line it touches; restore the untouched ones
-  verbatim or a status change reads as a 71-line diff.
-- After a merge the remote branch is deleted, so `--force-with-lease` fails with
-  "stale info" — push plainly.
-- **Check the ledger against merged PRs, not memory.** S9 and T7 sat `open` after
-  merging because nobody wrote the rows back.
-- A step whose evidence satisfies its gate while `spec-v2-steps.json` still says
-  `not_implemented` is **expected** drift after landing a step-owning task. Flip
-  both the JSON and the prose, then `make reader-steps`.
-
-## Waiting on the owner, not on work
-
-- **T5** (label the corpus) and **T25** — `[HUMAN]`.
-- **T12** — `[LAPTOP]`; needs a real browser.
-- **S10 / S11** — need upstream #143 to land first.
-- **T29** — product shape.
-
-## Surface profile at handover
-
-Cloud session (`CLAUDE_CODE_REMOTE=true`), so `laptop`-tagged tasks cannot be
-released `done` from here.
+- **#142** — session protocol only reads the queue, so open GitHub issues are
+  invisible work *(the user's own request)*
+- **#143**, **#144** — earlier findings
+- **#145** — `queue_doctor` never opens a payload, so a gateless `done` is
+  invisible to the audit
+- **#146** — two incompatible `priority` conventions; the rank floor sits above
+  the size ceiling, so rank-encoded tasks unconditionally outrank size-encoded
+  ones in `queue_batch.sh`
+- **#147** — `worker_postcheck.sh` infers isolation from "HEAD didn't move"; its
+  false positive records `available`, which is what *enables* parallel fan-out

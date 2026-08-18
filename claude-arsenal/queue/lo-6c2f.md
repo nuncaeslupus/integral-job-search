@@ -60,7 +60,7 @@ rows it produced.
 
 ```bash
 uv run python -m jobsearch.cv_store --write-evidence status/evidence/S4.json
-uv run --extra dev pytest tests/test_cv_store.py tests/test_decline.py -q
+uv run --extra dev pytest tests/test_cv_store.py tests/test_non_insistence.py -q
 ```
 
 ```gate

@@ -176,6 +176,70 @@ field *paths* (`"experience[1]"`) and boolean/count violations, never a
 field's `text`. That is the strongest guarantee this module can make on its
 own; full "never sent to a model or an employer" enforcement belongs where
 documents are actually generated, and is named here rather than faked.
+
+## Non-insistence (T40) on the conversational write path (D-9)
+
+Every other free-text writer in this codebase — `elicit_extract.store_answer`,
+`constraints_step.resolve`, `interview`, `question_bank`, `trait_sufficiency`
+— filters through `jobsearch.decline.DeclineLedger` before it appends.
+`add_conversation_entry`/`set_conversation_scalar` did not, so a candidate who
+declined a subject and has not reopened it could still have an answer on it
+recorded here — on the one surface built for the candidate who has no CV and
+is therefore answering the most questions. Two decisions closed that gap.
+
+**Ordering: the decline check sits beside `fields`/`said` validation, before
+either writes anything — and runs first of the two.** `EvidenceLog.append` is
+append-only with no rollback (see `add_conversation_entry`'s own docstring on
+finding 3, PR #28), so *any* refusal has to be decided before the append, not
+after; a decline is one more reason a write cannot proceed, alongside an
+unknown section and invalid fields. It is checked before `model(**fields)`,
+not after, for the same reason `elicit_extract.extract` resolves declines
+before its own over-length check: a subject the candidate opted out of should
+not also have to clear field validation to find that out, and the cheaper
+check being first means a declined write does no field-validation work at all.
+
+**Subject granularity and check: `section`/`field` through `DeclineLedger.
+declines`, not `may_ask`.** `elicit_extract._undeclined` is the reference —
+"an answer to an undeclined question can still mention a declined subject in
+passing... filters every candidate dimension id through `DeclineLedger.
+declines` before anything is written." `may_ask` answers a different
+question (may a *question* be raised again, in a given step) and is what
+governs asking, not writing; `declines` is the stricter "has this been
+declined and never reopened, at all" test that keeps a declined subject out
+of a write even when nobody is asking about it in this call at all — filing
+something away is its own kind of insistence. There is no dimension model on
+this side of the codebase to subdivide a CV section by, so the subject is the
+section itself (`"experience"`, `"episodes"`, ...) or the scalar field name
+(`"headline"`, `"residence_claim"`) — coarser than a dimension id, but the
+same check, at the same place, for the same reason.
+
+**Raises `DeclinedSubjectError`, rather than reporting the refusal the way
+`ImportResult` reports an unavailable extractor.** Both functions already
+raise plain `CVStoreError` for two other reasons a conversational write
+cannot proceed; a decline is a third member of that family, not a
+different kind of event, and reporting it instead would leave one function
+partly raising and partly reporting depending on which rule the call
+happened to trip — worse for a caller than either discipline held
+consistently. `DeclinedSubjectError` is still a `CVStoreError`, so a caller
+that already wraps this call in `except CVStoreError` (it must, to survive a
+malformed submission) needs no new code to stay correct; one that wants to
+answer a decline non-confrontationally, rather than as a generic failure,
+can `except DeclinedSubjectError` specifically — Python tries the narrower
+clause first. That is the "closer to what non-insistence is for" case the
+non-insistence rule cares about, reachable as a `catch`, not as a second
+return shape every existing caller of these two functions (`profile_capture.
+_drive_intake`, `probe_intake` here, every fixture in `tests/test_cv_store.py`)
+would otherwise have had to learn just to keep building the same `CVMaster`
+they already return today.
+
+`intake_declined_subjects_written` (`probe_intake`, gated at floor `0` by
+`_main`) is the measurement: it drives a real decline through
+`DeclineLedger`, calls the real `add_conversation_entry` for that subject,
+and counts the evidence rows produced — not whether the call raised, since a
+caller that silently swallowed `DeclinedSubjectError` while still writing
+some *other* row for the same turn would defeat the guarantee just as surely
+as never raising at all. A companion scenario reopens the same subject and
+writes again, so the gate cannot be satisfied by "never write anything."
 """
 
 from __future__ import annotations
@@ -198,6 +262,7 @@ from xml.sax.saxutils import escape as _xml_escape
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from jobsearch.candidate import LANGUAGE_PATTERN, Level
+from jobsearch.decline import DeclineError, DeclineLedger, Entry
 from jobsearch.identity import IdentityError, ProfileStore, create_profile
 from jobsearch.profile import EVIDENCE_ID, EvidenceLog
 
@@ -211,7 +276,7 @@ _DOC_ID_WIDTH = 6
 # Below this many fields exercised, a clean score is "1.0 over nothing" — the
 # same floor T6/T28/D-6 each set for their own probes.
 MINIMUM_FIELDS_MEASURED = 5
-MINIMUM_CHECKS = 14
+MINIMUM_CHECKS = 17
 
 # The only `master.json` shape this module understands. A bare `int` field
 # validates `schema_version: 2` against the version-1 model as long as its
@@ -226,6 +291,31 @@ SCHEMA_VERSION: Literal[1] = 1
 
 class CVStoreError(Exception):
     """`cv/master.json` (or a document import) breaks this module's contract."""
+
+
+class DeclinedSubjectError(CVStoreError):
+    """A conversational write was refused because the candidate has an
+    unreopened decline against this subject (T40) — see the module docstring's
+    "non-insistence on the conversational write path" section for why this
+    raises rather than reports, and `_undeclined`
+    (`jobsearch.elicit_extract`) for the reference filtering this mirrors.
+
+    A `CVStoreError` subclass, not a sibling exception: `add_conversation_entry`
+    and `set_conversation_scalar` already raise plain `CVStoreError` for two
+    other reasons a conversational write cannot proceed — an unknown section,
+    or `fields`/`said` that fail validation — and a decline is a third reason
+    of the same character, not a different kind of event. A caller that
+    already wraps these calls in `except CVStoreError` (it has to, to survive
+    a malformed submission) needs no new handling to stay correct when this
+    also fires; one that wants to answer a decline gently rather than as a
+    generic failure can `except DeclinedSubjectError` first, since it is
+    still a `CVStoreError` and the narrower `except` clause runs first.
+    """
+
+    def __init__(self, subject: str, reason: str) -> None:
+        self.subject = subject
+        self.reason = reason
+        super().__init__(f"{subject}: {reason}")
 
 
 class ExtractorUnavailable(Exception):
@@ -816,6 +906,35 @@ def add_document_entry(
     return _with_list_entry(master, section, entry)
 
 
+def _declines_or_fail(store: ProfileStore, subject: str) -> list[Entry]:
+    """`DeclineLedger.declines`, with its read failure kept inside this module's contract.
+
+    `DeclineLedger.entries` raises `DeclineError` when a line of
+    `session/declines.jsonl` is not a ledger entry, and `DeclineError` is a
+    plain `Exception` — not a `CVStoreError`. Called bare, it would escape
+    `add_conversation_entry` and `set_conversation_scalar` uncaught, past the
+    one discipline their docstrings promise: that a caller wrapping the call
+    in `except CVStoreError` needs no other handling to survive a submission
+    that cannot proceed. A corrupt ledger is exactly such a submission, so it
+    is translated here rather than allowed to break the promise.
+
+    Translated, not swallowed. The write stays fail-closed: a ledger that
+    cannot be read is a ledger that cannot be shown to permit this subject,
+    and writing anyway would record precisely the answer T40 exists to keep
+    out — on the evidence log, which is append-only and has no rollback. The
+    original `DeclineError` is chained as `__cause__` so the malformed line
+    number it names survives into the traceback.
+    """
+    try:
+        return DeclineLedger(store).declines(subject)
+    except DeclineError as exc:
+        raise CVStoreError(
+            f"cannot check whether {subject!r} was declined: the decline ledger is unreadable "
+            f"({exc}) — refusing the conversational write rather than recording a subject "
+            "the candidate may have declined"
+        ) from exc
+
+
 def add_conversation_entry(
     store: ProfileStore,
     master: CVMaster,
@@ -842,6 +961,43 @@ def add_conversation_entry(
     retraction targets a real claim, not a validation failure that produced
     none. Validating first means the ordinary well-formed case still writes
     exactly one row, and a malformed submission writes zero.
+
+    **Non-insistence (T40, D-9) is checked alongside that same validation,
+    not after it — for the identical append-only reason.** `section` is this
+    module's decline subject (`"experience"`, `"episodes"`, ...): coarser
+    than `elicit_extract`'s per-dimension subjects, because a CV section has
+    no dimension model to subdivide it by, but the same
+    `DeclineLedger.declines` check `_undeclined` (`jobsearch.elicit_extract`)
+    runs before every write there. That check — not `may_ask` — is the one
+    this mirrors: `may_ask` decides whether a *question* may be raised again
+    in a given step and lets a once-declined subject back in elsewhere;
+    `declines` is the stricter "has this been declined and never reopened,
+    at all" test `_undeclined` uses to keep a declined subject out of a
+    *write*, because filing it away is its own kind of insistence even when
+    nobody asked. Checked before `model(**fields)`, not after: a subject the
+    candidate opted out of should not also have to pass field validation to
+    find that out, and skipping the validation work is free once the earlier,
+    cheaper check has already refused the write.
+
+    **Raises `DeclinedSubjectError`, rather than returning a value that
+    reports the refusal.** `add_conversation_entry` already raises
+    `CVStoreError` for two other reasons a write cannot proceed — an unknown
+    `section`, or `fields`/`said` that fail validation — and a decline is a
+    third member of that same family: a submission this call cannot honour,
+    discovered before anything is written. Reporting it instead (an
+    `ImportResult`-shaped return) would mean this one function partly raises
+    and partly reports depending on *which* rule the same call happened to
+    trip — worse for a caller than either discipline held consistently,
+    since it would need both an `except` clause and a result check around
+    one call to be safe. A caller that already wraps this call in
+    `except CVStoreError` (it must, to survive a malformed submission) needs
+    no new code to stay correct when a decline fires instead; one that wants
+    to answer a decline non-confrontationally rather than as a generic
+    failure can catch `DeclinedSubjectError` specifically, since it is a
+    `CVStoreError` and Python tries the narrower `except` first — the
+    "closer to what non-insistence is for" case the payload names is still
+    reachable, just as a `catch`, not a second return shape everything else
+    that touches this function's output would need to learn.
     """
     model = SECTION_MODELS.get(section)
     if model is None:
@@ -852,6 +1008,13 @@ def add_conversation_entry(
     if not stripped:
         raise CVStoreError(
             "add_conversation_entry needs non-blank `said` text to provenance the entry"
+        )
+    declined = _declines_or_fail(store, section)
+    if declined:
+        raise DeclinedSubjectError(
+            section,
+            f"declined {len(declined)} time(s) and not reopened — not written "
+            "to the conversational CV store (T40)",
         )
     try:
         entry = model(**fields)
@@ -881,12 +1044,24 @@ def set_document_scalar(
 def set_conversation_scalar(
     store: ProfileStore, master: CVMaster, field: str, *, said: str, recorded_at: str
 ) -> CVMaster:
+    """Set one scalar field (`headline`, `residence_claim`) from a conversation
+    turn — the scalar counterpart of `add_conversation_entry`, sharing its
+    ordering and its raise-vs-report decision; see that function's docstring
+    for the reasoning behind both. `field` is this call's decline subject.
+    """
     if field not in SCALAR_FIELDS:
         raise CVStoreError(f"{field!r} is not a CVMaster scalar field — one of {SCALAR_FIELDS}")
     stripped = said.strip()
     if not stripped:
         raise CVStoreError(
             "set_conversation_scalar needs non-blank `said` text to provenance the field"
+        )
+    declined = _declines_or_fail(store, field)
+    if declined:
+        raise DeclinedSubjectError(
+            field,
+            f"declined {len(declined)} time(s) and not reopened — not written "
+            "to the conversational CV store (T40)",
         )
     row = EvidenceLog(store).append(
         recorded_at=recorded_at,
@@ -1300,6 +1475,59 @@ def probe_intake(root: Path) -> dict[str, Any]:
         f"conversation entries did not each write a profile/evidence.jsonl row: {evidence_ids}",
     )
 
+    # --- D-9/T40: a declined subject is not written by the conversational
+    # path — driven through the real DeclineLedger and the real
+    # add_conversation_entry, never a stub of either. `intake_declined_
+    # subjects_written` below is the count of evidence rows this scenario
+    # produced when it should have produced none.
+    decline_identity = create_profile(root, "Probe CV Declined", handle="probe-cv-declined")
+    decline_store = ProfileStore(root, decline_identity.handle)
+    decline_ledger = DeclineLedger(decline_store)
+    decline_ledger.decline("experience", step="intake", at=now)
+    rows_before_decline = len(EvidenceLog(decline_store).rows())
+    decline_refused = False
+    try:
+        add_conversation_entry(
+            decline_store,
+            CVMaster(),
+            "experience",
+            {"title": "Warehouse Team Lead", "organisation": "Northgate Logistics"},
+            said="I ran the night shift at Northgate Logistics for about two "
+            "years, mostly warehouse work, before the site closed down.",
+            recorded_at=now,
+        )
+    except DeclinedSubjectError:
+        decline_refused = True
+    rows_after_decline = len(EvidenceLog(decline_store).rows())
+    check(decline_refused, "a declined subject's conversational entry did not raise")
+    intake_declined_subjects_written = max(0, rows_after_decline - rows_before_decline)
+    check(
+        intake_declined_subjects_written == 0,
+        f"a declined subject was written to evidence.jsonl anyway "
+        f"({intake_declined_subjects_written} row(s))",
+    )
+
+    # The other half — reopening is the only thing that clears it (§5.4), so a
+    # reopened subject must reach the store exactly like any other, not stay
+    # silenced forever. Missing this half would let "never write anything"
+    # pass as a fix.
+    decline_ledger.reopen("experience", at=now)
+    rows_before_reopen = len(EvidenceLog(decline_store).rows())
+    add_conversation_entry(
+        decline_store,
+        CVMaster(),
+        "experience",
+        {"title": "Warehouse Team Lead", "organisation": "Northgate Logistics"},
+        said="I ran the night shift at Northgate Logistics for about two "
+        "years, mostly warehouse work, before the site closed down.",
+        recorded_at=now,
+    )
+    rows_after_reopen = len(EvidenceLog(decline_store).rows())
+    check(
+        rows_after_reopen == rows_before_reopen + 1,
+        "a reopened subject could not be recorded again by the conversational path",
+    )
+
     # --- required verification: strip one field's provenance, watch it fall -
     stripped_first = nothing_master.experience[0].model_copy(update={"provenance": ()})
     broken_master = nothing_master.model_copy(
@@ -1330,6 +1558,7 @@ def probe_intake(root: Path) -> dict[str, Any]:
     outcome = {
         "intake_field_provenance": combined_coverage,
         "fields_measured": combined_measured,
+        "intake_declined_subjects_written": intake_declined_subjects_written,
         "document_import": {
             "coverage": doc_result.coverage,
             "fields_measured": doc_result.fields_measured,
@@ -1429,6 +1658,11 @@ def _main(argv: list[str]) -> int:
     if measured["intake_field_provenance"] != 1.0:
         violations.append(
             f"intake_field_provenance = {measured['intake_field_provenance']} (want 1.0)"
+        )
+    if measured["intake_declined_subjects_written"] != 0:
+        violations.append(
+            "intake_declined_subjects_written = "
+            f"{measured['intake_declined_subjects_written']} (want 0)"
         )
     for violation in violations:
         print(violation, file=sys.stderr)
