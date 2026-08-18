@@ -416,7 +416,7 @@ Leave it there?"* Writes `last_activity`.
 **Gate.** `trait_evidence_sufficiency == 1.0` — every trait carries either a
 score backed by ≥2 independent episodes or `insufficient` with its count. A
 scored trait below the floor is a stereotype presented as a finding. Owner: T49 (T27 carries the floor as part of the interview; T28 keeps the evidence coming from every surface).
-State: `not_implemented`.
+State: `implemented`.
 
 **Resume.** Scoring is idempotent, so an interruption re-runs it. `position`
 records which insufficient traits were already asked about, so a resumed step
