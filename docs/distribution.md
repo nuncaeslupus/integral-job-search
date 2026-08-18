@@ -202,10 +202,10 @@ building before the volume exists to justify it.
 
 ## 7. Still open
 
-- **The name.** "integral" is the direction — `integral-job-search` or similar.
-  Not settled, and nothing above depends on it. `integral` alone is taken on
-  PyPI (an unrelated numerical-integration package); since nothing here is
-  published to PyPI, that constrains only a future decision to publish.
+- ~~**The name.**~~ **Settled: `integral-job-search`** (2026-08-18). The rename
+  is T55. `integral` alone is taken on PyPI by an unrelated numerical-integration
+  package; since nothing here is published to PyPI that constrains only a future
+  decision to publish, and `integral-job-search` is free there in any case.
 - **Whether the sources repository is public from the start.** Public is the
   obvious end state; starting private costs nothing and is reversible.
 - **Whether this repository is public.** Independent of the above, and not
