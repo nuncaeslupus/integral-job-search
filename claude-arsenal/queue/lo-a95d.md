@@ -9,7 +9,7 @@ key: resurrected_purged_offers
 ```
 
 ```bash
-echo "no gate command defined for S5 — replace this line with the command that writes status/evidence/S5.json" >&2; exit 1
+uv run --extra dev python -m jobsearch.lifecycle status/evidence/S5.json
 ```
 
 ## What this is
