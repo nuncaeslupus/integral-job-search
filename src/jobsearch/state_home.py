@@ -240,6 +240,17 @@ def probe_refusals() -> list[ProbeCheck]:
     checks: list[ProbeCheck] = []
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp).resolve()
+
+        def stable(text: str) -> str:
+            """The probe's throwaway directory, redacted out of what gets committed.
+
+            `measure` is written to `status/evidence/T51.json` and CI asserts
+            that regenerating it produces no diff. A fresh `mkdtemp` name in
+            every detail string made the file differ from itself on every run —
+            the evidence equivalent of a test that cannot pass twice.
+            """
+            return text.replace(str(base), "<tmp>")
+
         work_tree = base / "clone"
         (work_tree / "deep" / "nested").mkdir(parents=True)
         _git("init", "-q", str(work_tree), cwd=base)
@@ -299,7 +310,7 @@ def probe_refusals() -> list[ProbeCheck]:
                         expected=expected,
                         outcome="refused",
                         inside_a_repo=False,
-                        detail=str(exc).split(" — ")[0],
+                        detail=stable(str(exc).split(" — ")[0]),
                     )
                 )
                 continue
@@ -314,7 +325,7 @@ def probe_refusals() -> list[ProbeCheck]:
                     # counted against the gate — every other resolution that
                     # lands in a repository is exactly what the gate forbids.
                     inside_a_repo=inside and DEV_ENV not in env,
-                    detail=str(resolved),
+                    detail=stable(str(resolved)),
                 )
             )
     return checks

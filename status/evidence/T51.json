@@ -10,56 +10,56 @@
       "expected": "refused",
       "outcome": "refused",
       "inside_a_repo": false,
-      "detail": "INTEGRAL_HOME resolves to /tmp/tmp_jml9nh0/clone, which is inside the git work tree at /tmp/tmp_jml9nh0/clone"
+      "detail": "INTEGRAL_HOME resolves to <tmp>/clone, which is inside the git work tree at <tmp>/clone"
     },
     {
       "probe": "INTEGRAL_HOME deep inside the work tree",
       "expected": "refused",
       "outcome": "refused",
       "inside_a_repo": false,
-      "detail": "INTEGRAL_HOME resolves to /tmp/tmp_jml9nh0/clone/deep/nested/state, which is inside the git work tree at /tmp/tmp_jml9nh0/clone"
+      "detail": "INTEGRAL_HOME resolves to <tmp>/clone/deep/nested/state, which is inside the git work tree at <tmp>/clone"
     },
     {
       "probe": "XDG_DATA_HOME inside the work tree",
       "expected": "refused",
       "outcome": "refused",
       "inside_a_repo": false,
-      "detail": "XDG_DATA_HOME resolves to /tmp/tmp_jml9nh0/clone/share/integral-job-search, which is inside the git work tree at /tmp/tmp_jml9nh0/clone"
+      "detail": "XDG_DATA_HOME resolves to <tmp>/clone/share/integral-job-search, which is inside the git work tree at <tmp>/clone"
     },
     {
       "probe": "HOME inside the work tree, no variable set",
       "expected": "refused",
       "outcome": "refused",
       "inside_a_repo": false,
-      "detail": "HOME resolves to /tmp/tmp_jml9nh0/clone/.integral-job-search, which is inside the git work tree at /tmp/tmp_jml9nh0/clone"
+      "detail": "HOME resolves to <tmp>/clone/.integral-job-search, which is inside the git work tree at <tmp>/clone"
     },
     {
       "probe": "INTEGRAL_HOME outside any work tree",
       "expected": "resolved",
       "outcome": "resolved",
       "inside_a_repo": false,
-      "detail": "/tmp/tmp_jml9nh0/elsewhere/store/profiles"
+      "detail": "<tmp>/elsewhere/store/profiles"
     },
     {
       "probe": "INTEGRAL_DEV=1 inside the work tree — the documented escape",
       "expected": "resolved",
       "outcome": "resolved",
       "inside_a_repo": false,
-      "detail": "/tmp/tmp_jml9nh0/clone/state/profiles"
+      "detail": "<tmp>/clone/state/profiles"
     },
     {
       "probe": "INTEGRAL_DEV=0 inside the work tree — not an escape",
       "expected": "refused",
       "outcome": "refused",
       "inside_a_repo": false,
-      "detail": "INTEGRAL_HOME resolves to /tmp/tmp_jml9nh0/clone/state, which is inside the git work tree at /tmp/tmp_jml9nh0/clone"
+      "detail": "INTEGRAL_HOME resolves to <tmp>/clone/state, which is inside the git work tree at <tmp>/clone"
     },
     {
       "probe": "INTEGRAL_DEV empty inside the work tree — not an escape",
       "expected": "refused",
       "outcome": "refused",
       "inside_a_repo": false,
-      "detail": "INTEGRAL_HOME resolves to /tmp/tmp_jml9nh0/clone/state, which is inside the git work tree at /tmp/tmp_jml9nh0/clone"
+      "detail": "INTEGRAL_HOME resolves to <tmp>/clone/state, which is inside the git work tree at <tmp>/clone"
     }
   ],
   "call_sites": [

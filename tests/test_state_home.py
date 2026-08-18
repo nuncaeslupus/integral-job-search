@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -248,6 +249,22 @@ def test_the_gate_is_met_and_was_measured_over_a_non_empty_set() -> None:
     assert measured["probes_run"] > 0
     assert measured["call_sites_checked"] > 0
     assert measured["state_paths_inside_a_repo"] == 0, measured["shortfalls"]
+
+
+def test_the_measurement_is_stable_across_runs() -> None:
+    """Evidence CI regenerates must be a function of the repository, not of the run.
+
+    The probes build a throwaway git work tree, and its `mkdtemp` name landed in
+    the recorded details — so `make evidence` reported drift on a repository
+    nobody had touched. Two measurements have to be equal.
+    """
+    assert measure(_REPO_ROOT) == measure(_REPO_ROOT)
+
+
+def test_no_probe_detail_leaks_a_temporary_path() -> None:
+    for probe in probe_refusals():
+        assert "/tmp/" not in probe.detail, probe.detail
+        assert not probe.detail.startswith(tempfile.gettempdir()), probe.detail
 
 
 def test_the_evidence_file_records_what_was_measured(tmp_path: Path) -> None:
