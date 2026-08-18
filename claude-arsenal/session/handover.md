@@ -132,15 +132,24 @@ itself. Phrasing the rule as "this path shape is roster level" granted both.
 63 tasks: 11 merged, 11 done (against PR #22), 41 open, 0 `in_progress`, 0
 `escalated`. `queue_doctor`: 0 error, 0 warn, 0 info.
 
-New statuses are on this feature branch, so **the next orchestrator session must
-run `queue_sync.sh`** to port them onto `arsenal-queue` before dispatching.
+The eleven `done` flips are also pushed to `arsenal-queue`, so the coordination
+branch and the feature branch agree and `queue_batch.sh` will not hand M1's
+tasks out again. The previous handover's note stands: **pushes to
+`arsenal-queue` do work from a cloud session**, which is why this session did
+not have to leave the statuses stranded on the feature branch.
 
 ## Environment notes
 
-- Pushes to arbitrary branches *do* work in this session — verified — but the
+- Pushes to arbitrary branches *do* work in this session — verified, and the
+  previous handover had already verified `arsenal-queue` specifically. The
   session's git requirements designate one branch, so M1 landed as eleven
   commits on one PR rather than eleven PRs. Worth revisiting if per-task PRs
   are wanted.
+- **Main moved under this branch mid-session** (#21 tagged every task with its
+  milestone). The merge conflicted in `tasks.jsonl`, `plan.md` and this file;
+  resolved by taking main's structure and re-applying this session's status
+  flips and evidence rows on top, which is the right direction when the other
+  side changed the shape of a file rather than the same facts.
 - `gh` is unavailable; PRs are managed through the GitHub MCP tools, and
   `done` → `merged` flips go through `claude-arsenal/scripts/update_task_row.py`.
 - `gate_run.sh` checks the evidence file **before** running the bash block, so a
