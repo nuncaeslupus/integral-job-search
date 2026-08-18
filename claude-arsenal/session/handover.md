@@ -41,8 +41,12 @@ everything else unblocks behind them.
 | 4 | T34 | `lo-485e` | the step graph runtime, and L0/L1/L2 |
 | 4 | T37 | `lo-67f4` | profile revision + staleness across the three classes |
 | 5 | T36 | `lo-5080` | freshness triggers, each an offer and never an action |
-| 5 | T39 | `lo-99de` | scoring triggers |
 | — | T38, T40, T48 | `lo-dddd`, `lo-da9c`, `lo-bd03` | retraction/deletion, decline ledger, gate-state register |
+
+**T39** (scoring triggers, `lo-99de`) is *not* in this run. It depends on T37,
+which is M1, but the plan schedules it in **M3** alongside the traits and
+weights it exists to pace — there is nothing to defer scoring of until they
+exist. `/continue m1` will not return it, and that is correct.
 
 **Why M1 first.** It is the only milestone not paced by T5 (`lo-d2b2`,
 `[HUMAN]` corpus labelling), which gates everything measured on the evaluation
