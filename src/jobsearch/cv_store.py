@@ -187,7 +187,7 @@ import re
 import sys
 import tempfile
 import zipfile
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -556,25 +556,62 @@ def _paragraph_text(paragraph: ElementTree.Element) -> str:
     return "".join(parts)
 
 
+_DOCX_HEADER_RE = re.compile(r"^word/header\d*\.xml$")
+_DOCX_FOOTER_RE = re.compile(r"^word/footer\d*\.xml$")
+
+
+def _docx_part_paragraphs(path: Path, archive: zipfile.ZipFile, part: str) -> list[str]:
+    """Every `<w:p>` in one `.docx` part, as text.
+
+    A malformed part raises rather than being skipped. Skipping would put
+    back exactly the failure this function exists to remove — content that
+    is silently absent from the extracted text — only now for a reason the
+    candidate could not even guess at.
+    """
+    try:
+        root = ElementTree.fromstring(archive.read(part))
+    except ElementTree.ParseError as exc:
+        raise CVStoreError(f"{path}'s {part} is not well-formed XML: {exc}") from exc
+    return [_paragraph_text(paragraph) for paragraph in root.iter(f"{{{_DOCX_W_NS}}}p")]
+
+
 def _extract_docx_text(path: Path) -> str:
     """Every paragraph's text, joined by newlines — stdlib only.
 
     A `.docx` is a zip of XML parts; `word/document.xml` holds the body, one
-    `<w:p>` per paragraph. `_paragraph_text` reassembles each paragraph's
-    text and its explicit tabs/line breaks (finding 5); nothing here
-    interprets styles, tables, or headers/footers — a limitation named
-    rather than hidden.
+    `<w:p>` per paragraph, and `word/header*.xml` / `word/footer*.xml` hold
+    the running head and foot. `_paragraph_text` reassembles each
+    paragraph's text and its explicit tabs/line breaks (finding 5).
+
+    Headers and footers are read, not skipped (finding 6). Reading only the
+    body loses whatever a candidate put in the running head — which, on a
+    CV, is very often the name and contact details, since that is what a
+    word processor's header is *for*. The loss was silent in the way this
+    repository keeps having to design against: `intake_field_provenance`
+    measures whether the fields that made it in name their origin, not
+    whether everything in the file made it in, so a CV whose name lived in a
+    header imported without a name and still scored 1.0. Retaining the
+    original upload (finding 4) makes such a document recoverable, but
+    recoverable is not the same as read.
+
+    Order is headers (by part name), then body, then footers — deterministic,
+    because the extracted text is what provenance spans index into, so two
+    runs over one file must agree on every offset. Styles and tables are
+    still not interpreted; that limitation is named rather than hidden.
     """
     try:
         with zipfile.ZipFile(path) as archive:
-            xml_bytes = archive.read("word/document.xml")
-    except (zipfile.BadZipFile, KeyError) as exc:
+            names = set(archive.namelist())
+            if "word/document.xml" not in names:
+                raise CVStoreError(f"{path} is not a readable .docx file: no word/document.xml")
+            paragraphs: list[str] = []
+            for part in sorted(n for n in names if _DOCX_HEADER_RE.match(n)):
+                paragraphs.extend(_docx_part_paragraphs(path, archive, part))
+            paragraphs.extend(_docx_part_paragraphs(path, archive, "word/document.xml"))
+            for part in sorted(n for n in names if _DOCX_FOOTER_RE.match(n)):
+                paragraphs.extend(_docx_part_paragraphs(path, archive, part))
+    except zipfile.BadZipFile as exc:
         raise CVStoreError(f"{path} is not a readable .docx file: {exc}") from exc
-    try:
-        root = ElementTree.fromstring(xml_bytes)
-    except ElementTree.ParseError as exc:
-        raise CVStoreError(f"{path}'s word/document.xml is not well-formed XML: {exc}") from exc
-    paragraphs = [_paragraph_text(paragraph) for paragraph in root.iter(f"{{{_DOCX_W_NS}}}p")]
     return "\n".join(paragraphs)
 
 
@@ -983,12 +1020,18 @@ def measure_provenance(store: ProfileStore, master: CVMaster) -> ProvenanceResul
 # fixtures + the adversarial probe
 
 
-def _wrap_docx_body(body_xml: str) -> bytes:
+def _wrap_docx_body(body_xml: str, extra_parts: Mapping[str, str] | None = None) -> bytes:
     """The zip/XML envelope every `.docx` fixture in this module shares,
     around caller-supplied `<w:body>` content — factored out of
     `_build_minimal_docx` so `test_docx_extraction_preserves_tabs_and_line_
     breaks` (finding 5) can supply `<w:tab/>`/`<w:br/>` elements directly,
-    which a plain string-of-paragraphs fixture has no way to express."""
+    which a plain string-of-paragraphs fixture has no way to express.
+
+    `extra_parts` maps a zip member name to raw `<w:p>` XML, so a fixture can
+    carry `word/header1.xml` / `word/footer1.xml` (finding 6). Each is wrapped
+    in the `<w:hdr>`/`<w:ftr>` root Word uses; `_extract_docx_text` finds the
+    paragraphs by tag either way, so the root element only has to be
+    well-formed."""
     import io
 
     content_types = (
@@ -1019,6 +1062,13 @@ def _wrap_docx_body(body_xml: str) -> bytes:
         archive.writestr("[Content_Types].xml", content_types)
         archive.writestr("_rels/.rels", rels)
         archive.writestr("word/document.xml", document)
+        for name, paragraphs_xml in (extra_parts or {}).items():
+            root = "w:ftr" if "footer" in name else "w:hdr"
+            archive.writestr(
+                name,
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                f'<{root} xmlns:w="{_DOCX_W_NS}">{paragraphs_xml}</{root}>',
+            )
     return buffer.getvalue()
 
 

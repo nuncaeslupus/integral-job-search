@@ -214,6 +214,38 @@ def test_docx_extraction_needs_no_third_party_package() -> None:
     assert "Second paragraph, with more to say." in text
 
 
+def test_docx_extraction_reads_headers_and_footers_in_document_order() -> None:
+    """Content in a DOCX running head or foot must reach the extracted text.
+
+    A word processor's header is where a CV's name and contact details
+    usually live, and reading only `word/document.xml` dropped them with no
+    error and no drop in `intake_field_provenance` — that metric asks whether
+    the fields present name their origin, not whether the file's contents all
+    made it in. So the import scored a clean 1.0 over a CV with no name.
+
+    Order is asserted, not just membership: the extracted text is the artefact
+    provenance spans index into, so headers-then-body-then-footers has to be
+    stable or every span offset moves between runs.
+    """
+    docx_bytes = _wrap_docx_body(
+        '<w:p><w:r><w:t>Body paragraph.</w:t></w:r></w:p>',
+        extra_parts={
+            "word/header1.xml": '<w:p><w:r><w:t>Ada Lovelace</w:t></w:r></w:p>',
+            "word/footer1.xml": '<w:p><w:r><w:t>Page 1 of 1</w:t></w:r></w:p>',
+        },
+    )
+    tmp = Path("/tmp") / "cv_store_docx_headers_test.docx"
+    tmp.write_bytes(docx_bytes)
+    try:
+        text = _extract_docx_text(tmp)
+    finally:
+        tmp.unlink()
+
+    assert "Ada Lovelace" in text, "header content was dropped"
+    assert "Page 1 of 1" in text, "footer content was dropped"
+    assert text == "Ada Lovelace\nBody paragraph.\nPage 1 of 1"
+
+
 def test_pdf_import_reports_unavailable_when_pypdf_cannot_be_imported(
     store: ProfileStore, tmp_path: Path
 ) -> None:
