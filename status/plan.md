@@ -150,8 +150,20 @@ done until its row is complete and the measured value meets the gate.
 | T# | Gate | Measured | Command | SHA | Env | Date |
 |----|------|----------|---------|-----|-----|------|
 | T1 | `lint_typecheck_exit_code == 0` | 0 | `make gate` (runs `ruff check .` + `mypy .`) | `9581811` | cloud | 2026-08-15 |
-| S1 | `process_spec_complete == 1` | 1 | `uv run python -m jobsearch.process_spec status/evidence/S1.json` | `0a64da9` | cloud | 2026-08-17 |
-| S2 | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m jobsearch.step_specs status/evidence/S2.json` | `258b2de` | cloud | 2026-08-17 |
+| S1 | `process_spec_complete == 1` | 1 | `uv run python -m jobsearch.process_spec status/evidence/S1.json` | `f282705` | cloud | 2026-08-17 |
+| S1r | `process_spec_complete == 1` | 1 | `uv run python -m jobsearch.process_spec status/evidence/S1.json` | `258b2de` | cloud | 2026-08-17 |
+| S2 | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m jobsearch.step_specs status/evidence/S2.json` | `8c59a7f` | cloud | 2026-08-17 |
+| S2r | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m jobsearch.step_specs status/evidence/S2.json` | `83032bb` | cloud | 2026-08-18 |
+
+> **The SHA is the commit that carries the artefact, and the value is what *that*
+> commit's own checker read.** Both S-rows originally cited their PR's base commit
+> instead of its merge — `0a64da9` has no `spec-v2-process.md` and `258b2de` has no
+> `spec-v2-steps.md`, so neither could have measured what was recorded beside it.
+> Corrected above, and each row re-verified by materialising the commit and running
+> the checker it shipped with. Note that the review rounds tightened the checkers:
+> today's `process_spec` scores `f282705` at 0, because S1r added the required-subset
+> closure rule that the first draft did not satisfy. A row records the gate as it
+> stood, not a promise that a later, stricter gate passes on older text.
 
 ### Dependency graph
 
