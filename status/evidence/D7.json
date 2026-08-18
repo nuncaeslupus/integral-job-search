@@ -1,0 +1,14 @@
+{
+  "step_gate_owner_contradictions": 1,
+  "steps_checked": 13,
+  "contradictions": [
+    {
+      "step": "traits",
+      "task": "T28",
+      "metric": "trait_evidence_sufficiency",
+      "problems": [
+        "T28's own plan.md gate measures 'profile_capture_coverage', not 'trait_evidence_sufficiency' — T28 is not the task that writes this step's number"
+      ]
+    }
+  ]
+}

@@ -11,6 +11,12 @@ from pathlib import Path
 import pytest
 
 from jobsearch.process_spec import DEFAULT_STEPS_PATH, load_steps
+from jobsearch.step_gates import (
+    OwnershipReading,
+    gate_ownership,
+    measure_gate_ownership,
+    measure_trait_gate_ownership,
+)
 from jobsearch.step_specs import (
     DEFAULT_STEP_SPECS_DOC,
     MIN_FIELD_WORDS,
@@ -217,3 +223,91 @@ def test_a_missing_step_list_writes_evidence_rather_than_failing(tmp_path: Path)
 
     assert evidence.is_file()
     assert measured["step_specs_complete_fraction"] == 0.0
+
+
+# --- D-4 / D-7 — one gate.task, and every document agrees on it -----------
+#
+# `gate.task` is not an attribution — `step_gates.evidence_path` turns it into
+# the evidence file the register reads. D-7 found two documents naming
+# different owners for the Ranking gate (`spec-v2-steps.md` said T18 and T19,
+# `spec-v2-steps.json` said T19 alone); D-4 found the same class of
+# contradiction for Traits, one level deeper: neither of its two candidate
+# owners' own `plan.md` gate is the step's metric at all. The three tests
+# below are the general form, run over all thirteen steps.
+#
+# `traits` is the one step excluded from the second test. D-4 is still open:
+# reassigning it to T27 (the task that actually does the scoring) would only
+# make the *documents* agree — T27's own plan.md gate would still measure
+# `interview_profile_coverage`, not `trait_evidence_sufficiency`, so the
+# reassignment would not be true in the sense this check enforces. Making it
+# true means changing what T27 (or T28, or a new task) is measured against,
+# which `status/plan.md` §"Step gate ownership" records as a decision the
+# owner has not made yet — not something a document edit can decide for them.
+_OPEN_DIVERGENCES = frozenset({"traits"})  # D-4 — see claude-arsenal/queue/lo-4ca5.md
+
+
+def _assert_no_problem_matching(readings: list[OwnershipReading], needle: str) -> None:
+    offending = [
+        (r.step, r.task, p) for r in readings for p in r.problems if needle in p
+    ]
+    assert offending == [], offending
+
+
+def test_every_step_gate_names_exactly_one_owner() -> None:
+    """`gate.task` names one task, and `spec-v2-steps.md`'s `Owner:` clause does
+    too — the shape D-7 found (`Owner: T18, T19.`) generalised to all steps."""
+    readings = gate_ownership()
+    assert {r.step for r in readings} == {s.id for s in load_steps().steps}
+    _assert_no_problem_matching(readings, "does not name a single task")
+    _assert_no_problem_matching(readings, "owner(s)")
+    _assert_no_problem_matching(readings, "names no Owner")
+
+
+def test_the_gate_task_is_the_task_that_writes_the_metric() -> None:
+    """The mismatch that made the constraints step read as not implemented
+    (`gate.task` named T24; `constraint_field_resolution` is T41's own gate),
+    generalised to all thirteen steps.
+
+    `traits` is excluded: it is D-4, the one case this repo has not decided —
+    see the module docstring above.
+    """
+    for reading in gate_ownership():
+        if reading.step in _OPEN_DIVERGENCES:
+            continue
+        assert not any(
+            "is not the task that writes this step's number" in p for p in reading.problems
+        ), (reading.step, reading.task, reading.problems)
+        assert not any("has no gate row" in p for p in reading.problems), (
+            reading.step,
+            reading.task,
+        )
+
+
+def test_no_prose_document_names_a_different_owner_than_the_json() -> None:
+    """Neither `spec-v2-steps.md`'s `Owner:` clause nor `spec-v2-process.md`
+    §9's table may name a task `spec-v2-steps.json` does not."""
+    readings = gate_ownership()
+    _assert_no_problem_matching(readings, "spec-v2-steps.md names")
+    _assert_no_problem_matching(readings, "spec-v2-process.md §9 names")
+
+
+def test_the_committed_documents_have_no_owner_contradiction_except_traits() -> None:
+    """D-7's own gate: `step_gate_owner_contradictions` is the count of steps
+    with *any* problem above, `traits` included — so this stays honest about
+    what is actually fixed rather than passing by construction."""
+    measured = measure_gate_ownership()
+    contradicted = {c["step"] for c in measured["contradictions"]}
+    assert contradicted == _OPEN_DIVERGENCES, measured["contradictions"]
+
+
+def test_the_traits_gate_still_names_two_candidate_owners_neither_of_which_fits() -> None:
+    """D-4, recorded rather than silently fixed: T28 is named by every
+    document, but T28's own gate is `profile_capture_coverage`, and T27 (the
+    task that actually scores traits) has `interview_profile_coverage`.
+    Neither is `trait_evidence_sufficiency`. This is the report, not a bug —
+    if this test ever fails because the contradiction is gone, delete it and
+    remove `traits` from `_OPEN_DIVERGENCES` above."""
+    measured = measure_trait_gate_ownership()
+    assert measured["trait_gate_owner_contradictions"] == 1
+    assert measured["task"] == "T28"
+    assert "T28" in measured["problems"][0]

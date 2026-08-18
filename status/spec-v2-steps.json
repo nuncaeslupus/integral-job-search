@@ -378,7 +378,7 @@
         "op": "==",
         "threshold": 1.0,
         "state": "not_implemented",
-        "task": "S4"
+        "task": "T45"
       },
       "reentry_events": [
         "offer_shortlisted",

@@ -363,7 +363,7 @@ metrics whose owner must additionally measure and record them.
 | step metric | §9 owner | that task's own gate |
 |-------------|----------|----------------------|
 | `intake_field_provenance` | S4 | `intake_field_provenance == 1.0` — the same |
-| `constraint_field_resolution` | T24 | `unsatisfiable_hard_constraint_leaks == 0` — T41 resolves the fields |
+| `constraint_field_resolution` | T41 | `constraint_field_resolution == 1.0` — the same |
 | `trait_evidence_sufficiency` | T28 | `profile_capture_coverage == 1.0` — **contested, see D-4** |
 | `interview_lesson_linkage` | S6 | `interview_lesson_linkage == 1.0` — the same |
 
