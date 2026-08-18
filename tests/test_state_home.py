@@ -25,12 +25,14 @@ from jobsearch.state_home import (
     DEV_ENV,
     HOME_ENV,
     XDG_ENV,
+    ProbeCheck,
     StateHomeRefused,
     candidate_root,
     check_call_site,
     code_lines,
     dev_mode,
     enclosing_work_tree,
+    ensure_outside_a_work_tree,
     measure,
     probe_refusals,
     profiles_root,
@@ -169,6 +171,60 @@ def test_an_explicit_dev_false_overrides_the_environment(work_tree: Path) -> Non
 
 
 # ---------------------------------------------------------------------------
+# a root handed in on a command line
+
+
+def test_an_explicit_root_inside_a_work_tree_is_refused(work_tree: Path) -> None:
+    """`--input-dir` is the second way in, and the rule has to hold there too.
+
+    It did not: the checkpoints took the flag as a bare `Path`, so
+    `--input-dir ./profiles` wrote a candidate's session file into the clone
+    with nobody passing `--dev`.
+    """
+    with pytest.raises(StateHomeRefused):
+        ensure_outside_a_work_tree(work_tree / "profiles", env={})
+
+
+def test_an_explicit_root_outside_a_work_tree_resolves(tmp_path: Path) -> None:
+    outside = tmp_path / "store" / "profiles"
+    assert ensure_outside_a_work_tree(outside, env={}) == outside
+
+
+def test_dev_is_the_only_way_past_for_an_explicit_root_too(work_tree: Path) -> None:
+    inside = work_tree / "profiles"
+    assert ensure_outside_a_work_tree(inside, env={DEV_ENV: "1"}) == inside
+    assert ensure_outside_a_work_tree(inside, env={}, dev=True) == inside
+    for value in ("0", "false", ""):
+        with pytest.raises(StateHomeRefused):
+            ensure_outside_a_work_tree(inside, env={DEV_ENV: value})
+
+
+def test_every_checkpoint_guards_its_explicit_root() -> None:
+    """The audit's rule, held directly: no checkpoint takes `--input-dir` unguarded."""
+    checkpoints = [p for p in store_call_sites(_REPO_ROOT) if p.name == "run_checkpoint.py"]
+    assert checkpoints
+    for path in checkpoints:
+        text = path.read_text(encoding="utf-8")
+        assert "--input-dir" in text
+        assert "ensure_outside_a_work_tree" in text, path
+
+
+def test_a_call_site_taking_an_unguarded_input_dir_is_caught(tmp_path: Path) -> None:
+    """The regression this audit rule exists for, proved against a file that has it."""
+    unguarded = tmp_path / "unguarded.py"
+    unguarded.write_text(
+        "from pathlib import Path\n"
+        "from jobsearch.state_home import profiles_root\n"
+        "def main(args):\n"
+        '    parser.add_argument("--input-dir", default=None)\n'
+        "    return Path(args.input_dir) if args.input_dir else profiles_root()\n"
+    )
+    check = check_call_site(unguarded, tmp_path)
+    assert not check.passes
+    assert any("ensure_outside_a_work_tree" in reason for reason in check.reasons)
+
+
+# ---------------------------------------------------------------------------
 # every call site
 
 
@@ -238,7 +294,7 @@ def test_an_unparseable_call_site_is_reported_not_waved_through(tmp_path: Path) 
 
 def test_the_probe_measures_something_and_expects_each_outcome() -> None:
     probes = probe_refusals()
-    assert len(probes) >= 8, "the probe set shrank — a gate that checks less is not the same gate"
+    assert len(probes) >= 11, "the probe set shrank — a gate that checks less is not the same gate"
     unexpected = [p for p in probes if not p.passes]
     assert not unexpected, [f"{p.probe}: expected {p.expected}, got {p.outcome}" for p in probes]
 
@@ -273,3 +329,36 @@ def test_the_evidence_file_records_what_was_measured(tmp_path: Path) -> None:
     written = json.loads(target.read_text())
     assert written == measured
     assert written["paths_checked"] == written["probes_run"] + written["call_sites_checked"]
+    assert written["probes_unexpected"] == 0
+
+
+def test_a_probe_that_comes_out_wrong_is_not_masked_by_the_dev_variable() -> None:
+    """`INTEGRAL_DEV=0` is not an escape, so it cannot excuse a leak from being counted.
+
+    The earlier version read the escape as "the variable is present", so a
+    regression under `INTEGRAL_DEV=0` would have been listed in `shortfalls`
+    while `state_paths_inside_a_repo` stayed 0 and the command exited clean.
+    """
+    for probe in probe_refusals():
+        if probe.outcome == "resolved" and "=0" in probe.probe:
+            pytest.fail(f"{probe.probe} resolved and was not counted")
+    assert not dev_mode({DEV_ENV: "0"})
+
+
+def test_an_unexpected_probe_outcome_fails_the_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exit status keys on any shortfall, not only on a non-zero metric."""
+    from jobsearch import state_home
+
+    broken = ProbeCheck(
+        probe="a probe that came out the wrong way",
+        expected="refused",
+        outcome="resolved",
+        inside_a_repo=False,
+        detail="<tmp>/clone/state/profiles",
+    )
+    monkeypatch.setattr(state_home, "probe_refusals", lambda: [broken])
+    measured = state_home.measure(_REPO_ROOT)
+    assert measured["state_paths_inside_a_repo"] == 0
+    assert measured["probes_unexpected"] == 1
+    assert measured["shortfalls"]
+    assert state_home._main(["state_home", "--check"]) == 1

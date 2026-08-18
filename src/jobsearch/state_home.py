@@ -52,7 +52,7 @@ import subprocess
 import sys
 import tempfile
 import tokenize
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -168,6 +168,40 @@ def enclosing_work_tree(path: Path) -> Path | None:
     return None
 
 
+def ensure_outside_a_work_tree(
+    path: Path | str,
+    *,
+    source: str = "the given path",
+    env: Mapping[str, str] | None = None,
+    dev: bool | None = None,
+) -> Path:
+    """`path`, expanded and resolved — or `StateHomeRefused` if it is in a repository.
+
+    The containment rule as a function any caller can apply, not a step buried
+    inside `candidate_root`. It exists because a store root does not only arrive
+    from the environment: every step checkpoint takes `--input-dir`, and a root
+    handed in on a command line was reaching `ProfileStore` unchecked, so
+    `--input-dir ./profiles` wrote a candidate's session file into the clone
+    without anybody passing `--dev`. A guarantee that holds for one of the two
+    ways in is not a guarantee — the escape has to be the *only* way past, from
+    whichever direction the path came.
+    """
+    env = os.environ if env is None else env
+    resolved = Path(path).expanduser().resolve()
+    if dev if dev is not None else dev_mode(env):
+        return resolved
+
+    work_tree = enclosing_work_tree(resolved)
+    if work_tree is not None:
+        raise StateHomeRefused(
+            f"{source} resolves to {resolved}, which is inside the git work tree at "
+            f"{work_tree} — candidate state never lives in a repository "
+            f"(docs/distribution.md §2). Point it outside the work tree, or pass --dev "
+            f"({DEV_ENV}=1) if you are working on the tool itself."
+        )
+    return resolved
+
+
 def candidate_root(
     *,
     env: Mapping[str, str] | None = None,
@@ -192,19 +226,7 @@ def candidate_root(
             base = Path(home) if home else Path("~")
             root, source = base / f".{APP_DIR}", "HOME"
 
-    resolved = root.expanduser().resolve()
-    if dev if dev is not None else dev_mode(env):
-        return resolved
-
-    work_tree = enclosing_work_tree(resolved)
-    if work_tree is not None:
-        raise StateHomeRefused(
-            f"{source} resolves to {resolved}, which is inside the git work tree at "
-            f"{work_tree} — candidate state never lives in a repository "
-            f"(docs/distribution.md §2). Point {HOME_ENV} outside it, or pass --dev "
-            f"({DEV_ENV}=1) if you are working on the tool itself."
-        )
-    return resolved
+    return ensure_outside_a_work_tree(root, source=source, env=env, dev=dev)
 
 
 def profiles_root(
@@ -257,52 +279,89 @@ def probe_refusals() -> list[ProbeCheck]:
         outside = base / "elsewhere"
         outside.mkdir()
 
-        cases: list[tuple[str, dict[str, str], str]] = [
+        def from_env(env: dict[str, str]) -> Path:
+            return profiles_root(env=env)
+
+        def explicit(root: Path) -> Callable[[dict[str, str]], Path]:
+            """A root handed in on a command line, the way `--input-dir` hands one in."""
+
+            def resolve(env: dict[str, str]) -> Path:
+                return ensure_outside_a_work_tree(root, source="--input-dir", env=env)
+
+            return resolve
+
+        cases: list[tuple[str, dict[str, str], str, Callable[[dict[str, str]], Path]]] = [
             (
                 f"{HOME_ENV} at the work tree root",
                 {HOME_ENV: str(work_tree)},
                 "refused",
+                from_env,
             ),
             (
                 f"{HOME_ENV} deep inside the work tree",
                 {HOME_ENV: str(work_tree / "deep" / "nested" / "state")},
                 "refused",
+                from_env,
             ),
             (
                 f"{XDG_ENV} inside the work tree",
                 {XDG_ENV: str(work_tree / "share")},
                 "refused",
+                from_env,
             ),
             (
                 "HOME inside the work tree, no variable set",
                 {"HOME": str(work_tree)},
                 "refused",
+                from_env,
             ),
             (
                 f"{HOME_ENV} outside any work tree",
                 {HOME_ENV: str(outside / "store")},
                 "resolved",
+                from_env,
             ),
             (
                 f"{DEV_ENV}=1 inside the work tree — the documented escape",
                 {HOME_ENV: str(work_tree / "state"), DEV_ENV: "1"},
                 "resolved",
+                from_env,
             ),
             (
                 f"{DEV_ENV}=0 inside the work tree — not an escape",
                 {HOME_ENV: str(work_tree / "state"), DEV_ENV: "0"},
                 "refused",
+                from_env,
             ),
             (
                 f"{DEV_ENV} empty inside the work tree — not an escape",
                 {HOME_ENV: str(work_tree / "state"), DEV_ENV: ""},
                 "refused",
+                from_env,
+            ),
+            (
+                "an explicit --input-dir inside the work tree",
+                {},
+                "refused",
+                explicit(work_tree / "profiles"),
+            ),
+            (
+                f"an explicit --input-dir inside the work tree with {DEV_ENV}=1",
+                {DEV_ENV: "1"},
+                "resolved",
+                explicit(work_tree / "profiles"),
+            ),
+            (
+                "an explicit --input-dir outside any work tree",
+                {},
+                "resolved",
+                explicit(outside / "store" / "profiles"),
             ),
         ]
 
-        for name, env, expected in cases:
+        for name, env, expected, resolve in cases:
             try:
-                resolved = profiles_root(env=env)
+                resolved = resolve(env)
             except StateHomeRefused as exc:
                 checks.append(
                     ProbeCheck(
@@ -324,7 +383,12 @@ def probe_refusals() -> list[ProbeCheck]:
                     # inside a work tree, so it is reported without being
                     # counted against the gate — every other resolution that
                     # lands in a repository is exactly what the gate forbids.
-                    inside_a_repo=inside and DEV_ENV not in env,
+                    # Read with `dev_mode`, never as "the variable is present":
+                    # presence would let `INTEGRAL_DEV=0` — a value this probe
+                    # set explicitly declares is *not* an escape — excuse a
+                    # regression from being counted, and the gate would report
+                    # zero while a probe leaked.
+                    inside_a_repo=inside and not dev_mode(env),
                     detail=stable(str(resolved)),
                 )
             )
@@ -365,6 +429,17 @@ def check_call_site(path: Path, repo_root: Path = _REPO_ROOT) -> SiteCheck:
         reasons.append(
             "does not resolve its store root through jobsearch.state_home "
             "(profiles_root / candidate_root)"
+        )
+
+    # A site that also accepts a root from its caller has a second way in, and
+    # the audit has to see it guarded. Requiring only "resolves through the
+    # resolver" passed all thirteen checkpoints while every one of them still
+    # took `--input-dir` as a bare path — the gate read 0 over a hole.
+    takes_an_explicit_root = "--input-dir" in text
+    if takes_an_explicit_root and "ensure_outside_a_work_tree" not in text:
+        reasons.append(
+            "accepts an explicit --input-dir without passing it through "
+            "ensure_outside_a_work_tree, so a root inside a work tree is unguarded"
         )
 
     try:
@@ -481,6 +556,11 @@ def measure(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
         "state_paths_inside_a_repo": len(leaked) + len(offending_sites),
         "paths_checked": len(probes) + len(sites),
         "probes_run": len(probes),
+        # Counted and reported separately, never folded into the metric above:
+        # a probe that refused where it should have resolved is a broken gate,
+        # but it is not a path inside a repository, and a number that means two
+        # things is a number nobody can act on. `_main` fails on either.
+        "probes_unexpected": len(unexpected),
         "call_sites_checked": len(sites),
         "shortfalls": shortfalls,
         "probes": [probe.model_dump(mode="json") for probe in probes],
@@ -548,7 +628,11 @@ def _main(argv: list[str]) -> int:
         return 3
     for shortfall in measured["shortfalls"]:
         print(f"{shortfall['where']}: {'; '.join(shortfall['reasons'])}", file=sys.stderr)
-    return 1 if measured["state_paths_inside_a_repo"] else 0
+    # Any shortfall fails, not only a non-zero metric. A probe that came out the
+    # wrong way is recorded in `shortfalls` without moving
+    # `state_paths_inside_a_repo`, so keying the exit status to the metric alone
+    # let a demonstrably broken gate exit 0.
+    return 1 if measured["shortfalls"] else 0
 
 
 if __name__ == "__main__":

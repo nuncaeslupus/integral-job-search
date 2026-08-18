@@ -41,7 +41,11 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 from jobsearch.identity import IdentityError, ProfileStore  # noqa: E402
 from jobsearch.process_spec import Step, StepList, load_steps  # noqa: E402
 from jobsearch.session import SessionError, SessionStore  # noqa: E402
-from jobsearch.state_home import StateHomeRefused, profiles_root  # noqa: E402
+from jobsearch.state_home import (  # noqa: E402
+    StateHomeRefused,
+    ensure_outside_a_work_tree,
+    profiles_root,
+)
 from jobsearch.step_runtime import (  # noqa: E402
     ProfileView,
     is_finished,
@@ -122,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=(
             "root of the profiles tree (default: the store resolved from "
-            "$INTEGRAL_HOME — never a path inside the clone, T51)"
+            "$INTEGRAL_HOME). A path inside a git work tree is refused here too, "
+            "with --dev as the only way past (T51)"
         ),
     )
     parser.add_argument(
@@ -132,11 +137,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    dev = True if args.dev else None
     try:
+        # An explicitly supplied root goes through the same containment rule as
+        # a resolved one. Taking `--input-dir` as a bare `Path` let a profiles
+        # directory inside the clone through without `--dev`, which is the one
+        # thing T51 exists to stop — an escape that only guards one of the two
+        # ways in is not an escape.
         root = (
-            Path(args.input_dir)
+            ensure_outside_a_work_tree(args.input_dir, source="--input-dir", dev=dev)
             if args.input_dir
-            else profiles_root(dev=True if args.dev else None)
+            else profiles_root(dev=dev)
         )
     except StateHomeRefused as exc:
         print(f"checkpoint could not be computed: {exc}", file=sys.stderr)

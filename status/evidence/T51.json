@@ -1,7 +1,8 @@
 {
   "state_paths_inside_a_repo": 0,
-  "paths_checked": 22,
-  "probes_run": 8,
+  "paths_checked": 25,
+  "probes_run": 11,
+  "probes_unexpected": 0,
   "call_sites_checked": 14,
   "shortfalls": [],
   "probes": [
@@ -60,6 +61,27 @@
       "outcome": "refused",
       "inside_a_repo": false,
       "detail": "INTEGRAL_HOME resolves to <tmp>/clone/state, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "an explicit --input-dir inside the work tree",
+      "expected": "refused",
+      "outcome": "refused",
+      "inside_a_repo": false,
+      "detail": "--input-dir resolves to <tmp>/clone/profiles, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "an explicit --input-dir inside the work tree with INTEGRAL_DEV=1",
+      "expected": "resolved",
+      "outcome": "resolved",
+      "inside_a_repo": false,
+      "detail": "<tmp>/clone/profiles"
+    },
+    {
+      "probe": "an explicit --input-dir outside any work tree",
+      "expected": "resolved",
+      "outcome": "resolved",
+      "inside_a_repo": false,
+      "detail": "<tmp>/elsewhere/store/profiles"
     }
   ],
   "call_sites": [
