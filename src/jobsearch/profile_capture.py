@@ -34,25 +34,29 @@ a step id the JSON names that this module has not classified — or a
 classification for an id the JSON no longer has — is a **measured violation**,
 not a silent omission.
 
-**What is *not* mechanically derivable is whether a step's protocol puts free
-text about the candidate in front of a writer at all.** `status/spec-v2-steps.json`
-has no such field — `automatic` comes close (only "understanding" is `true`,
-i.e. has no candidate present) but says nothing about the twelve conversational
-steps, several of which (Ranking: *"No questions; this step presents"*;
-Identify: *"No evidence row is written for an unidentified session"*)
-structurally take no free text about the candidate despite being ordinary,
-`automatic: false` conversations. That distinction lives only in
-`status/spec-v2-steps.md`'s prose Protocol/Outputs sections, which are not
-machine-readable at this granularity. So `ACCEPTS_CANDIDATE_FREE_TEXT` below is
-the one hand-made judgement call in this module — exactly one boolean per step,
-each commented with the sentence of `spec-v2-steps.md` that settles it — and it
-is guarded, not trusted: `_classification_problems` fails loudly the moment its
-key set stops matching the live step list, which is the same "derived, not a
-silent list" guarantee `step_runtime.DETECTORS` gives `unknown_artefacts` for
-artefact presence rather than for text-acceptance. This is named here rather
-than hidden, per the payload: a checker that could not derive one part of its
-own denominator says so, instead of quietly pretending the whole thing came
-from the model.
+**Whether a step's protocol puts free text about the candidate in front of a
+writer at all is now declared in the model itself (S12).**
+`status/spec-v2-steps.json`'s `Step.accepts_candidate_free_text` answers it —
+`automatic` does not (only "understanding" is `true`, i.e. has no candidate
+present, but says nothing about the twelve conversational steps, several of
+which — Ranking: *"No questions; this step presents"*; Identify: *"No evidence
+row is written for an unidentified session"* — structurally take no free text
+about the candidate despite being ordinary, `automatic: false` conversations).
+
+Before S12 this module carried the judgement itself, as a hand-maintained
+`ACCEPTS_CANDIDATE_FREE_TEXT: dict[str, bool]`, one entry per step, each
+commented with the sentence of `spec-v2-steps.md` that settled it. That map is
+gone: `measure_coverage` and `_classification_problems` below now read
+`step.accepts_candidate_free_text` directly off the `StepList` `load_steps()`
+returns, and there is no local fallback for a step that leaves it undeclared —
+a module that read the model but kept a fallback map would not have moved
+anything. The field is optional (`None` = undeclared, never coerced to
+`False`) precisely so a new step can land without one: `None` is caught by
+name in `unclassified_free_text_steps` (this module's own S12 gate,
+`unclassified_free_text_steps == 0`) and in `_classification_problems`, both
+in the same "derived, not a silent list" shape `step_runtime.DETECTORS` gives
+`unknown_artefacts` for artefact presence — now checked against a schema field
+instead of a second Python file a step author had to remember to edit.
 
 **Which `True`-classified steps are actually *measured* is derived a third
 way — from what this module can drive, not from a step's own (possibly stale)
@@ -172,6 +176,10 @@ from jobsearch.question_bank import build_bank
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T28.json"
+# S12's own evidence file — `unclassified_free_text_steps`, over the live
+# model rather than T28's adversarial probe, so it can be read (and fails)
+# independently of whether the probe's throwaway tree even runs.
+DEFAULT_S12_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "S12.json"
 
 SurfaceStatus = Literal["captured", "dropped", "no_free_text", "pending_implementation"]
 
@@ -181,77 +189,53 @@ class ProfileCaptureError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# the one hand-made judgement call — see the module docstring's derivation note
-#
-# Every entry is commented with the `status/spec-v2-steps.md` sentence that
-# settles it; `_classification_problems` fails loudly if this dict's key set
-# ever stops matching `load_steps()`'s, so it cannot silently go stale.
+# S12: the declaration itself now lives on the model — see the module
+# docstring's derivation note. `unclassified_free_text_steps` and
+# `_classification_problems` below are the two checks that used to compare
+# `ACCEPTS_CANDIDATE_FREE_TEXT`'s key set against the live step list; now that
+# there is only one copy of the fact, they read `step.accepts_candidate_
+# free_text` straight off `StepList` instead.
 
-ACCEPTS_CANDIDATE_FREE_TEXT: dict[str, bool] = {
-    # Step 0: "No evidence row is written for an unidentified session." — the
-    # candidate's name is identity, never evidence.
-    "identify": False,
-    # Step 1: "`profile/evidence.jsonl` rows for everything said."
-    "intake": True,
-    # Step 2: CandidateTurn(action="state"/"confirm", text=...) — T41, shipped.
-    "constraints": True,
-    # Step 3: "A story bank of episodes" — T8/T27, shipped.
-    "history": True,
-    # Step 4: "ask... about the traits still below the floor... by asking for
-    # another situation" — T27's top-up loop, shipped.
-    "traits": True,
-    # Step 5: "Capture their words verbatim and extract afterwards."
-    "reactions": True,
-    # Step 6: "Forced pairwise choices... never sliders" — a structured pick
-    # between two packages, not free text.
-    "preferences": False,
-    # Step 7: automated fetch, plus a manual paste of an *advert's* text — not
-    # a claim about the candidate (see `jobsearch.offers`'s own docstring).
-    "sourcing": False,
-    # Step 8: `automatic: true` in the live step model — no candidate present.
-    "understanding": False,
-    # Step 9: "No questions; this step presents."
-    "ranking": False,
-    # Step 10: "Capture their words... a rejection reason recorded here
-    # triggers a weight refit." Reachable today via `lifecycle.transition`'s
-    # `reason` (S5, shipped) — see `capture_offer_decision_reason`.
-    "feedback": True,
-    # Step 11: "show the candidate what was chosen and what was left out" /
-    # personal details collected here, by the candidate's own words.
-    "application": True,
-    # Step 12: "record what actually happened... what they wish they had
-    # said" — "Evidence rows linking each lesson to a dimension or episode."
-    "interview_log": True,
-}
+
+def unclassified_free_text_steps(steps: StepList) -> list[str]:
+    """Step ids in the live model with no free-text declaration — S12's own
+    gate metric (`unclassified_free_text_steps == 0`).
+
+    `None` is "not yet decided", never coerced to "decided no" (that is
+    `False`, a real answer this function does not report): a new step landing
+    with the field unset must show up here by name, the same way an
+    undeclared step used to show up as a missing `ACCEPTS_CANDIDATE_FREE_TEXT`
+    entry — the judgement moved into the schema, it did not disappear.
+    """
+    return sorted(step.id for step in steps.steps if step.accepts_candidate_free_text is None)
 
 
 def _classification_problems(steps: StepList) -> list[str]:
-    """Where `ACCEPTS_CANDIDATE_FREE_TEXT`/`SURFACE_DRIVERS` disagree with the
-    live step model or with each other — see the module docstring.
+    """Where the live model's declarations / `SURFACE_DRIVERS` disagree with
+    each other — see the module docstring.
 
-    Four checks, all symmetric-difference comparisons the same shape
+    Three checks, the same symmetric-difference shape
     `step_runtime.unknown_artefacts` runs for its own table: a step the JSON
-    names with no classification here, a classification for a step the JSON no
-    longer has, a driver registered for a step classified `False` (a driver
-    implies free text is accepted — the classification would be self-
+    names with no free-text declaration at all (`unclassified_free_text_
+    steps`, folded in here too so T28's own gate — not just S12's — notices
+    it), a driver registered for a step declared `False` or left undeclared (a
+    driver implies free text is accepted — the declaration would be self-
     contradicting), and a driver for a step id the JSON does not name at all.
     """
     live_ids = {step.id for step in steps.steps}
-    classified_ids = set(ACCEPTS_CANDIDATE_FREE_TEXT)
-    problems: list[str] = []
-    for missing in sorted(live_ids - classified_ids):
-        problems.append(
-            f"{missing!r} is a step in {steps.source} with no ACCEPTS_CANDIDATE_FREE_TEXT entry"
-        )
-    for stale in sorted(classified_ids - live_ids):
-        problems.append(f"{stale!r} is classified here but is no longer a step in {steps.source}")
+    declared = {step.id: step.accepts_candidate_free_text for step in steps.steps}
+    problems: list[str] = [
+        f"{step_id!r} is a step in {steps.source} with no free-text declaration"
+        for step_id in unclassified_free_text_steps(steps)
+    ]
     for orphan in sorted(set(SURFACE_DRIVERS) - live_ids):
         problems.append(f"{orphan!r} has a driver registered but is not a step in {steps.source}")
     for contradiction in sorted(
-        step_id for step_id in SURFACE_DRIVERS if not ACCEPTS_CANDIDATE_FREE_TEXT.get(step_id)
+        step_id for step_id in SURFACE_DRIVERS if not declared.get(step_id)
     ):
         problems.append(
-            f"{contradiction!r} has a driver registered but is classified accepts_free_text=False"
+            f"{contradiction!r} has a driver registered but is not declared "
+            "accepts_candidate_free_text=True"
         )
     return problems
 
@@ -594,9 +578,9 @@ def measure_coverage(
     pending: list[str] = []
 
     for step in sorted(steps.steps, key=lambda s: s.n):
-        accepts = ACCEPTS_CANDIDATE_FREE_TEXT.get(step.id)
+        accepts = step.accepts_candidate_free_text
         if accepts is None:
-            continue  # already reported in `problems`
+            continue  # already reported in `problems` (or by the caller's own drivers)
         if not accepts:
             no_free_text.append(step.id)
             continue
@@ -1174,6 +1158,34 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+def measure_step_declarations(steps: StepList | None = None) -> dict[str, Any]:
+    """S12's gate reading: every step in the live model must declare whether
+    it takes candidate free text, from the model itself rather than a Python
+    map that could go stale.
+
+    Reads the already-validated `StepList` directly (never the raw JSON): a
+    step whose declaration is present but not a bool would already have
+    failed `load_steps()`, so there is nothing left for this function to
+    catch beyond "absent" (`None`) — the same load-raises / measure-reports
+    split every other gate in this module keeps.
+    """
+    steps = steps or load_steps()
+    unclassified = unclassified_free_text_steps(steps)
+    return {
+        "unclassified_free_text_steps": len(unclassified),
+        "unclassified_step_ids": unclassified,
+        "step_count": steps.step_count,
+    }
+
+
+def write_step_declaration_evidence(evidence: Path = DEFAULT_S12_EVIDENCE_PATH) -> dict[str, Any]:
+    """Measure S12's gate and record it."""
+    measured = measure_step_declarations()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 _WRITE_EVIDENCE_DEFAULT = "__default__"
 # Sentinel, not a real path: `--subject-gate` changes which file "the
 # default" means (`D8.json` instead of `T28.json`), and a fixed string
@@ -1183,12 +1195,16 @@ _WRITE_EVIDENCE_DEFAULT = "__default__"
 
 def _main(argv: list[str]) -> int:
     """`python -m jobsearch.profile_capture [--check] [--write-evidence [PATH]]`
-    -> T28's gate (`profile_capture_coverage`).
+    -> T28's gate (`profile_capture_coverage`), and — every non `--subject-gate`
+    run — S12's gate (`unclassified_free_text_steps`) alongside it.
 
     `--subject-gate` measures D-8's gate instead (`captures_without_a_
     subject`), and `--write-evidence`'s own default path switches with it —
     the same one-flag-picks-a-second-gate-over-the-same-module shape
-    `jobsearch.profile`'s `--constraint-survival` already uses for D-6.
+    `jobsearch.profile`'s `--constraint-survival` already uses for D-6. S12's
+    evidence always goes to its own default path (`status/evidence/S12.json`)
+    regardless of `--write-evidence PATH`, the same way D-8's own path is
+    fixed under `--subject-gate` — a custom PATH only ever redirects T28's file.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1242,7 +1258,15 @@ def _main(argv: list[str]) -> int:
         return 1 if violations else 0
 
     measured = measure() if args.check else write_evidence(write_path)
+    # S12: the step model's own free-text declarations, measured (and — unless
+    # --check — recorded to status/evidence/S12.json) alongside T28's probe on
+    # every plain `--write-evidence` run, so one invocation keeps both gates
+    # current without a second flag.
+    declarations = (
+        measure_step_declarations() if args.check else write_step_declaration_evidence()
+    )
     print(json.dumps(measured, ensure_ascii=False))
+    print(json.dumps(declarations, ensure_ascii=False))
 
     if measured["checks_run"] < MINIMUM_CHECKS:
         print(
@@ -1259,6 +1283,11 @@ def _main(argv: list[str]) -> int:
         violations.append(
             f"profile_capture_coverage = {measured['profile_capture_coverage']} (want 1.0) — "
             f"dropped: {measured['dropped_surfaces']}"
+        )
+    if declarations["unclassified_free_text_steps"] != 0:
+        violations.append(
+            f"unclassified_free_text_steps = {declarations['unclassified_free_text_steps']} "
+            f"(want 0) — {declarations['unclassified_step_ids']}"
         )
     for violation in violations:
         print(violation, file=sys.stderr)
