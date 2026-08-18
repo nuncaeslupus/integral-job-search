@@ -240,7 +240,7 @@
         "metric": "offer_schema_violations",
         "op": "==",
         "threshold": 0,
-        "state": "not_implemented",
+        "state": "implemented",
         "task": "T11"
       },
       "reentry_events": [

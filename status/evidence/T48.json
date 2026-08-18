@@ -2,7 +2,8 @@
   "step_gate_state_drift": 0,
   "steps_read": 13,
   "implemented": [
-    "identify"
+    "identify",
+    "sourcing"
   ],
   "not_implemented": [
     "application",
@@ -14,7 +15,6 @@
     "preferences",
     "ranking",
     "reactions",
-    "sourcing",
     "traits",
     "understanding"
   ],
