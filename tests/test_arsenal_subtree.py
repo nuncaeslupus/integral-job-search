@@ -16,6 +16,7 @@ against the real repository can only be tested on a state that already passes.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -138,6 +139,35 @@ def test_a_missing_subtree_is_an_error_not_a_pass(tmp_path: Path) -> None:
     assert code == 2
 
 
+def test_a_hand_added_bundle_file_upstream_never_heard_of_is_caught(tmp_path: Path) -> None:
+    """`compare()` used to walk only source -> bundle, so a script hand-added to
+    `claude-arsenal/bin/` (or one upstream deleted but that still lingers here)
+    was invisible: every forward comparison passes, and the file keeps running
+    forever, silently dropped by the next real upgrade. The reverse walk
+    (bundle -> source) is what catches it."""
+    root = _fixture_repo(tmp_path)
+    (root / BUNDLE / "bin" / "rogue.sh").write_text("#!/bin/sh\necho rogue\n", "utf-8")
+    _, measured = _run(root)
+    assert measured["extra_in_bundle"] == ["bin/rogue.sh"]
+    assert measured["vendored_files_diverging_from_subtree"] == 1
+
+
+def test_host_owned_bundle_files_are_not_flagged_as_extra(tmp_path: Path) -> None:
+    """`claude-arsenal/queue/`, `session/`, and `project/` legitimately hold
+    dozens of files upstream has never heard of — the task ledger, live
+    handover, workspace plans. The reverse walk must not treat host-owned
+    content as a stray/hand-added file, or the check is permanently red on
+    every real repository."""
+    root = _fixture_repo(tmp_path)
+    for name in HOST_OWNED:
+        owned_dir = root / BUNDLE / name
+        owned_dir.mkdir(parents=True, exist_ok=True)
+        (owned_dir / "host-file.txt").write_text("host state\n", "utf-8")
+    _, measured = _run(root)
+    assert measured["extra_in_bundle"] == []
+    assert measured["vendored_files_diverging_from_subtree"] == 0
+
+
 def test_the_makefile_no_longer_pins_a_bare_sha() -> None:
     """`ARSENAL_SHA` existed because the old target ran upstream code straight
     from a fetched checkout, and a movable tag could not vouch for it. The
@@ -155,6 +185,85 @@ def test_ci_runs_the_subtree_check() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     assert "\nverify-subtree:" in makefile
     assert "verify-subtree" in makefile.split("ci:", 1)[1].split("\n", 1)[0]
+
+
+def _recipe(makefile: str, target: str) -> str:
+    """The tab-indented recipe lines that follow a `target:` line, joined."""
+    lines = makefile.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"{target}:"))
+    recipe_lines: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.startswith("\t"):
+            recipe_lines.append(line)
+        else:
+            break
+    return "\n".join(recipe_lines)
+
+
+def test_arsenal_upgrade_reassembles_the_bundle_before_verifying() -> None:
+    """`update-skills` only rebuilds `.claude/skills/` — it never touches
+    `claude-arsenal/`, which is exactly what `verify-subtree` then compares
+    against. Without an explicit bundle-reassembly step, ANY upstream change to
+    a bundle asset makes the advertised pull-reassemble-verify sequence fail at
+    the verify step with the user having done nothing wrong. `update-skills`
+    and `verify-subtree` alone are not enough — the reassembly step itself must
+    run, and it must run after the pull and before the verify."""
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    recipe = _recipe(makefile, "arsenal-upgrade")
+    pull_at = recipe.index("git subtree pull")
+    # Not merely "does update-skills or verify-subtree appear" (both already
+    # did on the broken Makefile) — a THIRD step, distinct from both, that
+    # actually reassembles claude-arsenal/, positioned between the pull and
+    # the verify.
+    assert "update-skills" in recipe
+    reassemble_at = recipe.index("assemble-bundle")
+    verify_at = recipe.index("verify-subtree")
+    assert pull_at < reassemble_at < verify_at
+    # The reassembly target itself must run the real bundle-refresh logic
+    # (init.py's own refresh, not a re-implementation of it) — otherwise the
+    # name could exist while doing nothing.
+    assemble_recipe = _recipe(makefile, "assemble-bundle")
+    assert "init.py" in assemble_recipe
+    assert "--repo-path" in assemble_recipe
+
+
+def test_a_hand_copied_directory_is_not_accepted_as_a_subtree(tmp_path: Path) -> None:
+    """`_fixture_repo` is exactly the failure `subtree_is_real`'s own docstring
+    claims to catch: a plain `git init` plus an ordinary commit, with no real
+    `git subtree add/pull --squash` anywhere in its history. The old check
+    accepted any commit that merely touched the prefix path, so this fixture
+    passed as a "real" subtree — proving the check did not do what it claimed.
+    A hand-copied directory must read as not-a-subtree."""
+    root = _fixture_repo(tmp_path)
+    _, measured = _run(root)
+    assert measured["subtree_recorded_in_history"] is False
+
+
+def test_ci_gives_the_subtree_job_the_history_the_check_needs() -> None:
+    """The one place the real-subtree check must run is the one place it would
+    silently not.
+
+    `subtree_is_real` proves a subtree by finding a `git-subtree-dir:` trailer
+    in a commit message, and reports "cannot tell" — a skip, not a failure —
+    when the checkout is shallow, because failing there would make the check
+    permanently red in any shallow clone for a reason unrelated to the
+    repository's state. `actions/checkout` clones at depth 1 by default, which
+    is shallow: confirmed by cloning this repository `--depth 1`, where
+    `git rev-parse --is-shallow-repository` reports true and the trailer search
+    returns zero commits.
+
+    So without `fetch-depth: 0` on that job, CI takes the skip branch on every
+    run and the check is inert exactly where it is supposed to bite. Pinned
+    here because the failure is invisible: the job stays green either way.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    # Slice out just this job: everything from its key to the next job key
+    # (two-space indent, at the start of a line). Asserting against the whole
+    # file would pass on a `fetch-depth: 0` belonging to some other job.
+    rest = workflow.split("\n  verify-subtree:", 1)
+    assert len(rest) == 2, "no verify-subtree job in the workflow"
+    job = re.split(r"\n  [a-z][\w-]*:", rest[1], maxsplit=1)[0]
+    assert "fetch-depth: 0" in job, "verify-subtree needs full history or its check goes inert"
 
 
 def test_the_verifier_exits_zero_on_the_real_repository() -> None:

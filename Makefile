@@ -1,4 +1,4 @@
-.PHONY: help sync build lint format test gate evidence verify-gates verify-subtree ci arsenal-remote arsenal-upgrade reader reader-process reader-steps clean update-skills
+.PHONY: help sync build lint format test gate evidence verify-gates verify-subtree ci arsenal-remote arsenal-upgrade reader reader-process reader-steps clean update-skills assemble-bundle
 
 ARSENAL_REPO    ?= https://github.com/nuncaeslupus/claude-arsenal.git
 ARSENAL_REF     ?= v0.23.1  # pin to a tag — upgrade deliberately
@@ -122,11 +122,32 @@ update-skills:  ## assemble .claude/skills from the vendored subtree (for CC web
 	bash $(ARSENAL_PREFIX)/scripts/vendor-skills.sh \
 		--src $(ARSENAL_PREFIX) --dest .claude/skills --plugins $(ARSENAL_PLUGINS)
 
-# Upgrading is a subtree pull followed by a re-assembly, and the verifier below
-# then proves the assembled bundle is a function of the subtree rather than
-# something hand-edited since.
+# `update-skills` only rebuilds .claude/skills/ — that is what its name and its
+# help text both say, and it is the only thing CC-web needs. It is deliberately
+# NOT the step that touches claude-arsenal/: that name would then lie about
+# what it does, and a target with two unrelated jobs is a target nobody can
+# reason about from its name alone.
+#
+# claude-arsenal/ is a separate copy, assembled from the *bundle* half of the
+# skill — .claude/skills/init/assets/ — which update-skills just refreshed
+# from the subtree. Re-running init.py's own refresh logic is what actually
+# reassembles it; this is the same invocation the session-start protocol
+# already runs at the top of every session (see AGENTS.md step 0b), so
+# `arsenal-upgrade` performs no fewer steps by hand than a live session would.
+assemble-bundle:  ## reassemble claude-arsenal/ from the freshly-pulled subtree
+	python3 .claude/skills/init/scripts/init.py --repo-path . --silent
+
+# Upgrading is a subtree pull, a re-assembly of both halves the pull feeds
+# (.claude/skills/ via update-skills, claude-arsenal/ via assemble-bundle),
+# and only then the verifier — which proves the assembled bundle is a
+# function of the subtree rather than something hand-edited since. Skipping
+# assemble-bundle here was the bug: verify-subtree compares claude-arsenal/
+# against the subtree, but nothing between the pull and the verify ever
+# rebuilt claude-arsenal/ — so any upstream change to a bundle asset failed
+# the verify step through no fault of the user.
 arsenal-upgrade:  ## pull a new claude-arsenal release into the subtree (REF=v0.x.y)
 	@test -n "$(REF)" || { echo "usage: make arsenal-upgrade REF=v0.24.0" >&2; exit 1; }
 	git subtree pull --prefix=$(ARSENAL_PREFIX) arsenal $(REF) --squash
 	$(MAKE) --no-print-directory update-skills
+	$(MAKE) --no-print-directory assemble-bundle
 	$(MAKE) --no-print-directory verify-subtree

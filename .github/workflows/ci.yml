@@ -86,6 +86,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, unlike every other job here. The verifier proves the
+          # prefix is a real subtree by finding the `git-subtree-dir:` trailer
+          # in a commit message, and checkout's default depth-1 clone contains
+          # no such commit. On a shallow checkout the verifier reports "cannot
+          # tell" and skips that sub-check rather than failing — correct
+          # behaviour for a developer's shallow clone, and exactly the wrong
+          # thing to let happen in CI, where it would leave the check silently
+          # inert in the one place it is supposed to run.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true

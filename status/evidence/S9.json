@@ -3,6 +3,7 @@
   "assets_compared": 26,
   "diverging": [],
   "missing_from_bundle": [],
+  "extra_in_bundle": [],
   "host_owned_inside_subtree": [],
   "subtree_recorded_in_history": true,
   "excluded": [
