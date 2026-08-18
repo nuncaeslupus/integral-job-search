@@ -1,0 +1,14 @@
+<!--
+  The "after" half of a recorded before/after pair (`test_a_site_markup_change_is_a_single_field_edit`
+  in tests/test_connectors.py). Everything is identical to
+  examplejobs_detail_before.html except one class rename: `.job-description`
+  became `.job-body`. Fixing the connector for this change means editing
+  exactly the `text` selector in connectors/examplejobs_es.yaml — nothing
+  else on the page moved.
+-->
+<html><body>
+<h1 class="posting-title">Backend Engineer (Python)</h1>
+<div class="company-name">Acme SL</div>
+<div class="job-location">Barcelona</div>
+<div class="job-body">Build and operate our payments API. Python, remote-friendly.</div>
+</body></html>
