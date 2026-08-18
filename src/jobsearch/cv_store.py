@@ -262,7 +262,7 @@ from xml.sax.saxutils import escape as _xml_escape
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from jobsearch.candidate import LANGUAGE_PATTERN, Level
-from jobsearch.decline import DeclineLedger
+from jobsearch.decline import DeclineError, DeclineLedger, Entry
 from jobsearch.identity import IdentityError, ProfileStore, create_profile
 from jobsearch.profile import EVIDENCE_ID, EvidenceLog
 
@@ -906,6 +906,35 @@ def add_document_entry(
     return _with_list_entry(master, section, entry)
 
 
+def _declines_or_fail(store: ProfileStore, subject: str) -> list[Entry]:
+    """`DeclineLedger.declines`, with its read failure kept inside this module's contract.
+
+    `DeclineLedger.entries` raises `DeclineError` when a line of
+    `session/declines.jsonl` is not a ledger entry, and `DeclineError` is a
+    plain `Exception` — not a `CVStoreError`. Called bare, it would escape
+    `add_conversation_entry` and `set_conversation_scalar` uncaught, past the
+    one discipline their docstrings promise: that a caller wrapping the call
+    in `except CVStoreError` needs no other handling to survive a submission
+    that cannot proceed. A corrupt ledger is exactly such a submission, so it
+    is translated here rather than allowed to break the promise.
+
+    Translated, not swallowed. The write stays fail-closed: a ledger that
+    cannot be read is a ledger that cannot be shown to permit this subject,
+    and writing anyway would record precisely the answer T40 exists to keep
+    out — on the evidence log, which is append-only and has no rollback. The
+    original `DeclineError` is chained as `__cause__` so the malformed line
+    number it names survives into the traceback.
+    """
+    try:
+        return DeclineLedger(store).declines(subject)
+    except DeclineError as exc:
+        raise CVStoreError(
+            f"cannot check whether {subject!r} was declined: the decline ledger is unreadable "
+            f"({exc}) — refusing the conversational write rather than recording a subject "
+            "the candidate may have declined"
+        ) from exc
+
+
 def add_conversation_entry(
     store: ProfileStore,
     master: CVMaster,
@@ -980,7 +1009,7 @@ def add_conversation_entry(
         raise CVStoreError(
             "add_conversation_entry needs non-blank `said` text to provenance the entry"
         )
-    declined = DeclineLedger(store).declines(section)
+    declined = _declines_or_fail(store, section)
     if declined:
         raise DeclinedSubjectError(
             section,
@@ -1027,7 +1056,7 @@ def set_conversation_scalar(
         raise CVStoreError(
             "set_conversation_scalar needs non-blank `said` text to provenance the field"
         )
-    declined = DeclineLedger(store).declines(field)
+    declined = _declines_or_fail(store, field)
     if declined:
         raise DeclinedSubjectError(
             field,

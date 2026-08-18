@@ -54,7 +54,7 @@ from jobsearch.cv_store import (
     write_evidence,
     write_master,
 )
-from jobsearch.decline import DeclineLedger
+from jobsearch.decline import DeclineError, DeclineLedger
 from jobsearch.identity import ProfileStore, create_profile
 from jobsearch.profile import EvidenceLog
 
@@ -443,6 +443,65 @@ def test_a_declined_subject_is_not_written_by_the_conversational_path(
         )
 
     assert list(EvidenceLog(store).rows()) == []
+
+
+def test_an_unreadable_decline_ledger_refuses_the_write_as_a_cv_store_error(
+    store: ProfileStore,
+) -> None:
+    """A corrupt `declines.jsonl` must not escape the documented contract, and
+    must not let the write through.
+
+    `DeclineLedger.entries` raises `DeclineError` on a line that is not a
+    ledger entry, and `DeclineError` is a plain `Exception` — not a
+    `CVStoreError`. Both writers promise callers that `except CVStoreError` is
+    enough to survive any submission they cannot honour, so an untranslated
+    `DeclineError` would sail past a caller that did exactly what the
+    docstring told it to do.
+
+    Fail-closed is the half that matters more: a ledger that cannot be read
+    cannot show the subject is *permitted*, and writing anyway would file the
+    very answer T40 exists to keep out — onto an append-only log with no
+    rollback. So the assertion here is not only the exception type but the
+    empty log after it.
+    """
+    ledger_path = DeclineLedger(store).path
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger_path.write_text("{not json at all\n", encoding="utf-8")
+
+    with pytest.raises(CVStoreError) as entry_failure:
+        add_conversation_entry(
+            store,
+            CVMaster(),
+            "experience",
+            {"title": "Warehouse Team Lead", "organisation": "Northgate Logistics"},
+            said="I ran the night shift at Northgate Logistics for two years.",
+            recorded_at="2026-08-18T09:00:30Z",
+        )
+    assert isinstance(entry_failure.value.__cause__, DeclineError)
+    assert list(EvidenceLog(store).rows()) == []
+
+    with pytest.raises(CVStoreError) as scalar_failure:
+        set_conversation_scalar(
+            store,
+            CVMaster(),
+            "headline",
+            said="Ten years in logistics, most of it on nights.",
+            recorded_at="2026-08-18T09:01:00Z",
+        )
+    assert isinstance(scalar_failure.value.__cause__, DeclineError)
+    assert list(EvidenceLog(store).rows()) == []
+
+    # And a readable ledger still writes, so the guard above is refusing the
+    # unreadable ledger rather than refusing everything.
+    ledger_path.write_text("", encoding="utf-8")
+    set_conversation_scalar(
+        store,
+        CVMaster(),
+        "headline",
+        said="Ten years in logistics, most of it on nights.",
+        recorded_at="2026-08-18T09:01:00Z",
+    )
+    assert len(list(EvidenceLog(store).rows())) == 1
 
 
 def test_a_reopened_decline_lets_the_subject_be_recorded_again(store: ProfileStore) -> None:
