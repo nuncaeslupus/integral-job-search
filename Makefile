@@ -1,4 +1,4 @@
-.PHONY: help sync build lint format test gate reader reader-process reader-steps clean update-skills
+.PHONY: help sync build lint format test gate evidence verify-gates ci arsenal-remote reader reader-process reader-steps clean update-skills
 
 ARSENAL_REPO    ?= https://github.com/nuncaeslupus/claude-arsenal.git
 ARSENAL_REF     ?= v0.23.1  # pin to a tag — upgrade deliberately
@@ -44,6 +44,30 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 	echo "lint_typecheck_exit_code = $$rc  -> status/evidence/T1.json"; \
 	exit $$rc
 
+# Every module that owns a gate writes its own evidence file. Regenerating them
+# all and refusing any diff is what keeps a committed number honest: evidence
+# is measured once, at release, and nothing afterwards notices when a later
+# commit changes what the measurement would now say. The module list is
+# derived, never listed here — a hardcoded list silently stops covering the
+# next module somebody adds, which is the failure this target exists to catch.
+evidence:  ## regenerate every module's gate evidence and fail on any drift
+	@for m in $$(grep -l '^def _main' src/jobsearch/*.py | xargs -n1 basename | sed 's/\.py$$//'); do \
+		printf '  %-18s ' "$$m"; \
+		uv run python -m jobsearch.$$m >/dev/null || { echo "GATE FAILED"; exit 1; }; \
+		echo ok; \
+	done
+	@git diff --exit-code --stat status/evidence/ \
+		|| { echo "evidence: committed evidence does not match what the code measures now" >&2; exit 1; }
+	@echo "evidence: no drift"
+
+# The release path runs a task's gate once, the minute it is released. This
+# asserts every task the ledger calls done or merged can still show the
+# measurement its status claims — the same hole, reopened by time.
+verify-gates:  ## assert every done/merged task's declared gate still holds
+	uv run python tools/verify_gates.py
+
+ci: lint test evidence verify-gates  ## everything CI runs, in CI's order
+
 # The readers are generated but committed, so a spec edit without a regenerate
 # leaves a reviewer annotating text that has changed underneath them — and
 # nothing fails. `test_regenerating_the_reader_produces_no_diff` catches it;
@@ -67,6 +91,22 @@ reader-steps:  ## regenerate the step-spec reader only
 clean:  ## remove build and tool caches
 	rm -rf dist build .pytest_cache .mypy_cache .ruff_cache *.egg-info
 	find . -type d -name __pycache__ -not -path './.git/*' -exec rm -rf {} +
+
+# A git remote is local config, not repository content, so a fresh clone has no
+# 'arsenal' remote and claude-arsenal/bin/check_update.sh reports itself INERT
+# — it has nothing to compare the installed bundle against. This is the one
+# line that wires it up; run it once per clone.
+#
+# Note this is NOT the subtree the bundle would ideally be. `git subtree` maps
+# a prefix onto the upstream repository *root*, and the bundle upstream lives
+# at plugins/core/skills/init/assets/ — so a subtree at claude-arsenal/ would
+# import the whole marketplace repo, not the bundle layout the session protocol
+# calls (claude-arsenal/bin/*.sh). See the queue task for the conversion plan.
+arsenal-remote:  ## wire up the 'arsenal' remote so check_update.sh can compare versions
+	@git remote get-url arsenal >/dev/null 2>&1 \
+		|| git remote add arsenal $(ARSENAL_REPO)
+	@git fetch --tags arsenal
+	@bash claude-arsenal/bin/check_update.sh
 
 update-skills:  ## vendor claude-arsenal skills into .claude/skills (for CC web)
 	@tmp=$$(mktemp -d); trap 'rm -rf $$tmp' EXIT; \

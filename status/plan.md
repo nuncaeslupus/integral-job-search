@@ -298,6 +298,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | S2 | One specification per step, twelve fields each | all | L | S1, S1r | `step_specs_complete_fraction == 1.0` | `test_every_step_carries_every_field` in `tests/test_step_specs.py`; `test_divisor_is_the_settled_step_count` | ☑ |
 | S2r | The owner's twelve step-spec annotations folded in | all | M | S2 | `step_specs_complete_fraction == 1.0` | `test_duplicate_step_heading_does_not_collapse` in `tests/test_step_specs.py` | ☑ |
 | S8 | This plan — the build order for the thirteen-step process, and the queue reconciled against it | all | M | S2r | `plan_queue_task_drift == 0` | `test_task_in_the_queue_without_a_plan_row_is_drift` in `tests/test_plan_v2.py`; `test_a_payload_gate_differing_from_the_plan_is_drift`; `test_a_plan_dependency_missing_from_the_queue_is_drift`; `test_evidence_log_is_not_read_as_a_task_table` | ◐ |
+| S9 | Convert `claude-arsenal` from a vendored copy to a git subtree at a separate prefix, so upgrades are `git subtree pull` and the `ARSENAL_SHA` pin can go | all | M | — | `vendored_files_diverging_from_subtree == 0` | `test_every_bundle_file_matches_the_subtree_source` in `tests/test_arsenal_subtree.py`; `test_no_host_owned_path_is_inside_a_subtree_prefix`; `test_the_makefile_no_longer_pins_a_bare_sha` | ☐ |
 
 ### Divergences
 
@@ -320,7 +321,7 @@ listed; every open task appears in exactly one milestone.
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6 |
 | **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T20, D-1, D-2, D-3, D-4 |
-| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29 |
+| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
 **S7 is deliberately not first.** The handover recommended it as the next task,

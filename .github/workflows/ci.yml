@@ -1,0 +1,93 @@
+# CI for the job-search tool.
+#
+# This repository's whole method is that a claim carries a measurement: every
+# task declares a numeric gate, writes its evidence to `status/evidence/`, and
+# is only recorded done once that evidence clears the threshold. Until now none
+# of that ran anywhere but a developer's machine, which means the guarantee was
+# only ever as good as the last person who remembered to run `make`.
+#
+# So the four jobs below are not a generic Python pipeline with the gates
+# bolted on. Two of them exist specifically to keep the evidence honest:
+#
+#   evidence      — regenerates every module's measurement and fails on any
+#                   diff, so a committed number cannot quietly stop being what
+#                   the code actually measures.
+#   verify-gates  — asserts every task the ledger calls done or merged can
+#                   still show a measurement clearing its declared threshold,
+#                   so a later commit cannot break an earlier task's gate in
+#                   silence.
+#
+# They are separate jobs rather than steps in one, because "the number is
+# stale" and "the number fails its gate" are different failures and a reviewer
+# should be able to tell which happened without opening a log.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A second push supersedes the first; nobody needs CI for a commit that has
+  # already been replaced.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keep uv's cache off the default location so actions/cache handles it.
+  UV_CACHE_DIR: /tmp/.uv-cache
+
+jobs:
+  lint:
+    name: ruff + strict mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Pin the interpreter the project declares
+        run: uv python install 3.12
+      - run: make lint
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: make test
+
+  evidence:
+    name: evidence is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - name: Regenerate every gate's evidence and refuse any drift
+        run: make evidence
+      - name: Show what changed when it drifts
+        if: failure()
+        run: git --no-pager diff status/evidence/
+
+  verify-gates:
+    name: every done task can show its measurement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: make verify-gates
