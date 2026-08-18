@@ -376,7 +376,7 @@ gate. The SHA is the commit that carries the artefact, and the value is what
 | S1r | `process_spec_complete == 1` | 1 | `uv run python -m jobsearch.process_spec status/evidence/S1.json` | `258b2de` | cloud | 2026-08-17 |
 | S2 | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m jobsearch.step_specs status/evidence/S2.json` | `8c59a7f` | cloud | 2026-08-17 |
 | S2r | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m jobsearch.step_specs status/evidence/S2.json` | `83032bb` | cloud | 2026-08-18 |
-| S8 | `plan_queue_task_drift == 0` | 0 | `uv run python -m jobsearch.plan_v2 status/evidence/S8.json` | `f3bb433` | cloud | 2026-08-18 |
+| S8 | `plan_queue_task_drift == 0` | 0 | `uv run python -m jobsearch.plan_v2 status/evidence/S8.json` | `1605cdd` | cloud | 2026-08-18 |
 
 > Rows for T2, T3, T4, T4b and T23 are in `status/plan-v1.md` and in
 > `status/evidence/`; they are not restated here. The five above are restated
