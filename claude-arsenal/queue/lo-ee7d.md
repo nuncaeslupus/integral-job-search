@@ -9,7 +9,7 @@ key: spec_gate_contradictions
 ```
 
 ```bash
-echo "no gate command defined for D-3 — replace this line with the command that writes status/evidence/D3.json" >&2; exit 1
+uv run python -m jobsearch.spec_consistency
 ```
 
 ## What the spec requires
@@ -51,10 +51,17 @@ discipline rests on them not being.
 
 ## Tests
 
-`test_no_gate_requires_behaviour_a_step_protocol_forbids` — if that can be
-expressed mechanically across the spec documents, it is worth far more than this
-one instance; if it cannot, say so plainly rather than writing a test that only
-looks like it checks something.
+`test_no_document_states_a_superseded_gate` in `tests/test_spec_consistency.py`
+(matches `status/plan.md`'s D-3 row). It is expressed mechanically and
+generally: `jobsearch.spec_consistency` parses every "`<expr>` is superseded
+and must not be gated on" declaration out of `status/spec-v2-steps.md` — never
+hardcoding `story_failure_fraction` — and searches `status/specification.md`
+and `docs/METHODS.md` for that expression restated in a gate-shaped context (a
+`- [ ]` checklist item, or a line containing the word "gate"). Scanning the
+real tree today finds exactly one declaration and, after the fix, zero
+contradictions. Additional tests in the same file exercise the mechanism
+against synthetic documents with a different metric name to prove it is not
+shaped to this one instance.
 
 ## Location
 
