@@ -234,7 +234,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T38 | Retraction rows, and deletion of a person: "forget that" suppresses everywhere derived while the row survives; "delete everything about me" removes the tree, named once and irreversible, including another profile after confirming it by name | — | M | T6 | `retracted_rows_surviving_rebuild == 0` | `test_retracted_row_is_absent_from_every_derived_file` in `tests/test_retraction.py`; `test_retraction_is_itself_reversible`; `test_deletion_without_a_named_target_deletes_nothing` | ☑ |
 | T39 | Scoring triggers: recompute at a step boundary, on explicit request, and after N new trait-bearing rows — never per message | 4, 6 | S | T37 | `unscheduled_scoring_runs == 0` | `test_scoring_does_not_run_per_message` in `tests/test_scoring_triggers.py`; `test_deferred_scoring_loses_no_evidence` — the log is never behind | ☑ |
 | T40 | Decline ledger: a subject declined once is not raised again in that step, declined twice is not raised again at all unless the candidate reopens it | — | S | T6 | `repeat_asks_after_decline == 0` | `test_subject_declined_twice_is_never_asked_again` in `tests/test_non_insistence.py`; `test_candidate_reopening_a_subject_clears_the_ledger` | ☑ |
-| S7 | One skill per step, thirteen of them, each carrying its checkpoint as a **script** rather than prose | all | L | S2r, T34, T35 | `steps_with_a_skill_fraction == 1.0` | `test_every_step_has_a_skill`; `test_every_skill_names_its_gate_metric`; `test_every_skill_checkpoint_is_a_script_not_prose`; `test_no_skill_contradicts_its_step_specification` | ☐ |
+| S7 | One skill per step, thirteen of them, each carrying its checkpoint as a **script** rather than prose | all | L | S2r, T34, T35 | `steps_with_a_skill_fraction == 1.0` | `test_every_step_has_a_skill`; `test_every_skill_names_its_gate_metric`; `test_every_skill_checkpoint_is_a_script_not_prose`; `test_no_skill_contradicts_its_step_specification` | ◐ |
 
 ### PROFILE — evidence, constraints, stories, traits, weights
 
@@ -299,6 +299,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | S2r | The owner's twelve step-spec annotations folded in | all | M | S2 | `step_specs_complete_fraction == 1.0` | `test_duplicate_step_heading_does_not_collapse` in `tests/test_step_specs.py` | ☑ |
 | S8 | This plan — the build order for the thirteen-step process, and the queue reconciled against it | all | M | S2r | `plan_queue_task_drift == 0` | `test_task_in_the_queue_without_a_plan_row_is_drift` in `tests/test_plan_v2.py`; `test_a_payload_gate_differing_from_the_plan_is_drift`; `test_a_plan_dependency_missing_from_the_queue_is_drift`; `test_evidence_log_is_not_read_as_a_task_table` | ◐ |
 | S9 | Convert `claude-arsenal` from a vendored copy to a git subtree at a separate prefix, so upgrades are `git subtree pull` and the `ARSENAL_SHA` pin can go | all | M | — | `vendored_files_diverging_from_subtree == 0` | `test_every_bundle_file_matches_the_subtree_source` in `tests/test_arsenal_subtree.py`; `test_no_host_owned_path_is_inside_a_subtree_prefix`; `test_the_makefile_no_longer_pins_a_bare_sha` | ☐ |
+| S10 | The skill listing budget (8,000 chars, a per-turn context cost) is exceeded at 11,140 once the thirteen step skills land; decide between raising it and loading only the step in play | all | M | S7 | `skill_listing_budget_overage_chars == 0` | `test_the_library_is_within_its_listing_budget` in `tests/test_step_skills.py`; `test_every_step_is_still_reachable_after_the_change` — the saving may not come from dropping a step | ☐ |
 
 ### Divergences
 
@@ -309,6 +310,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | D-3 | `story_failure_fraction` floor contradicts the revised History protocol; reconcile `status/specification.md` and `docs/METHODS.md` | 3 | S | — | `spec_gate_contradictions == 0` | `test_no_document_states_a_superseded_gate` in `tests/test_spec_consistency.py` — the floor appears nowhere as a gate, and the fraction is reported | ☐ |
 | D-4 | The Traits gate is assigned to T28 by the specification and to T27 by the work; neither task's own gate is the step metric | 4 | S | — | `trait_gate_owner_contradictions == 0` | `test_step_gate_metric_is_some_task_gate` in `tests/test_step_gates.py` — every step gate metric is some task's acceptance gate; `test_no_two_documents_name_different_owners_for_one_step_gate` | ☐ |
 | D-6 | `rebuild()` writes only `stated` rows to `constraints.json`, so a refresh after the constraints step drops every `declined` and `unknown` field — the refusal T40 depends on reverts to never-asked | 2 | S | T41 | `constraint_states_survive_rebuild == 1.0` | `test_a_declined_field_survives_a_rebuild` in `tests/test_revision.py`; `test_an_unknown_field_survives_a_rebuild` — both must fail before the fix | ☐ |
+| D-7 | `spec-v2-steps.md` names two owners for the Ranking gate (T18, T19) while the JSON names one (T19); same class as D-4 | 9 | S | — | `step_gate_owner_contradictions == 0` | `test_every_step_gate_names_exactly_one_owner` in `tests/test_step_specs.py`; `test_the_gate_task_is_the_task_that_writes_the_metric`; `test_no_prose_document_names_a_different_owner_than_the_json` | ☐ |
 
 **Status legend**: ☐ open · ◐ in progress · ☑ merged
 
@@ -319,9 +321,9 @@ listed; every open task appears in exactly one milestone.
 | milestone | delivers | tasks |
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
-| **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6 |
+| **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
 | **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T20, D-1, D-2, D-3, D-4 |
-| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9 |
+| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9, S10 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
 **S7 is deliberately not first.** The handover recommended it as the next task,
