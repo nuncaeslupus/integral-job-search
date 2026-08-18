@@ -443,6 +443,27 @@ The owner also asked whether file access can be blocked automatically. It can: a
 belongs with S3 and `cross_user_leaks`. A rule the process cannot violate beats
 one it is asked to respect.
 
+Two contradictions the review caught, both introduced by the revision itself:
+
+- **The failure floor.** Step 3's protocol now says take a failure when it comes
+  rather than digging for one, while its gate still required a third of episodes
+  to be failures — an implementation would have had to break one or the other.
+  The floor is superseded by a shape requirement (both kinds present once a bank
+  holds four episodes) with the fraction **reported, never floored**. **D-3**
+  reconciles `status/specification.md` and `docs/METHODS.md`, which still assert
+  it.
+- **The extraction contract.** "Relate the offer to the candidate while it is
+  being read" contradicted the same step's privacy rule that nothing from the
+  profile is sent with the advert. The comparison is what the owner asked for and
+  it stays — as a **local annotation pass afterwards**, writing
+  `annotations/<offer_id>.json`, leaving the extraction itself
+  candidate-independent and therefore shareable. The convenience was never worth
+  the boundary.
+
+`make reader` also stamped a fresh date into the document that had not changed,
+turning a one-document edit into a two-document diff. Split into `reader-steps`
+and `reader-process`; `make reader` still does both for a release.
+
 **The reader-staleness check had a flaw of its own** and found it: the committed
 reader carries seeded reviewer notes, so regenerating into an empty directory
 diffed against itself. It now seeds identically, and was re-verified by editing

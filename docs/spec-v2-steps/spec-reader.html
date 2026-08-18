@@ -501,9 +501,18 @@ migration will earn its keep the first time someone asks how you handle pressure
 Traits next, which is where those stories turn into something I can match on.
 Carry on?"</em> Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>story_dimension_linkage == 1.0</code> — every episode links to at least one
-dimension id, so the bank is queryable rather than a pile of prose. Paired with
-<code>story_failure_fraction &gt;= 0.33</code>: success stories are rehearsed and reveal less.
-Owner: T8. State: <code>not_implemented</code>.</p>
+dimension id, so the bank is queryable rather than a pile of prose. Owner: T8.
+State: <code>not_implemented</code>.</p>
+<p><strong><code>story_failure_fraction &gt;= 0.33</code> is superseded and must not be gated on.</strong> The
+v1 criterion asked for a third of episodes to be failures, and the concern behind
+it is sound: a bank of nothing but rehearsed successes reveals very little. But a
+<em>floor</em> makes the tool dig for failures to satisfy a number, which is exactly the
+protocol above forbidding it — an implementation would have to break one or the
+other. What replaces it is a shape requirement, not a quota: once a bank holds
+four or more episodes it should contain <strong>both kinds</strong>, and the fraction is
+<strong>reported rather than floored</strong> so a monotone bank is visible without anyone
+being interrogated into fixing it. Reconciling <code>status/specification.md</code> and
+<code>docs/METHODS.md</code> with this is D-3.</p>
 <p><strong>Resume.</strong> <code>position</code> records roles covered, roles mentioned but not explored,
 and any thread the candidate left open. Resumes by naming the thread rather than
 restarting the role.</p>
@@ -738,7 +747,9 @@ loads and validates. A model that fails validation stops this step rather than
 extracting against a broken vocabulary — a bad extraction is worse than none,
 because it looks like a result.</p>
 <p><strong>Inputs.</strong> <code>offers/*.json</code>; <code>dimensions/*.yaml</code>; previous extractions, so
-unchanged offers are not re-extracted.</p>
+unchanged offers are not re-extracted. For the local annotation pass only:
+<code>profile/constraints.json</code> and <code>profile/weights.json</code> — <strong>read on this machine
+and never sent with the advert</strong>.</p>
 <p><strong>Protocol.</strong> No conversation, and <strong>the model is the last resort rather than the
 first</strong>. Extraction runs in stages, each cheaper than the next: normalise the
 advert into the same fields every offer carries; take what patterns and keyword
@@ -748,12 +759,17 @@ for the offers where it matters. Reading every advert with a model is what makes
 this expensive enough to stop using, and most of what an advert states is stated
 plainly. Handle negation as inversion rather than absence — "no on-call" is
 evidence <em>against</em>, not missing evidence.</p>
-<p><strong>Relate the offer to the candidate while it is being read</strong>, not later. An
-extraction that records <code>salary: 48000</code> leaves ranking to work out what that
-means; one that records it <em>and</em> that it sits inside the candidate's expected
+<p><strong>Annotate the offer against the candidate immediately afterwards — locally.</strong>
+An extraction that records <code>salary: 48000</code> leaves ranking to work out what that
+means; an annotation recording <em>and</em> that it sits inside the candidate's expected
 band, that private insurance was explicitly asked for and is present, that the
-required Catalan is held — turns ranking into comparison rather than
-computation, and makes every explanation available without recomputing it. Record
+required Catalan is held, turns ranking into comparison rather than computation.</p>
+<p>This runs as a <strong>second pass over the extraction, on this machine</strong>, and the
+separation matters more than the convenience: the model sees the advert and
+nothing else, and the profile is never sent one advert at a time. So the
+annotation is a distinct artefact — <code>annotations/&lt;offer_id&gt;.json</code>, derived,
+recomputed whenever constraints or weights change — and never a field inside the
+extraction, whose schema stays candidate-independent and shareable. Record
 <code>unmapped_concepts</code> rather than discarding what the model has no dimension for;
 that count is the staleness signal for the model itself. <strong>When an advert yields
 very little</strong> — four lines and a salary band is common — the step may look
@@ -768,7 +784,10 @@ per-run extraction budget, since this is the step that costs model calls.</p>
 outside-information lookups as a standing preference, recorded in
 <code>constraints.json</code>.</p>
 <p><strong>Outputs.</strong> <code>extractions/&lt;offer_id&gt;.json</code> — per dimension a score, evidence
-spans, and a provenance marker distinguishing the advert from outside sources.
+spans, and a provenance marker distinguishing the advert from outside sources;
+candidate-independent, so it could be shared or cached across profiles without
+leaking anything. Alongside it <code>annotations/&lt;offer_id&gt;.json</code> — the same offer
+read against <em>this</em> candidate's constraints, derived and never shared.
 The candidate sees, per offer, what it was found to say — and what it did not
 say, which is not the same as saying no.</p>
 <p><strong>Boundary.</strong> Usually silent, folded into step 9's presentation. When run alone:
@@ -780,13 +799,17 @@ T15, T16, T17. State: <code>not_implemented</code>.</p>
 <p><strong>Resume.</strong> Extraction is per offer and idempotent, so an interrupted run
 resumes at the first offer without a current extraction.</p>
 <p><strong>Re-run.</strong> Replaces the extraction for any offer whose text changed or whose
-extraction predates the current dimension model version. Preserves extractions
+extraction predates the current dimension model version. Annotations are cheaper
+and staler: they are recomputed whenever constraints or weights move, without
+re-reading the advert. Preserves extractions
 still current — re-extracting unchanged adverts spends money to reproduce a
 result.</p>
 <p><strong>Privacy.</strong> Advert text goes to the extraction model. <strong>Nothing from the
-candidate's profile is sent with it</strong> — extraction reads the advert, and
-matching happens locally afterwards. That separation is what keeps the profile
-from leaving the machine one advert at a time.</p></div>
+candidate's profile is sent with it</strong> — extraction reads the advert, and the
+annotation pass that compares it to the candidate runs locally, afterwards, with
+no model call. That separation is what keeps the profile from leaving the machine
+one advert at a time, and it is why the comparison lives in a separate file
+rather than as fields inside the extraction.</p></div>
 <div class="note" data-for="s-spec-step-8-understanding"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Step 8 — Understanding</span></div><textarea class="note-ta" data-key="s-spec-step-8-understanding" data-label="Step 8 — Understanding" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-step-9-ranking">

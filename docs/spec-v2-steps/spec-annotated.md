@@ -356,9 +356,19 @@ Traits next, which is where those stories turn into something I can match on.
 Carry on?"* Writes `last_activity`.
 
 **Gate.** `story_dimension_linkage == 1.0` — every episode links to at least one
-dimension id, so the bank is queryable rather than a pile of prose. Paired with
-`story_failure_fraction >= 0.33`: success stories are rehearsed and reveal less.
-Owner: T8. State: `not_implemented`.
+dimension id, so the bank is queryable rather than a pile of prose. Owner: T8.
+State: `not_implemented`.
+
+**`story_failure_fraction >= 0.33` is superseded and must not be gated on.** The
+v1 criterion asked for a third of episodes to be failures, and the concern behind
+it is sound: a bank of nothing but rehearsed successes reveals very little. But a
+*floor* makes the tool dig for failures to satisfy a number, which is exactly the
+protocol above forbidding it — an implementation would have to break one or the
+other. What replaces it is a shape requirement, not a quota: once a bank holds
+four or more episodes it should contain **both kinds**, and the fraction is
+**reported rather than floored** so a monotone bank is visible without anyone
+being interrogated into fixing it. Reconciling `status/specification.md` and
+`docs/METHODS.md` with this is D-3.
 
 **Resume.** `position` records roles covered, roles mentioned but not explored,
 and any thread the candidate left open. Resumes by naming the thread rather than
@@ -665,7 +675,9 @@ extracting against a broken vocabulary — a bad extraction is worse than none,
 because it looks like a result.
 
 **Inputs.** `offers/*.json`; `dimensions/*.yaml`; previous extractions, so
-unchanged offers are not re-extracted.
+unchanged offers are not re-extracted. For the local annotation pass only:
+`profile/constraints.json` and `profile/weights.json` — **read on this machine
+and never sent with the advert**.
 
 **Protocol.** No conversation, and **the model is the last resort rather than the
 first**. Extraction runs in stages, each cheaper than the next: normalise the
@@ -677,12 +689,18 @@ this expensive enough to stop using, and most of what an advert states is stated
 plainly. Handle negation as inversion rather than absence — "no on-call" is
 evidence *against*, not missing evidence.
 
-**Relate the offer to the candidate while it is being read**, not later. An
-extraction that records `salary: 48000` leaves ranking to work out what that
-means; one that records it *and* that it sits inside the candidate's expected
+**Annotate the offer against the candidate immediately afterwards — locally.**
+An extraction that records `salary: 48000` leaves ranking to work out what that
+means; an annotation recording *and* that it sits inside the candidate's expected
 band, that private insurance was explicitly asked for and is present, that the
-required Catalan is held — turns ranking into comparison rather than
-computation, and makes every explanation available without recomputing it. Record
+required Catalan is held, turns ranking into comparison rather than computation.
+
+This runs as a **second pass over the extraction, on this machine**, and the
+separation matters more than the convenience: the model sees the advert and
+nothing else, and the profile is never sent one advert at a time. So the
+annotation is a distinct artefact — `annotations/<offer_id>.json`, derived,
+recomputed whenever constraints or weights change — and never a field inside the
+extraction, whose schema stays candidate-independent and shareable. Record
 `unmapped_concepts` rather than discarding what the model has no dimension for;
 that count is the staleness signal for the model itself. **When an advert yields
 very little** — four lines and a salary band is common — the step may look
@@ -700,7 +718,10 @@ outside-information lookups as a standing preference, recorded in
 `constraints.json`.
 
 **Outputs.** `extractions/<offer_id>.json` — per dimension a score, evidence
-spans, and a provenance marker distinguishing the advert from outside sources.
+spans, and a provenance marker distinguishing the advert from outside sources;
+candidate-independent, so it could be shared or cached across profiles without
+leaking anything. Alongside it `annotations/<offer_id>.json` — the same offer
+read against *this* candidate's constraints, derived and never shared.
 The candidate sees, per offer, what it was found to say — and what it did not
 say, which is not the same as saying no.
 
@@ -716,14 +737,18 @@ T15, T16, T17. State: `not_implemented`.
 resumes at the first offer without a current extraction.
 
 **Re-run.** Replaces the extraction for any offer whose text changed or whose
-extraction predates the current dimension model version. Preserves extractions
+extraction predates the current dimension model version. Annotations are cheaper
+and staler: they are recomputed whenever constraints or weights move, without
+re-reading the advert. Preserves extractions
 still current — re-extracting unchanged adverts spends money to reproduce a
 result.
 
 **Privacy.** Advert text goes to the extraction model. **Nothing from the
-candidate's profile is sent with it** — extraction reads the advert, and
-matching happens locally afterwards. That separation is what keeps the profile
-from leaving the machine one advert at a time.
+candidate's profile is sent with it** — extraction reads the advert, and the
+annotation pass that compares it to the candidate runs locally, afterwards, with
+no model call. That separation is what keeps the profile from leaving the machine
+one advert at a time, and it is why the comparison lives in a separate file
+rather than as fields inside the extraction.
 
 > **✎ Notes** · `SPEC › Step 8 — Understanding`
 > Extraction itself (algorithms or whatever) must be clearly defined. All what can be automatic or with a script in the whole process is better than using LLMs massively. Only when really needed the LLM must be used.

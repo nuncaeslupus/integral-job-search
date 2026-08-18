@@ -75,7 +75,7 @@ generated rules where they do not**, marked as generated (T33).
 
 ## The gate
 
-Unchanged: `step_specs_complete_fraction == 1.0`. The twelve fields must still
+Unchanged, and declared once in the block above. The twelve fields must still
 all be answered for all thirteen steps after the revision — a note folded in by
 deleting a field is not a revision, it is a regression, and the gate says so.
 
