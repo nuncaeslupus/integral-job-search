@@ -1,0 +1,125 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: smoke + lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: uv sync
+        run: uv sync
+
+      - name: make smoke
+        run: make smoke
+
+      - name: make lint
+        run: make lint
+
+      - name: make audit-rule-drift
+        run: make audit-rule-drift
+
+      - name: make sync-version-check
+        run: make sync-version-check
+
+  test:
+    name: core tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The test suite invokes shipped scripts (e.g. queue_doctor.py) via bare
+      # `python3`, matching how consumers run them — so `python3` on PATH must
+      # satisfy the project's own floor (pyproject.toml requires-python
+      # >=3.12), not whatever ubuntu-22.04 defaults to (3.10).
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure git identity (tests create temp repos)
+        run: |
+          git config --global user.email "ci@arsenal.example"
+          git config --global user.name "Arsenal CI"
+
+      - name: make test
+        run: make test
+
+  version-bump:
+    name: version bump
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require a .bundle-version bump when shipped files change
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          VFILE: plugins/core/skills/init/assets/.bundle-version
+        run: |
+          changed=$(git diff --name-only "${BASE}...HEAD")
+          # "Shipped" = anything a consumer vendors: plugin skills + manifests.
+          # Dev-only paths (tests, docs, CI, pyproject) may skip the bump.
+          if ! printf '%s\n' "${changed}" | grep -qE '^(plugins/[^/]+/skills/|plugins/[^/]+/\.claude-plugin/|\.claude-plugin/)'; then
+            echo "No shipped files changed — bump not required."
+            exit 0
+          fi
+          base_v=$(git show "${BASE}:${VFILE}" 2>/dev/null | tr -d '[:space:]' || true)
+          head_v=$(tr -d '[:space:]' < "${VFILE}")
+          if [ "${base_v}" = "${head_v}" ]; then
+            echo "::error::Shipped files changed but ${VFILE} was not bumped (still ${head_v}). Bump it per CLAUDE.md."
+            exit 1
+          fi
+          echo "version bump OK: ${base_v:-none} -> ${head_v}"
+
+  queue-doctor:
+    name: queue doctor (dogfood)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: make queue-doctor
+        run: make queue-doctor
+        env:
+          GH_TOKEN: ${{ github.token }}  # needed for the --closed-issues gh calls
