@@ -9,7 +9,7 @@ key: steps_with_a_skill_fraction
 ```
 
 ```bash
-echo "no gate command defined for S7 — replace this line with the command that writes status/evidence/S7.json" >&2; exit 1
+uv run --extra dev python3 -m jobsearch.step_skills
 ```
 
 ## What this is

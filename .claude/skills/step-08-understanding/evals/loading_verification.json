@@ -1,0 +1,13 @@
+{
+  "skill": "step-08-understanding",
+  "canary": "step-08-understanding-loaded-2026-08-18-f42ed484-c21eedd944b4adae",
+  "negative_control": "this-fact-is-false: step 8 (Understanding) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 8 (understanding) — run it.",
+    "jobsearch.step_runtime offered() names 'understanding' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-08-understanding",
+    "Audit the job-search codebase's test coverage."
+  ]
+}

@@ -1,0 +1,83 @@
+---
+name: step-01-intake
+description: Triggered by a candidate's session at step 1 (`intake`) of the job-search process (`status/spec-v2-steps.json`) — captures the candidate's CV or working history into the store, with provenance. Do NOT use for a step that already has claimed_facts and only needs a correction pass on residence or pay — that is Constraints (step 2), not Intake.
+---
+
+# step-01-intake
+
+The candidate sees their working life written down — from the CV they already have, or built with them if they have none — and can correct it.
+
+CANARY: step-01-intake-loaded-2026-08-18-f42ed484-23a819c5a700052e
+
+**Offered.** May be declined at any time; declining never blocks a required step downstream (§2.5).
+
+## When to load
+
+Load when the candidate's session is at step 1 (`intake`) of the thirteen-step
+process (`status/spec-v2-steps.md`) — the previous step finished, or the step runtime's
+`offered()`/`decide_resumption()` (T34/T35) names `intake` as where this candidate should
+be. Phase: **first_run**.
+
+If the runtime (`jobsearch.step_runtime.offered`) is not offering `intake` for this candidate, defer to whichever step it does offer instead of running this one out of turn.
+
+## Preconditions and inputs
+
+A resolved handle (step 0). Nothing else: someone with no document, no recent CV and no idea where to start is expected here, and it must work for them without apology.
+
+**Reads:** `cv/source/*` if the candidate supplies a PDF or DOCX; `cv/master.json` if a previous run built one. Both optional.
+
+## Protocol — the manner, not the mechanism
+
+- Say what this is for — that everything captured makes the search better, that it stays on this machine, and that the tool is on their side rather than assessing them.
+- Take whatever exists: a document to parse, or a conversation. Parsing writes **claims with provenance**, never established facts — "Barcelona" from a CV header is what the document says, not where they live.
+- With no document, work backwards from the last job through the ones before, asking for what a CV would carry, and stop when the shape of a career is there, not when a form is full.
+- Establish where they live — it decides currency, work authorisation, commutable borders and how a foreign employer would tax them.
+
+**Never:**
+
+- Never ask here for a legal name, an address, a telephone number, an identity number, a date of birth or a photograph — none improve a *search*. They are collected by step 11, for the document that actually needs them, when it needs them.
+- Never produce a document here — no PDF, no DOCX. A CV written before there is an advert to write it for is worse than what step 11 produces.
+
+## Stop rule
+
+Every role in the supplied document is represented, or — with no document — the current or last role plus at least two earlier ones, or the candidate says that is enough. **Hard cap: 12 questions** — a CV parses in seconds and a career sketches in a handful of exchanges; past that this stops feeling like help.
+
+## When declined
+
+Intake is offered, and declining it is ordinary: skip to Constraints, which then asks from scratch instead of confirming. Say what is lost in one line — the search will lean more on questions later — and never repeat it.
+
+## Outputs
+
+`cv/master.json` — roles, tools, certifications, languages, every claim's provenance; `profile/evidence.jsonl` rows for everything said. No document is produced here.
+
+## Boundary
+
+What the tool says out loud when the step ends, verbatim — the settled example from the spec:
+
+```text
+"That's your history down — twelve years, four roles, and the Catalan I nearly missed. Want to keep going to what would rule a job out, or leave it here?"
+```
+
+Writes `last_activity`.
+
+## Checkpoint — the number, not the prose
+
+The step's acceptance gate is **`intake_field_provenance == 1.0`**,
+owned by **S4**. That gate is a build-time measurement over evidence this step's
+conversation produces; it is not computed here, and this skill's prose never asserts it passed.
+
+What this skill checks, mechanically, before ending the step: run
+`${CLAUDE_SKILL_DIR}/scripts/run_checkpoint.py --id <handle> [--input-dir <profiles-root>]`,
+this skill's own checkpoint script. It reads the candidate's
+`session/state.json` (T35) and profile tree (T34) and reports whether this step's *machine-visible*
+half of the stop rule is met — every artefact `intake` produces is present, and nothing is
+left outstanding in the recorded position — never by asking the model to eyeball the transcript
+and decide. Exit 0 means that half is satisfied; exit 1 means it is not (still open, or blocked on
+a missing input); exit 2 means the candidate or step could not be read. The script writes its
+result to the candidate's own tree at `session/checkpoint-intake.json`, never to a shared or
+global path.
+
+## Gotchas
+
+- A newer CV **adds** claims and marks superseded ones rather than overwriting — a role removed from a candidate's public CV survives in the store, because the store is the CV plus everything it omits.
+- `cv/source/*` is stored unmodified and never sent anywhere; `master.json` is never transmitted as-is, to a model or an employer.

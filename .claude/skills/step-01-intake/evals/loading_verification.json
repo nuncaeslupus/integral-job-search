@@ -1,0 +1,13 @@
+{
+  "skill": "step-01-intake",
+  "canary": "step-01-intake-loaded-2026-08-18-f42ed484-23a819c5a700052e",
+  "negative_control": "this-fact-is-false: step 1 (Intake) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 1 (intake) — run it.",
+    "jobsearch.step_runtime offered() names 'intake' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-01-intake",
+    "Audit the job-search codebase's test coverage."
+  ]
+}

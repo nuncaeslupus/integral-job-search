@@ -1,0 +1,13 @@
+{
+  "skill": "step-00-identify",
+  "canary": "step-00-identify-loaded-2026-08-18-f42ed484-4826385d60392bea",
+  "negative_control": "this-fact-is-false: step 0 (Identify) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 0 (identify) — run it.",
+    "jobsearch.step_runtime offered() names 'identify' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-00-identify",
+    "Audit the job-search codebase's test coverage."
+  ]
+}
