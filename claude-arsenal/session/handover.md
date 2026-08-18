@@ -4,12 +4,12 @@
 
 ## Next session starts here
 
-**M2's first half is merged** (PR #23, `841ba57`), and **PR #24 is open** with S9
-and T7. The board reads 31 merged, 37 open. `make ci` is green across five jobs.
+**PR #24 is merged** (`b53954f`). The board reads **37 merged, 32 open**, and
+`make ci` is green across five jobs, 592 tests.
 
-**The one thing that matters most is not code: T5 has not run.** The corpus has
-100 ads and zero labels, and it is `[HUMAN]` — only the owner can do it. Every
-remaining M2 task chains off it:
+**The one thing that matters most is still not code: T5 has not run.** The
+corpus has 100 ads and zero labels, and it is `[HUMAN]` — only the owner can do
+it. Every remaining M2 task chains off it:
 
 ```
 T14 ← T5
@@ -17,82 +17,94 @@ T15 ← T5, T14
 T16 T17 T42 T18 ← T15        T19 ← T18        T44 ← T18, T19
 ```
 
-So there is no path to a ranked list — the thing a candidate would actually
-look at — until the labelling happens. A labelling aid was being built this
-session to make it as fast as possible; check whether it landed.
+The labelling aid is built and committed (`tools/labelling_page.py` generates a
+self-contained `corpus/labelled/label.html`). There is no path to a ranked list
+— the thing a candidate would actually look at — until the labelling happens.
 
-## What landed
+## What landed in #24
 
-**PR #23 — nine tasks.** T24/T41 (constraints schema and step engine), D-6
-(refusals surviving a rebuild), T11/T32 (offer schema, connectors as data),
-T13/S5 (dedup, lifecycle with tombstones), T33 (net pay), S7 (thirteen step
-skills), and **CI, which did not exist before**.
+S9 (claude-arsenal as a real subtree at `vendor/`), T7 (question bank generated
+from the dimension model), T31 (reader notes rebound by a renumber), D-3 (a gate
+the step protocol forbids), and D-4/D-7 via **T49**, a new task.
 
-**PR #24 — open.** S9 (claude-arsenal is a real subtree at `vendor/`, the
-`ARSENAL_SHA` pin deleted), T7 (question bank generated from the dimension
-model), and the S11 seed.
+## The pattern this session kept hitting: green is not measured
 
-## Three defects the gates structurally could not see
+Three of the four defects found were invisible to a passing check, and two of
+them were found only by deliberately degrading the environment rather than by
+reading code.
 
-Worth carrying forward as a pattern, because all three were invisible to a
-passing gate and none was found by reading code:
+1. **`subtree_is_real()` accepted a hand-copied directory.** Its own test
+   fixture — a plain `git init` plus one commit, no subtree anywhere — read as
+   real. The trailer it needed (`git-subtree-dir:`) lives on the squash commit,
+   whose tree is *unprefixed*, so it never appears in a path-filtered
+   `git log -- <prefix>` walk at all.
+2. **`compare()` only walked source → bundle**, so a file hand-added to
+   `claude-arsenal/bin/` was invisible — the worst form of the exact failure the
+   subtree conversion exists to remove.
+3. **`make arsenal-upgrade` never reassembled the bundle it then verified**, so
+   the documented upgrade path failed on any upstream change.
+4. **CI's shallow checkout made two checks stop measuring rather than fail.**
+   `actions/checkout` clones at depth 1. The subtree check reported "cannot
+   tell" and skipped; T31's note check found only the tip commit, so all 28
+   notes trivially resolved to today's title and reported `unchanged`. Neither
+   turned a job red. Confirmed by cloning the repo `--depth 1` and reproducing
+   both. Every job now checks out full history, pinned by a test.
 
-1. **T33's shipped tax files claimed a human verification nobody performed.**
-   The gate measured that *generated* rule sets carry their mark — entirely
-   inside a temp directory — so a committed file wearing `verified` passed
-   untouched, and `verified` is the label that clears `approximate`.
-2. **A majority duplicate cluster erased its own evidence.** Three copies of one
-   ad in a batch of five put their shared body over the boilerplate line; all
-   three pairs scored **0.000**. `dedup_precision` measures precision and
-   deliberately not recall, so nothing would ever have flagged it.
-3. **Tax rule paths were built from unvalidated country and region.**
-
-**The lesson each time was the same: the fix went into the probe, not only into
-a test.** A property guarded only by a unit test is one the gate cannot see, and
-this repository has now been bitten by that three times in one session.
+**The lesson, which the previous handover already recorded in a different form:
+a gate that passes vacuously is worse than one that fails, because nobody
+investigates green.** Prefer degrading the environment (shallow clone, empty
+directory, missing file) over re-reading the code.
 
 ## Decisions taken this session
 
-1. **`verified` means a person checked it, and nothing else may wear it.** The
-   shipped ES/DE tax files are marked `generated`; promoting one back is a job
-   for somebody with the tax code in front of them, and the gate refuses it
-   until then.
-2. **A subtree at `claude-arsenal/` is impossible** — `git subtree` maps a prefix
-   onto the upstream *root*, the bundle lives several directories down, and host
-   state (`queue/`, 68 files) lives inside the same directory. Upstream is at
-   `vendor/claude-arsenal/`; the bundle is assembled from it and the assembly is
-   verified. `vendor/` is excluded from ruff and mypy.
-3. **Dedup counts a listing once, not once per copy.** Boilerplate frequency is
-   computed over cluster representatives, so an ad collected many times
-   contributes one entry.
-4. **Expiry refuses a naive timestamp** rather than assuming UTC — guessing a
-   zone expires a listing a day early for anyone outside it.
-5. **A step's `gate.task` names whoever writes the metric**, since that field
-   only locates an evidence file. The constraints step named T24 while T41
-   measures it, so the register read it as not-implemented while it passed at
-   1.0.
+1. **The Traits gate got a task, not an edit (T49).** `gate.task` names whoever
+   *writes* the metric. T28 is measured on `profile_capture_coverage`, T27 on
+   `interview_profile_coverage`; neither is `trait_evidence_sufficiency`, so no
+   reassignment between them could make the register true. T49 scores trait
+   evidence and carries the metric as its own gate.
+2. **`story_failure_fraction` is reported, never gated on (D-3).** A `>= 0.33`
+   floor cannot coexist with step 3's protocol, which takes a failure episode
+   when offered rather than digging for one.
+3. **Test mode's four open questions are answered** (payload `lo-5530.md`):
+   simulated candidates allowed and marked as fiction; no mid-session
+   retraction; notes shown at the end and seeded only once confirmed. Still
+   open: the marker itself, recommendation `[[...]]` / `[[! ...]]` with meta
+   parsing suspended during a paste.
+4. **The skill listing budget is to be raised (S10), which is an upstream
+   change.** `LISTING_BUDGET_CHARS = 8000` is a module constant with no CLI flag
+   and no env override, so there is nothing to set here. **Do not patch it under
+   `vendor/`** — the next subtree pull reverts it silently and
+   `make verify-subtree` fails meanwhile. S11 now depends on S10.
+5. **The Catalan corpus slice (D-1): option 1, accept and amend.** In flight at
+   handover — check whether it landed.
+
+## Filed upstream (nuncaeslupus/claude-arsenal)
+
+- **#142 — the queue never reads GitHub issues.** Owner's request. A task row
+  already carries an `issue` field and `queue_doctor.sh --closed-issues` flags
+  closed ones, but nothing imports the other way, so a repo can report an empty
+  board while carrying a backlog. Proposed a `queue_issues.sh` mirroring
+  `queue_sync.sh`, and flagged the two things needing a decision: a label filter,
+  and what happens about gates when the issue body is prose.
+- **#143 — `LISTING_BUDGET_CHARS` is not configurable.** Blocks S10 and S11.
+- **#144 — the bundle cannot be consumed as a subtree**, with the workaround
+  this repo landed and what it costs.
 
 ## Review
 
-Qodo raised 16 findings on #23; **all 13 code findings resolved**, each with a
-regression test confirmed failing against the previous code. Three rule
-violations declined with reasoning on the thread — one checks for a `size` field
-the queue schema does not have (size is encoded in `priority`), two ask for the
-PR to be split, which the one-branch session constraint forbids.
-
-On #24 Qodo weighed filtered-subtree, submodule and clone-and-copy alternatives
-and recommended keeping the separate-prefix subtree.
+Qodo raised 8 findings on #24 and reached **`🐞 Bugs (0)`**. Three were real,
+all in this repo's own S9 code, all fixed with a test confirmed failing first.
+Three were in vendored upstream code — declined, because a fix here is reverted
+by the next pull, which is the failure the subtree removes. Two were repeat rule
+violations already declined on #23 (a `size` field the queue schema does not
+have; splitting the PR, which the one-branch constraint forbids).
 
 ## Waiting on the owner, not on work
 
 - **T5** (label the corpus) and **T25** — `[HUMAN]`.
 - **T12** — `[LAPTOP]`; needs a real browser.
-- **S10** — the skill listing budget is 8,000 chars and the library is at
-  **11,140**. Not S7 being wasteful: its 13 descriptions average 318 chars
-  against the existing average of 369, and the pre-existing 19 skills use 88% of
-  the cap alone. The payload records three options with a preference (load only
-  the step in play). **Needs a decision, not a trim.**
-- **S11** — test mode, design deliberately left open.
+- **S10** — needs upstream #143 to land first.
+- **S11** — needs the marker decided, and S10.
 - **T29** — product shape.
 
 ## Environment notes
@@ -102,13 +114,19 @@ and recommended keeping the separate-prefix subtree.
 - **The `PreToolUse` guard blocks its own commit messages** when they quote the
   paths it protects. Pass messages through a file (`git commit -F`).
 - `update_task_row.py` rewrites every line it touches; restore the untouched
-  ones verbatim or a status change reads as a 64-line diff.
+  ones verbatim or a status change reads as a 69-line diff.
 - After a merge the remote branch is deleted, so `--force-with-lease` fails with
   "stale info" — push plainly.
+- **Do not `git checkout <path>` to undo a scratch experiment** on a file you
+  have edited but not committed — it reverts to the committed version and takes
+  your work with it. Copy the file aside first.
 - `make arsenal-upgrade REF=v0.x.y` pulls, reassembles and verifies in one step.
 - Worker fan-out worked well: `isolation: worktree`, each worker copies a named
-  disjoint file set back, orchestrator re-verifies and commits. Workers cut from
-  an older base more than once — tell them to fetch and fast-forward first.
+  disjoint file set back, orchestrator re-verifies and commits. Tell workers to
+  `git fetch` and hard-reset to the branch tip first — several cut from a stale
+  base.
+- S9 and T7 sat `open` on the board after merging because nobody wrote the rows
+  back. Check the ledger against the merged PR, not against memory.
 
 ## Surface profile at handover
 
