@@ -95,6 +95,21 @@ class Gate(BaseModel):
     task: NonEmptyStr
 
 
+class Read(BaseModel):
+    """One declared input of a step — §3.1.
+
+    `optional` is the prose graph's `?`, and those marks are what make §2.5
+    true rather than merely stated: a required step whose every non-optional
+    input comes from another required step can still be reached by a candidate
+    who declined every offered one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    artefact: NonEmptyStr
+    optional: bool = False
+
+
 class Step(BaseModel):
     """One step of the candidate's journey."""
 
@@ -116,6 +131,11 @@ class Step(BaseModel):
     automatic: bool
     gate: Gate
     reentry_events: list[str]
+    # §3.1's declarations, moved out of the prose code block so the graph can be
+    # checked rather than read. `jobsearch.step_graph` holds both the closure
+    # check and the drift check against the prose they came from.
+    reads: list[Read] = []
+    produces: list[NonEmptyStr] = []
 
 
 class StepList(BaseModel):
@@ -130,6 +150,16 @@ class StepList(BaseModel):
     step_count: int = Field(ge=1)
     phases: dict[str, str]
     steps: list[Step]
+    # Artefacts no step produces because they exist before the process starts —
+    # the dimension model is the only one today. Declared rather than inferred:
+    # "nothing produces it" is also what an unsatisfiable input looks like, and
+    # a checker that guessed between the two would pass the broken graph.
+    external_artefacts: list[NonEmptyStr] = []
+    # Prose label → the canonical artefact ids it names, used only to check the
+    # JSON against §3.1. One label may name more than one artefact ("reaction +
+    # outcome evidence"), so the mapping is explicit rather than a parser
+    # splitting English conjunctions.
+    artefact_aliases: dict[str, list[NonEmptyStr]] = {}
 
     @model_validator(mode="after")
     def _check_internally_consistent(self) -> StepList:
