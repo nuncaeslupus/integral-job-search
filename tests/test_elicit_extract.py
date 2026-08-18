@@ -158,8 +158,11 @@ def test_answer_links_to_the_asked_dimension_by_construction(
     """The dimension a bank question targets is fixed at bank-generation time,
     not guessed from the reply — so it is always first in `candidate_dimensions`.
     """
-    dims = candidate_dimensions(entries["elx_autonomy"], "no cue-bearing text here", model)
+    dims, denied = candidate_dimensions(
+        entries["elx_autonomy"], "no cue-bearing text here", model
+    )
     assert dims == ("elx_autonomy",)
+    assert denied == ()
 
 
 def test_secondary_cue_hit_is_linked_alongside_the_primary(
@@ -416,3 +419,64 @@ def test_measure_is_deterministic() -> None:
     first = measure()
     second = measure()
     assert first == second
+
+
+# --- review findings: the sign of a cue hit, and two orderings -------------
+
+
+def test_a_denied_subject_is_linked_but_marked_denied(
+    model: list[Dimension], entries: dict[str, BankEntry]
+) -> None:
+    """"There was no on-call rotation" and "the on-call rotation ran every
+    third week" used to produce byte-identical output.
+
+    Dropping the denial would be wrong — it answers the question, and
+    `profile._build_traits` collects evidence references without scoring, so
+    the link itself is unsigned and true of both. What must not happen is the
+    two becoming indistinguishable, because `Cue.negatable` exists precisely to
+    record that "no on-call" is evidence *against* rather than absence of
+    evidence, and a scorer counting episodes toward a trait floor (T49) would
+    otherwise count a denial as its opposite.
+    """
+    denied, affirmed = "there was no on-call rotation", "on-call rotation every third week"
+    denied_dims, denied_flags = candidate_dimensions(entries["elx_autonomy"], denied, model)
+    affirmed_dims, affirmed_flags = candidate_dimensions(entries["elx_autonomy"], affirmed, model)
+
+    assert denied_dims == affirmed_dims, "a denial must stay linked, not be dropped"
+    assert denied_flags == ("elx_oncall",)
+    assert affirmed_flags == ()
+
+
+def test_a_bank_entry_naming_an_unknown_dimension_is_refused(
+    model: list[Dimension],
+    entries: dict[str, BankEntry],
+    profile: tuple[EvidenceLog, DeclineLedger],
+) -> None:
+    """`BankEntry` validates the shape of a dimension id, never that the
+    ontology still holds one, and `EvidenceRow` accepts it too — so a bank
+    generated against an older model files rows under an id nothing resolves,
+    and the first thing to notice is a rebuilt `traits.json` listing a
+    dimension nobody can look up. A caller mistake, so it raises.
+    """
+    _, ledger = profile
+    stale = entries["elx_autonomy"].model_copy(update={"dimension_id": "gone_from_the_model"})
+    with pytest.raises(ElicitExtractError, match="not in the supplied model"):
+        extract(stale, "a perfectly ordinary answer about the work", model, ledger)
+
+
+def test_an_overlong_answer_to_a_declined_subject_reports_declined(
+    model: list[Dimension],
+    entries: dict[str, BankEntry],
+    profile: tuple[EvidenceLog, DeclineLedger],
+) -> None:
+    """The length check used to run first, so an over-long answer about a
+    declined subject came back `needs_review` with a reason about its size —
+    inviting a caller to look at it and file it anyway. No row ever leaked, but
+    "filtered before anything is written" has to cover what is *reported* too,
+    or the guarantee holds only on the paths that happen to reach it.
+    """
+    _, ledger = profile
+    ledger.decline("elx_autonomy", step="history", at="2026-08-18T09:00:00Z")
+    result = extract(entries["elx_autonomy"], "y" * (MAX_ANSWER_CHARS + 1), model, ledger)
+    assert result.outcome == "declined"
+    assert "declined" in result.reason

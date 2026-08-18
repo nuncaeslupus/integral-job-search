@@ -32,7 +32,7 @@ from jobsearch.candidate import (
     WorkAuthorisation,
 )
 from jobsearch.decline import DeclineLedger
-from jobsearch.dimensions import Dimension
+from jobsearch.dimensions import Dimension, LocalisedText
 from jobsearch.elicit_extract import MIN_ANSWER_CHARS
 from jobsearch.identity import ProfileStore, create_profile
 from jobsearch.interview import (
@@ -512,3 +512,31 @@ def test_synthetic_entry_ids_are_traceable_to_a_dimension() -> None:
     entry = _synthetic_entry("trait_creativity", "extra", 1, EXTRA_EPISODE_TEXT)
     assert entry.dimension_id == "trait_creativity"
     assert entry.bank_id == "trait_creativity:extra1"
+
+
+def _localised(text: str) -> LocalisedText:
+    """One string in all three corpus languages — the leak wording is what is
+    under test here, not the translation."""
+    return LocalisedText(en=text, es=text, ca=text)
+
+
+def test_a_numeric_quota_leak_is_detected_not_just_the_word_two() -> None:
+    """The floor is never voiced, and the check for that was a word list — but
+    the phrasing most likely to leak a quota is a *number*, not the word "two".
+    "You have given me 1 of 2 required examples" contains no listed marker and
+    states the quota outright, so the guarantee held only against the wordings
+    somebody had already thought of.
+
+    Asserted alongside two ordinary turns, because a detector that fires on
+    everything would satisfy the leak cases on its own and would make every
+    real turn unusable.
+    """
+    leak = _localised("You have given me 1 of 2 required examples.")
+    spanish_leak = _localised("Necesito 2 ejemplos más para esto.")
+    ordinary = _localised("Tell me about another time that mattered to you.")
+
+    assert leaks_quota_language(leak)
+    assert leaks_quota_language(spanish_leak)
+    assert not leaks_quota_language(ordinary)
+    assert not leaks_quota_language(EXTRA_EPISODE_TEXT)
+    assert not leaks_quota_language(LESSON_FOLLOWUP_TEXT)

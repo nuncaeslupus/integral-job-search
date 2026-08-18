@@ -85,6 +85,26 @@ CATALAN_SCOPE_ANCHOR = "catalan it ads"
 CATALAN_SCOPE_RE = re.compile(r"catalan\s+it\s+ads", re.IGNORECASE)
 REMOTE_MIX_ANCHOR = re.compile(r"remote\s+dimension.{0,40}mixed", re.IGNORECASE | re.DOTALL)
 
+# An anchor is only a declaration if nothing just before it reverses it. Both
+# anchors above match on their content words alone, so "the slice is **not**
+# Catalan IT ads" and "the remote dimension is not mixed" satisfied them while
+# stating the opposite of what they exist to assert — a drift detector that
+# passes on a document contradicting the thing it checks.
+#
+# The realistic drift is a reversion to the old wording, which the anchors
+# already catch. This closes the other direction, and is deliberately a narrow
+# window rather than a grammar: a negation more than a few words back usually
+# belongs to another clause, and this module does no linguistics.
+_NEGATION_RE = re.compile(r"\b(?:not|never|no longer|isn't|is not|aren't|are not)\b[\s\w,]{0,24}$",
+                          re.IGNORECASE)
+
+
+def _affirmed(text: str, match: re.Match[str] | None) -> bool:
+    """Whether `match` reads as an assertion rather than its denial."""
+    if match is None:
+        return False
+    return _NEGATION_RE.search(text[: match.start()]) is None
+
 _T4B_ROW_RE = re.compile(r"^\|\s*T4b\s*\|.*\|\s*$", re.MULTILINE)
 _KNOWN_DIVERGENCE_RE = re.compile(r"^## Known divergence.*?(?=^## |\Z)", re.MULTILINE | re.DOTALL)
 
@@ -123,12 +143,12 @@ def measure(
 
     if not row:
         mismatches.append({"document": "status/plan.md", "reason": "T4b row not found"})
-    elif not CATALAN_SCOPE_RE.search(row):
+    elif not _affirmed(row, CATALAN_SCOPE_RE.search(row)):
         mismatches.append(
             {
                 "document": "status/plan.md",
                 "reason": f"T4b row does not state the Catalan slice's scope "
-                f"({CATALAN_SCOPE_ANCHOR!r} not found)",
+                f"({CATALAN_SCOPE_ANCHOR!r} not stated, or negated)",
             }
         )
 
@@ -140,15 +160,15 @@ def measure(
             }
         )
     else:
-        if not CATALAN_SCOPE_RE.search(section):
+        if not _affirmed(section, CATALAN_SCOPE_RE.search(section)):
             mismatches.append(
                 {
                     "document": "corpus/raw/README.md",
                     "reason": f"Known divergence section does not state the Catalan "
-                    f"slice's scope ({CATALAN_SCOPE_ANCHOR!r} not found)",
+                    f"slice's scope ({CATALAN_SCOPE_ANCHOR!r} not stated, or negated)",
                 }
             )
-        if not REMOTE_MIX_ANCHOR.search(section):
+        if not _affirmed(section, REMOTE_MIX_ANCHOR.search(section)):
             mismatches.append(
                 {
                     "document": "corpus/raw/README.md",

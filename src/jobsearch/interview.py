@@ -82,6 +82,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -499,9 +500,22 @@ _QUOTA_MARKERS: tuple[str, ...] = (
     "insufficient",
 )
 
+# A word list alone missed the phrasing most likely to leak the quota, because
+# the leak is usually a *number*, not the word "two": "you have given me 1 of 2
+# required examples" contains no marker above and states the quota outright.
+# Any small integer sitting next to a counting word is treated as a leak — a
+# turn that needs to say "3 things" can say "a few".
+_QUOTA_COUNT_RE = re.compile(
+    r"\b\d+\s*(?:of|/|de)\s*\d+\b"
+    r"|\b\d+\s+(?:more\s+)?"
+    r"(?:example|episode|story|stories|occasion|time|moment|ejemplo|episodio|ocasi[oó]n|"
+    r"exemple|episodi|ocasi[oó])",
+    re.IGNORECASE,
+)
+
 
 def leaks_quota_language(text: LocalisedText) -> list[str]:
-    """Which corpus languages of `text` mention the floor, the count, or the word "quota".
+    """Which corpus languages of `text` leak the floor — by word or by number.
 
     Checked against every generated turn's text by `probe_interview` — the
     payload's item 2 asks for a way to test this rather than trust the wording
@@ -512,7 +526,7 @@ def leaks_quota_language(text: LocalisedText) -> list[str]:
     hits = []
     for language in ("en", "es", "ca"):
         lowered = text.get(language).lower()
-        if any(marker in lowered for marker in _QUOTA_MARKERS):
+        if any(marker in lowered for marker in _QUOTA_MARKERS) or _QUOTA_COUNT_RE.search(lowered):
             hits.append(language)
     return hits
 

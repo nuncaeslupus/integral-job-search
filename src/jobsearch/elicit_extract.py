@@ -148,10 +148,55 @@ class ExtractionResult:
     dimensions: tuple[str, ...]
     reason: str
     row: EvidenceRow | None = None
+    denied: tuple[str, ...] = ()
+    """Of `dimensions`, the ones the answer *denies* rather than affirms.
+
+    Linkage itself is unsigned and stays that way — `profile._build_traits`
+    collects evidence row references per dimension and scores nothing, so
+    "this episode bears on `on_call_load`" is true of "we were on call every
+    third week" and of "there was no on-call rotation" alike, and dropping the
+    second would throw away a real answer to a real question.
+
+    What must not happen is the two becoming *indistinguishable*. `Cue.value`
+    and `Cue.negatable` exist precisely because "no on-call" is evidence
+    against rather than absence of evidence (T16), and reusing the patterns
+    while discarding the sign leaves a later scorer — T49, counting episodes
+    towards a trait floor — unable to tell an affirmation from its opposite.
+    So the sign is carried here, beside the link, rather than folded into it.
+    """
 
 
 # ---------------------------------------------------------------------------
 # which dimensions an answer touches
+
+
+# Words that flip a cue in the three corpus languages, and how far ahead of the
+# match they are allowed to sit. A window, not a sentence parse: this module is
+# deterministic and does no linguistics, so it claims only what a window can
+# honestly support — `NEGATION_WINDOW_CHARS` is deliberately short, because a
+# negation five words back usually belongs to a different clause.
+NEGATION_WORDS: tuple[str, ...] = (
+    # en
+    "no", "not", "never", "without", "zero",
+    # es
+    "sin", "nunca", "ninguna", "ningun", "ningún", "tampoco",
+    # ca
+    "sense", "cap", "mai",
+)
+NEGATION_WINDOW_CHARS = 24
+
+
+def _is_negated(text: str, match_start: int) -> bool:
+    """Whether a negation word sits just before `match_start`.
+
+    The ad-side pipeline (T16) owns real negation scoring against a measured
+    `extraction_negation_recall`. This is the candidate-side echo of it, and it
+    is deliberately weaker and says so: it decides only whether to mark a link
+    as denied, never a numeric value, so a miss costs a lost sign rather than a
+    wrong score.
+    """
+    window = text[max(0, match_start - NEGATION_WINDOW_CHARS) : match_start].lower()
+    return any(re.search(rf"\b{re.escape(word)}\b", window) for word in NEGATION_WORDS)
 
 
 def _matched_cue_hits(
@@ -159,8 +204,8 @@ def _matched_cue_hits(
     dimensions: Sequence[Dimension],
     *,
     language: Language | None,
-) -> tuple[str, ...]:
-    """Dimension ids whose own `extraction.cues` fire on this answer's text.
+) -> tuple[tuple[str, bool], ...]:
+    """`(dimension_id, negated)` for every dimension whose cues fire on this text.
 
     Reuses `Dimension.extraction.cues` exactly as written for ad text (§5.1) —
     no separate pattern set invented for candidate speech. Only `matched`-side
@@ -178,16 +223,33 @@ def _matched_cue_hits(
     to narrow the scan.
     """
     languages = (language,) if language is not None else SCHEMA_LANGUAGES
-    hits: list[str] = []
+    hits: list[tuple[str, bool]] = []
     for dimension in dimensions:
         if dimension.side != "matched":
             continue
-        if any(
-            re.search(cue.pattern, answer, re.IGNORECASE)
+        fired = [
+            (cue, match)
             for lang in languages
             for cue in dimension.extraction.cues.get(lang, ())
-        ):
-            hits.append(dimension.id)
+            if (match := re.search(cue.pattern, answer, re.IGNORECASE)) is not None
+        ]
+        if not fired:
+            continue
+        # Negated only when *every* cue that fired is either a negatable one
+        # reading under a negation, or a cue the model itself scores at zero
+        # (`no\s+on-?call`). One plain affirmative hit is enough to call the
+        # whole answer an affirmation — "we had on-call shifts, though no
+        # on-call rotation as such" fires both an affirmed and a zero-valued
+        # cue, and the subject is plainly present.
+        hits.append(
+            (
+                dimension.id,
+                all(
+                    cue.value == 0.0 or (cue.negatable and _is_negated(answer, match.start()))
+                    for cue, match in fired
+                ),
+            )
+        )
     return tuple(hits)
 
 
@@ -197,8 +259,8 @@ def candidate_dimensions(
     dimensions: Sequence[Dimension],
     *,
     language: Language | None = None,
-) -> tuple[str, ...]:
-    """Every dimension id this answer is evidence for, before decline filtering.
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """`(every dimension this answer bears on, those it denies)`, before declines.
 
     `entry.dimension_id` — what the question was built to elicit — is always
     first, unconditionally: which dimension a bank question targets is fixed
@@ -206,14 +268,17 @@ def candidate_dimensions(
     to say back. Anything after it is a mechanical cue hit for a *different*
     dimension (`_matched_cue_hits`, deduplicated against the primary), in bank
     order.
+
+    The second tuple is the subset of those secondary hits the answer *denies*
+    — see `ExtractionResult.denied` for why a denial is linked rather than
+    dropped. The primary is never in it: which dimension a question targets is
+    a fact about the question, not a claim the answer makes.
     """
     primary = entry.dimension_id
-    secondary = tuple(
-        dimension_id
-        for dimension_id in _matched_cue_hits(answer, dimensions, language=language)
-        if dimension_id != primary
-    )
-    return (primary, *secondary)
+    hits = [(did, negated) for did, negated in _matched_cue_hits(
+        answer, dimensions, language=language
+    ) if did != primary]
+    return (primary, *(did for did, _ in hits)), tuple(did for did, negated in hits if negated)
 
 
 def _undeclined(ledger: DeclineLedger, dimension_ids: Sequence[str]) -> tuple[str, ...]:
@@ -252,6 +317,17 @@ def extract(
     """
     if not entry.dimension_id:  # pragma: no cover - BankEntry's own schema forbids this
         raise ElicitExtractError(f"bank entry {entry.bank_id} names no dimension")
+    # `BankEntry` validates the *shape* of a dimension id, never that the
+    # ontology still contains one. A bank generated against an older model —
+    # or hand-built in a test — therefore carries ids that resolve to nothing,
+    # and `EvidenceRow` accepts them too, so the first thing that notices is a
+    # rebuilt `traits.json` listing a dimension nobody can look up. Caller
+    # mistake, not a candidate outcome, so it raises like the check above.
+    if entry.dimension_id not in {dimension.id for dimension in dimensions}:
+        raise ElicitExtractError(
+            f"bank entry {entry.bank_id} names dimension {entry.dimension_id!r}, "
+            "which is not in the supplied model — regenerate the bank (T7) before extracting"
+        )
 
     stripped = answer.strip()
     if len(stripped) < MIN_ANSWER_CHARS:
@@ -261,15 +337,14 @@ def extract(
             f"answer is {len(stripped)} character(s), below the {MIN_ANSWER_CHARS}-character "
             "floor for evidence — too little to be about anything",
         )
-    if len(stripped) > MAX_ANSWER_CHARS:
-        return ExtractionResult(
-            "needs_review",
-            (),
-            f"answer is {len(stripped)} characters, above {MAX_ANSWER_CHARS} — implausible for "
-            "one elicitation answer; check it is really one answer before extracting",
-        )
 
-    candidates = candidate_dimensions(entry, stripped, dimensions, language=language)
+    # Declines are resolved before the length check, not after. Nothing is
+    # written either way, so no row ever leaked — but an over-long answer to a
+    # declined subject used to come back `needs_review` with a reason about its
+    # length, which invites a caller to look at it and file it. "Filtered
+    # before anything is written" has to mean before anything is *reported*
+    # too, or the guarantee holds only for the paths that happened to reach it.
+    candidates, denied = candidate_dimensions(entry, stripped, dimensions, language=language)
     kept = _undeclined(ledger, candidates)
 
     if not kept:
@@ -280,15 +355,30 @@ def extract(
             "nothing is filed about a subject the candidate opted out of",
         )
 
+    kept_denied = tuple(dimension_id for dimension_id in denied if dimension_id in kept)
+
+    if len(stripped) > MAX_ANSWER_CHARS:
+        return ExtractionResult(
+            "needs_review",
+            (),
+            f"answer is {len(stripped)} characters, above {MAX_ANSWER_CHARS} — implausible for "
+            "one elicitation answer; check it is really one answer before extracting",
+            denied=kept_denied,
+        )
+
     if entry.dimension_id not in kept:
         return ExtractionResult(
             "needs_review",
             kept,
             f"{entry.dimension_id} was declined, but the answer also touches "
             f"{', '.join(kept)} — decide whether to file it under that instead of discarding it",
+            denied=kept_denied,
         )
 
-    return ExtractionResult("stored", kept, f"answer is evidence for {', '.join(kept)}")
+    reason = f"answer is evidence for {', '.join(kept)}"
+    if kept_denied:
+        reason += f" (denying {', '.join(kept_denied)})"
+    return ExtractionResult("stored", kept, reason, denied=kept_denied)
 
 
 def store_answer(
@@ -320,7 +410,9 @@ def store_answer(
         source="conversation",
         dimensions=result.dimensions,
     )
-    return ExtractionResult(result.outcome, result.dimensions, result.reason, row)
+    return ExtractionResult(
+        result.outcome, result.dimensions, result.reason, row, denied=result.denied
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +613,56 @@ def probe_extraction(root: Path) -> dict[str, Any]:
         "a stored episode was not private on disk",
     )
 
+    # 10. A denial and an affirmation of the same subject must not be
+    #     indistinguishable. Both stay linked — a denial answers the question
+    #     — but the sign has to survive, or a scorer counting episodes towards
+    #     a trait floor cannot tell "we were on call constantly" from "there
+    #     was no on-call at all".
+    denied_hits = _matched_cue_hits("there was no on-call rotation", model, language=None)
+    affirmed_hits = _matched_cue_hits(
+        "the on-call rotation ran every third week", model, language=None
+    )
+    check(
+        denied_hits == (("elx_oncall", True),),
+        f"a denied subject did not read as denied: {denied_hits}",
+    )
+    check(
+        affirmed_hits == (("elx_oncall", False),),
+        f"an affirmed subject did not read as affirmed: {affirmed_hits}",
+    )
+    check(
+        [d for d, _ in denied_hits] == [d for d, _ in affirmed_hits],
+        "a denial was dropped rather than linked — it answers the question too",
+    )
+
+    # 11. A bank entry naming a dimension the model no longer has is a caller
+    #     mistake, not a candidate outcome: it must raise rather than file a
+    #     row under an id nothing can resolve.
+    stale = BankEntry(
+        bank_id="gone:q1",
+        dimension_id="gone",
+        question_id="q1",
+        text=entry_autonomy.text,
+        order=entry_autonomy.order,
+    )
+    try:
+        extract(stale, "a perfectly ordinary answer about work", model, ledger)
+    except ElicitExtractError:
+        check(True, "")
+    else:
+        check(False, "a bank entry naming an unknown dimension was accepted")
+
+    # 12. Declines are resolved before the length check: an over-long answer to
+    #     a wholly declined subject reports `declined`, not a reason about its
+    #     length that invites someone to file it anyway.
+    # `elx_autonomy` was declined in scenario 6 above, so this reuses the
+    # shared ledger's accumulated state rather than inventing a second one.
+    long_declined = extract(entry_autonomy, "y" * (MAX_ANSWER_CHARS + 1), model, ledger)
+    check(
+        long_declined.outcome == "declined",
+        f"an over-long answer to a declined subject reported {long_declined.outcome!r}",
+    )
+
     linkage, unlinked = story_dimension_linkage(log)
     check(
         linkage == 1.0,
@@ -532,6 +674,13 @@ def probe_extraction(root: Path) -> dict[str, Any]:
         "story_dimension_linkage": linkage,
         "unlinked_episode_ids": unlinked,
         "stored_episode_count": len(stored_rows),
+        "denied_link_examples": [
+            {"text": "there was no on-call rotation", "hits": [list(h) for h in denied_hits]},
+            {
+                "text": "the on-call rotation ran every third week",
+                "hits": [list(h) for h in affirmed_hits],
+            },
+        ],
         "checks_run": checks,
         "failures": failures,
     }
@@ -569,7 +718,7 @@ def probe_linkage_guarantee_is_load_bearing(root: Path) -> dict[str, Any]:
     }
 
 
-MINIMUM_CHECKS = 16
+MINIMUM_CHECKS = 22
 
 
 def measure() -> dict[str, Any]:

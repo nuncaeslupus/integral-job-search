@@ -2,6 +2,26 @@
   "story_dimension_linkage": 1.0,
   "unlinked_episode_ids": [],
   "stored_episode_count": 1,
-  "checks_run": 20,
+  "denied_link_examples": [
+    {
+      "text": "there was no on-call rotation",
+      "hits": [
+        [
+          "elx_oncall",
+          true
+        ]
+      ]
+    },
+    {
+      "text": "the on-call rotation ran every third week",
+      "hits": [
+        [
+          "elx_oncall",
+          false
+        ]
+      ]
+    }
+  ],
+  "checks_run": 25,
   "failures": []
 }

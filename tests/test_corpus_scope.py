@@ -15,7 +15,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jobsearch.corpus_scope import CATALAN_SCOPE_ANCHOR, TARGET_MIX, measure
+from jobsearch.corpus_scope import (
+    CATALAN_SCOPE_ANCHOR,
+    DEFAULT_PLAN,
+    TARGET_MIX,
+    measure,
+    t4b_row,
+)
 
 _GOOD_PLAN = (
     "| T# | Description | ... |\n"
@@ -120,3 +126,26 @@ def test_a_missing_t4b_row_is_a_mismatch_not_a_skip(tmp_path: Path) -> None:
     measured = measure(plan_path=plan, readme_path=readme)
     assert measured["corpus_language_slice_mismatch"] == 1
     assert measured["mismatches"][0]["document"] == "status/plan.md"
+
+
+def test_a_negated_declaration_does_not_satisfy_the_anchor(tmp_path: Path) -> None:
+    """The anchors match on content words alone, so "the slice is **not**
+    Catalan IT ads" satisfied them while stating the opposite of what they
+    exist to assert — a drift detector passing on a document that contradicts
+    the thing it checks.
+
+    The realistic drift is a reversion to the old wording, which the anchors
+    already caught. This is the other direction, and it is the one that would
+    have gone unnoticed: the metric stays at 0 and nobody re-reads a green check.
+    """
+    row = t4b_row()
+    plan = DEFAULT_PLAN.read_text(encoding="utf-8").replace(
+        row, row.replace("Catalan IT ads at large", "not Catalan IT ads at large")
+    )
+    negated = tmp_path / "plan.md"
+    negated.write_text(plan, encoding="utf-8")
+
+    measured = measure(plan_path=negated)
+
+    assert measured["corpus_language_slice_mismatch"] == 1
+    assert "status/plan.md" in measured["mismatches"][0]["document"]
