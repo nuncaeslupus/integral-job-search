@@ -179,8 +179,11 @@ than a database, Pydantic for schemas.
   one directory each — not accounts, not a server.
 - **An interactive UI.** Step 9's card is a filled template rendered to text or
   a page. Anything with state of its own waits.
-- **The distribution question** (process spec §11.5). Undecided, blocks nothing
-  until someone other than the owner installs this, and tracked by T29.
+- **A plugin, a published package, or a UI.** The distribution question
+  (process spec §11.5) is **settled**: installed by cloning, candidate state
+  outside the clone (`docs/distribution.md`, T29). A Claude Code plugin remains
+  a delivery change that can be made whenever the friction justifies it, and is
+  not v2 work.
 - **CV templates and layouts** (brief §2.7). The store feeds templates; choosing
   layouts is not v2.
 - **Re-litigating specification v2.** A task that finds the spec wrong seeds a
@@ -217,7 +220,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T24 | Candidate attribute schema — languages, location, relocation, salary floor/target, availability, work authorisation, **and the reach and legality fields step 7 needs**: employed or contracting, paid where, taxed where. Pins the `constraints.json` field set and its `stated`/`declined`/`unknown` states | 2, 7 | M | T23 | `unsatisfiable_hard_constraint_leaks == 0` | `test_offer_failing_a_hard_constraint_never_ranks` in `tests/test_candidate_attributes.py`; `test_missing_attribute_is_unknown_not_satisfied` — an unstated constraint does not silently pass | ☑ |
 | T25 | **[LAPTOP]** Broaden the corpus beyond remote programming: ≥6 job families, ≥15 ads each, same three languages | 5, 8 | L | — | `corpus_job_family_count >= 6` | `test_corpus_covers_at_least_six_job_families` in `tests/test_corpus_families.py` — no family below 15 ads | ☐ |
 | T26 | Dimension model v1: widen to the broadened corpus; add candidate-trait dimensions (creativity, ambition, learning orientation, spare-time engagement) | 4, 8 | L | T23, T25 | `ontology_hit_rate >= 0.85` | `test_every_job_family_reaches_dimension_coverage` in `tests/test_dimension_content.py` — no family below 0.80 | ☐ |
-| T29 | Record the product shape — packaging, phase skills, checkpoint scripts, and the distribution decision left open at process spec §11.5 | — | S | — | `phase_checkpoints_defined == 1` | `test_every_open_shape_question_has_a_recorded_answer` in `tests/test_product_shape.py` — each question in the shape doc carries a decision or a named blocker | ◐ |
+| T29 | Record the product shape — packaging, phase skills, checkpoint scripts, and the distribution decision left open at process spec §11.5. **Decided**: cloned, with candidate state outside the clone (`docs/distribution.md`); implementation is T51–T54 | — | S | — | `phase_checkpoints_defined == 1` | `test_every_open_shape_question_has_a_recorded_answer` in `tests/test_product_shape.py` — each question in the shape doc carries a decision or a named blocker | ◐ |
 | T30 | Encode step inputs/outputs in `spec-v2-steps.json` and gate on required-subset closure | — | M | — | `required_subset_closure_violations == 0` | `test_required_step_reads_only_required_or_optional_inputs` in `tests/test_step_graph.py` — a required step reading a required-absent input fails the check | ☑ |
 | T31 | Detect note-key rebinding and a stale spec reader | — | S | — | `reader_note_rebindings == 0` | `test_renumbered_section_does_not_rebind_a_note` in `tests/test_spec_reader.py` — moving a section leaves its note unbound rather than re-bound | ☑ |
 | T48 | Step gate state register: derive each step's `state` in `spec-v2-steps.json` from `status/evidence/*.json` instead of hand-editing it | — | S | T30 | `step_gate_state_drift == 0` | `test_step_state_matches_recorded_evidence` in `tests/test_step_gates.py` — a step whose evidence file records a passing measurement cannot read `not_implemented`; `test_missing_evidence_reads_not_implemented` | ☑ |
@@ -251,6 +254,8 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T28 | Continuous profile capture: every candidate-facing surface appends evidence, not just onboarding | — | M | T6, T27 | `profile_capture_coverage == 1.0` | `test_every_candidate_facing_surface_writes_evidence` in `tests/test_profile_capture.py` — a surface that accepts free text and writes no evidence row fails | ☑ |
 | T49 | Trait evidence sufficiency: score a trait only when its evidence floor is met, report `insufficient` otherwise — never refuse, never voice the floor to the candidate | 4 | M | T6, T27 | `trait_evidence_sufficiency == 1.0` | `test_a_trait_below_the_floor_is_insufficient_not_scored` in `tests/test_trait_sufficiency.py`; `test_insufficient_does_not_stop_the_step`; `test_the_floor_counts_occasions_not_repetitions` | ☑ |
 | T50 | Wire an intake capture driver: S4 gave intake a real conversational free-text surface, so it should move from `pending_implementation` to a measured surface rather than sitting in the bucket that means "nothing was built" | 1 | S | T28, S4 | `profile_capture_coverage == 1.0` | `test_intake_is_a_measured_surface_not_a_pending_one` in `tests/test_profile_capture.py` — the number alone cannot show this was done, since it already read 1.0 over four surfaces; `test_a_conversational_intake_answer_reaches_the_evidence_log` | ☐ |
+| T51 | Candidate state resolves from `$INTEGRAL_HOME` and is refused anywhere inside a git work tree — the distribution decision made mechanical, so "candidate data never reaches a repository" is a property of the code rather than a `.gitignore` line | — | M | — | `state_paths_inside_a_repo == 0` | `test_a_home_inside_a_git_work_tree_is_refused` in `tests/test_state_home.py`; `test_the_default_home_is_outside_the_clone`; `test_every_store_path_resolves_through_the_resolver` | ☐ |
+| T52 | First-run bootstrap: a `SessionStart` hook and a step-0 re-check install the dependencies a clone does not carry, idempotently, and announce the first install to the candidate | — | M | T51 | `unbootstrapped_first_runs == 0` | `test_a_clone_without_dependencies_installs_them_before_step_zero` in `tests/test_bootstrap.py`; `test_bootstrap_is_silent_when_the_environment_is_current`; `test_a_missing_package_manager_is_reported_not_raised` | ☐ |
 
 ### SUPPLY — connectors, offers, lifecycle
 
@@ -262,6 +267,8 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T13 | Cross-source dedup by similarity over normalised text + expiry detection | 7 | M | T11 | `dedup_precision >= 0.95` | `test_crossposted_duplicates_are_collapsed` in `tests/test_dedup.py`; `test_distinct_roles_at_same_company_are_not_merged` | ☑ |
 | S5 | Offer lifecycle: seven statuses and their allowed transitions, retention, the 60-day purge, and tombstones dedup cannot resurrect | 7 | L | S1, T11, T13 | `resurrected_purged_offers == 0` | `test_purged_offer_is_not_re_added_as_new` in `tests/test_offer_lifecycle.py`; `test_shortlisted_offer_is_never_purge_eligible`; `test_applied_cannot_return_to_new`; `test_explicit_revival_restores_and_keeps_the_tombstone` | ☑ |
 | T33 | Net-from-gross pay estimation per country, generated when the advert states only gross | 9 | M | T24 | `generated_tax_rules_marked_unverified == 1.0` | `test_net_estimate_within_ten_percent_of_reference` in `tests/test_pay.py`; `test_absent_country_rules_yield_unknown_not_a_guess` | ☑ |
+| T53 | Connector contract pack for the sources repository: one directory shape, one conformance command a contributor's agent and CI both run, and a fixture that is a sampled listing rather than an advert the candidate was reading | 7 | M | T32 | `connector_contract_violations == 0` | `test_a_connector_without_a_fixture_is_rejected` in `tests/test_connector_contract.py`; `test_a_connector_that_opens_its_own_socket_is_rejected`; `test_a_fixture_carrying_candidate_provenance_is_rejected` | ☐ |
+| T54 | Connector exchange: discover an existing connector for a site, install it into `$INTEGRAL_HOME` and run its fixture before first use; then offer to contribute a new or repaired one, disclosing every file that would be sent — and treat declining as a complete outcome | 7 | L | T53 | `unconsented_contributions == 0` | `test_nothing_leaves_the_machine_without_an_explicit_yes` in `tests/test_connector_exchange.py`; `test_the_disclosure_lists_every_file_that_would_be_sent`; `test_declining_leaves_the_connector_installed_and_is_not_asked_again` | ☐ |
 
 ### MATCH — extraction, annotation, ranking
 
@@ -329,7 +336,7 @@ listed; every open task appears in exactly one milestone.
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
 | **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T50, T20, D-1, D-2, D-3, D-4, D-8 |
-| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, D-9, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9, S10, S11, S12 |
+| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, D-9, T45, T46, S6, T47, T43, T22, T26, T25, T29, T51, T52, T53, T54, S9, S10, S11, S12 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
 **S7 is deliberately not first.** The handover recommended it as the next task,

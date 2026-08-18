@@ -1,7 +1,11 @@
 # How the tool is used — shape, steps, and what moves them along
 
-**Status: a proposal with a recommendation. Needs the owner's decision before
-T27 is claimed**, because the interview's design depends on it.
+**Status: decided.** Every question this document opened carries a decision or a
+named blocker — see "What needed deciding" at the end. Its **step table is
+superseded by specification v2** (`status/spec-v2-process.md`); what remains
+authoritative here is the shape argument — a conversation, steps as skills,
+checkpoints as scripts, state as files — and the packaging section, whose
+decision record is `docs/distribution.md`.
 
 ## The question
 
@@ -98,24 +102,56 @@ profiles/<handle>/       per-candidate state, gitignored (exists)
 scripts or make targets  the checkpoints
 ```
 
-Installable as a **Claude Code plugin** so the skills and commands come with it,
-which is the `ai-job-search` precedent the owner cited and the lowest-friction
-path for someone who already has Claude. Nothing in that choice prevents a thin
-UI later — the state is files and the logic is scripts, so a web front end would
-be additive rather than a rewrite.
+**Settled, 2026-08-18 — it is installed by cloning, and the candidate's state
+lives outside the clone.** See `docs/distribution.md`, which is the decision
+record for this section and for process spec §11.5. In short: the clone already
+carries the skills (`.claude/skills/`) and the checkpoint code (`src/`), the
+tool installs its own dependencies on first run, and `profiles/<handle>/`
+resolves from `$INTEGRAL_HOME` — never from inside the repository. A Claude Code
+plugin remains the likely next packaging and is a delivery change rather than a
+rewrite, precisely because state was never inside the artefact.
 
-## What needs deciding
+## What needed deciding
 
-1. **One long first interview, or several sittings?** (Open since the scope
-   extension.) The recommendation, stated so it can be argued with: several
-   sittings, resumable, with the first covering facts and the last job, because
-   an hour of questions before any value is returned is how people abandon
-   onboarding — but the *protocol* should be one continuous script, so a
-   candidate who wants to finish in one go can.
+<!-- shape-questions: 5 -->
+
+Every question this document opened now carries a decision or a named blocker.
+The marker above declares how many there are, the way `spec-v2-steps.json`
+declares `step_count`: a count taken from whatever survived cannot notice that
+something was deleted rather than answered.
+Three were settled by specification v2 and are recorded here so the shape
+document does not keep asking what the process document already answered; the
+fourth — distribution — was the remaining scope of T29.
+
+1. **One long first interview, or several sittings?**
+   **Decided: several, resumable.** Specification v2 §5.1 and §5.3 settle it —
+   thirteen steps, `position` written continuously during a step rather than at
+   its end, and a five-rule resumption order that announces which step is being
+   resumed and why. The protocol is still one continuous script, so a candidate
+   who wants to finish in one sitting can.
+
 2. **Are traits scored continuously, or held as episodes until enough
-   accumulate?** Recommendation: held, with a stated minimum before a trait
-   gets a value. A trait scored from one anecdote is a stereotype.
-3. **Is this multi-user from day one?** The spec says the profile schema must
-   be multi-user; if the packaging is a plugin someone installs, that is
-   effectively single-user per machine. Worth settling before the profile store
-   grows.
+   accumulate?**
+   **Decided: held.** Specification v2 §2.2 sets the floor at two independent
+   episodes recorded on two separate occasions. §11.1 leaves the *number* open
+   to the owner; the mechanism is settled. A trait scored from one anecdote is a
+   stereotype.
+
+3. **Is this multi-user from day one?**
+   **Decided: yes.** Specification v2 §6 — several people on one machine, one
+   directory each, identification before any read or write. Not a multi-tenant
+   service, which `status/plan.md` lists as permanently out of scope.
+
+4. **How is this distributed?**
+   **Decided: cloned, with candidate state outside the clone.** Recorded in
+   `docs/distribution.md`, which answers process spec §11.5 in full: install by
+   `git clone`, dependencies installed by the tool itself on first run,
+   `profiles/` resolved from `$INTEGRAL_HOME` and refused anywhere inside a git
+   work tree, job-site connectors in a separate repository, and a contribution
+   flow the candidate may decline without consequence.
+
+5. **What is the tool called?**
+   **Blocked: the owner has not settled the name.** "integral" is the agreed
+   direction — `integral-job-search` or similar. Nothing depends on it: no path,
+   gate or contract in this document or in `docs/distribution.md` is named after
+   the project, and the rename is mechanical whenever it is settled.
