@@ -17,7 +17,11 @@ queue protocol exists to prevent. So this script writes its own, separate file.
 
 Run via (from the repo root, with the project's dev environment):
     uv run python3 .claude/skills/step-11-application/scripts/run_checkpoint.py \
-        --id <handle> [--input-dir <profiles-root>]
+        --id <handle> [--input-dir <profiles-root>] [--dev]
+
+The profiles root defaults to the candidate store resolved from `$INTEGRAL_HOME`
+(`jobsearch.state_home`), which refuses any path inside a git work tree — candidate
+state never lives in the clone (T51, `docs/distribution.md` §2).
 
 Exit codes: 0 the step's machine-visible coverage is met; 1 it is not (still open, or
 blocked on a missing input); 2 the candidate or step could not be read at all.
@@ -37,6 +41,7 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 from jobsearch.identity import IdentityError, ProfileStore  # noqa: E402
 from jobsearch.process_spec import Step, StepList, load_steps  # noqa: E402
 from jobsearch.session import SessionError, SessionStore  # noqa: E402
+from jobsearch.state_home import StateHomeRefused, profiles_root  # noqa: E402
 from jobsearch.step_runtime import (  # noqa: E402
     ProfileView,
     is_finished,
@@ -114,13 +119,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--id", required=True, dest="handle", help="the candidate's resolved handle")
     parser.add_argument(
         "--input-dir",
-        default=str(_REPO_ROOT / "profiles"),
-        help="root of the profiles tree (default: repo profiles/)",
+        default=None,
+        help=(
+            "root of the profiles tree (default: the store resolved from "
+            "$INTEGRAL_HOME — never a path inside the clone, T51)"
+        ),
+    )
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="the explicit escape: allow a store inside a git work tree (INTEGRAL_DEV=1)",
     )
     args = parser.parse_args(argv)
 
     try:
-        result = checkpoint(Path(args.input_dir), args.handle)
+        root = (
+            Path(args.input_dir)
+            if args.input_dir
+            else profiles_root(dev=True if args.dev else None)
+        )
+    except StateHomeRefused as exc:
+        print(f"checkpoint could not be computed: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        result = checkpoint(root, args.handle)
     except (CheckpointError, IdentityError, SessionError) as exc:
         print(f"checkpoint could not be computed: {exc}", file=sys.stderr)
         return 2
