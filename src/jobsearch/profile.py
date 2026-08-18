@@ -31,6 +31,19 @@ behind the current one is stale, by definition". `scored_at` therefore answers
 **One profile cannot reach another.** Every path goes through `ProfileStore`
 (S3), so this module never names a directory. Writing profile B leaves profile
 A byte-identical, and that is measured too.
+
+**D-6: `constraints.json` is derived from two files of one profile, not one.**
+T24 pins ten fields and their three states (`stated`, `declined`, `unknown`);
+T41 is the engine that first resolves them, and a `declined` state lives in
+`session/declines.jsonl` (T40's ledger), never in `evidence.jsonl` — filing a
+refusal as evidence would make "what do you know about me?" answer partly with
+what someone declined to discuss. So for those ten names `_build_constraints`
+reads the ledger too, through `log.store` — still this one profile's own tree,
+so "one profile cannot reach another" is unaffected — and still nothing but
+what is on disk for this profile, so `profile_rebuild_deterministic` holds:
+two rebuilds of one unchanged tree still produce identical bytes, only "the
+log" now means the evidence log *and* the decline ledger together for this one
+derived file.
 """
 
 from __future__ import annotations
@@ -46,6 +59,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from jobsearch.candidate import FIELD_MODELS, ConstraintState
+from jobsearch.decline import DeclineLedger
 from jobsearch.identity import ProfileStore
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -328,23 +343,126 @@ def _header(log: EvidenceLog, rows: Sequence[EvidenceRow]) -> dict[str, Any]:
     }
 
 
+def _last_pinned_value(
+    rows: Sequence[EvidenceRow], field: str
+) -> tuple[EvidenceRow, dict[str, Any]] | None:
+    """The most recent T41-encoded `stated` value for one of T24's ten fields.
+
+    Mirrors `constraints_step._last_stated_value` exactly: same encoding
+    (`{"quote": ..., "value": ...}`, T41's `_encode_stated`), same
+    newest-first replay, same "cannot interpret it, cannot replay it" skip on
+    a row this cannot decode. Kept as its own copy rather than an import of
+    T41's function — `jobsearch.constraints_step` imports this module at load
+    time, so importing back would cycle, and T24/T41 own naming the
+    vocabulary; T6 only replays what they wrote.
+    """
+    for row in reversed(rows):
+        if row.kind != "constraint" or field not in row.dimensions:
+            continue
+        try:
+            payload = json.loads(row.text)
+            value = payload["value"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            continue
+        if isinstance(value, dict):
+            return row, value
+    return None
+
+
+def _resolve_pinned_field(
+    rows: Sequence[EvidenceRow], declines: Sequence[Any], field: str
+) -> tuple[ConstraintState, dict[str, Any] | None, bool]:
+    """One pinned field's `(state, value, touched)`.
+
+    The same reconciliation T41 applies when a call offers it no new turn for
+    a field (`constraints_step._resolve_without_turn`): whichever of a prior
+    stated row or a decline happened more recently wins. `touched` says
+    whether either history has anything to say about this field at all — see
+    `_resolve_pinned_fields` for why that decides whether the field is written
+    at all.
+    """
+    stated = _last_pinned_value(rows, field)
+    touched = stated is not None or bool(declines)
+    if stated is not None:
+        row, value = stated
+        last_decline_at = declines[-1].at if declines else None
+        if last_decline_at is None or row.recorded_at >= last_decline_at:
+            return "stated", value, touched
+    if declines:
+        return "declined", None, touched
+    return "unknown", None, touched
+
+
+def _resolve_pinned_fields(
+    log: EvidenceLog, rows: Sequence[EvidenceRow]
+) -> dict[str, dict[str, Any]]:
+    """T24's ten pinned fields, in T41's own shape — present only if touched.
+
+    "Touched" means a stated value or a decline has ever been recorded against
+    one of the ten names, by either history. A profile that has never reached
+    Constraints must not read as ten resolved `unknown`s just because a
+    rebuild ran: `step_runtime._constraints_resolved` counts `unknown` as
+    resolved, so writing it unconditionally would tell sufficiency a step ran
+    that never did. The moment one field is touched, all ten are written —
+    exactly `constraints_step.write_constraints`'s own behaviour, which this
+    reproduces so a rebuild after Constraints is a no-op rather than a
+    regression.
+    """
+    ledger = DeclineLedger(log.store)
+    resolved: dict[str, dict[str, Any]] = {}
+    any_touched = False
+    for field, model in FIELD_MODELS.items():
+        declines = ledger.declines(field)
+        state, value, touched = _resolve_pinned_field(rows, declines, field)
+        any_touched = any_touched or touched
+        try:
+            instance = (
+                model(state="stated", **value)
+                if state == "stated" and value is not None
+                else model(state=state)
+            )
+        except ValidationError:
+            # A row this shape check refuses is not a fact to carry forward —
+            # the same "cannot interpret it, cannot replay it" discipline as
+            # `_last_pinned_value`'s decode skip, just caught one step later.
+            instance = model(state="unknown")
+        resolved[field] = instance.model_dump(mode="json")
+    return resolved if any_touched else {}
+
+
 def _build_constraints(log: EvidenceLog, rows: Sequence[EvidenceRow]) -> dict[str, Any]:
     """Constraint rows folded into fields, each in one of three states.
 
-    T24 pins the field set and T41 owns the confirm-and-fill engine; what T6
-    owns is that the file is *derived* — regenerated from the log, in a stable
-    order, and never edited in place. A field nobody stated is absent here
-    rather than present-and-empty, because "unknown" and "stated as nothing"
-    are different answers and only T24 gets to name the difference.
+    T24 pins ten field names and T41 owns the confirm-and-fill engine that
+    first resolves them; what T6 owns is that the file stays *derived* — a
+    rebuild must reproduce it, not merely reproduce whatever part happens to
+    live in `evidence.jsonl`. For those ten names this function replays T41's
+    own resolution (`_resolve_pinned_fields`, module docstring) rather than
+    the plain evidence-id fold below, because a `declined` or `unknown` state
+    the plain fold cannot see (it lives in the decline ledger, or nowhere at
+    all) must survive a rebuild exactly as a `stated` one already did — a
+    field the candidate explicitly refused must not revert to
+    indistinguishable-from-never-asked just because something upstream
+    changed and `revision.refresh` recomputed this file (D-6).
+
+    A dimension outside the pinned ten is folded the old way, unchanged:
+    whatever `dimensions` a constraint row carries, however a step tagged it,
+    with the evidence ids that stated it. A field nobody stated is absent
+    here rather than present-and-empty, because "unknown" and "stated as
+    nothing" are different answers and only T24 gets to name the difference.
     """
-    stated: dict[str, dict[str, Any]] = {}
+    generic: dict[str, dict[str, Any]] = {}
     for row in rows:
         if row.kind != "constraint":
             continue
         for dimension in row.dimensions or ("unattributed",):
-            stated.setdefault(dimension, {"state": "stated", "evidence": []})
-            stated[dimension]["evidence"].append(row.id)
-    return {**_header(log, rows), "fields": dict(sorted(stated.items()))}
+            if dimension in FIELD_MODELS:
+                continue  # T24's pinned fields are resolved below, trichotomy and all
+            generic.setdefault(dimension, {"state": "stated", "evidence": []})
+            generic[dimension]["evidence"].append(row.id)
+
+    fields: dict[str, dict[str, Any]] = {**generic, **_resolve_pinned_fields(log, rows)}
+    return {**_header(log, rows), "fields": dict(sorted(fields.items()))}
 
 
 def _build_traits(log: EvidenceLog, rows: Sequence[EvidenceRow]) -> dict[str, Any]:
@@ -592,8 +710,134 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+# ---------------------------------------------------------------------------
+# D-6's gate — a resolved constraint state must survive a refresh
+
+DEFAULT_D6_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D6.json"
+
+# One target state per pinned field, cycling through all three so the gate
+# exercises `stated`, `declined` and `unknown` rather than just one of them —
+# 4 stated, 3 declined, 3 unknown across T24's ten names. `None` is the value
+# payload for a field this fixture declines or leaves untouched; a `state`
+# turn always carries one.
+_D6_FIXTURE: tuple[tuple[str, ConstraintState, dict[str, Any] | None], ...] = (
+    ("languages", "stated", {"levels": [{"language": "en", "level": "professional"}]}),
+    ("location", "declined", None),
+    ("relocation", "unknown", None),
+    ("salary", "stated", {"floor": 40000, "currency": "EUR"}),
+    ("availability", "declined", None),
+    ("work_authorisation", "unknown", None),
+    ("employment_mode", "stated", {"accepted": ["employed"]}),
+    ("pay_country", "declined", None),
+    ("tax_country", "unknown", None),
+    ("reach", "stated", {"modes": ["remote"]}),
+)
+MINIMUM_FIELDS_CHECKED = len(_D6_FIXTURE)
+
+
+def probe_constraint_survival(root: Path) -> dict[str, Any]:
+    """Resolve all ten of T24's pinned fields, refresh, and see what survives.
+
+    D-6: before the fix, `revision.refresh` called this module's `rebuild`,
+    whose generic fold only ever produced `stated` from an evidence-log row —
+    a `declined` field (recorded in T40's ledger, not the log) or an
+    unaddressed `unknown` one disappeared from `constraints.json` the moment
+    anything upstream refreshed it. This drives a genuine
+    resolve-then-refresh cycle over every one of the ten fields, each in one
+    of the three states, and counts how many come out of the refresh
+    byte-for-byte unchanged.
+    """
+    from jobsearch.constraints_step import CandidateTurn, resolve
+    from jobsearch.identity import create_profile
+    from jobsearch.revision import refresh
+
+    identity = create_profile(root, "Probe D6", handle="probe-d6")
+    store = ProfileStore(root, identity.handle)
+
+    turns = [
+        CandidateTurn(field=field, action="state", value=value)
+        for field, state, value in _D6_FIXTURE
+        if state == "stated"
+    ] + [
+        CandidateTurn(field=field, action="decline")
+        for field, state, _ in _D6_FIXTURE
+        if state == "declined"
+    ]
+    # The remaining fixture fields (`state == "unknown"`) get no turn at all —
+    # that is what makes them unknown: nobody has addressed them yet.
+    resolve(store, turns, now="2026-08-18T09:00:00Z")
+
+    constraints_path = store.path("profile", "constraints.json")
+    before = json.loads(constraints_path.read_text(encoding="utf-8"))["fields"]
+
+    refresh(store)
+
+    after = json.loads(constraints_path.read_text(encoding="utf-8"))["fields"]
+
+    survived: list[str] = []
+    lost: list[str] = []
+    for field, expected_state, _ in _D6_FIXTURE:
+        entry = after.get(field)
+        if (
+            isinstance(entry, dict)
+            and entry.get("state") == expected_state
+            and entry == before.get(field)
+        ):
+            survived.append(field)
+        else:
+            lost.append(
+                f"{field}: expected {expected_state!r} to survive the refresh — "
+                f"before={before.get(field)!r} after={entry!r}"
+            )
+
+    return {
+        "constraint_states_survive_rebuild": len(survived) / len(_D6_FIXTURE),
+        "fields_checked": len(_D6_FIXTURE),
+        "states_covered": sorted({state for _, state, _ in _D6_FIXTURE}),
+        "survived": survived,
+        "lost": lost,
+    }
+
+
+def write_constraint_survival_evidence(
+    evidence: Path = DEFAULT_D6_EVIDENCE_PATH,
+) -> dict[str, Any]:
+    """Measure `constraint_states_survive_rebuild` (D-6) in a throwaway tree."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="jobsearch-d6-") as tmp:
+        measured = probe_constraint_survival(Path(tmp) / "profiles")
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
-    """`python -m jobsearch.profile [path]` → T6's gate evidence."""
+    """`python -m jobsearch.profile [path]` → T6's gate evidence.
+
+    `python -m jobsearch.profile --constraint-survival [path]` → D-6's gate
+    evidence instead — a second, independent measurement over the same
+    module, kept as a flag rather than a new file because the property it
+    checks (a resolved state surviving *this* module's own `rebuild`) belongs
+    to `rebuild`, not to a module of its own.
+    """
+    if "--constraint-survival" in argv[1:]:
+        positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+        target = Path(positional[0]) if positional else DEFAULT_D6_EVIDENCE_PATH
+        measured = write_constraint_survival_evidence(target)
+        print(json.dumps(measured, ensure_ascii=False))
+        if measured["fields_checked"] < MINIMUM_FIELDS_CHECKED:
+            print(
+                f"only {measured['fields_checked']} fields were checked "
+                f"(floor {MINIMUM_FIELDS_CHECKED}) — full survival over nothing is not "
+                "a measurement",
+                file=sys.stderr,
+            )
+            return 3
+        for loss in measured["lost"]:
+            print(loss, file=sys.stderr)
+        return 1 if measured["lost"] else 0
+
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)

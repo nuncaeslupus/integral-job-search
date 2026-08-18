@@ -1,0 +1,22 @@
+{
+  "constraint_states_survive_rebuild": 1.0,
+  "fields_checked": 10,
+  "states_covered": [
+    "declined",
+    "stated",
+    "unknown"
+  ],
+  "survived": [
+    "languages",
+    "location",
+    "relocation",
+    "salary",
+    "availability",
+    "work_authorisation",
+    "employment_mode",
+    "pay_country",
+    "tax_country",
+    "reach"
+  ],
+  "lost": []
+}

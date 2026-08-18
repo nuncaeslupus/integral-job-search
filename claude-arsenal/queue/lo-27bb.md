@@ -50,10 +50,17 @@ A refresh after a constraints step preserves every `declined` and `unknown`
 field. T6's `profile_rebuild_deterministic` and T41's
 `constraint_field_resolution` both still pass.
 
+```gate
+constraint_states_survive_rebuild == 1.0
+evidence: status/evidence/D6.json
+key: constraint_states_survive_rebuild
+```
+
 ```bash
 uv run pytest tests/test_profile_store.py tests/test_constraints_step.py tests/test_revision.py -q
 uv run python -m jobsearch.profile --check
 uv run python -m jobsearch.constraints_step --check
+uv run python -m jobsearch.profile --constraint-survival status/evidence/D6.json
 ```
 
 ## Tests
