@@ -943,13 +943,17 @@ work look complete.
    relevant — is settled; the source list is not.
 4. **CV templates** remain out of v1 (brief §2.7). The store is designed to feed
    templates rather than one layout, which is all that is owed now.
-5. **How this is distributed** is undecided, and it decides one thing here. A
-   public repository with private per-person copies, a fork per candidate, or an
-   application with a UI all keep `profiles/` off the internet in different
-   ways. `.gitignore` is sufficient for a repository someone clones; it is not a
-   plan for anything else. The tree in §6 does not depend on the answer, so the
-   question can wait — but not past the point where someone other than the owner
-   installs this.
+5. ~~**How this is distributed** is undecided~~ — **settled 2026-08-18, and
+   recorded in `docs/distribution.md`.** The tool is installed by cloning the
+   repository, and the per-user tree of §6 resolves from `$INTEGRAL_HOME`
+   (default `~/.integral-job-search/`) rather than from a path inside the
+   clone — a resolver that refuses any location inside a git work tree, so
+   "candidate data never reaches a repository" is a property of the code and not
+   of a `.gitignore` line. As anticipated here, the tree in §6 did not depend on
+   the answer: nothing in it changes, only where its root resolves from.
+   Job-site connectors live in a separate repository and enter as a dependency;
+   contributing one is offered, disclosed in full, and may be declined without
+   consequence (§5.4's non-insistence rule, applied to contribution).
 6. **Which sources Sourcing uses** (§2.6) is the same shape of question as (3):
    the requirement — specialised boards, cross-border reach, the payment and tax
    questions asked at the right moment — is settled, and the list of connectors

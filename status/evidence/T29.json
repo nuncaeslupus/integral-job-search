@@ -1,0 +1,47 @@
+{
+  "phase_checkpoints_defined": 1,
+  "open_shape_questions_unanswered": 0,
+  "steps_measured": 13,
+  "steps_without_a_checkpoint": [],
+  "steps_implemented": [
+    "identify",
+    "intake",
+    "constraints",
+    "history",
+    "traits",
+    "sourcing"
+  ],
+  "steps_not_implemented": [
+    "reactions",
+    "preferences",
+    "understanding",
+    "ranking",
+    "feedback",
+    "application",
+    "interview_log"
+  ],
+  "shape_questions": [
+    {
+      "question": "One long first interview, or several sittings?",
+      "resolution": "Decided"
+    },
+    {
+      "question": "Are traits scored continuously, or held as episodes until enough",
+      "resolution": "Decided"
+    },
+    {
+      "question": "Is this multi-user from day one?",
+      "resolution": "Decided"
+    },
+    {
+      "question": "How is this distributed?",
+      "resolution": "Decided"
+    },
+    {
+      "question": "What is the tool called?",
+      "resolution": "Blocked"
+    }
+  ],
+  "unanswered_questions": [],
+  "violations": []
+}
