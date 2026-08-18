@@ -1,0 +1,9 @@
+{
+  "corpus_language_slice_mismatch": 0,
+  "mismatches": [],
+  "target_mix": {
+    "es": 60,
+    "en": 25,
+    "ca": 15
+  }
+}

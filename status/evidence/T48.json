@@ -3,13 +3,13 @@
   "steps_read": 13,
   "implemented": [
     "constraints",
+    "history",
     "identify",
     "sourcing"
   ],
   "not_implemented": [
     "application",
     "feedback",
-    "history",
     "intake",
     "interview_log",
     "preferences",

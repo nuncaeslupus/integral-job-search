@@ -338,7 +338,7 @@ Carry on?"* Writes `last_activity`.
 
 **Gate.** `story_dimension_linkage == 1.0` — every episode links to at least one
 dimension id, so the bank is queryable rather than a pile of prose. Owner: T8.
-State: `not_implemented`.
+State: `implemented`.
 
 **`story_failure_fraction >= 0.33` is superseded and must not be gated on.** The
 v1 criterion asked for a third of episodes to be failures, and the concern behind

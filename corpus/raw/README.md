@@ -31,21 +31,45 @@ Every ad was fetched from a live board. Nothing is synthetic, translated or
 paraphrased (`status/specification.md` risk register: a corpus of invented ads
 makes every numeric gate pass while measuring nothing).
 
-## Known divergence — the Catalan slice
+## Known divergence — the Catalan slice is Catalan IT ads, not remote programming
 
-T4b asks for **remote programming** ads in all three languages. Natively-Catalan
-*remote programming* ads barely exist: a full sweep of Feina Activa (the one
+**This is a decision (D-1), not an oversight.** T4b originally asked for
+**remote programming** ads in all three languages. Natively-Catalan *remote
+programming* ads barely exist: a full keyword sweep of Feina Activa (the one
 board whose ads are written in Catalan rather than translated into it, ~5 500
-live offers) yields fewer than ten, and most Catalan employers post in Spanish
-or English. Rather than pad the slice with machine-translated text — teletreballa.com
-republishes Feina Activa ads in translated Catalan, which would have made the count
-trivially — the Catalan 15 are **IT roles at large** (developer, sysadmin, data,
-cybersecurity, TIC consulting), 5 of which mention teletreball/remote work.
+live offers) returns under ten — a fact about the Catalan-language job market,
+not a collection shortfall, and no amount of harvesting effort changes it. The
+available shortcut — teletreballa.com republishes Feina Activa ads
+machine-translated into Catalan, which would have made the count trivially —
+was rejected on principle and stays rejected: those are not verbatim originals,
+and the spec's risk register forbids padding the corpus with text that is not
+the real ad. Shrinking the Catalan target and growing the Spanish one was
+considered and rejected too: the Catalan slice's job is Catalan job-ad
+*vocabulary* for the ontology, and that job does not require the ads to be
+remote — a Catalan sysadmin ad teaches the same vocabulary as a Catalan
+remote-developer ad.
 
-The Catalan slice therefore covers Catalan job-ad *vocabulary*, which is what the
-ontology needs, but is not a like-for-like remote-programming sample. Tracked as a
-queue task; labelling (T5) should treat the remote dimension on these as genuinely
-mixed rather than assumed-remote.
+So: **the Catalan 15 are Catalan IT ads at large** (developer, sysadmin, data,
+cybersecurity, TIC consulting), stated honestly as such, with the remote
+dimension mixed in rather than filtered for — unlike ES and EN, which are
+remote-filtered at source. Measured against the actual text (not assumed):
+6 of the 15 contain the string `teletreball`/`remot`, but close reading narrows
+that to 2 ads that actually offer telework as part of the role
+(`feinaactiva-FA92317375`: "Possibilitat de 95% teletreball"; `feinaactiva-FA92317378`:
+"Més del 50% de la jornada de teletreball"). The other 4 hits use `remot` to
+describe **remote IT support delivered to end users** — a duty, not the
+position's own arrangement — and one of those four
+(`feinaactiva-FA92318000`) is explicitly on-site ("LLOC DE TREBALL PRESENCIAL A
+VIC"). The remaining 9 Catalan ads say nothing about work location at all.
+
+`status/plan.md` (T4b row), `tests/test_corpus_raw.py` (`TARGET_MIX`, via
+`jobsearch.corpus_scope`) and this section are checked against each other
+mechanically by `jobsearch.corpus_scope` — `corpus_language_slice_mismatch == 0`
+fails if any of the three stops agreeing with the other two, rather than
+trusting three hand-edited documents to stay in sync. **Labelling (T5) must
+extract `remote_arrangement` from each Catalan ad's own text — never assume a
+Catalan ad is remote because the corpus overall skews that way, and never
+assume it is on-site either; both directions are represented.**
 
 ## Reproducing / extending
 

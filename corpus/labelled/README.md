@@ -20,6 +20,18 @@ T16 measures as `extraction_negation_recall`, and a bare score cannot carry it.
 
 **The store is currently unlabelled.** Labelling is T5, by hand.
 
+## Catalan ads are not all remote (D-1)
+
+`corpus/raw/README.md`'s "Known divergence" section explains why: the 15
+Catalan ads are Catalan IT ads at large, not filtered for remote work the way
+the Spanish and English slices are — of the 15, only 2 actually offer
+telework as part of the role; a further few mention `remot` only as remote IT
+*support delivered to end users*, a duty rather than the role's own modality,
+and at least one is explicitly on-site. When labelling `remote_arrangement`,
+extract it from each ad's own text. Do not default a Catalan ad to remote
+because the corpus overall skews that way, and do not default it to on-site
+either — most Catalan ads say nothing about location at all.
+
 ## Splits
 
 Each language is halved, evaluation taking the ceiling of an odd slice:
