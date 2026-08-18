@@ -1,0 +1,13 @@
+{
+  "skill": "step-02-constraints",
+  "canary": "step-02-constraints-loaded-2026-08-18-f42ed484-9c81575b4c43384b",
+  "negative_control": "this-fact-is-false: step 2 (Constraints) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 2 (constraints) — run it.",
+    "jobsearch.step_runtime offered() names 'constraints' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-02-constraints",
+    "Audit the job-search codebase's test coverage."
+  ]
+}

@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from jobsearch.constraints_step import CandidateTurn
+from jobsearch.constraints_step import resolve as resolve_constraints
 from jobsearch.identity import ProfileStore, create_profile
 from jobsearch.profile import EvidenceLog, ProfileRevision, rebuild
 from jobsearch.revision import (
@@ -269,3 +271,70 @@ def test_a_failure_elsewhere_in_the_class_rules_does_not_pass_behind_a_clean_rec
     result = probe_staleness(tmp_path / "profiles")
     assert result["failures"] == []
     assert result["stale_artefact_detection_recall"] == 1.0
+
+
+# --- D-6: a refresh must not un-ask a question the candidate already answered
+
+
+def test_a_declined_field_survives_a_rebuild(tmp_path: Path) -> None:
+    """A refresh must not revert a declined field to never-asked.
+
+    T41's engine records a decline in `session/declines.jsonl`, not in the
+    evidence log, and writes `state: "declined"` into `constraints.json`.
+    Before the fix, `revision.refresh` called `jobsearch.profile.rebuild`,
+    which regenerated `constraints.json` from the evidence log alone — a
+    field the candidate explicitly refused reverted to
+    indistinguishable-from-never-asked, and the tool would ask again, which
+    is exactly the non-insistence guarantee T40 exists to provide.
+    """
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Ada Lovelace", language="en")
+    store = ProfileStore(root, identity.handle)
+
+    resolve_constraints(
+        store, [CandidateTurn(field="salary", action="decline")], now="2026-08-18T09:00:00Z"
+    )
+    before = json.loads(store.path("profile", "constraints.json").read_text(encoding="utf-8"))
+    assert before["fields"]["salary"]["state"] == "declined"
+
+    refresh(store)
+
+    after = json.loads(store.path("profile", "constraints.json").read_text(encoding="utf-8"))
+    assert after["fields"]["salary"]["state"] == "declined", (
+        "a refresh after a constraints step un-declined a field the candidate "
+        "had explicitly refused"
+    )
+
+
+def test_an_unknown_field_survives_a_rebuild(tmp_path: Path) -> None:
+    """An unaddressed pinned field must still read `unknown`, not disappear.
+
+    T41 writes all ten of T24's pinned fields on every call, including the
+    ones nobody has addressed yet. Before the fix, `rebuild` only wrote a
+    field that had a `stated` evidence row behind it, so an untouched pinned
+    field vanished from `constraints.json` entirely once a refresh ran —
+    indistinguishable from a field that was never part of the schema at all.
+    """
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Ada Lovelace", language="en")
+    store = ProfileStore(root, identity.handle)
+
+    resolve_constraints(
+        store,
+        [
+            CandidateTurn(
+                field="salary", action="state", value={"floor": 40000, "currency": "EUR"}
+            )
+        ],
+        now="2026-08-18T09:00:00Z",
+    )
+    before = json.loads(store.path("profile", "constraints.json").read_text(encoding="utf-8"))
+    assert before["fields"]["location"]["state"] == "unknown"
+
+    refresh(store)
+
+    after = json.loads(store.path("profile", "constraints.json").read_text(encoding="utf-8"))
+    assert "location" in after["fields"], (
+        "a refresh after a constraints step dropped an unaddressed pinned field entirely"
+    )
+    assert after["fields"]["location"]["state"] == "unknown"

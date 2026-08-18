@@ -1,0 +1,13 @@
+{
+  "skill": "step-03-history",
+  "canary": "step-03-history-loaded-2026-08-18-f42ed484-76b243ddb405a4f1",
+  "negative_control": "this-fact-is-false: step 3 (History) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 3 (history) — run it.",
+    "jobsearch.step_runtime offered() names 'history' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-03-history",
+    "Audit the job-search codebase's test coverage."
+  ]
+}

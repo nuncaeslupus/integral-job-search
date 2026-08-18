@@ -1,0 +1,44 @@
+# A worked example, not a live connector: `examplejobs.test` is not a real
+# job board. It exists so the format has one committed, readable instance —
+# and so `tests/test_connectors.py` has something real to load, rather than
+# only the string literals a test author trusts by construction.
+#
+# `site` + `locale` must match this filename exactly (`examplejobs_es.yaml`) —
+# see `load_connector` in `src/jobsearch/connectors.py`.
+site: examplejobs
+locale: es
+version: "1.0.0"
+last_verified: "2026-08-01"
+# No login needed to read this fictitious board's listings. A site that does
+# need one sets `auth: candidate_session` instead — never a stored credential;
+# see the module docstring's "What a connector may not do".
+auth: none
+
+list:
+  url_pattern: "https://www.examplejobs.test/jobs?page={page}"
+  pagination:
+    mode: query_param
+    param: page
+    start: 1
+    max_pages: 5
+  # Each `.job-card` on the results page is one listing.
+  item: ".job-card"
+  fields:
+    detail_url:
+      css: "a.job-link"
+      attr: href
+    title:
+      css: ".job-title"
+    company:
+      css: ".job-company"
+
+detail:
+  fields:
+    text:
+      css: ".job-description"
+    title:
+      css: "h1.posting-title"
+    company:
+      css: ".company-name"
+    location_raw:
+      css: ".job-location"

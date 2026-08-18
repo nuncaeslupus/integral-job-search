@@ -9,7 +9,8 @@ key: constraint_field_resolution
 ```
 
 ```bash
-echo "no gate command defined for T41 — replace this line with the command that writes status/evidence/T41.json" >&2; exit 1
+uv run --extra dev pytest tests/test_constraints_step.py -q
+uv run --extra dev python -m jobsearch.constraints_step status/evidence/T41.json
 ```
 
 ## What this is

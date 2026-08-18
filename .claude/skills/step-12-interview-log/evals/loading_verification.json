@@ -1,0 +1,13 @@
+{
+  "skill": "step-12-interview-log",
+  "canary": "step-12-interview-log-loaded-2026-08-18-f42ed484-11721cfebdaa3515",
+  "negative_control": "this-fact-is-false: step 12 (Interview) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 12 (interview_log) — run it.",
+    "jobsearch.step_runtime offered() names 'interview_log' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-12-interview-log",
+    "Audit the job-search codebase's test coverage."
+  ]
+}

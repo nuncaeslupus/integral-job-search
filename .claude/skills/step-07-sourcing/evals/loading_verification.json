@@ -1,0 +1,13 @@
+{
+  "skill": "step-07-sourcing",
+  "canary": "step-07-sourcing-loaded-2026-08-18-f42ed484-55019180c91ff6e0",
+  "negative_control": "this-fact-is-false: step 7 (Sourcing) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 7 (sourcing) — run it.",
+    "jobsearch.step_runtime offered() names 'sourcing' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-07-sourcing",
+    "Audit the job-search codebase's test coverage."
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "skill": "step-11-application",
+  "canary": "step-11-application-loaded-2026-08-18-f42ed484-1acb16a96c555ddf",
+  "negative_control": "this-fact-is-false: step 11 (Application) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 11 (application) — run it.",
+    "jobsearch.step_runtime offered() names 'application' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-11-application",
+    "Audit the job-search codebase's test coverage."
+  ]
+}

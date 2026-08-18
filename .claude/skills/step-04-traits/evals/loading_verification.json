@@ -1,0 +1,13 @@
+{
+  "skill": "step-04-traits",
+  "canary": "step-04-traits-loaded-2026-08-18-f42ed484-730ac2a6d1508a06",
+  "negative_control": "this-fact-is-false: step 4 (Traits) has no hard cap on questions and runs until the candidate ends the session",
+  "load_prompts": [
+    "The candidate's session is at step 4 (traits) — run it.",
+    "jobsearch.step_runtime offered() names 'traits' next; continue the process."
+  ],
+  "no_load_prompts": [
+    "Generic prompt that should NOT activate step-04-traits",
+    "Audit the job-search codebase's test coverage."
+  ]
+}

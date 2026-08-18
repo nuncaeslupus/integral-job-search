@@ -202,6 +202,71 @@ keyword the profile does not support is a gap, never something to insert.
 [How AI screens resumes in 2026](https://happypeopleai.com/blog/how-ai-screens-your-resume-in-2026-and-how-to-beat-ats-filters)
 — both commercial; low confidence, flagged in §5.
 
+### 2.8 Cross-source near-duplicate detection
+
+**What.** The same advert reposted across sources — reworded, retitled, or with a source's own
+summary or footer stitched on — is found by shingled Jaccard similarity over normalised ad
+text, not by hashing (T13).
+
+**Why.** Process spec §7.4 fixes `text_sha256` as a hash over normalised text, which "catches
+re-collection of the same listing and nothing else": two portals carrying the same role rarely
+carry byte-identical text, so cross-posted duplicates need a *similarity* judgement, not an
+equality check. Word-shingle Jaccard (the technique behind Broder's near-duplicate web-page
+detection) was chosen over `difflib.SequenceMatcher` because shingle-set overlap is insensitive
+to *where* in the text an edit happened — a retitled opening line or an appended footer only
+invalidates the shingles that cross that boundary — while `SequenceMatcher`'s
+longest-common-subsequence approach is sensitive to exactly that kind of local rearrangement,
+and quadratic in text length besides. Standard library only: no new dependency.
+
+**How we use it.** Text is lowercased and word-tokenised into a comparison key that is never
+written back to the stored offer (`Offer.text` stays byte-for-byte verbatim, per T11 — T15's
+extraction evidence spans are offsets into it). The key is split into overlapping 8-word
+shingles and compared by `|intersection| / |union|`. Shingles common to more than half of a
+reference population are excluded from every pair's score before it is computed — same-source
+template text (a cookie notice, an equal-opportunity statement) recurs across most of an
+arbitrary batch, while genuine duplicate content is specific to one crosspost cluster, so a
+bare-majority frequency threshold separates the two without needing a template denylist. See
+§4.6 for the formula and the threshold's calibration.
+
+**Two passes, not one — the majority-cluster fix.** That reference population is *cluster
+representatives*, not raw offers, and it took a review finding to establish why raw offers is
+wrong: a frequency threshold cannot, on its own, distinguish shared template text from shared
+*duplicate* content, because both recur across a batch by construction. Counting frequency over
+raw offers means a popular role's own crossposts inflate their own content's frequency exactly
+the way boilerplate does — three or more copies of one ad in a batch of five puts their shared
+genuine body over the 50% line, and the filter erases the very content it exists to match on. A
+popular role is *more* likely to dominate a small batch, not less, so this was the exact case
+the feature exists for, not an edge case, and the gate's precision-only metric could not see it
+(recall is not measured — see below). The fix runs the comparison in two passes: pass one scores
+every pair on raw, unfiltered shingles against a stricter cutoff
+(`jobsearch.dedup._RAW_CLUSTER_THRESHOLD`, calibrated so shared-template overlap alone never
+crosses it) purely to find which offers are copies of the same ad, and collapses each such
+cluster to one representative (the union of its members' shingle sets). Pass two counts
+boilerplate frequency over those representatives — so three copies of one ad contribute one
+entry to the corpus, the same as a genuinely unique ad — and re-scores every pair with that
+filter. See `jobsearch.dedup._cluster_representatives` and
+`tests/test_dedup.py::test_majority_duplicate_cluster_is_not_erased_as_boilerplate`.
+
+**Limits.** The 0.25 similarity threshold and the 8-word shingle width are calibrated against a
+seven-offer, twenty-one-pair seeded fixture (`jobsearch.dedup._fixture_batch`), not a broad
+corpus — flagged in §5. Boilerplate filtering needs at least three items in its reference
+population to define "common" against; a bare pair falls back to unfiltered similarity, so a
+two-offer comparison sharing a long boilerplate block is not protected by this mechanism
+(`jobsearch.dedup.similarity` vs. `jobsearch.dedup.find_duplicates`, whose docstrings say so).
+The gate measures precision, never recall — see the module docstring's asymmetry argument,
+echoed in §4.4's `dedup_precision` row: a false merge silently drops a role from the candidate's
+list with nothing to tell them it happened, while a missed duplicate is only noise. Because a
+missed-duplicate defect (the majority-cluster case above) is structurally invisible to a
+precision-only gate, `jobsearch.dedup.probe_dedup` also runs a dedicated recall probe over a
+second, majority-cluster fixture (`jobsearch.dedup._majority_cluster_fixture`, at least three
+near-identical copies) and records `majority_cluster_recall` / `majority_cluster_missed`
+alongside `dedup_precision` in the same evidence file — a measurement, not a prose note, so the
+defect coming back would be caught. `dedup_precision` remains the sole declared gate; the recall
+probe does not change what "pass" means.
+
+**Sources.** Broder, A. (1997), *On the resemblance and containment of documents* — the
+w-shingling technique for near-duplicate detection this module's shingle width follows.
+
 ---
 
 ## 3. Techniques deliberately NOT used
@@ -293,6 +358,93 @@ carries the reasoning.
 to elicit preferences are also used to measure `rank_spearman`, the ranking gate measures
 memorisation, passes, and tells us nothing. It must be exactly zero.
 
+### 4.5 Net-from-gross pay estimation
+
+Comparing a Spanish offer and a German one on gross salary is exactly the comparison that
+misleads — a candidate needs a rough **monthly net**, in their own currency, for every offer
+(T33). Given a country's (or region's) rule set — progressive income-tax bands, a flat
+capped social security rate, and an "obvious" flat personal allowance — the estimate is:
+
+```
+taxable        = max(gross_annual - allowance, 0)
+income_tax     = Σ over ordered bands of (band's share of taxable) × band.rate
+social_security = min(gross_annual, cap) × social_security_rate
+net_annual     = gross_annual - income_tax - social_security
+net_monthly    = net_annual / 12
+```
+
+`income_tax` is the ordinary **marginal-band** calculation — each band taxes only the slice
+of `taxable` that falls inside it, not the whole amount at that band's rate. `social_security`
+is a single flat rate against gross, capped where the rule set says a country caps
+contributions. `net_monthly` always assumes 12 equal payments — countries that pay salary in
+13 or 14 instalments (Spain routinely does) are simplified to that convention, and each
+committed rule set's `notes` says so explicitly.
+
+**Two rule sources, and the honesty rule that governs them.** Rules are either **committed**
+(`taxes/<COUNTRY>.json`, checked by a person against a real tax code, `source: verified`,
+carrying `checked_on`) or **generated** when a country is absent (worked out on the spot,
+written to disk, and used — `source: generated`, carrying `generated_on` and `generated_by`
+instead of `checked_on`). **No rule set shipped in this repository is `verified` yet** —
+`taxes/ES.json` and `taxes/DE.json` were assembled from published secondary summaries, not
+checked by a person against the tax code, so both are marked `generated` and every figure
+drawn from them reads as approximate. `verified` is a claim about a person having done that
+work; `pay.probe_pay` checks the shipped files so nothing can wear the label without it.
+A search must never stop for want of a country's tax rules, so
+generation always succeeds; but every figure it produces is displayed as **approximate and
+generated**, never like a checked rule — `pay.TaxRules._marking_matches_source` makes the two
+sources mutually exclusive by construction, and `pay.NetEstimate.label()` carries the mark
+through to the number itself. A committed rule set also **goes stale**: rates change every
+year, and one nobody has checked in over `pay.STALE_AFTER_DAYS` days is flagged rather than
+shown next to a freshly-checked one with no visible difference. No model is called to produce
+a generated rule set here — `pay.default_generator` is a loudly-labelled, stdlib-only
+placeholder behind the same `pay.RuleGenerator` seam a real generator would use.
+
+**Out of scope, and said so on every estimate** (`pay.OUT_OF_SCOPE_NOTE`): dependants, joint
+assessment, regional variation below the level a rule set models, and pension arrangements.
+None of these are modelled; the estimate states that it ignores them rather than implying a
+precision the calculation does not have.
+
+### 4.6 Near-duplicate detection — shingled Jaccard similarity
+
+Two ads' normalised texts are each split into overlapping 8-word shingles (§2.8); similarity is
+plain Jaccard over the two shingle sets, after a two-pass boilerplate filter removes shingles
+common to more than half a reference population of cluster representatives (§2.8's
+"majority-cluster fix" — not the raw batch; see below for why):
+
+```
+shingles(text)             = { word[i:i+8] for i in range(len(words) - 7) }   # 8-word windows
+
+# pass 1 — cluster offers into copies of the same ad, on RAW (unfiltered) shingles
+cluster_threshold          = 0.30                                    # jobsearch.dedup._RAW_CLUSTER_THRESHOLD
+same_ad(a, b)               = jaccard(shingles(a), shingles(b)) > cluster_threshold
+clusters(batch)             = connected components of `batch` under `same_ad` (union-find)
+representative(cluster)     = ⋃ { shingles(o) : o in cluster }       # one entry per cluster, not per offer
+
+# pass 2 — boilerplate frequency over representatives, then the final score
+boilerplate(batch)          = { s : |{ r in representatives(batch) : s in r }| > 0.5 × |representatives(batch)| }
+similarity(a, b, batch)     = |shingles(a)\boilerplate − shingles(b)\boilerplate|
+                               ────────────────────────────────────────────────
+                               |shingles(a)\boilerplate ∪ shingles(b)\boilerplate|
+```
+
+Two offers are reported as the same ad when `similarity > 0.25`
+(`jobsearch.dedup.SIMILARITY_THRESHOLD`). That value is not assumed; it is the point roughly
+midway between the lowest score any seeded duplicate pair reached (0.489, after boilerplate
+filtering) and the highest score any seeded non-duplicate pair reached (0.0) in the calibration
+fixture referenced in §2.8 — comfortable margin on both sides of the observed gap, rather than a
+value fit to the exact boundary. Fixing the majority-cluster defect (§2.8) did not move this
+threshold or either observed score: `_fixture_batch`'s own largest crosspost cluster is 3 of 7
+offers (43%), under the 50% boilerplate line even under the single-pass filter this replaced, so
+the fix changes nothing on that fixture — it is recorded here as a fact that was checked, not
+assumed. `cluster_threshold = 0.30` (pass 1) is calibrated separately, deliberately stricter than
+`0.25`: pass 1 has no boilerplate filter yet to protect it, and two unrelated ads sharing only a
+long template footer can score up to 0.268 on raw Jaccard alone in the calibration fixture, so
+0.30 sits above every such footer-only confounder and below the weakest genuine crosspost's raw
+score (0.331). Boilerplate filtering itself needs at least three items in its reference
+population to define "common" against (with two, any shingle either shares is, trivially, in
+"all of them"); below that population no filtering is applied and the two shingle sets are
+compared as they stand.
+
 ---
 
 ## 5. Evidence gaps
@@ -312,6 +464,19 @@ Recorded so they are not mistaken for settled.
    substantially. Neither has been read in full; both are quoted from meta-analytic summaries.
 6. **Spanish, Catalan and EU-market specifics** — every source here is anglophone. Salary
    disclosure norms, ad conventions and screening practice differ. Not yet researched.
+7. **Shipped tax rule sets (§4.5)** — `taxes/ES.json` and `taxes/DE.json` are stepped,
+   flat-allowance approximations of each country's real progressive tax code, assembled from
+   public secondary sources rather than the primary tax authority text, and dated 2026-08-18.
+   Neither models regions, multi-payment conventions beyond the 12-payment default, or any
+   deduction beyond a single flat allowance. **Nobody has checked either against the tax code,
+   so both are marked `generated`** and every figure from them is shown as approximate; that is
+   the honest state, not a temporary one. Promoting either to `verified` is a task for a person
+   with the tax code in front of them — see each file's `notes` for what was simplified and why.
+8. **Dedup similarity threshold (§2.8, §4.6)** — 0.25, the 8-word shingle width, and the 0.5
+   boilerplate-frequency cutoff are all calibrated against one seven-offer seeded fixture, not
+   real cross-posted ad pairs collected at scale. They separate that fixture's cases with
+   margin, but the margin's size on a real, larger corpus is unmeasured. **Re-calibrate once
+   T12's live connector supplies real cross-posted pairs**, and widen the fixture itself.
 
 ---
 
@@ -319,4 +484,7 @@ Recorded so they are not mistaken for settled.
 
 | Date | Change |
 |---|---|
+| 2026-08-18 | §2.8/§4.6 updated: near-duplicate detection reworked to two passes — boilerplate frequency is now counted over crosspost-cluster representatives, not raw offers, fixing a majority-duplicate-cluster blind spot a precision-only gate could not see (T13 review finding). `SIMILARITY_THRESHOLD` unchanged; new `_RAW_CLUSTER_THRESHOLD = 0.30` calibrated for pass 1. |
+| 2026-08-18 | §2.8/§4.6 added: cross-source near-duplicate detection by shingled Jaccard similarity, and its threshold's calibration (T13). |
+| 2026-08-18 | §4.5 added: net-from-gross pay estimation, and its committed/generated rule-source split (T33). |
 | 2026-08-15 | Created. Sections 1–5 from the pre-`ONTOLOGY` research pass. |

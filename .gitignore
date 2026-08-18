@@ -236,3 +236,4 @@ profiles/
 
 # Generated pipeline artefacts (offers, extractions, rankings).
 data/
+.claude/worktrees/
