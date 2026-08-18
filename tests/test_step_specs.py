@@ -9,8 +9,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from jobsearch.process_spec import DEFAULT_STEPS_PATH, load_steps
+from jobsearch.process_spec import DEFAULT_STEPS_PATH, Step, load_steps
 from jobsearch.step_gates import (
     OwnershipReading,
     gate_ownership,
@@ -29,6 +30,35 @@ from jobsearch.step_specs import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_a_step_flag_must_be_a_real_boolean_not_something_coercible_to_one() -> None:
+    """The S12 gate counts only *absent* declarations, on the stated grounds
+    that a present non-boolean would already have failed `load_steps()`.
+
+    Pydantic's ordinary `bool` is lax, so that claim was false: `1`, `0`,
+    `"true"`, `"false"` and `"yes"` all validated and became `True`/`False`.
+    A typo'd declaration was therefore counted as a declaration, and the value
+    it produced looked entirely legitimate downstream — the gate reporting zero
+    unclassified steps while a step's classification came from the string
+    "yes". `2` was already rejected, so only the values that look deliberate
+    got through, which is the worst subset to let past.
+
+    The same laxness applied to every flag in the file, so all of them are
+    strict — this file is the settled model other modules read instead of
+    keeping their own copy, and a typo that still parses is the failure that
+    model exists to prevent.
+    """
+    steps = load_steps()
+    base = steps.steps[0].model_dump()
+
+    for flag in ("required", "automatic", "accepts_candidate_free_text"):
+        for coercible in (1, 0, "true", "false", "yes"):
+            with pytest.raises(ValidationError):
+                Step.model_validate({**base, flag: coercible})
+
+    # The committed model is unaffected: every flag in it is a real boolean.
+    assert load_steps().steps[0].accepts_candidate_free_text is not None
 
 
 def test_every_step_declares_whether_it_takes_candidate_free_text() -> None:
