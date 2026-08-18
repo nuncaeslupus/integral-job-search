@@ -29,7 +29,9 @@ A run that measures nothing is a failure, not a pass over an empty set.
 
 from __future__ import annotations
 
+import errno
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -142,28 +144,33 @@ class ProfileStore:
     """Every read and write under one candidate's tree, and nothing else.
 
     Constructed with a handle, so a caller that has not identified anybody has
-    no object to call. `path` is the single choke point: it resolves each
-    component beneath `<root>/<handle>/` and raises `ProfileLeak` for anything
-    that lands outside — an absolute component, a `..` climb, or a symlink that
-    points away.
+    no object to call. `path` is the single choke point, and it refuses three
+    different escapes:
+
+    * an **absolute or climbing component** — `..`, or a path that starts at
+      the root;
+    * a **symlink anywhere beneath the tree** that points out of it;
+    * a **symlink standing in for the handle directory itself**. This one is
+      the subtle case: resolving `<root>/<handle>` before using it as the
+      containment root means a `profiles/ada` that is really a link to
+      `profiles/nuria` makes Núria's directory Ada's authorised home, and every
+      later check then passes. So `home` is composed from the *resolved root*
+      and the literal handle, and is never resolved further.
     """
 
     def __init__(self, root: Path, handle: Handle) -> None:
         self.root = Path(root)
         self.handle = _validate_handle(handle)
-        self.home = (self.root / self.handle).resolve(strict=False)
+        # The root may legitimately sit behind links (`/tmp` on macOS), so it is
+        # resolved; the handle component never is — see the class docstring.
+        self.home = self.root.resolve(strict=False) / self.handle
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"ProfileStore(root={self.root!s}, handle={self.handle!r})"
 
     def path(self, *parts: str) -> Path:
-        """Resolve `parts` beneath this profile's tree, or refuse.
-
-        `Path.resolve` follows symlinks, so a link planted inside one tree that
-        points at another's `evidence.jsonl` is caught here too — which is the
-        realistic version of the attack, since the trees sit side by side under
-        one directory the candidate can write to.
-        """
+        """Resolve `parts` beneath this profile's tree, or refuse."""
+        self._refuse_a_symlinked_home()
         if not parts:
             return self.home
         for part in parts:
@@ -174,6 +181,42 @@ class ProfileStore:
             raise ProfileLeak(f"{candidate} is outside the tree of {self.handle!r}")
         return candidate
 
+    def _refuse_a_symlinked_home(self) -> None:
+        """A handle directory that is a link is not this candidate's tree.
+
+        Checked on every operation rather than once in the constructor: a store
+        outlives the moment it was built, and the whole point of the check is
+        that the directory can be replaced by something else.
+        """
+        if self.home.is_symlink():
+            raise ProfileLeak(
+                f"{self.home} is a symbolic link, so it is not {self.handle!r}'s own tree"
+            )
+
+    def _open_leaf(self, target: Path, mode: str) -> Any:
+        """Open the final component without following a link at that name.
+
+        `O_NOFOLLOW` where the platform has it. This does not close the general
+        check-then-open race — see the note on `ProfileLeak` — but it does stop
+        the static case, where a file inside the tree has quietly been a link
+        to somewhere else all along.
+        """
+        flags = getattr(os, "O_NOFOLLOW", 0)
+        if not flags:  # pragma: no cover - platform dependent
+            return target.open(mode, encoding="utf-8")
+        base = os.O_RDONLY
+        if mode == "a":
+            base = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+        elif mode == "w":
+            base = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        try:
+            descriptor = os.open(target, base | flags, 0o600)
+        except OSError as exc:
+            if exc.errno in {errno.ELOOP, errno.EMLINK}:
+                raise ProfileLeak(f"{target} is a symbolic link, not a file in this tree") from exc
+            raise
+        return os.fdopen(descriptor, mode, encoding="utf-8")
+
     # -- reads ------------------------------------------------------------
 
     def exists(self, *parts: str) -> bool:
@@ -182,9 +225,11 @@ class ProfileStore:
     def read_text(self, *parts: str) -> str:
         target = self.path(*parts)
         try:
-            return target.read_text(encoding="utf-8")
+            with self._open_leaf(target, "r") as stream:
+                content: str = stream.read()
         except FileNotFoundError as exc:
             raise IdentityError(f"{'/'.join(parts)} does not exist for {self.handle!r}") from exc
+        return content
 
     def read_json(self, *parts: str) -> Any:
         """Malformed JSON is an `IdentityError`, not a `JSONDecodeError`.
@@ -214,7 +259,8 @@ class ProfileStore:
     def write_text(self, content: str, *parts: str) -> Path:
         target = self.path(*parts)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        with self._open_leaf(target, "w") as stream:
+            stream.write(content)
         return target
 
     def write_json(self, payload: Any, *parts: str) -> Path:
@@ -225,8 +271,8 @@ class ProfileStore:
     def append_jsonl(self, row: Any, *parts: str) -> Path:
         target = self.path(*parts)
         target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+        with self._open_leaf(target, "a") as stream:
+            stream.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
         return target
 
     # -- identity ---------------------------------------------------------
@@ -254,7 +300,12 @@ def list_identities(root: Path) -> list[Identity]:
         return []
     found: list[Identity] = []
     for child in sorted(root.iterdir()):
-        if not child.is_dir() or child.name.startswith("."):
+        if child.name.startswith("."):
+            continue
+        if child.is_symlink() or not child.is_dir():
+            # `is_dir()` follows links, so a `profiles/ada -> profiles/nuria`
+            # would list Núria's identity under Ada's name. A link is not a
+            # profile; the roster is the one place that has to say so out loud.
             continue
         try:
             found.append(ProfileStore(root, child.name).identity())
@@ -385,13 +436,19 @@ def create_profile(
     """
     chosen = _validate_handle(handle) if handle else derive_handle(display_name)
     root = Path(root)
-    if (root / chosen).exists():
+    if language not in LANGUAGES:
+        raise IdentityError(f"unsupported language {language!r}; known: {', '.join(LANGUAGES)}")
+    root.mkdir(parents=True, exist_ok=True)
+    try:
+        # Exclusive, so two sessions creating the same handle at once cannot
+        # both pass a check and then have one overwrite the other's identity —
+        # which would silently merge two people into one history.
+        (root / chosen).mkdir(exist_ok=False)
+    except FileExistsError as exc:
         raise IdentityError(
             f"a profile named {chosen!r} already exists — "
             "ask for something to tell the two apart"
-        )
-    if language not in LANGUAGES:
-        raise IdentityError(f"unsupported language {language!r}; known: {', '.join(LANGUAGES)}")
+        ) from exc
     stamp = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
     identity = Identity(
         handle=chosen,
@@ -401,32 +458,56 @@ def create_profile(
         created_at=stamp,
     )
     store = ProfileStore(root, chosen)
-    store.write_json(identity.model_dump(), ROSTER_FILE)
+    payload = json.dumps(identity.model_dump(), indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    descriptor = os.open(store.path(ROSTER_FILE), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        stream.write(payload)
     return identity
 
 
-def read_active_handle(root: Path) -> Handle | None:
-    """Who this session identified, or `None` — which means *nothing may be read*."""
+def read_active_handle(root: Path, *, session_id: str | None) -> Handle | None:
+    """Who *this session* identified, or `None` — which means nothing may be read.
+
+    The marker is bound to the session that wrote it. Without that binding the
+    file is a standing authorisation: the next session, for the next person on
+    a shared laptop, inherits whoever was identified last and reaches their
+    tree before saying hello. §6.1 requires identification at the start of
+    *every* session, so a marker from a different session is no marker at all.
+    """
+    if not session_id:
+        # No session to compare against: treat it as nobody identified. The
+        # safe direction — the store still works, only the guard tightens.
+        return None
     marker = Path(root) / ACTIVE_FILE
     try:
         payload = json.loads(marker.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
-    handle = payload.get("handle") if isinstance(payload, dict) else None
+    if not isinstance(payload, dict) or payload.get("session_id") != session_id:
+        return None
+    handle = payload.get("handle")
     if not isinstance(handle, str) or not HANDLE.match(handle):
         return None
     return handle
 
 
-def write_active_handle(root: Path, handle: Handle, *, now: datetime | None = None) -> Path:
-    """Record the resolved handle for this session at the roster level."""
+def write_active_handle(
+    root: Path, handle: Handle, *, session_id: str, now: datetime | None = None
+) -> Path:
+    """Record the resolved handle for this session, stamped with the session id."""
     _validate_handle(handle)
+    if not session_id:
+        raise IdentityError("an active handle must be bound to a session")
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     marker = root / ACTIVE_FILE
     stamp = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
     marker.write_text(
-        json.dumps({"handle": handle, "identified_at": stamp}, indent=2) + "\n", encoding="utf-8"
+        json.dumps(
+            {"handle": handle, "session_id": session_id, "identified_at": stamp}, indent=2
+        )
+        + "\n",
+        encoding="utf-8",
     )
     return marker
 
@@ -443,22 +524,51 @@ class Decision:
     reason: str
 
 
-def guard_decision(target: Path | str, *, root: Path, active: Handle | None) -> Decision:
+# Whether a call would only look, or could change something. The distinction
+# matters at exactly one place — `identity.json` is the roster the tool reads
+# names out of before anybody is identified, and reading it is harmless while
+# writing it rewrites who the tool thinks exists.
+Intent = Literal["read", "write"]
+
+# Bash is `write` because a command can be `rm`. Being wrong in that direction
+# refuses a shell read of somebody else's roster entry, which costs nothing.
+_WRITING_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"})
+
+
+def intent_of(tool_name: str) -> Intent:
+    return "write" if tool_name in _WRITING_TOOLS else "read"
+
+
+def guard_decision(
+    target: Path | str,
+    *,
+    root: Path,
+    active: Handle | None,
+    intent: Intent = "read",
+) -> Decision:
     """May this path be touched, given who the session identified?
 
     The rules, in the order they are applied:
 
     1. outside `profiles/` — not this guard's business;
-    2. the roster level itself (`profiles/`, `profiles/.active.json`) — allowed,
-       because resolution happens before a handle exists;
-    3. `profiles/<h>/identity.json` — allowed for every `h`, because §6.1 case 3
-       lists the display names it has, and that is where they are;
-    4. anything else under a handle with no handle identified — refused, which
-       is §6's "before reading, not merely before writing";
-    5. under the identified handle — allowed;
-    6. under another handle — refused.
+    2. the roster directory itself — allowed, so the tool can list who exists;
+    3. roster metadata (`profiles/.active.json` and any other dotfile at that
+       level) — allowed, because writing it *is* the act of identifying, and
+       the session binding in `read_active_handle` is what makes a tampered
+       marker inert rather than an authorisation;
+    4. a handle **directory** — treated as that handle's, not as roster level.
+       This is what stops `rm -rf profiles/<somebody-else>` from passing as a
+       roster-level operation;
+    5. `profiles/<h>/identity.json` **being read** — allowed for every `h`,
+       because §6.1 case 3 lists the display names it has, and that is where
+       they are. Writing it is not: that rewrites another person's roster
+       entry, and no part of resolution needs to;
+    6. anything else under a handle with nobody identified — refused, which is
+       §6's "before reading, not merely before writing";
+    7. under the identified handle — allowed;
+    8. under another handle — refused.
 
-    Rule 3 is the one that keeps `test_correct_operation_never_trips_the_hook`
+    Rule 5 is the one that keeps `test_correct_operation_never_trips_the_hook`
     honest: without it the tool cannot perform its own opening move.
     """
     root = Path(root).resolve(strict=False)
@@ -473,11 +583,13 @@ def guard_decision(target: Path | str, *, root: Path, active: Handle | None) -> 
 
     relative = candidate.relative_to(root) if candidate != root else Path()
     parts = relative.parts
-    if len(parts) <= 1:
-        return Decision(True, "the roster level, which resolution has to read")
+    if not parts:
+        return Decision(True, "the roster directory, which resolution has to list")
+    if len(parts) == 1 and parts[0].startswith("."):
+        return Decision(True, "roster metadata, which identification itself writes")
 
     handle = parts[0]
-    if parts[1:] == (ROSTER_FILE,):
+    if parts[1:] == (ROSTER_FILE,) and intent == "read":
         return Decision(True, "identity.json is the roster resolution reads names from")
     if active is None:
         return Decision(
@@ -488,10 +600,15 @@ def guard_decision(target: Path | str, *, root: Path, active: Handle | None) -> 
     return Decision(False, f"{relative} belongs to {handle!r}, not to {active!r}")
 
 
-# Any `profiles/<something>/…` mention inside a shell command. Bash is not
-# parsed — a heuristic is the honest ceiling here — but a command that names
-# another handle's directory is caught, and that is the shape the mistake takes.
-_BASH_PROFILE_PATH = re.compile(r"(?<![\w/.-])((?:[\w./-]*/)?profiles/[\w.-]+(?:/[\w.-]+)*)")
+# Everything from a `profiles/` segment onward, wherever it appears in a shell
+# command. The prefix is deliberately discarded rather than matched: the shell
+# expands `"$PWD/profiles/nuria/…"` and `"$(pwd)/profiles/nuria/…"` into this
+# tree, and a scanner that read `PWD/profiles/nuria` as a literal relative path
+# would place it outside `profiles/` and wave it through. Treating every
+# `profiles/<x>/…` token as a path under the roster is the safe direction: the
+# cost is refusing a command that names an unrelated directory called
+# `profiles/`, and the alternative is missing the one that matters.
+_BASH_PROFILE_PATH = re.compile(r"profiles/[\w.-]+(?:/[\w.-]+)*")
 
 
 def paths_in_tool_call(tool_name: str, tool_input: dict[str, Any]) -> list[str]:
@@ -501,12 +618,16 @@ def paths_in_tool_call(tool_name: str, tool_input: dict[str, Any]) -> list[str]:
     string is scanned for anything that looks like a path under `profiles/`;
     everything else in the command is left alone, so an unrelated command
     yields no paths and is never refused.
+
+    The shell is not parsed, and it cannot be — this is a heuristic, and the
+    store-side `ProfileLeak` is the enforcing layer. What the heuristic must
+    not do is *silently* let something through, so it errs towards matching.
     """
     if tool_name == "Bash":
         command = tool_input.get("command")
         if not isinstance(command, str):
             return []
-        return [match.group(1) for match in _BASH_PROFILE_PATH.finditer(command)]
+        return [match.group(0) for match in _BASH_PROFILE_PATH.finditer(command)]
     found: list[str] = []
     for key in ("file_path", "path", "notebook_path"):
         value = tool_input.get(key)
@@ -523,8 +644,9 @@ def guard_tool_call(
     active: Handle | None,
 ) -> Decision:
     """The guard over a whole `PreToolUse` payload: refused if any path is."""
+    intent = intent_of(tool_name)
     for raw in paths_in_tool_call(tool_name, tool_input):
-        decision = guard_decision(raw, root=root, active=active)
+        decision = guard_decision(raw, root=root, active=active, intent=intent)
         if not decision.allowed:
             return Decision(False, f"{raw}: {decision.reason}")
     return Decision(True, "no path under profiles/ that belongs to somebody else")
@@ -549,11 +671,14 @@ def hook_main(stdin_text: str, *, root: Path | None = None) -> tuple[int, str]:
     tool_input = payload.get("tool_input")
     if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
         return 0, "profile guard: hook payload names no tool"
+    session_id = payload.get("session_id")
     decision = guard_tool_call(
         tool_name,
         tool_input,
         root=profiles_root,
-        active=read_active_handle(profiles_root),
+        active=read_active_handle(
+            profiles_root, session_id=session_id if isinstance(session_id, str) else None
+        ),
     )
     if decision.allowed:
         return 0, ""
@@ -657,14 +782,59 @@ def probe_leaks(root: Path) -> ProbeReport:
             active=first.handle,
         ),
     )
+    must_be_refused_by_the_guard(
+        "guard allowed a write to another handle's identity.json",
+        guard_tool_call(
+            "Edit",
+            {"file_path": str(root / second.handle / ROSTER_FILE)},
+            root=root,
+            active=first.handle,
+        ),
+    )
+    must_be_refused_by_the_guard(
+        "guard allowed the deletion of another handle's whole tree",
+        guard_tool_call(
+            "Bash",
+            {"command": f"rm -rf profiles/{second.handle}"},
+            root=root,
+            active=first.handle,
+        ),
+    )
+    must_be_refused_by_the_guard(
+        "guard allowed a shell expansion that lands in another handle's tree",
+        guard_tool_call(
+            "Bash",
+            {"command": f'cat "$PWD/profiles/{second.handle}/profile/evidence.jsonl"'},
+            root=root,
+            active=first.handle,
+        ),
+    )
+
+    # A marker written by another session is not this session's authorisation.
+    write_active_handle(root, second.handle, session_id="another-session")
+    probes += 1
+    if read_active_handle(root, session_id="this-session") is not None:
+        leaks.append("an active handle carried over from a different session")
+
+    # And a handle directory that is really a link to the other tree.
+    impostor_home = root / "probe-three"
+    try:
+        impostor_home.symlink_to(root / second.handle)
+    except (OSError, NotImplementedError):  # pragma: no cover - platform dependent
+        pass
+    else:
+        must_refuse(
+            "a symlink standing in for the handle directory",
+            lambda: ProfileStore(root, "probe-three").read_text("profile", "evidence.jsonl"),
+        )
 
     return ProbeReport(probes_run=probes, leaks=tuple(leaks))
 
 
-# Below this, a run has skipped so much that its zero means nothing. The symlink
-# probe is the only one that may not run (a platform without symlinks), so the
-# floor is every other probe.
-MINIMUM_PROBES = 8
+# Below this, a run has skipped so much that its zero means nothing. Only the
+# two symlink probes may be absent (a platform without symlinks), so the floor
+# is every other probe.
+MINIMUM_PROBES = 12
 
 
 def write_evidence(

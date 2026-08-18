@@ -24,6 +24,7 @@ import pytest
 from jobsearch.identity import (
     ACTIVE_FILE,
     MINIMUM_PROBES,
+    ROSTER_FILE,
     Decision,
     Identity,
     IdentityError,
@@ -208,11 +209,32 @@ def test_the_active_handle_round_trips_and_an_unwritable_marker_reads_as_nobody(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "profiles"
-    assert read_active_handle(root) is None
-    write_active_handle(root, "ada-lovelace", now=FIXED)
-    assert read_active_handle(root) == "ada-lovelace"
+    assert read_active_handle(root, session_id="s1") is None
+    write_active_handle(root, "ada-lovelace", session_id="s1", now=FIXED)
+    assert read_active_handle(root, session_id="s1") == "ada-lovelace"
     (root / ACTIVE_FILE).write_text("not json", encoding="utf-8")
-    assert read_active_handle(root) is None
+    assert read_active_handle(root, session_id="s1") is None
+
+
+def test_identification_does_not_carry_over_into_the_next_session(tmp_path: Path) -> None:
+    """§6.1 requires identification at the start of *every* session.
+
+    An unbound marker is a standing authorisation: the next person to sit down
+    at a shared laptop reaches the previous candidate's tree before the tool
+    has said hello.
+    """
+    root = tmp_path / "profiles"
+    write_active_handle(root, "ada-lovelace", session_id="yesterday", now=FIXED)
+    assert read_active_handle(root, session_id="today") is None
+    assert read_active_handle(root, session_id=None) is None
+    assert (
+        guard_decision(
+            root / "ada-lovelace" / "profile" / "evidence.jsonl",
+            root=root,
+            active=read_active_handle(root, session_id="today"),
+        ).allowed
+        is False
+    )
 
 
 # --- the hook --------------------------------------------------------------
@@ -287,9 +309,10 @@ def test_the_hook_blocks_with_exit_two_and_explains_itself(
     two_profiles: tuple[Path, Identity, Identity],
 ) -> None:
     root, first, second = two_profiles
-    write_active_handle(root, first.handle, now=FIXED)
+    write_active_handle(root, first.handle, session_id="s1", now=FIXED)
     payload = json.dumps(
         {
+            "session_id": "s1",
             "tool_name": "Read",
             "tool_input": {"file_path": str(root / second.handle / "profile" / "evidence.jsonl")},
         }
@@ -337,3 +360,104 @@ def test_the_gate_never_probes_the_real_profiles_tree(tmp_path: Path) -> None:
     real.mkdir()
     write_evidence(tmp_path / "S3.json")
     assert list(real.iterdir()) == []
+
+
+# --- the review round on #22 ----------------------------------------------
+#
+# Each of these is a hole Qodo found in the first version of the guard, kept as
+# a named regression rather than as a line in a commit message.
+
+
+def test_another_handles_identity_file_may_be_read_but_never_written(
+    two_profiles: tuple[Path, Identity, Identity],
+) -> None:
+    """Resolution reads the roster; nothing about it needs to rewrite it.
+
+    Allowing the write turns "list the display names it has" into "replace who
+    the tool thinks exists", which is a worse outcome than the read it was
+    granted for.
+    """
+    root, first, second = two_profiles
+    target = root / second.handle / ROSTER_FILE
+    assert guard_decision(target, root=root, active=first.handle, intent="read").allowed
+    assert not guard_decision(target, root=root, active=first.handle, intent="write").allowed
+    assert not guard_decision(target, root=root, active=None, intent="write").allowed
+    assert not guard_tool_call(
+        "Edit", {"file_path": str(target)}, root=root, active=first.handle
+    ).allowed
+
+
+def test_a_profile_directory_is_not_roster_level(
+    two_profiles: tuple[Path, Identity, Identity],
+) -> None:
+    """`rm -rf profiles/<somebody-else>` is not a roster operation.
+
+    A rule that waves through everything one component deep waves through the
+    deletion of a whole tree, which is the largest cross-user action there is.
+    """
+    root, first, second = two_profiles
+    assert not guard_decision(root / second.handle, root=root, active=first.handle).allowed
+    assert not guard_tool_call(
+        "Bash", {"command": f"rm -rf profiles/{second.handle}"}, root=root, active=first.handle
+    ).allowed
+    assert guard_decision(root / first.handle, root=root, active=first.handle).allowed
+    assert guard_decision(root, root=root, active=None).allowed
+
+
+def test_a_shell_expansion_does_not_walk_past_the_scanner(
+    two_profiles: tuple[Path, Identity, Identity],
+) -> None:
+    """`$PWD/profiles/<other>/…` expands into this tree at execution time.
+
+    Reading the matched text as a literal relative path puts it outside
+    `profiles/` and lets it through, which is the opposite of what the shell
+    then does.
+    """
+    root, first, second = two_profiles
+    for command in (
+        f'cat "$PWD/profiles/{second.handle}/profile/evidence.jsonl"',
+        f'cat "$(pwd)/profiles/{second.handle}/profile/evidence.jsonl"',
+        f"cat ~/job-search/profiles/{second.handle}/profile/evidence.jsonl",
+        f"cat ../job-search/profiles/{second.handle}/profile/evidence.jsonl",
+    ):
+        decision = guard_tool_call("Bash", {"command": command}, root=root, active=first.handle)
+        assert not decision.allowed, command
+
+
+def test_a_symlink_standing_in_for_the_handle_directory_is_refused(tmp_path: Path) -> None:
+    """The subtle one: the containment root itself is the link.
+
+    Resolving `<root>/<handle>` before using it as the boundary makes the other
+    person's directory this store's authorised home, and every later check then
+    passes rather than fails.
+    """
+    root = tmp_path / "profiles"
+    real = create_profile(root, "Núria Puig", language="ca", now=FIXED)
+    ProfileStore(root, real.handle).write_text("private\n", "profile", "evidence.jsonl")
+    try:
+        (root / "ada-lovelace").symlink_to(root / real.handle)
+    except (OSError, NotImplementedError):  # pragma: no cover - platform dependent
+        pytest.skip("symlinks unavailable on this platform")
+
+    impostor = ProfileStore(root, "ada-lovelace")
+    with pytest.raises(ProfileLeak, match="symbolic link"):
+        impostor.read_text("profile", "evidence.jsonl")
+    with pytest.raises(ProfileLeak, match="symbolic link"):
+        impostor.write_text("planted", "profile", "evidence.jsonl")
+    # And the roster does not report the link as a second person.
+    assert [identity.handle for identity in list_identities(root)] == [real.handle]
+
+
+def test_two_creators_of_one_handle_cannot_both_win(tmp_path: Path) -> None:
+    """A non-atomic check-then-create merges two people into one history."""
+    root = tmp_path / "profiles"
+    first = create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    with pytest.raises(IdentityError, match="tell the two apart"):
+        create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    assert ProfileStore(root, first.handle).identity().display_name == "Ada Lovelace"
+
+    # The directory existing at all is enough — even with no identity yet, the
+    # handle is taken, and the loser must not overwrite the winner's file.
+    (root / "grace-hopper").mkdir()
+    with pytest.raises(IdentityError, match="tell the two apart"):
+        create_profile(root, "Grace Hopper", language="en", now=FIXED)
