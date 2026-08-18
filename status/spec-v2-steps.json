@@ -80,8 +80,8 @@
         "metric": "constraint_field_resolution",
         "op": "==",
         "threshold": 1.0,
-        "state": "not_implemented",
-        "task": "T24"
+        "state": "implemented",
+        "task": "T41"
       },
       "reentry_events": [
         "moved_house",

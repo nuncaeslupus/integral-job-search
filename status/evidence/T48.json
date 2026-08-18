@@ -2,12 +2,12 @@
   "step_gate_state_drift": 0,
   "steps_read": 13,
   "implemented": [
+    "constraints",
     "identify",
     "sourcing"
   ],
   "not_implemented": [
     "application",
-    "constraints",
     "feedback",
     "history",
     "intake",
