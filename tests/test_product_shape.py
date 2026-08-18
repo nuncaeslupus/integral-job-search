@@ -17,6 +17,8 @@ REGISTER = """# Shape
 
 ## What needed deciding
 
+<!-- shape-questions: 2 -->
+
 1. **First question?**
    **Decided: this way.** Because of a reason.
 
@@ -31,9 +33,11 @@ def _step(n: int, **gate: Any) -> dict[str, Any]:
     return {"n": n, "id": f"step_{n}", "gate": block}
 
 
-def _steps(tmp_path: Path, *steps: dict[str, Any]) -> Path:
+def _steps(tmp_path: Path, *steps: dict[str, Any], declared: int | None = None) -> Path:
+    """A step list. `declared` overrides `step_count` to model a deletion."""
     path = tmp_path / "steps.json"
-    path.write_text(json.dumps({"step_count": len(steps), "steps": list(steps)}), encoding="utf-8")
+    count = len(steps) if declared is None else declared
+    path.write_text(json.dumps({"step_count": count, "steps": list(steps)}), encoding="utf-8")
     return path
 
 
@@ -94,7 +98,10 @@ def test_an_invented_state_is_not_a_checkpoint(tmp_path: Path) -> None:
 
 def test_a_question_without_a_marker_is_counted(tmp_path: Path) -> None:
     """An answer given in conversation and not written down is not an answer."""
-    register = "## What needed deciding\n\n1. **Only question?**\n   We talked about it.\n"
+    register = (
+        "## What needed deciding\n\n<!-- shape-questions: 1 -->\n\n"
+        "1. **Only question?**\n   We talked about it.\n"
+    )
     measured = product_shape.measure(_steps(tmp_path, _step(0)), _shape(tmp_path, register))
 
     assert measured["open_shape_questions_unanswered"] == 1
@@ -146,3 +153,105 @@ def test_evidence_is_written_where_the_gate_reads_it(tmp_path: Path) -> None:
 
     recorded = json.loads(evidence.read_text(encoding="utf-8"))
     assert recorded["phase_checkpoints_defined"] == 1
+
+
+def test_a_deleted_step_is_caught(tmp_path: Path) -> None:
+    """Twelve well-formed steps where thirteen were declared is not a clean sheet."""
+    measured = product_shape.measure(
+        _steps(tmp_path, _step(0), _step(1), declared=3), _shape(tmp_path)
+    )
+
+    assert measured["phase_checkpoints_defined"] == 0
+    assert measured["steps_declared"] == 3
+    assert measured["steps_measured"] == 2
+    assert any("was removed, not measured" in v for v in measured["violations"])
+
+
+def test_a_step_list_without_a_declared_count_is_not_measurable(tmp_path: Path) -> None:
+    """The expected number must not come from the list being checked."""
+    path = tmp_path / "steps.json"
+    path.write_text(json.dumps({"steps": [_step(0)]}), encoding="utf-8")
+
+    measured = product_shape.measure(path, _shape(tmp_path))
+
+    assert measured["phase_checkpoints_defined"] == 0
+    assert measured["steps_declared"] is None
+
+
+def test_a_step_entry_that_is_not_an_object_is_a_violation(tmp_path: Path) -> None:
+    """A replaced entry becomes a violation rather than being filtered away."""
+    path = tmp_path / "steps.json"
+    path.write_text(json.dumps({"step_count": 2, "steps": [_step(0), "step_1"]}), encoding="utf-8")
+
+    measured = product_shape.measure(path, _shape(tmp_path))
+
+    assert measured["phase_checkpoints_defined"] == 0
+    assert [entry["step"] for entry in measured["steps_without_a_checkpoint"]] == ["entry 1"]
+
+
+def test_a_deleted_question_is_caught(tmp_path: Path) -> None:
+    """Deleting a question instead of answering it is the failure mode here."""
+    register = (
+        "## What needed deciding\n\n<!-- shape-questions: 2 -->\n\n"
+        "1. **Kept question?**\n   **Decided: yes.**\n"
+    )
+    measured = product_shape.measure(_steps(tmp_path, _step(0)), _shape(tmp_path, register))
+
+    assert measured["phase_checkpoints_defined"] == 0
+    assert measured["open_shape_questions_unanswered"] == -1
+    assert any("deleted rather than answered" in v for v in measured["violations"])
+
+
+def test_a_register_that_declares_no_count_is_not_measurable(tmp_path: Path) -> None:
+    register = "## What needed deciding\n\n1. **A question?**\n   **Decided: yes.**\n"
+    measured = product_shape.measure(_steps(tmp_path, _step(0)), _shape(tmp_path, register))
+
+    assert measured["phase_checkpoints_defined"] == 0
+    assert measured["questions_declared"] is None
+
+
+def test_a_gap_in_the_numbering_is_caught(tmp_path: Path) -> None:
+    """1, 3 is a lost question even when the declared total was updated too."""
+    register = (
+        "## What needed deciding\n\n<!-- shape-questions: 2 -->\n\n"
+        "1. **First?**\n   **Decided: yes.**\n\n3. **Third?**\n   **Decided: yes.**\n"
+    )
+    measured = product_shape.measure(_steps(tmp_path, _step(0)), _shape(tmp_path, register))
+
+    assert measured["phase_checkpoints_defined"] == 0
+    assert any("went missing" in v for v in measured["violations"])
+
+
+def test_the_word_blocked_in_prose_does_not_resolve_a_question(tmp_path: Path) -> None:
+    """A resolution must be made, not merely mentioned."""
+    register = (
+        "## What needed deciding\n\n<!-- shape-questions: 1 -->\n\n"
+        "1. **Unanswered?**\n   Whether this is **Blocked** is unresolved.\n"
+    )
+    measured = product_shape.measure(_steps(tmp_path, _step(0)), _shape(tmp_path, register))
+
+    assert measured["unanswered_questions"] == ["Unanswered?"]
+    assert measured["phase_checkpoints_defined"] == 0
+
+
+def test_a_marker_naming_nothing_does_not_resolve_a_question(tmp_path: Path) -> None:
+    """`**Blocked:**` with no reason after the colon is not a named blocker."""
+    register = (
+        "## What needed deciding\n\n<!-- shape-questions: 1 -->\n\n"
+        "1. **Unanswered?**\n   **Blocked:**\n"
+    )
+    measured = product_shape.measure(_steps(tmp_path, _step(0)), _shape(tmp_path, register))
+
+    assert measured["unanswered_questions"] == ["Unanswered?"]
+
+
+def test_a_blocker_may_name_its_reason_in_parentheses(tmp_path: Path) -> None:
+    """The documented `**Blocked (reason): …**` form still resolves."""
+    register = (
+        "## What needed deciding\n\n<!-- shape-questions: 1 -->\n\n"
+        "1. **Answered?**\n   **Blocked (spec §11.1): the owner sets the number.**\n"
+    )
+    measured = product_shape.measure(_steps(tmp_path, _step(0)), _shape(tmp_path, register))
+
+    assert measured["unanswered_questions"] == []
+    assert measured["phase_checkpoints_defined"] == 1

@@ -1,6 +1,7 @@
 {
   "phase_checkpoints_defined": 1,
   "open_shape_questions_unanswered": 0,
+  "steps_declared": 13,
   "steps_measured": 13,
   "steps_without_a_checkpoint": [],
   "steps_implemented": [
@@ -20,6 +21,7 @@
     "application",
     "interview_log"
   ],
+  "questions_declared": 5,
   "shape_questions": [
     {
       "question": "One long first interview, or several sittings?",

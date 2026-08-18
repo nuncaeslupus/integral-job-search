@@ -113,7 +113,12 @@ rewrite, precisely because state was never inside the artefact.
 
 ## What needed deciding
 
+<!-- shape-questions: 5 -->
+
 Every question this document opened now carries a decision or a named blocker.
+The marker above declares how many there are, the way `spec-v2-steps.json`
+declares `step_count`: a count taken from whatever survived cannot notice that
+something was deleted rather than answered.
 Three were settled by specification v2 and are recorded here so the shape
 document does not keep asking what the process document already answered; the
 fourth — distribution — was the remaining scope of T29.
