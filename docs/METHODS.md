@@ -77,19 +77,28 @@ for the other reason — it produces consistently extractable answers.
 [question-type comparison](https://www.sciencedirect.com/science/article/abs/pii/S0148296319301985) ·
 [US OPM structured interview guidance](https://www.opm.gov/policy-data-oversight/assessment-and-selection/other-assessment-methods/structured-interviews/)
 
-### 2.2 Failure-weighted episode capture
+### 2.2 Story-bank composition — both kinds present, reported not floored
 
-**What.** At least a third of story-bank episodes must be about something that went wrong
-(gate: `story_failure_fraction >= 0.33`).
+**What.** Once a story bank holds four or more episodes it should contain both
+successes and failures. `story_failure_fraction` (failure episodes ÷ all
+episodes) is computed and shown alongside the bank so a monotone one is
+visible — it is reported, never gated on. A v1 draft floored it instead, at
+`story_failure_fraction >= 0.33`; that floor is **superseded** (see Limits).
 
 **Why.** Success stories are rehearsed and sanitised; they are the ones a candidate has
 already told in interviews. Failure episodes carry more information per word about working
 style, values and self-awareness, and they are the material a cover letter needs to be
-specific rather than fluent-generic.
+specific rather than fluent-generic. That concern is real, which is why the fraction is
+still worth reporting — a bank of nothing but rehearsed successes reveals less, and
+something should say so.
 
-**Limits.** This is a design judgement extrapolated from the behavioural-interview premise,
-not a directly evidenced threshold. The 0.33 figure is a starting value to be revised once
-we can measure which episodes actually get used in drafts. Flagged in §5.
+**Limits.** The `>= 0.33` floor was a design judgement extrapolated from the
+behavioural-interview premise, never a directly evidenced threshold — and it is now
+superseded: `status/spec-v2-steps.md` step 3's revised History protocol takes a failure
+episode when the candidate offers one "rather than digging for it," which a floor cannot
+coexist with — an implementation would have to break the protocol or miss the gate. D-3
+reconciles this entry and `status/specification.md`'s v1 success criteria with that
+decision. Flagged in §5.
 
 ### 2.3 Discrete choice / conjoint preference elicitation
 
@@ -454,8 +463,10 @@ Recorded so they are not mistaken for settled.
 1. **ATS and LLM screening behaviour (§2.7)** — sourced from commercial vendor and SEO pages,
    which have an interest in the answer. No peer-reviewed source located. Fastest-moving area
    here. **Re-verify before Phase 7.**
-2. **The 0.33 failure-episode floor (§2.2)** — a design judgement, not an evidenced threshold.
-   Revise once we can measure which episodes drafts actually use.
+2. **The 0.33 failure-episode floor (§2.2)** — was a design judgement, not an evidenced
+   threshold. Now superseded (D-3): `story_failure_fraction` is reported, not floored. The
+   open question this leaves is which episodes drafts actually use, not what the floor
+   should have been.
 3. **RJP effect size at a distance (§2.5)** — the mechanism should transfer from
    employer-provided previews to inferred ones; the magnitude should not be assumed to.
 4. **Wording features (§2.6)** — evidence covers effects on applicant perception, not on what

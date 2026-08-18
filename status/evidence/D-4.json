@@ -1,0 +1,7 @@
+{
+  "trait_gate_owner_contradictions": 0,
+  "steps_checked": 1,
+  "task": "T49",
+  "metric": "trait_evidence_sufficiency",
+  "problems": []
+}

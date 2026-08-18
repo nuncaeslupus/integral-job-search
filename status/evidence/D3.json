@@ -1,0 +1,20 @@
+{
+  "spec_gate_contradictions": 0,
+  "superseded_declarations_found": 1,
+  "declarations": [
+    {
+      "expr": "story_failure_fraction >= 0.33",
+      "document": "status/spec-v2-steps.md",
+      "line": 343,
+      "text": "**`story_failure_fraction >= 0.33` is superseded and must not be gated on.** The"
+    }
+  ],
+  "contradictions": [],
+  "source_documents": [
+    "status/spec-v2-steps.md"
+  ],
+  "target_documents": [
+    "status/specification.md",
+    "docs/METHODS.md"
+  ]
+}

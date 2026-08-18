@@ -43,6 +43,12 @@ extend-exclude = [
     ".claude/skills",
     "claude-arsenal/bin",
     "claude-arsenal/scripts",
+    # The claude-arsenal subtree (S9). Upstream's whole repository, vendored at
+    # its own prefix so `git subtree pull` has somewhere to land. Linting it
+    # would report on code this project cannot fix and would revert at the next
+    # upgrade — the same reason the assembled bundle above is excluded. Defects
+    # found here go upstream as issues.
+    "vendor",
 ]
 
 [tool.ruff.lint]
@@ -86,6 +92,9 @@ exclude = [
     "^\\.claude/skills/",
     "^claude-arsenal/bin/",
     "^claude-arsenal/scripts/",
+    # The claude-arsenal subtree (S9) — upstream's code, replaced wholesale on
+    # every `make arsenal-upgrade`. See the ruff note above.
+    "^vendor/",
 ]
 
 [tool.pytest.ini_options]

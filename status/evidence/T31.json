@@ -1,0 +1,18 @@
+{
+  "reader_note_rebindings": 0,
+  "readers_declared": [
+    "docs/spec-v2",
+    "docs/spec-v2-steps"
+  ],
+  "readers_with_notes": [
+    "docs/spec-v2",
+    "docs/spec-v2-steps"
+  ],
+  "notes_read": 28,
+  "notes_unchanged": 28,
+  "notes_unresolvable": 0,
+  "rebindings": [],
+  "unresolvable_notes": [],
+  "adversarial_checks_run": 5,
+  "adversarial_failures": []
+}

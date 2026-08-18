@@ -41,7 +41,17 @@ their own gates.
 - [ ] `corpus_size >= 100` — hand-labelled ads (≈60 ES, ≈25 EN, ≈15 CA)
 - [ ] `story_bank_size >= 12` — distinct episodes captured at onboarding (projects, failures, decisions, definitions of success)
 - [ ] `story_dimension_linkage == 1.0` — every episode links to ≥1 dimension ID, so the bank is queryable rather than a pile of prose
-- [ ] `story_failure_fraction >= 0.33` — at least a third of episodes are about something that went wrong; success stories are rehearsed and reveal less
+- **`story_failure_fraction` — reported, not gated.** The v1 draft floored this
+  at `>= 0.33`: at least a third of episodes about something that went wrong,
+  because success stories are rehearsed and reveal less. That floor is
+  **superseded** — `status/spec-v2-steps.md` step 3's revised History protocol
+  takes a failure episode when the candidate offers one rather than digging
+  for one to satisfy a quota, and a floor requires exactly that digging; the
+  two cannot both hold. What survives the concern behind the floor: once a
+  bank holds four or more episodes it should contain both kinds, and
+  `story_failure_fraction` is computed and shown alongside the bank so a
+  monotone one is visible, but nothing in this system passes or fails against
+  it. (D-3.)
 - [ ] `reaction_elicitation_items >= 15` — real ads or ad excerpts reacted to, compared or sorted during onboarding
 - [ ] `elicitation_eval_overlap == 0` — zero overlap between the ads used to elicit preferences and the 20 held-out ads scored for `rank_spearman`. Without this the ranking gate measures memorisation rather than fit, and would pass while the system is worthless
 - [ ] **Profile recognisability** (non-numeric): given their own generated profile plus two

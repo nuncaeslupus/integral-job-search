@@ -214,7 +214,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T5 | **[HUMAN]** Label the collected ads against the dimension model; assign elicitation/evaluation split | 5, 8 | L | T3, T4, T4b | `corpus_size >= 100` | `test_corpus_meets_size_and_language_mix` in `tests/test_corpus_content.py` — ≥100 labelled ads and language mix within ±10% | ☐ |
 | T22 | `methods_ref` link check across dimensions and computation sites | — | S | T2, T18 | `undocumented_methods == 0` | `test_every_methods_ref_resolves_to_an_anchor` in `tests/test_methods_links.py` — every `methods_ref` resolves to a heading in `docs/METHODS.md` | ☐ |
 | T23 | Dimension `side`: matched / candidate-fact / candidate-trait, and a coverage metric that stops asking ad-side questions of candidate-side entries | 4, 8 | M | T2 | `side_coverage_violations == 0` | `test_a_trait_dimension_without_cues_is_valid` in `tests/test_dimension_side.py`; `test_extractor_coverage_counts_only_ad_side_dimensions` | ☑ |
-| T24 | Candidate attribute schema — languages, location, relocation, salary floor/target, availability, work authorisation, **and the reach and legality fields step 7 needs**: employed or contracting, paid where, taxed where. Pins the `constraints.json` field set and its `stated`/`declined`/`unknown` states | 2, 7 | M | T23 | `unsatisfiable_hard_constraint_leaks == 0` | `test_offer_failing_a_hard_constraint_never_ranks` in `tests/test_candidate_attributes.py`; `test_missing_attribute_is_unknown_not_satisfied` — an unstated constraint does not silently pass | ◐ |
+| T24 | Candidate attribute schema — languages, location, relocation, salary floor/target, availability, work authorisation, **and the reach and legality fields step 7 needs**: employed or contracting, paid where, taxed where. Pins the `constraints.json` field set and its `stated`/`declined`/`unknown` states | 2, 7 | M | T23 | `unsatisfiable_hard_constraint_leaks == 0` | `test_offer_failing_a_hard_constraint_never_ranks` in `tests/test_candidate_attributes.py`; `test_missing_attribute_is_unknown_not_satisfied` — an unstated constraint does not silently pass | ☑ |
 | T25 | **[LAPTOP]** Broaden the corpus beyond remote programming: ≥6 job families, ≥15 ads each, same three languages | 5, 8 | L | — | `corpus_job_family_count >= 6` | `test_corpus_covers_at_least_six_job_families` in `tests/test_corpus_families.py` — no family below 15 ads | ☐ |
 | T26 | Dimension model v1: widen to the broadened corpus; add candidate-trait dimensions (creativity, ambition, learning orientation, spare-time engagement) | 4, 8 | L | T23, T25 | `ontology_hit_rate >= 0.85` | `test_every_job_family_reaches_dimension_coverage` in `tests/test_dimension_content.py` — no family below 0.80 | ☐ |
 | T29 | Record the product shape — packaging, phase skills, checkpoint scripts, and the distribution decision left open at process spec §11.5 | — | S | — | `phase_checkpoints_defined == 1` | `test_every_open_shape_question_has_a_recorded_answer` in `tests/test_product_shape.py` — each question in the shape doc carries a decision or a named blocker | ◐ |
@@ -234,14 +234,14 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T38 | Retraction rows, and deletion of a person: "forget that" suppresses everywhere derived while the row survives; "delete everything about me" removes the tree, named once and irreversible, including another profile after confirming it by name | — | M | T6 | `retracted_rows_surviving_rebuild == 0` | `test_retracted_row_is_absent_from_every_derived_file` in `tests/test_retraction.py`; `test_retraction_is_itself_reversible`; `test_deletion_without_a_named_target_deletes_nothing` | ☑ |
 | T39 | Scoring triggers: recompute at a step boundary, on explicit request, and after N new trait-bearing rows — never per message | 4, 6 | S | T37 | `unscheduled_scoring_runs == 0` | `test_scoring_does_not_run_per_message` in `tests/test_scoring_triggers.py`; `test_deferred_scoring_loses_no_evidence` — the log is never behind | ☑ |
 | T40 | Decline ledger: a subject declined once is not raised again in that step, declined twice is not raised again at all unless the candidate reopens it | — | S | T6 | `repeat_asks_after_decline == 0` | `test_subject_declined_twice_is_never_asked_again` in `tests/test_non_insistence.py`; `test_candidate_reopening_a_subject_clears_the_ledger` | ☑ |
-| S7 | One skill per step, thirteen of them, each carrying its checkpoint as a **script** rather than prose | all | L | S2r, T34, T35 | `steps_with_a_skill_fraction == 1.0` | `test_every_step_has_a_skill`; `test_every_skill_names_its_gate_metric`; `test_every_skill_checkpoint_is_a_script_not_prose`; `test_no_skill_contradicts_its_step_specification` | ◐ |
+| S7 | One skill per step, thirteen of them, each carrying its checkpoint as a **script** rather than prose | all | L | S2r, T34, T35 | `steps_with_a_skill_fraction == 1.0` | `test_every_step_has_a_skill`; `test_every_skill_names_its_gate_metric`; `test_every_skill_checkpoint_is_a_script_not_prose`; `test_no_skill_contradicts_its_step_specification` | ☑ |
 
 ### PROFILE — evidence, constraints, stories, traits, weights
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
 |----|-------------|------|------|---------|------|-------|----|
 | T6 | Profile store: append-only `evidence.jsonl` + `rebuild` to byte-identical derived files; two-profile fixture | — | M | S3, T2 | `profile_rebuild_deterministic == 1` | `test_rebuild_twice_produces_identical_bytes` in `tests/test_profile_store.py`; `test_second_profile_does_not_leak_into_first` | ☑ |
-| T41 | Constraints step engine: confirm-and-fill from Intake's claims when they exist, ask from scratch when they do not, and never promote an unconfirmed claim | 2 | M | T6, T24 | `constraint_field_resolution == 1.0` | `test_every_constraint_field_resolves_to_one_of_three_states` in `tests/test_constraints_step.py`; `test_unconfirmed_claim_stays_unknown`; `test_step_runs_with_no_claims_present` — the required-only path | ◐ |
+| T41 | Constraints step engine: confirm-and-fill from Intake's claims when they exist, ask from scratch when they do not, and never promote an unconfirmed claim | 2 | M | T6, T24 | `constraint_field_resolution == 1.0` | `test_every_constraint_field_resolves_to_one_of_three_states` in `tests/test_constraints_step.py`; `test_unconfirmed_claim_stays_unknown`; `test_step_runs_with_no_claims_present` — the required-only path | ☑ |
 | T7 | Question bank generation from the dimension model | 3, 4 | M | T3, T6 | `question_dimension_coverage == 1.0` | `test_every_generated_question_maps_to_a_dimension` in `tests/test_question_bank.py` | ☐ |
 | T8 | Free-text answer extraction → dimension values + story-bank episodes | 1, 3 | L | T7 | `story_dimension_linkage == 1.0` | `test_every_episode_links_to_a_dimension` in `tests/test_elicit_extract.py`; `test_episode_defaults_to_private_disclosure` | ☐ |
 | T27 | Onboarding interview protocol: sequencing, answer-dependent follow-ups, coverage tracking, the first-job branch, empathic framing, and the two-episode/two-occasion trait floor reading `insufficient` rather than refusing | 3, 4 | L | T7, T8, T24 | `interview_profile_coverage >= 0.90` | `test_every_trait_is_scored_or_explicitly_insufficient` in `tests/test_interview.py`; `test_scripted_respondent_yields_full_profile_coverage`; `test_every_negative_episode_gets_a_lesson_followup` | ☐ |
@@ -249,17 +249,18 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T10 | Preference weights: forced pairwise choices → part-worths → salary-equivalent scale | 6 | M | T9 | `weight_salary_equivalent_roundtrip_error <= 0.01` | `test_partworth_to_salary_equivalent_roundtrips` in `tests/test_weights.py` — converting a dimension to €/month and back recovers the part-worth within 1% | ☐ |
 | T21 | Feedback loop: rejection reason → `evidence.jsonl` → rebuild → changed ranking, and the offer's lifecycle status moves with it | 10 | M | S5, T6, T19 | `feedback_traceability == 1.0` | `test_every_profile_value_traces_to_evidence_rows` in `tests/test_feedback.py`; `test_rejection_moves_offer_status_and_marks_weights_stale` | ☐ |
 | T28 | Continuous profile capture: every candidate-facing surface appends evidence, not just onboarding | — | M | T6, T27 | `profile_capture_coverage == 1.0` | `test_every_candidate_facing_surface_writes_evidence` in `tests/test_profile_capture.py` — a surface that accepts free text and writes no evidence row fails | ☐ |
+| T49 | Trait evidence sufficiency: score a trait only when its evidence floor is met, report `insufficient` otherwise — never refuse, never voice the floor to the candidate | 4 | M | T6, T27 | `trait_evidence_sufficiency == 1.0` | `test_a_trait_below_the_floor_is_insufficient_not_scored` in `tests/test_trait_sufficiency.py`; `test_insufficient_does_not_stop_the_step`; `test_the_floor_counts_occasions_not_repetitions` | ☐ |
 
 ### SUPPLY — connectors, offers, lifecycle
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
 |----|-------------|------|------|---------|------|-------|----|
-| T11 | Normalised offer schema + manual-paste connector | 7 | M | T1 | `offer_schema_violations == 0` | `test_pasted_text_produces_valid_offer` in `tests/test_connect_manual.py` — a pasted ad yields a schema-valid offer with verbatim `text` | ◐ |
-| T32 | Declarative connector format and a shared connector library — data, never code, never a credential; authenticated sources drive the candidate's own browser session | 7 | M | T11 | `connector_executes_no_shared_code == 1` | `test_connector_file_is_data_only` in `tests/test_connectors.py`; `test_no_connector_stores_a_credential`; `test_authenticated_source_uses_the_candidate_session` | ◐ |
+| T11 | Normalised offer schema + manual-paste connector | 7 | M | T1 | `offer_schema_violations == 0` | `test_pasted_text_produces_valid_offer` in `tests/test_connect_manual.py` — a pasted ad yields a schema-valid offer with verbatim `text` | ☑ |
+| T32 | Declarative connector format and a shared connector library — data, never code, never a credential; authenticated sources drive the candidate's own browser session | 7 | M | T11 | `connector_executes_no_shared_code == 1` | `test_connector_file_is_data_only` in `tests/test_connectors.py`; `test_no_connector_stores_a_credential`; `test_authenticated_source_uses_the_candidate_session` | ☑ |
 | T12 | **[LAPTOP]** One live portal connector against recorded fixtures | 7 | L | T11, T32 | `connector_fixture_parse_f1 >= 0.95` | `test_connector_parses_fixture_pages_to_offers` in `tests/test_connect_portal.py` | ☐ |
-| T13 | Cross-source dedup by similarity over normalised text + expiry detection | 7 | M | T11 | `dedup_precision >= 0.95` | `test_crossposted_duplicates_are_collapsed` in `tests/test_dedup.py`; `test_distinct_roles_at_same_company_are_not_merged` | ◐ |
-| S5 | Offer lifecycle: seven statuses and their allowed transitions, retention, the 60-day purge, and tombstones dedup cannot resurrect | 7 | L | S1, T11, T13 | `resurrected_purged_offers == 0` | `test_purged_offer_is_not_re_added_as_new` in `tests/test_offer_lifecycle.py`; `test_shortlisted_offer_is_never_purge_eligible`; `test_applied_cannot_return_to_new`; `test_explicit_revival_restores_and_keeps_the_tombstone` | ◐ |
-| T33 | Net-from-gross pay estimation per country, generated when the advert states only gross | 9 | M | T24 | `generated_tax_rules_marked_unverified == 1.0` | `test_net_estimate_within_ten_percent_of_reference` in `tests/test_pay.py`; `test_absent_country_rules_yield_unknown_not_a_guess` | ◐ |
+| T13 | Cross-source dedup by similarity over normalised text + expiry detection | 7 | M | T11 | `dedup_precision >= 0.95` | `test_crossposted_duplicates_are_collapsed` in `tests/test_dedup.py`; `test_distinct_roles_at_same_company_are_not_merged` | ☑ |
+| S5 | Offer lifecycle: seven statuses and their allowed transitions, retention, the 60-day purge, and tombstones dedup cannot resurrect | 7 | L | S1, T11, T13 | `resurrected_purged_offers == 0` | `test_purged_offer_is_not_re_added_as_new` in `tests/test_offer_lifecycle.py`; `test_shortlisted_offer_is_never_purge_eligible`; `test_applied_cannot_return_to_new`; `test_explicit_revival_restores_and_keeps_the_tombstone` | ☑ |
+| T33 | Net-from-gross pay estimation per country, generated when the advert states only gross | 9 | M | T24 | `generated_tax_rules_marked_unverified == 1.0` | `test_net_estimate_within_ten_percent_of_reference` in `tests/test_pay.py`; `test_absent_country_rules_yield_unknown_not_a_guess` | ☑ |
 
 ### MATCH — extraction, annotation, ranking
 
@@ -299,7 +300,8 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | S2r | The owner's twelve step-spec annotations folded in | all | M | S2 | `step_specs_complete_fraction == 1.0` | `test_duplicate_step_heading_does_not_collapse` in `tests/test_step_specs.py` | ☑ |
 | S8 | This plan — the build order for the thirteen-step process, and the queue reconciled against it | all | M | S2r | `plan_queue_task_drift == 0` | `test_task_in_the_queue_without_a_plan_row_is_drift` in `tests/test_plan_v2.py`; `test_a_payload_gate_differing_from_the_plan_is_drift`; `test_a_plan_dependency_missing_from_the_queue_is_drift`; `test_evidence_log_is_not_read_as_a_task_table` | ◐ |
 | S9 | Convert `claude-arsenal` from a vendored copy to a git subtree at a separate prefix, so upgrades are `git subtree pull` and the `ARSENAL_SHA` pin can go | all | M | — | `vendored_files_diverging_from_subtree == 0` | `test_every_bundle_file_matches_the_subtree_source` in `tests/test_arsenal_subtree.py`; `test_no_host_owned_path_is_inside_a_subtree_prefix`; `test_the_makefile_no_longer_pins_a_bare_sha` | ☐ |
-| S10 | The skill listing budget (8,000 chars, a per-turn context cost) is exceeded at 11,140 once the thirteen step skills land; decide between raising it and loading only the step in play | all | M | S7 | `skill_listing_budget_overage_chars == 0` | `test_the_library_is_within_its_listing_budget` in `tests/test_step_skills.py`; `test_every_step_is_still_reachable_after_the_change` — the saving may not come from dropping a step | ☐ |
+| S10 | The skill listing budget (8,000 chars, a per-turn context cost) is exceeded at 11,140 once the thirteen step skills land. **Decided: raise it.** The constant is hardcoded upstream with no override, so this is an upstream change first (`claude-arsenal` issue #143) and a re-measure here after | all | M | S7 | `skill_listing_budget_overage_chars == 0` | `test_the_library_is_within_its_listing_budget` in `tests/test_step_skills.py`; `test_every_step_is_still_reachable_after_the_change` — the saving may not come from dropping a step | ☐ |
+| S11 | Test mode — an orthogonal meta channel (`[[...]]`) for capturing notes about the tool during a live session, without disturbing it; notes are shown at the end and seeded only once confirmed | all | M | S7, S10 | `test_notes_reaching_candidate_evidence == 0` | `test_a_meta_note_never_reaches_the_evidence_log` in `tests/test_test_mode.py`; `test_a_pasted_advert_containing_brackets_is_not_eaten`; `test_the_visible_conversation_is_byte_identical_with_and_without_notes` | ☐ |
 
 ### Divergences
 
@@ -309,7 +311,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | D-2 | v0 gold examples are cue-derived, not independent — T15 must measure `extraction_macro_f1` against independent labels | 8 | S | T5 | `cue_derived_gold_in_evaluation_split == 0` | `test_no_evaluation_example_is_derived_from_a_cue` in `tests/test_corpus_content.py` | ☐ |
 | D-3 | `story_failure_fraction` floor contradicts the revised History protocol; reconcile `status/specification.md` and `docs/METHODS.md` | 3 | S | — | `spec_gate_contradictions == 0` | `test_no_document_states_a_superseded_gate` in `tests/test_spec_consistency.py` — the floor appears nowhere as a gate, and the fraction is reported | ☐ |
 | D-4 | The Traits gate is assigned to T28 by the specification and to T27 by the work; neither task's own gate is the step metric | 4 | S | — | `trait_gate_owner_contradictions == 0` | `test_step_gate_metric_is_some_task_gate` in `tests/test_step_gates.py` — every step gate metric is some task's acceptance gate; `test_no_two_documents_name_different_owners_for_one_step_gate` | ☐ |
-| D-6 | `rebuild()` writes only `stated` rows to `constraints.json`, so a refresh after the constraints step drops every `declined` and `unknown` field — the refusal T40 depends on reverts to never-asked | 2 | S | T41 | `constraint_states_survive_rebuild == 1.0` | `test_a_declined_field_survives_a_rebuild` in `tests/test_revision.py`; `test_an_unknown_field_survives_a_rebuild` — both must fail before the fix | ☐ |
+| D-6 | `rebuild()` writes only `stated` rows to `constraints.json`, so a refresh after the constraints step drops every `declined` and `unknown` field — the refusal T40 depends on reverts to never-asked | 2 | S | T41 | `constraint_states_survive_rebuild == 1.0` | `test_a_declined_field_survives_a_rebuild` in `tests/test_revision.py`; `test_an_unknown_field_survives_a_rebuild` — both must fail before the fix | ☑ |
 | D-7 | `spec-v2-steps.md` names two owners for the Ranking gate (T18, T19) while the JSON names one (T19); same class as D-4 | 9 | S | — | `step_gate_owner_contradictions == 0` | `test_every_step_gate_names_exactly_one_owner` in `tests/test_step_specs.py`; `test_the_gate_task_is_the_task_that_writes_the_metric`; `test_no_prose_document_names_a_different_owner_than_the_json` | ☐ |
 
 **Status legend**: ☐ open · ◐ in progress · ☑ merged
@@ -322,8 +324,8 @@ listed; every open task appears in exactly one milestone.
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
-| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T20, D-1, D-2, D-3, D-4 |
-| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9, S10 |
+| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T20, D-1, D-2, D-3, D-4 |
+| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9, S10, S11 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
 **S7 is deliberately not first.** The handover recommended it as the next task,
@@ -362,15 +364,23 @@ metrics whose owner must additionally measure and record them.
 | step metric | §9 owner | that task's own gate |
 |-------------|----------|----------------------|
 | `intake_field_provenance` | S4 | `intake_field_provenance == 1.0` — the same |
-| `constraint_field_resolution` | T24 | `unsatisfiable_hard_constraint_leaks == 0` — T41 resolves the fields |
-| `trait_evidence_sufficiency` | T28 | `profile_capture_coverage == 1.0` — **contested, see D-4** |
+| `constraint_field_resolution` | T41 | `constraint_field_resolution == 1.0` — the same |
+| `trait_evidence_sufficiency` | T49 | `trait_evidence_sufficiency == 1.0` — owner writes the metric (D-4 resolved) |
 | `interview_lesson_linkage` | S6 | `interview_lesson_linkage == 1.0` — the same |
 
-**D-4** records the one contradiction this plan found and did not resolve: §9
-assigns the Traits metric to T28 (continuous capture), while the two-episode
-floor that produces the measurement is specified in T27 (the interview
-protocol). The plan records §9's answer and points at the divergence rather than
-quietly overriding a settled specification.
+**D-4** was the one contradiction this plan found and could not resolve by
+editing: §9 assigned the Traits metric to T28 (continuous capture), while the
+two-episode floor that produces the measurement is specified in T27 (the
+interview protocol). Neither task's own gate is `trait_evidence_sufficiency`,
+so reassigning between them would have made the documents agree and the
+register still wrong — the plan recorded §9's answer and pointed at the
+divergence rather than quietly overriding a settled specification.
+
+It is now **resolved by a task, not an edit**: **T49** scores trait evidence
+and is measured on `trait_evidence_sufficiency` itself, so §9, this table and
+T49's own gate row name one task and mean the same thing. T27 keeps the floor
+as part of the interview and T28 keeps evidence arriving from every surface;
+what T49 adds is the decision to withhold a score, which belonged to neither.
 
 ## Evidence log
 

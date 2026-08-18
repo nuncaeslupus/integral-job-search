@@ -26,17 +26,29 @@ from __future__ import annotations
 
 import json
 import operator
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jobsearch.process_spec import DEFAULT_STEPS_PATH, GateState, Step, StepList, load_steps
+from jobsearch.plan_v2 import DEFAULT_PLAN, plan_rows
+from jobsearch.process_spec import (
+    DEFAULT_PROCESS_DOC,
+    DEFAULT_STEPS_PATH,
+    GateState,
+    Step,
+    StepList,
+    load_steps,
+)
+from jobsearch.step_specs import DEFAULT_STEP_SPECS_DOC, split_steps
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_DIR = _REPO_ROOT / "status" / "evidence"
 DEFAULT_EVIDENCE_PATH = DEFAULT_EVIDENCE_DIR / "T48.json"
+DEFAULT_D7_EVIDENCE_PATH = DEFAULT_EVIDENCE_DIR / "D7.json"
+DEFAULT_D4_EVIDENCE_PATH = DEFAULT_EVIDENCE_DIR / "D-4.json"
 
 _COMPARISONS: dict[str, Callable[[float, float], bool]] = {
     "==": operator.eq,
@@ -172,6 +184,236 @@ def apply_states(
 
 
 # ---------------------------------------------------------------------------
+# gate ownership (D-4, D-7): does `gate.task` name the task that writes the
+# number, and does every document that names an owner agree with it?
+#
+# `evidence_path` above turns `gate.task` into `status/evidence/<task>.json`.
+# So `gate.task` is not an attribution — it is a lookup key — and a step whose
+# owner is contested between documents, or whose named task's own acceptance
+# gate is a *different* metric, is a step the register is reading the wrong
+# file for. PR #23 hit this for the constraints step: the prose (and, until
+# fixed, `spec-v2-steps.json` itself) named T24, but `constraint_field_resolution`
+# is T41's own gate — T24 only pins the field set. `gate_ownership` is that
+# check, generalised to all thirteen steps and every document that names one.
+
+_TASK_LABEL_RE = re.compile(r"^(?:T\d+[a-z]?|S\d+r?|D-\d+)$")
+# `Owner: T19. State:` or, wrapped across a line, `Owner: T10. State:\n...` —
+# DOTALL so a hard-wrapped clause is still one match.
+_OWNER_RE = re.compile(r"Owner:\s*(.+?)\.\s*State:", re.DOTALL)
+_METRIC_NAME_RE = re.compile(r"^([a-z][a-z0-9_]*)\s*(?:==|!=|<=|>=|<|>)")
+# `| `metric` | 2 Constraints | T41 — ... |` — the metric in column 1, the
+# owner token at the start of column 3. Scoped to §9 by the caller, not to the
+# whole document, so it never matches the §2 step table (metric is its last
+# column there, not its first).
+_PROCESS_GATE_ROW_RE = re.compile(
+    r"^\|\s*`(?P<metric>[a-z][a-z0-9_]*)`\s*\|[^|]*\|\s*(?P<owner>[A-Za-z0-9-]+)",
+    re.MULTILINE,
+)
+
+
+@dataclass(frozen=True)
+class OwnershipReading:
+    """One step's `gate.task`, checked against every document that names one."""
+
+    step: str
+    task: str
+    metric: str
+    problems: tuple[str, ...]
+
+    @property
+    def contradicted(self) -> bool:
+        return bool(self.problems)
+
+
+def _prose_owners(steps_doc: Path) -> dict[int, str]:
+    """Each step's raw `Owner:` clause from `spec-v2-steps.md`, by step number."""
+    if not steps_doc.is_file():
+        return {}
+    sections = split_steps(steps_doc.read_text(encoding="utf-8"))
+    owners: dict[int, str] = {}
+    for n, section in sections.items():
+        match = _OWNER_RE.search(section)
+        if match:
+            owners[n] = match.group(1).strip()
+    return owners
+
+
+def _process_owners(process_doc: Path) -> dict[str, str]:
+    """metric -> owner token, from §9 of `spec-v2-process.md`.
+
+    §9 names an owner for only the metrics it calls new; a metric absent here
+    is not a contradiction, it is simply not repeated in this document.
+    """
+    if not process_doc.is_file():
+        return {}
+    text = process_doc.read_text(encoding="utf-8")
+    marker = "## 9. Where the gates come from"
+    if marker not in text:
+        return {}
+    start = text.index(marker)
+    rest = text[start:]
+    end = rest.find("\n## 10")
+    section = rest if end == -1 else rest[:end]
+    return {m.group("metric"): m.group("owner") for m in _PROCESS_GATE_ROW_RE.finditer(section)}
+
+
+def _primary_owners(clause: str) -> list[str]:
+    """The task ids named at the top level of an `Owner:` clause.
+
+    A parenthetical does not count as naming an owner: `T19 (ranked by T18)`
+    names one owner. `T18, T19` — the shape D-7 found — names two, which is
+    exactly the ambiguity `evidence_path` cannot resolve on its own.
+    """
+    head = clause.split("(", 1)[0]
+    return [tok.strip() for tok in head.split(",") if _TASK_LABEL_RE.match(tok.strip())]
+
+
+def gate_ownership(
+    steps: StepList | None = None,
+    steps_doc: Path = DEFAULT_STEP_SPECS_DOC,
+    process_doc: Path = DEFAULT_PROCESS_DOC,
+    plan: Path = DEFAULT_PLAN,
+) -> list[OwnershipReading]:
+    """Every step's `gate.task`, checked against three sources of an owner:
+
+    `spec-v2-steps.md`'s `Owner:` clause, `spec-v2-process.md` §9's table (for
+    the metrics it repeats), and — the check the constraints-step fix
+    generalises — whether `gate.task`'s own acceptance gate in `status/plan.md`
+    *is* the step's metric, which is what makes it the task whose evidence file
+    actually carries the number `evidence_path` goes looking for.
+    """
+    steps = steps or load_steps()
+    prose = _prose_owners(steps_doc)
+    process_owned = _process_owners(process_doc)
+    own_gate_metric: dict[str, str | None] = {}
+    for row in plan_rows(plan):
+        match = _METRIC_NAME_RE.match(row.gate)
+        own_gate_metric[row.label] = match.group(1) if match else None
+
+    readings: list[OwnershipReading] = []
+    for step in sorted(steps.steps, key=lambda s: s.n):
+        problems: list[str] = []
+        task = step.gate.task
+        metric = step.gate.metric
+
+        if not _TASK_LABEL_RE.match(task):
+            problems.append(f"gate.task {task!r} does not name a single task")
+
+        clause = prose.get(step.n)
+        if clause is None:
+            problems.append("spec-v2-steps.md names no Owner for this step")
+        else:
+            owners = _primary_owners(clause)
+            if len(owners) != 1:
+                problems.append(
+                    f"spec-v2-steps.md names {len(owners)} owner(s) ({clause!r}), not one"
+                )
+            elif owners[0] != task:
+                problems.append(
+                    f"spec-v2-steps.md names {owners[0]}, spec-v2-steps.json names {task}"
+                )
+
+        process_owner = process_owned.get(metric)
+        if process_owner is not None and process_owner != task:
+            problems.append(
+                f"spec-v2-process.md §9 names {process_owner} for {metric}, "
+                f"spec-v2-steps.json names {task}"
+            )
+
+        if task in own_gate_metric:
+            task_metric = own_gate_metric[task]
+            if task_metric != metric:
+                problems.append(
+                    f"{task}'s own plan.md gate measures {task_metric!r}, not {metric!r} — "
+                    f"{task} is not the task that writes this step's number"
+                )
+        else:
+            problems.append(f"{task} has no gate row in status/plan.md")
+
+        readings.append(
+            OwnershipReading(step=step.id, task=task, metric=metric, problems=tuple(problems))
+        )
+    return readings
+
+
+MINIMUM_STEPS_CHECKED = 13
+
+
+def measure_gate_ownership(
+    steps_path: Path = DEFAULT_STEPS_PATH,
+    steps_doc: Path = DEFAULT_STEP_SPECS_DOC,
+    process_doc: Path = DEFAULT_PROCESS_DOC,
+    plan: Path = DEFAULT_PLAN,
+) -> dict[str, Any]:
+    """D-7's gate: every step, checked for an owner contradiction."""
+    steps = load_steps(steps_path)
+    readings = gate_ownership(steps, steps_doc, process_doc, plan)
+    contradicted = [r for r in readings if r.contradicted]
+    return {
+        "step_gate_owner_contradictions": len(contradicted),
+        "steps_checked": len(readings),
+        "contradictions": [
+            {"step": r.step, "task": r.task, "metric": r.metric, "problems": list(r.problems)}
+            for r in contradicted
+        ],
+    }
+
+
+def write_owner_evidence(
+    evidence: Path = DEFAULT_D7_EVIDENCE_PATH,
+    steps_path: Path = DEFAULT_STEPS_PATH,
+    steps_doc: Path = DEFAULT_STEP_SPECS_DOC,
+    process_doc: Path = DEFAULT_PROCESS_DOC,
+    plan: Path = DEFAULT_PLAN,
+) -> dict[str, Any]:
+    measured = measure_gate_ownership(steps_path, steps_doc, process_doc, plan)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def measure_trait_gate_ownership(
+    steps_path: Path = DEFAULT_STEPS_PATH,
+    steps_doc: Path = DEFAULT_STEP_SPECS_DOC,
+    process_doc: Path = DEFAULT_PROCESS_DOC,
+    plan: Path = DEFAULT_PLAN,
+) -> dict[str, Any]:
+    """D-4's gate: the Traits step alone, checked for an owner contradiction.
+
+    Scoped to one step because D-4 is the narrower, still-open question: unlike
+    every other step, neither of Traits's two candidate owners (T27, T28) has
+    `trait_evidence_sufficiency` as its own plan.md gate, so this can measure
+    `1` (contradicted) honestly without D-7's general check ever being asked to
+    agree that the whole register is clean.
+    """
+    steps = load_steps(steps_path)
+    readings = gate_ownership(steps, steps_doc, process_doc, plan)
+    traits = next((r for r in readings if r.step == "traits"), None)
+    if traits is None:
+        return {"trait_gate_owner_contradictions": 0, "steps_checked": 0, "problems": []}
+    return {
+        "trait_gate_owner_contradictions": 1 if traits.contradicted else 0,
+        "steps_checked": 1,
+        "task": traits.task,
+        "metric": traits.metric,
+        "problems": list(traits.problems),
+    }
+
+
+def write_trait_owner_evidence(
+    evidence: Path = DEFAULT_D4_EVIDENCE_PATH,
+    steps_path: Path = DEFAULT_STEPS_PATH,
+    steps_doc: Path = DEFAULT_STEP_SPECS_DOC,
+    process_doc: Path = DEFAULT_PROCESS_DOC,
+    plan: Path = DEFAULT_PLAN,
+) -> dict[str, Any]:
+    measured = measure_trait_gate_ownership(steps_path, steps_doc, process_doc, plan)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+# ---------------------------------------------------------------------------
 # the gate
 
 
@@ -216,12 +458,43 @@ def _main(argv: list[str]) -> int:
 
         python -m jobsearch.step_gates [path]     → T48's gate evidence
         python -m jobsearch.step_gates --apply    → rewrite the states, then measure
+        python -m jobsearch.step_gates --owners [path]  → D-7's gate evidence
+        python -m jobsearch.step_gates --traits [path]  → D-4's gate evidence
     """
-    if "--apply" in argv[1:]:
+    args = argv[1:]
+    positional = [arg for arg in args if not arg.startswith("--")]
+
+    if "--owners" in args:
+        target = Path(positional[0]) if positional else DEFAULT_D7_EVIDENCE_PATH
+        measured = write_owner_evidence(target)
+        print(json.dumps(measured, ensure_ascii=False))
+        if measured["steps_checked"] < MINIMUM_STEPS_CHECKED:
+            print(
+                f"only {measured['steps_checked']} step(s) were checked "
+                f"(floor {MINIMUM_STEPS_CHECKED}) — a partial register is not a measurement",
+                file=sys.stderr,
+            )
+            return 3
+        for entry in measured["contradictions"]:
+            problems = "; ".join(entry["problems"])
+            print(f"{entry['step']} ({entry['task']}): {problems}", file=sys.stderr)
+        return 1 if measured["step_gate_owner_contradictions"] else 0
+
+    if "--traits" in args:
+        target = Path(positional[0]) if positional else DEFAULT_D4_EVIDENCE_PATH
+        measured = write_trait_owner_evidence(target)
+        print(json.dumps(measured, ensure_ascii=False))
+        if measured["steps_checked"] < 1:
+            print("the traits step could not be found — nothing was measured", file=sys.stderr)
+            return 3
+        for problem in measured["problems"]:
+            print(problem, file=sys.stderr)
+        return 1 if measured["trait_gate_owner_contradictions"] else 0
+
+    if "--apply" in args:
         for reading in apply_states():
             print(f"{reading.step}: {reading.recorded} → {reading.derived} ({reading.why})")
 
-    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)
     print(json.dumps(measured, ensure_ascii=False))

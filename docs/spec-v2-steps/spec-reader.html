@@ -446,7 +446,7 @@ Reactions needs live adverts they are there, and by the time Sourcing runs it is
 a fetch rather than a research project.</p>
 <p><strong>Gate.</strong> <code>constraint_field_resolution == 1.0</code> — every field carries one of the
 three states. A blank field is indistinguishable from a question nobody asked.
-Owner: T24. State: <code>not_implemented</code>.</p>
+Owner: T41 (the field set itself is pinned by T24). State: <code>not_implemented</code>.</p>
 <p><strong>Resume.</strong> <code>position</code> lists fields covered and outstanding. Resumes at the first
 outstanding field, naming what is left: <em>"three things left — hours, notice, and
 whether you'd move."</em></p>
@@ -565,7 +565,7 @@ fixing than launching, and I don't have enough yet on how you take pressure.
 Leave it there?"</em> Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>trait_evidence_sufficiency == 1.0</code> — every trait carries either a
 score backed by ≥2 independent episodes or <code>insufficient</code> with its count. A
-scored trait below the floor is a stereotype presented as a finding. Owner: T28.
+scored trait below the floor is a stereotype presented as a finding. Owner: T49 (T27 carries the floor as part of the interview; T28 keeps the evidence coming from every surface).
 State: <code>not_implemented</code>.</p>
 <p><strong>Resume.</strong> Scoring is idempotent, so an interruption re-runs it. <code>position</code>
 records which insufficient traits were already asked about, so a resumed step
@@ -794,8 +794,8 @@ say, which is not the same as saying no.</p>
 <em>"Read the fourteen new ones. Three don't say anything about how they work,
 which is itself worth knowing."</em> Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>extraction_macro_f1 &gt;= 0.75</code> on the evaluation split, with
-<code>extraction_negation_recall &gt;= 0.80</code> and <code>ontology_hit_rate &gt;= 0.85</code>. Owner:
-T15, T16, T17. State: <code>not_implemented</code>.</p>
+<code>extraction_negation_recall &gt;= 0.80</code> (T16) and <code>ontology_hit_rate &gt;= 0.85</code>
+(T17) alongside. Owner: T15. State: <code>not_implemented</code>.</p>
 <p><strong>Resume.</strong> Extraction is per offer and idempotent, so an interrupted run
 resumes at the first offer without a current extraction.</p>
 <p><strong>Re-run.</strong> Replaces the extraction for any offer whose text changed or whose
@@ -850,8 +850,9 @@ its reasons.</p>
 they say 'we don't do on-call' outright, which is worth about €400 a month to
 you. Want to react to any of these?"</em> Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>explained_fraction == 1.0</code> — every ranked offer cites at least one
-verbatim span per contributing dimension. Calibrated by <code>rank_spearman &gt;= 0.60</code>
-against a blind manual ranking (T20). Owner: T18, T19. State: <code>not_implemented</code>.</p>
+verbatim span per contributing dimension, computed over the frontier T18
+produces. Calibrated by <code>rank_spearman &gt;= 0.60</code> against a blind manual ranking
+(T20). Owner: T19. State: <code>not_implemented</code>.</p>
 <p><strong>Resume.</strong> Rankings are computed, not conversational. A ranking whose pinned
 revision is behind the current one is shown as out of date with a one-click
 recompute.</p>
@@ -964,7 +965,7 @@ or sit on it?"</em> Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>cv_generation_traceability == 1.0</code> — the fraction of claims in a
 generated document tracing to a specific store entry. Anything less is the tool
 inventing experience on a candidate's behalf, which is the single worst thing
-this project could ship. Owner: S4. State: <code>not_implemented</code>.</p>
+this project could ship. Owner: T45. State: <code>not_implemented</code>.</p>
 <p><strong>Resume.</strong> A draft in progress is saved as an unapproved version, so an
 interrupted session resumes at review rather than regenerating.</p>
 <p><strong>Re-run.</strong> <strong>Never overwrites.</strong> A regeneration writes <code>v&lt;N+1&gt;</code> and preserves

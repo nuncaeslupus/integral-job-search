@@ -92,6 +92,24 @@ class Label(Strict):
     round: int = Field(ge=1, default=1)
 
 
+class ImportRow(Strict):
+    """One row of the JSON batch `harness import` applies (T5 fast path).
+
+    The shape `tools/labelling_page.py` emits: everything `set` needs for one
+    label, plus the ad it belongs to. `extra="forbid"` (via `Strict`) catches a
+    row shaped by a stale copy of the page — a `span` field where `quote` is
+    expected, say — as a validation error instead of a silently-ignored key.
+    """
+
+    ad_id: str = Field(min_length=1)
+    dimension: str = Field(min_length=1)
+    value: float = Field(ge=-1.0, le=1.0)
+    quote: str = Field(min_length=1)
+    negated: bool = False
+    labeller: str = Field(min_length=1, default="owner")
+    round: int = Field(ge=1, default=1)
+
+
 class LabelledAd(Strict):
     """A corpus ad with its split assignment and any labels placed on it."""
 
@@ -531,16 +549,11 @@ def _cmd_set(args: argparse.Namespace) -> int:
         print(f"no ad {args.ad_id!r} in {store_path}", file=sys.stderr)
         return 2
 
-    start = ad.text.find(args.quote)
-    if start < 0:
-        print(f"quote does not appear in {ad.id} — copy it verbatim from the text", file=sys.stderr)
+    located = locate_quote(ad, args.quote)
+    if isinstance(located, str):
+        print(located, file=sys.stderr)
         return 2
-    if ad.text.find(args.quote, start + 1) >= 0:
-        print(
-            f"quote appears more than once in {ad.id} — extend it until it is unique",
-            file=sys.stderr,
-        )
-        return 2
+    start, end = located
 
     known = {dimension.id for dimension in load_dimensions()}
     if args.dimension not in known:
@@ -550,7 +563,7 @@ def _cmd_set(args: argparse.Namespace) -> int:
     label = Label(
         dimension=args.dimension,
         value=args.value,
-        spans=[Span(start=start, end=start + len(args.quote))],
+        spans=[Span(start=start, end=end)],
         negated=args.negated,
         labeller=args.labeller,
         round=args.round,
@@ -562,8 +575,174 @@ def _cmd_set(args: argparse.Namespace) -> int:
     ]
     updated = ad.model_copy(update={"labels": [*kept, label]})
     save_store([updated if other.id == ad.id else other for other in store], store_path)
-    end = start + len(args.quote)
     print(f"{ad.id}: {args.dimension} = {args.value} (round {args.round}) @ {start}-{end}")
+    return 0
+
+
+def locate_quote(ad: LabelledAd, quote: str) -> tuple[int, int] | str:
+    """Find `quote` in `ad.text`, or the reason it cannot be used as a span.
+
+    The one search `set` and `import` must agree on byte-for-byte: an absent
+    quote and an ambiguous one are refused identically by both entry points,
+    so a labeller cannot get a different answer from the CLI than from the
+    page's batch. Returns `(start, end)` on success, or a human-readable
+    refusal reason — never raises, so a caller validating a whole batch can
+    keep going through every row instead of stopping at the first bad one.
+    """
+    start = ad.text.find(quote)
+    if start < 0:
+        return f"quote does not appear in {ad.id} — copy it verbatim from the text"
+    if ad.text.find(quote, start + 1) >= 0:
+        return f"quote appears more than once in {ad.id} — extend it until it is unique"
+    return start, start + len(quote)
+
+
+def import_labels(
+    store: list[LabelledAd],
+    rows: list[dict[str, Any]],
+    known_dimensions: set[str],
+) -> tuple[list[LabelledAd], list[dict[str, Any]]]:
+    """Validate a whole batch, then apply it — or apply nothing.
+
+    Two passes over `rows`, on purpose. The first only reads: it shapes each
+    row through `ImportRow` and locates its quote, and touches nothing in
+    `store`. Only if every row passed does the second pass build the updated
+    store and return it; a single bad row anywhere in the batch means the
+    first pass's returned store is the *original*, unmodified list, and the
+    caller (`_cmd_import`) never calls `save_store` on it. This is what keeps
+    a partially-bad paste from partially applying — the alternative, applying
+    each row as it validates, would leave whatever validated before the first
+    failure sitting in the file with no record of which rows those were.
+
+    Later rows targeting the same `(ad_id, dimension, round)` as an earlier
+    row in the *same* batch win, matching `set`'s overwrite-in-place
+    behaviour — so importing the same export twice, or a corrected re-export,
+    never grows the label list, which is the idempotency the task calls for.
+
+    Returns `(updated_store_or_original, results)`. `results` has one entry
+    per row, each `{"index", "ad_id", "dimension", "status", "reason"?,
+    "start"?, "end"?}` with `status` one of `"applied"` or `"refused"`.
+    """
+    by_id = {ad.id: ad for ad in store}
+    results: list[dict[str, Any]] = []
+    located: list[tuple[int, ImportRow, int, int]] = []
+    all_valid = True
+
+    for index, raw_row in enumerate(rows):
+        try:
+            row = ImportRow.model_validate(raw_row)
+        except ValidationError as exc:
+            all_valid = False
+            problems = "; ".join(
+                f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+                for error in exc.errors()
+            )
+            results.append({"index": index, "status": "refused", "reason": problems})
+            continue
+
+        base = {"index": index, "ad_id": row.ad_id, "dimension": row.dimension}
+        ad = by_id.get(row.ad_id)
+        if ad is None:
+            all_valid = False
+            reason = f"no ad {row.ad_id!r} in the store"
+            results.append({**base, "status": "refused", "reason": reason})
+            continue
+        if row.dimension not in known_dimensions:
+            all_valid = False
+            results.append(
+                {**base, "status": "refused", "reason": f"unknown dimension {row.dimension!r}"}
+            )
+            continue
+
+        located_span = locate_quote(ad, row.quote)
+        if isinstance(located_span, str):
+            all_valid = False
+            results.append({**base, "status": "refused", "reason": located_span})
+            continue
+
+        start, end = located_span
+        located.append((index, row, start, end))
+        results.append({**base, "status": "applied", "start": start, "end": end})
+
+    if not all_valid:
+        return store, results
+
+    updated_by_id = dict(by_id)
+    for _index, row, start, end in located:
+        ad = updated_by_id[row.ad_id]
+        label = Label(
+            dimension=row.dimension,
+            value=row.value,
+            spans=[Span(start=start, end=end)],
+            negated=row.negated,
+            labeller=row.labeller,
+            round=row.round,
+        )
+        kept = [
+            existing
+            for existing in ad.labels
+            if not (existing.dimension == row.dimension and existing.round == row.round)
+        ]
+        updated_by_id[row.ad_id] = ad.model_copy(update={"labels": [*kept, label]})
+
+    return list(updated_by_id.values()), results
+
+
+def _cmd_import(args: argparse.Namespace) -> int:
+    """Apply the JSON batch `tools/labelling_page.py` emits, in one write.
+
+    Exactly as strict as `set`, run over every row before anything is
+    written: the same verbatim-quote search (`locate_quote`), the same
+    refusal of an absent or ambiguous quote, the same unknown-dimension
+    check. `import_labels` does the validate-then-apply split; this is the
+    CLI shell around it — read the file (or stdin), report per row, and only
+    call `save_store` once, when nothing was refused.
+    """
+    store_path = Path(args.store)
+    store = load_store(store_path)
+
+    raw_text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(
+        encoding="utf-8"
+    )
+    try:
+        rows = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        print(f"not valid JSON: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(rows, list):
+        print("expected a JSON array of label rows", file=sys.stderr)
+        return 2
+
+    known = {dimension.id for dimension in load_dimensions()}
+    updated, results = import_labels(store, rows, known)
+
+    refused = [r for r in results if r["status"] == "refused"]
+    applied = [r for r in results if r["status"] == "applied"]
+
+    for result in results:
+        if result["status"] == "applied":
+            print(
+                f"row {result['index']}: {result['ad_id']} {result['dimension']} "
+                f"applied @ {result['start']}-{result['end']}"
+            )
+        else:
+            label_bit = ""
+            if "ad_id" in result:
+                label_bit = f"{result['ad_id']} {result.get('dimension', '')} "
+            print(
+                f"row {result['index']}: {label_bit}refused — {result['reason']}", file=sys.stderr
+            )
+
+    if refused:
+        print(
+            f"{len(refused)} row(s) refused, {len(applied)} row(s) would have applied — "
+            "nothing written",
+            file=sys.stderr,
+        )
+        return 2
+
+    save_store(updated, store_path)
+    print(f"{len(applied)} label(s) applied to {store_path}")
     return 0
 
 
@@ -633,6 +812,12 @@ def build_parser() -> argparse.ArgumentParser:
     put.add_argument("--labeller", default="owner")
     put.add_argument("--round", type=int, default=1)
     put.set_defaults(func=_cmd_set)
+
+    imp = sub.add_parser(
+        "import", help="apply a JSON batch of labels (from tools/labelling_page.py)"
+    )
+    imp.add_argument("file", help="path to a JSON array of label rows, or - for stdin")
+    imp.set_defaults(func=_cmd_import)
 
     status = sub.add_parser("status", help="print the full harness measurement")
     status.set_defaults(func=_cmd_status)

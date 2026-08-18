@@ -1,16 +1,18 @@
-.PHONY: help sync build lint format test gate evidence verify-gates ci arsenal-remote reader reader-process reader-steps clean update-skills
+.PHONY: help sync build lint format test gate evidence verify-gates verify-subtree ci arsenal-remote arsenal-upgrade reader reader-process reader-steps clean update-skills assemble-bundle
 
 ARSENAL_REPO    ?= https://github.com/nuncaeslupus/claude-arsenal.git
 ARSENAL_REF     ?= v0.23.1  # pin to a tag — upgrade deliberately
 ARSENAL_PLUGINS ?= all      # comma list, or "all" to include skill-creator
+ARSENAL_PREFIX  ?= vendor/claude-arsenal
 
-# Immutable pin: the commit v0.23.1 resolved to when it was reviewed and
-# vendored. A tag can be moved by anyone with push access upstream, and this
-# target executes vendor-skills.sh straight out of the fetched checkout — so
-# the tag alone is not enough to guarantee we run the code we reviewed.
-# Re-vendoring aborts if the ref no longer resolves here. To upgrade: bump
-# ARSENAL_REF, run once, read the reported SHA, review the diff, then set it.
-ARSENAL_SHA     ?= f84b4eff13a87c29023931147877bc55085466f8
+# ARSENAL_SHA is gone, and its absence is the point of the subtree (S9).
+# It existed because update-skills used to execute vendor-skills.sh straight
+# out of a freshly fetched checkout: a tag can be moved by anyone with upstream
+# push access, so the tag alone did not guarantee we ran the code we reviewed,
+# and a second hand-copied hash had to guard it. A subtree records the exact
+# commit in its own merge, in this repository's history, where review already
+# looks — so the guarantee comes from git rather than from remembering to
+# update a constant.
 
 help:  ## list available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -66,7 +68,13 @@ evidence:  ## regenerate every module's gate evidence and fail on any drift
 verify-gates:  ## assert every done/merged task's declared gate still holds
 	uv run python tools/verify_gates.py
 
-ci: lint test evidence verify-gates  ## everything CI runs, in CI's order
+# The assembled bundle under claude-arsenal/ is a copy of the subtree's assets.
+# A hand-edit there works perfectly until the next upgrade silently reverts it —
+# the exact failure a vendored copy has and a subtree is meant to remove.
+verify-subtree:  ## assert claude-arsenal/ still matches its subtree source
+	uv run python tools/verify_arsenal_subtree.py
+
+ci: lint test evidence verify-gates verify-subtree  ## everything CI runs, in CI's order
 
 # The readers are generated but committed, so a spec edit without a regenerate
 # leaves a reviewer annotating text that has changed underneath them — and
@@ -108,16 +116,38 @@ arsenal-remote:  ## wire up the 'arsenal' remote so check_update.sh can compare 
 	@git fetch --tags arsenal
 	@bash claude-arsenal/bin/check_update.sh
 
-update-skills:  ## vendor claude-arsenal skills into .claude/skills (for CC web)
-	@tmp=$$(mktemp -d); trap 'rm -rf $$tmp' EXIT; \
-	git clone --depth 1 --branch $(ARSENAL_REF) $(ARSENAL_REPO) $$tmp >/dev/null 2>&1 \
-		|| { echo "update-skills: clone of $(ARSENAL_REF) from $(ARSENAL_REPO) failed" >&2; exit 1; }; \
-	got=$$(git -C $$tmp rev-parse HEAD); \
-	if [ "$$got" != "$(ARSENAL_SHA)" ]; then \
-		echo "update-skills: refusing to run vendor-skills.sh from an unverified checkout." >&2; \
-		echo "  $(ARSENAL_REF) resolves to $$got" >&2; \
-		echo "  ARSENAL_SHA expects   $(ARSENAL_SHA)" >&2; \
-		echo "  The tag moved, or you are upgrading. Review the diff, then update ARSENAL_SHA." >&2; \
-		exit 1; \
-	fi; \
-	bash $$tmp/scripts/vendor-skills.sh --src $$tmp --dest .claude/skills --plugins $(ARSENAL_PLUGINS)
+update-skills:  ## assemble .claude/skills from the vendored subtree (for CC web)
+	@test -d $(ARSENAL_PREFIX) \
+		|| { echo "update-skills: no subtree at $(ARSENAL_PREFIX) — run 'make arsenal-upgrade REF=<tag>'" >&2; exit 1; }
+	bash $(ARSENAL_PREFIX)/scripts/vendor-skills.sh \
+		--src $(ARSENAL_PREFIX) --dest .claude/skills --plugins $(ARSENAL_PLUGINS)
+
+# `update-skills` only rebuilds .claude/skills/ — that is what its name and its
+# help text both say, and it is the only thing CC-web needs. It is deliberately
+# NOT the step that touches claude-arsenal/: that name would then lie about
+# what it does, and a target with two unrelated jobs is a target nobody can
+# reason about from its name alone.
+#
+# claude-arsenal/ is a separate copy, assembled from the *bundle* half of the
+# skill — .claude/skills/init/assets/ — which update-skills just refreshed
+# from the subtree. Re-running init.py's own refresh logic is what actually
+# reassembles it; this is the same invocation the session-start protocol
+# already runs at the top of every session (see AGENTS.md step 0b), so
+# `arsenal-upgrade` performs no fewer steps by hand than a live session would.
+assemble-bundle:  ## reassemble claude-arsenal/ from the freshly-pulled subtree
+	python3 .claude/skills/init/scripts/init.py --repo-path . --silent
+
+# Upgrading is a subtree pull, a re-assembly of both halves the pull feeds
+# (.claude/skills/ via update-skills, claude-arsenal/ via assemble-bundle),
+# and only then the verifier — which proves the assembled bundle is a
+# function of the subtree rather than something hand-edited since. Skipping
+# assemble-bundle here was the bug: verify-subtree compares claude-arsenal/
+# against the subtree, but nothing between the pull and the verify ever
+# rebuilt claude-arsenal/ — so any upstream change to a bundle asset failed
+# the verify step through no fault of the user.
+arsenal-upgrade:  ## pull a new claude-arsenal release into the subtree (REF=v0.x.y)
+	@test -n "$(REF)" || { echo "usage: make arsenal-upgrade REF=v0.24.0" >&2; exit 1; }
+	git subtree pull --prefix=$(ARSENAL_PREFIX) arsenal $(REF) --squash
+	$(MAKE) --no-print-directory update-skills
+	$(MAKE) --no-print-directory assemble-bundle
+	$(MAKE) --no-print-directory verify-subtree

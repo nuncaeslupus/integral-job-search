@@ -270,7 +270,7 @@ a fetch rather than a research project.
 
 **Gate.** `constraint_field_resolution == 1.0` — every field carries one of the
 three states. A blank field is indistinguishable from a question nobody asked.
-Owner: T24. State: `not_implemented`.
+Owner: T41 (the field set itself is pinned by T24). State: `not_implemented`.
 
 **Resume.** `position` lists fields covered and outstanding. Resumes at the first
 outstanding field, naming what is left: *"three things left — hours, notice, and
@@ -415,7 +415,7 @@ Leave it there?"* Writes `last_activity`.
 
 **Gate.** `trait_evidence_sufficiency == 1.0` — every trait carries either a
 score backed by ≥2 independent episodes or `insufficient` with its count. A
-scored trait below the floor is a stereotype presented as a finding. Owner: T28.
+scored trait below the floor is a stereotype presented as a finding. Owner: T49 (T27 carries the floor as part of the interview; T28 keeps the evidence coming from every surface).
 State: `not_implemented`.
 
 **Resume.** Scoring is idempotent, so an interruption re-runs it. `position`
@@ -697,8 +697,8 @@ say, which is not the same as saying no.
 which is itself worth knowing."* Writes `last_activity`.
 
 **Gate.** `extraction_macro_f1 >= 0.75` on the evaluation split, with
-`extraction_negation_recall >= 0.80` and `ontology_hit_rate >= 0.85`. Owner:
-T15, T16, T17. State: `not_implemented`.
+`extraction_negation_recall >= 0.80` (T16) and `ontology_hit_rate >= 0.85`
+(T17) alongside. Owner: T15. State: `not_implemented`.
 
 **Resume.** Extraction is per offer and idempotent, so an interrupted run
 resumes at the first offer without a current extraction.
@@ -766,8 +766,9 @@ they say 'we don't do on-call' outright, which is worth about €400 a month to
 you. Want to react to any of these?"* Writes `last_activity`.
 
 **Gate.** `explained_fraction == 1.0` — every ranked offer cites at least one
-verbatim span per contributing dimension. Calibrated by `rank_spearman >= 0.60`
-against a blind manual ranking (T20). Owner: T18, T19. State: `not_implemented`.
+verbatim span per contributing dimension, computed over the frontier T18
+produces. Calibrated by `rank_spearman >= 0.60` against a blind manual ranking
+(T20). Owner: T19. State: `not_implemented`.
 
 **Resume.** Rankings are computed, not conversational. A ranking whose pinned
 revision is behind the current one is shown as out of date with a one-click
@@ -908,7 +909,7 @@ or sit on it?"* Writes `last_activity`.
 **Gate.** `cv_generation_traceability == 1.0` — the fraction of claims in a
 generated document tracing to a specific store entry. Anything less is the tool
 inventing experience on a candidate's behalf, which is the single worst thing
-this project could ship. Owner: S4. State: `not_implemented`.
+this project could ship. Owner: T45. State: `not_implemented`.
 
 **Resume.** A draft in progress is saved as an unapproved version, so an
 interrupted session resumes at review rather than regenerating.
