@@ -49,3 +49,25 @@ should feed templates rather than one fixed layout.
 Service: **PROFILE** · Size: L · Depends: S1
 
 Source: `status/spec-v2-brief.md` §2.6, §2.7
+
+---
+
+## Scope change — v2 plan, 2026-08-18
+
+**Narrowed.** S4 is the CV **store**: importing pdf/docx into
+`cv/master.json`, building the same store by conversation with someone who has
+no CV, and pinning the `master.json` contract — which nothing else pins. It owns
+step 1's gate, `intake_field_provenance == 1.0`: every field names the document
+span or the conversation turn it came from.
+
+**Per-advert generation splits out as T45.** Its gate
+(`cv_generation_traceability == 1.0`) is a different measurement on a different
+artefact, and it depends on an offer and an extraction that step 1 has no
+business knowing about.
+
+**Intake never produces a document.** A candidate arriving with no CV does not
+get a PDF generated for them; they get the same structured store that parsing a
+real CV would have produced. `cv/source/*` is stored unmodified and never sent
+anywhere. Personal details — date of birth, address, telephone — are **not**
+collected here; they are collected at step 11, by T46, for the document that
+requires them.
