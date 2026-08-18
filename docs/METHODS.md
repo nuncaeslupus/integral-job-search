@@ -202,6 +202,45 @@ keyword the profile does not support is a gap, never something to insert.
 [How AI screens resumes in 2026](https://happypeopleai.com/blog/how-ai-screens-your-resume-in-2026-and-how-to-beat-ats-filters)
 — both commercial; low confidence, flagged in §5.
 
+### 2.8 Cross-source near-duplicate detection
+
+**What.** The same advert reposted across sources — reworded, retitled, or with a source's own
+summary or footer stitched on — is found by shingled Jaccard similarity over normalised ad
+text, not by hashing (T13).
+
+**Why.** Process spec §7.4 fixes `text_sha256` as a hash over normalised text, which "catches
+re-collection of the same listing and nothing else": two portals carrying the same role rarely
+carry byte-identical text, so cross-posted duplicates need a *similarity* judgement, not an
+equality check. Word-shingle Jaccard (the technique behind Broder's near-duplicate web-page
+detection) was chosen over `difflib.SequenceMatcher` because shingle-set overlap is insensitive
+to *where* in the text an edit happened — a retitled opening line or an appended footer only
+invalidates the shingles that cross that boundary — while `SequenceMatcher`'s
+longest-common-subsequence approach is sensitive to exactly that kind of local rearrangement,
+and quadratic in text length besides. Standard library only: no new dependency.
+
+**How we use it.** Text is lowercased and word-tokenised into a comparison key that is never
+written back to the stored offer (`Offer.text` stays byte-for-byte verbatim, per T11 — T15's
+extraction evidence spans are offsets into it). The key is split into overlapping 8-word
+shingles and compared by `|intersection| / |union|`. Shingles common to more than half of the
+batch being compared are excluded from every pair's score before it is computed — same-source
+template text (a cookie notice, an equal-opportunity statement) recurs across most of an
+arbitrary batch, while genuine duplicate content is specific to one pair, so a bare-majority
+frequency threshold separates the two without needing a template denylist. See §4.6 for the
+formula and the threshold's calibration.
+
+**Limits.** The 0.25 similarity threshold and the 8-word shingle width are calibrated against a
+seven-offer, twenty-one-pair seeded fixture (`jobsearch.dedup._fixture_batch`), not a broad
+corpus — flagged in §5. Boilerplate filtering needs at least three offers in a batch to define
+"common" against; a bare pair falls back to unfiltered similarity, so a two-offer comparison
+sharing a long boilerplate block is not protected by this mechanism (`jobsearch.dedup.similarity`
+vs. `jobsearch.dedup.find_duplicates`, whose docstrings say so). The gate measures precision,
+never recall — see the module docstring's asymmetry argument, echoed in §4.4's `dedup_precision`
+row: a false merge silently drops a role from the candidate's list with nothing to tell them it
+happened, while a missed duplicate is only noise.
+
+**Sources.** Broder, A. (1997), *On the resemblance and containment of documents* — the
+w-shingling technique for near-duplicate detection this module's shingle width follows.
+
 ---
 
 ## 3. Techniques deliberately NOT used
@@ -339,6 +378,30 @@ assessment, regional variation below the level a rule set models, and pension ar
 None of these are modelled; the estimate states that it ignores them rather than implying a
 precision the calculation does not have.
 
+### 4.6 Near-duplicate detection — shingled Jaccard similarity
+
+Two ads' normalised texts are each split into overlapping 8-word shingles (§2.8); similarity is
+plain Jaccard over the two shingle sets, after a batch-relative boilerplate filter removes
+shingles common to more than half the batch being compared:
+
+```
+shingles(text)        = { word[i:i+8] for i in range(len(words) - 7) }   # 8-word windows
+boilerplate(batch)     = { s : |{ o in batch : s in shingles(o) }| > 0.5 × |batch| }
+similarity(a, b, batch) = |shingles(a)\boilerplate − shingles(b)\boilerplate|
+                           ────────────────────────────────────────────────
+                           |shingles(a)\boilerplate ∪ shingles(b)\boilerplate|
+```
+
+Two offers are reported as the same ad when `similarity > 0.25`
+(`jobsearch.dedup.SIMILARITY_THRESHOLD`). That value is not assumed; it is the point roughly
+midway between the lowest score any seeded duplicate pair reached (0.489, after boilerplate
+filtering) and the highest score any seeded non-duplicate pair reached (0.0) in the calibration
+fixture referenced in §2.8 — comfortable margin on both sides of the observed gap, rather than a
+value fit to the exact boundary. Boilerplate filtering itself needs at least three offers in the
+batch to define "common" against (with two, any shingle either shares is, trivially, in "all of
+them"); below that population no filtering is applied and the two shingle sets are compared as
+they stand.
+
 ---
 
 ## 5. Evidence gaps
@@ -366,6 +429,11 @@ Recorded so they are not mistaken for settled.
    so both are marked `generated`** and every figure from them is shown as approximate; that is
    the honest state, not a temporary one. Promoting either to `verified` is a task for a person
    with the tax code in front of them — see each file's `notes` for what was simplified and why.
+8. **Dedup similarity threshold (§2.8, §4.6)** — 0.25, the 8-word shingle width, and the 0.5
+   boilerplate-frequency cutoff are all calibrated against one seven-offer seeded fixture, not
+   real cross-posted ad pairs collected at scale. They separate that fixture's cases with
+   margin, but the margin's size on a real, larger corpus is unmeasured. **Re-calibrate once
+   T12's live connector supplies real cross-posted pairs**, and widen the fixture itself.
 
 ---
 
@@ -373,5 +441,6 @@ Recorded so they are not mistaken for settled.
 
 | Date | Change |
 |---|---|
+| 2026-08-18 | §2.8/§4.6 added: cross-source near-duplicate detection by shingled Jaccard similarity, and its threshold's calibration (T13). |
 | 2026-08-18 | §4.5 added: net-from-gross pay estimation, and its committed/generated rule-source split (T33). |
 | 2026-08-15 | Created. Sections 1–5 from the pre-`ONTOLOGY` research pass. |

@@ -1,0 +1,10 @@
+{
+  "dedup_precision": 1.0,
+  "pairs_judged": 21,
+  "duplicate_pairs_seeded": 4,
+  "predicted_positive": 4,
+  "true_positives": 4,
+  "false_positives": 0,
+  "missed_duplicates": 0,
+  "failures": []
+}
