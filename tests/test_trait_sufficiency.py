@@ -16,6 +16,7 @@ episode, and a trait left with no reading at all.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
@@ -29,6 +30,7 @@ from jobsearch.interview import (
 from jobsearch.profile import EvidenceLog
 from jobsearch.trait_sufficiency import (
     MINIMUM_TRAITS,
+    Status,
     TraitSufficiencyReading,
     _fixture_dimension,
     _localised,
@@ -127,7 +129,7 @@ def test_insufficient_does_not_stop_the_step(
     )
     by_id = {r.dimension_id: r for r in readings}
     assert by_id["trait_thin"].status == "insufficient"
-    assert by_id["trait_full"].status == "scored"
+    assert by_id["trait_full"].status == "sufficient"
 
 
 def test_the_floor_counts_occasions_not_repetitions(
@@ -192,7 +194,7 @@ def test_evidence_from_any_surface_counts(
 
     assert reading.episodes == 2
     assert reading.occasions == 2
-    assert reading.status == "scored", reading
+    assert reading.status == "sufficient", reading
     assert len(reading.evidence) == 2
 
 
@@ -295,7 +297,7 @@ def test_a_denial_counts_toward_the_floor_same_as_an_affirmation(
 
     assert reading.episodes == 2
     assert reading.occasions == 2
-    assert reading.status == "scored", (
+    assert reading.status == "sufficient", (
         f"two occasions of evidence denying a trait did not clear the floor — {reading}"
     )
 
@@ -304,13 +306,13 @@ def test_a_denial_counts_toward_the_floor_same_as_an_affirmation(
 
 
 def test_a_trait_scored_from_a_single_episode_is_rejected() -> None:
-    """Breaking the contract by hand: a reading claiming `"scored"` from one
+    """Breaking the contract by hand: a reading claiming `"sufficient"` from one
     episode on one occasion — built directly, bypassing `trait_sufficiency_reading`
     — must drop `trait_evidence_sufficiency` below 1.0 and name the offending
     dimension, exactly as if the real pipeline had produced it."""
     broken = TraitSufficiencyReading(
         dimension_id="trait_broken",
-        status="scored",
+        status="sufficient",
         episodes=1,
         occasions=1,
         declined=False,
@@ -344,7 +346,7 @@ def test_a_trait_left_neither_scored_nor_insufficient_is_rejected() -> None:
     denominator, and never counted as satisfied."""
     only_reading = TraitSufficiencyReading(
         dimension_id="trait_covered",
-        status="scored",
+        status="sufficient",
         episodes=3,
         occasions=3,
         declined=False,
@@ -396,7 +398,7 @@ def test_a_single_trait_dimension_does_not_report_full_sufficiency(
         dimensions=("trait_lonely",),
     )
     reading = trait_sufficiency_reading(log, ledger, "trait_lonely")
-    assert reading.status == "scored", reading
+    assert reading.status == "sufficient", reading
 
     fraction, violations = trait_evidence_sufficiency(("trait_lonely",), (reading,))
 
@@ -446,3 +448,61 @@ def test_probe_trait_sufficiency_is_clean(tmp_path: Path) -> None:
     assert result["checks_run"] >= MINIMUM_CHECKS
     assert result["failures"] == [], result["failures"]
     assert result["trait_evidence_sufficiency"] == 1.0
+
+
+def test_a_scored_reading_must_name_as_many_evidence_rows_as_episodes_claimed() -> None:
+    """Non-empty was the whole check, so a reading claiming two episodes while
+    naming one row satisfied it.
+
+    That matters because `trait_evidence_sufficiency` takes readings as *data*
+    on purpose — so a hand-built violation is caught exactly as if the pipeline
+    had produced it — and a count nothing has to substantiate is the easiest
+    kind to overstate. Duplicate ids are counted once, for the same reason.
+    """
+    unbacked = TraitSufficiencyReading(
+        dimension_id="trait_x",
+        status="sufficient",
+        episodes=2,
+        occasions=2,
+        declined=False,
+        reason="clears the floor",
+        evidence=("only-one-row",),
+    )
+    duplicated = TraitSufficiencyReading(
+        dimension_id="trait_y",
+        status="sufficient",
+        episodes=2,
+        occasions=2,
+        declined=False,
+        reason="clears the floor",
+        evidence=("same-row", "same-row"),
+    )
+    backed = TraitSufficiencyReading(
+        dimension_id="trait_z",
+        status="sufficient",
+        episodes=2,
+        occasions=2,
+        declined=False,
+        reason="clears the floor",
+        evidence=("row-a", "row-b"),
+    )
+
+    ids = ("trait_x", "trait_y", "trait_z")
+    fraction, violations = trait_evidence_sufficiency(ids, (unbacked, duplicated, backed))
+
+    assert fraction == 1 / 3
+    assert len(violations) == 2
+    assert all("a count nothing backs" in v for v in violations)
+
+
+def test_the_state_is_sufficient_rather_than_scored_because_nothing_scores() -> None:
+    """Named `"scored"` at first, which claimed an artefact that does not exist:
+    `profile._build_traits` collects evidence references and scores nothing.
+
+    A reader taking `trait_evidence_sufficiency == 1.0` to mean "every trait has
+    a score" would have been wrong. It means every trait has enough evidence to
+    *be* scored, or says what is missing. Pinned as a test because the name is
+    the whole guarantee, and a later rename back would be silent.
+    """
+    assert "scored" not in get_args(Status)
+    assert set(get_args(Status)) == {"sufficient", "insufficient"}

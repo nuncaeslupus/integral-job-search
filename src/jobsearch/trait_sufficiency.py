@@ -120,7 +120,7 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T49.json"
 # rather than only for the probe's exit code.
 MINIMUM_TRAITS = 2
 
-Status = Literal["scored", "insufficient"]
+Status = Literal["sufficient", "insufficient"]
 
 
 class TraitSufficiencyError(Exception):
@@ -132,10 +132,10 @@ class TraitSufficiencyReading:
     """One trait dimension's scored-or-insufficient verdict — the step 4 contract.
 
     `status` is never a third value: `trait_sufficiency_reading` derives it
-    from `TraitFloorState.status` (`"sufficient"` -> `"scored"`,
+    from `TraitFloorState.status` (`"sufficient"` -> `"sufficient"`,
     `"insufficient"` -> `"insufficient"`), the same completeness
     `TraitFloorState.status` itself is held to. `evidence` is the row ids a
-    `"scored"` reading is backed by — always non-empty for a scored trait,
+    `"sufficient"` reading is backed by — always non-empty for a scored trait,
     always empty for an insufficient one — so a caller (or `traits.json`, once
     something builds it) can trace the verdict back to what was said, the same
     discipline `EvidenceRow`'s own ids exist for. `reason` is carried through
@@ -166,8 +166,22 @@ def trait_sufficiency_reading(
 ) -> TraitSufficiencyReading:
     """One trait's verdict, read from T27's own floor state — never recomputed.
 
+    **The state is `"sufficient"`, not `"scored"`, and the difference is not
+    cosmetic.** Nothing in this repository computes a trait *value*:
+    `profile._build_traits` collects evidence references and says outright that
+    it scores nothing. Naming this state `"scored"` — as it was first written —
+    claimed an artefact that does not exist, and would have let a reader take
+    `trait_evidence_sufficiency == 1.0` as "every trait has a score" when what
+    it means is "every trait has enough evidence to *be* scored, or says what is
+    missing".
+
+    That is the honest reading of the gate, and it is what the step's own
+    machine-readable metric asks for. Step 4's prose still says "a score backed
+    by >= 2 episodes"; delivering the score itself is future work, and the day a
+    scorer exists this state is what tells it which traits it may run on.
+
     `state.status == "sufficient"` is the only thing that can make this
-    `"scored"`; everything else, declined included, is `"insufficient"` — the
+    `"sufficient"`; everything else, declined included, is `"insufficient"` — the
     non-insistence mapping item 4 of the payload asks for (`TraitFloorState.declined`
     is what already keeps `profile_coverage` from counting a declined trait as
     *owed*, and this reuses the same signal rather than re-deriving it).
@@ -181,7 +195,7 @@ def trait_sufficiency_reading(
         )
         return TraitSufficiencyReading(
             dimension_id=dimension_id,
-            status="scored",
+            status="sufficient",
             episodes=state.episodes,
             occasions=state.occasions,
             declined=False,
@@ -228,7 +242,7 @@ def trait_evidence_sufficiency(
 
     A dimension id with no matching reading at all is a violation (item 5: a
     trait must never be left neither scored nor marked insufficient). A
-    `"scored"` reading below `MINIMUM_TRAIT_EPISODES`/`MINIMUM_TRAIT_OCCASIONS`,
+    `"sufficient"` reading below `MINIMUM_TRAIT_EPISODES`/`MINIMUM_TRAIT_OCCASIONS`,
     or carrying no evidence row ids, is a violation (a scored trait below the
     floor is "a stereotype presented as a finding" — the module docstring's own
     words, and the harm the gate exists for). An `"insufficient"` reading with an
@@ -250,7 +264,7 @@ def trait_evidence_sufficiency(
                 f"{dimension_id}: no reading at all — neither scored nor marked insufficient"
             )
             continue
-        if reading.status == "scored":
+        if reading.status == "sufficient":
             below_episodes = reading.episodes < MINIMUM_TRAIT_EPISODES
             below_occasions = reading.occasions < MINIMUM_TRAIT_OCCASIONS
             if below_episodes or below_occasions:
@@ -260,8 +274,21 @@ def trait_evidence_sufficiency(
                     f"({MINIMUM_TRAIT_EPISODES} episodes / {MINIMUM_TRAIT_OCCASIONS} occasions)"
                 )
                 continue
-            if not reading.evidence:
-                violations.append(f"{dimension_id}: scored with no evidence row ids backing it")
+            backing = len(set(reading.evidence))
+            if backing < reading.episodes:
+                # Non-empty was the whole check, so a reading claiming two
+                # episodes while naming one row satisfied it. That matters
+                # because `measure` takes readings as *data* on purpose — so a
+                # hand-built violation is caught exactly as if the pipeline had
+                # produced it — and a count nothing has to substantiate is the
+                # easiest kind to overstate. The legitimate builder collects one
+                # row id per qualifying episode, so anything fewer is either a
+                # fabricated reading or a real bug in the builder; both deserve
+                # to fail here rather than pass at 1.0.
+                violations.append(
+                    f"{dimension_id}: claims {reading.episodes} episode(s) but names "
+                    f"{backing} distinct evidence row id(s) — a count nothing backs"
+                )
                 continue
         elif reading.status == "insufficient":
             if not reading.reason.strip():
@@ -403,7 +430,7 @@ def probe_trait_sufficiency(root: Path) -> dict[str, Any]:
     by_id = {reading.dimension_id: reading for reading in readings}
 
     check(
-        by_id[scored_id].status == "scored"
+        by_id[scored_id].status == "sufficient"
         and by_id[scored_id].episodes >= MINIMUM_TRAIT_EPISODES
         and by_id[scored_id].occasions >= MINIMUM_TRAIT_OCCASIONS,
         f"a trait that cleared the floor was not reported scored: {by_id[scored_id]}",
@@ -464,17 +491,17 @@ def probe_trait_sufficiency(root: Path) -> dict[str, Any]:
     )
     denial_reading = trait_sufficiency_reading(log, ledger, denial_id)
     check(
-        denial_reading.status == "scored",
+        denial_reading.status == "sufficient",
         f"two occasions of evidence denying a trait did not clear the floor: {denial_reading}",
     )
 
-    # Item 5, half (a): a trait "scored" from a single episode must be rejected
+    # Item 5, half (a): a trait "sufficient" from a single episode must be rejected
     # — the required-verification break, over a reading built by hand rather
     # than through `trait_sufficiency_reading`, so the check is of the metric
     # and not of this module's own writer.
     single_scored = TraitSufficiencyReading(
         dimension_id=scored_id,
-        status="scored",
+        status="sufficient",
         episodes=1,
         occasions=1,
         declined=False,

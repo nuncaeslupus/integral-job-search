@@ -12,7 +12,7 @@
     },
     {
       "dimension_id": "trait_creativity",
-      "status": "scored",
+      "status": "sufficient",
       "episodes": 2,
       "occasions": 2,
       "declined": false,
