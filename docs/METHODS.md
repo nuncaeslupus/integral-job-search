@@ -488,6 +488,17 @@ Recorded so they are not mistaken for settled.
    real cross-posted ad pairs collected at scale. They separate that fixture's cases with
    margin, but the margin's size on a real, larger corpus is unmeasured. **Re-calibrate once
    T12's live connector supplies real cross-posted pairs**, and widen the fixture itself.
+9. **The Catalan corpus slice is IT-at-large, not remote-programming (D-1)** — natively-Catalan
+   remote-programming job ads are too thin a market to fill a 15-ad slice: a full keyword sweep
+   of Feina Activa, the only board publishing ads written in Catalan rather than translated into
+   it, returns under ten. `corpus/raw/ads.jsonl`'s 15 Catalan ads are Catalan IT ads at large
+   (developer, sysadmin, data, cybersecurity, TIC consulting) instead, with the remote dimension
+   **mixed in rather than filtered for** — only 2 of the 15 actually offer telework as part of
+   the role; ES and EN stay remote-filtered at source. Labelling (T5) must extract
+   `remote_arrangement` per Catalan ad from its own text, never assume the slice is remote
+   because ES/EN are. See `corpus/raw/README.md` ("Known divergence") and
+   `jobsearch.corpus_scope`, which checks `status/plan.md`, the README and
+   `tests/test_corpus_raw.py::TARGET_MIX` against each other mechanically.
 
 ---
 
@@ -495,6 +506,7 @@ Recorded so they are not mistaken for settled.
 
 | Date | Change |
 |---|---|
+| 2026-08-18 | §5 added: the Catalan corpus slice is documented as IT-at-large rather than remote-programming (D-1); `status/plan.md`'s T4b row and `corpus/raw/README.md` restated to match, and `jobsearch.corpus_scope` checks the two against `tests/test_corpus_raw.py::TARGET_MIX` mechanically. |
 | 2026-08-18 | §2.8/§4.6 updated: near-duplicate detection reworked to two passes — boilerplate frequency is now counted over crosspost-cluster representatives, not raw offers, fixing a majority-duplicate-cluster blind spot a precision-only gate could not see (T13 review finding). `SIMILARITY_THRESHOLD` unchanged; new `_RAW_CLUSTER_THRESHOLD = 0.30` calibrated for pass 1. |
 | 2026-08-18 | §2.8/§4.6 added: cross-source near-duplicate detection by shingled Jaccard similarity, and its threshold's calibration (T13). |
 | 2026-08-18 | §4.5 added: net-from-gross pay estimation, and its committed/generated rule-source split (T33). |
