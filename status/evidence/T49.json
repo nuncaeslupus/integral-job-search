@@ -1,0 +1,40 @@
+{
+  "trait_evidence_sufficiency": 1.0,
+  "traits_checked": 4,
+  "readings": [
+    {
+      "dimension_id": "trait_ambition",
+      "status": "insufficient",
+      "episodes": 1,
+      "occasions": 1,
+      "declined": false,
+      "evidence_count": 0
+    },
+    {
+      "dimension_id": "trait_creativity",
+      "status": "scored",
+      "episodes": 2,
+      "occasions": 2,
+      "declined": false,
+      "evidence_count": 2
+    },
+    {
+      "dimension_id": "trait_curiosity",
+      "status": "insufficient",
+      "episodes": 2,
+      "occasions": 1,
+      "declined": false,
+      "evidence_count": 0
+    },
+    {
+      "dimension_id": "trait_resilience",
+      "status": "insufficient",
+      "episodes": 0,
+      "occasions": 0,
+      "declined": true,
+      "evidence_count": 0
+    }
+  ],
+  "checks_run": 17,
+  "failures": []
+}

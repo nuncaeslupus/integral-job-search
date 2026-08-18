@@ -5,7 +5,8 @@
     "constraints",
     "history",
     "identify",
-    "sourcing"
+    "sourcing",
+    "traits"
   ],
   "not_implemented": [
     "application",
@@ -15,7 +16,6 @@
     "preferences",
     "ranking",
     "reactions",
-    "traits",
     "understanding"
   ],
   "drift": []
