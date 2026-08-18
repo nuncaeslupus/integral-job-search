@@ -43,8 +43,20 @@ target, and the corpus satisfies it.
 
 ```bash
 uv run python -m jobsearch.corpus status/evidence/T4b.json
-uv run --extra dev pytest tests/test_corpus_raw.py -q
+uv run python -m jobsearch.corpus_scope --write-evidence
+uv run --extra dev pytest tests/test_corpus_raw.py tests/test_corpus_scope.py -q
 ```
+
+```gate
+corpus_language_slice_mismatch == 0
+evidence: status/evidence/D1.json
+key: corpus_language_slice_mismatch
+```
+
+The `gate` block is what makes the agreement above mechanical. Without it this
+payload carried only a `bash` block, so `tools/verify_gates.py` counted the task
+as declaring no gate and skipped it — a task recorded `done` whose numeric claim
+nothing re-asserted, which is the failure the fenced block exists to prevent.
 
 ## Tests
 
