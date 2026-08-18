@@ -3,6 +3,35 @@
 Surfaced by S7, which added thirteen step skills. Flagged rather than resolved
 because the choice is a project-level one, not S7's to make.
 
+## Decision (owner, 2026-08-18): raise the budget — option 1
+
+Chosen over the dispatcher (option 2), which this payload had preferred. The
+reasoning stands recorded because it was overruled deliberately: a dispatcher is
+the only option that stays under a fixed cap as steps are added, but it also
+means the model cannot see what the other twelve steps are for, and the step
+skills are deliberately adjacent — knowing that step 9 exists is part of
+knowing step 8 is the wrong one to load.
+
+**This is now blocked on an upstream change, not on work here.**
+`LISTING_BUDGET_CHARS = 8000` is a module constant in
+`vendor/claude-arsenal/plugins/skill-creator/skills/skill-creator/scripts/audit_library.py:50`,
+referenced in nine places. `main()` exposes `--profile`, `--severity`, `--json`
+and `--by-plugin`; none of them affect the budget, and no environment variable
+is read. There is no project-level override to set.
+
+Filed upstream as **`nuncaeslupus/claude-arsenal` issue #143**, asking for
+`--listing-budget` plus an `ARSENAL_LISTING_BUDGET_CHARS` fallback, the
+effective budget and its source printed in the output (a configurable threshold
+whose value is invisible is one nobody can tell has been quietly raised to
+whatever the library happened to measure), and the per-plugin breakdown kept
+unconditional.
+
+**Do not patch the constant in `vendor/`.** It is a subtree; the edit would be
+reverted by the next `git subtree pull`, silently — which is the exact failure
+S9 exists to remove, and `make verify-subtree` would fail on it in the
+meantime. The sequence is: land the upstream change, `make arsenal-upgrade
+REF=<tag>`, set this repository's budget, re-measure.
+
 ## The measurement
 
 `skill-creator`'s `audit_library.py` caps the **sum of every skill's
@@ -51,9 +80,9 @@ for an unmeasurable misrouting, which is the worse failure.
    audited against the cap. Not S7's to touch, and it does not fix the
    structural problem — it only buys room once.
 
-Prefer (2) if the runtime can carry it: it is the only option that stays under
-the cap as more steps are added, and the budget exists because the cost is
-per-turn.
+This payload preferred (2); the owner chose (1). See the decision at the top —
+what (1) buys is that every step description stays visible, and what it costs is
+that the cap has to be revisited each time the library grows.
 
 ## Acceptance gate
 
@@ -79,5 +108,6 @@ come from dropping a step.
 
 ## Location
 
-`.claude/skills/`, `src/jobsearch/step_skills.py`, and — for option 1 — the
-`skill-creator` budget constant (see S9)
+`.claude/skills/`, `src/jobsearch/step_skills.py`, and — upstream, since
+option 1 was chosen — the `skill-creator` budget constant
+(`claude-arsenal` issue #143). Nothing under `vendor/` is edited here.
