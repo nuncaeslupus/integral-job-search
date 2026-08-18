@@ -509,7 +509,14 @@ def _violates_relocation(field_value: Relocation, offer: OfferFacts) -> str | No
 def _violates_salary(field_value: Salary, offer: OfferFacts) -> str | None:
     if not offer.salary_stated or offer.salary_max is None:
         return None  # nothing to compare — an unstated ad band, not a candidate unknown
-    if offer.salary_currency is not None and offer.salary_currency != field_value.currency:
+    # The offer must say which currency its band is in. An advert that names a
+    # number and no currency is not implicitly quoting the candidate's own: it
+    # is a number of unknown units, and comparing it to a floor invents the
+    # missing half. Both outcomes of that invention are wrong in a way nobody
+    # sees — a veto silently drops a role that may well clear the floor, and a
+    # pass admits one that does not. Unknown must not fabricate a hard
+    # constraint result; that is the rule this whole module is built on.
+    if offer.salary_currency is None or offer.salary_currency != field_value.currency:
         return None  # cannot compare across currencies without a conversion rate
     if offer.salary_max < (field_value.floor or 0):
         return (

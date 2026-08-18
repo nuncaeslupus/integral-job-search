@@ -415,6 +415,25 @@ def test_salary_across_mismatched_currencies_is_not_compared() -> None:
     assert result.surviving == ("offer-usd",)
 
 
+def test_salary_with_no_stated_currency_is_not_compared() -> None:
+    """An advert quoting a number and no currency is a number of unknown units,
+    not an implicit quote in the candidate's own currency.
+
+    The mismatched-currency test above covers an offer that says "USD". This is
+    the one that says nothing, which took a different path: the guard only
+    returned early when a currency was present *and* different, so an absent
+    one fell straight through to the numeric comparison. Both outcomes of that
+    are invisible — a veto drops a role that might well clear the floor, and a
+    pass admits one that does not — and either way the tool has invented the
+    missing half of the comparison.
+    """
+    constraints = _permissive()
+    result = filter_hard_constraints(
+        constraints, [_offer("offer-unitless", salary_currency=None, salary_min=1, salary_max=1)]
+    )
+    assert result.surviving == ("offer-unitless",)
+
+
 # --- the gate ----------------------------------------------------------------
 
 
