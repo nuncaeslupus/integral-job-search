@@ -293,6 +293,52 @@ carries the reasoning.
 to elicit preferences are also used to measure `rank_spearman`, the ranking gate measures
 memorisation, passes, and tells us nothing. It must be exactly zero.
 
+### 4.5 Net-from-gross pay estimation
+
+Comparing a Spanish offer and a German one on gross salary is exactly the comparison that
+misleads — a candidate needs a rough **monthly net**, in their own currency, for every offer
+(T33). Given a country's (or region's) rule set — progressive income-tax bands, a flat
+capped social security rate, and an "obvious" flat personal allowance — the estimate is:
+
+```
+taxable        = max(gross_annual - allowance, 0)
+income_tax     = Σ over ordered bands of (band's share of taxable) × band.rate
+social_security = min(gross_annual, cap) × social_security_rate
+net_annual     = gross_annual - income_tax - social_security
+net_monthly    = net_annual / 12
+```
+
+`income_tax` is the ordinary **marginal-band** calculation — each band taxes only the slice
+of `taxable` that falls inside it, not the whole amount at that band's rate. `social_security`
+is a single flat rate against gross, capped where the rule set says a country caps
+contributions. `net_monthly` always assumes 12 equal payments — countries that pay salary in
+13 or 14 instalments (Spain routinely does) are simplified to that convention, and each
+committed rule set's `notes` says so explicitly.
+
+**Two rule sources, and the honesty rule that governs them.** Rules are either **committed**
+(`taxes/<COUNTRY>.json`, checked by a person against a real tax code, `source: verified`,
+carrying `checked_on`) or **generated** when a country is absent (worked out on the spot,
+written to disk, and used — `source: generated`, carrying `generated_on` and `generated_by`
+instead of `checked_on`). **No rule set shipped in this repository is `verified` yet** —
+`taxes/ES.json` and `taxes/DE.json` were assembled from published secondary summaries, not
+checked by a person against the tax code, so both are marked `generated` and every figure
+drawn from them reads as approximate. `verified` is a claim about a person having done that
+work; `pay.probe_pay` checks the shipped files so nothing can wear the label without it.
+A search must never stop for want of a country's tax rules, so
+generation always succeeds; but every figure it produces is displayed as **approximate and
+generated**, never like a checked rule — `pay.TaxRules._marking_matches_source` makes the two
+sources mutually exclusive by construction, and `pay.NetEstimate.label()` carries the mark
+through to the number itself. A committed rule set also **goes stale**: rates change every
+year, and one nobody has checked in over `pay.STALE_AFTER_DAYS` days is flagged rather than
+shown next to a freshly-checked one with no visible difference. No model is called to produce
+a generated rule set here — `pay.default_generator` is a loudly-labelled, stdlib-only
+placeholder behind the same `pay.RuleGenerator` seam a real generator would use.
+
+**Out of scope, and said so on every estimate** (`pay.OUT_OF_SCOPE_NOTE`): dependants, joint
+assessment, regional variation below the level a rule set models, and pension arrangements.
+None of these are modelled; the estimate states that it ignores them rather than implying a
+precision the calculation does not have.
+
 ---
 
 ## 5. Evidence gaps
@@ -312,6 +358,14 @@ Recorded so they are not mistaken for settled.
    substantially. Neither has been read in full; both are quoted from meta-analytic summaries.
 6. **Spanish, Catalan and EU-market specifics** — every source here is anglophone. Salary
    disclosure norms, ad conventions and screening practice differ. Not yet researched.
+7. **Shipped tax rule sets (§4.5)** — `taxes/ES.json` and `taxes/DE.json` are stepped,
+   flat-allowance approximations of each country's real progressive tax code, assembled from
+   public secondary sources rather than the primary tax authority text, and dated 2026-08-18.
+   Neither models regions, multi-payment conventions beyond the 12-payment default, or any
+   deduction beyond a single flat allowance. **Nobody has checked either against the tax code,
+   so both are marked `generated`** and every figure from them is shown as approximate; that is
+   the honest state, not a temporary one. Promoting either to `verified` is a task for a person
+   with the tax code in front of them — see each file's `notes` for what was simplified and why.
 
 ---
 
@@ -319,4 +373,5 @@ Recorded so they are not mistaken for settled.
 
 | Date | Change |
 |---|---|
+| 2026-08-18 | §4.5 added: net-from-gross pay estimation, and its committed/generated rule-source split (T33). |
 | 2026-08-15 | Created. Sections 1–5 from the pre-`ONTOLOGY` research pass. |

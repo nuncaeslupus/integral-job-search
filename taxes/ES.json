@@ -1,0 +1,39 @@
+{
+  "country": "ES",
+  "region": null,
+  "currency": "EUR",
+  "source": "generated",
+  "checked_on": null,
+  "generated_on": "2026-08-18",
+  "generated_by": "assembled from published public summaries of the 2024/2025 tax code (sources named in `notes`) — not checked by a person against the tax code itself",
+  "income_tax_bands": [
+    {
+      "up_to": 12450,
+      "rate": 0.19
+    },
+    {
+      "up_to": 20200,
+      "rate": 0.24
+    },
+    {
+      "up_to": 35200,
+      "rate": 0.3
+    },
+    {
+      "up_to": 60000,
+      "rate": 0.37
+    },
+    {
+      "up_to": 300000,
+      "rate": 0.45
+    },
+    {
+      "up_to": null,
+      "rate": 0.47
+    }
+  ],
+  "social_security_rate": 0.0635,
+  "social_security_cap": 56646.0,
+  "allowance": 5550.0,
+  "notes": "General (state + average-autonomous-community) IRPF scale for 2024/2025, and the minimo del contribuyente personal allowance, as published by public sources describing Agencia Tributaria figures (e.g. anfix.com/blog/tramos-irpf, taxdown.es, iberley.es), checked 2026-08-18. Employee Social Security 'cotizacion' (contingencias comunes 4.70% + desempleo indefinido 1.55% + formacion profesional 0.10% = 6.35%), capped at the 2024 base maxima of EUR 4,720.50/month x 12 (pimec.org). Simplifications: applies the personal minimum as a straight deduction from the taxable base rather than Spain's actual 'tax on income minus tax on the minimum' method (a close approximation, not exact); ignores autonomous-community scale differences below this national-average level, the common 14-payment convention (this rule set assumes 12 equal payments), and any other reduction or deduction (mileage, pension contributions, family circumstances). Rough estimate only — see docs/METHODS.md#45-net-from-gross-pay-estimation."
+}
