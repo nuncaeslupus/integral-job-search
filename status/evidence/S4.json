@@ -11,6 +11,12 @@
     },
     "pdf_without_extras": {
       "status": "unavailable"
+    },
+    "pdf_dependency_states": {
+      "forced_missing": {
+        "status": "unavailable"
+      },
+      "installed": null
     }
   },
   "build_from_nothing": {
@@ -25,6 +31,6 @@
       "experience[0]: no provenance recorded"
     ]
   },
-  "checks_run": 17,
+  "checks_run": 19,
   "failures": []
 }

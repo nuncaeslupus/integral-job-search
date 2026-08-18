@@ -182,10 +182,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+import tempfile
 import zipfile
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -209,6 +212,16 @@ _DOC_ID_WIDTH = 6
 # same floor T6/T28/D-6 each set for their own probes.
 MINIMUM_FIELDS_MEASURED = 5
 MINIMUM_CHECKS = 14
+
+# The only `master.json` shape this module understands. A bare `int` field
+# validates `schema_version: 2` against the version-1 model as long as its
+# other keys happen to fit — which defeats the marker entirely (finding 6):
+# a file from a future, incompatible schema would load silently instead of
+# being refused. `Literal[1]` makes an unrecognised version a validation
+# failure at the type level, and `load_master` (below) checks it explicitly
+# first so the refusal names the version rather than surfacing as a generic
+# "extra field" complaint.
+SCHEMA_VERSION: Literal[1] = 1
 
 
 class CVStoreError(Exception):
@@ -326,7 +339,7 @@ class CVMaster(Strict):
     section for why the shape is identical regardless of how it was built.
     """
 
-    schema_version: int = 1
+    schema_version: Literal[1] = SCHEMA_VERSION
     residence_claim: SourcedText | None = None
     headline: SourcedText | None = None
     raw_blocks: tuple[RawBlock, ...] = ()
@@ -363,17 +376,78 @@ def load_master(store: ProfileStore) -> CVMaster:
     module docstring's rule. A field merely lacking provenance is *not*
     corruption (see `SourcedEntry`) and loads without complaint; only
     `measure_provenance` has an opinion about that.
+
+    A `schema_version` this module does not recognise is checked explicitly,
+    before the general `CVMaster.model_validate` — not because the type
+    (`Literal[1]`) would not already refuse it, but so the refusal names the
+    version it does not understand rather than surfacing as an anonymous
+    "extra field" complaint somewhere else in the payload (finding 6).
     """
     if not store.exists("cv", "master.json"):
         return CVMaster()
+    raw = store.read_json("cv", "master.json")
+    if (
+        isinstance(raw, dict)
+        and "schema_version" in raw
+        and raw["schema_version"] != SCHEMA_VERSION
+    ):
+        raise CVStoreError(
+            f"{store.handle}/cv/master.json declares schema_version="
+            f"{raw['schema_version']!r}, which this module does not understand — it "
+            f"knows only schema_version={SCHEMA_VERSION!r}. Refusing to load a file "
+            "whose shape it cannot verify rather than guessing at it."
+        )
     try:
-        return CVMaster.model_validate(store.read_json("cv", "master.json"))
+        return CVMaster.model_validate(raw)
     except (ValidationError, IdentityError) as exc:
         raise CVStoreError(f"{store.handle}/cv/master.json is not a valid CV store: {exc}") from exc
 
 
+def _atomic_write(store: ProfileStore, content: bytes, *parts: str) -> Path:
+    """Write `content` under this profile's tree so a reader never observes a
+    partial file (finding 2's "an interrupted write leaves an orphan
+    source" — and, for `master.json`, worse: a truncated JSON file that
+    `load_master` then refuses to load at all).
+
+    `ProfileStore.write_text`/`write_json` open the target with `"w"`, which
+    truncates in place — a process killed mid-write (the machine loses
+    power, the container is OOM-killed) leaves whatever fraction had been
+    flushed. This writes the full content to a temp file *in the same
+    directory* (so the final `os.replace` stays on one filesystem, where
+    POSIX guarantees it is atomic) and only then swaps it into place: either
+    the old content is still there, or the new content is there in full —
+    never a byte-for-byte mixture of the two. Going through `store.path()`
+    keeps the same leak-guard and symlink refusal every other write in this
+    codebase gets; this only changes *how* the bytes land, not where.
+    """
+    target = store.path(*parts)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, tmp_name = tempfile.mkstemp(
+        dir=target.parent, prefix=f".{target.name}.", suffix=".tmp"
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(content)
+        tmp_path.replace(target)
+    except BaseException:
+        with suppress(FileNotFoundError):
+            tmp_path.unlink()
+        raise
+    return target
+
+
+def _atomic_write_text(store: ProfileStore, content: str, *parts: str) -> Path:
+    return _atomic_write(store, content.encode("utf-8"), *parts)
+
+
+def _atomic_write_json(store: ProfileStore, payload: Any, *parts: str) -> Path:
+    text = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    return _atomic_write_text(store, text, *parts)
+
+
 def write_master(store: ProfileStore, master: CVMaster) -> Path:
-    return store.write_json(master.model_dump(mode="json"), "cv", "master.json")
+    return _atomic_write_json(store, master.model_dump(mode="json"), "cv", "master.json")
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +458,14 @@ def next_doc_id(store: ProfileStore) -> str:
     """`doc-000001`, `doc-000002`, ... — mirrors `EvidenceLog.next_id`'s own
     "derive from what's highest on disk" reasoning, for the same reason: a
     hand-repaired or partially-synced `cv/source/` must not mint an id that
-    collides with one already there."""
+    collides with one already there.
+
+    A **read only** — it reserves nothing. Two callers racing before either
+    has written anything can both compute the same id; `_reserve_doc_id`
+    (below) is what closes that window. Kept separate because `_reserve_doc_id`
+    calls this in a retry loop, and a version that both read and reserved in
+    one step could not be retried against a fresh read after a collision.
+    """
     highest = 0
     source_dir = store.path("cv", "source")
     if source_dir.is_dir():
@@ -395,14 +476,94 @@ def next_doc_id(store: ProfileStore) -> str:
     return f"doc-{highest + 1:0{_DOC_ID_WIDTH}d}"
 
 
+# A collision storm this deep means something is stuck (a runaway concurrent
+# importer, a `cv/source/` an outside process keeps mutating) rather than an
+# ordinary race between two candidates' sessions — at that point refusing
+# loudly is more honest than retrying forever.
+_MAX_DOC_ID_RESERVE_ATTEMPTS = 64
+
+
+def _reserve_doc_id(store: ProfileStore) -> str:
+    """Atomically claim the next doc id (finding 2).
+
+    `next_doc_id` only reads the directory, so two `import_document` calls
+    racing between that read and their write can compute the *same* "next"
+    id — and the old code then just wrote under it, so whichever import
+    wrote second silently clobbered the first one's `cv/source/<id>.txt`
+    while `master.json` still held spans cut from the first import's text:
+    exactly "two concurrent imports ... leave spans pointing into the wrong
+    document." This mirrors the shape `jobsearch.identity.create_profile`
+    uses for handles (PR #22, `(root / chosen).mkdir(exist_ok=False)`):
+    reservation *is* an atomic OS-level create (`O_CREAT | O_EXCL` — the
+    file either did not exist and now does, or the create fails, with no
+    window in between), and a collision on it means somebody else won that
+    id, not that this caller may take it anyway. Unlike `create_profile`
+    (which refuses outright on collision, because a handle is a name the
+    *candidate* chose and a `-2` suffix nobody chose would be worse), a doc
+    id is an internal auto-increment with no meaning of its own, so the
+    right response to a lost race is simply to recompute and try the next
+    one — bounded by `_MAX_DOC_ID_RESERVE_ATTEMPTS` so a truly stuck
+    situation still fails loudly instead of looping forever.
+    """
+    source_dir = store.path("cv", "source")
+    source_dir.mkdir(parents=True, exist_ok=True)
+    for _ in range(_MAX_DOC_ID_RESERVE_ATTEMPTS):
+        candidate = next_doc_id(store)
+        target = source_dir / f"{candidate}.txt"
+        try:
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            continue  # somebody else just won this id — recompute against a fresh read
+        os.close(descriptor)
+        return candidate
+    raise CVStoreError(
+        f"could not reserve a document id for {store.handle!r} after "
+        f"{_MAX_DOC_ID_RESERVE_ATTEMPTS} collisions — this looks stuck, not merely raced"
+    )
+
+
+_DOCX_TEXT_TAG = f"{{{_DOCX_W_NS}}}t"
+_DOCX_TAB_TAG = f"{{{_DOCX_W_NS}}}tab"
+_DOCX_BREAK_TAG = f"{{{_DOCX_W_NS}}}br"
+
+
+def _paragraph_text(paragraph: ElementTree.Element) -> str:
+    """One paragraph's text, in document order, translating the separator
+    *elements* Word uses in place of separator *characters* (finding 5).
+
+    The earlier version concatenated only `<w:t>` runs, so an explicit
+    `<w:tab/>` (a tab between tab-separated values — a dates/skills table
+    laid out with tabs, say) or `<w:br/>` (a manual line break inside one
+    paragraph) contributed nothing, silently merging content a human reading
+    the document would see as separated. That matters more here than in a
+    document viewer: the extracted text **is** the artefact `DocumentSpan`
+    offsets index into (see the module docstring's `cv/source/*` section), so
+    a dropped separator does not just look wrong — it shifts every span
+    computed from text after it. `paragraph.iter()` walks every descendant
+    in document order, so a run's text and a following tab or break are
+    translated in the same relative position they appeared in the XML;
+    everything else (styling, bookmarks, revision markup, ...) contributes
+    nothing, same as before.
+    """
+    parts: list[str] = []
+    for node in paragraph.iter():
+        if node.tag == _DOCX_TEXT_TAG:
+            parts.append(node.text or "")
+        elif node.tag == _DOCX_TAB_TAG:
+            parts.append("\t")
+        elif node.tag == _DOCX_BREAK_TAG:
+            parts.append("\n")
+    return "".join(parts)
+
+
 def _extract_docx_text(path: Path) -> str:
     """Every paragraph's text, joined by newlines — stdlib only.
 
     A `.docx` is a zip of XML parts; `word/document.xml` holds the body, one
-    `<w:p>` per paragraph, text split across `<w:t>` runs wherever Word
-    happened to break formatting. Concatenating every run inside a paragraph
-    reassembles the paragraph's text exactly; nothing here interprets styles,
-    tables, or headers/footers — a limitation named rather than hidden.
+    `<w:p>` per paragraph. `_paragraph_text` reassembles each paragraph's
+    text and its explicit tabs/line breaks (finding 5); nothing here
+    interprets styles, tables, or headers/footers — a limitation named
+    rather than hidden.
     """
     try:
         with zipfile.ZipFile(path) as archive:
@@ -413,11 +574,33 @@ def _extract_docx_text(path: Path) -> str:
         root = ElementTree.fromstring(xml_bytes)
     except ElementTree.ParseError as exc:
         raise CVStoreError(f"{path}'s word/document.xml is not well-formed XML: {exc}") from exc
-    paragraphs = [
-        "".join(run.text or "" for run in paragraph.iter(f"{{{_DOCX_W_NS}}}t"))
-        for paragraph in root.iter(f"{{{_DOCX_W_NS}}}p")
-    ]
+    paragraphs = [_paragraph_text(paragraph) for paragraph in root.iter(f"{{{_DOCX_W_NS}}}p")]
     return "\n".join(paragraphs)
+
+
+@contextmanager
+def _pypdf_forced_missing() -> Iterator[None]:
+    """Guarantee `import pypdf` raises `ImportError` for the duration of the
+    block, regardless of whether the real package happens to be installed
+    (finding 1). Setting `sys.modules["pypdf"] = None` is the standard
+    stdlib technique: Python's import system treats a `None` entry as "this
+    name is known to be unimportable" and raises immediately, without ever
+    touching the filesystem — so this works identically whether `pypdf` is
+    genuinely absent (this repository's CI) or genuinely present. The
+    previous entry (a real module, or nothing at all) is restored on exit
+    either way, so this never leaks into any other test or probe that runs
+    afterwards.
+    """
+    _sentinel = object()
+    saved = sys.modules.get("pypdf", _sentinel)
+    sys.modules["pypdf"] = None  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        if saved is _sentinel:
+            sys.modules.pop("pypdf", None)
+        else:
+            sys.modules["pypdf"] = saved  # type: ignore[assignment]
 
 
 def _extract_pdf_text(path: Path) -> str:
@@ -472,8 +655,9 @@ SUPPORTED_SUFFIXES = (".docx", ".pdf")
 
 
 def import_document(store: ProfileStore, path: Path) -> ImportResult:
-    """Extract `path`'s text, store it under `cv/source/`, and append one
-    `RawBlock` per non-blank paragraph to `cv/master.json`.
+    """Extract `path`'s text, store it (and the original file) under
+    `cv/source/`, and append one `RawBlock` per non-blank paragraph to
+    `cv/master.json`.
 
     Never raises for an ordinary candidate-facing outcome — a missing
     extractor, an unsupported extension, a document with no readable text —
@@ -481,6 +665,40 @@ def import_document(store: ProfileStore, path: Path) -> ImportResult:
     (`path` does not exist) is the one thing this still lets surface as a
     `FileNotFoundError` from `Path.read_bytes`/`zipfile`, because that is not
     a thing to show a candidate — it is this module being called wrongly.
+    Once a document id has been reserved, a failure to reserve the *next*
+    one (`_reserve_doc_id` exhausting its retries) is likewise let through
+    unhandled — see that function's docstring for why that is exceptional
+    rather than ordinary.
+
+    **Two artefacts, two names, one indexed** (finding 4): `<doc-id>.txt` is
+    the *extracted* text — `DocumentSpan.start`/`.end` are offsets into
+    exactly this file, because offsets into a compressed, structured binary
+    would point at nothing a human or a highlight UI could read (the module
+    docstring's `cv/source/*` section). `<doc-id>.original<suffix>` is the
+    uploaded file's bytes, verbatim — nothing here parses, normalises, or
+    re-encodes them. Keeping both means the DOCX header/footer content
+    `_extract_docx_text` does not read, and anything a future extractor
+    understands that this one does not, is recoverable later instead of
+    permanently discarded; only the `.txt` file is ever a span target.
+
+    **Ordering and what it does and does not guarantee** (finding 2): the
+    doc id is reserved *before* either file is written, closing the
+    "two concurrent imports land under the same id" race — see
+    `_reserve_doc_id`. Each individual write (`.txt`, `.original<suffix>`,
+    `master.json`) is atomic (`_atomic_write*` — temp file, then
+    `os.replace`), so none of them can land half-written. What this does
+    *not* do is wrap the three writes in one cross-file transaction: if the
+    process is interrupted after the source/original writes land but before
+    `master.json` is updated, `cv/source/<doc-id>.*` exists with no
+    `raw_blocks` entry pointing at it — an orphan, but an inert and cheaply
+    detectable one (a later pass can look for source files no block cites),
+    not a corruption of anything already committed. Closing that residual
+    window fully would need a write-ahead log or a lock spanning both files
+    — real two-phase-commit machinery for a single-candidate,
+    mostly-interactive import that no other writer contends with in
+    practice; the two failure modes that actually corrupt data — id
+    collision under concurrency, and a torn write from an interrupted save —
+    are closed, and this is named rather than left implicit.
     """
     suffix = path.suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:
@@ -507,8 +725,9 @@ def import_document(store: ProfileStore, path: Path) -> ImportResult:
             detail="the document extracted no readable text",
         )
 
-    doc_id = next_doc_id(store)
-    store.write_text(text, "cv", "source", f"{doc_id}.txt")
+    doc_id = _reserve_doc_id(store)
+    _atomic_write_text(store, text, "cv", "source", f"{doc_id}.txt")
+    _atomic_write(store, path.read_bytes(), "cv", "source", f"{doc_id}.original{suffix}")
 
     blocks = tuple(
         RawBlock(text=content, provenance=(DocumentSpan(source_file=doc_id, start=start, end=end),))
@@ -572,7 +791,21 @@ def add_conversation_entry(
     """Append one turn to `profile/evidence.jsonl` (T6, unmodified) and add a
     typed section entry citing it — the build-from-nothing half of this
     module, and step 1's own "profile/evidence.jsonl rows for everything
-    said" (`status/spec-v2-steps.md`)."""
+    said" (`status/spec-v2-steps.md`).
+
+    `fields` is validated *before* anything is written (finding 3): building
+    `model(**fields)` first, with no provenance yet, runs every field
+    constraint (`min_length`, the `Level`/`LANGUAGE_PATTERN` enums, ...) and
+    raises `ValidationError` for a bad submission without touching disk. Only
+    once that has succeeded does this append to `profile/evidence.jsonl` —
+    `jobsearch.profile.EvidenceLog` is append-only with **no rollback**
+    (its own module docstring, and the class docstring here), so a row
+    written before validation and then orphaned by a `ValidationError` is
+    permanent: nothing later can delete it, retraction included, since a
+    retraction targets a real claim, not a validation failure that produced
+    none. Validating first means the ordinary well-formed case still writes
+    exactly one row, and a malformed submission writes zero.
+    """
     model = SECTION_MODELS.get(section)
     if model is None:
         raise CVStoreError(
@@ -583,6 +816,10 @@ def add_conversation_entry(
         raise CVStoreError(
             "add_conversation_entry needs non-blank `said` text to provenance the entry"
         )
+    try:
+        entry = model(**fields)
+    except ValidationError as exc:
+        raise CVStoreError(f"invalid {section} fields {fields!r}: {exc}") from exc
     row = EvidenceLog(store).append(
         recorded_at=recorded_at,
         step="intake",
@@ -590,7 +827,7 @@ def add_conversation_entry(
         text=stripped,
         source="conversation",
     )
-    entry = model(**fields, provenance=(ConversationTurn(evidence_id=row.id),))
+    entry = entry.model_copy(update={"provenance": (ConversationTurn(evidence_id=row.id),)})
     return _with_list_entry(master, section, entry)
 
 
@@ -631,7 +868,45 @@ def set_conversation_scalar(
 
 def _named_fields(master: CVMaster) -> list[tuple[str, SourcedEntry]]:
     """Every populated field in `master`, named the way a violation reports
-    it — a scalar by its field name, a list entry by `section[index]`."""
+    it — a scalar by its field name, a list entry by `section[index]`.
+
+    **The deferred decision, made: per-entry, not per-leaf.** `intake_field_
+    provenance` measures one thing per populated *list entry* (`experience[1]`
+    is one measurement, whatever it holds — `title`, `organisation`, `start`,
+    `end`, `description`) and one thing per populated *scalar field*
+    (`headline`, `residence_claim`). It does **not** measure `experience[1].
+    title` and `experience[1].organisation` separately, even though the model
+    is named `intake_field_provenance` and `status/spec-v2-brief.md` §2.6 says
+    "every field in master.json names where it came from" — read most
+    literally, "field" is a leaf attribute, not a whole entry.
+
+    Per-entry is the reading this module keeps, for a reason stated plainly
+    rather than smoothed over: an `Experience` lifted from one contiguous CV
+    paragraph, or answered in one conversational turn, genuinely has *one*
+    span or *one* evidence row backing all of it — `add_document_entry` and
+    `add_conversation_entry` both attach exactly one `Provenance` per call,
+    because that is what the extractor (or the conversation) can honestly
+    support. Measuring per leaf would force one of two dishonest moves: invent
+    per-field sub-spans an importer cannot actually observe (a CV paragraph
+    does not say where "title" ends and "organisation" begins), or split
+    `Experience` into five separately-provenanced scalar wrappers purely to
+    satisfy a metric — a schema change with no reader that needs it, driven
+    by the measurement rather than the store's own shape. Per-entry also
+    treats document-imported and conversation-built entries identically,
+    which is the property `test_add_document_entry_and_add_conversation_
+    entry_use_the_same_section_models` and the module docstring's
+    "reaches the same contract" section both depend on.
+
+    **This is a real, reportable gap against §2.6's wording, not a wordplay
+    dodge.** The metric's name and the spec sentence both read more naturally
+    as per-leaf than what this module measures; that tension is not resolved
+    by this docstring, it is *named* by it. The fix belongs in
+    `status/spec-v2-brief.md` §2.6, not here (this module does not edit its
+    own spec) — the sentence should say "every **entry**" (or name the entry
+    as the unit of provenance explicitly) to match what an honest importer
+    can support. Reported, not silently reconciled by rewording the code's
+    own justification to sound like a match.
+    """
     named: list[tuple[str, SourcedEntry]] = []
     for field in SCALAR_FIELDS:
         value = getattr(master, field)
@@ -708,10 +983,12 @@ def measure_provenance(store: ProfileStore, master: CVMaster) -> ProvenanceResul
 # fixtures + the adversarial probe
 
 
-def _build_minimal_docx(paragraphs: Sequence[str]) -> bytes:
-    """A syntactically valid, minimal `.docx`, built with stdlib `zipfile`
-    only — proof `_extract_docx_text` needs no third-party package to read
-    one, by needing none to write one either."""
+def _wrap_docx_body(body_xml: str) -> bytes:
+    """The zip/XML envelope every `.docx` fixture in this module shares,
+    around caller-supplied `<w:body>` content — factored out of
+    `_build_minimal_docx` so `test_docx_extraction_preserves_tabs_and_line_
+    breaks` (finding 5) can supply `<w:tab/>`/`<w:br/>` elements directly,
+    which a plain string-of-paragraphs fixture has no way to express."""
     import io
 
     content_types = (
@@ -732,14 +1009,10 @@ def _build_minimal_docx(paragraphs: Sequence[str]) -> bytes:
         'Target="word/document.xml"/>'
         "</Relationships>"
     )
-    body = "".join(
-        f'<w:p><w:r><w:t xml:space="preserve">{_xml_escape(paragraph)}</w:t></w:r></w:p>'
-        for paragraph in paragraphs
-    )
     document = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-        f"<w:body>{body}</w:body></w:document>"
+        f"<w:body>{body_xml}</w:body></w:document>"
     )
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -747,6 +1020,17 @@ def _build_minimal_docx(paragraphs: Sequence[str]) -> bytes:
         archive.writestr("_rels/.rels", rels)
         archive.writestr("word/document.xml", document)
     return buffer.getvalue()
+
+
+def _build_minimal_docx(paragraphs: Sequence[str]) -> bytes:
+    """A syntactically valid, minimal `.docx`, built with stdlib `zipfile`
+    only — proof `_extract_docx_text` needs no third-party package to read
+    one, by needing none to write one either."""
+    body = "".join(
+        f'<w:p><w:r><w:t xml:space="preserve">{_xml_escape(paragraph)}</w:t></w:r></w:p>'
+        for paragraph in paragraphs
+    )
+    return _wrap_docx_body(body)
 
 
 # A distinctive string standing in for something a candidate actually said —
@@ -794,18 +1078,55 @@ def probe_intake(root: Path) -> dict[str, Any]:
             import_result.blocks_added == 3,
             f"expected 3 non-blank paragraphs imported, got {import_result}",
         )
+        check(
+            doc_store.exists("cv", "source", f"{import_result.doc_id}.original.docx")
+            and doc_store.path("cv", "source", f"{import_result.doc_id}.original.docx").read_bytes()
+            == docx_bytes,
+            "the original uploaded .docx bytes were not kept alongside the extracted text",
+        )
 
+        # --- finding 1: the malformed-PDF fixture's status must not depend on
+        # whether `pypdf` happens to be installed here. Force the "missing"
+        # path deterministically — `import pypdf` raises ImportError whenever
+        # `sys.modules["pypdf"]` is `None`, regardless of whether the real
+        # package is actually installed (the standard stdlib technique for
+        # this, needing no monkeypatch fixture since this is a plain
+        # function) — and, only when pypdf genuinely *is* importable here,
+        # also exercise the path that runs with it for real. Both branches
+        # are checked; neither is allowed to change whether the gate is
+        # clean. See "Required verification" — this module's own report
+        # documents both dependency states, run for real, side by side.
         pdf_path = Path(fixture_dir) / "cv.pdf"
         pdf_path.write_bytes(b"%PDF-1.4\n%not a real pdf, only the extractor decides\n")
-        pdf_result = import_document(doc_store, pdf_path)
+
+        with _pypdf_forced_missing():
+            forced_missing_result = import_document(doc_store, pdf_path)
         check(
-            pdf_result.status == "unavailable",
-            f"PDF import should report 'unavailable' with no extras installed, got {pdf_result}",
+            forced_missing_result.status == "unavailable",
+            "with pypdf forced absent, PDF import should report 'unavailable' — got "
+            f"{forced_missing_result}",
         )
         check(
-            bool(pdf_result.detail),
+            bool(forced_missing_result.detail),
             "an 'unavailable' import gave no reported detail to show a candidate",
         )
+
+        try:
+            import pypdf  # noqa: F401
+        except ImportError:
+            installed_result = None
+        else:
+            installed_result = import_document(doc_store, pdf_path)
+            check(
+                installed_result.status == "corrupt",
+                "with pypdf genuinely installed, the same malformed fixture should report "
+                f"'corrupt' — got {installed_result}",
+            )
+        # `pdf_result` is kept as the name the rest of this function (and the
+        # evidence payload below) reports against — always the forced-missing
+        # outcome, since that is the one every gate run can reach regardless
+        # of environment.
+        pdf_result = forced_missing_result
 
     doc_master = load_master(doc_store)
     check(len(doc_master.raw_blocks) == 3, "imported blocks were not persisted to master.json")
@@ -813,6 +1134,23 @@ def probe_intake(root: Path) -> dict[str, Any]:
         doc_master.raw_blocks == load_master(doc_store).raw_blocks,
         "the failed PDF import silently changed a store a successful DOCX import already wrote",
     )
+
+    # --- finding 5: explicit tabs/line breaks must survive extraction, since
+    # the extracted text is what every span above indexes into.
+    separators_docx = _wrap_docx_body(
+        '<w:p><w:r><w:t xml:space="preserve">Name</w:t></w:r>'
+        "<w:r><w:tab/></w:r>"
+        '<w:r><w:t xml:space="preserve">Role</w:t></w:r>'
+        "<w:r><w:br/></w:r>"
+        '<w:r><w:t xml:space="preserve">Ada Lovelace</w:t></w:r></w:p>'
+    )
+    with tempfile.TemporaryDirectory(prefix="jobsearch-s4-seps-") as seps_dir:
+        seps_path = Path(seps_dir) / "seps.docx"
+        seps_path.write_bytes(separators_docx)
+        check(
+            _extract_docx_text(seps_path) == "Name\tRole\nAda Lovelace",
+            f"DOCX tab/line-break separators were dropped: {_extract_docx_text(seps_path)!r}",
+        )
 
     source_text = doc_store.read_text("cv", "source", f"{import_result.doc_id}.txt")
     start = source_text.index("Led the migration")
@@ -951,6 +1289,17 @@ def probe_intake(root: Path) -> dict[str, Any]:
                 "blocks_added": import_result.blocks_added,
             },
             "pdf_without_extras": {"status": pdf_result.status},
+            # finding 1: both dependency states, measured deterministically
+            # in the same run — never just whichever one this environment
+            # happens to have. "installed" is `None` when pypdf genuinely
+            # is not importable here (the CI/gate default); when it *is*,
+            # its status is checked above and reported here too.
+            "pdf_dependency_states": {
+                "forced_missing": {"status": forced_missing_result.status},
+                "installed": (
+                    {"status": installed_result.status} if installed_result is not None else None
+                ),
+            },
         },
         "build_from_nothing": {
             "coverage": nothing_result.coverage,
