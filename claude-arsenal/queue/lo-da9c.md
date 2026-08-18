@@ -9,7 +9,8 @@ key: repeat_asks_after_decline
 ```
 
 ```bash
-echo "no gate command defined for T40 — replace this line with the command that writes status/evidence/T40.json" >&2; exit 1
+uv run --extra dev pytest tests/test_non_insistence.py -q
+uv run --extra dev python -m jobsearch.decline status/evidence/T40.json
 ```
 
 ## What this is
