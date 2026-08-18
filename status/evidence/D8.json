@@ -1,0 +1,14 @@
+{
+  "captures_without_a_subject": 0,
+  "violation_ids": [],
+  "deliberate_break_demonstration": {
+    "captures_without_a_subject_before_break": 0,
+    "captures_without_a_subject_after_break": 1,
+    "broken_row_id": "ev-000001",
+    "violation_ids_after_break": [
+      "ev-000001"
+    ]
+  },
+  "checks_run": 16,
+  "failures": []
+}

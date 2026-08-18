@@ -51,8 +51,8 @@ A captured reason names the artefact it was about, and a reader can recover it
 from the log alone.
 
 ```bash
-uv run --extra dev pytest tests/test_profile_capture.py -q
-uv run python -m jobsearch.profile_capture --write-evidence
+uv run --extra dev pytest tests/test_profile_capture.py tests/test_profile_store.py tests/test_retraction.py tests/test_revision.py -q
+uv run python -m jobsearch.profile_capture --subject-gate --write-evidence status/evidence/D8.json
 ```
 
 ```gate
