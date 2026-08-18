@@ -50,11 +50,15 @@ into later, via the `generator=` parameter, without touching any caller.
 from __future__ import annotations
 
 import json
+import math
+import re
 import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
+from functools import partial
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Literal
 
@@ -65,6 +69,11 @@ DEFAULT_TAXES_DIR = _REPO_ROOT / "taxes"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T33.json"
 
 COUNTRY_PATTERN = r"^[A-Z]{2}$"
+# Loose on purpose (ISO 3166-2 subdivision codes run 1-3 alphanumerics — "CT",
+# "BY", "NY") but, like `COUNTRY_PATTERN`, closed to anything a filesystem
+# path treats specially: no `/`, no `.`, no whitespace. `_rule_path` is what
+# actually depends on that closure — see its docstring.
+REGION_PATTERN = r"^[A-Z0-9]{1,10}$"
 CURRENCY_PATTERN = r"^[A-Z]{3}$"
 DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
@@ -181,8 +190,18 @@ class TaxRules(Strict):
         # already raised if any of these were `None` — it exists only to
         # narrow the type for mypy without duplicating the validation.
         bounds: list[float] = [band.up_to for band in bands[:-1] if band.up_to is not None]
-        if bounds != sorted(bounds):
-            raise ValueError("income tax bands must be in ascending order of up_to")
+        # Strict, not `bounds != sorted(bounds)` — that non-strict comparison
+        # equals its own sorted form for a *duplicate* bound too
+        # (`[10, 10, 20]` sorts to itself), which let a zero-width band
+        # through: `_apply_bands`' `(previous_upper, up_to]` interval for the
+        # repeated bound has `upper <= lower`, contributes nothing, and this
+        # schema is the trusted source for figures shown to a candidate, so
+        # malformed data must fail here rather than silently compute short.
+        if any(a >= b for a, b in pairwise(bounds)):
+            raise ValueError(
+                "income tax bands must be in strictly ascending order of up_to — "
+                "a duplicate or descending bound is refused, not silently applied"
+            )
         return self
 
 
@@ -239,8 +258,43 @@ def default_generator(country: str, region: str | None, currency: str, as_of: da
 
 
 def _rule_path(taxes_dir: Path, country: str, region: str | None) -> Path:
+    """The file a country's (or region's) rules live at — validated before any
+    filesystem access, so no caller of `load_committed_rules` or
+    `load_or_generate_rules` can bypass the check by going around it.
+
+    `country` and `region` arrive here as a caller's arguments, not as a
+    validated `TaxRules` payload — `TaxRules.country`'s pattern only
+    constrains what a rule *file's contents* may claim once it has already
+    been read, never what a caller may ask this function to open or create.
+    Without a check here, `country="../../etc"` walks
+    `load_committed_rules` outside `taxes_dir` to read an arbitrary JSON
+    file, and `load_or_generate_rules` — with a caller-supplied `generator`
+    — *writes* one there. So both are checked against this module's own
+    patterns first, and the resolved result is asserted to still sit
+    directly inside the resolved `taxes_dir` — belt and braces against a
+    pattern gap or a symlinked file already sitting in the directory, not
+    just a single line of defence. `identity.ProfileStore.path` solves the
+    same class of problem for profile paths; this mirrors its containment
+    check (`resolve` the root, compare parents) and its symlink treatment
+    (resolving the leaf so a symlinked rule file is caught the same way a
+    symlinked profile home is).
+
+    A rejection is `PayError`, never a silent `None` — an attempt to read or
+    write outside `taxes_dir` is a bug or an attack, and answering "no rules
+    for that country" would hide both.
+    """
+    if not re.match(COUNTRY_PATTERN, country):
+        raise PayError(f"not a usable country code: {country!r}")
+    if region is not None and not re.match(REGION_PATTERN, region):
+        raise PayError(f"not a usable region code: {region!r}")
     name = f"{country}-{region}.json" if region else f"{country}.json"
-    return taxes_dir / name
+    root = taxes_dir.resolve(strict=False)
+    candidate = (root / name).resolve(strict=False)
+    if candidate.parent != root:
+        raise PayError(
+            f"{name!r} resolves to {candidate}, outside {taxes_dir} — refused rather than followed"
+        )
+    return candidate
 
 
 def read_rules_file(path: Path) -> TaxRules:
@@ -417,7 +471,17 @@ def estimate_net_monthly(
     (`load_or_generate_rules`), computes the figure, and returns it already
     carrying every mark `label()` needs — a caller cannot accidentally show
     the number without also being handed whether it is approximate or stale.
+
+    `gross_annual` is checked before anything else touches rules or does
+    arithmetic: a negative figure flows straight into the social-security
+    term and comes out the other end as a negative net, and `NaN` propagates
+    into both the number and `label()`'s formatted string, so a candidate
+    would be shown "nan" next to an offer. Neither is a number a candidate
+    ever actually earns, so both are refused here rather than computed and
+    handed back looking like an answer.
     """
+    if not math.isfinite(gross_annual) or gross_annual < 0:
+        raise PayError(f"gross_annual must be a finite, non-negative number, got {gross_annual!r}")
     as_of = as_of or date.today()
     rules = load_or_generate_rules(
         country, region, currency=currency, taxes_dir=taxes_dir, generator=generator, as_of=as_of
@@ -538,6 +602,52 @@ def probe_pay(taxes_dir: Path) -> dict[str, Any]:
             f"{shipped.name}: shipped rule set claims source=verified, but no "
             "person has checked it against a tax code",
         )
+
+    # Path traversal through `country`/`region` — a security property that
+    # only a unit test checks is one this gate cannot see, and this module
+    # has already been bitten by exactly that shape of gap once (the gate
+    # could not see a mislabelled shipped rule file until the shipped-files
+    # loop above was added). `_rule_path` is the one choke point every
+    # caller here goes through, so probing it — and the two loaders built on
+    # it — is probing every route a caller has into the filesystem.
+    outside = taxes_dir.parent / "outside-taxes-dir.json"
+
+    def try_rule_path(c: str, r: str | None) -> Path:
+        return _rule_path(taxes_dir, c, r)
+
+    def try_load_committed(c: str, r: str | None) -> TaxRules | None:
+        return load_committed_rules(c, r, taxes_dir=taxes_dir)
+
+    def try_load_or_generate(c: str, r: str | None) -> TaxRules:
+        return load_or_generate_rules(c, r, currency="EUR", taxes_dir=taxes_dir, as_of=as_of)
+
+    for traversal_country, traversal_region in (
+        ("../../etc", None),
+        ("..", None),
+        ("ES", "../../etc"),
+        ("ES", ".."),
+    ):
+        where = f"country={traversal_country!r} region={traversal_region!r}"
+        check(
+            _is_refused(PayError, partial(try_rule_path, traversal_country, traversal_region)),
+            f"_rule_path did not refuse {where}",
+        )
+        check(
+            _is_refused(
+                PayError, partial(try_load_committed, traversal_country, traversal_region)
+            ),
+            f"load_committed_rules did not refuse {where}",
+        )
+        check(
+            _is_refused(
+                PayError, partial(try_load_or_generate, traversal_country, traversal_region)
+            ),
+            f"load_or_generate_rules did not refuse {where}",
+        )
+    check(
+        not outside.exists(),
+        "a traversal attempt wrote a rule file outside taxes_dir",
+    )
 
     # A generator that tries to hand back "verified" must be refused, not
     # silently written to disk and used as if it were checked.

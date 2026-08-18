@@ -10,6 +10,7 @@ on an unmarked bad net figure is a real harm (payload, owner decision
 from __future__ import annotations
 
 import json
+import math
 from datetime import date
 from pathlib import Path
 
@@ -250,4 +251,110 @@ def test_a_dishonest_generator_is_refused_by_the_loader(tmp_path: Path) -> None:
     with pytest.raises(PayError):
         load_or_generate_rules(
             "ZZ", currency="EUR", taxes_dir=tmp_path, generator=dishonest, as_of=AS_OF
+        )
+
+
+# --- review-finding regressions ---------------------------------------------
+
+
+def test_country_and_region_are_validated_before_any_filesystem_access(tmp_path: Path) -> None:
+    """A `country`/`region` that climbs out of `taxes_dir` must be refused by
+    every entry point that resolves a rule path — never followed to read an
+    arbitrary file, and never followed to write one outside the directory.
+
+    Without validating in `_rule_path` itself, `country="../../etc"` would
+    let `load_committed_rules` read whatever JSON file happens to sit at the
+    traversed path, and `load_or_generate_rules` — with a caller-supplied
+    `generator` — would *write* a generated rule set there. Both must raise
+    `PayError`, not return `None` (which would misreport an attack as "no
+    rules for that country") and not write anything outside `tmp_path`.
+    """
+    taxes_dir = tmp_path / "taxes"
+    taxes_dir.mkdir()
+    outside_marker = tmp_path / "escaped.json"
+
+    for traversal_country, traversal_region in (
+        ("../../etc", None),
+        ("..", None),
+        ("ES", "../../etc"),
+        ("ES", ".."),
+        ("es", None),  # lowercase must not slip past COUNTRY_PATTERN either
+    ):
+        with pytest.raises(PayError):
+            load_committed_rules(traversal_country, traversal_region, taxes_dir=taxes_dir)
+        with pytest.raises(PayError):
+            load_or_generate_rules(
+                traversal_country,
+                traversal_region,
+                currency="EUR",
+                taxes_dir=taxes_dir,
+                as_of=AS_OF,
+            )
+        with pytest.raises(PayError):
+            estimate_net_monthly(
+                50000.0,
+                "EUR",
+                traversal_country,
+                traversal_region,
+                taxes_dir=taxes_dir,
+                as_of=AS_OF,
+            )
+
+    assert not outside_marker.exists(), "a traversal attempt wrote outside taxes_dir"
+    assert list(taxes_dir.iterdir()) == [], "a traversal attempt wrote inside taxes_dir too"
+
+
+def test_negative_nan_and_infinite_gross_are_refused(tmp_path: Path) -> None:
+    """A gross salary that is negative, `NaN`, or infinite must never reach
+    the arithmetic or be handed back as a `NetEstimate`.
+
+    A negative gross flows into the social-security term and yields a
+    negative net that reads as a plausible (if unfortunate) figure. `NaN`
+    is worse: it propagates into `net_monthly` *and* into `label()`'s
+    formatted string, so a candidate would see "nan EUR/mo net" next to a
+    real offer. Both are refused before rules are even loaded.
+    """
+    for bad_gross in (-1.0, -50000.0, math.nan, math.inf, -math.inf):
+        with pytest.raises(PayError):
+            estimate_net_monthly(bad_gross, "EUR", "ZZ", taxes_dir=tmp_path, as_of=AS_OF)
+
+
+def test_duplicate_band_bound_is_refused(tmp_path: Path) -> None:
+    """A repeated `up_to` bound must be refused at construction, not silently
+    accepted as a zero-width band that contributes nothing.
+
+    `bounds != sorted(bounds)` is a non-strict check: `[10, 10, 20]` equals
+    its own sorted form, so it slips past that comparison. `_apply_bands`
+    would then compute a `(10, 10]` interval whose `upper <= lower`, tax
+    nothing over it, and silently understate the figure — this schema is the
+    trusted source for numbers shown to a candidate, so malformed data must
+    fail at load, not at display.
+    """
+    with pytest.raises(ValidationError):
+        TaxRules(
+            country="ZZ",
+            currency="EUR",
+            source="verified",
+            checked_on="2026-08-18",
+            income_tax_bands=(
+                Band(up_to=10_000.0, rate=0.10),
+                Band(up_to=10_000.0, rate=0.20),
+                Band(up_to=None, rate=0.30),
+            ),
+            social_security_rate=0.1,
+        )
+
+    # A descending pair must be refused for the same reason.
+    with pytest.raises(ValidationError):
+        TaxRules(
+            country="ZZ",
+            currency="EUR",
+            source="verified",
+            checked_on="2026-08-18",
+            income_tax_bands=(
+                Band(up_to=20_000.0, rate=0.10),
+                Band(up_to=10_000.0, rate=0.20),
+                Band(up_to=None, rate=0.30),
+            ),
+            social_security_rate=0.1,
         )
