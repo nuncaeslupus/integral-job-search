@@ -1,0 +1,29 @@
+{
+  "interview_profile_coverage": 1.0,
+  "negative_episode_followup_rate": 1.0,
+  "trait_states": [
+    {
+      "dimension_id": "trait_creativity",
+      "episodes": 2,
+      "occasions": 2,
+      "declined": false,
+      "status": "sufficient"
+    },
+    {
+      "dimension_id": "trait_ambition",
+      "episodes": 2,
+      "occasions": 2,
+      "declined": false,
+      "status": "sufficient"
+    },
+    {
+      "dimension_id": "trait_curiosity",
+      "episodes": 2,
+      "occasions": 2,
+      "declined": false,
+      "status": "sufficient"
+    }
+  ],
+  "checks_run": 13,
+  "failures": []
+}
