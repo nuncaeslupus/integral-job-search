@@ -9,7 +9,7 @@ key: question_dimension_coverage
 ```
 
 ```bash
-echo "no gate command defined for T7 — replace this line with the command that writes status/evidence/T7.json" >&2; exit 1
+uv run python -m jobsearch.question_bank
 ```
 
 The two blocks do different jobs and both are required. The `bash` block

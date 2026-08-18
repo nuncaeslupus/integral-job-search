@@ -1,0 +1,14 @@
+{
+  "question_dimension_coverage": 1.0,
+  "dimension_count": 22,
+  "question_count": 23,
+  "languages_required": [
+    "en",
+    "es",
+    "ca"
+  ],
+  "dimensions_missing_full_language_coverage": [],
+  "questions_with_unresolved_dimension": [],
+  "adversarial_checks_run": 5,
+  "adversarial_failures": []
+}
