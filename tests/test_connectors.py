@@ -22,6 +22,7 @@ from jobsearch.connectors import (
     MINIMUM_PROBES,
     ConnectorError,
     FieldSelector,
+    _as_float,
     assess_staleness,
     build_list_urls,
     build_offer,
@@ -30,8 +31,10 @@ from jobsearch.connectors import (
     load_connector,
     parse_connector,
     parse_detail_page,
+    parse_html,
     parse_list_page,
     probe_connector_isolation,
+    select_first,
     write_evidence,
 )
 
@@ -271,10 +274,141 @@ def test_build_offer_without_any_text_is_refused() -> None:
         build_offer(connector, list_fields={"title": "x"}, detail_fields=None)
 
 
+# ---------------------------------------------------------------------------
+# salary numbers — locale-aware parsing (review finding 2, MEDIUM)
+
+
+def test_as_float_parses_european_thousands_dot_decimal_comma() -> None:
+    """Regression: `"1.234,56"` (thousands-dot, decimal-comma — the format
+    `connectors/examplejobs_es.yaml`'s locale actually uses) used to become
+    `"1.23456"` after the old naive comma-strip/dot-keep logic, parsing as
+    `1.23456` — a ~1000x error with no exception. Must now read as
+    `1234.56`."""
+    assert _as_float("1.234,56") == 1234.56
+    assert _as_float("45.000,00") == 45000.0
+    assert _as_float("-1.234,56") == -1234.56
+
+
+def test_as_float_parses_english_thousands_comma_decimal_dot() -> None:
+    """The other convention must keep working: `"1,234.56"`
+    (thousands-comma, decimal-dot) reads as `1234.56`, not regress while
+    fixing the European case."""
+    assert _as_float("1,234.56") == 1234.56
+    assert _as_float("45,000.00") == 45000.0
+    assert _as_float("1234.56") == 1234.56  # no thousands grouping at all
+
+
+def test_as_float_a_lone_separator_with_three_digits_is_thousands_not_decimal() -> None:
+    """The documented disambiguation rule for a single separator occurring
+    once: exactly three following digits reads as grouped-thousands, not a
+    fractional amount — `"1.234"` and `"1,234"` (either convention's plain
+    whole-number-with-grouping spelling) both mean `1234`, not `1.234`/
+    `1234.0` interpreted the other way."""
+    assert _as_float("1.234") == 1234.0
+    assert _as_float("1,234") == 1234.0
+    # A different digit count after a lone separator is unambiguous as a
+    # decimal instead.
+    assert _as_float("1234.5") == 1234.5
+    assert _as_float("1234,5") == 1234.5
+    assert _as_float("1234,56") == 1234.56
+
+
+def test_as_float_repeated_thousands_grouping() -> None:
+    assert _as_float("1.234.567") == 1234567.0
+    assert _as_float("1,234,567") == 1234567.0
+
+
+def test_as_float_genuinely_ambiguous_input_returns_none_not_a_guess() -> None:
+    """A wrong salary is worse than an absent one — it silently reorders a
+    ranking. Anything this module cannot resolve with confidence must come
+    back `None`, exactly like the rest of the parsing pipeline (e.g. a
+    JS-rendered page yielding no selector matches), never a guessed number."""
+    assert _as_float("1.2.3") is None  # repeated separator, not valid grouping
+    assert _as_float("1,23,456") is None  # inconsistent group sizes
+    assert _as_float("12a4") is None  # not a number at all
+    assert _as_float("1.234,56,78") is None  # decimal separator repeats
+    assert _as_float("") is None
+    assert _as_float(None) is None
+
+
+def test_build_offer_feeds_a_correctly_parsed_european_salary_into_the_offer() -> None:
+    """End-to-end: a connector field carrying the European format must reach
+    `Offer.salary` correctly, not silently 1000x wrong."""
+    connector = parse_connector(VALID)
+    offer = build_offer(
+        connector,
+        list_fields={
+            "text": "Backend role.",
+            "salary_min": "30.000,00",
+            "salary_max": "45.000,00",
+            "salary_currency": "EUR",
+        },
+        detail_fields=None,
+    )
+    assert offer.salary is not None
+    assert offer.salary.min == 30000.0
+    assert offer.salary.max == 45000.0
+
+
 def test_build_list_urls_fills_only_the_page_placeholder() -> None:
     connector = parse_connector(VALID)
     urls = build_list_urls(connector, page_count=2)
     assert urls == [
+        "https://www.examplejobs.test/jobs?page=1",
+        "https://www.examplejobs.test/jobs?page=2",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# pagination.mode is honoured, not just max_pages/start
+
+
+def test_pagination_mode_none_with_max_pages_above_one_is_rejected_at_load() -> None:
+    """Regression for review finding 3 (LOW), load-time half: a connector
+    declaring `mode: none` (no second page exists) while leaving `max_pages`
+    above its default of 1 is self-contradicting — nothing describes what a
+    second page's URL would even be. Caught here rather than only discovered
+    once T12 fetches the same URL `max_pages` times."""
+    body = VALID.replace(
+        "  pagination:\n    mode: query_param\n    param: page\n    start: 1\n    max_pages: 5\n",
+        "  pagination:\n    mode: none\n    max_pages: 3\n",
+    )
+    assert "mode: none" in body and "max_pages: 3" in body  # the replace actually matched
+    with pytest.raises(ConnectorError, match="max_pages"):
+        parse_connector(body)
+
+
+def test_build_list_urls_honours_pagination_mode_none() -> None:
+    """Regression for review finding 3 (LOW), interpreter-side half:
+    `build_list_urls` used to read only `max_pages`/`start`, never
+    `pagination.mode`. `Pagination`'s own validator now refuses `mode: none`
+    with `max_pages > 1` at *load* (see the sibling test above), but a
+    connector built in-memory via `model_copy(update=...)` — as this test
+    suite itself does elsewhere, e.g.
+    `test_a_site_markup_change_is_a_single_field_edit` — does not re-run that
+    validator, so the contradictory state can still exist on an object
+    `build_list_urls` is asked to interpret. Without the fix, that object's
+    default page count (`max_pages`, since no `page_count` override is
+    given) would make `build_list_urls` emit the same URL repeatedly:
+    duplicate requests, duplicate offers once T12 fetches them."""
+    connector = parse_connector(VALID)
+    assert connector.list.pagination.max_pages == 5  # the fixture's own default
+
+    contradictory_pagination = connector.list.pagination.model_copy(
+        update={"mode": "none", "param": None, "max_pages": 3}
+    )
+    contradictory_list = connector.list.model_copy(update={"pagination": contradictory_pagination})
+    contradictory_connector = connector.model_copy(update={"list": contradictory_list})
+
+    # No page_count override: the connector's own (contradictory) max_pages
+    # must not leak through — mode: none means exactly one page.
+    assert build_list_urls(contradictory_connector) == [
+        "https://www.examplejobs.test/jobs?page=1"
+    ]
+
+    # An explicit page_count override is still honoured as given — mode only
+    # overrides the *default* derived from the connector's own max_pages.
+    assert build_list_urls(contradictory_connector, page_count=2) == [
         "https://www.examplejobs.test/jobs?page=1",
         "https://www.examplejobs.test/jobs?page=2",
     ]
@@ -308,6 +442,51 @@ def test_compile_selector_accepts_the_closed_vocabulary() -> None:
 def test_compile_selector_rejects_anything_outside_the_grammar(css: str) -> None:
     with pytest.raises(ConnectorError):
         compile_selector(css)
+
+
+def test_uppercase_tag_and_attribute_names_still_match_lowercased_markup() -> None:
+    """Regression for review finding 1 (MEDIUM): `html.parser.HTMLParser`
+    lowercases tag and attribute *names* while parsing (verified directly
+    against the stdlib below), but `compile_selector` used to store them
+    verbatim. A connector author writing `DIV.job-card` or `[DISABLED]` —
+    exactly the kind of hand-edit this format exists to make safe for a
+    non-programmer — got a selector that loaded without error and then
+    matched nothing, ever: no exception at load, no exception at parse, just
+    a silently empty result. Without the fix in `compile_selector`, this
+    test's first two assertions fail because `select_first`/`select_all`
+    return nothing for the uppercase-written selectors."""
+    from html.parser import HTMLParser
+
+    class _Probe(HTMLParser):
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            self.seen_tag = tag
+            self.seen_attrs = dict(attrs)
+
+    probe = _Probe()
+    probe.feed('<DIV DISABLED CLASS="Featured"></DIV>')
+    assert probe.seen_tag == "div"  # tag name lowercased by the stdlib parser
+    assert "disabled" in probe.seen_attrs  # attribute *name* lowercased too
+    assert probe.seen_attrs["class"] == "Featured"  # attribute *value* untouched
+
+    root = parse_html('<div class="Featured job-card" disabled>hi</div>')
+
+    tag_selector = compile_selector("DIV")
+    assert select_first(root, tag_selector) is not None
+
+    attr_selector = compile_selector("[DISABLED]")
+    assert select_first(root, attr_selector) is not None
+
+    # Class names stay case-sensitive: HTML class matching is case-sensitive,
+    # so an uppercase class in a selector must NOT be silently lowercased —
+    # doing so would break a correctly-written connector instead of fixing a
+    # broken one.
+    assert select_first(root, compile_selector(".Featured")) is not None
+    assert select_first(root, compile_selector(".featured")) is None
+
+    # Attribute *values* stay case-sensitive too.
+    other = parse_html('<div data-x="Foo"></div>')
+    assert select_first(other, compile_selector('[data-x="Foo"]')) is not None
+    assert select_first(other, compile_selector('[data-x="foo"]')) is None
 
 
 # ---------------------------------------------------------------------------

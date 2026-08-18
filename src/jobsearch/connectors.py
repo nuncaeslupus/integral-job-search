@@ -187,12 +187,28 @@ def compile_selector(css: str) -> SimpleSelector:
     fails to parse (it is not one of the four token kinds), the same way it
     would if a human mistyped it. Nothing here ever calls `eval` on the
     string; refusal is a plain regex-driven consumption check.
+
+    Tag names and attribute *names* are lowercased here, once, at compile
+    time — never left as typed. HTML tag and attribute names are
+    case-insensitive by spec, and `html.parser.HTMLParser` already lowercases
+    both when it builds a `Node` (verified: `<DIV DISABLED>` tokenises to
+    `tag="div"`, `attrs={"disabled": ...}`). Without this normalisation a
+    selector written `DIV.job-card` or `[DISABLED]` — exactly what a
+    non-programmer hand-editing a connector is liable to type — compiles
+    without error and then simply never matches anything: no exception at
+    load, no exception at parse, just a silently empty result, which is the
+    worst possible failure mode for someone who cannot read this module to
+    find out why. Attribute *values*, class names, and ids are left exactly
+    as written: those ARE case-sensitive in HTML (`[data-x="Foo"]` must not
+    match `data-x="foo"`, and `.Job` must not match `class="job"`), so
+    lowercasing them would silently break a correctly-written connector
+    instead of fixing a broken one.
     """
     text = css.strip()
     if not text:
         raise ConnectorError("empty selector")
     tag_match = _TAG_TOKEN.match(text)
-    tag = tag_match.group(0) if tag_match else None
+    tag = tag_match.group(0).lower() if tag_match else None
     rest = text[tag_match.end() :] if tag_match else text
 
     id_: str | None = None
@@ -212,7 +228,9 @@ def compile_selector(css: str) -> SimpleSelector:
         else:
             body = token[1:-1]
             name, _, value = body.partition("=")
-            attrs.append((name, value.strip("\"'")) if value else (name, None))
+            # Only the attribute *name* is case-insensitive HTML syntax; the
+            # value (when present) is data and stays exactly as written.
+            attrs.append((name.lower(), value.strip("\"'")) if value else (name.lower(), None))
         position = match.end()
     if position != len(rest):
         raise ConnectorError(f"selector is not tag/#id/.class/[attr]: {css!r}")
@@ -393,6 +411,28 @@ class Pagination(Strict):
             raise ValueError("pagination.param is required when pagination.mode is not 'none'")
         return self
 
+    @model_validator(mode="after")
+    def _no_pagination_means_exactly_one_page(self) -> Pagination:
+        # `mode: none` is a structural claim — "this site has no second
+        # page" — not merely "no query parameter is named for it". Leaving
+        # `max_pages` above its default of 1 while declaring `mode: none` is
+        # a self-contradicting connector: nothing describes what a second,
+        # third, ... page's URL would even be, so `build_list_urls` would
+        # have nothing to vary and would emit the same URL `max_pages`
+        # times — duplicate requests, and duplicate offers once T12 fetches
+        # them. Caught here, at load, a contributor sees the mistake in the
+        # file they just wrote; `build_list_urls` also defends against this
+        # independently (belt-and-suspenders, the same posture the rest of
+        # this module takes toward its own safety properties) so that a
+        # `page_count` override or a connector loaded before this validator
+        # existed still cannot duplicate a request.
+        if self.mode == "none" and self.max_pages > 1:
+            raise ValueError(
+                "pagination.mode is 'none' but max_pages > 1 — a site with no "
+                "pagination cannot have more than one page; set mode or lower max_pages"
+            )
+        return self
+
 
 class ListPage(Strict):
     """The search-results page: how to reach it, how it continues, and one
@@ -568,10 +608,35 @@ def load_connectors(directory: Path = DEFAULT_CONNECTORS_DIR) -> list[Connector]
 def build_list_urls(connector: Connector, *, page_count: int | None = None) -> list[str]:
     """The sequence of list-page URLs `connector.list` describes.
 
+    `pagination.mode` is honoured, not just `max_pages`: `mode: "none"`
+    means the site has no second page to describe, so when the *connector's
+    own* `max_pages` is what decides the count (`page_count` not given),
+    exactly one URL is returned regardless of what `max_pages` says.
+    `Pagination`'s own validator already refuses `max_pages > 1` alongside
+    `mode: "none"` at load — a well-formed, freshly-loaded connector cannot
+    reach this function in the contradictory state at all — but the clamp is
+    repeated here rather than trusted to have happened upstream, because a
+    `Connector`/`Pagination` built via `model_copy(update=...)` (as this
+    module's own tests do, and as a future caller might) does not re-run
+    Pydantic validators, so the contradiction can still exist on an in-memory
+    object. Without this clamp such an object would make `build_list_urls`
+    emit the *same* URL `max_pages` times — T12's fetcher issuing duplicate
+    identical requests and potentially collecting duplicate offers.
+
+    An explicit `page_count` argument is a caller's direct instruction for
+    how many URLs to build and is honoured as given, exactly as before —
+    `mode` only overrides the *default* derived from the connector's own
+    `max_pages`.
+
     Substitution is `str.replace`, not `str.format` — see `PAGE_PLACEHOLDER`'s
     comment. This never issues a request; T12 does that.
     """
-    pages = page_count if page_count is not None else connector.list.pagination.max_pages
+    if page_count is not None:
+        pages = page_count
+    else:
+        pages = connector.list.pagination.max_pages
+        if connector.list.pagination.mode == "none":
+            pages = min(pages, 1)
     start = connector.list.pagination.start
     return [
         connector.list.url_pattern.replace(PAGE_PLACEHOLDER, str(start + offset))
@@ -626,10 +691,108 @@ def parse_detail_page(connector: Connector, html: str) -> dict[str, str]:
 
 
 def _as_float(value: str | None) -> float | None:
+    """Parse a salary number that may be written in either the
+    thousands-comma/decimal-dot convention (`"1,234.56"`, US/UK) or the
+    thousands-dot/decimal-comma convention (`"1.234,56"`, most of continental
+    Europe — including `es`, the locale of the only shipped connector,
+    `connectors/examplejobs_es.yaml`). Naively stripping commas and keeping
+    dots — the previous behaviour — silently turns `"1.234,56"` into
+    `"1.23456"`: a ~1000x error with no exception, feeding straight into
+    `Salary.min`/`Salary.max` and therefore into ranking. That is worse than
+    returning nothing, so every branch below that cannot resolve the format
+    with confidence returns `None` instead of guessing.
+
+    Disambiguation rule, applied in this order:
+
+    1. **Both separators present** (`.` and `,` both occur): the one that
+       occurs *last* in the string is the decimal separator — it must occur
+       exactly once — and every occurrence of the other character is a
+       thousands separator, stripped. Covers `"1.234,56"` (comma last →
+       decimal) and `"1,234.56"` (dot last → decimal) unambiguously; a
+       decimal separator occurring more than once (e.g. malformed input) is
+       refused, not guessed at.
+    2. **One separator character, appearing exactly once**: if exactly three
+       digits follow it, it is read as a thousands separator (`"1.234"` →
+       `1234`, `"1,234"` → `1234`) — grouped-thousands is by far the more
+       common reason a whole number carries a lone separator followed by
+       exactly three digits, and salary figures are rarely quoted to three
+       decimal places. Any other digit count after it (one, two, four or
+       more) is read as the decimal separator (`"1234,56"` → `1234.56`,
+       `"1234.5"` → `1234.5`). This one case is a deliberate, named
+       resolution of what would otherwise be genuinely ambiguous — see the
+       module's evidence gate philosophy: a documented rule beats a silent
+       guess.
+    3. **One separator character, appearing more than once**: only valid as
+       repeated thousands-grouping (`"1.234.567"` → `1234567`,
+       `"1,234,567"` → `1234567`) — the leading group must be 1-3 digits and
+       every later group exactly 3; anything else (`"1.2.3"`, uneven groups)
+       is genuinely ambiguous and returns `None`.
+    4. **No separator**: parsed as a plain integer string.
+
+    A leading `+`/`-` sign is preserved through every branch. Anything that
+    does not reduce to plain digits (letters, multiple decimal points,
+    empty groups) returns `None` rather than raising — same contract as the
+    rest of this module's parsing: absent, never confidently wrong.
+    """
     if value is None:
         return None
+    text = value.strip().replace(" ", "").replace("\xa0", "")
+    if not text:
+        return None
+    sign = ""
+    if text[0] in "+-":
+        sign, text = text[0], text[1:]
+    if not text:
+        return None
+
+    dot_positions = [index for index, char in enumerate(text) if char == "."]
+    comma_positions = [index for index, char in enumerate(text) if char == ","]
+
+    candidate: str
+    if dot_positions and comma_positions:
+        if dot_positions[-1] > comma_positions[-1]:
+            decimal_char, decimal_positions, thousands_char = ".", dot_positions, ","
+        else:
+            decimal_char, decimal_positions, thousands_char = ",", comma_positions, "."
+        if len(decimal_positions) != 1:
+            return None  # the "decimal" separator repeats — not a format we recognise
+        integer_part, _, frac_part = text.rpartition(decimal_char)
+        integer_part = integer_part.replace(thousands_char, "")
+        if not integer_part.isdigit() or not frac_part.isdigit():
+            return None
+        candidate = f"{integer_part}.{frac_part}"
+    elif dot_positions or comma_positions:
+        sep_char = "." if dot_positions else ","
+        positions = dot_positions or comma_positions
+        if len(positions) == 1:
+            following_digits = len(text) - positions[0] - 1
+            if following_digits == 3:
+                digits_only = text.replace(sep_char, "")
+                if not digits_only.isdigit():
+                    return None
+                candidate = digits_only
+            else:
+                integer_part, _, frac_part = text.partition(sep_char)
+                if not integer_part.isdigit() or not frac_part.isdigit():
+                    return None
+                candidate = f"{integer_part}.{frac_part}"
+        else:
+            groups = text.split(sep_char)
+            if (
+                all(group.isdigit() for group in groups)
+                and 1 <= len(groups[0]) <= 3
+                and all(len(group) == 3 for group in groups[1:])
+            ):
+                candidate = "".join(groups)
+            else:
+                return None  # inconsistent grouping — genuinely ambiguous
+    else:
+        if not text.isdigit():
+            return None
+        candidate = text
+
     try:
-        return float(value.replace(",", "").replace(" ", "").strip())
+        return float(f"{sign}{candidate}")
     except ValueError:
         return None
 
