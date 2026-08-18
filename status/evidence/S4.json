@@ -1,6 +1,7 @@
 {
   "intake_field_provenance": 1.0,
   "fields_measured": 7,
+  "intake_declined_subjects_written": 0,
   "document_import": {
     "coverage": 1.0,
     "fields_measured": 4,
@@ -31,6 +32,6 @@
       "experience[0]: no provenance recorded"
     ]
   },
-  "checks_run": 19,
+  "checks_run": 22,
   "failures": []
 }

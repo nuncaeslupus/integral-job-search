@@ -33,6 +33,7 @@ from jobsearch.cv_store import (
     MINIMUM_FIELDS_MEASURED,
     CVMaster,
     CVStoreError,
+    DeclinedSubjectError,
     DocumentSpan,
     Experience,
     ImportResult,
@@ -53,6 +54,7 @@ from jobsearch.cv_store import (
     write_evidence,
     write_master,
 )
+from jobsearch.decline import DeclineLedger
 from jobsearch.identity import ProfileStore, create_profile
 from jobsearch.profile import EvidenceLog
 
@@ -417,6 +419,57 @@ def test_add_conversation_entry_refuses_blank_text(store: ProfileStore) -> None:
     assert list(EvidenceLog(store).rows()) == []
 
 
+def test_a_declined_subject_is_not_written_by_the_conversational_path(
+    store: ProfileStore,
+) -> None:
+    """D-9/T40: non-insistence must hold on the *write* path, not only the
+    ask path. Every other free-text writer in this codebase filters through
+    `DeclineLedger` before it appends (`elicit_extract._undeclined`,
+    `constraints_step.resolve`); before this fix, `add_conversation_entry`
+    did not, so a candidate who declined "experience" and never reopened it
+    could still have an answer on it filed here — the one surface built for
+    the candidate with no CV, who answers the most questions of anyone."""
+    ledger = DeclineLedger(store)
+    ledger.decline("experience", step="intake", at="2026-08-18T09:00:00Z")
+
+    with pytest.raises(DeclinedSubjectError):
+        add_conversation_entry(
+            store,
+            CVMaster(),
+            "experience",
+            {"title": "Warehouse Team Lead", "organisation": "Northgate Logistics"},
+            said="I ran the night shift at Northgate Logistics for two years.",
+            recorded_at="2026-08-18T09:00:30Z",
+        )
+
+    assert list(EvidenceLog(store).rows()) == []
+
+
+def test_a_reopened_decline_lets_the_subject_be_recorded_again(store: ProfileStore) -> None:
+    """The other half of the fix: refusing every write for a declined subject
+    is not the same as honouring T40, and a fix that never writes anything
+    would pass the previous test for the wrong reason. §5.4: only the
+    candidate reopening a subject clears it — once "experience" is reopened,
+    the exact same conversational entry the previous test refused must be
+    recorded, with a real `profile/evidence.jsonl` row behind it."""
+    ledger = DeclineLedger(store)
+    ledger.decline("experience", step="intake", at="2026-08-18T09:00:00Z")
+    ledger.reopen("experience", at="2026-08-18T09:05:00Z")
+
+    master = add_conversation_entry(
+        store,
+        CVMaster(),
+        "experience",
+        {"title": "Warehouse Team Lead", "organisation": "Northgate Logistics"},
+        said="I ran the night shift at Northgate Logistics for two years.",
+        recorded_at="2026-08-18T09:10:00Z",
+    )
+
+    rows = list(EvidenceLog(store).rows())
+    assert len(rows) == 1
+    assert master.experience[-1].provenance[0].evidence_id == rows[0].id  # type: ignore[union-attr]
+
+
 # --- the on-disk contract: strict, frozen, extra keys refused ---------------
 
 
@@ -565,6 +618,7 @@ def test_cli_exits_nonzero_when_intake_field_provenance_is_below_one(
         return {
             "intake_field_provenance": result.coverage,
             "fields_measured": result.fields_measured,
+            "intake_declined_subjects_written": 0,
             "failures": [],
             "checks_run": MINIMUM_CHECKS,
         }
