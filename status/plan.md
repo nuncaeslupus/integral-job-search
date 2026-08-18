@@ -313,6 +313,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | D-4 | The Traits gate is assigned to T28 by the specification and to T27 by the work; neither task's own gate is the step metric | 4 | S | — | `trait_gate_owner_contradictions == 0` | `test_step_gate_metric_is_some_task_gate` in `tests/test_step_gates.py` — every step gate metric is some task's acceptance gate; `test_no_two_documents_name_different_owners_for_one_step_gate` | ☑ |
 | D-6 | `rebuild()` writes only `stated` rows to `constraints.json`, so a refresh after the constraints step drops every `declined` and `unknown` field — the refusal T40 depends on reverts to never-asked | 2 | S | T41 | `constraint_states_survive_rebuild == 1.0` | `test_a_declined_field_survives_a_rebuild` in `tests/test_revision.py`; `test_an_unknown_field_survives_a_rebuild` — both must fail before the fix | ☑ |
 | D-7 | `spec-v2-steps.md` names two owners for the Ranking gate (T18, T19) while the JSON names one (T19); same class as D-4 | 9 | S | — | `step_gate_owner_contradictions == 0` | `test_every_step_gate_names_exactly_one_owner` in `tests/test_step_specs.py`; `test_the_gate_task_is_the_task_that_writes_the_metric`; `test_no_prose_document_names_a_different_owner_than_the_json` | ☑ |
+| D-8 | Captured evidence cannot say which offer a reason was about — `EvidenceRow` carries `step`, `source` and `recorded_at`, so T28's required provenance "in response to what" is unmet and two rejections of two different jobs are indistinguishable in the log | 4 | M | T28, T6 | `captures_without_a_subject == 0` | `test_two_rejections_of_different_offers_are_distinguishable_in_the_log` in `tests/test_profile_capture.py`; `test_a_captured_reason_survives_rebuild_with_its_subject`; `test_an_answer_to_a_question_needs_no_subject_field` | ☐ |
 
 **Status legend**: ☐ open · ◐ in progress · ☑ merged
 
@@ -324,7 +325,7 @@ listed; every open task appears in exactly one milestone.
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
-| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T20, D-1, D-2, D-3, D-4 |
+| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T20, D-1, D-2, D-3, D-4, D-8 |
 | **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9, S10, S11 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
