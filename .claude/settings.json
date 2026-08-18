@@ -2,5 +2,18 @@
   "statusLine": {
     "type": "command",
     "command": "bash claude-arsenal/bin/statusline_capture.sh"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Write|Edit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash tools/profile_guard.sh"
+          }
+        ]
+      }
+    ]
   }
 }

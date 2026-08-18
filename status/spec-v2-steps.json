@@ -23,11 +23,16 @@
         "metric": "cross_user_leaks",
         "op": "==",
         "threshold": 0,
-        "state": "not_implemented",
+        "state": "implemented",
         "task": "S3"
       },
       "reentry_events": [
         "session_start"
+      ],
+      "reads": [],
+      "produces": [
+        "handle",
+        "session_state"
       ]
     },
     {
@@ -50,6 +55,16 @@
         "cv_updated",
         "new_role_started",
         "certification_obtained"
+      ],
+      "reads": [
+        {
+          "artefact": "handle",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "cv_master",
+        "claimed_facts"
       ]
     },
     {
@@ -73,6 +88,17 @@
         "permit_changed",
         "pay_floor_changed",
         "availability_changed"
+      ],
+      "reads": [
+        {
+          "artefact": "claimed_facts",
+          "optional": true
+        }
+      ],
+      "produces": [
+        "constraints",
+        "currency",
+        "locale"
       ]
     },
     {
@@ -96,6 +122,16 @@
         "lost_job",
         "new_role_started",
         "long_absence"
+      ],
+      "reads": [
+        {
+          "artefact": "cv_master",
+          "optional": true
+        }
+      ],
+      "produces": [
+        "stories",
+        "trait_evidence"
       ]
     },
     {
@@ -119,6 +155,15 @@
         "interests_changed",
         "scoring_batch_threshold_reached",
         "new_episodes_recorded"
+      ],
+      "reads": [
+        {
+          "artefact": "trait_evidence",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "traits"
       ]
     },
     {
@@ -140,6 +185,15 @@
       "reentry_events": [
         "weights_stale",
         "market_shifted"
+      ],
+      "reads": [
+        {
+          "artefact": "constraints",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "reaction_evidence"
       ]
     },
     {
@@ -162,6 +216,15 @@
         "weights_stale",
         "rejection_reason_recorded",
         "reaction_contradicts_weights"
+      ],
+      "reads": [
+        {
+          "artefact": "reaction_evidence",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "weights"
       ]
     },
     {
@@ -185,6 +248,15 @@
         "candidate_requested_search",
         "constraints_changed",
         "search_reach_changed"
+      ],
+      "reads": [
+        {
+          "artefact": "constraints",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "offers"
       ]
     },
     {
@@ -206,6 +278,19 @@
       "reentry_events": [
         "new_offers_collected",
         "dimension_model_updated"
+      ],
+      "reads": [
+        {
+          "artefact": "offers",
+          "optional": false
+        },
+        {
+          "artefact": "dimension_model",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "extractions"
       ]
     },
     {
@@ -228,6 +313,23 @@
         "profile_revision_bumped",
         "new_offers_extracted",
         "candidate_requested_ranking"
+      ],
+      "reads": [
+        {
+          "artefact": "extractions",
+          "optional": false
+        },
+        {
+          "artefact": "constraints",
+          "optional": false
+        },
+        {
+          "artefact": "weights",
+          "optional": true
+        }
+      ],
+      "produces": [
+        "rankings"
       ]
     },
     {
@@ -250,6 +352,16 @@
         "ranking_presented",
         "offer_status_changed",
         "rejection_received"
+      ],
+      "reads": [
+        {
+          "artefact": "rankings",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "reaction_evidence",
+        "outcome_evidence"
       ]
     },
     {
@@ -273,6 +385,19 @@
         "cv_updated",
         "candidate_requested_regeneration",
         "employer_replied"
+      ],
+      "reads": [
+        {
+          "artefact": "cv_master",
+          "optional": false
+        },
+        {
+          "artefact": "offers",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "generated_documents"
       ]
     },
     {
@@ -295,7 +420,93 @@
         "interview_scheduled",
         "interview_happened",
         "outcome_received"
+      ],
+      "reads": [
+        {
+          "artefact": "stories",
+          "optional": false
+        },
+        {
+          "artefact": "offers",
+          "optional": false
+        }
+      ],
+      "produces": [
+        "interview_preparation",
+        "interview_lessons"
       ]
     }
-  ]
+  ],
+  "external_artefacts": [
+    "dimension_model"
+  ],
+  "artefact_aliases": {
+    "a ranking": [
+      "rankings"
+    ],
+    "claimed facts": [
+      "claimed_facts"
+    ],
+    "constraints.json": [
+      "constraints"
+    ],
+    "currency": [
+      "currency"
+    ],
+    "cv + letter per offer": [
+      "generated_documents"
+    ],
+    "cv/master.json": [
+      "cv_master"
+    ],
+    "dimension model": [
+      "dimension_model"
+    ],
+    "extractions": [
+      "extractions"
+    ],
+    "handle": [
+      "handle"
+    ],
+    "locale": [
+      "locale"
+    ],
+    "offers/*.json": [
+      "offers"
+    ],
+    "one offer": [
+      "offers"
+    ],
+    "preparation": [
+      "interview_preparation"
+    ],
+    "rankings/<ts>.json": [
+      "rankings"
+    ],
+    "reaction + outcome evidence": [
+      "reaction_evidence",
+      "outcome_evidence"
+    ],
+    "reaction evidence": [
+      "reaction_evidence"
+    ],
+    "session state": [
+      "session_state"
+    ],
+    "stories.jsonl": [
+      "stories"
+    ],
+    "then lessons": [
+      "interview_lessons"
+    ],
+    "trait evidence": [
+      "trait_evidence"
+    ],
+    "traits.json": [
+      "traits"
+    ],
+    "weights.json": [
+      "weights"
+    ]
+  }
 }

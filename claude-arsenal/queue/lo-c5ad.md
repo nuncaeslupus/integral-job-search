@@ -9,7 +9,8 @@ key: required_subset_closure_violations
 ```
 
 ```bash
-echo "no gate command defined for T30 — replace this line with the command that writes status/evidence/T30.json" >&2; exit 1
+uv run --extra dev pytest tests/test_step_graph.py -q
+uv run --extra dev python -m jobsearch.step_graph status/evidence/T30.json
 ```
 
 ## What this is

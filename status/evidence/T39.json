@@ -1,0 +1,10 @@
+{
+  "unscheduled_scoring_runs": 0,
+  "turns_evaluated": 7,
+  "scoring_runs": [
+    "batch_threshold",
+    "step_boundary",
+    "explicit_request"
+  ],
+  "failures": []
+}

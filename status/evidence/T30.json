@@ -1,0 +1,15 @@
+{
+  "required_subset_closure_violations": 0,
+  "step_graph_prose_drift": 0,
+  "required_steps": [
+    "identify",
+    "constraints",
+    "sourcing",
+    "understanding",
+    "ranking"
+  ],
+  "declared_reads": 17,
+  "closure_violations": [],
+  "unproduced_inputs": [],
+  "drift": []
+}

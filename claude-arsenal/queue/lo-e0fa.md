@@ -9,7 +9,8 @@ key: profile_rebuild_deterministic
 ```
 
 ```bash
-echo "no gate command defined for T6 — replace this line with the command that writes status/evidence/T6.json" >&2; exit 1
+uv run --extra dev pytest tests/test_profile_store.py -q
+uv run --extra dev python -m jobsearch.profile status/evidence/T6.json
 ```
 
 The two blocks do different jobs and both are required. The `bash` block

@@ -9,7 +9,8 @@ key: retracted_rows_surviving_rebuild
 ```
 
 ```bash
-echo "no gate command defined for T38 — replace this line with the command that writes status/evidence/T38.json" >&2; exit 1
+uv run --extra dev pytest tests/test_retraction.py -q
+uv run --extra dev python -m jobsearch.retraction status/evidence/T38.json
 ```
 
 ## What this is
