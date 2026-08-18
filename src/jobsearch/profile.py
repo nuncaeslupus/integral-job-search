@@ -54,6 +54,12 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T6.json"
 # Where the log and the derived files live inside one profile's tree (§6).
 EVIDENCE_PARTS = ("profile", "evidence.jsonl")
 DERIVED_DIR = "profile"
+# One stamp for the whole derived set. `stories.jsonl` is JSONL and so carries
+# no header of its own; without this it could never be shown to be current, and
+# a rebuild would never clear it from the stale list (T37). The manifest is
+# honest about what the derived files actually are — one set, rebuilt together
+# from one log, at one revision.
+DERIVED_MANIFEST = ".derived.json"
 
 # §4.1's row kinds. `retraction` is one of them rather than a separate mechanism,
 # which is what makes "forget that" survive a rebuild.
@@ -441,6 +447,15 @@ def rebuild(store: ProfileStore) -> dict[str, str]:
         content = artefact.render(artefact.build(log, rows))
         store.write_text(content, DERIVED_DIR, artefact.filename)
         written[artefact.filename] = content
+    store.write_json(
+        {
+            "profile_revision": log.revision().as_json(),
+            "scored_at": _scored_at(rows),
+            "files": sorted(written),
+        },
+        DERIVED_DIR,
+        DERIVED_MANIFEST,
+    )
     return written
 
 
