@@ -407,6 +407,47 @@ pressing send.
 not been regenerated. The readers are committed but generated, so without that
 check a reviewer can annotate text that has since changed, and nothing fails.
 
+### 8. Specification v2.1 for the steps — the owner's second review round (S2r, 2026-08-18)
+
+Twelve annotations on `status/spec-v2-steps.md`, saved at
+`docs/spec-v2-steps/notes.json` and folded in. Three were corrections rather
+than preferences:
+
+1. **Intake's "never ask" list was wrong.** Date of birth, address and telephone
+   are not asked at Intake because they do not improve a *search* — but a CV
+   needs them, so **step 11 collects what the document it is producing
+   requires**. The rule moved; it was not deleted.
+2. **The caps were too high.** 40 questions in History and 25 in Intake read as
+   an interrogation. Now 18 and 12, with a mid-step check-in, and the framing
+   inverted: not "want to stop?" but what the next step buys them.
+3. **History over-weighted failure**, inherited from `story_failure_fraction`.
+   Successes evidence traits equally and are pleasanter to tell.
+
+Decisions taken with them: connectors are **declarative files in a public
+repo** (T32) — data, never code, so borrowing one cannot run a stranger's
+program against a machine holding someone's profile; **S2r precedes the per-step
+skills** (S7), the same argument that put S1 before S2; net pay uses committed
+rules per country and **generates them when a country is absent**, marked as
+generated so a guess is never displayed as a checked figure (T33).
+
+Also folded in: the process should be enjoyable rather than merely tolerable;
+Constraints carries a prepared list of *usual suspects* for the values people
+never think to state; **pre-sourcing may begin during Constraints** so Reactions
+has live adverts rather than a cold fetch; extraction is script-and-keyword
+first with the model as last resort; an offer is a card of bullets plus one
+honest line ("full remote, pay is good, but it is a gun factory"); the mock
+interview is a **strict role-play with no chatting**, declared before it starts.
+
+The owner also asked whether file access can be blocked automatically. It can: a
+`PreToolUse` hook refusing reads and writes under another handle's tree, which
+belongs with S3 and `cross_user_leaks`. A rule the process cannot violate beats
+one it is asked to respect.
+
+**The reader-staleness check had a flaw of its own** and found it: the committed
+reader carries seeded reviewer notes, so regenerating into an empty directory
+diffed against itself. It now seeds identically, and was re-verified by editing
+the source and watching it go red.
+
 ---
 
 ## Sign-off
