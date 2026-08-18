@@ -1,0 +1,12 @@
+{
+  "unrunnable_step_dispatches": 0,
+  "probes_run": 13,
+  "required_trace": [
+    "identify",
+    "constraints",
+    "sourcing",
+    "understanding",
+    "ranking"
+  ],
+  "failures": []
+}
