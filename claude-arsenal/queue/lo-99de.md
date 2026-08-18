@@ -9,7 +9,8 @@ key: unscheduled_scoring_runs
 ```
 
 ```bash
-echo "no gate command defined for T39 — replace this line with the command that writes status/evidence/T39.json" >&2; exit 1
+uv run --extra dev pytest tests/test_scoring_triggers.py -q
+uv run --extra dev python -m jobsearch.scoring status/evidence/T39.json
 ```
 
 ## What this is
