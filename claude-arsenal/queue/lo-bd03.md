@@ -9,7 +9,8 @@ key: step_gate_state_drift
 ```
 
 ```bash
-echo "no gate command defined for T48 — replace this line with the command that writes status/evidence/T48.json" >&2; exit 1
+uv run --extra dev pytest tests/test_step_gates.py -q
+uv run --extra dev python -m jobsearch.step_gates status/evidence/T48.json
 ```
 
 ## What this is

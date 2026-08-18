@@ -1,0 +1,22 @@
+{
+  "step_gate_state_drift": 0,
+  "steps_read": 13,
+  "implemented": [
+    "identify"
+  ],
+  "not_implemented": [
+    "application",
+    "constraints",
+    "feedback",
+    "history",
+    "intake",
+    "interview_log",
+    "preferences",
+    "ranking",
+    "reactions",
+    "sourcing",
+    "traits",
+    "understanding"
+  ],
+  "drift": []
+}

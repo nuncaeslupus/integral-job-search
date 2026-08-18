@@ -23,7 +23,7 @@
         "metric": "cross_user_leaks",
         "op": "==",
         "threshold": 0,
-        "state": "not_implemented",
+        "state": "implemented",
         "task": "S3"
       },
       "reentry_events": [
