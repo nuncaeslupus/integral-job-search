@@ -54,6 +54,52 @@ uv run python -m jobsearch.harness gate                    # write status/eviden
 refuses a quote that is absent or ambiguous. Offsets typed by hand are how a
 corpus acquires spans that point at the wrong words while still validating.
 
+## Fast path — the labelling page
+
+Typing a quote correctly, in Catalan or Spanish, in a terminal, 300+ times
+(100 ads × up to 22 dimensions) is the actual bottleneck `set` alone leaves
+open — a mistyped accent is rejected outright by the same verbatim check that
+protects the corpus. `tools/labelling_page.py` and `harness import` remove
+the typing without touching the judgement:
+
+```bash
+uv run python tools/labelling_page.py           # writes corpus/labelled/label.html
+open corpus/labelled/label.html                 # or: xdg-open / double-click — file://, no server
+```
+
+Work through the ads in the page: select the words in the ad that evidence a
+dimension with the mouse — the page reads the browser's own selection back as
+the quote, so it is always an exact substring of the ad and can never fail
+`set`'s verbatim check — enter a value, and tick **negated** when the ad
+*denies* the dimension ("sense guàrdies", "no on-call") rather than being
+silent about it. Progress accumulates in the browser's `localStorage`, so
+closing the tab does not lose it; a visible JSON blob on the page is the
+running export.
+
+When ready — after one ad or after all 100 — copy that blob to a file and
+apply it in one atomic batch instead of one `set` call per label:
+
+```bash
+uv run python -m jobsearch.harness import labels.json
+# or, piping the clipboard straight through:
+pbpaste | uv run python -m jobsearch.harness import -
+```
+
+`import` is exactly as strict as `set` — the same verbatim-quote search, the
+same refusal of an absent or ambiguous quote — run over the whole batch before
+anything is written: one bad row refuses the entire file rather than
+half-applying it. Re-importing the same export (or a superset of it, after
+labelling more ads) is safe; it overwrites in place rather than duplicating.
+
+The page also shades where a dimension's extraction regex matches the ad
+text, purely so the eye lands on the right paragraph — it never sets a value,
+never picks a dimension, and never fills a quote. v0's gold examples are
+already known to be cue-derived rather than independent (D-2,
+`status/plan.md`), and `extraction_macro_f1` is measured against this
+corpus — a page that pre-filled from its own cues would let that gate check
+the extractor against itself. The page says so in its own UI, above the ad,
+every time it is opened.
+
 ## Self-agreement
 
 The labelling protocol calls for re-labelling a subset at least two weeks later

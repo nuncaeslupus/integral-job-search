@@ -237,3 +237,9 @@ profiles/
 # Generated pipeline artefacts (offers, extractions, rankings).
 data/
 .claude/worktrees/
+
+# T5's labelling aid (tools/labelling_page.py) — a build artefact of the
+# corpus and the dimension model, regenerable at any time. The labeller's
+# actual work lives in the browser's localStorage until exported and applied
+# with `harness import`; this file itself carries no state worth committing.
+corpus/labelled/label.html
