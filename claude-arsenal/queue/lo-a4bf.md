@@ -47,3 +47,24 @@ refusal, not a default to the first handle found.
 Service: **PROFILE** · Size: M · Depends: S1
 
 Source: `status/spec-v2-brief.md` §1.3, §5
+
+---
+
+## Scope change — v2 plan, 2026-08-18
+
+**Narrowed.** S3 keeps identity and the tree: handle resolution before any path
+under `profiles/` is read *or written*, the four-step resolution order, and the
+`PreToolUse` hook that refuses reads and writes under another handle's tree. It
+owns step 0's gate, `cross_user_leaks == 0`, and the hook must be written so
+correct operation never trips it.
+
+**Session state and resumption split out as T35** — `session/state.json`, the
+continuous-write rule, and the five-rule resumption order. They are a different
+concern with a different gate, and T35 depends on this task and on T6.
+
+The key is **a handle the candidate chooses**, not a legal name. Later sessions
+greet by display name and ask for confirmation. Where exactly one profile
+exists, that is a confirmation and never a default: silently assuming the only
+profile is how one person's evidence ends up in another person's history, and
+the log is append-only, so it is a mess to unpick rather than a mistake to
+undo.
