@@ -249,6 +249,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T10 | Preference weights: forced pairwise choices → part-worths → salary-equivalent scale | 6 | M | T9 | `weight_salary_equivalent_roundtrip_error <= 0.01` | `test_partworth_to_salary_equivalent_roundtrips` in `tests/test_weights.py` — converting a dimension to €/month and back recovers the part-worth within 1% | ☐ |
 | T21 | Feedback loop: rejection reason → `evidence.jsonl` → rebuild → changed ranking, and the offer's lifecycle status moves with it | 10 | M | S5, T6, T19 | `feedback_traceability == 1.0` | `test_every_profile_value_traces_to_evidence_rows` in `tests/test_feedback.py`; `test_rejection_moves_offer_status_and_marks_weights_stale` | ☐ |
 | T28 | Continuous profile capture: every candidate-facing surface appends evidence, not just onboarding | — | M | T6, T27 | `profile_capture_coverage == 1.0` | `test_every_candidate_facing_surface_writes_evidence` in `tests/test_profile_capture.py` — a surface that accepts free text and writes no evidence row fails | ☐ |
+| T49 | Trait evidence sufficiency: score a trait only when its evidence floor is met, report `insufficient` otherwise — never refuse, never voice the floor to the candidate | 4 | M | T6, T27 | `trait_evidence_sufficiency == 1.0` | `test_a_trait_below_the_floor_is_insufficient_not_scored` in `tests/test_trait_sufficiency.py`; `test_insufficient_does_not_stop_the_step`; `test_the_floor_counts_occasions_not_repetitions` | ☐ |
 
 ### SUPPLY — connectors, offers, lifecycle
 
@@ -323,7 +324,7 @@ listed; every open task appears in exactly one milestone.
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
-| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T20, D-1, D-2, D-3, D-4 |
+| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T20, D-1, D-2, D-3, D-4 |
 | **M4 — per opportunity** | documents for one advert, and the interview around it | S4, T45, T46, S6, T47, T43, T22, T26, T25, T29, S9, S10, S11 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
@@ -364,14 +365,22 @@ metrics whose owner must additionally measure and record them.
 |-------------|----------|----------------------|
 | `intake_field_provenance` | S4 | `intake_field_provenance == 1.0` — the same |
 | `constraint_field_resolution` | T41 | `constraint_field_resolution == 1.0` — the same |
-| `trait_evidence_sufficiency` | T28 | `profile_capture_coverage == 1.0` — **contested, see D-4** |
+| `trait_evidence_sufficiency` | T49 | `trait_evidence_sufficiency == 1.0` — owner writes the metric (D-4 resolved) |
 | `interview_lesson_linkage` | S6 | `interview_lesson_linkage == 1.0` — the same |
 
-**D-4** records the one contradiction this plan found and did not resolve: §9
-assigns the Traits metric to T28 (continuous capture), while the two-episode
-floor that produces the measurement is specified in T27 (the interview
-protocol). The plan records §9's answer and points at the divergence rather than
-quietly overriding a settled specification.
+**D-4** was the one contradiction this plan found and could not resolve by
+editing: §9 assigned the Traits metric to T28 (continuous capture), while the
+two-episode floor that produces the measurement is specified in T27 (the
+interview protocol). Neither task's own gate is `trait_evidence_sufficiency`,
+so reassigning between them would have made the documents agree and the
+register still wrong — the plan recorded §9's answer and pointed at the
+divergence rather than quietly overriding a settled specification.
+
+It is now **resolved by a task, not an edit**: **T49** scores trait evidence
+and is measured on `trait_evidence_sufficiency` itself, so §9, this table and
+T49's own gate row name one task and mean the same thing. T27 keeps the floor
+as part of the interview and T28 keeps evidence arriving from every surface;
+what T49 adds is the decision to withhold a score, which belonged to neither.
 
 ## Evidence log
 

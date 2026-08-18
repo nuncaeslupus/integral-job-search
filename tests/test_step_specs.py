@@ -235,15 +235,21 @@ def test_a_missing_step_list_writes_evidence_rather_than_failing(tmp_path: Path)
 # owners' own `plan.md` gate is the step's metric at all. The three tests
 # below are the general form, run over all thirteen steps.
 #
-# `traits` is the one step excluded from the second test. D-4 is still open:
-# reassigning it to T27 (the task that actually does the scoring) would only
-# make the *documents* agree — T27's own plan.md gate would still measure
-# `interview_profile_coverage`, not `trait_evidence_sufficiency`, so the
-# reassignment would not be true in the sense this check enforces. Making it
-# true means changing what T27 (or T28, or a new task) is measured against,
-# which `status/plan.md` §"Step gate ownership" records as a decision the
-# owner has not made yet — not something a document edit can decide for them.
-_OPEN_DIVERGENCES = frozenset({"traits"})  # D-4 — see claude-arsenal/queue/lo-4ca5.md
+# `traits` used to be excluded here. D-4 was the harder half of the same
+# problem: reassigning the step to T27 (the task that actually does the
+# scoring) would have made the *documents* agree while leaving the check
+# false, because T27's own plan.md gate measures `interview_profile_coverage`,
+# not `trait_evidence_sufficiency`. A document edit could not decide it — only
+# giving some task that metric as its own gate could, and that was the owner's
+# call to make. They made it: **T49** now exists to score trait evidence and
+# carries `trait_evidence_sufficiency` as its gate, so every document and
+# `plan.md` name the same task and the exception is gone.
+#
+# The set stays, empty, rather than being deleted along with it. Excluding a
+# step is a real state this repository has been in and may be in again, and an
+# exception that has to be added back to a named set is visible in a diff in a
+# way one re-introduced `if step == "traits": continue` is not.
+_OPEN_DIVERGENCES: frozenset[str] = frozenset()
 
 
 def _assert_no_problem_matching(readings: list[OwnershipReading], needle: str) -> None:
@@ -268,8 +274,9 @@ def test_the_gate_task_is_the_task_that_writes_the_metric() -> None:
     (`gate.task` named T24; `constraint_field_resolution` is T41's own gate),
     generalised to all thirteen steps.
 
-    `traits` is excluded: it is D-4, the one case this repo has not decided —
-    see the module docstring above.
+    No step is excluded any more: D-4's Traits exception closed when T49 took
+    ownership of `trait_evidence_sufficiency`. `_OPEN_DIVERGENCES` is empty,
+    so this now runs over all thirteen.
     """
     for reading in gate_ownership():
         if reading.step in _OPEN_DIVERGENCES:
@@ -291,23 +298,32 @@ def test_no_prose_document_names_a_different_owner_than_the_json() -> None:
     _assert_no_problem_matching(readings, "spec-v2-process.md §9 names")
 
 
-def test_the_committed_documents_have_no_owner_contradiction_except_traits() -> None:
-    """D-7's own gate: `step_gate_owner_contradictions` is the count of steps
-    with *any* problem above, `traits` included — so this stays honest about
-    what is actually fixed rather than passing by construction."""
+def test_the_committed_documents_have_no_owner_contradiction() -> None:
+    """D-7's own gate: `step_gate_owner_contradictions` counts steps with *any*
+    problem above, `traits` included. It read 1 until T49 landed and 0 after,
+    so it stays honest about what is actually fixed rather than passing by
+    construction — asserting equality with `_OPEN_DIVERGENCES` (now empty)
+    keeps that property if a step ever has to be excluded again."""
     measured = measure_gate_ownership()
     contradicted = {c["step"] for c in measured["contradictions"]}
     assert contradicted == _OPEN_DIVERGENCES, measured["contradictions"]
 
 
-def test_the_traits_gate_still_names_two_candidate_owners_neither_of_which_fits() -> None:
-    """D-4, recorded rather than silently fixed: T28 is named by every
-    document, but T28's own gate is `profile_capture_coverage`, and T27 (the
-    task that actually scores traits) has `interview_profile_coverage`.
-    Neither is `trait_evidence_sufficiency`. This is the report, not a bug —
-    if this test ever fails because the contradiction is gone, delete it and
-    remove `traits` from `_OPEN_DIVERGENCES` above."""
+def test_the_traits_gate_names_the_task_that_writes_its_metric() -> None:
+    """D-4, resolved rather than declared out of scope. It was reported for a
+    while instead of fixed: T28 was named by every document, but T28's own gate
+    is `profile_capture_coverage` and T27's is `interview_profile_coverage` —
+    neither is `trait_evidence_sufficiency`, so no reassignment among the two
+    could have made the register true.
+
+    The fix was a task, not an edit: **T49** scores trait evidence and is
+    measured on `trait_evidence_sufficiency` itself. This asserts the outcome
+    (zero contradictions, T49 named) rather than merely that the count moved,
+    because a count of 0 is also what a check reading nothing returns —
+    `steps_checked` is asserted too for that reason."""
     measured = measure_trait_gate_ownership()
-    assert measured["trait_gate_owner_contradictions"] == 1
-    assert measured["task"] == "T28"
-    assert "T28" in measured["problems"][0]
+    assert measured["steps_checked"] == 1
+    assert measured["trait_gate_owner_contradictions"] == 0
+    assert measured["task"] == "T49"
+    assert measured["metric"] == "trait_evidence_sufficiency"
+    assert measured["problems"] == []

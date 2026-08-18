@@ -883,7 +883,7 @@ Every step in §2 names one gate metric. Ten reuse metrics that already exist in
 |--------|------|-------|
 | `intake_field_provenance` | 1 Intake | S4 — every field in `master.json` traces to a document span or a conversation turn |
 | `constraint_field_resolution` | 2 Constraints | T41 — every constraint field is `stated`, `declined` or `unknown`, never blank (the field set itself is pinned by T24) |
-| `trait_evidence_sufficiency` | 4 Traits | T28 — every trait carries either a score with ≥2 independent episodes, or `insufficient` |
+| `trait_evidence_sufficiency` | 4 Traits | T49 — every trait carries either a score with ≥2 independent episodes, or `insufficient` |
 | `interview_lesson_linkage` | 12 Interview log | S6 (to be seeded) — every interview produces ≥1 evidence row linked to a dimension or a story |
 
 Every metric is currently `not_implemented` at the step level, which is a

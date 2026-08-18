@@ -148,7 +148,7 @@
         "op": "==",
         "threshold": 1.0,
         "state": "not_implemented",
-        "task": "T28"
+        "task": "T49"
       },
       "reentry_events": [
         "long_absence",
