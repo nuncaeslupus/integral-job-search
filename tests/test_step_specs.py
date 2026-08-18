@@ -31,6 +31,21 @@ from jobsearch.step_specs import (
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_every_step_declares_whether_it_takes_candidate_free_text() -> None:
+    """S12: `Step.accepts_candidate_free_text` is the completeness check that
+    stops a step being added to `spec-v2-steps.json` without one — the
+    migration's own "did every step actually get a value" test, over the
+    committed file this repo ships. `None` is a real, undeclared state, not
+    coerced to `False`; `jobsearch.profile_capture.unclassified_free_text_steps`
+    is the same check as a reusable gate metric, exercised more thoroughly
+    (including the failure case) in `tests/test_profile_capture.py`."""
+    steps = load_steps()
+
+    undeclared = [step.id for step in steps.steps if step.accepts_candidate_free_text is None]
+
+    assert undeclared == [], f"steps with no free-text declaration: {undeclared}"
+
+
 def test_every_step_spec_fills_the_template() -> None:
     """The brief's ten fields plus the two §10 requires every step to repeat."""
     sections = split_steps(DEFAULT_STEP_SPECS_DOC.read_text(encoding="utf-8"))

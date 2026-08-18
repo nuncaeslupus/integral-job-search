@@ -21,6 +21,18 @@ next task:
 Every step must name a gate metric. `not_implemented` is a valid state while a
 step is unbuilt; a blank metric is not, because a step with an empty metric is
 indistinguishable from a step whose gate was forgotten.
+
+**S12** moved one more judgement into this schema: `Step.accepts_candidate_free_text`
+records whether a step's protocol puts free text about the candidate in front
+of a writer at all. It used to live as a hand-maintained Python dict in
+`jobsearch.profile_capture` (`ACCEPTS_CANDIDATE_FREE_TEXT`), checked against
+this file's live step ids on every measurement so it could not silently go
+stale — now the fact is declared beside the step it describes instead of in a
+second file a step author has to remember to edit. The field is optional
+(`bool | None`, default `None`) rather than required: an undeclared step still
+loads here so S1/S2/T30/S7 — which have nothing to do with free-text capture —
+are unaffected; only `jobsearch.profile_capture`'s own gate
+(`unclassified_free_text_steps`) notices and fails on a step left undeclared.
 """
 
 from __future__ import annotations
@@ -129,6 +141,20 @@ class Step(BaseModel):
     # field is the cheapest enforcement available.
     visible_output: NonEmptyStr
     automatic: bool
+    # S12: whether this step's protocol puts free text *about the candidate*
+    # in front of a writer at all. Not derivable from `automatic` — only
+    # `understanding` is `automatic: true`, and that field answers "is a
+    # candidate present", not "does this step take free text about them"
+    # (Ranking is an ordinary, non-automatic conversation that only presents).
+    # `None` is deliberately a real state, not a default that reads as an
+    # answer: a step landing here with the declaration unset must be
+    # `None`, not silently `False`, so `jobsearch.profile_capture`'s own gate
+    # (`unclassified_free_text_steps`) can name it rather than mistake "not
+    # yet decided" for "decided no". Optional rather than required so an
+    # undeclared step still loads here (and every gate that has nothing to do
+    # with free-text capture — S1, S2, T30, S7 — is unaffected); only the
+    # capture gate that actually cares about this field fails on it.
+    accepts_candidate_free_text: bool | None = None
     gate: Gate
     reentry_events: list[str]
     # §3.1's declarations, moved out of the prose code block so the graph can be
