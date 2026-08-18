@@ -5,13 +5,13 @@
     "constraints",
     "history",
     "identify",
+    "intake",
     "sourcing",
     "traits"
   ],
   "not_implemented": [
     "application",
     "feedback",
-    "intake",
     "interview_log",
     "preferences",
     "ranking",

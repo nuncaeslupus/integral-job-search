@@ -189,7 +189,7 @@ leave it here?"* Writes `last_activity`.
 **Gate.** `intake_field_provenance == 1.0` — every field in `master.json` names
 where it came from: a document span, or the turn in which it was said. A field
 with no provenance is a field the tool invented. Owner: S4. State:
-`not_implemented`.
+`implemented`.
 
 **Resume.** `position` records which roles are covered and which the candidate
 mentioned but has not described. An interrupted Intake resumes at the next

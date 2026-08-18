@@ -1,0 +1,30 @@
+{
+  "intake_field_provenance": 1.0,
+  "fields_measured": 7,
+  "document_import": {
+    "coverage": 1.0,
+    "fields_measured": 4,
+    "violations": [],
+    "import_result": {
+      "status": "imported",
+      "blocks_added": 3
+    },
+    "pdf_without_extras": {
+      "status": "unavailable"
+    }
+  },
+  "build_from_nothing": {
+    "coverage": 1.0,
+    "fields_measured": 3,
+    "violations": []
+  },
+  "deliberate_break_demonstration": {
+    "coverage_before_break": 1.0,
+    "coverage_after_break": 0.6666666666666666,
+    "violations_after_break": [
+      "experience[0]: no provenance recorded"
+    ]
+  },
+  "checks_run": 17,
+  "failures": []
+}
