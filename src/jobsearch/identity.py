@@ -1,0 +1,727 @@
+"""Identity: the per-user tree, handle resolution, and the leak guard (S3).
+
+Process specification §6 says no path under `profiles/` is read or written
+before a handle is resolved, and §6.1 gives the resolution order. This module
+is the mechanical half of that sentence. Three things live here, and each one
+exists because the prose version of it is unenforceable:
+
+* **`ProfileStore`** — every store operation goes through one object that was
+  constructed with a handle, and it resolves every path beneath that handle's
+  tree. There is no function here that takes a bare path, so "read the wrong
+  person's evidence" is not an operation a caller can express by accident. A
+  path that escapes the tree raises `ProfileLeak` rather than returning
+  something plausible.
+* **`resolve_handle`** — the four-step order of §6.1 as a pure function that
+  returns *what to do next*, never a handle it picked on the candidate's
+  behalf. Case 2 (exactly one profile) returns `confirm`, not that profile:
+  silently assuming the only profile is how one person's evidence ends up in
+  another person's history, and because the log is append-only that is a mess
+  to unpick rather than a mistake to undo.
+* **`guard_decision`** — the rule the `PreToolUse` hook applies, kept here as a
+  tested function rather than in the hook script, so the thing that can refuse
+  a tool call is covered by the same suite as everything else.
+
+The gate is `cross_user_leaks == 0` (§6.1), and it is measured rather than
+asserted: `probe_leaks` builds a two-profile tree and points each profile's
+operations at the other's files, counting the ones that were *not* refused.
+A run that measures nothing is a failure, not a pass over an empty set.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+import unicodedata
+from collections.abc import Iterator
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from jobsearch.corpus import LANGUAGES
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_PROFILES_ROOT = _REPO_ROOT / "profiles"
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "S3.json"
+
+# Directory-safe and stable: lowercase ASCII, digits and single hyphens. The
+# handle is a directory name on three operating systems and a key in every
+# derived file, so it is deliberately narrower than what a person might type —
+# `derive_handle` does the narrowing, and the candidate is shown the result.
+HANDLE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$")
+Handle = str
+
+# Names that would collide with the roster level of the tree or with a shell's
+# idea of a relative path. `profiles/.active.json` lives at the roster level, so
+# a handle may not begin with a dot either.
+_RESERVED_HANDLES = frozenset({"active", "identity", "all", "new", "none", "shared"})
+
+Language = Literal["en", "es", "ca"]
+
+# The file at the roster level that records who this session identified. It is
+# not inside any handle's tree, because reading it is what tells the guard which
+# tree is allowed — a chicken-and-egg the tree layout would otherwise create.
+ACTIVE_FILE = ".active.json"
+
+# Read freely at the roster level so §6.1 case 3 can list display names before a
+# handle exists. Nothing else under a handle is readable pre-identification.
+ROSTER_FILE = "identity.json"
+
+
+class IdentityError(Exception):
+    """Identification could not be completed, or a profile is malformed."""
+
+
+class ProfileLeak(Exception):
+    """An operation tried to resolve a path outside its own profile's tree.
+
+    Raised, never returned: a leak that a caller can ignore is a leak. It is
+    also what `probe_leaks` counts, so the gate and the runtime failure mode
+    are the same event.
+    """
+
+
+class Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class Identity(Strict):
+    """`profiles/<handle>/identity.json` — process spec §6.
+
+    The display name is what the candidate gave; the handle is derived from it
+    and is the only thing that ever appears in a path. A full legal name is not
+    required and is never asked for as an opening (§6.1).
+    """
+
+    handle: str = Field(pattern=HANDLE.pattern, min_length=1, max_length=32)
+    display_name: str = Field(min_length=1, max_length=200)
+    language: Language
+    locale: str = Field(pattern=r"^[a-z]{2}(?:-[A-Z]{2})?$")
+    created_at: str
+
+    def summary(self) -> str:
+        """How the tool refers to this person out loud."""
+        return f"{self.display_name} ({self.handle})"
+
+
+# ---------------------------------------------------------------------------
+# handles
+
+
+def derive_handle(display_name: str) -> Handle:
+    """Turn what a person typed into a directory-safe handle.
+
+    Accents are folded rather than stripped to nothing, because "Núria" and
+    "Nuria" are the same person's answer to the same question and the second
+    should not silently become a different profile from the first.
+    """
+    folded = unicodedata.normalize("NFKD", display_name.strip().lower())
+    ascii_only = "".join(ch for ch in folded if not unicodedata.combining(ch))
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_only).strip("-")[:32].strip("-")
+    if not slug or not HANDLE.match(slug) or slug in _RESERVED_HANDLES:
+        raise IdentityError(
+            f"cannot derive a handle from {display_name!r} — ask for something to use instead"
+        )
+    return slug
+
+
+def _validate_handle(handle: str) -> Handle:
+    if not HANDLE.match(handle) or handle in _RESERVED_HANDLES:
+        raise IdentityError(f"not a usable handle: {handle!r}")
+    return handle
+
+
+# ---------------------------------------------------------------------------
+# the store
+
+
+class ProfileStore:
+    """Every read and write under one candidate's tree, and nothing else.
+
+    Constructed with a handle, so a caller that has not identified anybody has
+    no object to call. `path` is the single choke point: it resolves each
+    component beneath `<root>/<handle>/` and raises `ProfileLeak` for anything
+    that lands outside — an absolute component, a `..` climb, or a symlink that
+    points away.
+    """
+
+    def __init__(self, root: Path, handle: Handle) -> None:
+        self.root = Path(root)
+        self.handle = _validate_handle(handle)
+        self.home = (self.root / self.handle).resolve(strict=False)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"ProfileStore(root={self.root!s}, handle={self.handle!r})"
+
+    def path(self, *parts: str) -> Path:
+        """Resolve `parts` beneath this profile's tree, or refuse.
+
+        `Path.resolve` follows symlinks, so a link planted inside one tree that
+        points at another's `evidence.jsonl` is caught here too — which is the
+        realistic version of the attack, since the trees sit side by side under
+        one directory the candidate can write to.
+        """
+        if not parts:
+            return self.home
+        for part in parts:
+            if Path(part).is_absolute():
+                raise ProfileLeak(f"absolute path in a store operation: {part!r}")
+        candidate = self.home.joinpath(*parts).resolve(strict=False)
+        if candidate != self.home and self.home not in candidate.parents:
+            raise ProfileLeak(f"{candidate} is outside the tree of {self.handle!r}")
+        return candidate
+
+    # -- reads ------------------------------------------------------------
+
+    def exists(self, *parts: str) -> bool:
+        return self.path(*parts).exists()
+
+    def read_text(self, *parts: str) -> str:
+        target = self.path(*parts)
+        try:
+            return target.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise IdentityError(f"{'/'.join(parts)} does not exist for {self.handle!r}") from exc
+
+    def read_json(self, *parts: str) -> Any:
+        """Malformed JSON is an `IdentityError`, not a `JSONDecodeError`.
+
+        Callers that step around a broken profile — `list_identities` is the
+        one that matters — catch this module's errors. A decoder exception
+        escaping through them turns "skip the half-written profile" into a
+        crash at the roster level, which is the tool's opening move.
+        """
+        raw = self.read_text(*parts)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise IdentityError(f"{self.handle}/{'/'.join(parts)} is not JSON: {exc}") from exc
+
+    def read_jsonl(self, *parts: str) -> Iterator[Any]:
+        for number, line in enumerate(self.read_text(*parts).splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise IdentityError(f"{'/'.join(parts)}:{number} is not JSON: {exc}") from exc
+
+    # -- writes -----------------------------------------------------------
+
+    def write_text(self, content: str, *parts: str) -> Path:
+        target = self.path(*parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+        return target
+
+    def write_json(self, payload: Any, *parts: str) -> Path:
+        return self.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", *parts
+        )
+
+    def append_jsonl(self, row: Any, *parts: str) -> Path:
+        target = self.path(*parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+        return target
+
+    # -- identity ---------------------------------------------------------
+
+    def identity(self) -> Identity:
+        try:
+            return Identity.model_validate(self.read_json(ROSTER_FILE))
+        except ValidationError as exc:
+            raise IdentityError(f"{self.handle}/{ROSTER_FILE} is malformed: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# the roster and the four-step resolution
+
+
+def list_identities(root: Path) -> list[Identity]:
+    """Every profile that exists, in handle order.
+
+    A directory without a readable `identity.json` is skipped rather than
+    guessed at: the roster is what the tool reads names out of, and a half
+    written profile has no name to read.
+    """
+    root = Path(root)
+    if not root.is_dir():
+        return []
+    found: list[Identity] = []
+    for child in sorted(root.iterdir()):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        try:
+            found.append(ProfileStore(root, child.name).identity())
+        except (IdentityError, ProfileLeak):
+            continue
+    return found
+
+
+Outcome = Literal["resolved", "confirm", "choose", "create"]
+
+
+@dataclass(frozen=True)
+class Resolution:
+    """What §6.1 says to do next — never a handle chosen on the candidate's behalf.
+
+    `handle` is set only for `resolved`. For `confirm` it is `candidate`: the
+    profile to *offer*, which the caller must have confirmed before it builds a
+    store. Keeping them in different fields is the whole point — a caller
+    cannot read a suggestion as a decision.
+    """
+
+    outcome: Outcome
+    reason: str
+    handle: Handle | None = None
+    candidate: Identity | None = None
+    choices: tuple[Identity, ...] = ()
+
+    @property
+    def is_resolved(self) -> bool:
+        return self.outcome == "resolved"
+
+    def store(self, root: Path) -> ProfileStore:
+        """The store for a resolved handle; anything else refuses."""
+        if self.outcome != "resolved" or self.handle is None:
+            raise IdentityError(
+                f"no handle is resolved yet ({self.outcome}: {self.reason}) — "
+                "nothing under profiles/ may be read or written"
+            )
+        return ProfileStore(root, self.handle)
+
+
+def resolve_handle(
+    root: Path,
+    *,
+    named: str | None = None,
+    confirmed: bool = False,
+) -> Resolution:
+    """The §6.1 resolution order, as far as it can go without asking.
+
+    1. the candidate names themselves, or a handle is supplied explicitly;
+    2. exactly one profile exists → name it and ask for confirmation;
+    3. otherwise ask who this is, listing the display names it has;
+    4. no match → offer to create a profile, which is an explicit act.
+
+    `confirmed=True` is the caller reporting that the human answered yes to the
+    offer this function made last time. It is the only way case 2 becomes a
+    resolution, which is what makes case 2 a confirmation rather than a default.
+    """
+    identities = list_identities(root)
+
+    if named:
+        wanted = named.strip()
+        matches = [
+            identity
+            for identity in identities
+            if identity.handle == wanted or identity.display_name.casefold() == wanted.casefold()
+        ]
+        if len(matches) == 1:
+            return Resolution(
+                outcome="resolved",
+                reason=f"named {wanted!r}",
+                handle=matches[0].handle,
+                candidate=matches[0],
+            )
+        if len(matches) > 1:
+            # Two people who answer to the same display name. §6.1: ask for
+            # something to tell them apart rather than inventing a suffix.
+            return Resolution(
+                outcome="choose",
+                reason=f"{len(matches)} profiles answer to {wanted!r}",
+                choices=tuple(matches),
+            )
+        return Resolution(
+            outcome="create",
+            reason=f"no profile matches {wanted!r}",
+            choices=tuple(identities),
+        )
+
+    if len(identities) == 1:
+        only = identities[0]
+        if confirmed:
+            return Resolution(
+                outcome="resolved",
+                reason=f"confirmed {only.summary()}",
+                handle=only.handle,
+                candidate=only,
+            )
+        return Resolution(
+            outcome="confirm",
+            reason=f"one profile exists — offer {only.summary()} and wait for a yes",
+            candidate=only,
+        )
+
+    if identities:
+        return Resolution(
+            outcome="choose",
+            reason=f"{len(identities)} profiles exist — ask which one this is",
+            choices=tuple(identities),
+        )
+
+    return Resolution(outcome="create", reason="no profile exists yet")
+
+
+def create_profile(
+    root: Path,
+    display_name: str,
+    *,
+    language: Language = "es",
+    locale: str | None = None,
+    handle: str | None = None,
+    now: datetime | None = None,
+) -> Identity:
+    """Create a profile — always an explicit act (§6.1 case 4).
+
+    A handle that already exists is refused rather than suffixed: two people
+    who would collide are asked for something to tell them apart, and a
+    `-2` invented here is a name nobody chose and nobody recognises.
+    """
+    chosen = _validate_handle(handle) if handle else derive_handle(display_name)
+    root = Path(root)
+    if (root / chosen).exists():
+        raise IdentityError(
+            f"a profile named {chosen!r} already exists — "
+            "ask for something to tell the two apart"
+        )
+    if language not in LANGUAGES:
+        raise IdentityError(f"unsupported language {language!r}; known: {', '.join(LANGUAGES)}")
+    stamp = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
+    identity = Identity(
+        handle=chosen,
+        display_name=display_name.strip(),
+        language=language,
+        locale=locale or language,
+        created_at=stamp,
+    )
+    store = ProfileStore(root, chosen)
+    store.write_json(identity.model_dump(), ROSTER_FILE)
+    return identity
+
+
+def read_active_handle(root: Path) -> Handle | None:
+    """Who this session identified, or `None` — which means *nothing may be read*."""
+    marker = Path(root) / ACTIVE_FILE
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    handle = payload.get("handle") if isinstance(payload, dict) else None
+    if not isinstance(handle, str) or not HANDLE.match(handle):
+        return None
+    return handle
+
+
+def write_active_handle(root: Path, handle: Handle, *, now: datetime | None = None) -> Path:
+    """Record the resolved handle for this session at the roster level."""
+    _validate_handle(handle)
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    marker = root / ACTIVE_FILE
+    stamp = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
+    marker.write_text(
+        json.dumps({"handle": handle, "identified_at": stamp}, indent=2) + "\n", encoding="utf-8"
+    )
+    return marker
+
+
+# ---------------------------------------------------------------------------
+# the PreToolUse guard
+
+
+@dataclass(frozen=True)
+class Decision:
+    """The guard's answer about one path."""
+
+    allowed: bool
+    reason: str
+
+
+def guard_decision(target: Path | str, *, root: Path, active: Handle | None) -> Decision:
+    """May this path be touched, given who the session identified?
+
+    The rules, in the order they are applied:
+
+    1. outside `profiles/` — not this guard's business;
+    2. the roster level itself (`profiles/`, `profiles/.active.json`) — allowed,
+       because resolution happens before a handle exists;
+    3. `profiles/<h>/identity.json` — allowed for every `h`, because §6.1 case 3
+       lists the display names it has, and that is where they are;
+    4. anything else under a handle with no handle identified — refused, which
+       is §6's "before reading, not merely before writing";
+    5. under the identified handle — allowed;
+    6. under another handle — refused.
+
+    Rule 3 is the one that keeps `test_correct_operation_never_trips_the_hook`
+    honest: without it the tool cannot perform its own opening move.
+    """
+    root = Path(root).resolve(strict=False)
+    candidate = Path(target)
+    if not candidate.is_absolute():
+        candidate = (root.parent / candidate).resolve(strict=False)
+    else:
+        candidate = candidate.resolve(strict=False)
+
+    if candidate != root and root not in candidate.parents:
+        return Decision(True, "outside the profile tree")
+
+    relative = candidate.relative_to(root) if candidate != root else Path()
+    parts = relative.parts
+    if len(parts) <= 1:
+        return Decision(True, "the roster level, which resolution has to read")
+
+    handle = parts[0]
+    if parts[1:] == (ROSTER_FILE,):
+        return Decision(True, "identity.json is the roster resolution reads names from")
+    if active is None:
+        return Decision(
+            False, "no candidate is identified yet; §6.1 — identification precedes reads"
+        )
+    if handle == active:
+        return Decision(True, f"inside the tree of {active!r}")
+    return Decision(False, f"{relative} belongs to {handle!r}, not to {active!r}")
+
+
+# Any `profiles/<something>/…` mention inside a shell command. Bash is not
+# parsed — a heuristic is the honest ceiling here — but a command that names
+# another handle's directory is caught, and that is the shape the mistake takes.
+_BASH_PROFILE_PATH = re.compile(r"(?<![\w/.-])((?:[\w./-]*/)?profiles/[\w.-]+(?:/[\w.-]+)*)")
+
+
+def paths_in_tool_call(tool_name: str, tool_input: dict[str, Any]) -> list[str]:
+    """Which paths a `PreToolUse` payload is about.
+
+    File tools name their path in a field. `Bash` does not, so its command
+    string is scanned for anything that looks like a path under `profiles/`;
+    everything else in the command is left alone, so an unrelated command
+    yields no paths and is never refused.
+    """
+    if tool_name == "Bash":
+        command = tool_input.get("command")
+        if not isinstance(command, str):
+            return []
+        return [match.group(1) for match in _BASH_PROFILE_PATH.finditer(command)]
+    found: list[str] = []
+    for key in ("file_path", "path", "notebook_path"):
+        value = tool_input.get(key)
+        if isinstance(value, str) and value:
+            found.append(value)
+    return found
+
+
+def guard_tool_call(
+    tool_name: str,
+    tool_input: dict[str, Any],
+    *,
+    root: Path,
+    active: Handle | None,
+) -> Decision:
+    """The guard over a whole `PreToolUse` payload: refused if any path is."""
+    for raw in paths_in_tool_call(tool_name, tool_input):
+        decision = guard_decision(raw, root=root, active=active)
+        if not decision.allowed:
+            return Decision(False, f"{raw}: {decision.reason}")
+    return Decision(True, "no path under profiles/ that belongs to somebody else")
+
+
+def hook_main(stdin_text: str, *, root: Path | None = None) -> tuple[int, str]:
+    """The `PreToolUse` hook body: JSON in, (exit code, message) out.
+
+    Exit 2 is Claude Code's "block this call and tell the model why"; 0 lets it
+    through. A payload this hook cannot parse lets the call through — a guard
+    that fails closed on its own bug would make the tool unusable, and the
+    store-side `ProfileLeak` is the real enforcement.
+    """
+    profiles_root = Path(root) if root is not None else DEFAULT_PROFILES_ROOT
+    try:
+        payload = json.loads(stdin_text)
+    except json.JSONDecodeError as exc:
+        return 0, f"profile guard: unreadable hook payload ({exc})"
+    if not isinstance(payload, dict):
+        return 0, "profile guard: hook payload is not an object"
+    tool_name = payload.get("tool_name")
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_name, str) or not isinstance(tool_input, dict):
+        return 0, "profile guard: hook payload names no tool"
+    decision = guard_tool_call(
+        tool_name,
+        tool_input,
+        root=profiles_root,
+        active=read_active_handle(profiles_root),
+    )
+    if decision.allowed:
+        return 0, ""
+    return 2, f"profile guard refused this call — {decision.reason}"
+
+
+# ---------------------------------------------------------------------------
+# the gate
+
+
+@dataclass(frozen=True)
+class ProbeReport:
+    """What the gate measured: how many probes ran, and which ones got through."""
+
+    probes_run: int
+    leaks: tuple[str, ...]
+
+
+def probe_leaks(root: Path) -> ProbeReport:
+    """Point each profile's operations at the other's tree and count what got through.
+
+    This is the gate's measurement, and it is deliberately adversarial: the
+    probes are the mistakes a caller actually makes — a relative climb, an
+    absolute path, a symlink planted between the trees, a handle that was never
+    identified. Every one must raise; a probe that returns a value is a leak,
+    named in the returned list.
+    """
+    root = Path(root)
+    first = create_profile(root, "Probe One", handle="probe-one")
+    second = create_profile(root, "Probe Two", handle="probe-two")
+    store = ProfileStore(root, first.handle)
+    other = ProfileStore(root, second.handle)
+    other.write_text("second's secret\n", "profile", "evidence.jsonl")
+
+    leaks: list[str] = []
+    probes = 0
+
+    def must_refuse(label: str, operation: Any) -> None:
+        nonlocal probes
+        probes += 1
+        try:
+            operation()
+        except (ProfileLeak, IdentityError, OSError):
+            return
+        leaks.append(label)
+
+    def must_be_refused_by_the_guard(label: str, decision: Decision) -> None:
+        nonlocal probes
+        probes += 1
+        if decision.allowed:
+            leaks.append(label)
+
+    must_refuse(
+        "relative climb into the other tree",
+        lambda: store.read_text("..", second.handle, "profile", "evidence.jsonl"),
+    )
+    must_refuse(
+        "absolute path into the other tree",
+        lambda: store.read_text(str(other.path("profile", "evidence.jsonl"))),
+    )
+    must_refuse(
+        "write through a relative climb",
+        lambda: store.write_text("x", "..", second.handle, "profile", "planted.jsonl"),
+    )
+    must_refuse(
+        "append through a relative climb",
+        lambda: store.append_jsonl({"x": 1}, "..", second.handle, "profile", "evidence.jsonl"),
+    )
+    must_refuse("climb clean out of profiles/", lambda: store.read_text("..", "..", "README.md"))
+
+    link = root / first.handle / "borrowed"
+    try:
+        link.symlink_to(root / second.handle)
+    except (OSError, NotImplementedError):  # pragma: no cover - platform dependent
+        link = None  # type: ignore[assignment]
+    if link is not None:
+        must_refuse(
+            "symlink pointing at the other tree",
+            lambda: store.read_text("borrowed", "profile", "evidence.jsonl"),
+        )
+
+    # And the guard the hook applies, over the same shapes.
+    must_be_refused_by_the_guard(
+        "guard allowed a read with nobody identified",
+        guard_decision(
+            root / second.handle / "profile" / "evidence.jsonl", root=root, active=None
+        ),
+    )
+    must_be_refused_by_the_guard(
+        "guard allowed a read under another handle",
+        guard_decision(
+            root / second.handle / "profile" / "evidence.jsonl", root=root, active=first.handle
+        ),
+    )
+    must_be_refused_by_the_guard(
+        "guard allowed a shell command naming another handle's tree",
+        guard_tool_call(
+            "Bash",
+            {"command": f"cat profiles/{second.handle}/profile/evidence.jsonl"},
+            root=root,
+            active=first.handle,
+        ),
+    )
+
+    return ProbeReport(probes_run=probes, leaks=tuple(leaks))
+
+
+# Below this, a run has skipped so much that its zero means nothing. The symlink
+# probe is the only one that may not run (a platform without symlinks), so the
+# floor is every other probe.
+MINIMUM_PROBES = 8
+
+
+def write_evidence(
+    evidence: Path = DEFAULT_EVIDENCE_PATH, *, workspace: Path | None = None
+) -> dict[str, Any]:
+    """Measure `cross_user_leaks` in a throwaway two-profile tree and record it.
+
+    The measurement never runs against `profiles/` itself: the probes create
+    profiles and plant a symlink, and doing that to a real candidate's tree to
+    produce a number would be its own kind of leak.
+    """
+    import tempfile
+
+    if workspace is not None:
+        report = probe_leaks(Path(workspace))
+    else:
+        with tempfile.TemporaryDirectory(prefix="jobsearch-s3-") as tmp:
+            report = probe_leaks(Path(tmp) / "profiles")
+    measured: dict[str, Any] = {
+        "cross_user_leaks": len(report.leaks),
+        "probes_run": report.probes_run,
+        "leaks": list(report.leaks),
+    }
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _main(argv: list[str]) -> int:
+    """Two entry points, one module.
+
+        python -m jobsearch.identity            → measure S3's gate, write evidence
+        python -m jobsearch.identity --hook     → the PreToolUse guard, JSON on stdin
+    """
+    if "--hook" in argv[1:]:
+        code, message = hook_main(sys.stdin.read())
+        if message:
+            print(message, file=sys.stderr)
+        return code
+
+    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+    target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
+    measured = write_evidence(target)
+    print(json.dumps(measured, ensure_ascii=False))
+    if measured["probes_run"] < MINIMUM_PROBES:
+        # A pass over nothing is not a pass: zero leaks out of zero attempts is
+        # exactly what a broken probe suite reports.
+        print(
+            f"only {measured['probes_run']} probes ran (floor {MINIMUM_PROBES}) — "
+            "nothing was measured",
+            file=sys.stderr,
+        )
+        return 3
+    for leak in measured["leaks"]:
+        print(f"cross-user leak: {leak}", file=sys.stderr)
+    return 1 if measured["leaks"] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main(sys.argv))

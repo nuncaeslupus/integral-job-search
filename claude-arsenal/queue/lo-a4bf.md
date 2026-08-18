@@ -9,7 +9,8 @@ key: cross_user_leaks
 ```
 
 ```bash
-echo "no gate command defined for S3 — replace this line with the command that writes status/evidence/S3.json" >&2; exit 1
+uv run --extra dev pytest tests/test_identity.py -q
+uv run --extra dev python -m jobsearch.identity status/evidence/S3.json
 ```
 
 ## What this is
