@@ -8,6 +8,9 @@ import sys
 from pathlib import Path
 
 CLAUDE_MD_MARKER = "<!-- claude-arsenal: auto-managed -->"
+CLAUDE_MD_END_MARKER = "<!-- /claude-arsenal: auto-managed -->"
+# How the block ended before it had a closing marker.
+LEGACY_BLOCK_TAIL = "@claude-arsenal/AGENTS.md"
 
 CLAUDE_MD_BLOCK = """\
 <!-- claude-arsenal: auto-managed -->
@@ -15,16 +18,42 @@ CLAUDE_MD_BLOCK = """\
 
 Every session, without waiting to be asked:
 
-1. Read `claude-arsenal/project/overview.md` (project + workspace index).
-2. Read `claude-arsenal/session/handover.md` for last session activity.
-3. Run `claude-arsenal/bin/queue_eval.sh`.
-   - **Tasks available** → start worker loop (see `@claude-arsenal/AGENTS.md`).
-   - **Queue empty + workspace plans exist** → seed from each workspace's plan, then workers.
-   - **Queue empty + `status/plan.md` exists** → seed from it, then workers.
-   - **Nothing** → ask what to work on.
-4. After any session with tasks: update workspace handover + global session handover.
+1. Read `arsenal/session/handover.md` for the previous session's context.
+2. List the repository's issues labelled `arsenal:task` — **open and closed** — and
+   save the JSON. Use whatever GitHub access this surface has; run
+   `claude-arsenal/bin/github_channel.sh --detect` to find out which.
+3. Run `python3 claude-arsenal/scripts/query_status.py --issues <that file>` for the
+   board, and report anything it flags.
+4. Pick up work: `python3 claude-arsenal/scripts/task_select.py --issues <that file>`
+   returns the next unblocked task, then
+   `bash claude-arsenal/bin/claim_task.sh <id>` takes it (see `@claude-arsenal/AGENTS.md`).
+   - **Nothing returned + workspace plans exist** → seed tasks from each plan.
+   - **Nothing at all** → ask what to work on.
+5. Open each task's PR with `Closes #<issue>` so merging it closes the task by itself.
+6. After any session with tasks: update `arsenal/session/handover.md`.
 
-@claude-arsenal/AGENTS.md"""
+@claude-arsenal/AGENTS.md
+<!-- /claude-arsenal: auto-managed -->"""
+
+_CONFIG_TEMPLATE = """\
+# claude-arsenal host configuration — yours; upstream never rewrites this file.
+
+# How far must a task PR get before it may be merged?
+#   always | after-ci | after-ci-and-review | never
+merge-policy = "after-ci"
+
+# test-first writes a failing test before the change; test-after writes tests
+# alongside it.
+test-discipline = "test-first"
+
+# What /session-end leaves behind: handoff | ticket | none
+session-end = "handoff"
+
+# The skills-listing character budget the auditor enforces. Raise it if your
+# surface's real budget differs, rather than deleting skills to fit a number
+# that is not yours.
+listing-budget = 8000
+"""
 
 DEFAULT_SURFACE_PROFILE = {
     "surface": "unknown",
@@ -72,9 +101,10 @@ WORKSPACE_HANDOVER_STUB = """\
 ## How to continue
 
 1. Read `claude-arsenal/AGENTS.md` for the worker loop algorithm.
-2. Run `claude-arsenal/bin/queue_eval.sh` to get the next unblocked task.
-3. If the last task is still `in_progress` with no active assignee, run:
-   `claude-arsenal/bin/release.sh <task_id> open` to requeue it first.
+2. Fetch the `arsenal:task` issues, then run
+   `claude-arsenal/scripts/task_select.py --issues <file>` for the next task.
+3. Claim it with `claude-arsenal/bin/claim_task.sh <task_id>`; `lost` means
+   another session has it, so take the next one.
 """
 
 OVERVIEW_HEADER = """\
@@ -116,12 +146,12 @@ def _has_shebang(path: Path) -> bool:
 
 # Host-owned bundle paths the init only SCAFFOLDS: a template is written once
 # when absent, but NEVER overwritten on re-run — these hold live host data
-# (AGENTS.md marks session/, project/, and queue/ "host-owned; never touched by
-# /init re-run"). Clobbering them wipes the consumer's handover / plans / queue
-# on every `init --silent` at session start. Only session/ ships a template
-# today; project/ and queue/ are listed defensively so a future bundle file
-# under them can't introduce the same data loss.
-_SCAFFOLD_ONCE = ("session/", "project/", "queue/")
+# (AGENTS.md marks session/ and project/ "host-owned; never touched by /init
+# re-run"). Clobbering them wipes the consumer's handover and plans on every
+# `init --silent` at session start. Only session/ ships a template today;
+# project/ is listed defensively so a future bundle file under it can't
+# introduce the same data loss.
+_SCAFFOLD_ONCE = ("session/", "project/")
 
 
 def _refresh_bundle(bundle: Path, target: Path, silent: bool = False) -> None:
@@ -152,6 +182,34 @@ def _refresh_bundle(bundle: Path, target: Path, silent: bool = False) -> None:
             if _has_shebang(src):
                 dst.chmod(dst.stat().st_mode | 0o111)
             print(f"  refreshed:  {rel}")
+    _prune_bundle(bundle, target)
+
+
+# Directories the bundle owns outright: everything in them comes from upstream,
+# so a file there that upstream no longer ships is a leftover, not host data.
+_PRUNABLE_DIRS = ("bin", "scripts")
+
+
+def _prune_bundle(bundle: Path, target: Path) -> None:
+    """Delete installed bundle files upstream no longer ships.
+
+    Refreshing by checksum updates and adds, but never removed — so an upgrade
+    left every retired script sitting in the bundle, still executable. Those are
+    not inert leftovers: they are the previous architecture, and a session that
+    finds `claim.sh` can still run it against a queue that is no longer the
+    board. Only the two upstream-owned directories are swept; host trees are
+    never touched.
+    """
+    for dirname in _PRUNABLE_DIRS:
+        src_dir, dst_dir = bundle / dirname, target / dirname
+        if not dst_dir.is_dir():
+            continue
+        shipped = {p.name for p in src_dir.iterdir() if p.is_file()} if src_dir.is_dir() else set()
+        for installed in sorted(dst_dir.iterdir()):
+            if not installed.is_file() or installed.name in shipped:
+                continue
+            installed.unlink()
+            print(f"  removed (no longer shipped): {dirname}/{installed.name}")
 
 
 def _check_bundle_version(bundle: Path, arsenal: Path) -> None:
@@ -213,23 +271,64 @@ def _add_gitignore_entry(repo_path: Path, entry: str) -> None:
     print(f"  .gitignore: added {entry}")
 
 
+def _replace_managed_block(content: str) -> str | None:
+    """Return content with the managed block replaced, or None if there is none.
+
+    The block is delimited by the two markers. Repos installed before the end
+    marker existed have only the opening one, and their block runs to the
+    `@claude-arsenal/AGENTS.md` import that terminates the template — match that
+    so an upgrade repairs them too, instead of skipping the one file that tells
+    every session what to do.
+    """
+    start = content.find(CLAUDE_MD_MARKER)
+    if start == -1:
+        return None
+    end = content.find(CLAUDE_MD_END_MARKER, start)
+    if end != -1:
+        end += len(CLAUDE_MD_END_MARKER)
+    else:
+        legacy = content.find(LEGACY_BLOCK_TAIL, start)
+        if legacy == -1:
+            # An opening marker with no recognisable end: replacing to the end of
+            # the file would eat host-owned content, so leave it and say so.
+            return ""
+        end = legacy + len(LEGACY_BLOCK_TAIL)
+    return content[:start] + CLAUDE_MD_BLOCK + content[end:]
+
+
 def _inject_claude_md(repo_path: Path) -> None:
     claude_md = repo_path / "CLAUDE.md"
-    if claude_md.exists():
-        content = claude_md.read_text(encoding="utf-8")
-        if CLAUDE_MD_MARKER in content:
-            print("  CLAUDE.md: session-protocol block already present — skipping")
-            return
-        new_content = content.rstrip("\n") + f"\n\n{CLAUDE_MD_BLOCK}\n"
-        claude_md.write_text(new_content, encoding="utf-8")
-        print("  CLAUDE.md: injected session-protocol block")
-    else:
+    if not claude_md.exists():
         claude_md.write_text(f"{CLAUDE_MD_BLOCK}\n", encoding="utf-8")
         print("  CLAUDE.md: created with session-protocol block")
+        return
+
+    content = claude_md.read_text(encoding="utf-8")
+    if CLAUDE_MD_MARKER not in content:
+        claude_md.write_text(content.rstrip("\n") + f"\n\n{CLAUDE_MD_BLOCK}\n", encoding="utf-8")
+        print("  CLAUDE.md: injected session-protocol block")
+        return
+
+    # The block is labelled auto-managed, so manage it. It was previously written
+    # once and never touched again, which meant an upgrade that rewrote the
+    # protocol left every consumer running the old one — naming paths that had
+    # moved and scripts that had been deleted.
+    replaced = _replace_managed_block(content)
+    if replaced == "":
+        print(
+            "  CLAUDE.md: managed block has no end marker and no recognisable tail — "
+            "left alone; review it against the current protocol"
+        )
+        return
+    if replaced is None or replaced.rstrip("\n") == content.rstrip("\n"):
+        print("  CLAUDE.md: session-protocol block up to date")
+        return
+    claude_md.write_text(replaced.rstrip("\n") + "\n", encoding="utf-8")
+    print("  CLAUDE.md: session-protocol block refreshed (was out of date)")
 
 
 def _upsert_overview(repo_path: Path, workspace: str, root: str, spec: str, plan: str) -> None:
-    overview = repo_path / "claude-arsenal" / "project" / "overview.md"
+    overview = repo_path / "arsenal" / "project" / "overview.md"
     if not overview.exists():
         overview.write_text(OVERVIEW_HEADER, encoding="utf-8")
     content = overview.read_text(encoding="utf-8")
@@ -269,23 +368,31 @@ def init_base(
     # Version check — prints upgrade banner when behind the plugin source
     _check_bundle_version(bundle, arsenal)
 
-    # Scaffold directories
-    for d in ["bin", "project", "queue", "session", "agents"]:
+    # Scaffold directories. `claude-arsenal/` is upstream's and may be
+    # overwritten freely; `arsenal/` is the host's and is created once, never
+    # written again by an upgrade — that separation is what lets a consumer
+    # vendor the bundle without an update ever touching their tasks or config.
+    for d in ["bin", "scripts", "agents"]:
         (arsenal / d).mkdir(parents=True, exist_ok=True)
+    home = repo_path / "arsenal"
+    for d in ["tasks", "specs", "plans", "project", "session"]:
+        (home / d).mkdir(parents=True, exist_ok=True)
 
     # Refresh bundle files
     if not silent:
         print("Refreshing bundle files:")
     _refresh_bundle(bundle, arsenal, silent=silent)
 
-    # Create empty queue
-    queue_file = arsenal / "queue" / "tasks.jsonl"
-    if not queue_file.exists():
-        queue_file.write_text("", encoding="utf-8")
-        print(f"  created: {queue_file.relative_to(repo_path)}")
+    # Host configuration. Seeded once and never rewritten, so a preference set
+    # here survives every bundle upgrade — unlike one stored in a vendored skill,
+    # which is build output and gets replaced.
+    config = home / "config.toml"
+    if not config.exists():
+        config.write_text(_CONFIG_TEMPLATE, encoding="utf-8")
+        print(f"  created: {config.relative_to(repo_path)}")
 
     # Create session handover
-    handover = arsenal / "session" / "handover.md"
+    handover = home / "session" / "handover.md"
     if not handover.exists():
         handover.write_text(
             "# Session Handover\n\n<!-- Written at session end. -->\n",
@@ -294,7 +401,7 @@ def init_base(
         print(f"  created: {handover.relative_to(repo_path)}")
 
     # Default surface profile (gitignored — overwritten by detect_surface.sh hook)
-    profile = arsenal / "session" / "surface_profile.json"
+    profile = home / "session" / "surface_profile.json"
     if not profile.exists():
         profile.write_text(
             json.dumps(DEFAULT_SURFACE_PROFILE, indent=2) + "\n", encoding="utf-8"
@@ -303,11 +410,17 @@ def init_base(
 
     # .gitignore — surface profile, the statusLine-written rate-limit snapshot,
     # and the per-session dispatch-round counter (all live, machine-local state)
-    _add_gitignore_entry(repo_path, "claude-arsenal/session/surface_profile.json")
-    _add_gitignore_entry(repo_path, "claude-arsenal/session/rate_limits.json")
-    _add_gitignore_entry(repo_path, "claude-arsenal/session/budget_iterations.json")
-    _add_gitignore_entry(repo_path, "claude-arsenal/session/worktree_isolation")
-    _add_gitignore_entry(repo_path, "claude-arsenal/session/host_branch")
+    for entry in (
+        "arsenal/session/surface_profile.json",
+        "arsenal/session/rate_limits.json",
+        "arsenal/session/budget_iterations.json",
+        "arsenal/session/worktree_isolation",
+        "arsenal/session/host_branch",
+        # Rescue metadata is machine-local too; it was previously omitted, so a
+        # forced-restore snapshot could be swept into a task commit (#140).
+        "arsenal/session/rescue_refs",
+    ):
+        _add_gitignore_entry(repo_path, entry)
 
     # statusLine command feeding budget_check.sh (token-budget stop)
     _register_statusline(repo_path)
@@ -331,7 +444,8 @@ def init_workspace(
     plan: str,
     bundle_override: Path | None = None,
 ) -> None:
-    # The workspace name becomes a directory under claude-arsenal/project/.
+    # The workspace name becomes a directory under arsenal/project/ — host-owned,
+    # so a bundle upgrade never touches a workspace's spec, plan, or context.
     # Strip Windows-style trailing dots/spaces before checking (they normalize
     # to ".." on NTFS) and retain the substring ".." guard for defence-in-depth.
     normalized = workspace.rstrip(". ")
@@ -347,7 +461,7 @@ def init_workspace(
     if not (arsenal / "bin").is_dir():
         init_base(repo_path, bundle_override)
 
-    ws_dir = arsenal / "project" / workspace
+    ws_dir = repo_path / "arsenal" / "project" / workspace
     ws_dir.mkdir(parents=True, exist_ok=True)
     print(f"Registering workspace {workspace!r}...")
 
@@ -389,8 +503,8 @@ def main() -> None:
     if args.workspace:
         name = args.workspace
         root = args.root or f"./{name}/"
-        spec = args.spec or f"claude-arsenal/project/{name}/spec.md"
-        plan = args.plan or f"claude-arsenal/project/{name}/plan.md"
+        spec = args.spec or f"arsenal/project/{name}/spec.md"
+        plan = args.plan or f"arsenal/project/{name}/plan.md"
         init_workspace(repo_path, name, root, spec, plan, bundle_override)
     else:
         init_base(repo_path, bundle_override, silent=args.silent)
