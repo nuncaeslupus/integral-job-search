@@ -20,6 +20,41 @@ Every session, without waiting to be asked:
 @claude-arsenal/AGENTS.md
 
 <!-- host-owned: not managed by claude-arsenal -->
+## Reading the board on this surface — do this instead of `--issues`
+
+Steps 3 and 4 of the protocol above pass `--issues <file>` to `query_status.py`
+and `task_select.py`. **That does not work here, and it fails silently.** Those
+scripts identify a task by an HTML-comment marker in the issue body, and the
+GitHub MCP server strips HTML from bodies before returning them, so the marker
+never arrives. `state_from_issues` matches nothing and returns an empty map for
+every issue.
+
+An empty map looks healthy: every task defaults to `open`, so selection is
+right up until the first task is finished — whose issue is closed, whose state
+is still read as `open`, and whose work is therefore handed out again.
+
+So derive the state map first, and pass it as `--state`:
+
+```bash
+# 1. fetch the issues (MCP: list_issues, labels=["arsenal:task"], open AND closed,
+#    fields number/body/state/labels) and save the JSON to $ISSUES.
+#    For each CLOSED issue also call issue_read and keep its
+#    `closed_by_pull_requests` — that is what distinguishes done from parked.
+uv run python -m jobsearch.board_state --issues "$ISSUES" > "$STATE"
+python3 claude-arsenal/scripts/task_select.py --tasks-dir arsenal/tasks --state "$STATE"
+```
+
+`jobsearch.board_state` recovers each task from the `arsenal/tasks/<id>.md` link in the
+body (ordinary markdown, unstripped), prefers the real marker wherever it
+survives, and reports rather than guesses at an issue it cannot resolve. It also
+treats a closed issue with **no closing PR** as `cancelled` rather than `done`,
+because `state_reason` is unavailable on this surface and upstream's default
+would read a deliberately parked task as finished (claude-arsenal#155).
+
+Drop this section once the marker survives the round trip — check with
+`task_select.py --issues` returning a non-empty selection and no warnings.
+
+
 ## Known environment state
 
 **GitHub Actions is out of runner minutes until the next billing period
