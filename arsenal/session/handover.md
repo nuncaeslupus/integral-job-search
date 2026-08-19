@@ -1,4 +1,4 @@
-# Session handover — 2026-08-19 (arsenal v0.26.0 → v0.29.0; D-2 done)
+# Session handover — 2026-08-19 (arsenal v0.26.0 → v0.29.1; D-2 merged)
 
 ## Read this first
 
@@ -23,18 +23,18 @@ existed to do. Verified: 27 issues, 5 tasks selected, **zero warnings**.
 | what | where |
 |------|-------|
 | PR #74 — arsenal v0.26.0 → v0.29.0, board verified, workaround deleted | **merged** as `e87c243` |
-| PR #75 — D-2 (`lo-77a6`), gold provenance | **open**, gates green locally |
-| D-2 (`lo-77a6`) | claimed (`arsenal/claims/lo-77a6`), implemented, PR #75 |
-| Bundle | **v0.29.0** — v0.29.1 is tagged upstream and **not yet pulled** |
+| PR #75 — D-2 (`lo-77a6`), gold provenance | **merged** as `1ed1cc0`; issue #45 closed by it |
+| D-2 (`lo-77a6`) | **merged** — recorded in `arsenal/tasks/_history/lo-77a6.md` |
+| Bundle | **v0.29.1** — current with the newest tag |
 
 ## Do this next
 
-1. **Pull v0.29.1.** `make arsenal-upgrade REF=v0.29.1`. It was tagged while
-   this session was running and has not been looked at.
-2. **T14 (`lo-3100`) needs an owner decision, not a worker run.** Its payload
+1. **T14 (`lo-3100`) needs an owner decision, not a worker run.** Its payload
    recommends folding it into T15 as the rules stage rather than gating it
    against a corpus that cannot support one. That is a scope call. The other
    unblocked tasks are T53 (`lo-803e`), T55 (`lo-9f72`), T9 (`lo-b422`).
+2. **The queue is clean.** `query_status --issues` reports no problems at all
+   now that D-2 has a gate; `verify-gates` asserts **52/52**.
 
 ## Three things that will bite you
 
@@ -57,17 +57,22 @@ clean. Check with:
 git log origin/main --format=%H | while read c; do git cat-file -p $c | grep git-subtree-split:; done
 ```
 
-### `claim_task.sh` cannot claim on this surface
+### Claiming needs one manual step on this surface
 
-`github_channel.sh --detect` prints `rest` on the strength of a `GET
-/rate_limit` probe, but this proxy refuses API writes, so the script exits **2**
-(`error:`) — which the protocol says to halt the loop over — instead of falling
-back to its `manual` path. Filed as **claude-arsenal#163**, still open.
+This proxy refuses GitHub API writes, so `claim_task.sh` cannot create the
+claim ref itself. Since **v0.29.1** it handles that correctly — it exits **5**
+and prints the call for you to make, rather than exiting 2 (`error:`, which the
+protocol says to halt the loop over). Verified:
 
-Claim by hand instead: the MCP `create_branch` tool with branch
-`arsenal/claims/<task-id>`, which is the same compare-and-swap the script does
-(201 = won, 422 = lost). Then label the issue `arsenal:claimed`, self-assign,
-and comment the session id.
+```
+$ bash claude-arsenal/bin/claim_task.sh lo-803e
+manual POST /repos/nuncaeslupus/job-search/git/refs {"ref":"refs/heads/arsenal/claims/lo-803e","sha":"1ed1cc0…"}
+exit=5
+```
+
+Make that call with the MCP `create_branch` tool, branch
+`arsenal/claims/<task-id>` — the same compare-and-swap (201 = won, 422 = lost).
+Then label the issue `arsenal:claimed`, self-assign, and comment the session id.
 
 ### CI cannot pass, and `merge-policy` now says what to do about it
 
@@ -109,7 +114,7 @@ anticipate — the most valuable evidence in the set read as a defect.
 |---|-------|------|
 | claude-arsenal#161 | **closed, fixed in v0.29.0** | `init.py` corrupted `CLAUDE.md` on every upgrade from a pre-0.27 install |
 | claude-arsenal#162 | **closed, fixed in v0.29.0** | `check_update.sh` conflated the subtree prefix with the bundle dir |
-| claude-arsenal#163 | open | `github_channel.sh` detects `rest` from a read-only probe, then hard-errors on writes |
+| claude-arsenal#163 | **closed, fixed in v0.29.1** | `github_channel.sh` detects `rest` from a read-only probe, then hard-errors on writes instead of falling back to `manual` |
 | claude-arsenal#166 | open | `merge-policy` has no value for "review required, CI unavailable" |
 
 ## Environment
@@ -118,6 +123,6 @@ anticipate — the most valuable evidence in the set read as a defect.
 make lint && make test && make evidence && make verify-subtree && make verify-gates
 ```
 
-Five gates, all green on `3974c13`: ruff+mypy clean over 86 files, 907 passed,
-no evidence drift, 0 diverging subtree assets, 51/51 terminal gates asserted.
-Upstream's own suite passes 15/15 against the vendored bundle.
+Five gates, all green: ruff+mypy clean over 86 files, 907 passed, no evidence
+drift, 0 diverging subtree assets, **52/52** terminal gates asserted.
+Upstream's own suite passes **16/16** against the vendored v0.29.1 bundle.
