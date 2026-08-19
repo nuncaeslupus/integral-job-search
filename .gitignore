@@ -229,6 +229,12 @@ claude-arsenal/session/host_branch
 
 claude-arsenal/session/rescue_refs
 
+# The bundle's own handover *template*. assemble-bundle re-emits it on every
+# run, and the host's real handover is arsenal/session/handover.md — so a
+# tracked copy here is a file nobody owns that dirties the tree before every
+# worker loop. verify-subtree already excludes it for the same reason.
+claude-arsenal/session/handover.md
+
 # Candidate data — the most sensitive artefact in the system (spec §2).
 # The profile store holds psychological dimensions and a story bank of
 # failures; none of it belongs in a repository that may be shared.

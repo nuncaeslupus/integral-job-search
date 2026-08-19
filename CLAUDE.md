@@ -18,42 +18,40 @@ Every session, without waiting to be asked:
 6. After any session with tasks: update `arsenal/session/handover.md`.
 
 @claude-arsenal/AGENTS.md
+<!-- /claude-arsenal: auto-managed -->
 
 <!-- host-owned: not managed by claude-arsenal -->
-## Reading the board on this surface — do this instead of `--issues`
+## Reading the board — the plain `--issues` path works again
 
-Steps 3 and 4 of the protocol above pass `--issues <file>` to `query_status.py`
-and `task_select.py`. **That does not work here, and it fails silently.** Those
-scripts identify a task by an HTML-comment marker in the issue body, and the
-GitHub MCP server strips HTML from bodies before returning them, so the marker
-never arrives. `state_from_issues` matches nothing and returns an empty map for
-every issue.
+`claude-arsenal` v0.28.0 stopped keying task identity on an HTML comment. A body
+now resolves via a visible `arsenal-task: <id>` token **or** the ordinary
+`arsenal/tasks/<id>.md` payload link, so the marker this surface's GitHub MCP
+tools strip is no longer load-bearing, and the whole local workaround
+(`jobsearch.board_state` plus `--state`) is gone with it. Verified on this
+surface: 27 issues fetched, `task_select.py --issues` returns the same five
+tasks with **zero** warnings, and `query_status.py --issues` reports one real
+problem instead of 27 spurious "no issue handle" lines.
 
-An empty map looks healthy: every task defaults to `open`, so selection is
-right up until the first task is finished — whose issue is closed, whose state
-is still read as `open`, and whose work is therefore handed out again.
-
-So derive the state map first, and pass it as `--state`:
+Steps 3 and 4 of the protocol above are therefore correct as written:
 
 ```bash
-# 1. fetch the issues (MCP: list_issues, labels=["arsenal:task"], open AND closed,
-#    fields number/body/state/labels) and save the JSON to $ISSUES.
-#    For each CLOSED issue also call issue_read and keep its
-#    `closed_by_pull_requests` — that is what distinguishes done from parked.
-uv run python -m jobsearch.board_state --issues "$ISSUES" > "$STATE"
-python3 claude-arsenal/scripts/task_select.py --tasks-dir arsenal/tasks --state "$STATE"
+# fetch with MCP list_issues, labels=["arsenal:task"], open AND closed,
+# fields number/body/state/labels; save to $ISSUES
+python3 claude-arsenal/scripts/query_status.py --issues "$ISSUES"
+python3 claude-arsenal/scripts/task_select.py  --issues "$ISSUES"
 ```
 
-`jobsearch.board_state` recovers each task from the `arsenal/tasks/<id>.md` link in the
-body (ordinary markdown, unstripped), prefers the real marker wherever it
-survives, and reports rather than guesses at an issue it cannot resolve. It also
-treats a closed issue with **no closing PR** as `cancelled` rather than `done`,
-because `state_reason` is unavailable on this surface and upstream's default
-would read a deliberately parked task as finished (claude-arsenal#155).
+If a future selection ever comes back empty or unwarned when it should not be,
+v0.28.0 says so out loud: `state_from_issues` warns when issues were fetched and
+**none** resolved to a task, which is the "an empty map looks healthy" failure
+that used to pass silently.
 
-Drop this section once the marker survives the round trip — check with
-`task_select.py --issues` returning a non-empty selection and no warnings.
-
+**Parking a task needs the `arsenal:cancelled` label.** `state_reason` is not
+available through these MCP tools, so upstream reads any closed issue as `done`
+unless that label is on it. Closing a task issue to park it, without the label,
+silently releases everything downstream. Prefer keeping it **open** and holding
+it out of selection with `requires:` — that is what #71 does — and use the label
+only for work genuinely abandoned.
 
 ## Known environment state
 

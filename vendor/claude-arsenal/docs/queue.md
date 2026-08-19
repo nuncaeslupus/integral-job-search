@@ -16,6 +16,22 @@ identical for every agent.
 not a copy of it — and a claim is an atomic ref creation that GitHub itself
 arbitrates.
 
+The handle names its task with a visible line in the issue body:
+
+```
+`arsenal-task: t-3f8a91c2`
+Task defined in `arsenal/tasks/t-3f8a91c2.md`
+```
+
+**Visible, not an HTML comment.** The id used to live in `<!-- … -->`, and the
+GitHub tools a cloud session uses strip angle-bracketed content out of issue
+bodies — so on that surface every issue was anonymous, the state map came back
+empty, and an empty map looks exactly like a healthy new board right up until
+the first finished task is handed out a second time. The task-file path is read
+as a fallback, which rescues issues opened before the visible token existed, and
+a legacy comment still works wherever it survives. If issues are fetched and
+none yields a task id, that is reported as the parse failure it is.
+
 There is no coordination branch, no side worktree, and no ledger file that two
 sessions have to keep in step.
 
@@ -127,7 +143,13 @@ interval, no tie-break, and no window in which two agents both believe they won.
 `claim_task.sh` prints `won` or `lost` accordingly.
 
 Claim refs are never deleted — a sandboxed session cannot delete a ref — so a
-retry claims `…​.a2` instead. A crashed session therefore blocks nothing.
+crashed claim needs an escape hatch: `claim_task.sh <id> 2` takes `….a2`. That
+suffix is a different ref, which nobody else is contending for, so the collision
+cannot arbitrate it — it steps *past* the lock rather than competing for it.
+Stepping past a claim therefore has to be deliberate: the retry is refused
+unless `ARSENAL_CLAIM_STALE_OK=1` says the base claim has been established as
+stale. A crashed session still blocks nothing; a live one is no longer
+overrun by a second argument.
 
 ---
 
@@ -146,6 +168,24 @@ listing-budget  = 8000         # the skills-listing budget the auditor enforces
 
 `merge-policy` answers "what do you need before a task PR may merge?" — asked
 once at `/init`, then never again.
+
+### Saying "closed, but not done"
+
+A closed issue reads as `done`. To close one *without* releasing the work that
+depends on it, add the **`arsenal:cancelled`** label.
+
+GitHub's own `state_reason` says the same thing and is honoured when present,
+but it cannot be the mechanism: the GitHub tools a cloud session uses do not
+return that field at all, so on that surface every closed issue would look
+identical. A label is the one signal every surface can read.
+
+### Finished tasks
+
+`arsenal/tasks/_history/<id>.md` holds tasks that are already done — same front
+matter plus `status:` and `pr:`. They are never selected as work. They exist so
+a dep pointing at completed work resolves instead of reading as unknown (an
+unknown dep blocks by design), and so a finished task's acceptance gate stays on
+disk for any check that re-asserts it.
 
 Inspect the effective values and where each came from:
 

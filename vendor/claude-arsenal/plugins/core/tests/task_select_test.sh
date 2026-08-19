@@ -202,4 +202,97 @@ n=$(ARSENAL_WORKTREE_ISOLATION=unavailable python3 "${SELECT_PY}" --tasks-dir "$
         --max 9 --isolation-sentinel "${sentinel}" </dev/null 2>/dev/null | wc -l)
 [[ "${n}" -eq 1 ]] || fail "ARSENAL_WORKTREE_ISOLATION must override the sentinel (got ${n})"
 
+# --- 17: a ```sh gate counts as a gate, because gate_run.sh executes one ---
+#         When the two disagree the board reports "no gate" for a task whose
+#         gate runs fine — the direction that gets a working payload rewritten,
+#         or teaches people to ignore the next real warning.
+cat > "${TASKS}/t-dddd4444.md" <<'EOF'
+---
+id: t-dddd4444
+title: "Gate written as sh"
+priority: 20
+---
+
+## Acceptance gate
+```sh
+true
+```
+EOF
+out=$(echo '{}' | python3 "${SELECT_PY}" --tasks-dir "${TASKS}" 2>/dev/null | head -1)
+python3 -c 'import sys,json
+t=json.loads(sys.stdin.readline())
+assert t["id"]=="t-dddd4444", t["id"]
+assert t["gate"] is True, "an sh-fenced gate must count as a gate"' <<<"${out}" \
+    || fail "an sh-fenced gate must be recognised"
+rm -f "${TASKS}/t-dddd4444.md"
+
+# --- 18: a closed issue whose reason is unavailable still reads as done ---
+#         The GitHub MCP tools a cloud session uses return no state_reason at
+#         all. Reading absent as "not done" would stall the queue on that
+#         surface; the cancelled LABEL carries the distinction instead, because
+#         labels are the one signal every surface can see.
+cat > "${tmpdir}/issues-noreason.json" <<'EOF'
+[{"number": 1, "state": "CLOSED", "body": "handle <!-- arsenal-task: t-aaaa1111 -->"}]
+EOF
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-noreason.json" --max 9 2>/dev/null)
+grep -q 't-bbbb2222' <<<"${out}" || fail "a closed issue with no state_reason must unblock its dependent"
+
+cat > "${tmpdir}/issues-cancelled.json" <<'EOF'
+[{"number": 1, "state": "CLOSED", "body": "handle <!-- arsenal-task: t-aaaa1111 -->",
+  "labels": [{"name": "arsenal:cancelled"}]}]
+EOF
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-cancelled.json" --max 9 2>/dev/null)
+grep -q 't-bbbb2222' <<<"${out}" && fail "arsenal:cancelled must NOT release the dependent"
+
+# state_reason still wins where a surface can supply it
+cat > "${tmpdir}/issues-notplanned2.json" <<'EOF'
+[{"number": 1, "state": "CLOSED", "state_reason": "not_planned",
+  "body": "handle <!-- arsenal-task: t-aaaa1111 -->"}]
+EOF
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-notplanned2.json" --max 9 2>/dev/null)
+grep -q 't-bbbb2222' <<<"${out}" && fail "state_reason=not_planned must still block the dependent"
+
+# --- 19: task identity survives a body sanitizer ---
+#         The GitHub MCP tools a cloud session uses strip angle-bracketed
+#         content out of issue bodies, so an id kept in an HTML comment was gone
+#         before anything read it: every issue was anonymous, the state map came
+#         back empty, and an empty map is indistinguishable from a healthy new
+#         board — until the first finished task is handed out a second time.
+cat > "${tmpdir}/issues-stripped.json" <<'EOF'
+[{"number": 7, "state": "CLOSED",
+  "body": "`arsenal-task: t-aaaa1111`\nTask defined in `arsenal/tasks/t-aaaa1111.md`"}]
+EOF
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-stripped.json" --max 9 2>/dev/null)
+grep -q 't-aaaa1111' <<<"${out}" && fail "a closed task must not be handed out again"
+grep -q 't-bbbb2222' <<<"${out}" || fail "the visible token must resolve the issue to its task"
+
+# an issue carrying ONLY the path still resolves — this is what rescues issues
+# opened before the visible token existed, whose comment the sanitizer ate
+cat > "${tmpdir}/issues-pathonly.json" <<'EOF'
+[{"number": 8, "state": "CLOSED", "body": "Task defined in `arsenal/tasks/t-aaaa1111.md`"}]
+EOF
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-pathonly.json" --max 9 2>/dev/null)
+grep -q 't-bbbb2222' <<<"${out}" || fail "the task-file path must resolve identity as a fallback"
+
+# the legacy HTML comment keeps working where it survives
+cat > "${tmpdir}/issues-legacy.json" <<'EOF'
+[{"number": 9, "state": "CLOSED", "body": "handle <!-- arsenal-task: t-aaaa1111 -->"}]
+EOF
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-legacy.json" --max 9 2>/dev/null)
+grep -q 't-bbbb2222' <<<"${out}" || fail "a legacy comment marker must still resolve"
+
+# --- 20: issues that resolve to nothing is a parse failure, said out loud ---
+cat > "${tmpdir}/issues-anon.json" <<'EOF'
+[{"number": 10, "state": "OPEN", "body": "the marker was stripped out of this body"},
+ {"number": 11, "state": "CLOSED", "body": "so was this one"}]
+EOF
+err=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-anon.json" 2>&1 >/dev/null)
+grep -q "none carries a task id" <<<"${err}" \
+    || fail "N issues resolving to zero task ids must be reported, not returned quietly: ${err}"
+
+# and an empty issue list is NOT a parse failure — a new board is legitimately empty
+echo '[]' > "${tmpdir}/issues-empty.json"
+err=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-empty.json" 2>&1 >/dev/null)
+grep -q "none carries a task id" <<<"${err}" && fail "an empty issue list must not warn"
+
 echo "PASS: task_select_test — all gates passed"
