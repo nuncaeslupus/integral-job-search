@@ -44,7 +44,7 @@ from jobsearch.harness import main as harness_main
 from jobsearch.suggestions import SuggestionSet
 
 
-def _load_labelling_page() -> object:
+def _load_labelling_page() -> Any:
     """Import `tools/labelling_page.py` without `tools/` being on `sys.path`.
 
     `tools/` is repo automation, not a package under `src/` — `pyproject.toml`
@@ -52,6 +52,12 @@ def _load_labelling_page() -> object:
     `tools` there is out of scope for this task's file list. Loading the
     module by its file path keeps the test self-sufficient instead of
     depending on a config change shipped elsewhere.
+
+    Returned as `Any`, which is what it honestly is: a module resolved at run
+    time whose attributes no stub describes. The alternative — annotating it
+    `object` and then silencing `attr-defined` at every use — buys no type
+    safety and leaves suppression comments standing where a reader has to judge
+    each one. One accurate annotation replaces all three.
     """
     path = Path(__file__).resolve().parents[1] / "tools" / "labelling_page.py"
     spec = importlib.util.spec_from_file_location("labelling_page", path)
@@ -63,9 +69,9 @@ def _load_labelling_page() -> object:
 
 
 _PAGE = _load_labelling_page()
-build_page = _PAGE.build_page  # type: ignore[attr-defined]
-page_main = _PAGE.main  # type: ignore[attr-defined]
-banked_payload = _PAGE._banked_payload  # type: ignore[attr-defined]
+build_page = _PAGE.build_page
+page_main = _PAGE.main
+banked_payload = _PAGE._banked_payload
 
 # The real, committed store and model — the fixture every "does the real
 # corpus work" test in this file exercises.
