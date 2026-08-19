@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,9 +44,20 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 # an empty environment. `jobsearch.bootstrap` is stdlib-only precisely so it can
 # be imported at this point — every import below it needs pydantic, which is one
 # of the things it installs.
-from jobsearch.bootstrap import ensure_ready  # noqa: E402
+from jobsearch.bootstrap import ensure_ready, venv_interpreter  # noqa: E402
 
-ensure_ready(_REPO_ROOT, entry_point="step-0")
+_bootstrap = ensure_ready(_REPO_ROOT, entry_point="step-0")
+
+# Installing is not enough. `uv sync` populates `.venv`, but no child process can
+# put that environment on *this* interpreter's sys.path — so a fresh clone run
+# directly under the system Python would install the packages and then fail to
+# import them anyway. Re-exec into the venv's interpreter once, guarded by an
+# environment sentinel so a venv that still cannot import cannot loop.
+if _bootstrap.action == "installed" and not os.environ.get("INTEGRAL_BOOTSTRAP_REEXEC"):
+    _python = venv_interpreter(_REPO_ROOT)
+    if _python.exists() and Path(sys.executable).resolve() != _python.resolve():
+        os.environ["INTEGRAL_BOOTSTRAP_REEXEC"] = "1"
+        os.execv(str(_python), [str(_python), *sys.argv])
 
 from jobsearch.identity import IdentityError, ProfileStore  # noqa: E402
 from jobsearch.process_spec import Step, StepList, load_steps  # noqa: E402

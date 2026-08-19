@@ -52,8 +52,9 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -69,8 +70,12 @@ MARKER_NAME = "bootstrap.json"
 UV_INSTALLER = "curl -LsSf https://astral.sh/uv/install.sh | sh"
 
 # PEP 508: the distribution name is everything before the first version
-# specifier, extra marker, or environment marker.
-_DIST_NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
+# specifier, extra marker, or environment marker; the rest is the specifier.
+_REQUIREMENT = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(.*)$")
+# Only the ordering operators this project actually declares are interpreted.
+# Anything else is treated as "cannot verify", which means presence alone
+# satisfies it — stated here rather than discovered later.
+_FLOOR = re.compile(r"(>=|==|~=)\s*([0-9][0-9A-Za-z.\-]*)")
 
 Runner = Callable[[Sequence[str], Path], "CommandResult"]
 Announcer = Callable[[str], None]
@@ -99,6 +104,7 @@ class Report:
     * `installed`   — dependencies were missing and the install command succeeded.
     * `failed`      — the install command ran and failed; `detail` says how.
     * `unavailable` — no package manager to run; `detail` carries the one-line fix.
+    * `in-progress` — another session holds the install lock; it is doing this.
 
     `reached_the_code_unbootstrapped` is the gate's question, and it is
     deliberately not the same as "everything went well": a run that could not
@@ -133,12 +139,19 @@ class Report:
 # what the project declares, and what is actually installed
 
 
-def declared_dependencies(root: Path = _REPO_ROOT) -> tuple[str, ...]:
-    """The runtime distribution names from `pyproject.toml`, never a second copy.
+def declared_requirements(root: Path = _REPO_ROOT) -> tuple[tuple[str, tuple[int, ...]], ...]:
+    """`(name, version floor)` per runtime dependency in `pyproject.toml`.
 
     Read rather than restated: a hardcoded list here would keep reporting a
     clean environment after somebody adds a dependency, which is the same
     self-counting mistake this repo's gates document at length.
+
+    The floor matters. Comparing names alone let an installed `pydantic 1.x`
+    satisfy `pydantic>=2.9`, so the environment read as current and the code
+    failed downstream anyway — the bootstrap reporting success is worse than
+    the ImportError it replaced, because nothing then tries to fix it. An
+    empty tuple means "no floor this parser understands", and presence alone
+    satisfies it.
     """
     manifest = root / "pyproject.toml"
     try:
@@ -147,12 +160,35 @@ def declared_dependencies(root: Path = _REPO_ROOT) -> tuple[str, ...]:
         raise BootstrapError(f"{manifest} could not be read: {exc}") from exc
 
     requirements = data.get("project", {}).get("dependencies", [])
-    names: list[str] = []
+    parsed: list[tuple[str, tuple[int, ...]]] = []
     for requirement in requirements:
-        match = _DIST_NAME.match(str(requirement))
-        if match:
-            names.append(_normalise(match.group(1)))
-    return tuple(names)
+        match = _REQUIREMENT.match(str(requirement))
+        if not match:
+            continue
+        floor = _FLOOR.search(match.group(2) or "")
+        parsed.append((_normalise(match.group(1)), _version(floor.group(2)) if floor else ()))
+    return tuple(parsed)
+
+
+def declared_dependencies(root: Path = _REPO_ROOT) -> tuple[str, ...]:
+    """Just the names, for the messages a person reads."""
+    return tuple(name for name, _floor in declared_requirements(root))
+
+
+def _version(text: str) -> tuple[int, ...]:
+    """The leading numeric release segment of a version, for ordering.
+
+    `2.9.1rc1` reads as `(2, 9, 1)`: enough to answer "is this at least 2.9",
+    which is the only question asked here, without carrying a PEP 440
+    implementation into a module that must stay stdlib-only.
+    """
+    parts: list[int] = []
+    for chunk in text.split("."):
+        digits = re.match(r"\d+", chunk)
+        if digits is None:
+            break
+        parts.append(int(digits.group()))
+    return tuple(parts)
 
 
 def _normalise(name: str) -> str:
@@ -171,26 +207,37 @@ def site_packages(root: Path = _REPO_ROOT) -> Path | None:
 
 
 def missing_dependencies(root: Path = _REPO_ROOT) -> tuple[str, ...]:
-    """Declared distributions with nothing installed to satisfy them, in declared order.
+    """Declared distributions nothing installed satisfies, in declared order.
 
     Read out of the venv's own `site-packages` rather than by importing:
     importing works only from inside the environment being checked, and the
     `SessionStart` hook runs outside it.
+
+    "Satisfies" means present *and* at or above the declared floor — a
+    too-old distribution is missing as far as this module is concerned, since
+    the outcome it produces is the same failed import.
     """
-    declared = declared_dependencies(root)
+    declared = declared_requirements(root)
     if not declared:
         return ()
 
     packages = site_packages(root)
     if packages is None:
-        return declared
+        return tuple(name for name, _floor in declared)
 
-    installed = {
-        _normalise(str(dist.metadata["Name"]))
-        for dist in importlib.metadata.Distribution.discover(path=[str(packages)])
-        if dist.metadata is not None and dist.metadata["Name"]
-    }
-    return tuple(name for name in declared if name not in installed)
+    installed: dict[str, tuple[int, ...]] = {}
+    for dist in importlib.metadata.Distribution.discover(path=[str(packages)]):
+        if dist.metadata is None or not dist.metadata["Name"]:
+            continue
+        installed[_normalise(str(dist.metadata["Name"]))] = _version(
+            str(dist.metadata["Version"] or "0")
+        )
+
+    missing: list[str] = []
+    for name, floor in declared:
+        if name not in installed or (floor and installed[name] < floor):
+            missing.append(name)
+    return tuple(missing)
 
 
 def environment_is_current(root: Path = _REPO_ROOT) -> bool:
@@ -221,12 +268,32 @@ def package_manager(
     return None
 
 
-def install_command(
+def venv_interpreter(root: Path = _REPO_ROOT) -> Path:
+    """The project venv's interpreter, POSIX or Windows layout.
+
+    Returned whether or not it exists: the pip path *creates* the venv, so the
+    caller needs the path it is about to bring into being.
+    """
+    windows = root / ".venv" / "Scripts" / "python.exe"
+    if windows.exists():
+        return windows
+    return root / ".venv" / "bin" / "python"
+
+
+def install_commands(
     manager: str,
     root: Path = _REPO_ROOT,
     executable: str = sys.executable,
-) -> tuple[str, ...]:
-    """The argv this bootstrap would run — returned, so it can be shown before it runs.
+) -> tuple[tuple[str, ...], ...]:
+    """Every argv this bootstrap would run, in order — returned before any of it runs.
+
+    Plural because the pip path is two steps. The single-command version ran
+    `<host python> -m pip install -e .` when `.venv` was absent, which installs
+    into whatever interpreter happened to be running — often refused outright
+    on an externally managed Python, and invisible to `missing_dependencies`
+    either way, since that reads `.venv/site-packages`. The bootstrap would
+    then report success and find the same dependencies missing next time. So
+    the venv is created first, and pip is that venv's own pip.
 
     `executable` is injectable for the same reason `package_manager`'s is, plus
     one more: this argv is *recorded in the evidence file*, and reading
@@ -236,20 +303,34 @@ def install_command(
     time by a different door.
     """
     if manager == "uv":
-        return ("uv", "sync", "--extra", "dev")
-    venv_python = root / ".venv" / "bin" / "python"
-    python = str(venv_python) if venv_python.exists() else (executable or "python3")
-    return (python, "-m", "pip", "install", "-e", ".[dev]")
+        return (("uv", "sync", "--extra", "dev"),)
+
+    python = venv_interpreter(root)
+    install = (str(python), "-m", "pip", "install", "-e", ".[dev]")
+    if python.exists():
+        return (install,)
+    return ((executable or "python3", "-m", "venv", ".venv"), install)
 
 
 def _run(argv: Sequence[str], cwd: Path) -> CommandResult:
-    completed = subprocess.run(  # fixed argv, no shell
-        list(argv),
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    """Run one install step, turning a failure to *start* into a result too.
+
+    `shutil.which` said the binary was there; between that answer and this call
+    it can be removed, replaced, or left non-executable, and `subprocess.run`
+    then raises. An uncaught `FileNotFoundError` here would surface in step 0 as
+    exactly the traceback this module exists to prevent, so the exception
+    becomes a `CommandResult` like any other failure.
+    """
+    try:
+        completed = subprocess.run(  # fixed argv, no shell
+            list(argv),
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return CommandResult(tuple(argv), 127, f"{argv[0]} could not be started: {exc}")
     return CommandResult(tuple(argv), completed.returncode, completed.stderr.strip())
 
 
@@ -282,40 +363,93 @@ def already_announced(env: dict[str, str] | None = None) -> bool:
         return False
 
 
-def record_announcement(
+def claim_announcement(
     installed: Sequence[str],
-    command: Sequence[str],
+    commands: Sequence[Sequence[str]],
     *,
     env: dict[str, str] | None = None,
     now: str | None = None,
-) -> Path | None:
-    """Write the marker, best effort. A store we cannot write is not a reason to stop."""
+) -> bool:
+    """Claim the right to announce, atomically. True means "you are the one who tells them".
+
+    Written with `O_CREAT | O_EXCL` and *before* the install rather than after,
+    because check-then-write is a race: two sessions starting together both read
+    "not announced yet" and both address the candidate. Exclusive creation means
+    the filesystem picks one. Claiming first also means a crashed install does
+    not re-announce on every later start, which is the failure mode a person
+    actually notices.
+
+    A store that cannot be written returns True — announcing twice is a far
+    smaller fault than installing in silence.
+    """
     marker = _marker_path(env)
     if marker is None:
-        return None
+        return True
     payload = {
         "announced_at": now or datetime.now(UTC).isoformat(),
         "installed": list(installed),
-        "command": list(command),
+        "commands": [list(command) for command in commands],
     }
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        handle = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        return False
     except OSError:
-        return None
-    return marker
+        return True
+    with os.fdopen(handle, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(payload, indent=2) + "\n")
+    return True
 
 
-def announcement_for(missing: Sequence[str], command: Sequence[str]) -> str:
+@contextmanager
+def installation_lock(root: Path) -> Iterator[bool]:
+    """Hold the per-clone install lock, or yield False when somebody else has it.
+
+    Two package-manager processes mutating one `.venv` at the same time is the
+    kind of corruption that is hard to diagnose and easy to avoid: a session
+    that loses the race waits for nothing and simply reports the environment as
+    being prepared elsewhere. A lock older than an hour is treated as abandoned
+    — a crashed install must not wedge every future session.
+    """
+    lock = root / ".integral-bootstrap.lock"
+    acquired = False
+    try:
+        if lock.exists():
+            try:
+                stale = (datetime.now(UTC).timestamp() - lock.stat().st_mtime) > 3600
+            except OSError:
+                stale = False
+            if stale:
+                lock.unlink(missing_ok=True)
+        try:
+            handle = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            yield False
+            return
+        except OSError:
+            # An unwritable clone is not a reason to refuse to install.
+            yield True
+            return
+        os.close(handle)
+        acquired = True
+        yield True
+    finally:
+        if acquired:
+            lock.unlink(missing_ok=True)
+
+
+def announcement_for(missing: Sequence[str], commands: Sequence[Sequence[str]]) -> str:
     """What the candidate reads, the first time this happens.
 
     Names what is being installed and what is running it. "Setting things
     up…" would technically be an announcement and would tell them nothing.
     """
     what = ", ".join(missing)
+    how = " then ".join(f"`{' '.join(command)}`" for command in commands)
     return (
         "First run: this tool needs a few Python packages that a clone does not carry "
-        f"({what}), so it is installing them now with `{' '.join(command)}`. "
+        f"({what}), so it is installing them now with {how}. "
         "This happens once; later sessions start silently."
     )
 
@@ -366,35 +500,59 @@ def ensure_ready(
             detail=detail,
         )
 
-    command = install_command(manager, root, executable)
-    message: str | None = None
-    if not already_announced(env):
-        message = announcement_for(missing, command)
-        announce(message)
+    commands = install_commands(manager, root, executable)
+    with installation_lock(root) as mine:
+        if not mine:
+            # Another session is already installing into this clone. Two package
+            # managers writing one .venv is the failure worth avoiding; waiting
+            # is not, since that session will finish and this one re-checks at
+            # its next entry point.
+            busy = "This tool's dependencies are being installed by another session."
+            announce(busy)
+            return Report(
+                action="in-progress",
+                entry_point=entry_point,
+                missing=missing,
+                manager=manager,
+                command=commands[0],
+                announcement=busy,
+                detail=busy,
+            )
 
-    result = (run or _run)(command, root)
-    if result.returncode != 0:
-        detail = result.stderr or f"{' '.join(command)} exited {result.returncode}"
-        failure = f"Installing this tool's dependencies failed: {detail}"
-        announce(failure)
-        return Report(
-            action="failed",
-            entry_point=entry_point,
-            missing=missing,
-            manager=manager,
-            command=command,
-            announcement=message or failure,
-            detail=detail,
-        )
+        # Re-read inside the lock: the session that just released it may have
+        # installed exactly what this one was about to.
+        missing = missing_dependencies(root)
+        if not missing:
+            return Report(action="current", entry_point=entry_point)
 
-    if message is not None:
-        record_announcement(missing, command, env=env, now=now)
+        message: str | None = None
+        if claim_announcement(missing, commands, env=env, now=now):
+            message = announcement_for(missing, commands)
+            announce(message)
+
+        runner = run or _run
+        for command in commands:
+            result = runner(command, root)
+            if result.returncode != 0:
+                detail = result.stderr or f"{' '.join(command)} exited {result.returncode}"
+                failure = f"Installing this tool's dependencies failed: {detail}"
+                announce(failure)
+                return Report(
+                    action="failed",
+                    entry_point=entry_point,
+                    missing=missing,
+                    manager=manager,
+                    command=command,
+                    announcement=message or failure,
+                    detail=detail,
+                )
+
     return Report(
         action="installed",
         entry_point=entry_point,
         missing=missing,
         manager=manager,
-        command=command,
+        command=commands[-1],
         announcement=message,
     )
 
@@ -429,6 +587,7 @@ def _simulate(
     which: Callable[[str], str | None],
     run: Runner,
     env: dict[str, str],
+    base: Path,
     executable: str = "/usr/bin/python3",
 ) -> Simulation:
     spoken: list[str] = []
@@ -442,6 +601,15 @@ def _simulate(
         env=env,
         now="1970-01-01T00:00:00+00:00",
     )
+    # The throwaway clone's path appears inside the recorded argv (the pip path
+    # runs `.venv/bin/python` *of that clone*), and this report is written to
+    # committed evidence. Redacted here, where the temporary directory is owned,
+    # rather than at each call site — this is the third variant of "a number
+    # that changes with the machine measuring it" in two tasks.
+    report = replace(
+        report, command=tuple(part.replace(str(base), "<clone>") for part in report.command)
+    )
+
     reasons: list[str] = []
     if report.action != expected_action:
         reasons.append(f"expected action {expected_action!r}, got {report.action!r}")
@@ -498,6 +666,7 @@ def simulate_first_runs(tmp_factory: Callable[[], Path] | None = None) -> list[S
                 which=has_uv,
                 run=ok,
                 env=env("hook"),
+                base=base,
             )
         )
         simulations.append(
@@ -510,6 +679,7 @@ def simulate_first_runs(tmp_factory: Callable[[], Path] | None = None) -> list[S
                 which=has_uv,
                 run=ok,
                 env=env("step0"),
+                base=base,
             )
         )
         simulations.append(
@@ -522,6 +692,7 @@ def simulate_first_runs(tmp_factory: Callable[[], Path] | None = None) -> list[S
                 which=has_uv,
                 run=ok,
                 env=env("returning"),
+                base=base,
             )
         )
         simulations.append(
@@ -534,6 +705,7 @@ def simulate_first_runs(tmp_factory: Callable[[], Path] | None = None) -> list[S
                 which=no_uv,
                 run=ok,
                 env=env("pip"),
+                base=base,
             )
         )
         simulations.append(
@@ -547,6 +719,7 @@ def simulate_first_runs(tmp_factory: Callable[[], Path] | None = None) -> list[S
                 executable="",
                 run=ok,
                 env=env("bare"),
+                base=base,
             )
         )
         simulations.append(
@@ -559,6 +732,7 @@ def simulate_first_runs(tmp_factory: Callable[[], Path] | None = None) -> list[S
                 which=has_uv,
                 run=broken,
                 env=env("failed"),
+                base=base,
             )
         )
 
@@ -574,6 +748,7 @@ def simulate_first_runs(tmp_factory: Callable[[], Path] | None = None) -> list[S
             which=has_uv,
             run=ok,
             env=shared,
+            base=base,
         )
         simulations.append(
             _simulate(
@@ -585,6 +760,7 @@ def simulate_first_runs(tmp_factory: Callable[[], Path] | None = None) -> list[S
                 which=has_uv,
                 run=ok,
                 env=shared,
+                base=base,
             )
         )
     return simulations
@@ -600,11 +776,15 @@ def _fake_clone(root: Path, *, with_venv: bool) -> Path:
 
     packages = root / ".venv" / "lib" / "python3.12" / "site-packages"
     packages.mkdir(parents=True, exist_ok=True)
-    for name in declared_dependencies(root):
-        dist = packages / f"{name}-0.0.0.dist-info"
+    for name, floor in declared_requirements(root):
+        # At the declared floor, not 0.0.0: since the readiness check learned to
+        # honour version floors, a placeholder version would make this "ready"
+        # clone read as stale and the probe would measure the wrong arrival.
+        version = ".".join(str(part) for part in floor) if floor else "1.0"
+        dist = packages / f"{name}-{version}.dist-info"
         dist.mkdir(exist_ok=True)
         (dist / "METADATA").write_text(
-            f"Metadata-Version: 2.1\nName: {name}\nVersion: 0.0.0\n", encoding="utf-8"
+            f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n", encoding="utf-8"
         )
     return root
 

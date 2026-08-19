@@ -18,7 +18,7 @@ import ast
 import json
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
@@ -26,15 +26,20 @@ import pytest
 from jobsearch.bootstrap import (
     UV_INSTALLER,
     CommandResult,
+    _run,
     announcement_for,
+    claim_announcement,
     declared_dependencies,
+    declared_requirements,
     ensure_ready,
     environment_is_current,
-    install_command,
+    install_commands,
+    installation_lock,
     measure,
     missing_dependencies,
     package_manager,
     simulate_first_runs,
+    venv_interpreter,
     write_evidence,
 )
 
@@ -48,13 +53,16 @@ def _clone(root: Path, *, installed: Sequence[str] = ()) -> Path:
         (_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"), encoding="utf-8"
     )
     if installed:
+        floors = dict(declared_requirements(root))
         packages = root / ".venv" / "lib" / "python3.12" / "site-packages"
         packages.mkdir(parents=True, exist_ok=True)
         for name in installed:
-            dist = packages / f"{name}-0.0.0.dist-info"
+            floor = floors.get(name, ())
+            version = ".".join(str(part) for part in floor) if floor else "1.0"
+            dist = packages / f"{name}-{version}.dist-info"
             dist.mkdir(exist_ok=True)
             (dist / "METADATA").write_text(
-                f"Metadata-Version: 2.1\nName: {name}\nVersion: 0.0.0\n", encoding="utf-8"
+                f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n", encoding="utf-8"
             )
     return root
 
@@ -67,6 +75,16 @@ def _recorder() -> tuple[list[tuple[str, ...]], object]:
         return CommandResult(tuple(argv), 0)
 
     return calls, run
+
+
+def _run_via(
+    raiser: Callable[[Sequence[str], Path], CommandResult], argv: Sequence[str], cwd: Path
+) -> CommandResult:
+    """Route a raising fake through the same conversion `_run` performs."""
+    try:
+        return raiser(argv, cwd)
+    except OSError as exc:
+        return CommandResult(tuple(argv), 127, f"{argv[0]} could not be started: {exc}")
 
 
 def _has_uv(name: str) -> str | None:
@@ -190,8 +208,116 @@ def test_uv_is_preferred_and_pip_is_the_fallback(tmp_path: Path) -> None:
     assert package_manager(_has_uv) == "uv"
     assert package_manager(_no_uv) == "pip"
     assert package_manager(lambda _name: None, executable="") is None
-    assert install_command("uv", root)[:2] == ("uv", "sync")
-    assert install_command("pip", root)[1:] == ("-m", "pip", "install", "-e", ".[dev]")
+    assert install_commands("uv", root) == (("uv", "sync", "--extra", "dev"),)
+
+
+def test_the_pip_fallback_creates_the_venv_it_will_be_checked_against(tmp_path: Path) -> None:
+    """Installing into the host interpreter would be invisible to the readiness check."""
+    root = _clone(tmp_path / "clone")
+    commands = install_commands("pip", root, executable="/usr/bin/python3")
+
+    assert commands[0] == ("/usr/bin/python3", "-m", "venv", ".venv")
+    assert commands[-1][1:] == ("-m", "pip", "install", "-e", ".[dev]")
+    assert str(venv_interpreter(root)) == commands[-1][0], "pip must be the venv's own pip"
+
+    # With the venv already there, creating it again is not in the plan.
+    (root / ".venv" / "bin").mkdir(parents=True)
+    (root / ".venv" / "bin" / "python").write_text("", encoding="utf-8")
+    assert len(install_commands("pip", root, executable="/usr/bin/python3")) == 1
+
+
+def test_a_windows_venv_interpreter_is_found(tmp_path: Path) -> None:
+    root = _clone(tmp_path / "clone")
+    scripts = root / ".venv" / "Scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "python.exe").write_text("", encoding="utf-8")
+    assert venv_interpreter(root).name == "python.exe"
+
+
+def test_a_command_that_cannot_start_is_reported_not_raised(tmp_path: Path) -> None:
+    """`which` said it was there; between then and now it can vanish."""
+    root = _clone(tmp_path / "clone")
+    spoken: list[str] = []
+
+    def cannot_start(argv: Sequence[str], cwd: Path) -> CommandResult:
+        raise FileNotFoundError(2, "No such file or directory", argv[0])
+
+    report = ensure_ready(
+        root,
+        run=lambda argv, cwd: _run_via(cannot_start, argv, cwd),
+        announce=spoken.append,
+        which=_has_uv,
+        env={"INTEGRAL_HOME": str(tmp_path / "home")},
+    )
+
+    assert report.action == "failed"
+    assert "could not be started" in report.detail
+    assert report.spoke
+
+
+def test_the_runner_itself_converts_a_launch_failure(tmp_path: Path) -> None:
+    """The real `_run`, against a binary that is genuinely not there."""
+    result = _run(("/nonexistent/uv", "sync"), tmp_path)
+    assert result.returncode == 127
+    assert "could not be started" in result.stderr
+
+
+def test_an_installed_version_below_the_declared_floor_counts_as_missing(tmp_path: Path) -> None:
+    """`pydantic 1.x` does not satisfy `pydantic>=2.9`, and reporting it current is worse
+    than the ImportError, because nothing then tries to fix it."""
+    root = tmp_path / "clone"
+    root.mkdir()
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "x"\ndependencies = ["pydantic>=2.9"]\n', encoding="utf-8"
+    )
+    packages = root / ".venv" / "lib" / "python3.12" / "site-packages"
+    packages.mkdir(parents=True)
+    dist = packages / "pydantic-1.10.13.dist-info"
+    dist.mkdir()
+    (dist / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: pydantic\nVersion: 1.10.13\n", encoding="utf-8"
+    )
+
+    assert declared_requirements(root) == (("pydantic", (2, 9)),)
+    assert missing_dependencies(root) == ("pydantic",)
+    assert not environment_is_current(root)
+
+    (dist / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: pydantic\nVersion: 2.9.1\n", encoding="utf-8"
+    )
+    assert missing_dependencies(root) == ()
+
+
+def test_two_sessions_do_not_install_over_each_other(tmp_path: Path) -> None:
+    """One .venv, two package managers, is corruption nobody enjoys diagnosing."""
+    root = _clone(tmp_path / "clone")
+    calls, run = _recorder()
+    spoken: list[str] = []
+
+    with installation_lock(root) as held:
+        assert held
+        report = ensure_ready(
+            root,
+            run=run,  # type: ignore[arg-type]
+            announce=spoken.append,
+            which=_has_uv,
+            env={"INTEGRAL_HOME": str(tmp_path / "home")},
+        )
+
+    assert report.action == "in-progress"
+    assert calls == [], "the second session must not run a package manager"
+    assert spoken, "and it must say why it did nothing"
+
+
+def test_the_announcement_is_claimed_atomically(tmp_path: Path) -> None:
+    """Check-then-write is a race; exclusive creation lets the filesystem pick one."""
+    env = {"INTEGRAL_HOME": str(tmp_path / "home")}
+    assert claim_announcement(
+        ("pydantic",), [("uv", "sync")], env=env, now="1970-01-01T00:00:00+00:00"
+    )
+    assert not claim_announcement(
+        ("pydantic",), [("uv", "sync")], env=env, now="1970-01-01T00:00:00+00:00"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +359,9 @@ def test_the_announcement_happens_once(tmp_path: Path) -> None:
     assert first and not second
 
 
-def test_the_marker_lives_outside_the_clone(tmp_path: Path) -> None:
+def test_the_marker_after_a_first_run_bootstrap_is_written_outside_the_clone(
+    tmp_path: Path,
+) -> None:
     """T51's rule holds here too: this is per-person state, so it is not in the repository."""
     root = _clone(tmp_path / "clone")
     _calls, run = _recorder()
@@ -267,10 +395,12 @@ def test_an_unwritable_store_does_not_stop_the_bootstrap(tmp_path: Path) -> None
     assert report.action == "installed"
 
 
-def test_the_announcement_names_what_is_installed() -> None:
-    message = announcement_for(("pydantic", "pyyaml"), ("uv", "sync"))
+def test_the_announcement_names_every_command_that_will_run() -> None:
+    message = announcement_for(
+        ("pydantic", "pyyaml"), [("python3", "-m", "venv", ".venv"), ("uv", "sync")]
+    )
     assert "pydantic" in message and "pyyaml" in message
-    assert "uv sync" in message
+    assert "python3 -m venv .venv" in message and "uv sync" in message
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +463,30 @@ def test_the_hook_does_not_use_uv_run_to_ask_whether_uv_is_needed() -> None:
     hook = (_REPO_ROOT / "tools" / "bootstrap_hook.sh").read_text(encoding="utf-8")
     code = "\n".join(line for line in hook.splitlines() if not line.lstrip().startswith("#"))
     assert "uv run" not in code
+
+
+def test_the_hook_does_not_discard_the_announcement() -> None:
+    """The announcement goes to stderr, so a hook that silences stderr silences it.
+
+    This is the gap the in-process gate could not see: it exercises `ensure_ready`
+    with an injected announcer and never the plumbing the candidate actually gets.
+    """
+    hook = (_REPO_ROOT / "tools" / "bootstrap_hook.sh").read_text(encoding="utf-8")
+    invocation = next(
+        line for line in hook.splitlines() if "jobsearch.bootstrap" in line and "python" in line
+    )
+    assert ">/dev/null" in invocation, "stdout is a machine status line and may go"
+    assert "2>&1" not in invocation and "2>/dev/null" not in invocation
+
+
+def test_step_zero_re_execs_into_the_venv_after_installing() -> None:
+    """Installing does not put the packages on a running interpreter's path."""
+    script = (
+        _REPO_ROOT / ".claude" / "skills" / "step-00-identify" / "scripts" / "run_checkpoint.py"
+    ).read_text(encoding="utf-8")
+    assert "os.execv" in script
+    assert "INTEGRAL_BOOTSTRAP_REEXEC" in script, "and it must not be able to loop"
+    assert script.index("os.execv") < script.index("from jobsearch.identity import")
 
 
 # ---------------------------------------------------------------------------

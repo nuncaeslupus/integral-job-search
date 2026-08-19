@@ -20,9 +20,16 @@ export INTEGRAL_ENTRY_POINT=session-start
 # Deliberately NOT `uv run`: that would install the environment as a side
 # effect of asking whether the environment exists, and the announcement the
 # candidate is owed would never be made.
+#
+# stdout carries a machine-readable status line and is discarded; **stderr is
+# deliberately not**, because that is where the candidate-facing announcement
+# goes. Sending both to /dev/null made the install silent — and worse than
+# silent: the marker was still written, so step 0 then saw a current
+# environment and said nothing either, and a package manager had run on
+# somebody's machine without them ever being told.
 for python in python3 python; do
   if command -v "$python" >/dev/null 2>&1; then
-    PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" "$python" -m jobsearch.bootstrap --ensure >/dev/null 2>&1 \
+    PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" "$python" -m jobsearch.bootstrap --ensure >/dev/null \
       || true
     exit 0
   fi
