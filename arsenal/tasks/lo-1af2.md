@@ -4,6 +4,7 @@ title: "T25: [LAPTOP] Broaden the corpus beyond remote programming \u2014 >=6 jo
 priority: 70
 workspace: ONTOLOGY
 tags: [laptop, m4]
+requires: [surface:egress]
 ---
 
 ## Acceptance gate
