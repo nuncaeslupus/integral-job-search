@@ -269,3 +269,40 @@ def test_the_committed_plan_and_queue_agree() -> None:
     measured = plan_v2.measure()
     assert measured["violations"] == []
     assert measured["plan_queue_task_drift"] == 0
+
+
+def test_a_plan_dependency_on_finished_work_is_not_drift(tmp_path: Path) -> None:
+    """The board carries what a task is still waiting on; the plan's `Depends`
+    column carries everything it ever waited on. Migrating to per-task files
+    drops the deps that are already satisfied, so reading their absence as
+    drift would make every completed prerequisite a permanent violation — 23 of
+    them here on the day of the move — and a check that is always red is one
+    nobody reads.
+    """
+    measured = plan_v2.measure(
+        _plan(tmp_path, _two_task_plan("T1")),
+        _queue(
+            tmp_path,
+            {"title": "T1: Do it", "status": "merged"},
+            {"title": "T2: Do it after", "deps": []},
+        ),
+    )
+    assert measured["dependency_mismatches"] == []
+    assert measured["plan_queue_task_drift"] == 0
+
+
+def test_a_plan_dependency_on_a_blocked_task_is_still_drift(tmp_path: Path) -> None:
+    """The exemption above is for finished work only. `blocked` is a failure
+    state, not a completion: a task sequenced behind one is still genuinely
+    waiting, and dropping that dep would let it be built out of order."""
+    measured = plan_v2.measure(
+        _plan(tmp_path, _two_task_plan("T1")),
+        _queue(
+            tmp_path,
+            {"title": "T1: Do it", "status": "blocked"},
+            {"title": "T2: Do it after", "deps": []},
+        ),
+    )
+    assert measured["dependency_mismatches"] == [
+        "T2 depends on T1 in the plan and not in the queue"
+    ]

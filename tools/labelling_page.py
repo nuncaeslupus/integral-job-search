@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """T5's labelling aid — read the ad, react to what is already marked on it.
 
-T5 (`claude-arsenal/queue/lo-d2b2.md`) is `[HUMAN]`: a person must decide which
+T5 (`arsenal/tasks/_history/lo-d2b2.md`) is `[HUMAN]`: a person must decide which
 dimensions each of the 100 ads in `corpus/labelled/ads.jsonl` evidences, and
 supply a verbatim quote for every value.
 

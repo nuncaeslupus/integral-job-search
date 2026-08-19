@@ -278,3 +278,20 @@ def test_the_verifier_exits_zero_on_the_real_repository() -> None:
         [sys.executable, str(VERIFIER)], capture_output=True, text=True, cwd=REPO_ROOT
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_compiled_bytecode_in_the_bundle_is_not_reported_as_a_hand_edit(
+    tmp_path: Path,
+) -> None:
+    """Importing any vendored script leaves a `__pycache__/` behind — the
+    migration path does it, and so do several tests. Reporting that as an
+    undocumented bundle edit turns a required gate red over a file git already
+    ignores, which is how a real divergence ends up dismissed as noise."""
+    root = _fixture_repo(tmp_path)
+    before_code, before = _run(root)
+    cache = root / BUNDLE / "bin" / "__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "stale.cpython-312.pyc").write_bytes(b"\x00")
+    after_code, after = _run(root)
+    assert after["extra_in_bundle"] == []
+    assert (after_code, after) == (before_code, before)

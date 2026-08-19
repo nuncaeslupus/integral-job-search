@@ -1,6 +1,6 @@
 """T5's labelling aid — the generated page and `harness import`.
 
-T5 (`claude-arsenal/queue/lo-d2b2.md`) is `[HUMAN]`: nothing here tests the
+T5 (`arsenal/tasks/_history/lo-d2b2.md`) is `[HUMAN]`: nothing here tests the
 labels themselves, because no labels are placed by code. What is tested is the
 tooling that makes the person's 300+ label-and-quote decisions fast and
 mechanically safe:

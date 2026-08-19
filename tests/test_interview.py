@@ -4,7 +4,7 @@
 `test_every_trait_is_scored_or_explicitly_insufficient`,
 `test_scripted_respondent_yields_full_profile_coverage`, and
 `test_every_negative_episode_gets_a_lesson_followup`. The payload
-(`claude-arsenal/queue/lo-609f.md`) adds a fourth,
+(`arsenal/tasks/_history/lo-609f.md`) adds a fourth,
 `test_first_job_branch_skips_retrospective_questions`. The rest of this file
 holds the two properties the "Required verification" section of the task asks
 to see fail on purpose: a further probing question instead of a lesson

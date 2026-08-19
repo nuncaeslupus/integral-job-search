@@ -201,6 +201,13 @@ def compare(root: Path = _REPO_ROOT) -> dict[str, object]:
             if not path.is_file():
                 continue
             relative = path.relative_to(bundle_root)
+            # Compiled bytecode is not a bundle file. Importing any vendored
+            # script — which the migration path and several tests do — leaves a
+            # `__pycache__/` behind, and reporting it as an undocumented
+            # hand-edit turns a required gate red for a file git already
+            # ignores.
+            if "__pycache__" in relative.parts:
+                continue
             if relative.parts and relative.parts[0] in HOST_OWNED:
                 continue
             if relative in EXCLUDED_FROM_COMPARISON:

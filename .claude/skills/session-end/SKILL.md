@@ -28,7 +28,7 @@ Do not load mid-job. The retrospective wants a complete arc to scan.
 **Spec-alignment check (always, before writing the handoff).** Ask: did this
 session ADOPT or LOCK any architecture decision? If yes, verify the spec and
 plan actually reflect it — workspace projects keep them at
-`claude-arsenal/project/<WORKSPACE>/spec.md` + `plan.md`; otherwise they are
+`arsenal/project/<WORKSPACE>/spec.md` + `plan.md`; otherwise they are
 `status/specification.md` + `status/plan.md`. If they don't, either update them now or seed a
 queue task before ending — a decision that lives only in handover prose drifts,
 because the handover is a snapshot the next session overwrites while the spec,
@@ -74,7 +74,7 @@ Format and rubric for the proposal block live in [retrospective-rubric](referenc
 
 ## Step 3 — PR audit (always when queue exists)
 
-Collect every task in `done` or `in_progress` status from `claude-arsenal/queue/tasks.jsonl`
+Collect every claimed task and every task whose PR is open, from the `arsenal:task` issues
 that carries a `pr` field, then check each PR for CI, review comments, and merge conflicts.
 
 **When `gh` CLI is available:**
@@ -97,7 +97,7 @@ Mark any PR as **BLOCKED** if: CI is failing, there are `CHANGES_REQUESTED` revi
 Print the PR URL list directly from the queue, with task IDs and titles, so the user can check them manually:
 ```
 PRs from this session requiring human review:
-  lo-a3f8  #42  https://github.com/…/pull/42  — T1: Implement claim.sh
+  t-3f8a91c2  #42  https://github.com/…/pull/42  — Extract the surface probe
   lo-b2c1  #43  https://github.com/…/pull/43  — T2: Auth gate
 ```
 
@@ -105,7 +105,7 @@ PRs from this session requiring human review:
 ```
 Escalated tasks (exhausted retry cap — no PR opened):
   lo-c3d4  attempts=3/3  T3: Data migration
-  → Recovery: release.sh lo-c3d4 open --reset-attempts  (from claude-arsenal/bin/)
+  → Recovery: the next attempt claims <id>.a2; past max-attempts a human decides
 ```
 
 ## Auto-fire (opt-in)
@@ -120,4 +120,4 @@ Stop-hook setup (so this skill fires at conversation close without an explicit `
 
 ## Workspace-aware paths
 
-When `claude-arsenal/project/<WORKSPACE>/` exists, write the Step 1 handoff to `claude-arsenal/project/<WORKSPACE>/handover.md` and refresh the cross-workspace `claude-arsenal/session/handover.md` instead of `status/handoff.md`. Otherwise use `status/handoff.md` as above. The handoff opt-in marker still governs whether Step 1 runs at all.
+When `arsenal/project/<WORKSPACE>/` exists, write the Step 1 handoff to `arsenal/project/<WORKSPACE>/handover.md` and refresh the cross-workspace `arsenal/session/handover.md` instead of `status/handoff.md`. Otherwise use `status/handoff.md` as above. The handoff opt-in marker still governs whether Step 1 runs at all.

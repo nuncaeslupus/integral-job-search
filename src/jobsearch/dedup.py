@@ -81,7 +81,7 @@ and the payload for T13's finding-1 review note.
 **Expiry is detected here, not acted on.** §7.1 defines seven statuses and the
 transitions between them, and §7.3's purge rule and §7.4's tombstones belong to
 S5, not this module (see the T13 scope note in `status/plan.md` and
-`claude-arsenal/queue/lo-9e33.md`). `detect_expired` only reports which offers
+`arsenal/tasks/_history/lo-9e33.md`). `detect_expired` only reports which offers
 look expired — past `expires_at`, or dropped from a source's latest listing —
 so S5 can carry out the `-> expired` transition. It never writes `Offer.status`
 itself.

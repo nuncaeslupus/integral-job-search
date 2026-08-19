@@ -1,7 +1,7 @@
 """T28 — continuous profile capture across every candidate-facing surface.
 
 The payload names three RED tests directly; this file also covers the
-properties `claude-arsenal/queue/lo-62f9.md` and the module docstring call
+properties `arsenal/tasks/_history/lo-62f9.md` and the module docstring call
 out as things to get right rather than assume: the surface set is derived
 from the live step model and fails loudly on drift, "no free text" and "not
 yet built" are kept distinct from "built and dropping input", non-insistence
@@ -467,7 +467,7 @@ def test_coverage_is_unchanged_by_the_migration(
     written, so there are five captured surfaces today
     (`constraints`, `feedback`, `history`, `intake`, `traits`), not the four
     named when S12 was scoped — see this file's own module docstring and
-    `claude-arsenal/queue/lo-9261.md`'s corrected acceptance gate.
+    `arsenal/tasks/_history/lo-9261.md`'s corrected acceptance gate.
     """
     store = store_for("coverage-unchanged-by-migration")
 

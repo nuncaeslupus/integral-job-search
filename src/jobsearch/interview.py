@@ -9,7 +9,7 @@ module is that wiring: which question comes next, what a negative answer is
 followed by, when a personality question presumes a job that may not exist, and
 when a trait has been asked about enough to be worth scoring.
 
-**Two decisions this task's payload (`claude-arsenal/queue/lo-609f.md`) left
+**Two decisions this task's payload (`arsenal/tasks/_history/lo-609f.md`) left
 open are settled by work that landed after it was written, not by this
 module's own judgement**: T35 (`jobsearch.session`) already builds the whole
 runtime around a session that is interrupted and resumed, and `spec-v2-steps.md`

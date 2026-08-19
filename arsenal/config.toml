@@ -1,0 +1,17 @@
+# claude-arsenal host configuration — yours; upstream never rewrites this file.
+
+# How far must a task PR get before it may be merged?
+#   always | after-ci | after-ci-and-review | never
+merge-policy = "after-ci"
+
+# test-first writes a failing test before the change; test-after writes tests
+# alongside it.
+test-discipline = "test-first"
+
+# What /session-end leaves behind: handoff | ticket | none
+session-end = "handoff"
+
+# The skills-listing character budget the auditor enforces. Raise it if your
+# surface's real budget differs, rather than deleting skills to fit a number
+# that is not yours.
+listing-budget = 8000
