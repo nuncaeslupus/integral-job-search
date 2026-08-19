@@ -369,7 +369,13 @@ def test_the_evidence_is_a_function_of_the_repository_not_of_the_run(tmp_path: P
     second = json.loads(target.read_text(encoding="utf-8"))
     assert first == second
     assert first == measure()
-    assert "/tmp/" not in json.dumps(first)
+
+    # Not just temp paths: anything absolute and machine-specific makes the file
+    # differ from itself on the next machine, which is how CI caught this.
+    serialised = json.dumps(first)
+    assert "/tmp/" not in serialised
+    assert str(_REPO_ROOT) not in serialised
+    assert sys.executable not in serialised
 
 
 @pytest.mark.parametrize("flag", ["--check", "--ensure"])

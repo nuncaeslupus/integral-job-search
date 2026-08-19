@@ -221,13 +221,24 @@ def package_manager(
     return None
 
 
-def install_command(manager: str, root: Path = _REPO_ROOT) -> tuple[str, ...]:
-    """The argv this bootstrap would run — returned, so it can be shown before it runs."""
+def install_command(
+    manager: str,
+    root: Path = _REPO_ROOT,
+    executable: str = sys.executable,
+) -> tuple[str, ...]:
+    """The argv this bootstrap would run — returned, so it can be shown before it runs.
+
+    `executable` is injectable for the same reason `package_manager`'s is, plus
+    one more: this argv is *recorded in the evidence file*, and reading
+    `sys.executable` directly wrote the measuring machine's own interpreter path
+    into it. CI then regenerated the file on a different machine and reported
+    drift on a repository nobody had touched — the T51 lesson, arriving a second
+    time by a different door.
+    """
     if manager == "uv":
         return ("uv", "sync", "--extra", "dev")
-    interpreter = sys.executable or "python3"
     venv_python = root / ".venv" / "bin" / "python"
-    python = str(venv_python) if venv_python.exists() else interpreter
+    python = str(venv_python) if venv_python.exists() else (executable or "python3")
     return (python, "-m", "pip", "install", "-e", ".[dev]")
 
 
@@ -355,7 +366,7 @@ def ensure_ready(
             detail=detail,
         )
 
-    command = install_command(manager, root)
+    command = install_command(manager, root, executable)
     message: str | None = None
     if not already_announced(env):
         message = announcement_for(missing, command)
