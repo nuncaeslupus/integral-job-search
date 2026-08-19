@@ -10,7 +10,7 @@ documents side by side.
 
 So the gate is drift, measured in three dimensions and in both directions:
 
-- **membership** — a task in `claude-arsenal/queue/tasks.jsonl` with no row in
+- **membership** — a task on the board (`arsenal/tasks/`) with no row in
   the plan is work nobody sequenced, gated or reconciled; a row in the plan with
   no task in the queue is work nobody can pick up;
 - **gate** — a plan row whose Gate cell disagrees with the `gate` block in that
@@ -43,9 +43,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from jobsearch.taskboard import load_board
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PLAN = _REPO_ROOT / "status" / "plan.md"
-DEFAULT_QUEUE = _REPO_ROOT / "claude-arsenal" / "queue" / "tasks.jsonl"
+DEFAULT_QUEUE = _REPO_ROOT / "arsenal" / "tasks"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "S8.json"
 
 # T1, T4b, S3, S1r, D-1 — every label the two documents use for a task.
@@ -56,6 +58,11 @@ _LABEL_RE = re.compile(r"^(?:T\d+[a-z]?|S\d+r?|D-\d+)$")
 _GATE_RE = re.compile(r"^[a-z][a-z0-9_]*\s*(?:==|!=|<=|>=|<|>)\s*-?\d+(?:\.\d+)?$")
 
 _GATE_BLOCK_RE = re.compile(r"^```gate\s*$", re.MULTILINE)
+
+# The two statuses that mean the work is finished, so anything depending on it
+# is no longer waiting. `blocked` and `escalated` are failure states, not
+# completions, and a dependent of one is still genuinely blocked.
+_TERMINAL = frozenset({"done", "merged"})
 _MIN_TASK_CELLS = 4
 
 
@@ -148,7 +155,18 @@ def payload_gate(payload: Path) -> str | None:
 
 
 def queue_tasks(queue: Path) -> tuple[list[dict[str, object]], list[str]]:
-    """Every queue record that is a JSON object, and a violation for the rest."""
+    """Every board record, and a violation for each entry that is not one.
+
+    Accepts both shapes the board has had: a directory of front-matter task
+    files (claude-arsenal v0.26.0 and later, including the preserved
+    `_history/` of work that finished before the migration) or the JSONL
+    ledger that preceded it. The rows come back identically shaped either way,
+    so the three drift checks below need not know which they are reading.
+    """
+    if queue.is_dir():
+        history = queue / "_history"
+        rows, board_violations = load_board(queue, history if history.is_dir() else None)
+        return [dict(row) for row in rows], board_violations
     tasks: list[dict[str, object]] = []
     violations: list[str] = []
     for number, line in enumerate(queue.read_text(encoding="utf-8").splitlines(), start=1):
@@ -239,6 +257,9 @@ def measure(plan: Path = DEFAULT_PLAN, queue: Path = DEFAULT_QUEUE) -> dict[str,
 
     # --- dependency agreement: the plan's Depends against the queue's deps ---
     dependency_mismatches: list[str] = []
+    finished_labels = {
+        label for label, task in labelled.items() if str(task.get("status")) in _TERMINAL
+    }
     for label, task in sorted(labelled.items()):
         planned_row = by_label.get(label)
         if planned_row is None:
@@ -250,7 +271,13 @@ def measure(plan: Path = DEFAULT_PLAN, queue: Path = DEFAULT_QUEUE) -> dict[str,
                 if isinstance(dep, dict) and dep.get("type", "blocks") == "blocks":
                     queued_deps.add(id_to_label.get(str(dep.get("id")), str(dep.get("id"))))
         planned_deps = set(planned_row.depends)
-        for missing in sorted(planned_deps - queued_deps):
+        # A prerequisite that already finished is satisfied, and the board
+        # stops carrying it: the migration to per-task files records what a
+        # task is still waiting on, while the plan's `Depends` column records
+        # the whole history of what it waited on. Reading that difference as
+        # drift would make every completed prerequisite a permanent violation,
+        # so only a dep on unfinished work counts as missing here.
+        for missing in sorted(planned_deps - queued_deps - finished_labels):
             dependency_mismatches.append(
                 f"{label} depends on {missing} in the plan and not in the queue"
             )

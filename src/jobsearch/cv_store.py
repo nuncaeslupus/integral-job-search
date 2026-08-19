@@ -4,7 +4,7 @@
 under "the CV": an **input** (a supplied PDF/DOCX, or nothing at all), a
 **store** (`cv/master.json` — "everything a CV contains plus everything it
 omits", never sent anywhere as-is), and an **output** (a CV generated per
-advert). `claude-arsenal/queue/lo-cb1c.md`'s scope change narrows this task to
+advert). `arsenal/tasks/_history/lo-cb1c.md`'s scope change narrows this task to
 the middle one: this module owns `cv/master.json` and the two ways it gets
 filled — parsing a document, or a conversation with someone who has none — and
 nothing about the third. Per-advert generation is T45; personal details

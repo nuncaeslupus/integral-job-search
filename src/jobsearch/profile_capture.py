@@ -10,7 +10,7 @@ everywhere after. `status/plan.md`'s T28 row and `status/specification.md` §5.4
 both say the profile is supposed to be a *pure function of everything the
 candidate ever said*, not of everything they said in one particular step.
 
-**`profile_capture_coverage`.** The gate (`claude-arsenal/queue/lo-62f9.md`) is
+**`profile_capture_coverage`.** The gate (`arsenal/tasks/_history/lo-62f9.md`) is
 the fraction of candidate-facing surfaces that accept free text and append at
 least one evidence row when they are actually exercised. "A surface that takes
 input and records nothing fails the gate — that is the whole point," and the

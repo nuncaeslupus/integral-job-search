@@ -1,6 +1,6 @@
 """S4 — the CV store: import, build-from-nothing, and the `master.json` contract.
 
-The payload (`claude-arsenal/queue/lo-cb1c.md`) names three tests directly;
+The payload (`arsenal/tasks/_history/lo-cb1c.md`) names three tests directly;
 this file also covers what the module docstring and the payload's "things to
 get right" call out: the dependency split (DOCX stdlib-only, PDF behind the
 optional `cv` extra), `cv/source/*` stored unmodified, build-from-nothing

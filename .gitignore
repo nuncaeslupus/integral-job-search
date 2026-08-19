@@ -243,3 +243,15 @@ data/
 # actual work lives in the browser's localStorage until exported and applied
 # with `harness import`; this file itself carries no state worth committing.
 corpus/labelled/label.html
+
+arsenal/session/surface_profile.json
+
+arsenal/session/rate_limits.json
+
+arsenal/session/budget_iterations.json
+
+arsenal/session/worktree_isolation
+
+arsenal/session/host_branch
+
+arsenal/session/rescue_refs

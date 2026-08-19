@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Assert that every task the queue calls finished has evidence to show for it.
+"""Assert that every task the board calls finished has evidence to show for it.
 
-`done` in `claude-arsenal/queue/tasks.jsonl` means "the PR is opened and the
-gate passed", and `merged` means that PR landed. Both are claims about a
-measurement. Nothing enforced them after the fact: the orchestrator ran
-`gate_run.sh` once, at release time, against the tree as it stood that
-minute. A later commit that breaks an earlier task's gate leaves the ledger
-saying `done` and the evidence saying otherwise, and no one finds out — the
-false-`done` hole, reopened by time rather than by carelessness.
+A terminal task — `done`, meaning "the PR is opened and the gate passed", or
+`merged`, meaning that PR landed — is making a claim about a measurement.
+Nothing enforced them after the fact: the orchestrator ran `gate_run.sh` once,
+at release time, against the tree as it stood that minute. A later commit that
+breaks an earlier task's gate leaves the board saying `done` and the evidence
+saying otherwise, and no one finds out — the false-`done` hole, reopened by
+time rather than by carelessness.
 
 So this runs in CI, on every push, over the *whole* board:
 
@@ -34,6 +34,19 @@ stale.
 Exit: 0 all terminal gates pass; 1 one or more fail; 2 the queue or a payload
 could not be read (a broken board is not a green board).
 
+The board moved when this repository migrated off the coordination-branch
+queue (claude-arsenal v0.26.0). Finished tasks are no longer rows in
+`tasks.jsonl`; they are entries in `arsenal/tasks/_migrated-history.md`, and
+their payloads — the fenced ``gate`` blocks this tool asserts — are kept in
+`arsenal/tasks/_history/` precisely so it still has something to check. The
+migration itself does not preserve them: it records a finished task's id,
+title and PR, and drops the payload that carried its gate. Keeping them is
+what stops the move from silently retiring 51 assertions.
+
+So `load_tasks` accepts either shape, dispatching on the file's suffix: a
+`.jsonl` ledger for the old board, a `.md` history for the new one. Both
+produce the same rows, and every test below drives whichever it needs.
+
 `--queue` and `--payload-dir` default to this repository's board and exist so
 the checker can be driven against a fixture. A verifier whose only input is the
 real board can only ever be tested on a board that is already passing, which
@@ -48,9 +61,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from jobsearch.taskboard import load_board
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-QUEUE_PATH = _REPO_ROOT / "claude-arsenal" / "queue" / "tasks.jsonl"
-PAYLOAD_DIR = _REPO_ROOT / "claude-arsenal" / "queue"
+QUEUE_PATH = _REPO_ROOT / "arsenal" / "tasks"
+PAYLOAD_DIR = _REPO_ROOT / "arsenal" / "tasks"
 GATE_EVIDENCE = _REPO_ROOT / "claude-arsenal" / "scripts" / "gate_evidence.py"
 
 # The two statuses that assert a gate was measured and passed. `escalated` and
@@ -63,14 +78,22 @@ class VerifyError(Exception):
 
 
 def load_tasks(queue: Path) -> list[dict[str, object]]:
-    """Every row of the ledger, or a raised error naming the bad line.
+    """Every row of the board, or a raised error naming the bad line.
 
-    A ledger that will not parse is reported rather than skipped: a queue
-    reduced to the rows that happened to be readable would quietly stop
-    checking whatever the broken line described.
+    Dispatches on shape so the old ledger and the new board are both readable:
+    a directory of front-matter task files, or a JSONL ledger. A board that
+    will not parse is reported rather than skipped — one reduced to the rows
+    that happened to be readable would quietly stop checking whatever the
+    broken entry described.
     """
     if not queue.exists():
         raise VerifyError(f"no queue at {queue}")
+    if queue.is_dir():
+        history = queue / "_history"
+        rows, violations = load_board(queue, history if history.is_dir() else None)
+        if violations:
+            raise VerifyError("; ".join(violations))
+        return [dict(row) for row in rows]
     rows: list[dict[str, object]] = []
     for number, line in enumerate(queue.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():

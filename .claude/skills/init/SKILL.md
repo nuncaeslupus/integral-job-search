@@ -46,15 +46,15 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/init.py" --workspace BACKEND --root ./backe
 The script:
 1. Creates `claude-arsenal/` structure: `bin/`, `project/`, `queue/`, `session/`, `agents/`.
 2. Copies bundle scripts from the plugin into `claude-arsenal/bin/` (checksum-based; refreshes stale files only).
-3. Creates empty `claude-arsenal/queue/tasks.jsonl` and `claude-arsenal/session/handover.md`.
+3. Scaffolds the host-owned `arsenal/` tree — `tasks/`, `specs/`, `plans/`, `session/handover.md` — and seeds `arsenal/config.toml`. Upstream owns `claude-arsenal/` and may overwrite it on every re-run; it never writes into `arsenal/` again, so an upgrade cannot touch the host repo's tasks or settings.
 4. Writes a permissive `surface_profile.json` (gitignored) so all tasks are eligible on any surface.
 5. Adds `.gitignore` entries for `surface_profile.json` and the statusLine-written `rate_limits.json`.
 6. Registers `statusline_capture.sh` as the host `statusLine` command (skipped if one already exists) so `budget_check.sh` can read quota.
 7. Injects the session-start protocol block + `@claude-arsenal/AGENTS.md` import into `CLAUDE.md`.
 
 With `--workspace NAME`, additionally:
-- Creates `claude-arsenal/project/<NAME>/` with `spec.md`, `plan.md`, `context.md`, `handover.md` stubs.
-- Upserts `claude-arsenal/project/overview.md` workspace index.
+- Creates `arsenal/project/<NAME>/` with `spec.md`, `plan.md`, `context.md`, `handover.md` stubs.
+- Upserts `arsenal/project/overview.md` workspace index.
 
 ## Gotchas
 

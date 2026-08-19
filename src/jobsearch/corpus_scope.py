@@ -1,5 +1,5 @@
 """D-1: does the Catalan corpus slice's declared scope agree across the
-documents that state it? (`claude-arsenal/queue/lo-bc1d.md`)
+documents that state it? (`arsenal/tasks/_history/lo-bc1d.md`)
 
 T4b asked for ≥100 raw ads, ≈60 ES / 25 EN / 15 CA, all **remote programming**
 roles. `corpus/raw/ads.jsonl` holds exactly that count and mix, but the 15

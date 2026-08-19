@@ -1,0 +1,55 @@
+# Completed before the migration
+
+Recorded so the history survives; these are not queue entries.
+
+- `lo-0204` — T1: Scaffold package: uv, ruff, strict mypy, pytest, Makefile, `profiles/` gitignored (merged) — https://github.com/nuncaeslupus/job-search/pull/4
+- `lo-3f5e` — T2: Dimension schema (Pydantic) + loader + validator, incl. `methods_ref` anchor resolution (merged) — https://github.com/nuncaeslupus/job-search/pull/7
+- `lo-2774` — T3: Dimension model v0: 20–25 dimensions with ES/EN/CA cues and elicitation questions (merged) — https://github.com/nuncaeslupus/job-search/pull/8
+- `lo-e16f` — T4: Corpus harness: ad store, labelling CLI, split assignment, self-agreement report (merged) — https://github.com/nuncaeslupus/job-search/pull/9
+- `lo-e497` — T4b: [LAPTOP] Collect ≥100 raw ads (≈60 ES, 25 EN, 15 CA) for remote programming roles — text + source URL only, no labels (merged) — https://github.com/nuncaeslupus/job-search/pull/6
+- `lo-d2b2` — T5: Label the collected ads against the dimension model; assign elicitation/evaluation split (merged) — https://github.com/nuncaeslupus/job-search/pull/42
+- `lo-e0fa` — T6: Profile store: append-only `evidence.jsonl` + `rebuild` to byte-identical derived files; two-profile fixture (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-80ba` — T7: Question bank generation from the dimension model (merged) — https://github.com/nuncaeslupus/job-search/pull/24
+- `lo-f496` — T8: Free-text answer extraction → dimension values + story-bank episodes (merged) — https://github.com/nuncaeslupus/job-search/pull/25
+- `lo-5c8c` — T11: Normalised offer schema + manual-paste connector (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-9e33` — T13: Cross-source dedup + expiry detection (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-bc1d` — D-1: Catalan corpus slice covers IT roles at large, not remote programming as T4b specifies (merged) — https://github.com/nuncaeslupus/job-search/pull/25
+- `lo-680d` — T23: Dimension `side`: matched / candidate-fact / candidate-trait, and a coverage metric that respects it (merged) — https://github.com/nuncaeslupus/job-search/pull/12
+- `lo-b876` — T24: Candidate attribute schema: languages, location, relocation, salary floor/target, availability, work authorisation (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-609f` — T27: Onboarding interview protocol: sequencing, follow-ups, coverage, first-job branch, empathic framing (merged) — https://github.com/nuncaeslupus/job-search/pull/25
+- `lo-62f9` — T28: Continuous profile capture: every candidate-facing surface appends evidence (merged) — https://github.com/nuncaeslupus/job-search/pull/27
+- `lo-2293` — T29: Decide and record the product shape — plugin packaging, phase skills, checkpoint scripts (done) — https://github.com/nuncaeslupus/job-search/pull/33
+- `lo-6928` — S1: Specification v2 — the whole process: steps, connections, artefact tree, lifecycle, resumption (merged) — https://github.com/nuncaeslupus/job-search/pull/15
+- `lo-aa45` — S2: Specification v2 — one spec per step, filling the step template (merged) — https://github.com/nuncaeslupus/job-search/pull/17
+- `lo-a4bf` — S3: Multi-user profile tree, identify-at-session-start, and the PreToolUse guard (session state is T35) (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-cb1c` — S4: CV store (the CV on steroids): import pdf/docx, build-from-nothing, per-ad generation (merged) — https://github.com/nuncaeslupus/job-search/pull/28
+- `lo-a95d` — S5: Offer lifecycle — status, purge rule, tombstones so dedup cannot resurrect, retention for what mattered (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-d865` — S1r: Specification v2.1 — fold the owner's review round into the process spec (merged) — https://github.com/nuncaeslupus/job-search/pull/16
+- `lo-c5ad` — T30: Encode step inputs/outputs in spec-v2-steps.json and gate on required-subset closure (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-eb2d` — T31: Detect note-key rebinding and a stale spec reader (merged) — https://github.com/nuncaeslupus/job-search/pull/24
+- `lo-d8d8` — S2r: fold the owner's twelve step-spec annotations into the step specifications (merged) — https://github.com/nuncaeslupus/job-search/pull/18
+- `lo-9073` — T32: declarative connector format, and a shared connector library (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-3265` — T33: net-from-gross pay estimation, per country, generated when absent (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-9ff0` — S7: one skill per step, generated from the settled step specifications (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-ee7d` — D-3: story_failure_fraction floor contradicts the revised History protocol (merged) — https://github.com/nuncaeslupus/job-search/pull/24
+- `lo-67f4` — T37: Profile revision and staleness across derived, authored and historical artefacts (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-4730` — T35: Session state and resumption — state.json written continuously, and the five-rule resumption order (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-485e` — T34: Step graph runtime — which steps may run, what is still owed, and the sufficiency level (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-5080` — T36: Freshness triggers and proactive re-entry — elapsed time, life event, gap; each an offer, never an action (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-dddd` — T38: Retraction rows, and deletion of a person — suppress everywhere derived; delete a named tree (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-99de` — T39: Scoring triggers — step boundary, explicit request, batch threshold N; never per message (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-da9c` — T40: Decline ledger — a subject declined twice is never raised again unless the candidate reopens it (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-f55b` — T41: Constraints step engine — confirm-and-fill from claims, ask from scratch without them (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-bd03` — T48: Step gate state register — derive each step's state from status/evidence/ instead of hand-editing it (merged) — https://github.com/nuncaeslupus/job-search/pull/22
+- `lo-4e48` — S8: Plan v2 — the build order for the thirteen-step process, and the queue reconciled against it (merged) — https://github.com/nuncaeslupus/job-search/pull/20
+- `lo-4ca5` — D-4: the Traits gate is assigned to T28 by the specification and to T27 by the work (merged) — https://github.com/nuncaeslupus/job-search/pull/24
+- `lo-27bb` — D-6: rebuild() flattens constraints.json back to stated-only, dropping declined/unknown (merged) — https://github.com/nuncaeslupus/job-search/pull/23
+- `lo-4a9b` — S9: convert claude-arsenal from a vendored copy to a git subtree (merged) — https://github.com/nuncaeslupus/job-search/pull/24
+- `lo-d92d` — D-7: spec-v2-steps.md names two owners for the Ranking gate; the JSON names one (merged) — https://github.com/nuncaeslupus/job-search/pull/24
+- `lo-455d` — T49: Trait evidence sufficiency — score a trait only when the evidence floor is met, or report insufficient (merged) — https://github.com/nuncaeslupus/job-search/pull/26
+- `lo-fbb4` — D-8: captured evidence cannot say which offer a reason was about (merged) — https://github.com/nuncaeslupus/job-search/pull/28
+- `lo-9261` — S12: move free-text capability into the machine-readable step model (merged) — https://github.com/nuncaeslupus/job-search/pull/31
+- `lo-803d` — T50: wire an intake capture driver now that the CV store gives it a free-text surface (merged) — https://github.com/nuncaeslupus/job-search/pull/29
+- `lo-6c2f` — D-9: non-insistence is not honoured on intake's conversational write path (merged) — https://github.com/nuncaeslupus/job-search/pull/30
+- `lo-4b79` — T51: Candidate state resolves from $INTEGRAL_HOME, never from inside a git work tree (merged) — https://github.com/nuncaeslupus/job-search/pull/36
+- `lo-b2de` — T52: First-run bootstrap — the tool installs its own dependencies, and says so (merged) — https://github.com/nuncaeslupus/job-search/pull/37

@@ -147,3 +147,63 @@ def test_the_makefile_exposes_the_targets_ci_invokes(target: str) -> None:
     assert f"\n{target}:" in makefile
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert target in workflow
+
+
+def _board(tmp_path: Path, task_id: str, *, status: str, measured: float | None) -> Path:
+    """A board in the post-migration shape: a directory of front-matter files."""
+    board = tmp_path / "tasks"
+    history = board / "_history"
+    history.mkdir(parents=True, exist_ok=True)
+    evidence = tmp_path / f"{task_id}-evidence.json"
+    if measured is not None:
+        evidence.write_text(json.dumps({"coverage": measured}), encoding="utf-8")
+    front_matter = (
+        f"---\nid: {task_id}\n"
+        f'title: "{task_id.upper()}: a finished task"\n'
+        f"status: {status}\n---\n\n"
+    )
+    (history / f"{task_id}.md").write_text(
+        front_matter + GATED_PAYLOAD.format(metric="coverage", evidence=evidence),
+        encoding="utf-8",
+    )
+    return board
+
+
+def test_a_terminal_task_on_the_migrated_board_still_has_its_gate_asserted(
+    tmp_path: Path,
+) -> None:
+    """The migration moves finished tasks out of the ledger. If the verifier
+    only understood the ledger, that move would retire every assertion it makes
+    while still exiting 0 — the board would look green because nothing was
+    being checked, which is the exact failure this file exists to prevent."""
+    board = _board(tmp_path, "h1", status="merged", measured=0.0)
+    result = _run(tmp_path, board)
+    assert result.returncode == 1, result.stdout
+    assert "h1" in result.stderr
+
+
+def test_a_task_file_with_no_id_is_an_error_not_a_pass(tmp_path: Path) -> None:
+    """Same standard as a malformed ledger line: exit 2, not a quiet skip."""
+    board = _board(tmp_path, "h2", status="merged", measured=1.0)
+    (board / "_history" / "broken.md").write_text("---\ntitle: no id\n---\n", encoding="utf-8")
+    result = _run(tmp_path, board)
+    assert result.returncode == 2
+
+
+def test_a_live_task_on_the_board_is_not_required_to_have_evidence(tmp_path: Path) -> None:
+    """A task nobody has finished legitimately has no measurement. Live task
+    files carry no `status`, so demanding one would make the board red from the
+    first commit — a check that always fails is a check nobody reads."""
+    board = _board(tmp_path, "h3", status="merged", measured=1.0)
+    (board / "h4.md").write_text(
+        '---\nid: h4\ntitle: "H4: unstarted"\n---\n\nno gate here\n', encoding="utf-8"
+    )
+    result = _run(tmp_path, board)
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_board_whose_gates_all_hold_passes(tmp_path: Path) -> None:
+    """Asserted last, for the reason given above."""
+    board = _board(tmp_path, "h5", status="merged", measured=1.0)
+    result = _run(tmp_path, board)
+    assert result.returncode == 0, result.stderr

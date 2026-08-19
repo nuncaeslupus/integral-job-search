@@ -4,7 +4,7 @@
 `test_a_trait_below_the_floor_is_insufficient_not_scored`,
 `test_insufficient_does_not_stop_the_step`, and
 `test_the_floor_counts_occasions_not_repetitions`. The payload
-(`claude-arsenal/queue/lo-455d.md`) adds two more,
+(`arsenal/tasks/_history/lo-455d.md`) adds two more,
 `test_evidence_from_any_surface_counts` and
 `test_the_floor_is_never_in_candidate_facing_text`. The rest of this file holds
 the properties `trait_sufficiency.py`'s own module docstring commits to: a
