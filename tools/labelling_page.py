@@ -259,6 +259,14 @@ mark.cue-hit {
 }
 .export-actions { display: flex; gap: 0.5rem; margin-top: 0.4rem; flex-wrap: wrap; }
 .copy-status { font-size: 0.8rem; color: var(--muted); }
+.howto {
+  margin: 1rem 1rem 0 1rem; padding: 0.75rem 1rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--panel); font-size: 0.9rem; line-height: 1.5;
+}
+.howto summary { cursor: pointer; font-weight: 500; }
+.howto ol { margin: 0.75rem 0 0.5rem 0; padding-left: 1.4rem; }
+.howto li { margin-bottom: 0.5rem; }
+.howto p { margin: 0.5rem 0 0 0; }
 footer { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 1rem; }
 </style>
 </head>
@@ -292,6 +300,49 @@ _BODY = """<header>
     <button id="nextUnlabelledBtn" class="primary">next unlabelled &rarr;</button>
   </div>
 </header>
+
+<details class="howto" open>
+  <summary><strong>How to label an ad</strong> &mdash; click to collapse</summary>
+  <ol>
+    <li><strong>Read the ad</strong> on the left. Decide for yourself what it
+      says; do not start from the highlights (see the note below).</li>
+    <li><strong>Find a dimension it evidences</strong> in the right-hand list.
+      Each card shows the dimension&rsquo;s name and its definition. Most ads
+      evidence only a handful of the 22 &mdash; <em>you are not meant to fill in
+      every card.</em> Leave a dimension untouched when the ad says nothing
+      about it.</li>
+    <li><strong>Select the words that prove it</strong> with the mouse, in the
+      ad text, then click <em>use selection</em> on that dimension&rsquo;s card.
+      The quote is taken from the browser&rsquo;s own selection, so it is always
+      an exact substring of the ad and can never fail the importer&rsquo;s
+      verbatim check. Select the evidence itself, not the whole paragraph.</li>
+    <li><strong>Enter a value</strong> from &minus;1 to 1. The sign is what
+      matters most: <code>1</code> = the ad strongly evidences this dimension,
+      <code>0.5</code> = weakly or partially, <code>&minus;1</code> = it
+      evidences the opposite. Steps of 0.05 are allowed; do not agonise over
+      the second decimal.</li>
+    <li><strong>Tick <em>negated</em></strong> when the ad <em>denies</em> the
+      dimension in words &mdash; &ldquo;sense gu&agrave;rdies&rdquo;, &ldquo;no
+      on-call&rdquo;. That is different from the ad simply not mentioning it
+      (leave it blank) and it is measured separately, so it is worth getting
+      right.</li>
+    <li><strong>Move on</strong> with <em>next unlabelled</em>. A dimension
+      counts as done only when it has <em>both</em> a quote and a value &mdash;
+      that is what the <em>Dimensions (n/22 on this ad)</em> heading counts.
+      The counter in the header measures something different and looser: how
+      many <em>ads</em> carry at least one label, so an ad you have barely
+      started already counts there. Neither number is a target.</li>
+  </ol>
+  <p><strong>Stopping and resuming.</strong> Your work is saved in this
+    browser as you go &mdash; closing the tab does not lose it (clearing
+    browser data does). There is no &ldquo;submit&rdquo;: when you want to hand
+    work over, scroll to <em>Export</em> at the bottom, click <em>copy
+    JSON</em>, and send that blob. You can do that after five ads or after a
+    hundred, and again later; importing is idempotent.</p>
+  <p><strong>If you are unsure about an ad</strong>, skip it rather than
+    guessing. An honest gap is fixable later; a guessed label silently becomes
+    ground truth that every extraction score is measured against.</p>
+</details>
 
 <div class="notice">
   <strong>Highlights are navigation, not labels.</strong> The shaded words show
