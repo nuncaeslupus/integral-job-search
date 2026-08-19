@@ -757,6 +757,19 @@ def _cmd_import(args: argparse.Namespace) -> int:
     except json.JSONDecodeError as exc:
         print(f"not valid JSON: {exc}", file=sys.stderr)
         return 2
+    # Two accepted shapes. A bare array is what the first page emitted and what
+    # a hand-written batch still is. An object is what the page emits once it can
+    # also carry `proposed_dimensions` — a dimension coined mid-read, which this
+    # command deliberately does not apply: writing `dimensions/<id>.yaml` is a
+    # change to the model's spine and belongs in a reviewed diff, not in a
+    # labelling import that also touches the corpus.
+    proposals: list[dict[str, Any]] = []
+    if isinstance(rows, dict):
+        proposals = rows.get("proposed_dimensions") or []
+        rows = rows.get("labels")
+        if rows is None:
+            print("expected a JSON object with a 'labels' array", file=sys.stderr)
+            return 2
     if not isinstance(rows, list):
         print("expected a JSON array of label rows", file=sys.stderr)
         return 2
@@ -791,6 +804,13 @@ def _cmd_import(args: argparse.Namespace) -> int:
 
     save_store(updated, store_path)
     print(f"{len(applied)} label(s) applied to {store_path}")
+    for proposal in proposals:
+        print(
+            f"proposed dimension {proposal.get('id', '?')!r} "
+            f"(coined at {proposal.get('coined_at_ad', '?')}) — not applied; "
+            "run `python -m jobsearch.suggestions propose` to write its file",
+            file=sys.stderr,
+        )
     return 0
 
 

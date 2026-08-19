@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from jobsearch.dimensions import Dimension, load_dimensions
+from jobsearch.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, load_dimensions
 from jobsearch.harness import (
     DEFAULT_STORE_PATH,
     Label,
@@ -37,6 +37,8 @@ from jobsearch.harness import (
     main,
     save_store,
 )
+from jobsearch.harness import main as harness_main
+from jobsearch.suggestions import SuggestionSet
 
 
 def _load_labelling_page() -> object:
@@ -127,7 +129,7 @@ def test_generated_page_contains_every_matched_dimension_and_every_ad() -> None:
 
     for dimension in DIMENSIONS:
         assert f'"{dimension.id}"' in page, f"dimension {dimension.id} missing from the page"
-        assert dimension.label.es in page, f"{dimension.id}'s Spanish label missing"
+        assert dimension.label.en in page, f"{dimension.id}'s label missing"
     for ad_record in STORE:
         assert f'"{ad_record.id}"' in page, f"ad {ad_record.id} missing from the page"
 
@@ -150,129 +152,215 @@ def test_generated_page_is_self_contained() -> None:
     assert re.search(r"<link[^>]*>", page) is None
 
 
-def test_generated_page_carries_the_cue_contamination_warning() -> None:
-    """The page must say, in its own UI, that highlights are not labels.
+def test_the_page_carries_no_cue_data_at_all() -> None:
+    """D-2, closed by construction rather than by rule.
 
-    `corpus/labelled/README.md` and D-2 explain why in prose a labeller never
-    reads; the page's own notice is what actually reaches them.
-    """
-    page = build_page(STORE[:3], DIMENSIONS)
+    `extraction_macro_f1` (T15) is measured against this corpus's labels, so a
+    page that let a cue hit propose a dimension, a rung or a span would let the
+    labeller rubber-stamp the extractor's own regexes as ground truth — the gate
+    would then score the extractor against itself and pass regardless of merit.
 
-    assert "navigation" in page.lower()
-    assert "D-2" in page or "cue-derived" in page.lower() or "independent" in page.lower()
-
-
-def test_ambiguous_quote_selection_is_detected_client_side() -> None:
-    """The page must warn about a repeated selection before it is ever exported.
-
-    `set` and `import` both refuse an ambiguous quote server-side; the page's
-    own `countOccurrences` logic is what lets the person catch it while
-    looking at the ad, instead of on the next `harness import` run. This test
-    reads the *shipped* JS text — not a reimplementation of it — so a change
-    that silently deletes the check would fail here.
-    """
-    page = build_page(STORE[:1], DIMENSIONS[:1])
-
-    assert "extend the selection" in page
-    assert "countOccurrences" in page
-
-
-def test_negated_toggle_is_present_per_dimension() -> None:
-    """`negated` records a denial ("sense guàrdies"), not an absence — README.
-
-    The page must offer this as a real per-label choice, not only accept it
-    from `harness import`.
-    """
-    page = build_page(STORE[:1], DIMENSIONS[:1])
-
-    assert 'class="negated-input"' in page
-    assert "denies" in page.lower()
-
-
-def test_cue_highlight_never_prefills_a_value() -> None:
-    """D-2: cue-derived gold is not independent of the model it checks.
-
-    `extraction_macro_f1` (T15) is measured against this corpus's labels, so
-    a page that let a cue hit set a value, pick a dimension, or fill a quote
-    would let the labeller rubber-stamp the extractor's own regex as ground
-    truth — the gate would then check the model against itself. This is
-    verified two ways, both mechanical rather than a reading of intent:
-
-    1. the JSON payload the page embeds carries a cue's `pattern` and
-       `negatable` only — never its `value` (`Cue.value` exists in the
-       dimension schema and is deliberately dropped when building the page);
-       there is no number in the page's data for a prefill to come from.
-    2. the only call site of the highlighting function (`cueMatches`) is
-       inside `renderAdText`, and nothing in that function's body calls
-       `touch(` — the one function that writes into the labeller's saved
-       state. A cue match therefore cannot reach `localStorage` no matter
-       what the labeller does.
+    Earlier versions guarded this by keeping cue *values* out of an embedded cue
+    list, which left the guard one careless edit from being undone. There is now
+    no cue list: the payload carries no patterns, no values and no negatable
+    flags, so no rendering path and no future change to the page can derive a
+    mark from the extractor. The marks come from `suggestions.json`, whose
+    provenance is recorded and whose overlap with the cues is measured.
     """
     page = build_page(STORE[:5], DIMENSIONS)
     embedded = _embedded_data(page)
 
     for dimension in embedded["dimensions"]:
-        for cues in dimension["cues"].values():
-            for cue in cues:
-                assert set(cue.keys()) == {"pattern", "negatable"}, (
-                    f"{dimension['id']}: cue payload carries {sorted(cue.keys())}, "
-                    "which includes something beyond pattern/negatable a prefill could use"
-                )
+        assert set(dimension) == {
+            "id", "group", "label", "definition", "polarity", "kind", "levels"
+        }, f"{dimension['id']} carries {sorted(dimension)}"
 
-    start = page.index("function renderAdText")
-    end = page.index("\n  function ", start + 1)
-    render_ad_text_body = page[start:end]
-    assert "cueMatches(ad)" in render_ad_text_body, (
-        "renderAdText must be the one caller of cueMatches"
-    )
-    # Exactly two mentions of the identifier: its own `function cueMatches(ad) {`
-    # definition, and the single call inside renderAdText asserted above — so
-    # nothing else in the page can be a second call site.
-    assert page.count("cueMatches") == 2, "cueMatches must be defined once and called once"
-    assert "touch(" not in render_ad_text_body, (
-        "cue highlighting must never write into the labeller's saved state"
-    )
+    blob = json.dumps(embedded)
+    for leaked in ("cues", "negatable", "extraction"):
+        assert leaked not in blob, f"the page payload carries {leaked!r}"
+
+    # And no committed cue pattern appears verbatim. Restricted to patterns
+    # carrying regex metacharacters: a bare-word cue like `promotion` occurs
+    # naturally in a definition, so its absence would prove nothing and its
+    # presence is not evidence of a leak. A pattern with `\\s+` or an
+    # alternation in it cannot arrive by any route but a cue list.
+    regexish = [
+        (dimension.id, cue.pattern)
+        for dimension in DIMENSIONS
+        for cues in dimension.extraction.cues.values()
+        for cue in cues
+        if any(token in cue.pattern for token in ("\\\\", "|", "[", "?", "+", "("))
+    ]
+    assert regexish, "no regex-shaped cue to check against — this assertion has gone inert"
+    for dimension_id, pattern in regexish:
+        assert pattern not in page, f"{dimension_id}: cue pattern reached the page"
 
 
-def test_value_input_carries_no_static_default() -> None:
-    """The value `<input>` template must ship with no `value="…"` attribute.
+def test_the_page_explains_where_its_marks_come_from() -> None:
+    """The reasoning has to reach the labeller, not just the commit log.
 
-    Belt-and-braces alongside `test_cue_highlight_never_prefills_a_value`: even
-    a page with an empty `DATA.ads`/`DATA.dimensions` payload must not bake a
-    number into the control itself.
+    A person confirming pre-marked spans needs to know the marks are not the
+    extractor's own output, and that some ads are deliberately bare — otherwise
+    an unmarked control ad reads as a bug and gets skipped.
     """
-    page = build_page([], [])
+    page = build_page(STORE[:3], DIMENSIONS)
 
-    assert re.search(r'class="val-input"[^>]*\bvalue=', page) is None
+    assert "D-2" in page
+    assert "suggestions.json" in page
+    assert "control" in page.lower()
+    assert "rubber-stamping" in page.lower()
 
 
-def test_emitted_quote_is_a_real_substring_of_the_ad_text() -> None:
-    """The page's data contract: `text` reaches the browser unmodified.
-
-    The page can only ever emit a quote by reading `window.getSelection()`
-    inside the rendered ad text; that guarantee is worth nothing if the text
-    the page embeds is not byte-for-byte what `harness` will later search
-    against. Driven with a real, accented Catalan ad — the case most likely
-    to be mangled by an encoding step the page's data pipeline might add.
+def test_a_proposal_is_visibly_not_a_decision() -> None:
+    """The whole speed-up rests on the labeller being able to tell at a glance
+    what they decided from what was proposed to them, without reading a legend.
     """
-    catalan_ads = [a for a in STORE if a.language == "ca"]
-    assert catalan_ads, "fixture assumption: the committed corpus has Catalan ads"
-    target = next(a for a in catalan_ads if any(ch in a.text for ch in "àèéíòóúïüç"))
+    page = build_page(STORE[:1], DIMENSIONS[:1])
 
-    page = build_page([target], DIMENSIONS)
-    embedded = _embedded_data(page)
-    embedded_ad = next(a for a in embedded["ads"] if a["id"] == target.id)
+    assert "mark.ann.confirmed" in page, "confirmed marks must be styled apart from proposals"
+    assert "dashed" in page
+    assert "status: 'pending'" in page
+    assert "a.status !== 'confirmed'" in page
 
-    assert embedded_ad["text"] == target.text, "ad text must reach the page unmodified"
 
-    # Simulate what a real selection would hand back: a literal slice of the
-    # embedded text, taken across an accented word.
-    accent_index = next(i for i, ch in enumerate(target.text) if ch in "àèéíòóúïüç")
-    quote = target.text[max(0, accent_index - 3) : accent_index + 4]
-    assert quote in embedded_ad["text"]
+def test_only_a_resolved_annotation_is_exported() -> None:
+    """A proposal nobody acted on is not a label. The export path is where that
+    is enforced, so it is read out of the shipped JS rather than restated here.
+    """
+    page = build_page(STORE[:1], DIMENSIONS[:1])
 
-    located = locate_quote(target, quote)
-    assert not isinstance(located, str), f"a real substring must locate cleanly: {located}"
+    body = page[page.index("function buildExport"):page.index("function note")]
+    assert "if (a.status !== 'confirmed') { skipped++; continue; }" in body
+    assert "source: sourceOf(a)" in body
+
+
+def test_provenance_is_derived_from_the_proposal_not_stored_as_a_flag() -> None:
+    """A stored flag is one the UI can set wrongly and nothing can catch. Deriving
+    `confirmed` vs `edited` by comparing against the original proposal means the
+    audit cannot be fooled by a page bug — only by editing the saved state by
+    hand.
+    """
+    page = build_page(STORE[:1], DIMENSIONS[:1])
+
+    body = page[page.index("function sourceOf"):page.index("function rungOf")]
+    assert "if (!a.origin) return 'human';" in body
+    assert "unchanged ? 'confirmed' : 'edited'" in body
+
+
+def test_the_page_widens_an_ambiguous_quote_instead_of_asking() -> None:
+    """`import` refuses a quote appearing twice. The old page made the labeller
+    "extend it until it is unique", which is work the text itself determines —
+    so the page now widens the exported quote until it pins down, leaving the
+    stored offsets alone.
+    """
+    page = build_page(STORE[:1], DIMENSIONS[:1])
+
+    assert "function uniqueQuote" in page
+    assert "quote: uniqueQuote(ad.text, a.start, a.end)" in page
+
+
+def test_negation_stays_a_per_annotation_choice() -> None:
+    """`negated` records a denial ("sense guàrdies"), not an absence — README."""
+    page = build_page(STORE[:1], DIMENSIONS[:1])
+
+    assert "a.negated = !a.negated" in page
+    assert "'un-negate' : 'negate'" in page
+
+
+def test_no_rung_is_offered_that_the_importer_would_refuse() -> None:
+    """The page offers rungs; `import_labels` refuses anything that is not one.
+    If the two ever disagree the labeller loses work already done, at submission
+    time, with no way to recover the intended value.
+    """
+    embedded = _embedded_data(build_page(STORE[:1], DIMENSIONS))
+    by_id = {dimension.id: dimension for dimension in DIMENSIONS}
+
+    for payload in embedded["dimensions"]:
+        for level in payload["levels"]:
+            assert by_id[payload["id"]].level_for(level["value"]) is not None, (
+                f"{payload['id']} offers rung {level['value']}, which import would refuse"
+            )
+
+
+def test_every_dimension_is_reachable_through_a_titled_section() -> None:
+    """The picker exists so a labeller can find a dimension without already
+    knowing its name. A dimension in no rendered section is unreachable except
+    by search, which requires the name they do not have.
+    """
+    embedded = _embedded_data(build_page(STORE[:1], DIMENSIONS))
+    sections = {group["id"] for group in embedded["groups"]}
+
+    for dimension in embedded["dimensions"]:
+        assert dimension["group"] in sections, f"{dimension['id']} is in no rendered section"
+    for group in embedded["groups"]:
+        assert group["title"], f"{group['id']} has no heading to render"
+
+
+def test_a_mark_crosses_to_the_browser_as_a_quote_not_an_offset() -> None:
+    """A Python offset counts code points; a JavaScript one counts UTF-16 units.
+
+    The corpus is full of emoji outside the BMP — the Manfred ads open with 📢,
+    and 🫵🏾 is two surrogate pairs on its own. Each one makes the JS index one
+    unit larger than the Python index, so an offset computed here and used there
+    slides every later span leftwards, citing words next to the evidence rather
+    than the evidence. It looks plausible in the panel and is wrong in the
+    corpus — the same failure `corpus/labelled/README.md` rules out for byte
+    offsets, one encoding layer up.
+
+    Observed before this was fixed: a `technical_depth` span on `manfred-8360`
+    rendered as "so. Manejarás **cientos de miles de eventos por segun" instead
+    of "Manejarás **cientos de miles de eventos por segundo**" — four units
+    adrift by 2,300 characters in.
+    """
+    ad_record = next(a for a in STORE if a.id == "manfred-8360")
+    quote = "Docker y Kubernetes"
+    assert ad_record.text.count(quote) == 1
+
+    suggestions = SuggestionSet.model_validate(
+        {
+            "method": "llm_read",
+            "generated_at": "2026-08-19",
+            "by_ad": {
+                ad_record.id: [
+                    {"dimension": "stack_modernity", "value": 0.6, "quote": quote}
+                ]
+            },
+        }
+    )
+    embedded = _embedded_data(build_page([ad_record], DIMENSIONS, suggestions))
+    (mark,) = embedded["suggestions"]["marks"][ad_record.id]
+
+    assert mark["quote"] == quote
+    assert "start" not in mark and "end" not in mark, (
+        "a mark must not carry offsets across the language boundary"
+    )
+
+    # The hazard is real for this ad, not hypothetical — so the test cannot go
+    # quietly inert if the corpus is ever re-fetched without emoji.
+    before = ad_record.text[: ad_record.text.index(quote)]
+    assert any(ord(ch) > 0xFFFF for ch in before), (
+        "no astral character before the span — this regression test proves nothing here"
+    )
+
+
+def test_the_page_resolves_a_mark_in_its_own_index_space() -> None:
+    """The other half of the fix, read out of the shipped JS: the browser locates
+    the quote itself rather than trusting a number computed in Python."""
+    page = build_page(STORE[:1], DIMENSIONS[:1])
+
+    assert "const start = ad.text.indexOf(m.quote);" in page
+    assert "if (start < 0) return [];" in page, "an unlocatable mark must be dropped, not placed"
+
+
+def test_a_coined_dimension_records_the_ad_it_was_coined_at() -> None:
+    """A dimension invented at ad 60 means ads 1-59 were read without it. Recording
+    where it was coined is what lets those be swept for it, rather than assumed
+    clean or re-read in full.
+    """
+    page = build_page(STORE[:1], DIMENSIONS[:1])
+
+    assert "coined_at_ad: ADS[current].id" in page
+    assert "proposed_dimensions" in page
 
 
 # ── `harness import` ────────────────────────────────────────────────────────
@@ -527,12 +615,67 @@ def test_split_shares_are_stable_input_for_the_page(tmp_path: Path) -> None:
 # ── helpers ──────────────────────────────────────────────────────────────
 
 
-def _embedded_data(page: str) -> dict[str, list[dict[str, Any]]]:
+def _embedded_data(page: str) -> dict[str, Any]:
     match = re.search(
         r'<script type="application/json" id="jobsearch-data">(.*?)</script>', page, re.S
     )
     assert match, "page must embed its data as a json script block"
     # build_page escapes "</" to "<\/" so the JSON block cannot terminate early;
     # undo that before parsing, matching what the page's own JS does.
-    parsed: dict[str, list[dict[str, Any]]] = json.loads(match.group(1).replace("<\\/", "</"))
+    parsed: dict[str, Any] = json.loads(match.group(1).replace("<\\/", "</"))
     return parsed
+
+
+def test_import_accepts_the_pages_export_object(tmp_path: Path) -> None:
+    """The page emits `{labels: [...]}` so it can also carry proposed dimensions.
+    A bare array stays valid — that is a hand-written batch, and the older page.
+    """
+    store_path = tmp_path / "store.jsonl"
+    save_store([ad(text="Ofrecemos guardias rotativas cada mes.")], store_path)
+    batch = tmp_path / "batch.json"
+    batch.write_text(
+        json.dumps({"labels": [row(quote="guardias rotativas")]}), encoding="utf-8"
+    )
+
+    code = harness_main(["--store", str(store_path), "import", str(batch)])
+
+    assert code == 0
+    assert load_store(store_path)[0].labels[0].dimension == "on_call_load"
+
+
+def test_import_does_not_write_a_coined_dimension_into_the_model(tmp_path: Path) -> None:
+    """A dimension coined mid-read changes the model's spine, and every gate that
+    counts dimensions reads it. That belongs in a reviewed diff, not in an import
+    that is also writing to the corpus — so the labels apply and the proposal is
+    reported for a separate, deliberate step.
+    """
+    store_path = tmp_path / "store.jsonl"
+    save_store([ad(text="Ofrecemos guardias rotativas cada mes.")], store_path)
+    batch = tmp_path / "batch.json"
+    batch.write_text(
+        json.dumps(
+            {
+                "labels": [row(quote="guardias rotativas")],
+                "proposed_dimensions": [
+                    {"id": "childcare_support", "label": "Childcare support",
+                     "coined_at_ad": "test-1"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    before = sorted(p.name for p in DEFAULT_DIMENSIONS_DIR.iterdir())
+
+    code = harness_main(["--store", str(store_path), "import", str(batch)])
+
+    assert code == 0
+    assert sorted(p.name for p in DEFAULT_DIMENSIONS_DIR.iterdir()) == before
+
+
+def test_import_rejects_an_object_that_carries_no_labels(tmp_path: Path) -> None:
+    store_path = tmp_path / "store.jsonl"
+    save_store([ad()], store_path)
+    batch = tmp_path / "batch.json"
+    batch.write_text(json.dumps({"proposed_dimensions": []}), encoding="utf-8")
+
+    assert harness_main(["--store", str(store_path), "import", str(batch)]) == 2
