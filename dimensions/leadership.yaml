@@ -106,21 +106,26 @@ extraction:
       language: es
       span: "Capacidad para liderar y coordinar equipos técnicos."
       value: 0.67
+      derived_from: cue
     - ad_id: tecnoempleo-98201f7d82b073d32d45
       language: es
       span: "Capacidad para gestionar varios interlocutores y equipos de trabajo."
       value: 1.0
+      derived_from: cue
     # The negative case, stated by the ad rather than inferred from silence.
     - ad_id: tecnoempleo-799b12ca520d03c0e743
       language: es
       span: "Gestión de equipos No"
       value: 0.0
+      derived_from: cue
     - ad_id: wwr-faire-senior-staff-data-engineer-platform-data-and-analytics
       language: en
       span: "Striking the right balance of technical leadership and hands-on development."
       value: 0.33
+      derived_from: cue
     - ad_id: feinaactiva-FA92322533
       language: ca
       span: "Liderar projectes de TI, inclòs el disseny i implementació de nous sistemes i serveis."
       value: 0.33
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -79,12 +79,15 @@ extraction:
       language: en
       span: "all the resources you need for your work.\n\nFlexible working hours to help you easily balance your personal and professional life.\n\nWork remotely from anywhere in Europe, or hang"
       value: 0.7
+      derived_from: cue
     - ad_id: tecnoempleo-0e9510e2527fd31cd240
       language: es
       span: "teletrabajo fuera de tu área geográfica habitual Horario flexible de entrada y salida y jornada intensiva viernes y verano. Desarrollo de plan de carrera personalizado formación"
       value: 0.7
+      derived_from: cue
     - ad_id: feinaactiva-FA92317375
       language: ca
       span: "- Jornada completa, 40 h/setmanals, amb horari flexible d'entrada i sortida.\n- Possibilitat de 95% teletreball.\n- Ambient multidisciplinari.\n- Equip jove i amb activitats"
       value: 0.7
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

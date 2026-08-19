@@ -2,7 +2,27 @@
 
 # How far must a task PR get before it may be merged?
 #   always | after-ci | after-ci-and-review | never
-merge-policy = "after-ci"
+#
+# Review is now required as well as CI, because CI alone cannot currently say
+# anything: GitHub Actions is out of runner minutes, so every job fails in
+# seconds with no runner assigned (see "Known environment state" in CLAUDE.md).
+# A policy of `after-ci` against a CI that can only be red is either a block on
+# all merges or a rule everyone learns to wave through, and the second is what
+# actually happens.
+#
+# So, while the outage lasts, read this policy as:
+#
+#   ci      the five gates run locally on the PR's head — `make lint test
+#           evidence verify-subtree verify-gates`. These are exactly what CI
+#           runs, in CI's order (`make ci`), so this is the same assertion by
+#           another route, not a weaker one. Quote the results on the PR.
+#   review  the Qodo review has landed and every comment it raises is fixed or
+#           answered on the thread. An unread bot review is not a review.
+#
+# When runners come back, delete this note: `after-ci-and-review` then means
+# what it says, and the local run goes back to being a pre-push check rather
+# than the evidence.
+merge-policy = "after-ci-and-review"
 
 # test-first writes a failing test before the change; test-after writes tests
 # alongside it.

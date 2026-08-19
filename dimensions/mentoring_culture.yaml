@@ -78,8 +78,10 @@ extraction:
       language: en
       span: "Company benefits include:\nPaid Time Off\nMentored Career Development\nU.S. Holidays\nUSD Remuneration\nProfit Sharing\nMaternity Coverage\n100% Remote\nAbout Azumo"
       value: 0.8
+      derived_from: cue
     - ad_id: manfred-8360
       language: es
       span: "clave para ayudar a Valsea a encontrar y mentorizar a nuevos compañeros, sentando las bases definitivas para el crecimiento del equipo de Go."
       value: 0.8
+      derived_from: cue
 methods_ref: METHODS.md#21-structured-behavioural-elicitation

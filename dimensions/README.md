@@ -137,13 +137,51 @@ towards `dimension_extractor_coverage` while proving the opposite of what that
 metric claims — and it appears exactly when a cue is tightened without
 revisiting the gold it was written from.
 
-**Caveat on gold provenance.** The v0 gold examples were first selected by
-searching the corpus for text each dimension's own cues match. That makes them
-real, but not independent: they demonstrate that a cue fires on genuine market
-language, and they do **not** constitute evidence that extraction generalises to
-phrasings the cues do not already anticipate. T5's hand labels are the
-independent set, and `extraction_macro_f1` (T15) must be measured against those,
-never against this gold. Tracked as queue task D-2.
+**Gold provenance is a field, not a caveat (D-2).** Every gold example carries
+`derived_from: cue | human`, required by the schema with no default — a default
+is a provenance decided by absence, and getting it wrong in the `human`
+direction is the silent failure the field exists to prevent.
+
+* `cue` — the span was found by searching the corpus for text this dimension's
+  own cues already match. Real ad wording, and a fair demonstration that a cue
+  fires on genuine market language. **Not** independent of the extractor:
+  scoring extraction against it asks a regex to re-find the string it was
+  written from, which passes near 1.0 and measures nothing.
+* `human` — a person read the ad and decided the value. The only kind that can
+  evidence generalisation.
+
+`evaluation_gold(dimensions)` returns only the `human` half, per dimension, and
+is the single function an extraction score may be computed over — so "score
+only against human labels" is code rather than a rule someone has to remember.
+It keeps a key for every dimension, including the ones whose list is empty: a
+dimension that cannot be scored has to stay visible, or a macro-average over
+the survivors reads as complete. `extraction_macro_f1` (T15, `lo-25b1`) is
+computed over this and nothing else.
+
+The committed state, measured on every `make evidence` run and recorded in
+`status/evidence/T3.json`:
+
+| | |
+|---|---|
+| `gold_by_provenance` | **69 cue, 0 human** |
+| `evaluation_gold_count` | **0** |
+| `dimensions_without_evaluation_gold` | **all 25 ad-side dimensions** |
+| `cue_derived_gold_in_evaluation_split` | 0 — D-2's gate |
+
+That first row is the finding, not a gap to be closed by relabelling: the whole
+v0 gold set is cue-derived, so today **no dimension can be scored for
+extraction at all**. The last row is the only one that can go wrong, and it
+does so the moment `evaluation_gold`'s filter is relaxed — which is tempting
+precisely because every list it returns is currently empty and that looks like
+a bug.
+
+One rule changes shape as a result. `unmatched_gold` applies to **cue-derived
+gold only**. Requiring a span to be reachable by the very cues it tests is fair
+of an example those cues selected and incoherent of a person's reading — a
+human label matters most exactly where the cues miss it. Since `_main` treats
+an `unmatched_gold` violation as a hard failure, the unscoped rule would have
+turned the T3 gate red on the first human label the cues did not anticipate,
+reading the most valuable evidence in the set as a defect.
 
 Review caught what that mechanical selection cost: seven dimensions had cues
 matching a *word* without requiring it applied to the role or employer, and each

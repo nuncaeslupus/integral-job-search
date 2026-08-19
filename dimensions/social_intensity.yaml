@@ -96,4 +96,5 @@ extraction:
       language: en
       span: "to engage with colleagues at company-wide offsites.\n\nCulture - We All Shape It\n\nAs part of a rapidly scaling start up, you will be instrumental in shaping our culture."
       value: 0.6
+      derived_from: cue
 methods_ref: METHODS.md#21-structured-behavioural-elicitation

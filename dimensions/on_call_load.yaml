@@ -78,4 +78,5 @@ extraction:
       language: es
       span: "bloqueado.\n\n**🚨 Sobre las Guardias** (On-Call) Manejar transacciones en tiempo real implica estar alerta, pero en Valsea el descanso es sagrado y las guardias están extremadamente"
       value: 0.8
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

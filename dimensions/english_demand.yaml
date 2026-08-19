@@ -78,12 +78,15 @@ extraction:
       language: es
       span: "persistencia.\n* **Nivel de Inglés Alto**: Tu día a día será completamente en este idioma.💂\n\n**Suma puntos 🎁**"
       value: 1.0
+      derived_from: cue
     - ad_id: feinaactiva-09202624459
       language: ca
       span: "anglès (parlat Superior, escrit Superior)\n\ncatalà (parlat Superior, escrit Superior)"
       value: 1.0
+      derived_from: cue
     - ad_id: feinaactiva-09202623802
       language: ca
       span: "Anglès (B2), català i castellà (C1).\nJornada completa. Retribució 3.085,71*14."
       value: 0.6
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

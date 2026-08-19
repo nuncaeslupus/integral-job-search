@@ -78,8 +78,10 @@ extraction:
       language: en
       span: "**👩🏾‍⚕️ Health care**: Private health insurance for you and your family.\n\n**🗣️ Continuous"
       value: 0.7
+      derived_from: cue
     - ad_id: manfred-8360
       language: es
       span: "**👩🏾‍⚕️Cuidado de tu salud**: Seguro médico privado para ti y para tu familia.\n\n**🗣️ Aprendizaje"
       value: 0.7
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

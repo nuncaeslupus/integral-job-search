@@ -58,6 +58,25 @@ SCHEMA_LANGUAGES: tuple[Language, ...] = get_args(Language)
 #                    evidences these, so they are elicited and never extracted.
 Side = Literal["matched", "candidate_fact", "candidate_trait"]
 
+# Where a gold example's value came from — the distinction D-2 exists to make
+# unmixable (`arsenal/tasks/lo-77a6.md`).
+#
+#   cue     the span was found by searching the corpus for text this dimension's
+#           own cues already match, then reading the surrounding excerpt. Real
+#           ad wording, and a fair demonstration that a cue fires on genuine
+#           market language — but not independent of the extractor. Scoring
+#           extraction against it asks a regex to re-find the string it was
+#           written from, which passes near 1.0 and measures nothing.
+#   human   a person read the ad and decided the value. The only kind that can
+#           evidence generalisation, and the only kind `extraction_macro_f1`
+#           may be computed over.
+#
+# There is deliberately no default. A default is a provenance decided by
+# absence, and getting it wrong in the `human` direction is exactly the silent
+# failure this field exists to prevent — so the schema makes every author say
+# which they have.
+GoldProvenance = Literal["cue", "human"]
+
 # Which section of the labelling picker a dimension appears under. Purely a
 # presentation axis — nothing scores on it — but it is declared here rather than
 # in the page because a picker that lists 22 flat options is the thing that made
@@ -204,12 +223,16 @@ class GoldExample(Strict):
     **verbatim** in that ad's text. An invented excerpt would let every later
     extraction gate measure the model against fiction — the same failure the
     corpus README refuses for the ads themselves.
+
+    `derived_from` is what keeps two incompatible kinds of gold from being
+    averaged into one number (D-2); see `GoldProvenance`.
     """
 
     ad_id: str = Field(min_length=1)
     language: Language
     span: str = Field(min_length=1)
     value: float = Field(ge=-1.0, le=1.0)
+    derived_from: GoldProvenance
 
 
 class Extraction(Strict):
@@ -581,23 +604,98 @@ def verify_gold(
 
 
 def unmatched_gold(dimensions: list[Dimension]) -> list[str]:
-    """Gold examples that none of their own dimension's cues match.
+    """**Cue-derived** gold examples that none of their own dimension's cues match.
 
-    A gold example the extractor cannot reach is not a demonstration of
-    anything: it counts towards `dimension_extractor_coverage` while proving
-    the opposite of what that metric claims. This catches the two ways that
-    happens — a cue tightened without revisiting its gold, and a gold span
-    chosen from wording no cue describes.
+    A cue-derived gold example the extractor cannot reach is not a
+    demonstration of anything: it counts towards
+    `dimension_extractor_coverage` while proving the opposite of what that
+    metric claims. This catches the two ways that happens — a cue tightened
+    without revisiting its gold, and a gold span chosen from wording no cue
+    describes.
+
+    Human gold is exempt, and the exemption is the whole point (D-2). This rule
+    demands that a gold span be reachable by the very cues it is meant to test,
+    which is a fair thing to ask of an example *selected* by those cues and an
+    incoherent thing to ask of a person's reading. A human label matters most
+    exactly when the cues miss it — that is what generalisation means — and
+    applying this check to it would reject the evidence with the highest value
+    and re-create the circularity D-2 exists to break. Worse, `_main` treats a
+    violation here as a hard failure, so before the split the first human label
+    the cues did not anticipate would have turned the T3 gate red and read as a
+    bad label rather than as an extractor gap.
     """
     return [
-        f"{dimension.id}: gold {gold.ad_id} is matched by no {gold.language} cue"
+        f"{dimension.id}: cue-derived gold {gold.ad_id} is matched by no {gold.language} cue"
         for dimension in dimensions
         for gold in dimension.extraction.gold
-        if not any(
+        if gold.derived_from == "cue"
+        and not any(
             re.search(cue.pattern, gold.span, re.IGNORECASE)
             for cue in dimension.extraction.cues.get(gold.language, [])
         )
     ]
+
+
+def evaluation_gold(dimensions: list[Dimension]) -> dict[str, list[GoldExample]]:
+    """Per dimension, the gold an extraction score may legitimately be computed over.
+
+    This is the single function T15 (`lo-25b1`) calls, so "score only against
+    human labels" is code rather than a rule someone has to remember. Reading
+    `dimension.extraction.gold` directly is the mistake; there is no filter
+    argument here because an optional one is a filter that gets left off.
+
+    Empty lists are kept, not dropped: a dimension with no independent gold is
+    a dimension that **cannot be scored**, and a caller that receives nothing
+    for it must report it unmeasured rather than average over what is left.
+    Today every list is empty — the entire committed gold set is cue-derived —
+    and that is the honest state of the measurement, not a bug in this
+    function.
+    """
+    return {
+        dimension.id: [g for g in dimension.extraction.gold if g.derived_from == "human"]
+        for dimension in dimensions
+    }
+
+
+def gold_provenance(dimensions: list[Dimension]) -> dict[str, Any]:
+    """How much gold there is of each kind, and which dimensions cannot be scored.
+
+    `dimensions_without_evaluation_gold` is fix step 3 of D-2: a dimension
+    whose only gold is cue-derived must surface rather than pass silently, so
+    the T17 `ontology_hit_rate` review has something to read.
+    """
+    per_dimension = evaluation_gold(dimensions)
+    counts = {"cue": 0, "human": 0}
+    for dimension in dimensions:
+        for gold in dimension.extraction.gold:
+            counts[gold.derived_from] += 1
+    return {
+        "gold_by_provenance": counts,
+        "evaluation_gold_count": counts["human"],
+        # D-2's gate, and the one number here that can actually go wrong. The
+        # name is the plan's (`status/plan.md`, Divergences), and "the
+        # evaluation split" now means what `evaluation_gold` returns: the plan
+        # was written when T5 would have hand-labelled a held-out slice of the
+        # corpus, and the owner retired that campaign on 2026-08-19. The
+        # invariant is unchanged — no cue-derived example may reach whatever is
+        # scored — so the metric keeps its declared name rather than the code
+        # growing a second one for the same thing.
+        #
+        # The counts above are descriptive; this asserts the separation holds
+        # by running the real `evaluation_gold` and counting anything in its
+        # output that is not a human label. It goes non-zero the moment someone
+        # relaxes that filter — which is the failure D-2 exists to prevent, and
+        # is otherwise invisible until an `extraction_macro_f1` of ~1.0 is
+        # reported and believed.
+        "cue_derived_gold_in_evaluation_split": sum(
+            1 for golds in per_dimension.values() for g in golds if g.derived_from != "human"
+        ),
+        # Ad-side only: a candidate-trait dimension is never read from an advert,
+        # so it is not "missing" evaluation gold — see `extractor_coverage`.
+        "dimensions_without_evaluation_gold": sorted(
+            d.id for d in ad_side(dimensions) if not per_dimension[d.id]
+        ),
+    }
 
 
 def silent_language_slices(
@@ -743,6 +841,11 @@ def write_coverage_evidence(
         "dimensions_without_cues_or_gold": uncovered,
         "gold_violations": verify_gold(dimensions, ads),
         "gold_unmatched_by_own_cues": unmatched_gold(dimensions),
+        # D-2. Recorded beside coverage on purpose: `dimension_extractor_coverage`
+        # counts a dimension as covered on the strength of gold that cannot
+        # evidence generalisation, so the two numbers have to be read together
+        # or the first one flatters the model.
+        **gold_provenance(dimensions),
         # Reported, not failed: see `silent_language_slices`.
         "language_slices_with_no_corpus_hit": silent_language_slices(dimensions, ads),
     }

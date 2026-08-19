@@ -102,20 +102,25 @@ extraction:
       language: es
       span: "Capacidad para trabajar de forma autónoma y en equipo."
       value: 0.4
+      derived_from: cue
     - ad_id: tecnoempleo-175115a5429143b3da42
       language: es
       span: "Capacidad para trabajar en equipo y asumir responsabilidades técnicas."
       value: 0.8
+      derived_from: cue
     - ad_id: wwr-proxify-ab-senior-fullstack-developer-python-3
       language: en
       span: "Ability to work independently and deliver high-quality results in a remote setup."
       value: -0.6
+      derived_from: cue
     - ad_id: manfred-8456
       language: en
       span: "a large, cross-functional environment"
       value: 0.8
+      derived_from: cue
     - ad_id: feinaactiva-FA92318000
       language: ca
       span: "Treball en equip i col·laboració amb altres departaments."
       value: 0.8
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

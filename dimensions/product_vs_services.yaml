@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "Our client is a fast-growing, Series A-backed AI company delivering agentic AI solutions to banks and credit unions. Their platform is already serving over 100 financial"
       value: -0.7
+      derived_from: cue
     - ad_id: tecnoempleo-0ccd13f62257530f7946
       language: es
       span: "Descripción de la empresa Devoteam es una consultora europea líder enfocada en estrategia digital plataformas tecnológicas ciberseguridad y transformación empresarial a través de la tecnología."
       value: -0.7
+      derived_from: cue
     - ad_id: feinaactiva-FA92317375
       language: ca
       span: "DESENVOLUPADOR .NET (H/D) per a consultoria tecnològica en creixement, líder en el seu sector, experts en desenvolupament web i alta motivació per la tecnologia punta.\n\n- Desenvolupar"
       value: -0.7
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

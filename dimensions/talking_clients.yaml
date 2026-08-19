@@ -96,12 +96,15 @@ extraction:
       language: ca
       span: "Gestió de la relació amb els clients (direcció i àrees de negoci)"
       value: 0.67
+      derived_from: cue
     - ad_id: tecnoempleo-450515d772aac3661b41
       language: es
       span: "contacto directo con cliente"
       value: 0.67
+      derived_from: cue
     - ad_id: wwr-cloudflare-principal-partner-solutions-engineer-saarc-based-in-bangalore
       language: en
       span: "Technical Account Management & Architectural Health: Act as the escalated technical point of contact"
       value: 1.0
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

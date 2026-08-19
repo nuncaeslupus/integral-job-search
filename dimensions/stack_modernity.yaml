@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "real-time responses, all orchestrated via **Kubernetes and Docker**.\n* To keep everything synchronized and monitored, they rely on **GitHub Actions, Argo CD, Langfuse,"
       value: 0.6
+      derived_from: cue
     - ad_id: manfred-8360
       language: es
       span: "verdad.\n\nEstamos hablando de un entorno de **microservicios orientado a eventos con unos 80 servicios** en total, donde tus nuevas criaturas en Go tendrán que entenderse"
       value: 0.6
+      derived_from: cue
     - ad_id: feinaactiva-09202624459
       language: ca
       span: "tecnològics (transformació digital, migració al núvol públic en models IaaS/PaaS/SaaS i evolució d'arquitectures), avaluant de forma crítica les estratègies abans i després"
       value: 0.6
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal
