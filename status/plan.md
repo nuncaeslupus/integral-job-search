@@ -214,7 +214,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T3 | Dimension model v0: 20–25 dimensions with ES/EN/CA cues and elicitation questions | 8 | L | T2 | `dimension_extractor_coverage >= 0.90` | `test_every_dimension_has_cues_in_all_three_languages` in `tests/test_dimension_content.py` — each dimension carries ≥1 cue per language | ☑ |
 | T4 | Corpus harness: ad store, labelling CLI, split assignment, self-agreement report | 5, 8 | M | T2 | `corpus_harness_roundtrip_loss == 0` | `test_corpus_roundtrip_preserves_text_and_offsets` in `tests/test_corpus.py` — writing then reading an ad preserves text byte-for-byte and label offsets | ☑ |
 | T4b | **[LAPTOP]** Collect ≥100 raw ads: ≈60 ES + 25 EN remote programming roles, plus ≈15 CA Catalan IT ads at large — the remote dimension mixed in, not filtered for (D-1) | 5, 8 | M | — | `raw_ad_count >= 100` | `test_raw_corpus_meets_size_and_language_mix` in `tests/test_corpus_raw.py` — ≥100 raw ads, mix within ±10% | ☑ |
-| T5 | **[HUMAN]** Label the collected ads against the dimension model; assign elicitation/evaluation split | 5, 8 | L | T3, T4, T4b | `corpus_size >= 100` | `test_corpus_meets_size_and_language_mix` in `tests/test_corpus_content.py` — ≥100 labelled ads and language mix within ±10% | ☐ |
+| T5 | Corpus assembled and pre-marked; splits assigned. The hand-labelling campaign was **retired 2026-08-19** — the model reads each advert itself, and human labels accrue from use | 5, 8 | L | T3, T4, T4b | `corpus_size >= 100` | `test_raw_corpus_meets_size_and_language_mix` in `tests/test_corpus_raw.py` — ≥100 ads, language mix within ±10% | ◐ |
 | T22 | `methods_ref` link check across dimensions and computation sites | — | S | T2, T18 | `undocumented_methods == 0` | `test_every_methods_ref_resolves_to_an_anchor` in `tests/test_methods_links.py` — every `methods_ref` resolves to a heading in `docs/METHODS.md` | ☐ |
 | T23 | Dimension `side`: matched / candidate-fact / candidate-trait, and a coverage metric that stops asking ad-side questions of candidate-side entries | 4, 8 | M | T2 | `side_coverage_violations == 0` | `test_a_trait_dimension_without_cues_is_valid` in `tests/test_dimension_side.py`; `test_extractor_coverage_counts_only_ad_side_dimensions` | ☑ |
 | T24 | Candidate attribute schema — languages, location, relocation, salary floor/target, availability, work authorisation, **and the reach and legality fields step 7 needs**: employed or contracting, paid where, taxed where. Pins the `constraints.json` field set and its `stated`/`declined`/`unknown` states | 2, 7 | M | T23 | `unsatisfiable_hard_constraint_leaks == 0` | `test_offer_failing_a_hard_constraint_never_ranks` in `tests/test_candidate_attributes.py`; `test_missing_attribute_is_unknown_not_satisfied` — an unstated constraint does not silently pass | ☑ |
@@ -348,11 +348,21 @@ exists until T35 and T34 land. Written before them, the scripts have nothing to
 read and the skills become the prose transcription S7's own payload warns
 against.
 
-**The critical path is M1, and it is not blocked by T5.** T5 ([HUMAN] corpus
-labelling) still paces `extraction_macro_f1`, `elicitation_eval_overlap` and
-everything that measures against the evaluation split — but nothing in M1
-touches the corpus. The two run in parallel: the spine is built while the
-labelling happens, and M2's extraction gates land when T5 does.
+**T5 no longer paces anything.** It was the choke point — T9, T14, D-2 and,
+through T14, the whole of T15's chain blocked on a hand-labelling campaign. That
+campaign was retired on 2026-08-19: the owner read four pre-marked ads, judged
+the read good enough, and decided the model should find the dimensions in each
+advert on its own. T5 closed against PR #42 on `corpus_size >= 100`, the
+threshold it always carried, and the three tasks behind it are unblocked.
+
+What did *not* go away is the measurement. `extraction_macro_f1` and
+`prefilter_recall` were both specified against the hand-labelled corpus, and the
+corpus holds **39 human labels over 4 ads — 14 of them in the evaluation half**,
+no dimension above 4, four dimensions with none. `status/evidence/T5.json`
+carries those counts per dimension so the gap is visible before a number is
+computed rather than after. D-2 (`lo-77a6`) settles what to do about it: score
+only what a person decided, report `n`, and refuse the score outright below a
+floor — unmeasured being a third outcome, distinct from pass and from fail.
 
 **Milestones are queue tags.** Every task carries `m1`, `m2`, `m3`, `m4` or
 `cross`, so a worker session scopes to the milestone rather than to raw
