@@ -65,6 +65,7 @@ def _load_labelling_page() -> object:
 _PAGE = _load_labelling_page()
 build_page = _PAGE.build_page  # type: ignore[attr-defined]
 page_main = _PAGE.main  # type: ignore[attr-defined]
+banked_payload = _PAGE._banked_payload  # type: ignore[attr-defined]
 
 # The real, committed store and model — the fixture every "does the real
 # corpus work" test in this file exercises.
@@ -236,7 +237,8 @@ def test_only_a_resolved_annotation_is_exported() -> None:
 
     body = page[page.index("function buildExport"):page.index("function note")]
     assert "if (a.status !== 'confirmed') { skipped++; continue; }" in body
-    assert "source: sourceOf(a)" in body
+    assert "const derived = sourceOf(a);" in body
+    assert "source: derived," in body
 
 
 def test_provenance_is_derived_from_the_proposal_not_stored_as_a_flag() -> None:
@@ -248,7 +250,7 @@ def test_provenance_is_derived_from_the_proposal_not_stored_as_a_flag() -> None:
     page = build_page(STORE[:1], DIMENSIONS[:1])
 
     body = page[page.index("function sourceOf"):page.index("function rungOf")]
-    assert "if (!a.origin) return 'human';" in body
+    assert "if (!o) return 'human';" in body
     assert "unchanged ? 'confirmed' : 'edited'" in body
 
 
@@ -878,7 +880,7 @@ def test_a_banked_label_reaches_the_page_as_a_confirmed_annotation() -> None:
         )
     ]
 
-    banked = _PAGE._banked_payload(store[0])  # type: ignore[attr-defined]
+    banked = banked_payload(store[0])
 
     assert banked == [
         {
@@ -888,6 +890,8 @@ def test_a_banked_label_reaches_the_page_as_a_confirmed_annotation() -> None:
             "nth": 0,
             "negated": False,
             "source": "human",
+            "labeller": "owner",
+            "round": 1,
         }
     ]
     assert "Contracte laboral indefinit" in build_page(store, DIMENSIONS)
@@ -919,7 +923,7 @@ def test_a_banked_span_of_a_repeated_phrase_keeps_its_own_position() -> None:
         )
     ]
 
-    banked = _PAGE._banked_payload(store[0])  # type: ignore[attr-defined]
+    banked = banked_payload(store[0])
 
     assert banked[0]["nth"] == 1
     # What the page's `nthIndexOf` does, in Python: the (nth+1)th occurrence.
@@ -937,10 +941,45 @@ def test_every_banked_span_in_the_committed_corpus_resolves_to_itself() -> None:
     """
     checked = 0
     for stored in STORE:
-        for entry in _PAGE._banked_payload(stored):  # type: ignore[attr-defined]
+        for entry in banked_payload(stored):
             at = -1
             for _ in range(entry["nth"] + 1):
                 at = stored.text.index(entry["quote"], at + 1)
             assert stored.text[at : at + len(entry["quote"])] == entry["quote"]
             checked += 1
     assert checked, "no labels banked yet — this test would pass over nothing"
+
+
+def test_a_banked_span_keeps_the_round_it_was_labelled_in() -> None:
+    """`labeller` and `round` ride along, because the export rebuilds every row.
+
+    The page stamps its two header inputs onto every exported label. A banked
+    round-1 label re-exported from a page set to round 2 would come back as a
+    round-2 row — and `import_labels` replaces by `(ad, dimension, round)`, so
+    it would land as a *duplicate* in round 2 while round 1 sat untouched. That
+    silently corrupts `harness agreement`, which is a comparison between rounds
+    and means nothing once one round holds the other's labels.
+    """
+    text = "Contracte laboral indefinit. Anglès B2 necessari."
+    store = [
+        ad(
+            ad_id="a",
+            text=text,
+            labels=[
+                Label(
+                    dimension="contract_stability",
+                    value=0.9,
+                    spans=[Span(start=0, end=27)],
+                    labeller="someone-else",
+                    round=2,
+                    source="confirmed",
+                )
+            ],
+        )
+    ]
+
+    banked = banked_payload(store[0])
+
+    assert banked[0]["labeller"] == "someone-else"
+    assert banked[0]["round"] == 2
+    assert banked[0]["source"] == "confirmed"

@@ -1,12 +1,12 @@
 {
   "side_coverage_violations": 0,
   "violations": [],
-  "dimension_count": 22,
+  "dimension_count": 23,
   "by_side": {
-    "matched": 22,
+    "matched": 23,
     "candidate_fact": 0,
     "candidate_trait": 0
   },
-  "ad_side_count": 22,
+  "ad_side_count": 23,
   "dimension_extractor_coverage": 1.0
 }

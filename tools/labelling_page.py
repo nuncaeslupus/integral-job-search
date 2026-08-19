@@ -143,6 +143,13 @@ def _banked_payload(ad: LabelledAd) -> list[dict[str, Any]]:
     emoji. `nth` disambiguates a quote that occurs more than once, so a repeated
     phrase resolves to the span that was actually labelled rather than to the
     first match, and the span stays exactly as wide as the labeller drew it.
+
+    `labeller` and `round` travel with each span because the export rebuilds
+    every row from the page's two header inputs. Without them, opening the page
+    in round 2 and exporting would re-stamp round-1 labels as round 2 — and
+    since `import_labels` replaces by `(ad, dimension, round)`, that writes a
+    duplicate into round 2 while round 1 sits untouched, quietly corrupting the
+    round-over-round self-agreement measurement.
     """
     banked: list[dict[str, Any]] = []
     for label in ad.labels:
@@ -156,6 +163,8 @@ def _banked_payload(ad: LabelledAd) -> list[dict[str, Any]]:
                     "nth": ad.text[: span.start].count(quote),
                     "negated": label.negated,
                     "source": label.source,
+                    "labeller": label.labeller,
+                    "round": label.round,
                 }
             )
     return sorted(banked, key=lambda b: (b["quote"], b["nth"]))
@@ -692,7 +701,16 @@ function annotations(adId) {
       return [{
         dimension: b.dimension, value: b.value, start, end: start + b.quote.length,
         quote: b.quote, negated: !!b.negated, status: 'confirmed', note: '',
-        origin: null, banked: b.source || 'human',
+        banked: b.source || 'human', labeller: b.labeller, round: b.round,
+        // The snapshot is what lets a *correction* to a banked label report as
+        // `edited`. Without it the stored source rides along unchanged, so
+        // fixing a label that had been `confirmed` still exports as
+        // `confirmed`, inflating the one number the control cohort exists to
+        // make readable.
+        origin: {
+          dimension: b.dimension, value: b.value,
+          quote: b.quote, negated: !!b.negated,
+        },
       }];
     });
     const decided = new Set(banked.map(b => b.dimension));
@@ -706,13 +724,63 @@ function annotations(adId) {
         negated: !!m.negated, status: 'pending', note: m.note || '',
         origin: {
           dimension: m.dimension, value: m.value,
-          start, end, negated: !!m.negated,
+          quote: m.quote, negated: !!m.negated,
         },
       }];
     }));
     save();
   }
-  return reconcile(adId);
+  return reconcile(mergeBanked(adId));
+}
+
+// Which ads have had their banked labels folded into an already-saved state,
+// this page load. Session-scoped on purpose: a banked row deleted during the
+// session stays deleted while you work, and comes back on reload, which is
+// honest -- the corpus still holds it, and removing it for good means removing
+// it from the corpus.
+const bankedMerged = new Set();
+
+// Seeding only runs the first time an ad is opened, so an ad already carrying a
+// saved state -- every ad the labeller has touched -- would never see BANKED at
+// all. That is precisely the case banking exists for: work exported, imported,
+// and the page rebuilt around it. So banked labels are folded into an existing
+// state too, adding any dimension the state does not already hold and retiring
+// the proposals it answers.
+function mergeBanked(adId) {
+  if (bankedMerged.has(adId)) return adId;
+  bankedMerged.add(adId);
+  const banked = BANKED[adId] || [];
+  if (!banked.length) return adId;
+
+  const ad = ADS.find(a => a.id === adId);
+  const anns = state.byAd[adId] || [];
+  const held = new Set(anns.map(a => a.dimension));
+  const added = [];
+  for (const b of banked) {
+    if (held.has(b.dimension)) continue;
+    const start = nthIndexOf(ad.text, b.quote, b.nth);
+    if (start < 0) continue;
+    added.push({
+      dimension: b.dimension, value: b.value, start, end: start + b.quote.length,
+      quote: b.quote, negated: !!b.negated, status: 'confirmed', note: '',
+      banked: b.source || 'human', labeller: b.labeller, round: b.round,
+      origin: {
+        dimension: b.dimension, value: b.value,
+        quote: b.quote, negated: !!b.negated,
+      },
+    });
+  }
+  if (!added.length) return adId;
+  const decided = new Set(added.map(a => a.dimension));
+  state.byAd[adId] = added.concat(anns.filter(a => !(decided.has(a.dimension) && isProposal(a))));
+  save();
+  return adId;
+}
+
+// An untouched suggestion: something the page put there that nobody has acted
+// on. Never a label the labeller made themselves, which must survive.
+function isProposal(a) {
+  return a.status !== 'confirmed' && !!a.origin && !a.banked && !a.restored;
 }
 
 // Saved offsets only mean anything against the text they were taken from, and
@@ -759,15 +827,21 @@ function reconcile(adId) {
 // annotation that still matches the proposal it came from is `confirmed`, one
 // that has moved is `edited`, one with no proposal behind it is `human`.
 function sourceOf(a) {
-  // A banked label already carries the provenance it was stored with. Deriving
-  // it again here would re-read every corpus label as fresh human work and
-  // quietly promote a `confirmed` one, inflating the very confirm rate the
-  // blind-control cohort exists to make readable.
-  if (a.banked || a.restored) return a.banked || a.restored;
-  if (!a.origin) return 'human';
   const o = a.origin;
-  const unchanged = o.dimension === a.dimension && o.value === a.value
-    && o.start === a.start && o.end === a.end && !!o.negated === !!a.negated;
+  // Compared on the *quote*, never on the offsets. `reconcile` moves start/end
+  // whenever the corpus text shifts around an otherwise untouched span, and an
+  // offset comparison would read that as the labeller having edited something
+  // they never went near.
+  const unchanged = !!o && o.dimension === a.dimension && o.value === a.value
+    && o.quote === a.quote && !!o.negated === !!a.negated;
+
+  // A label that arrived already decided, out of the corpus or out of a
+  // restored export, keeps the provenance it was stored with, but only while it
+  // still says what it said. Correct it and it is an edit, whatever it was.
+  const given = a.banked || a.restored;
+  if (given) return unchanged ? given : 'edited';
+
+  if (!o) return 'human';
   return unchanged ? 'confirmed' : 'edited';
 }
 
@@ -1140,10 +1214,20 @@ function buildExport() {
   for (const ad of ADS) {
     for (const a of (state.byAd[ad.id] || [])) {
       if (a.status !== 'confirmed') { skipped++; continue; }
+      // A row that arrived with its own labeller and round keeps them: the
+      // header inputs describe what is being labelled *now*, and stamping them
+      // onto somebody else's round-1 work would re-file it as this round's. An
+      // edited row is this labeller's judgement again, so it takes the current
+      // values.
+      const derived = sourceOf(a);
+      const inherited = (a.banked || a.restored) && derived !== 'edited';
       labels.push({
         ad_id: ad.id, dimension: a.dimension, value: a.value,
         quote: uniqueQuote(ad.text, a.start, a.end),
-        negated: !!a.negated, labeller, round, source: sourceOf(a),
+        negated: !!a.negated,
+        labeller: inherited && a.labeller ? a.labeller : labeller,
+        round: inherited && a.round ? a.round : round,
+        source: derived,
       });
     }
   }
@@ -1190,15 +1274,27 @@ function restoreFromExport(text) {
     if (start < 0) { unplaced++; continue; }
     const end = start + row.quote.length;
     const anns = annotations(ad.id);
-    const at = anns.findIndex(a => a.dimension === row.dimension
-      && a.start === start && a.end === end);
     const ann = {
       dimension: row.dimension, value: row.value, start, end, quote: row.quote,
       negated: !!row.negated, status: 'confirmed', note: '',
-      origin: null, restored: row.source || 'human',
+      restored: row.source || 'human',
+      labeller: row.labeller, round: row.round,
+      origin: {
+        dimension: row.dimension, value: row.value,
+        quote: row.quote, negated: !!row.negated,
+      },
     };
-    if (at >= 0) anns[at] = ann; else anns.push(ann);
-    state.byAd[ad.id] = anns;
+    // A restored row answers its dimension, so any proposal still pending for
+    // that dimension is retired with it, including one sitting on a different
+    // span. Left standing, confirming it later would put two rows carrying two
+    // different values under one (ad, dimension, round) -- which `import_labels`
+    // now refuses as a conflict, taking the whole batch down with it.
+    const at = anns.findIndex(a => a.dimension === row.dimension
+      && a.start === start && a.end === end);
+    if (at >= 0) anns[at] = ann;
+    else anns.push(ann);
+    state.byAd[ad.id] = anns.filter(a =>
+      a === ann || !(a.dimension === row.dimension && isProposal(a)));
     restored++;
   }
   save();

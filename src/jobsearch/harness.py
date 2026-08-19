@@ -671,6 +671,14 @@ def import_labels(
     Returns `(updated_store_or_original, results)`. `results` has one entry
     per row, each `{"index", "ad_id", "dimension", "status", "reason"?,
     "start"?, "end"?}` with `status` one of `"applied"` or `"refused"`.
+
+    `"applied"` is a statement about that **row**, not about the batch: it means
+    the row validated and located, and it stays `"applied"` even when a later
+    row's refusal rolls the whole import back. Whether anything reached disk is
+    the *store* return value, which is the original list untouched if any row was
+    refused — and `_cmd_import` says so in as many words ("N row(s) refused, M
+    row(s) would have applied — nothing written"). A caller must read the store,
+    or the presence of any refusal, rather than counting `"applied"` rows.
     """
     by_id = {ad.id: ad for ad in store}
     results: list[dict[str, Any]] = []
