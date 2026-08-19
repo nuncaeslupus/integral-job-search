@@ -140,6 +140,7 @@ _HEAD = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>T5 labelling aid</title>
 <style>
 :root {
@@ -200,6 +201,17 @@ header h1 { font-size: 1.05rem; margin: 0 0 0.4rem 0; }
 .controls input[type="text"], .controls input[type="number"], .controls select {
   font: inherit; padding: 0.2rem 0.35rem; border: 1px solid var(--border);
   border-radius: 4px; background: var(--panel); color: var(--text);
+  max-width: 100%;
+}
+/* An unconstrained <select> sizes itself to its widest option, and this one
+   holds 100 ad titles — on a 390px phone it measured 728px and dragged the
+   whole layout viewport out to 778px, which is why nothing lined up under a
+   thumb. The cap is on the control, not the option text, so the menu still
+   shows titles in full when it opens. */
+.controls label { min-width: 0; }
+#jumpSelect { max-width: min(22rem, 55vw); }
+.ad-text, .quote-display, .dim-def {
+  overflow-wrap: anywhere;
 }
 button {
   font: inherit; padding: 0.3rem 0.7rem; border-radius: 5px; border: 1px solid var(--border);
@@ -218,9 +230,49 @@ main {
   gap: 1rem; margin: 0 1rem 1rem 1rem;
 }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+/* What the page is holding for you, pinned where a thumb can reach it. */
+.selection-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: none; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+  padding: 0.6rem 0.8rem; background: var(--panel);
+  border-top: 1px solid var(--border); box-shadow: 0 -2px 12px rgba(0,0,0,0.12);
+  font-size: 0.85rem;
+}
+.selection-bar.active { display: flex; flex-wrap: nowrap; }
+.selection-bar button { white-space: nowrap; }
+.filters { margin-top: 0.5rem; }
+.filters > summary {
+  cursor: pointer; font-size: 0.8rem; color: var(--muted); padding: 0.25rem 0;
+}
+.filters .controls { margin-top: 0.5rem; }
+@media (max-width: 700px) {
+  .filters > summary { min-height: 40px; display: flex; align-items: center; }
+}
+.selection-bar .held {
+  flex: 1 1 12rem; min-width: 0; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.selection-bar .held b { color: var(--text); font-weight: 500; }
+.dim-filter {
+  width: 100%; font: inherit; padding: 0.4rem 0.5rem; margin-bottom: 0.6rem;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg); color: var(--text);
+}
+@media (max-width: 700px) { .dim-filter { font-size: 16px; min-height: 40px; } }
+.dim-card.filtered-out { display: none; }
+.quick-values { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.quick-values button { padding: 0.3rem 0.55rem; font-size: 0.85rem; }
+@media (max-width: 700px) { .quick-values button { min-height: 40px; padding: 0.45rem 0.7rem; } }
 .ad-pane, .dims-pane, .export {
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   padding: 0.9rem; max-height: 75vh; overflow-y: auto;
+  /* A grid item defaults to `min-width: auto`, so the track grows to its widest
+     child rather than the container. While the panes were scroll boxes their
+     overflow hid it; once mobile made them `overflow: visible` the widest
+     control pushed the column to 390px inside a 366px `main` and the page
+     overflowed by exactly the margins. Grid items have to be allowed to shrink. */
+  min-width: 0;
 }
 .ad-meta { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.5rem; }
 .ad-meta a { color: var(--accent); }
@@ -268,6 +320,31 @@ mark.cue-hit {
 .howto li { margin-bottom: 0.5rem; }
 .howto p { margin: 0.5rem 0 0 0; }
 footer { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 1rem; }
+
+/* Phones. The panes stop being independently scrollable boxes — nested scroll
+   areas inside a page that already scrolls is the classic way to trap a thumb —
+   and every control grows to a real touch target. Inputs go to 16px because
+   anything smaller makes iOS Safari zoom the viewport on focus, which throws
+   away the reading position mid-label. */
+@media (max-width: 700px) {
+  body { line-height: 1.5; }
+  header { position: static; padding: 0.6rem 0.75rem; }
+  .notice, .howto { margin-left: 0.75rem; margin-right: 0.75rem; }
+  main { margin: 0 0.75rem 1rem 0.75rem; gap: 0.75rem; }
+  .ad-pane, .dims-pane, .export { max-height: none; overflow: visible; padding: 0.75rem; }
+  .ad-text { font-size: 1rem; }
+  button { padding: 0.55rem 0.9rem; min-height: 44px; }
+  .controls { gap: 0.4rem 0.6rem; }
+  .controls label { font-size: 0.85rem; }
+  .controls input[type="text"], .controls input[type="number"], .controls select,
+  .dim-controls input, .dim-controls select { font-size: 16px; min-height: 40px; }
+  .dim-card { padding: 0.7rem; }
+  .dim-controls { gap: 0.5rem; }
+  .dim-controls label { min-height: 44px; display: flex; align-items: center; }
+  .export textarea { min-height: 6rem; }
+  footer { padding-bottom: 5rem; }
+}
+
 </style>
 </head>
 <body>
@@ -276,29 +353,35 @@ footer { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 1
 _BODY = """<header>
   <h1>T5 labelling aid</h1>
   <div class="progress" id="progress"></div>
-  <div class="controls">
-    <label>Labeller <input type="text" id="labellerName" value="owner" size="8"></label>
-    <label>Round <input type="number" id="roundNum" value="1" min="1" style="width:3.5rem"></label>
-    <label>Split
-      <select id="splitFilter">
-        <option value="">all</option>
-        <option value="elicitation">elicitation</option>
-        <option value="evaluation">evaluation</option>
-      </select>
-    </label>
-    <label>Language
-      <select id="langFilter">
-        <option value="">all</option>
-        <option value="es">es</option>
-        <option value="en">en</option>
-        <option value="ca">ca</option>
-      </select>
-    </label>
-    <label>Jump to <select id="jumpSelect"></select></label>
+  <div class="controls nav-controls">
     <button id="prevBtn">&larr; prev</button>
     <button id="nextBtn">next &rarr;</button>
     <button id="nextUnlabelledBtn" class="primary">next unlabelled &rarr;</button>
   </div>
+  <details class="filters" id="filtersPanel" open>
+    <summary>Filters, labeller, jump to&hellip;</summary>
+    <div class="controls">
+      <label>Labeller <input type="text" id="labellerName" value="owner" size="8"></label>
+      <label>Round
+        <input type="number" id="roundNum" value="1" min="1" style="width:3.5rem"></label>
+      <label>Split
+        <select id="splitFilter">
+          <option value="">all</option>
+          <option value="elicitation">elicitation</option>
+          <option value="evaluation">evaluation</option>
+        </select>
+      </label>
+      <label>Language
+        <select id="langFilter">
+          <option value="">all</option>
+          <option value="es">es</option>
+          <option value="en">en</option>
+          <option value="ca">ca</option>
+        </select>
+      </label>
+      <label>Jump to <select id="jumpSelect"></select></label>
+    </div>
+  </details>
 </header>
 
 <details class="howto" open>
@@ -359,13 +442,17 @@ _BODY = """<header>
 <main>
   <section class="ad-pane">
     <div class="ad-meta" id="adMeta"></div>
-    <div class="ad-hint">Select text with the mouse below, then click &ldquo;use
-      selection&rdquo; on the dimension it evidences.</div>
+    <div class="ad-hint">Select the words below &mdash; drag with the mouse, or
+      long-press and drag on a phone &mdash; then use &ldquo;use selection&rdquo;
+      on the dimension they evidence. The selection is held for you, so tapping
+      away does not lose it.</div>
     <div class="ad-text" id="adText"></div>
   </section>
   <section class="dims-pane">
     <h2>Dimensions (<span id="dimDoneCount"></span>/<span id="dimTotalCount"></span>
       on this ad)</h2>
+    <input type="search" class="dim-filter" id="dimFilter" autocomplete="off"
+      placeholder="filter dimensions by name or id&hellip;">
     <div id="dimsList"></div>
   </section>
 </main>
@@ -385,6 +472,12 @@ _BODY = """<header>
     local storage until you export and import it — closing the tab does not
     lose it, clearing browser data does.</p>
 </section>
+
+<div class="selection-bar" id="selectionBar">
+  <span class="held" id="heldSelection"></span>
+  <button type="button" id="jumpToDims" class="primary">label it &darr;</button>
+  <button type="button" id="dropSelection" aria-label="drop selection">&times;</button>
+</div>
 
 <footer>generated by tools/labelling_page.py &mdash; no data leaves this page</footer>
 """
@@ -618,6 +711,12 @@ _SCRIPT = r"""
         '<label>value <input type="number" class="val-input" min="-1" max="1" ' +
         'step="0.05" placeholder="&ndash;"></label>' +
         '<label><input type="checkbox" class="negated-input"> negated (denies it)</label>' +
+        '<span class="quick-values">' +
+        '<button type="button" class="quick-btn" data-value="-1">&minus;1</button>' +
+        '<button type="button" class="quick-btn" data-value="-0.5">&minus;0.5</button>' +
+        '<button type="button" class="quick-btn" data-value="0.5">0.5</button>' +
+        '<button type="button" class="quick-btn" data-value="1">1</button>' +
+        "</span>" +
         '<button type="button" class="capture-btn">use selection</button>' +
         '<button type="button" class="clear-btn">clear</button>' +
         "</div>" +
@@ -638,6 +737,18 @@ _SCRIPT = r"""
         touch(currentAd().id, dim.id, { negated: e.target.checked });
         renderExport();
       });
+      // A number spinner with 0.05 steps is unusable with a thumb; these are the
+      // four values that actually get typed.
+      Array.prototype.forEach.call(card.querySelectorAll(".quick-btn"), function (btn) {
+        btn.addEventListener("click", function () {
+          var value = parseFloat(btn.getAttribute("data-value"));
+          touch(currentAd().id, dim.id, { value: value });
+          renderDimCard(dim, currentAd());
+          renderProgress();
+          populateJumpSelect();
+          renderExport();
+        });
+      });
       card.querySelector(".capture-btn").addEventListener("click", function () {
         captureSelection(dim);
       });
@@ -651,13 +762,67 @@ _SCRIPT = r"""
     });
   }
 
+  // The selection is remembered as it is made, not read when the button is
+  // pressed. On a phone that is the difference between working and not: tapping
+  // anything outside the text collapses the selection first, so a handler that
+  // called getSelection() at click time always found it empty. Desktop had the
+  // same latent bug — a click that lands a hair outside the highlight clears it.
+  // Held text is stored *with the ad it came from*. Text alone was a real hazard:
+  // navigate to the next ad with a phrase still held, tap "use selection", and a
+  // common phrase ("teletrabajo", "remote") that happens to occur once in the new
+  // ad would be recorded as evidence from an advert it was never in — silently,
+  // and into the corpus every extraction score is measured against.
+  var heldSelection = null;
+
+  function rememberSelection() {
+    var sel = window.getSelection ? window.getSelection() : null;
+    if (!sel || sel.isCollapsed) { return; }
+    var text = sel.toString();
+    if (!text.trim()) { return; }
+    var adText = document.getElementById("adText");
+    // Only selections inside the ad text count; anything else (the instructions,
+    // a dimension definition) would produce a quote no importer could locate.
+    if (!adText || !adText.contains(sel.anchorNode) || !adText.contains(sel.focusNode)) {
+      return;
+    }
+    var ad = currentAd();
+    if (!ad) { return; }
+    heldSelection = { adId: ad.id, text: text };
+    renderSelectionBar();
+  }
+
+  function renderSelectionBar() {
+    var bar = document.getElementById("selectionBar");
+    if (!bar) { return; }
+    var ad = currentAd();
+    // A hold from another ad is not shown and not offered — dropping it at the
+    // boundary is the same rule as refusing it at capture, applied earlier.
+    if (!heldSelection || !ad || heldSelection.adId !== ad.id) {
+      bar.classList.remove("active");
+      return;
+    }
+    var shown = heldSelection.text.length > 90
+      ? heldSelection.text.slice(0, 90) + "\u2026"
+      : heldSelection.text;
+    document.getElementById("heldSelection").innerHTML =
+      "held: <b>\u201c" + escapeHtml(shown) + "\u201d</b>";
+    bar.classList.add("active");
+  }
+
+  function dropSelection() {
+    heldSelection = null;
+    renderSelectionBar();
+  }
+
   function captureSelection(dim) {
     var ad = currentAd();
     var card = document.querySelector('.dim-card[data-dim="' + dim.id + '"]');
     var errEl = card.querySelector(".quote-error");
     errEl.textContent = "";
-    var sel = window.getSelection ? window.getSelection() : null;
-    var text = sel ? sel.toString() : "";
+    var live = window.getSelection ? window.getSelection() : null;
+    var liveText = live && !live.isCollapsed ? live.toString() : "";
+    var held = heldSelection && heldSelection.adId === ad.id ? heldSelection.text : "";
+    var text = liveText || held;
     if (!text) {
       errEl.textContent = "select some text in the ad first";
       return;
@@ -674,10 +839,37 @@ _SCRIPT = r"""
       return;
     }
     touch(ad.id, dim.id, { quote: text });
+    dropSelection();
     renderDimCard(dim, ad);
     renderProgress();
     populateJumpSelect();
     renderExport();
+  }
+
+  function applyDimFilter(query) {
+    var needle = (query || "").trim().toLowerCase();
+    Array.prototype.forEach.call(document.querySelectorAll(".dim-card"), function (card) {
+      if (!needle) {
+        card.classList.remove("filtered-out");
+        return;
+      }
+      // The dimension's own name, id and definition — not the whole card. Every
+      // card carries the same -1/-0.5/0.5/1 buttons, so searching textContent
+      // made "1" and "0.5" match all 22 while the box promises name-or-id.
+      var haystack = ["dim-label", "dim-id", "dim-def"].map(function (cls) {
+        var el = card.querySelector("." + cls);
+        return el ? el.textContent : "";
+      }).join(" ").toLowerCase();
+      card.classList.toggle("filtered-out", haystack.indexOf(needle) === -1);
+    });
+  }
+
+  function reapplyDimFilter() {
+    // `buildDimsList` destroys the cards the filter marked, so the query has to
+    // be applied again after every rebuild — otherwise moving to the next ad
+    // shows all 22 while the box still shows what you typed.
+    var filter = document.getElementById("dimFilter");
+    applyDimFilter(filter ? filter.value : "");
   }
 
   function render() {
@@ -695,6 +887,8 @@ _SCRIPT = r"""
     renderAdText(ad);
     buildDimsList(ad);
     DIMENSIONS.forEach(function (dim) { renderDimCard(dim, ad); });
+    reapplyDimFilter();
+    renderSelectionBar();
     renderProgress();
     jumpSelect.value = ad.id;
     renderExport();
@@ -796,6 +990,25 @@ _SCRIPT = r"""
   });
   roundInput.addEventListener("change", function () {
     ui.round = roundInput.value; saveJSON(UI_KEY, ui);
+  });
+  // On a phone the filter row costs more than a screenful before the ad even
+  // starts; it is opened by default on anything wider.
+  if (window.matchMedia && window.matchMedia("(max-width: 700px)").matches) {
+    document.getElementById("filtersPanel").open = false;
+  }
+
+  document.addEventListener("selectionchange", rememberSelection);
+  document.addEventListener("mouseup", rememberSelection);
+  document.addEventListener("touchend", rememberSelection);
+  document.getElementById("dropSelection").addEventListener("click", dropSelection);
+  document.getElementById("jumpToDims").addEventListener("click", function () {
+    var list = document.getElementById("dimsList");
+    if (list) { list.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    var filter = document.getElementById("dimFilter");
+    if (filter) { filter.focus({ preventScroll: true }); }
+  });
+  document.getElementById("dimFilter").addEventListener("input", function (e) {
+    applyDimFilter(e.target.value);
   });
   document.getElementById("prevBtn").addEventListener("click", function () { step(-1); });
   document.getElementById("nextBtn").addEventListener("click", function () { step(1); });
