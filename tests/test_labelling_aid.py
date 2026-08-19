@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from jobsearch.dimensions import load_dimensions
+from jobsearch.dimensions import Dimension, load_dimensions
 from jobsearch.harness import (
     DEFAULT_STORE_PATH,
     Label,
@@ -79,6 +79,18 @@ def ad(
         split="evaluation",
         labels=labels or [],
     )
+
+
+def known(*ids: str) -> dict[str, Dimension]:
+    """The real committed dimensions, by id — what `import_labels` validates against.
+
+    Real ones rather than stubs, because the import path now also checks that a
+    value lands on one of the dimension's declared rungs. A stub scale would let
+    a test pass a value the committed model would refuse, which is the direction
+    that hides a regression rather than causing one.
+    """
+    by_id = {dimension.id: dimension for dimension in load_dimensions()}
+    return {dimension_id: by_id[dimension_id] for dimension_id in ids}
 
 
 def row(
@@ -273,7 +285,7 @@ def test_import_refuses_an_absent_quote(tmp_path: Path) -> None:
     store = load_store(store_path)
 
     updated, results = import_labels(
-        store, [row(quote="not in this ad anywhere")], {"on_call_load"}
+        store, [row(quote="not in this ad anywhere")], known("on_call_load")
     )
 
     assert results[0]["status"] == "refused"
@@ -285,7 +297,7 @@ def test_import_refuses_an_ambiguous_quote(tmp_path: Path) -> None:
     """A quote appearing more than once is refused, not silently placed on the first hit."""
     store = [ad(text="guardias, guardias, y mas guardias por la tarde")]
 
-    updated, results = import_labels(store, [row(quote="guardias")], {"on_call_load"})
+    updated, results = import_labels(store, [row(quote="guardias")], known("on_call_load"))
 
     assert results[0]["status"] == "refused"
     assert "more than once" in results[0]["reason"]
@@ -300,9 +312,9 @@ def test_import_applies_a_valid_batch(tmp_path: Path) -> None:
         store,
         [
             row(ad_id="a", dimension="on_call_load", value=0.8, quote="guardias rotativas"),
-            row(ad_id="a", dimension="travel_requirement", value=0.6, quote="viajes frecuentes"),
+            row(ad_id="a", dimension="travel_requirement", value=0.9, quote="viajes frecuentes"),
         ],
-        {"on_call_load", "travel_requirement"},
+        known("on_call_load", "travel_requirement"),
     )
 
     assert all(r["status"] == "applied" for r in results)
@@ -365,7 +377,7 @@ def test_import_refuses_an_unknown_dimension() -> None:
     store = [ad()]
 
     updated, results = import_labels(
-        store, [row(dimension="sallary_transparency")], {"on_call_load"}
+        store, [row(dimension="sallary_transparency")], known("on_call_load")
     )
 
     assert results[0]["status"] == "refused"
@@ -380,7 +392,7 @@ def test_import_refuses_malformed_rows_without_a_traceback() -> None:
     updated, results = import_labels(
         store,
         [{"ad_id": "test-1", "dimension": "on_call_load", "value": 5.0, "quote": "guardias"}],
-        {"on_call_load"},
+        known("on_call_load"),
     )
 
     assert results[0]["status"] == "refused"
@@ -399,15 +411,15 @@ def test_import_last_row_wins_within_one_batch() -> None:
     updated, results = import_labels(
         store,
         [
-            row(ad_id="a", value=0.2, quote="Guardias rotativas"),
-            row(ad_id="a", value=0.9, quote="sin guardias"),
+            row(ad_id="a", value=0.8, quote="Guardias rotativas"),
+            row(ad_id="a", value=0.0, quote="sin guardias"),
         ],
-        {"on_call_load"},
+        known("on_call_load"),
     )
 
     assert all(r["status"] == "applied" for r in results)
     assert len(updated[0].labels) == 1
-    assert updated[0].labels[0].value == 0.9
+    assert updated[0].labels[0].value == 0.0
 
 
 def test_import_cli_refusal_reports_every_bad_row_and_exits_nonzero(tmp_path: Path) -> None:
@@ -452,7 +464,7 @@ def test_import_against_the_real_committed_corpus() -> None:
     """
     dimension_with_gold = next(d for d in DIMENSIONS if d.extraction.gold)
     gold = dimension_with_gold.extraction.gold[0]
-    known = {d.id for d in DIMENSIONS}
+    by_id = {d.id: d for d in DIMENSIONS}
 
     updated, results = import_labels(
         list(STORE),
@@ -464,7 +476,7 @@ def test_import_against_the_real_committed_corpus() -> None:
                 quote=gold.span,
             )
         ],
-        known,
+        by_id,
     )
 
     assert results[0]["status"] == "applied", results[0]
