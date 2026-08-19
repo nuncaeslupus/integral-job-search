@@ -37,10 +37,9 @@ from jobsearch.harness import (
     import_labels,
     load_store,
     locate_quote,
-    main,
     save_store,
 )
-from jobsearch.harness import main as harness_main
+from jobsearch.harness import _main as main
 from jobsearch.suggestions import SuggestionSet
 
 
@@ -719,7 +718,7 @@ def test_import_accepts_the_pages_export_object(tmp_path: Path) -> None:
         json.dumps({"labels": [row(quote="guardias rotativas")]}), encoding="utf-8"
     )
 
-    code = harness_main(["--store", str(store_path), "import", str(batch)])
+    code = main(["--store", str(store_path), "import", str(batch)])
 
     assert code == 0
     assert load_store(store_path)[0].labels[0].dimension == "on_call_load"
@@ -748,7 +747,7 @@ def test_import_does_not_write_a_coined_dimension_into_the_model(tmp_path: Path)
     )
     before = sorted(p.name for p in DEFAULT_DIMENSIONS_DIR.iterdir())
 
-    code = harness_main(["--store", str(store_path), "import", str(batch)])
+    code = main(["--store", str(store_path), "import", str(batch)])
 
     assert code == 0
     assert sorted(p.name for p in DEFAULT_DIMENSIONS_DIR.iterdir()) == before
@@ -760,7 +759,7 @@ def test_import_rejects_an_object_that_carries_no_labels(tmp_path: Path) -> None
     batch = tmp_path / "batch.json"
     batch.write_text(json.dumps({"proposed_dimensions": []}), encoding="utf-8")
 
-    assert harness_main(["--store", str(store_path), "import", str(batch)]) == 2
+    assert main(["--store", str(store_path), "import", str(batch)]) == 2
 
 
 def test_page_build_refuses_an_invalid_suggestion_set(tmp_path: Path) -> None:

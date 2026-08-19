@@ -24,14 +24,17 @@ from jobsearch.harness import (
     assign_splits,
     build_store,
     load_store,
-    main,
     measure,
+    measure_labels,
     probe_labels,
     roundtrip_loss,
     save_store,
     self_agreement,
     split_counts,
     unknown_dimensions,
+)
+from jobsearch.harness import (
+    _main as main,
 )
 
 # Accents, an emoji and a line break — the three things that move offsets if
@@ -346,3 +349,102 @@ def test_self_agreement_corrects_for_chance() -> None:
     report = self_agreement(mixed)
     assert report["compared_labels"] == 3
     assert 0.0 < report["kappa"] < 1.0
+
+
+def test_label_evidence_counts_labels_per_dimension_not_spans(tmp_path: Path) -> None:
+    """`labels_by_dimension` counts judgements, not the spans evidencing them.
+
+    D-2 makes T15 refuse `extraction_macro_f1` for any dimension below a label
+    floor, so the floor has to be counted in the unit a human actually decides
+    in. One label carrying three spans of the same ad is one judgement; counting
+    spans would let a single well-evidenced ad clear a floor on its own.
+    """
+    store = tmp_path / "ads.jsonl"
+    save_store(
+        [
+            ad(
+                ad_id="test-1",
+                labels=[
+                    Label(
+                        dimension="on_call_load",
+                        value=0.8,
+                        spans=[Span(start=0, end=2), Span(start=3, end=5), Span(start=6, end=8)],
+                        labeller="owner",
+                        source="confirmed",
+                    )
+                ],
+            )
+        ],
+        store,
+    )
+
+    measured = measure_labels(store)
+
+    assert measured["labels_by_dimension"]["on_call_load"] == 1
+    assert measured["label_count"] == 1
+    assert measured["span_count"] == 3
+    assert measured["labels_by_source"] == {"confirmed": 1}
+
+
+def test_label_evidence_names_the_dimensions_nobody_has_labelled(tmp_path: Path) -> None:
+    """A dimension with no label is named, not left to be inferred from absence.
+
+    The list is what tells a reader of `status/evidence/T5.json` which
+    dimensions `extraction_macro_f1` cannot be computed for at all — the
+    difference between a gate that failed and one that was never measurable.
+    """
+    store = tmp_path / "ads.jsonl"
+    save_store([ad(labels=[])], store)
+
+    measured = measure_labels(store)
+
+    assert measured["label_count"] == 0
+    assert "on_call_load" in measured["dimensions_without_labels"]
+    assert measured["corpus_size"] == 1
+
+
+def test_bare_harness_run_writes_both_files_for_the_store_it_was_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No subcommand writes T4 *and* T5, and both honour `--store`.
+
+    This is the shape `make evidence` invokes: the target greps `^def _main`
+    and runs each module with no arguments. While this one required a
+    subcommand it stayed outside that loop, and `T4.json` sat committed at
+    `label_count: 0` against a store holding 39 of them.
+
+    `--store` is a top-level flag, and the bare run reaches its two gates by
+    re-dispatching. Rebuilding that argv without the flag would measure the
+    committed corpus instead of the one named — writing numbers about the wrong
+    file while exiting 0, which is the failure mode evidence files cannot have.
+    """
+    store = tmp_path / "ads.jsonl"
+    save_store([ad(ad_id="only-one")], store)
+    t4, t5 = tmp_path / "T4.json", tmp_path / "T5.json"
+    monkeypatch.setattr("jobsearch.harness.DEFAULT_EVIDENCE_PATH", t4)
+    monkeypatch.setattr("jobsearch.harness.LABEL_EVIDENCE_PATH", t5)
+
+    assert main(["--store", str(store)]) == 0
+
+    assert json.loads(t4.read_text())["ad_count"] == 1
+    measured = json.loads(t5.read_text())
+    assert measured["corpus_size"] == 1
+    assert measured["labelled_ad_count"] == 0
+
+
+def test_bare_run_reports_the_worse_of_its_two_gates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty store exits non-zero rather than writing two files and passing.
+
+    Both gates treat an empty corpus as unmeasured (exit 3), and the bare run
+    takes the maximum, so one failing gate cannot be hidden by the other
+    succeeding.
+    """
+    store = tmp_path / "ads.jsonl"
+    save_store([], store)
+    monkeypatch.setattr("jobsearch.harness.DEFAULT_EVIDENCE_PATH", tmp_path / "T4.json")
+    monkeypatch.setattr("jobsearch.harness.LABEL_EVIDENCE_PATH", tmp_path / "T5.json")
+
+    assert main(["--store", str(store)]) == 3
+
