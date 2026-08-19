@@ -145,6 +145,28 @@ assemble-bundle:  ## reassemble claude-arsenal/ from the freshly-pulled subtree
 # against the subtree, but nothing between the pull and the verify ever
 # rebuilt claude-arsenal/ — so any upstream change to a bundle asset failed
 # the verify step through no fault of the user.
+#
+# ⚠️ MERGE THE UPGRADE PR WITH A MERGE COMMIT, NEVER A SQUASH. The pull below
+# is `--squash`, which records the release it landed on as a `git-subtree-split:`
+# trailer on a commit of its own. A squash merge into main rewrites the branch
+# into a single commit and that trailer goes with it, so the NEXT pull cannot
+# find where the last one stopped and replays from the last split main still
+# remembers — re-applying changes already in the tree as add/add conflicts.
+#
+# This has already happened here, and it is cheap to check. `origin/main`
+# records exactly one split:
+#
+#     $ git log origin/main --format=%H | while read c; do \
+#           git cat-file -p $c | grep git-subtree-split:; done
+#     git-subtree-split: f84b4ef...        # the original `git subtree add` (S9)
+#
+# f84b4ef is v0.25.0. The v0.26.0 upgrade was squash-merged (#44), so its split
+# never reached main — and the v0.27.0 pull therefore computed its base as
+# `f84b4ef..085fa8c`, replaying v0.25→v0.27 onto a tree already at v0.26 and
+# conflicting on twelve files that had no common ancestor to merge from. The
+# resolution is always "take upstream's tree verbatim", because this prefix
+# carries no local edits by construction — but the conflict should not happen
+# at all, and it will not if the merge commit survives.
 arsenal-upgrade:  ## pull a new claude-arsenal release into the subtree (REF=v0.x.y)
 	@test -n "$(REF)" || { echo "usage: make arsenal-upgrade REF=v0.24.0" >&2; exit 1; }
 	git subtree pull --prefix=$(ARSENAL_PREFIX) arsenal $(REF) --squash
