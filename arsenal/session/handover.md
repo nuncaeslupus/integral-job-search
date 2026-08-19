@@ -123,11 +123,11 @@ table, for the actual commands.
 one board now, versioned with the code, and nothing to reconcile across
 branches.
 
-### Four upstream defects were found and worked around here
+### Five upstream defects were found and worked around here
 
-They are filed against `nuncaeslupus/claude-arsenal`. Each is worked around in
-this repository, so nothing below is outstanding work — but do not undo the
-workarounds when a later bundle arrives; check the issues are fixed first.
+Filed as claude-arsenal **#151–#155**. Each is worked around in this
+repository, so nothing below is outstanding work — but **do not undo the
+workarounds** when a later bundle arrives; check the issues are fixed first.
 
 1. **The migration strands finished tasks' deps, and the selector treats an
    absent dep as blocking.** Together those made **15 of 27 live tasks
@@ -144,18 +144,71 @@ workarounds when a later bundle arrives; check the issues are fixed first.
    retired queue scripts in place — `verify-subtree` catches it here, most
    repos have no such check. Deleted by hand.
 
+5. **A closed issue with no `state_reason` reads as `done`** (#155).
+   `state_from_issues` defaults a missing reason to `completed`, and the MCP
+   `list_issues` tool a cloud session uses **cannot return that field at all**.
+   So the same closed issue is `done` from here and `cancelled` from a
+   `gh`-capable laptop — and a task closed as *not planned* releases its
+   dependents. See the S10 note below for what this cost.
+
 Also: the migration's closing line says to run `/queue-sync-issues`, a skill
 that does not exist in v0.26.0. The real tool is
-`claude-arsenal/scripts/handle_sync.py`.
+`claude-arsenal/scripts/handle_sync.py`. (Noted in #154.)
 
-### One state that the new format cannot express
+### Two more upstream defects, reported but NOT worked around
 
-S10 (`lo-5efb`) was `blocked` — deliberately parked pending a project-level
-decision on the skill listing budget. The new format has no `blocked`: a task's
-state is its issue's state, which is `open`, `claimed`, `done` or `cancelled`.
-S10's issue is therefore **closed as not-planned** (`cancelled`), which keeps it
-out of selection and keeps it blocking S11, exactly as `blocked` did. Reopen it
-when the decision is made.
+Both surfaced by the review bot on PR #44 and verified against v0.26.0. Neither
+is hit by this repository today, so nothing here compensates for them — know
+they exist before relying on the behaviour.
+
+6. **`claim_task.sh <id> 2` can "win" a task another session holds** (#156).
+   The attempt suffix (`<id>.a2`) changes the ref, and the ref *is* the
+   compare-and-swap lock, so the collision check runs against a ref nobody
+   contends for. `AGENTS.md` forbids bumping the attempt to route around a
+   `lost` — a prohibition, not a lock. Harmless while one session runs at a
+   time, which is how this repo works.
+7. **A ` ```sh ` gate is reported as no-gate** (#157). `task_select.py` matches
+   only ` ```bash `; `gate_run.sh` runs both. Every payload here uses `bash`,
+   so nothing is mis-reported today — but write gates as `bash`, not `sh`,
+   until it is fixed.
+
+### Verified, so you do not have to re-test it
+
+`arsenal:task` **did not exist** in this repository and **auto-created on the
+first issue**, on the REST path this bundle actually uses. That was flagged as
+an open question when the bundle shipped; it is settled. `arsenal:claimed` is
+created the same way by the first claim.
+
+### One state the new format cannot express: S10
+
+S10 (`lo-5efb`) was `blocked` — parked pending a project-level decision on the
+skill listing budget. There is no `blocked` state now.
+
+The obvious translation, closing its issue as *not planned*, **was tried and
+reverted**: per defect 5 it reads back as `done` from a cloud session, which
+would have released S11. Instead S10's issue (#71) stays **open** and the task
+carries `requires: [surface:human]`, which is true of it — the budget question
+is a project-level judgement, not a worker's. That holds it out of automated
+selection on every surface while leaving S11 correctly blocked.
+
+**When the budget question is decided, drop the `requires` line** from
+`arsenal/tasks/lo-5efb.md` to put it back in the queue.
+
+### The board was verified end to end, not assumed
+
+27 issues created and fetched back; `task_select.py` driven against them
+returns **exactly the 7 tasks the pre-migration queue offered**, with zero
+warnings:
+
+```
+p70  lo-1af2  T25  [LAPTOP] broaden the corpus   ← sorts first; a cloud session must skip it
+p5   lo-3100  T14  lexical prefilter             ← read its scope note first
+p5   lo-77a6  D-2  the measurement               ← recommended next
+p5   lo-803e  T53  connector contract pack
+p5   lo-9f72  T55  rename to integral-job-search
+p5   lo-b422  T9   reaction elicitation
+p1   lo-277b  T12  [LAPTOP] portal connector
+```
 
 ## Environment
 

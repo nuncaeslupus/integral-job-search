@@ -4,6 +4,7 @@ title: "S10: the skill listing budget is structurally exceeded by 13 step skills
 priority: 10
 workspace: SOLO
 tags: [infra]
+requires: [surface:human]
 ---
 
 Surfaced by S7, which added thirteen step skills. Flagged rather than resolved
