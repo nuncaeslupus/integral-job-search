@@ -18,6 +18,7 @@ Every session, without waiting to be asked:
 6. After any session with tasks: update `arsenal/session/handover.md`.
 
 @claude-arsenal/AGENTS.md
+<!-- /claude-arsenal: auto-managed -->
 
 <!-- host-owned: not managed by claude-arsenal -->
 ## Reading the board on this surface — do this instead of `--issues`
