@@ -121,9 +121,44 @@ def _ad_payload(ads: list[LabelledAd]) -> list[dict[str, Any]]:
             "source": ad.source,
             "source_url": ad.source_url,
             "text": ad.text,
+            "labels": _banked_payload(ad),
         }
         for ad in sorted(ads, key=lambda a: a.id)
     ]
+
+
+def _banked_payload(ad: LabelledAd) -> list[dict[str, Any]]:
+    """The labels already in the store, as the page's own annotation shape.
+
+    Without this the page is amnesiac: every rebuild — a new suggestion set, a
+    new dimension, a fix to the page itself — hands back a corpus the labeller
+    has already worked through, with their decisions visible only in whatever
+    `localStorage` happened to survive. The first labelling session ended
+    exactly there, with the page gone and an export the page could not read
+    back. The store is the durable memory; this is the page reading it.
+
+    Each span is shipped as `(quote, nth)` rather than as offsets, for the
+    reason `_suggestion_payload` gives — a Python offset counts code points and
+    a JavaScript one counts UTF-16 units, and the corpus is full of astral
+    emoji. `nth` disambiguates a quote that occurs more than once, so a repeated
+    phrase resolves to the span that was actually labelled rather than to the
+    first match, and the span stays exactly as wide as the labeller drew it.
+    """
+    banked: list[dict[str, Any]] = []
+    for label in ad.labels:
+        for span in label.spans:
+            quote = ad.text[span.start : span.end]
+            banked.append(
+                {
+                    "dimension": label.dimension,
+                    "value": label.value,
+                    "quote": quote,
+                    "nth": ad.text[: span.start].count(quote),
+                    "negated": label.negated,
+                    "source": label.source,
+                }
+            )
+    return sorted(banked, key=lambda b: (b["quote"], b["nth"]))
 
 
 def _suggestion_payload(
@@ -482,7 +517,11 @@ _BODY = """<header>
     your agreement rate has a baseline; the page says so when you reach one.</p>
   <p><strong>Stopping and resuming.</strong> Work is saved in this browser as you
     go. Export when you are done and apply it with
-    <code>uv run python -m jobsearch.harness import &lt;file&gt;</code>.</p>
+    <code>uv run python -m jobsearch.harness import &lt;file&gt;</code>. Once applied,
+    it is in the corpus: every page built after that arrives with those labels
+    already placed and marked <em>banked</em>, so a lost tab costs you nothing
+    since the last export. <em>restore</em> below reads an export file straight
+    back into the page if you need it sooner than that.</p>
 </details>
 
 <main>
@@ -503,7 +542,7 @@ _BODY = """<header>
     <ul class="anns" id="anns"></ul>
     <p class="count" id="annEmpty"></p>
     <details style="margin-top:1rem">
-      <summary class="count">Export</summary>
+      <summary class="count">Export &amp; restore</summary>
       <p class="count">Only annotations you confirmed or edited are included.</p>
       <textarea id="export" readonly></textarea>
       <div class="bar" style="margin-top:0.4rem">
@@ -511,6 +550,11 @@ _BODY = """<header>
         <button id="copy">copy</button>
         <button id="download">download</button>
         <span class="count" id="exportNote"></span>
+      </div>
+      <div class="bar" style="margin-top:0.6rem">
+        <label class="count">restore from an export file
+          <input id="restore" type="file" accept="application/json,.json"></label>
+        <span class="count" id="restoreNote"></span>
       </div>
     </details>
   </section>
@@ -554,6 +598,10 @@ const DATA = JSON.parse(document.getElementById('jobsearch-data').textContent);
 const DIMS = new Map(DATA.dimensions.map(d => [d.id, d]));
 const ADS = DATA.ads;
 const MARKS = DATA.suggestions.marks || {};
+// Labels already applied to the corpus with `harness import`. They are not
+// proposals: somebody already decided them, so they arrive confirmed and the
+// suggestion for that dimension is dropped rather than re-offered.
+const BANKED = Object.fromEntries(DATA.ads.map(a => [a.id, a.labels || []]));
 const CONTROL = new Set(DATA.suggestions.control || []);
 const STORE_KEY = 'jobsearch.t5.labels.v2';
 
@@ -634,7 +682,22 @@ function annotations(adId) {
     // sliding every later span leftwards into the wrong words. Locating the
     // quote in the browser's own string keeps one index space throughout.
     const ad = ADS.find(a => a.id === adId);
-    state.byAd[adId] = (MARKS[adId] || []).flatMap(m => {
+    // Banked labels come first and arrive confirmed: they are decisions this
+    // labeller already made and applied to the corpus, not something to react
+    // to again. A suggestion for a dimension they have already decided is
+    // dropped — offering it back would ask them to re-litigate their own work.
+    const banked = (BANKED[adId] || []).flatMap(b => {
+      const start = nthIndexOf(ad.text, b.quote, b.nth);
+      if (start < 0) return [];
+      return [{
+        dimension: b.dimension, value: b.value, start, end: start + b.quote.length,
+        quote: b.quote, negated: !!b.negated, status: 'confirmed', note: '',
+        origin: null, banked: b.source || 'human',
+      }];
+    });
+    const decided = new Set(banked.map(b => b.dimension));
+    state.byAd[adId] = banked.concat((MARKS[adId] || []).flatMap(m => {
+      if (decided.has(m.dimension)) return [];
       const start = ad.text.indexOf(m.quote);
       if (start < 0) return [];
       const end = start + m.quote.length;
@@ -646,7 +709,7 @@ function annotations(adId) {
           start, end, negated: !!m.negated,
         },
       }];
-    });
+    }));
     save();
   }
   return reconcile(adId);
@@ -696,6 +759,11 @@ function reconcile(adId) {
 // annotation that still matches the proposal it came from is `confirmed`, one
 // that has moved is `edited`, one with no proposal behind it is `human`.
 function sourceOf(a) {
+  // A banked label already carries the provenance it was stored with. Deriving
+  // it again here would re-read every corpus label as fresh human work and
+  // quietly promote a `confirmed` one, inflating the very confirm rate the
+  // blind-control cohort exists to make readable.
+  if (a.banked || a.restored) return a.banked || a.restored;
   if (!a.origin) return 'human';
   const o = a.origin;
   const unchanged = o.dimension === a.dimension && o.value === a.value
@@ -715,6 +783,19 @@ function hue(dimensionId) {
 }
 
 // ── the quote a span exports as ───────────────────────────────────────────────────────────────
+
+// A quote can occur more than once in an ad — "guardias" twice, a salary line
+// repeated in the summary and the body. `indexOf` alone would collapse every
+// such span onto the first hit and quietly re-point somebody's label at the
+// wrong sentence, so the occurrence index travels with the quote.
+function nthIndexOf(text, needle, nth) {
+  let at = -1;
+  for (let seen = 0; seen <= (nth || 0); seen++) {
+    at = text.indexOf(needle, at + 1);
+    if (at < 0) return -1;
+  }
+  return at;
+}
 
 function occurrences(text, needle) {
   if (!needle) return 0;
@@ -826,7 +907,9 @@ function renderAnns(inline) {
     li.innerHTML =
       `<div class="ann-dim">${esc(dim ? dim.label : a.dimension)}`
       + '<span class="state"> &middot; '
-      + `${a.status === 'confirmed' ? sourceOf(a) : 'proposed'}</span></div>`
+      + `${a.status === 'confirmed' ? sourceOf(a) : 'proposed'}`
+      + `${a.banked ? ' &middot; banked' : (a.restored ? ' &middot; restored' : '')}`
+      + '</span></div>'
       + '<div class="ann-rung">'
       + `${esc(rung ? rung.label : '(rung ' + a.value + ' is not in the model)')}`
       + (a.negated ? ' <span class="state">negated</span>' : '') + '</div>'
@@ -1072,6 +1155,57 @@ function buildExport() {
     + (state.coined.length ? `, ${state.coined.length} proposed dimension(s)` : '');
 }
 
+// ── restore ───────────────────────────────────────────────────────────────────────────────────
+
+// The page's own export, read back in. Banking work with `harness import` is
+// the durable answer — the next page then arrives with it already placed — but
+// that round trip needs somebody at a terminal, and between two of them the
+// only copy of an afternoon's labelling is a `localStorage` key that a cleared
+// browser, a different machine or a downloaded-to-a-new-folder page all lose.
+// This is the labeller's own way back from that, needing nothing but the file
+// the download button already gave them.
+function restoreFromExport(text) {
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch (err) { return { error: 'that file is not JSON' }; }
+  const rows = Array.isArray(payload) ? payload : payload && payload.labels;
+  if (!Array.isArray(rows)) return { error: "no 'labels' array in that file" };
+
+  // A dimension coined in the exporting session is unknown to this page, and
+  // its labels would otherwise restore as rows the picker cannot name. Carrying
+  // the proposals over first keeps them nameable — and keeps them in the next
+  // export, so the coinage is not lost by passing through a restore.
+  for (const dim of (payload.proposed_dimensions || [])) {
+    if (!dim || !dim.id || DIMS.has(dim.id)) continue;
+    DIMS.set(dim.id, dim);
+    DATA.dimensions.push(dim);
+    state.coined.push(dim);
+  }
+
+  let restored = 0, unplaced = 0;
+  for (const row of rows) {
+    const ad = ADS.find(a => a.id === (row && row.ad_id));
+    if (!ad || typeof row.quote !== 'string') { unplaced++; continue; }
+    const start = ad.text.indexOf(row.quote);
+    if (start < 0) { unplaced++; continue; }
+    const end = start + row.quote.length;
+    const anns = annotations(ad.id);
+    const at = anns.findIndex(a => a.dimension === row.dimension
+      && a.start === start && a.end === end);
+    const ann = {
+      dimension: row.dimension, value: row.value, start, end, quote: row.quote,
+      negated: !!row.negated, status: 'confirmed', note: '',
+      origin: null, restored: row.source || 'human',
+    };
+    if (at >= 0) anns[at] = ann; else anns.push(ann);
+    state.byAd[ad.id] = anns;
+    restored++;
+  }
+  save();
+  render();
+  return { restored, unplaced };
+}
+
 function note(message) {
   const footer = document.getElementById('footer');
   footer.textContent = message;
@@ -1135,6 +1269,19 @@ document.addEventListener('DOMContentLoaded', () => {
     else { panel.classList.add('open'); document.getElementById('ndId').focus(); }
   });
   document.getElementById('build').addEventListener('click', buildExport);
+  document.getElementById('restore').addEventListener('change', ev => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = restoreFromExport(String(reader.result));
+      document.getElementById('restoreNote').textContent = result.error
+        ? result.error
+        : `${result.restored} label(s) restored`
+          + (result.unplaced ? `, ${result.unplaced} could not be placed` : '');
+    };
+    reader.readAsText(file);
+  });
   document.getElementById('copy').addEventListener('click', async () => {
     buildExport();
     try {

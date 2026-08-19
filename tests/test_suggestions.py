@@ -29,7 +29,7 @@ from jobsearch.suggestions import (
     validate_suggestions,
     write_proposals,
 )
-from jobsearch.suggestions import main as suggestions_main
+from jobsearch.suggestions import _main as suggestions_main
 
 DIMENSIONS = load_dimensions()
 TEXT = "Ofrecemos guardias rotativas cada mes y dos horas cada viernes para estudiar."

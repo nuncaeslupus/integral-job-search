@@ -243,7 +243,7 @@ def test_extractor_coverage_counts_only_ad_side_dimensions(tmp_path: Path) -> No
 
 
 def test_the_committed_model_is_all_matched_and_unchanged() -> None:
-    """`side` is additive: the 22 v0 dimensions default to `matched`."""
+    """`side` is additive: every committed dimension defaults to `matched`."""
     dimensions = load_dimensions(DEFAULT_DIMENSIONS_DIR)
 
     assert {d.side for d in dimensions} == {"matched"}

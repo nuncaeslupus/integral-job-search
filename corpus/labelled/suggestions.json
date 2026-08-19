@@ -1,0 +1,5271 @@
+{
+  "method": "llm_read",
+  "generated_at": "2026-08-19T18:33:07+00:00",
+  "note": "One pass over every ad that is not in the blind-control cohort, read for meaning. No extraction cue was consulted while reading: the reader worked from each dimension's definition and its named rungs only, which is what keeps extraction_macro_f1 from scoring the extractor against its own output (D-2). feinaactiva-09202623802 carries only the dimensions its labeller had not already decided.",
+  "blind_control": [
+    "feinaactiva-09202624157",
+    "feinaactiva-09202624459",
+    "feinaactiva-FA92317986",
+    "manfred-8389",
+    "manfred-8419",
+    "tecnoempleo-08a719c5825dd3fa5043",
+    "tecnoempleo-175115a5429143b3da42",
+    "tecnoempleo-17da1920025ad37df94f",
+    "tecnoempleo-5749101e123023582e44",
+    "tecnoempleo-799b12ca520d03c0e743",
+    "tecnoempleo-963f114e02ee83f2ba4e",
+    "tecnoempleo-a9e2182a624843761947",
+    "tecnoempleo-acca1d9de2a1b3afa647",
+    "wwr-clickhouse-ai-product-engineer-clickstack-1",
+    "wwr-lmg-staffing-solutions-ai-assisted-software-engineer-web-applications",
+    "wwr-toptal-senior-software-engineer-for-ai-powered-banking-platform"
+  ],
+  "by_ad": {
+    "feinaactiva-09202623802": [
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "_Priorització i planificació dels projectes i peticions recurrents.",
+        "confidence": "low",
+        "note": "the role sets its own order of work"
+      }
+    ],
+    "feinaactiva-FA20230113O56": [
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Funcionari.",
+        "confidence": "medium",
+        "note": "a civil-service post; the ad's own contract line says 'indiferent'"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "Ajuntament de Sabadell. 2 places de Tècnic superior",
+        "confidence": "medium",
+        "note": "municipal public service"
+      }
+    ],
+    "feinaactiva-FA92317375": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "per a consultoria tecnològica en creixement",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contracte laboral indefinit",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "amb horari flexible d'entrada i sortida",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Possibilitat de 95% teletreball.",
+        "confidence": "medium",
+        "note": "95% is nearly remote but framed as a possibility, and the office is named"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Mínima 2 any en programació .Net",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": ".NET Core, Entity Framework, LINQ.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribució segons experiència i resultat prova tècnica.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "Equip jove i amb activitats de teambuilding.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Carrera a llarg termini.",
+        "confidence": "medium"
+      }
+    ],
+    "feinaactiva-FA92317378": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "per a consultoria tecnològica líder en el seu sector",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Més del 50% de la jornada de teletreball.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Flexibilitat horària.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribució competitiva, adequada a l'experiència i habilitats.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Formació i Certificacions tècniques.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Entre 3 i 5 anys d'experiència",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Nivell B2 d'anglès.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "aplicant metodologia AGILE.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": -0.6,
+        "quote": "Assegurar l'adaptació dels canvis amb les especificacions del client.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Innovació, últimes tecnologies i versions.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contracte laboral indefinit",
+        "confidence": "high"
+      }
+    ],
+    "feinaactiva-FA92318000": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.0,
+        "quote": "LLOC DE TREBALL PRESENCIAL A VIC",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Disponibilitat per desplaçar-se.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "Tracte directe amb els clients",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.8,
+        "quote": "Coneixement de normatives i estàndards de seguretat (ISO 27001, GDPR, NIST...)",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "prestar servei tècnic informàtic a empreses",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contracte indefinit un cop superat el període de formació i proves",
+        "confidence": "medium",
+        "note": "open-ended, but only after a probation period"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Sou: A convenir",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "anglès (parlat Mitjà, escrit Mitjà)",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiència 2 anys.",
+        "confidence": "medium"
+      }
+    ],
+    "feinaactiva-FA92319975": [
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "Atenció d’incidents de segon nivell:",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "desenvolupats pel nostre client i que son usats pels seus clients finals",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.8,
+        "quote": "Bones pràctiques ITIL i/o ISO 20000.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "Proporcionar assistència als usuaris 2n nivell.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiència 3 anys.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contracte laboral indefinit",
+        "confidence": "high"
+      }
+    ],
+    "feinaactiva-FA92320073": [
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "explotació de plataformes de\ndades sanitàries",
+        "confidence": "high",
+        "note": "health data for a hospital group"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Dissenyar i evolucionar l’arquitectura de dades corporativa",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Participar en l’avaluació i adopció de noves tecnologies relacionades amb IA, cloud i dades.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Col·laborar amb equips clínics, tècnics i de negoci en iniciatives de transformació digital.",
+        "confidence": "medium",
+        "note": "internal clinical and business teams rather than external clients"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contracte laboral indefinit",
+        "confidence": "high"
+      }
+    ],
+    "feinaactiva-FA92320466": [
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "Fundació Orienta és una institució monogràfica en salut mental infantojuvenil.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "La Fundació Orienta està compromesa amb la igualtat de tracte i oportunitats",
+        "confidence": "high",
+        "note": "the standard line, nothing named behind it"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Retribució competitiva: 31.000€ bruts anuals aproximats",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Lloc de treball estable amb contracte indefinit (4 mesos de període de prova)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Possibilitat de progrés salarial a través del model de Carrera Professional",
+        "confidence": "high",
+        "note": "a named career model, not just 'opportunities'"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Accés a formacions especialitzades",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.0,
+        "quote": "Jornada completa (36h/setmana – 1.620 h/any), de dilluns a divendres",
+        "confidence": "medium",
+        "note": "a shorter week, but a fixed one"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiència 2 anys.",
+        "confidence": "medium"
+      }
+    ],
+    "feinaactiva-FA92322289": [
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "-Salari: 34.000 – 43.000 BA. Segons vàlua en 14 pagues.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "-Contractació: Indefinida.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Marge d’adaptació segons necessitats i conciliació personal.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Formació a càrrec de l’empresa",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": -0.7,
+        "quote": "- Familiaritat amb SAP R/3.",
+        "confidence": "medium",
+        "note": "SAP R/3 plus Navision and Oracle — a maintained estate"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "- Supervisió i resolució d’incidències.",
+        "confidence": "low",
+        "note": "the role also builds, so this is only half of it"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "- Suport als usuaris.",
+        "confidence": "medium",
+        "note": "internal users of the group's own systems"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.9,
+        "quote": "- Residència a Girona o rodalies.",
+        "confidence": "high",
+        "note": "living near Girona is stated as a requirement"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "anglès (parlat Mitjà, escrit Mitjà)",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "- Experiència prèvia d 2-3 anys en les tasques descrites.",
+        "confidence": "high"
+      }
+    ],
+    "feinaactiva-FA92322523": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Assessorar clients en la seva estratègia de transformació digital.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 1.0,
+        "quote": "acompanyar els clients en l'adopció de noves tecnologies que aportin valor",
+        "confidence": "high",
+        "note": "a consultant role — the client relationship is the job"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Salari mensual brut des de '2800' fins a '3000'",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contracte laboral indefinit",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "anglès (parlat Superior, escrit Superior)",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Disponibilitat de vehicle",
+        "confidence": "medium",
+        "note": "a car asked for, which usually means visiting clients"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Definir arquitectures de dades i estratègies de Business Intelligence.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiència 2 anys. 2 Anys",
+        "confidence": "medium"
+      }
+    ],
+    "feinaactiva-FA92322529": [
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.2,
+        "quote": "Estem cercant un/a programador/programadora junior amb ganes d'aprendre",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "Participació en code reviews i millora contínua del codi",
+        "confidence": "medium",
+        "note": "code review named, without saying it is teaching"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Experiència amb algun framework JavaScript modern (Vue.js, React o similar)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Contracte indefinit i horari flexible",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "Formació contínua i oportunitats de desenvolupament professional",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contracte laboral indefinit",
+        "confidence": "high"
+      }
+    ],
+    "feinaactiva-FA92322533": [
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "• Resolució d'incidències en aplicacions informàtiques i ofimàtica en general",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "• Oportunitat de desenvolupament professional i liderar el departament.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "• Jornada completa + contracte indefinit.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "• Idiomes: anglès nivell mitjà.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiència 3 anys. Experiència amb sistemes operatius Windows",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.0,
+        "quote": "al nostre equip de Lleida",
+        "confidence": "medium",
+        "note": "a work city named, no remote arrangement mentioned"
+      }
+    ],
+    "manfred-8360": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Esta posición es **100% remota** si te encuentras en cualquier punto de España o Europa.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Manejarás **cientos de miles de eventos por segundo**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "se comunica mediante **gRPC** y corre sobre **Docker y Kubernetes**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": -0.6,
+        "quote": "se huye de los *sprints* infinitos y las reuniones que podrían haber sido un e-mail",
+        "confidence": "high",
+        "note": "the ad is rejecting ceremony, not describing it"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.0,
+        "quote": "El equipo opera en un horario de **09:00h a 17:00h** (excluyendo la hora de la comida).",
+        "confidence": "high",
+        "note": "remote, but on a fixed common timetable"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "En Valsea se respira total autonomía",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "**Inglés nivel alto:** Fluidez total para trabajar en un entorno multicultural.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "**Dominio sólido de Go**: Al menos 3 años de experiencia real en sistemas distribuidos.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado para ti y para tu familia.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Clases de inglés y español gratuitas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "**Teambuildings**.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "serás la pieza clave para ayudar a Valsea a encontrar y mentorizar a nuevos compañeros",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "Valsea es una **plataforma tecnológica SaaS integral**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "**Excelente comunicación**: Interlocución directa con *Product O*wners y *stakeholders*.",
+        "confidence": "medium",
+        "note": "internal product owners, not the employer's customers"
+      }
+    ],
+    "manfred-8379": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Este puesto es **100% remoto desde España",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.7,
+        "quote": "**No hay horarios fijos ni dailies** que podrían ser un post-it",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": -0.6,
+        "quote": "sin sprints tradicionales, sin reuniones innecesarias",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "tú tendrás autonomía para asignarte el siguiente proyecto",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "**Presupuesto de formación personal**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "**Seguro médico.**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "**reviews constantes**, **pair/mob programming**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "**Nivel de inglés bilingüe**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "seguimiento de huella de carbono",
+        "confidence": "low",
+        "note": "a B Corp with a carbon-footprint feature; the purpose is commerce, so this is thin"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "de vez en cuando habrá reuniones o eventos en **París o Barcelona**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "**Presupuesto para eventos de equipo**.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "El producto de Joko no se limita solo cashback automático",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "tengan experiencia previa **construyendo productos en producción,**",
+        "confidence": "low",
+        "note": "the title says Senior; the body only asks for production experience"
+      }
+    ],
+    "manfred-8383": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Este puesto es **100% remoto desde España",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.7,
+        "quote": "**No hay horarios fijos ni dailies** que podrían ser un post-it",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": -0.6,
+        "quote": "sin sprints tradicionales, sin reuniones innecesarias",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "Tendrás autonomía para identificar problemas, proponer mejoras y liderar iniciativas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "**Presupuesto de formación personal**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "**Seguro médico.**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "**Nivel de inglés bilingüe**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "de vez en cuando habrá reuniones o eventos en **París o Barcelona**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "**Presupuesto para eventos de equipo**.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "siguen siendo una empresa de producto con un stack centrado en **TypeScript, Node.js, React, React Native y AWS**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "**exigencias altas de disponibilidad, escalabilidad y fiabilidad.**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "una arquitectura **serverless** basada en servicios como Lambda, DynamoDB, SQS o S3",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "tengan experiencia operando y evolucionando sistemas en producción",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "Empezarás a convertirte en una referencia para otros ingenieros",
+        "confidence": "low"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "seguimiento de huella de carbono",
+        "confidence": "low",
+        "note": "a B Corp with a carbon-footprint feature; the purpose is commerce, so this is thin"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Tendrás contacto constante con software engineers, producto y negocio",
+        "confidence": "medium",
+        "note": "internal teams, not the employer's customers"
+      }
+    ],
+    "manfred-8386": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Este puesto es **100% remoto desde España",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.7,
+        "quote": "**No hay horarios fijos ni dailies** que podrían ser un post-it",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": -0.6,
+        "quote": "Nada de sprints rígidos ni reuniones interminables",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "tendrás la autonomía para coger el siguiente experimento",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "**Presupuesto de formación personal**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "**Seguro médico.**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "**Inglés** de nivel **bilingüe**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "de vez en cuando habrá reuniones o eventos en **París o Barcelona**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "**Presupuesto para eventos de equipo**.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "El producto de Joko no se limita solo cashback automático",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "El stack es TypeScript de principio a fin, tanto en backend como en frontend, con React y React Native en el lado del cliente.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "Se trata de moverse rápido, ejecutar experimentos, leer los datos y lanzar cambios",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Hablarás con stakeholders de Producto, Datos, Negocio e Ingeniería de forma habitual",
+        "confidence": "medium",
+        "note": "internal stakeholders"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "seguimiento de huella de carbono",
+        "confidence": "low",
+        "note": "a B Corp with a carbon-footprint feature; the purpose is commerce, so this is thin"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Tengan **experiencia lanzando funcionalidades de principio a fin en productos B2C con usuarios reales y tráfico real**",
+        "confidence": "low",
+        "note": "no years asked for and no seniority word in the role name"
+      }
+    ],
+    "manfred-8392": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Este puesto es **100% remoto desde España",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.7,
+        "quote": "**No hay horarios fijos ni dailies** que podrían ser un post-it",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": -0.6,
+        "quote": "sin sprints tradicionales, sin reuniones innecesarias",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "tú tendrás autonomía para asignarte el siguiente proyecto",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "**Presupuesto de formación personal**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "**Seguro médico.**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "**Nivel de inglés bilingüe o muy fluido**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "**Presupuesto para eventos de equipo**.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "**Su app móvil genera el 40% de los ingresos totales de la compañía.**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Tu misión principal será liderar la arquitectura y el rendimiento de la app móvil",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "liderar la actualización a **React Native 77**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Tengan **+7 años de experiencia en desarrollo móvil**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "actuando como *Tech Lead* para realizar *code reviews* profundas",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "estar cerca facilita enormemente la logística de los encuentros esporádicos",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "seguimiento de huella de carbono",
+        "confidence": "low",
+        "note": "a B Corp with a carbon-footprint feature; the purpose is commerce, so this is thin"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Ganas de trabajar codo con codo con Product Managers y Designers",
+        "confidence": "medium",
+        "note": "internal product people"
+      }
+    ],
+    "manfred-8400": [
+      {
+        "dimension": "company_stage",
+        "value": -0.7,
+        "quote": "Se trata de una start-up alemana, fundada en 2018",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "La misión de femtasy es inspirar a las personas a disfrutar y celebrar su sexualidad libremente",
+        "confidence": "low",
+        "note": "the purpose is stated plainly; whether this is a sector you would rule out is your call, not mine"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Siempre y cuando estés dentro de la UE o UK",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "Sí que realizan sprints semanales, y dedican la mañana de cada lunes a planificarse el resto de la semana.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "**Son bastante flexibles y te darán todas las facilidades para que puedas amoldarte sin problema.**",
+        "confidence": "medium",
+        "note": "flexible, but a daily slot everyone has to be available for"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "**Inglés fluido (C1):**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Budget de aprendizaje y desarrollo.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "**Crecimiento profesional y personal**",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "Ale será tu sherpa durante tus primeros pasos en femtasy",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "reúnen a todo el equipo durante una semana cada 3 meses para colaborar, conectar, alinearse y divertirse",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "El 60% del equipo de femtasy trabaja en remoto",
+        "confidence": "medium",
+        "note": "the whole team is gathered in person once a quarter"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "femtasy ofrece igualdad de oportunidades para todos",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Un **paquete retributivo** muy atractivo",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "una plataforma de streaming de contenido audio-erótico",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Toda la infraestructura está montada en Cloud, con AWS, K8s e IaC (Terraform).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "**Visión de Arquitectura:** Capacidad para diseñar, desarrollar y mantener arquitecturas escalables y eficientes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "el *mindset* y la *seniority* suficiente como poder ponerse al día en pocas semanas",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "**Mentalidad proactiva y autónoma:** Ser capaz de identificar oportunidades de mejora",
+        "confidence": "high"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "entornos de rápido crecimiento (start-ups & *scale-ups*)",
+        "confidence": "low"
+      }
+    ],
+    "manfred-8456": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "This position is **100% remote** if you are based anywhere in Spain or Europe.",
+        "confidence": "high",
+        "note": "hybrid, three days in, only if you live near Malaga"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Advanced written and spoken **English.**",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "**4+ years** of professional experience in **test automation**.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Private health insurance for you and your family.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Free English and Spanish lessons and ongoing professional development opportunities.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "Company trip once per year to a mistery location",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "you will also have the autonomy and focus to take ownership and lead your own initiatives",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": -0.7,
+        "quote": "while still maintaining the fast-paced agility of a startup",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "They are currently experiencing a phase of **explosive growth**",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "operating a fully proprietary SaaS platform",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Manage automation utilizing **Playwright and Java**.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "in collaboration with **PM’s, Frontend and Backend teams and**",
+        "confidence": "medium",
+        "note": "internal teams"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": -0.7,
+        "quote": "Previous experience in **iGaming, fintech or banking**.",
+        "confidence": "medium",
+        "note": "iGaming named outright — the 'entertainment brands' this platform serves are gambling"
+      }
+    ],
+    "remotive-1919265": [
+      {
+        "dimension": "contract_stability",
+        "value": 0.0,
+        "quote": "Those who prefer consistent contract work over a full-time role",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "generally $90-$150+/hr",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "with vetted, fascinating clients doing work that matters",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "say \"no\" to things that don't excite you",
+        "confidence": "medium",
+        "note": "autonomy over which mission to take, more than over the work itself"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Those still early in their careers (<4 years) and recent university/bootcamp grads (at least not yet)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "in small, autonomous, distributed expert teams",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "You’ll be paid to scope it out, give the client options, guide strategy, and execute on the selected solution.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Missions usually involve building an ambitious piece of software from 0 to 1",
+        "confidence": "low"
+      },
+      {
+        "dimension": "company_stage",
+        "value": -0.7,
+        "quote": "is a VC-backed, stealth, application-only home on the internet",
+        "confidence": "medium"
+      }
+    ],
+    "remotive-1919266": [
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Typical rates: $120-$170/hr",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.0,
+        "quote": "You keep 100% of your rate",
+        "confidence": "medium",
+        "note": "a rate you keep, not a salary — this is contract work"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Remote | Americas, Europe, or Israel",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "A.Team is an invite-only network of senior AI engineers, ML engineers, and AI architects",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Agent architectures and orchestration systems",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "building production AI systems for startups, enterprises, and global companies",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "You'll work directly with founders, CTOs, and product leaders, helping shape both technical direction and execution.",
+        "confidence": "high"
+      }
+    ],
+    "remotive-2091075": [
+      {
+        "dimension": "talking_clients",
+        "value": 1.0,
+        "quote": "Own the full sales cycle from first touch to close",
+        "confidence": "high",
+        "note": "a sales role — talking to clients is the whole job"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Salary - $45,000 - $50,000 USD + commission",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Remote, travel encouraged",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "This is a highly autonomous, build-it-yourself role. You'll help shape the outbound playbook, not just execute someone else's.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "1+ years of B2B sales or business development experience (SDR/BDR background a plus)",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Reach out to local companies near Outsite locations to sell business travel and corporate stay packages",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.0,
+        "quote": "Comfortable working European timezone hours",
+        "confidence": "low"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "Forecast pipeline accurately and hit monthly/quarterly new business targets",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "Outsite for Teams is Outsite's B2B expansion",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-06201d32e21283acc042": [
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Experiencia mínima de 5 años.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo híbrido teletrabajo y presencial.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.9,
+        "quote": "Residencia en Madrid.",
+        "confidence": "high",
+        "note": "living in Madrid is stated as a requirement"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "Toma de requisitos ejecución y resolución de incidencias.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Toma de requisitos",
+        "confidence": "low"
+      }
+    ],
+    "tecnoempleo-083f138452ecf39ba141": [
+      {
+        "dimension": "mission_alignment",
+        "value": -0.7,
+        "quote": "Empresa del sector Ciberdefensa",
+        "confidence": "high",
+        "note": "defence — a sector some people rule out on purpose"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "3 días de teletrabajo.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.9,
+        "quote": "Resides en León",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Tienes experiencia como Senior DevOps 4-6 años con Kubernetes y Docker.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Inglés alto.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Administración de plataformas Docker y Kubernetes.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Diseño de infraestructuras robustas y altamente disponibles.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Salario competitivo.",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-0ccd13f62257530f7946": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Devoteam es una consultora europea líder",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": -0.7,
+        "quote": "- Experiencia en entornos legacy y aplicaciones corporativas consolidadas.",
+        "confidence": "high",
+        "note": "Visual Basic .NET is 85% of the estate"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "permite el desarrollo de nuestras 8.500 personas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "La modalidad de trabajo es híbrida en Madrid",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "acudiendo 2 días a la semana a las oficinas del cliente",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "- Experiencia en mantenimiento correctivo y evolutivo de aplicaciones.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "certificando continuamente a nuestros consultores en las últimas tecnologías",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-0e9510e2527fd31cd240": [
+      {
+        "dimension": "mission_alignment",
+        "value": -0.7,
+        "quote": "Estamos ampliando nuestros equipos en el sector defensa",
+        "confidence": "high",
+        "note": "defence — a sector some people rule out on purpose"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.2,
+        "quote": "estamos buscando a graduados/as en ingeniería informática/industrial/de telecomunicaciones/aeronáutica",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido y 8 semanas al año de teletrabajo fuera de tu área geográfica habitual",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario flexible de entrada y salida y jornada intensiva viernes y verano.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Desarrollo de plan de carrera personalizado",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "formación y ayuda para el aprendizaje de idiomas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Programa Wellbeing seguro médico dental y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Promovemos la igualdad de oportunidades en la contratación comprometidos con la inclusión y la diversidad",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Movilidad nacional e internacional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Actividades de diseño y arquitectura de componentes software",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribución competitiva con revisiones continuas",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-17971c3c92426385774e": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "un proyecto para un importante cliente del sector Retail",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "cerca de 56.000 empleados en casi 30 países",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo híbrido 60 teletrabajo - 40 presencial",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "- Ubicación Alicante",
+        "confidence": "medium",
+        "note": "a fixed office in Alicante to attend on the presential days"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "- Contrato indefinido y jornada completa",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "al menos 3 años de experiencia en desarrollo de aplicaciones Java Spring Boot",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "- Desarrollo de APIs REST enfocadas al rendimiento escalabilidad y seguridad.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Despliegues en Kubernetes.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Contamos con acceso a certificaciones formaciones de los principales Partners Tecnológicos",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Crearemos juntos un plan de carrera personalizado.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "- Seguro de vida y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "estamos comprometidos con la creación de un entorno diverso e inclusivo",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "- Oficina con espacios reservados al ocio. Trabajo y diversión unido",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-18e81d88427793004e48": [
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "un proyecto de la Administración Pública muy estable a largo plazo",
+        "confidence": "medium",
+        "note": "public administration"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Desde Second Window estamos en búsqueda de un perfil de Programador Java",
+        "confidence": "high",
+        "note": "a staffing firm placing you on a client project"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": -0.7,
+        "quote": "la persona debe estar interesada en trabajar en entorno Java clásico y J2EE",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modalidad Híbrida zona Pio XII (3 días teletrabajo y 2 presencial)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Rango salarial 25-26k bruto año",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contratación indefinida",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "es OBLIGATORIO contar con 18 meses de experiencia laboral como programador Java",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado y seguro de vida",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "Plan de formación personalizado.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": ".Horario3 días(700/800-1500/1600) y 2 días (800/900-1600/1700)",
+        "confidence": "medium",
+        "note": "a start-time window inside a fixed frame"
+      }
+    ],
+    "tecnoempleo-1bcc1ad4a2d783cdaa45": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "100 Teletrabajo",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Banda salarial entre 33.000 y 40.000 brutos anuales",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato indefinido desde el primer día",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "dentro del departamento de la App Móvil de una importante entidad bancaria",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Implementar interfaces de usuario modernas utilizando Jetpack Compose",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado y seguro de vida cubiertos al 100 por la empresa.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Plan de carrera personalizado y acceso continuo a formación técnica",
+        "confidence": "high"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "Incorporación prioritaria / urgente",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Buscamos un perfil especializado en entorno Android Nativo",
+        "confidence": "low",
+        "note": "no years asked for anywhere in the ad"
+      }
+    ],
+    "tecnoempleo-1cc61c4fa2bc03664543": [
+      {
+        "dimension": "process_formality",
+        "value": 0.8,
+        "quote": "Participar en revisiones e hitos formales como CDR FAT SAT o QR",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "proyectos espaciales de alta complejidad",
+        "confidence": "low",
+        "note": "European space agencies; public-sector purpose rather than a named social mission"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "Coordinar actividades técnicas con diferentes disciplinas clientes y subcontratistas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido y 8 semanas al año de teletrabajo fuera de tu área geográfica habitual",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario flexible de entrada y salida y jornada intensiva viernes y verano.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Desarrollo de plan de carrera personalizado",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "formación y ayuda para el aprendizaje de idiomas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Programa Wellbeing seguro médico dental y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Promovemos la igualdad de oportunidades en la contratación",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Movilidad nacional e internacional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "un nivel de inglés que te permita desenvolverte en un entorno internacional",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribución competitiva con revisiones continuas",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-2b631c75f2d5f3b0b041": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "se puede trabajar desde cualquier punto de España en remoto",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Salario 20k bruto/año",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contratación indefinida",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.2,
+        "quote": "Programador Java / Fullstack Junior con 1-2 año de experiencia en el rol",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "en uno de los principales clientes a nivel nacional",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado y seguro de vida",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Plan de carrera y formación personalizado.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-36f61e53c27b1332f14f": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "- Modalidad híbrida (60 de teletrabajo).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "- Centro de trabajo Barcelona.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "- Al menos 4 años de experiencia como Ingeniero/a DevOps.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "- Contrato indefinido con nosotros.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "para participar en un proyecto estable del ámbito de la Ciberseguridad",
+        "confidence": "medium",
+        "note": "'indefinido con nosotros' — you are contracted by sg tech and placed on the project"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "la administración de infraestructuras cloud-native",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "- Inglés con capacidad para desenvolverse en entornos profesionales.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "- Salario competitivo según experiencia más plan de retribución flexible.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "- Desarrollo profesional y formación continua.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "participará en la evolución de plataformas tecnológicas de alta disponibilidad",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-38021664327933990244": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "TELETRABAJO para Desarrolladores con mas de tres años de experiencia.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "con mas de tres años de experiencia",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": -0.7,
+        "quote": "MIGRACION COBOL CICS DB2 JCL / MICROFOCUS ENTERPRISE DEVELOPER",
+        "confidence": "high",
+        "note": "the ad bundles many roles; several are core-banking mainframe work"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Desarrollo y soporte de Arquitectura Gen AI para cliente bancario.",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-3acb14d652f72310804e": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Contrato indefinido con Page Tech Solutions",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato indefinido con Page Tech Solutions Híbrido en Barcelona",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Híbrido en Barcelona",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "Impartir sesiones de formación y transferencia de conocimiento a usuarios y clientes.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiencia de 3 a 5 años como desarrollador/a de Microsoft Power Platform.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "dominio fluido de inglés tanto oral como escrito",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "Buen entendimiento de metodologías ágiles especialmente Agile/Scrum y herramientas como JIRA.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": -0.6,
+        "quote": "Reportar periódicamente el avance de las tareas al Project Manager o Team Lead.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "Formación continua para desarrollar tu talento",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Plan de carrera en un ecosistema de talento tecnológico.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "Resolver incidencias funcionales identificadas durante los ciclos de testing.",
+        "confidence": "low",
+        "note": "low-code customisation plus incident work"
+      }
+    ],
+    "tecnoempleo-3bf51adb6287c3a79045": [
+      {
+        "dimension": "stack_modernity",
+        "value": -0.7,
+        "quote": "Experiencia demostrable en RPG. AS400 y Cobol/DB2.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Modelo 100 Teletrabajo",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Rango Salarial 34-38K brutos / año.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contratación indefinida desde el primer día.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "en una de las principales entidades a nivel nacional",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado y seguro de vida incluidos.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Plan de Carrera Formación personalizada para que nunca dejes de crecer.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-3d221bdde2b35371a447": [
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "estamos ampliando nuestros equipos en el sector espacial para asumir proyectos de vigilancia espacial",
+        "confidence": "low",
+        "note": "space surveillance — read it yourself before deciding whether this is purpose or defence"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "la resolución de incidencias de infraestructura",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.8,
+        "quote": "al cumplimiento de requisitos de seguridad a la mitigación de vulnerabilidades y a las actividades de acreditación",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido y 4 semanas al año de teletrabajo fuera de tu área geográfica habitual",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario flexible de entrada y salida y jornada intensiva viernes y verano.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Desarrollo de plan de carrera personalizado",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "formación y ayuda para el aprendizaje de idiomas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Programa Wellbeing seguro médico dental y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Promovemos la igualdad de oportunidades en la contratación",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Movilidad nacional e internacional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribución competitiva con revisiones continuas",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-450515d772aac3661b41": [
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "Elaboración de ofertas técnicas y participación en su defensa.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.3,
+        "quote": "Contrato como socio temporal (1 año prorrogable hasta consolidación).",
+        "confidence": "high",
+        "note": "fixed-term, extendable — not an open-ended contract"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "1 día de teletrabajo semanal.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Disponibilidad para viajar.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Nivel alto de inglés (C1).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiencia mínima de 3 años en desarrollo de producto",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Salario competitivo",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Jornada completa (viernes intensivo y jornada intensiva en julio y agosto).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Beneficios sociales (seguro médico comedor cheque guardería entre otros).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "una empresa industrial de referencia en el sector automoción",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-45a2115cd2c6d3b89847": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Modalidad 100 teletrabajo.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Mínimo 7 años de experiencia en desarrollo con Python.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Definir e implementar arquitecturas de software escalables mantenibles y extensibles.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Desarrollar microservicios utilizando FastAPI u otros frameworks equivalentes.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Nivel de inglés B2 (imprescindible).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "Realizar revisiones de código (code reviews) y garantizar la calidad del software.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-48201e48926b33084e40": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Modalidad de trabajo Teletrabajo 100 con disponibilidad para acudir",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "reuniones muy puntuales a cliente ubicado en Madrid",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Salario 31k (perfiles 2 años) - 34k (perfiles 3 años) bruto/año",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Estabilidad Contrato indefinido desde el primer día.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiencia 2-3 años como Desarrollador/a Java 11 o superior",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Nivel de inglés C1.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Conocimientos de arquitecturas basadas en Microservicios.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "Experiencia trabajando con metodologías ágiles (Scrum Kanban etc.).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "como Java Software Engineer participando en proyectos de desarrollo de aplicaciones empresariales",
+        "confidence": "medium",
+        "note": "a staffing firm; the project is at a client in Madrid"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado y seguro de vida cubiertos por la empresa.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Plan de carrera diseñado para ti y formación técnica personalizada.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-4acc17e2f2c5333bd24e": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "desarrollamos sistemas core de nueva generación para líderes del sector bancario asegurador e industrial",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "- Disponibilidad para acudir a oficina 3 días en semana (Madrid o Bilbao)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "- Experiencia de 6 años o más en desarrollo de software backend con Java.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "- Nivel de inglés B2 o superior.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Sólida experiencia en el diseño y desarrollo de arquitecturas basadas en microservicios utilizando Spring Boot.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "- Experiencia trabajando con metodologías ágiles (Scrum/Kanban).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "Capacidad para liderar técnicamente desarrollos mentorizar a perfiles menos experimentados",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.8,
+        "quote": "GFT dispone y ha registrado un Plan de Igualdad que recoge las medidas a adoptar",
+        "confidence": "high",
+        "note": "a registered equality plan, not just the standard line"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "- Conciliación y Flexibilidad Posibilidad de trabajar desde casa híbrido/remoto jornadas flexibles y viernes intensivos.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "- Formación y Desarrollo Plan personalizado programas formativos.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "- Programa de Bienestar Nutrición Física Mental. Descuentos con Wellhub. Servicio de apoyo psicológico gratuito.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "- Comprender las necesidades del cliente y trabajar en estrecha colaboración con los equipos correspondientes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "- Vida en GFT Oficinas inteligentes eventos premios de valores charlas inspiradoras.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-4d1614c48200037eb84b": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "líder en dar soluciones tecnológicas específicas a cada cliente",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Buscamos profesionales con al menos 5 años de experiencia en desarrollo con ABAP",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "- Modalidad híbrida de trabajo (3 días de teletrabajo y 2 en oficina)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "+Disponibilidad para trabajar de forma presencial 2 días a la semana en Terrassa o Sant Cugat",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": -0.7,
+        "quote": "- Desarrollo ABAP en módulos logísticos y PP",
+        "confidence": "medium",
+        "note": "SAP ABAP — a long-lived estate rather than a current stack"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "- Formación personalizada",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "- Posibilidad de desarrollo profesional",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "trabajará codo a codo con el Consultor Funcional del proyecto",
+        "confidence": "low"
+      }
+    ],
+    "tecnoempleo-55e210eee22f7368ee40": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "para importante cliente del sector logístico en Coslada",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Más de 3 años de experiencia en desarrollo de Microsoft Dynamics 365 CRM.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Requerido nivel alto de inglés (Mínimo B2)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Disponibilidad para trabajar de manera presencial en Madrid (Coslada) Alicante o Bilbao con 10 días de teletrabajo al mes.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario de 8 a 17 o 9 a 18 viernes intensivo hasta las 15.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Disponibilidad para realizar viajes puntuales.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Trabajarás en estrecha colaboración con arquitectos de soluciones consultores funcionales y equipos de integración",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Optimización del rendimiento de las soluciones a gran escala.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-5daa18bff2393309c941": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "invertimos muchos esfuerzos en buscar los mejores profesionales para nuestros clientes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "+ Modalidad híbrida 60 de teletrabajo.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "+ Centro de trabajo en Madrid (C/ Sauceda 28).",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.0,
+        "quote": "+ Horario Lunes a jueves 0800 a 1800 h/Viernes 0800 a 1430 h",
+        "confidence": "medium",
+        "note": "stated hours, no give named"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "+ Rango salarial máximo valorado de 45.000 B/A",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "+ Entre 3 y 5 años de experiencia en administración de infraestructuras.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "+ Resolver incidencias técnicas relacionadas con la plataforma e infraestructura.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "+ Acceso a formación",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-5f8c10a9f2c0030f5a41": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Debe poder trabajar de manera autónoma en modo teletrabajo (residente en España).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "En Devoteam partner estratégico de Microsoft",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "- Al menos 5 años de experiencia en desarrollo de aplicaciones empresariales.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "- Disponibilidad para desplazamientos puntuales a las dependencias del cliente",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "- Habilidades de comunicación y capacidad para explicar conceptos técnicos a usuarios funcionales.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "- Conocimiento de metodologías ágiles de desarrollo (Scrum Kanban o similares).",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "- Experiencia avanzada con Microsoft Copilot Studio y soluciones de IA generativa.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-6bb2174bf25ab3f49b4c": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Modalidad 100 remoto",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.2,
+        "quote": "Ingeniero o Tecnico DevOps Junior con al menos 1-2 años de experiencia laboral en el rol",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Es necesario un nivel de inglés medio-alto (al menos B2).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Salario 28.000 brutos anuales.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato Indefinido",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.0,
+        "quote": "Horario estándar de oficina",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Beneficios sociales seguro médico seguro de vida plan de formación ticket restaurante...",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Desde Second Window buscamos un perfil de Ingeniero o Tecnico DevOps Junior",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "una compañía consolidada a nivel internacional",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Orquestadores Docker (Kubernetes PaaS Openshift)",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-705a10d45296232c2048": [
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "- Diseño e implementación de software de simulación para sistemas embarcados de navegación.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido y 8 semanas al año de teletrabajo fuera de tu área geográfica habitual",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario flexible de entrada y salida y jornada intensiva viernes y verano.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Desarrollo de plan de carrera personalizado",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "formación y ayuda para el aprendizaje de idiomas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Programa Wellbeing seguro médico dental y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Promovemos la igualdad de oportunidades en la contratación",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Movilidad nacional e internacional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribución competitiva con revisiones continuas",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-707519a4f2ec43eb3e4b": [
+      {
+        "dimension": "process_formality",
+        "value": 0.8,
+        "quote": "- Participar en revisiones e hitos formales como CDR FAT SAT o QR",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "proyectos espaciales de alta complejidad",
+        "confidence": "low",
+        "note": "European space agencies; public-sector purpose rather than a named social mission"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "- Coordinar actividades técnicas con diferentes disciplinas clientes y subcontratistas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido y 8 semanas al año de teletrabajo fuera de tu área geográfica habitual",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario flexible de entrada y salida y jornada intensiva viernes y verano.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Desarrollo de plan de carrera personalizado",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "formación y ayuda para el aprendizaje de idiomas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Programa Wellbeing seguro médico dental y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Promovemos la igualdad de oportunidades en la contratación",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Movilidad nacional e internacional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "- Necesitarás además un nivel de inglés que te permita desenvolverte en un entorno internacional",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribución competitiva con revisiones continuas",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-774013f262e303263f4f": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "te motiva trabajar con soluciones de datos En Devoteam partner estratégico de Microsoft",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "la posición es en modelo híbrido y debe acudir de manera presencial a la oficina 2- 3 veces por semana",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.9,
+        "quote": "Debe residir en Barcelona",
+        "confidence": "high",
+        "note": "living in Barcelona is stated as a requirement"
+      }
+    ],
+    "tecnoempleo-81b417fb5250f369614d": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "para un importante proyecto del sector Retail",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "cerca de 56.000 empleados en casi 30 países",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo híbrido 60 teletrabajo - 40 presencial",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "- Ubicación Alicante",
+        "confidence": "medium",
+        "note": "a fixed office in Alicante to attend on the presential days"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "- Contrato indefinido y jornada completa",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "al menos 3 años de experiencia profesional en desarrollo de aplicaciones Python",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "- Desarrollo de APIs REST orientadas a rendimiento escalabilidad y seguridad.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "- Despliegues en Kubernetes.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Contamos con acceso a certificaciones formaciones de los principales Partners Tecnológicos",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Crearemos juntos un plan de carrera personalizado.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "- Seguro de vida y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "estamos comprometidos con la creación de un entorno diverso e inclusivo",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "- Oficina con espacios reservados al ocio. Trabajo y diversión unido",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-9123124f3262436c2741": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Page Consulting Tech Solutions es el área de PageGroup especializada en la realización de proyectos IT en clientes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato indefinido con Page Tech Solutions",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Remoto dentro de España",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "+3 años de experiencia en desarrollo con Camunda",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Nivel alto de inglés (imprescindible)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Colaborar con equipos técnicos y de negocio en entornos internacionales.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Orquestar flujos complejos de negocio combinando Servicios externos",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "Formación continua para desarrollar tu talento",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Plan de carrera en un ecosistema de talento tecnológico.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-98201f7d82b073d32d45": [
+      {
+        "dimension": "stack_modernity",
+        "value": -0.7,
+        "quote": "soluciones de software en entornos COBOL CICS y DB2.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "En CMV Consultores buscamos un/a profesional senior especializado/a en entornos mainframe",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Más de 5 años de experiencia en desarrollo de aplicaciones con COBOL.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "Guiar a perfiles con menor experiencia compartiendo conocimientos y buenas prácticas.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Salario 40.00047.000 brutos anuales en función de la experiencia",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato estable.",
+        "confidence": "medium",
+        "note": "'estable' rather than the usual 'indefinido'"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modalidad híbrida combinación de teletrabajo y asistencia presencial.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.0,
+        "quote": "Sin viajes ni guardias.",
+        "negated": true,
+        "confidence": "high",
+        "note": "the ad rules travel out outright"
+      },
+      {
+        "dimension": "on_call_load",
+        "value": 0.0,
+        "quote": "Sin viajes ni guardias",
+        "negated": true,
+        "confidence": "high",
+        "note": "the ad rules on-call out outright"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.0,
+        "quote": "Horario estándar de oficina.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Nivel de inglés suficiente para desenvolverse en un entorno profesional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "Incorporación a un proyecto con responsabilidad técnica y capacidad real de decisión.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Colaborar con equipos funcionales técnicos y de negocio.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-9a701fdde29843aa924e": [
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "más de 35.000 empleados en todo el mundo y presencia en más de 30 países",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Somos líderes en servicios de tecnología digital y ofrecemos soluciones tecnológicas a gran escala para grandes compañías.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "- Modalidad100 remoto.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "- Horario900 1800 con alta flexibilidad de entrada y salida.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Más de4 años de experiencia como Backend Developerdesarrollando conPL/SQL.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Nivel de inglésB2o superior.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "- Proporcionar soporte postproducción (babysitting) y resolución de incidencias.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.8,
+        "quote": "Tenemos un compromiso especial con la inclusión y fomentamos la contratación de personas con discapacidad.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "- Beneficios sociales (seguro médico teletrabajo seguros de vida y accidentes).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "- Acceso gratuito a plataformas de formación.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "- Estabilidad profesional y plan de carrera.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "- Colaborar con equipos internacionales en un entorno ágil y multidisciplinar.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-9ae7135032ea738f104e": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "invertimos muchos esfuerzos en buscar los mejores profesionales para nuestros clientes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "-Experiencia mínima de 3 años en desarrollo de soluciones RPA.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "-Modalidad con posibilidad de teletrabajo.",
+        "confidence": "medium",
+        "note": "'posibilidad' — the ad does not commit to how much"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "-Proyecto estable en Madrid.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": -0.6,
+        "quote": "-Ejecutar las tareas asignadas con autonomía garantizando la calidad de las entregas.",
+        "confidence": "medium",
+        "note": "autonomy in how, not in what — the tasks arrive assigned"
+      }
+    ],
+    "tecnoempleo-ab3c123542fa23f36849": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Flexibilidad total Modelo 100 Teletrabajo definitivo.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Experiencia Mínimo 5 años como Desarrollador Backend Java.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Banda salarial entre 38.000 y 40.000 brutos/año",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Estabilidad Contrato indefinido directo con nosotros desde el primer día.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Idiomas Inglés intermedio (nivel B2).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Experiencia sólida con Java 17 o superior y Spring Boot 4.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Trabajo con arquitecturas modernas basadas en eventos y optimización del rendimiento con Redis.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "Colaboración diaria en equipos bajo metodologías ágiles (Agile/Scrum).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario Horario de Lunes a Jueves (800 - 1800) y Viernes jornada intensiva (800 - 1500).",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado y seguro de vida gratuitos.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Futuro Plan de carrera totalmente personalizado.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "para unirse a un importante proyecto del Sector Mobility",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-ac7416da82c8f3897a4f": [
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "en el sector de la Administración Pública (AAPP)",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Teletrabajo 100 Trabaja cómodamente desde donde quieras.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Banda salarial entre 28.000 y 30.000 brutos anuales",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Estabilidad Real Contrato indefinido desde el primer día",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiencia demostrable de al menos 3 a 4 años en desarrollo con Angular (v14).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Disponibilidad horaria en jornada flexible (Madrid entre las 800 y las 1800 h).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Seguro médico privado y seguro de vida cubiertos al 100 por la empresa.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Plan de carrera personalizado y acceso continuo a formación técnica",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "un proyecto de mantenimiento y nuevos desarrollos",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Participar activamente en la toma de requerimientos análisis funcional",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-ad2b117a424563973240": [
+      {
+        "dimension": "mission_alignment",
+        "value": -0.7,
+        "quote": "Experiencia previa en sectores como aeroespacial defensa satélite o entornos de misión crítica será altamente valorada.",
+        "confidence": "medium",
+        "note": "defence named as valued experience rather than as the project itself"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Contrato indefinido con Michael Page.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato indefinido con Michael Page",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido con una presencialidad aproximada del 20-30",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Nivel avanzado de inglés (obligatorio).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Disponibilidad para viajar ocasionalmente a formaciones y workshops.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Salario en función de la experiencia aportada.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "Formación continua para desarrollar tu talento.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Plan de carrera en un ecosistema de talento tecnológico.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.8,
+        "quote": "Mantener la trazabilidad entre requisitos casos de prueba y resultados de validación.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-afcf1ca7128c4382444a": [
+      {
+        "dimension": "stack_modernity",
+        "value": -0.7,
+        "quote": "- Conocimientos técnicos de Java SE 8 EJB 3.0 Hibernate JPA JAX-RS J2EE y PrimeFaces.",
+        "confidence": "high",
+        "note": "J2EE, WebLogic 11g, PrimeFaces — a maintained enterprise estate"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "- Al menos 5 años de experiencia en desarrollo Java backend en entornos enterprise.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "- Modalidad híbrida 60 teletrabajo y 40 oficina con flexibilidad.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "- Disponibilidad para realizar 3-4 viajes al año de 2-3 días máximo.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "- Nivel mínimo de inglés B2 siendo obligatorio aportar evidencia mediante certificación evaluación o prueba equivalente.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "- Contrato indefinido con nosotros.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "para participar en un proyecto estable dentro del sector Movilidad",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "- Al menos 2 años de experiencia en sistemas transaccionales críticos de alta disponibilidad y alto volumen.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "on_call_load",
+        "value": 0.8,
+        "quote": "- Experiencia en soporte de entornos 24x7 con gobernanza de cambios.",
+        "confidence": "medium",
+        "note": "listed as desirable, not as a duty — read it before confirming"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "- Desarrollo profesional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "flujos de control de versiones con Git code reviews y apoyo al control de releases",
+        "confidence": "low"
+      }
+    ],
+    "tecnoempleo-b2051b57b2bf73af2245": [
+      {
+        "dimension": "mission_alignment",
+        "value": -0.7,
+        "quote": "Estamos ampliando nuestros equipos en el sector defensa y seguridad para desarrollar plataformas de explotación masiva de información en el ámbito de la ciberdefensa.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "diseño e implementación de plataformas Big Data para el almacenamiento procesamiento y explotación de grandes volúmenes de información",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "con al menos 3 años de experiencia en plataformas Big Data",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Experiencia con Apache Spark y Hadoop.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido y 8 semanas al año de teletrabajo fuera de tu área geográfica habitual",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario flexible de entrada y salida y jornada intensiva viernes y verano.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Desarrollo de plan de carrera personalizado",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "formación y ayuda para el aprendizaje de idiomas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Programa Wellbeing seguro médico dental y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Promovemos la igualdad de oportunidades en la contratación",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Movilidad nacional e internacional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribución competitiva con revisiones continuas",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-b2fb182e627ab3455b4c": [
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "Formado por más de 3.000 personas creativas digitales e innovadoras",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "alta capacidad de adaptación a las necesidades de nuestros clientes y del mercado",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "- Modelo de trabajo en remoto . Opción de ir a trabajar a oficinas pero siempre a elección del trabajador.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "- Horario flexible horario flexible entrada 8.30h salida 18h con viernes intensivo de 8h a 15h",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "un mínimo de 3 años de experiencia para unirse a nuestra comunidad Go",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "- Contrato indefinido Desde el primer día con opción de 12 o 14 pagas.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Experiencia en el diseño de arquitecturas de microservicios y hexagonal",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "capacidad para diseñar e implementar infraestructura escalable y tolerante a fallos",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "- Formación continua Acceso a Udemy Business cursos de idiomas certificaciones oficiales y formación técnica.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "- Plan de carrera Acompañamiento para crecer especializarte o asumir nuevos retos.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "- Bienestar integral Programas de nutrición actividad física y equilibrio emocional.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "- Ambiente inclusivo Entorno diverso y multicultural.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "- Eventos sociales Actividades para conectar con el equipo.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-b57e13f992dc636ab549": [
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "un proyecto tecnológico del sector de la gestión del tráfico aéreo",
+        "confidence": "low",
+        "note": "public air-traffic infrastructure rather than a named social mission"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Salario entre 20.000 y 22.000 brutos anuales",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato estable.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modalidad híbrida (60 teletrabajo).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Centro de trabajo en San Fernando de Henares (Madrid).",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "on_call_load",
+        "value": 0.0,
+        "quote": "Horario de oficina sin turnos ni guardias.",
+        "negated": true,
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.0,
+        "quote": "Horario de oficina sin turnos ni guardias",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Nivel de inglés C1.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Al menos 2 años de experiencia en ingeniería de sistemas y definición de requisitos.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.8,
+        "quote": "Manejo de DOORS.",
+        "confidence": "medium",
+        "note": "formal requirements management for a safety-critical system"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Captura y análisis de requisitos de usuario.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Equipo informático proporcionado por el cliente.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-b93c13afc21e43bcf341": [
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "Estamos ampliando nuestros equipos en el sector Espacio",
+        "confidence": "low"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "- Contribuir a la definición de arquitecturas de misión y de sistema",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "- Dominio de la redacción de documentación formal de proyectos en inglés.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "- Experiencia laboral en Ingeniería de Sistemas o Análisis de Misiones.",
+        "confidence": "low",
+        "note": "no number of years anywhere in the ad"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido y 8 semanas al año de teletrabajo fuera de tu área geográfica habitual",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario flexible de entrada y salida y jornada intensiva viernes y verano.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Desarrollo de plan de carrera personalizado",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "formación y ayuda para el aprendizaje de idiomas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Programa Wellbeing seguro médico dental y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Promovemos la igualdad de oportunidades en la contratación",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Movilidad nacional e internacional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribución competitiva con revisiones continuas",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-d43c1b320243432b3542": [
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "- Modelado y diseño de Data Warehouse orientado a explotación analítica (modelos dimensionales optimización de consultas).",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Te integrarás en un entorno basado en arquitectura de microservicios",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "- Creación de dashboards e informes reutilizables para clientes y soluciones internas.",
+        "confidence": "low"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "Estamos ampliando nuestros equipos en el sector de Sistemas Inteligentes de Transporte (ITS).",
+        "confidence": "low",
+        "note": "public transport systems"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo de trabajo híbrido y 8 semanas al año de teletrabajo fuera de tu área geográfica habitual",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario flexible de entrada y salida y jornada intensiva viernes y verano.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Desarrollo de plan de carrera personalizado",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "formación y ayuda para el aprendizaje de idiomas",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Programa Wellbeing seguro médico dental y de accidentes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Promovemos la igualdad de oportunidades en la contratación",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Movilidad nacional e internacional.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Retribución competitiva con revisiones continuas",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-d6e91b4d923ae3baeb4a": [
+      {
+        "dimension": "technical_depth",
+        "value": -0.6,
+        "quote": "Gestión de incidencias problemas y cambios mediante herramientas ITSM.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.8,
+        "quote": "Herramientas ITSM Fundamentos ITIL.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Contrato indefinido con Page Tech Solutions.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato indefinido con Page Tech Solutions",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Banda salarial 25.000/BA.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Remoto 100 para la vacante de software.",
+        "confidence": "high",
+        "note": "the hardware vacancy in the same ad is hybrid in Madrid"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiencia mínima de 3 años en funciones de homologación packaging Workplace Engineering o soporte avanzado.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "Formación continua para desarrollar tu talento.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Plan de carrera en un ecosistema de talento tecnológico.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-e44313f0429cc382cf4e": [
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "Capacidad para interactuar directamente con usuarios de negocio y stakeholders.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.9,
+        "quote": "Resides por Sant Cugat",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modelo híbrido con 3 días de teletrabajo semanales.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Posibilidad de realizar jornada intensiva de 700 a 1500.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato estable e incorporación a proyectos estratégicos de datos.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Entorno tecnológico moderno basado en Microsoft Fabric y Power BI.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Experiencia previa como Data Analyst BI Analyst o posición similar.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Oportunidades de crecimiento profesional y formación continua.",
+        "confidence": "high"
+      }
+    ],
+    "tecnoempleo-f1561880d27323ff6e45": [
+      {
+        "dimension": "company_stage",
+        "value": -0.7,
+        "quote": "Galadrim es una startup que diseña y desarrolla productos web móviles y de IA",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "desarrolla soluciones complejas a medida para sus clientes",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "utilizando metodologías ágiles",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "trabajarás en modalidad full remote (100 teletrabajo) hasta que abramos nuestras primeras oficinas en Madrid",
+        "confidence": "medium",
+        "note": "remote only until the Madrid office opens — then hybrid"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "- Salario 30.000 - 35.000 brutos anuales",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "- React / React Native",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.8,
+        "quote": "Tu progresión en Galadrim",
+        "confidence": "medium",
+        "note": "the ad lays out 3-month, 6-month and long-term steps"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "te lanzarás a proyectos reales desde el día uno siempre con el apoyo de un Tech Lead",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "te motiva acompañar a los comerciales a reuniones para explicar conceptos técnicos de forma clara",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Dominas el español a nivel nativo y el inglés con fluidez",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "También podrás participar en conferencias y workshops internacionales con el resto del equipo",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.4,
+        "quote": "devolución parcial de tus gastos en deporte o gimnasio",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "Disfrutas del trabajo en equipo pero tienes autonomía total en tus tareas.",
+        "confidence": "medium"
+      }
+    ],
+    "tecnoempleo-f814120cf27f830d1b43": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Trabaja con nosotros con modalidad 100 remota con contrato indefinido.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "modalidad 100 remota con contrato indefinido",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "Formado por más de 3.000 personas creativas digitales e innovadoras",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "alta capacidad de adaptación a las necesidades de nuestros clientes y del mercado",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Experiencia mínima de 5 años en entornos backend con Java.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Experiencia desarrollando con Java a partir de la versión 8 (preferentemente Java 17/21).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "Experiencia trabajando bajo un marco de metodología agil.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Horario 8.30 a 18h ( flexible) L-J y V 8 a 15h e Intensiva de Verano Julio y Agosto de 8 a 15h.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "tenemos a tu disposición certificaciones oficiales Udemy Business TechDays Meetups",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "Actividades de Teambuilding nos gusta divertirnos",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.4,
+        "quote": "Plan de retribución flexible (seguro médico transporte tickets guardería tickets restaurante).",
+        "confidence": "medium",
+        "note": "medical cover offered through salary sacrifice rather than paid for by the employer"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "Nacimos para provocar un cambio real a través de la innovación y el desarrollo sostenible",
+        "confidence": "low"
+      }
+    ],
+    "tecnoempleo-fe6e1b01b22973125642": [
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.2,
+        "quote": "busca 3 Fullstack Developers Juniors para incorporarse a su equipo de desarrollo",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.9,
+        "quote": "Contrato Indefinido jornada completa.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Modalidad Modelo híbrido con teletrabajo mayoritario.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Nuestro cliente desarrolla desde 1997 soluciones globales y servicios",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Participación en proyectos de I+D+i con foco en tecnologías digitales avanzadas.",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-azumo-data-engineer-databricks-aws-gaming-liveops-latin-america": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "FULLY REMOTE based in Latin America",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "We help companies of all sizes build intelligent applications by combining expertise in data, cloud, and",
+        "confidence": "high",
+        "note": "a development firm delivering into client companies"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Optimize large-scale data processing workflows for performance and cost efficiency",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Strong experience with Databricks",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "5+ years experience with data-related and data management responsibilities",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Professional English proficiency (B2/C1)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Compensation commensurate with experience and candidate potential.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Mentored Career Development",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "Mentored Career Development\nU.S. Holidays",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.4,
+        "quote": "Maternity Coverage",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Collaborate with product, analytics, engineering, and business stakeholders to support data-driven decision-making",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "we support our engineers in mastering the latest technologies",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "Experience working in fast-paced product engineering organizations",
+        "confidence": "low",
+        "note": "listed under nice-to-have, so it describes the candidate more than the job"
+      }
+    ],
+    "wwr-azumo-data-engineer-latin-america": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "FULLY REMOTE based in Latin America",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "We help companies of all sizes build intelligent applications by combining expertise in data, cloud, and",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "designing and developing scalable, high performant big data infrastructure using",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Spark, Kafka, Snowflake or any similar frameworks",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "5+ years experience with data-related and data management responsibilities",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Professional English proficiency (B2/C1)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Compensation commensurate with experience and candidate potential.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Mentored Career Development",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.5,
+        "quote": "Challenging ourselves and learning new technologies is at the core of what we do.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.4,
+        "quote": "Maternity Coverage",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "We believe in giving back to our community and will volunteer our time to philanthropy, open source initiatives",
+        "confidence": "low",
+        "note": "a stated giving-back culture, not the purpose of the work itself"
+      }
+    ],
+    "wwr-azumo-java-engineer-latin-america": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "fully remote based in Latin America",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "We help companies of all sizes build intelligent applications by combining expertise in data, cloud, and",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "developing scalable, high performant backend infrastructure using enterprise class frameworks",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "4+ years experience with enterprise class frameworks",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Professional English proficiency (B2/C1)",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Compensation commensurate with experience and candidate potential.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "career_progression",
+        "value": 0.5,
+        "quote": "Mentored Career Development",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.4,
+        "quote": "Maternity Coverage",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "work with product managers to find solutions",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "Evaluate multiple approaches and technologies to solving a problem",
+        "confidence": "low"
+      }
+    ],
+    "wwr-cloudflare-principal-partner-solutions-engineer-saarc-based-in-bangalore": [
+      {
+        "dimension": "talking_clients",
+        "value": 1.0,
+        "quote": "you will act as the single technical point of contact as the trusted advisory for your assigned partners",
+        "confidence": "high",
+        "note": "a partner-facing solutions role — the relationship is the job"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.9,
+        "quote": "Available Locations\nBengaluru, India",
+        "confidence": "high",
+        "note": "the role is based in Bangalore"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Hybrid or Remote",
+        "confidence": "medium",
+        "note": "the ad only says this once, in the header"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "8+ years of technical, partner-facing experience",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "We’re a highly ambitious, large-scale technology company with a soul.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "Since 2014, we've equipped more than 2,400 journalism and civil society organizations in 111 countries",
+        "confidence": "medium",
+        "note": "a named, running programme rather than a slogan"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.8,
+        "quote": "Cloudflare provides reasonable accommodations to qualified individuals with disabilities.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "Cloudflare protects and accelerates any Internet application online without adding hardware",
+        "confidence": "medium",
+        "note": "their own product, though the role is spent inside partner organisations"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Strong technical depth in Cloudflare One (CF1) or equivalent SASE/SSE architectures, Zero Trust, DNS, and application security",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-coinbase-analytics-engineer-gfco-analytics": [
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "$152,405",
+        "confidence": "high",
+        "note": "the band is $152,405–$179,300 base"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Coinbase is a remote-first, but not remote-only company.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Expect to get together quarterly for intense in-person working sessions",
+        "confidence": "high"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "The bar is high, the environment is intense, and we like it that way.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "3+ years of experience in analytics engineering, data engineering, or a related data role",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "experience with modern data stack tools such as dbt, Airflow, and cloud data warehouses",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.67,
+        "quote": "Track record of partnering with non-technical stakeholders to translate business needs into data solutions",
+        "confidence": "medium",
+        "note": "internal CX and compliance stakeholders"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "benefits (medical, dental, vision, 401(k))",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "Coinbase is an Equal Opportunity Employer.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "build the data foundations that power customer experience and compliance operations at Coinbase",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "we are uncompromising on our mission to increase economic freedom",
+        "confidence": "low",
+        "note": "a mission is named; whether crypto is a sector you would rule out is your call"
+      }
+    ],
+    "wwr-faire-senior-staff-data-engineer-platform-data-and-analytics": [
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "California & New York: the pay range for this role is $276,000 to $379,500 per year.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "open to candidates located in Arizona, California, Colorado",
+        "confidence": "medium",
+        "note": "the ad calls it a remote role, then adds a hybrid 3-days-in paragraph for hybrid employees — worth reading both"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "This role is for a highly experienced technical leader in the data space",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Data warehousing experience at Petabyte scale.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "AWS, Snowflake, Airflow, Spark, Python, Kotlin.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "Provide technical guidance and mentorship on the most difficult open-ended problems we face.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "Faire is a technology wholesale platform built on the belief that the future is local.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "we believe that we can level the playing field so businesses can grow and local communities can thrive",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.8,
+        "quote": "Faire is committed to providing access, equal opportunity and reasonable accommodation for individuals with disabilities",
+        "confidence": "high"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "with the agency to move fast and see your results clearly",
+        "confidence": "low"
+      }
+    ],
+    "wwr-gusto-inc-staff-software-engineer-ai-developer-tools": [
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "targeted at $180,000/yr to $200,000/yr in Denver & most remote locations",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Employees who are based in those locations will be expected to work from the office on designated days approximately",
+        "confidence": "medium",
+        "note": "remote is offered, but office days apply if you live near Denver, SF or NYC"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "8+ Years of Systems Expertise",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Architect AI Core Infrastructure: Design, scale, and maintain the internal platform and APIs that integrate LLMs into the developer workflow",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "deep understanding of prompt engineering, fine-tuning, RAG architectures, and orchestrating multi-agent workflows",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "mentoring junior engineers and aligning cross-functional stakeholders along the way",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "We handle the hard stuff — payroll, health insurance, 401(k)s, and HR",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "At Gusto, we're on a mission to grow the small business economy.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.8,
+        "quote": "Gusto is also committed to providing reasonable accommodations for qualified individuals with disabilities and disabled veterans in our job application procedures.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "We treat our fellow engineers as our primary customers",
+        "confidence": "medium",
+        "note": "the customers here are other Gusto engineers"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "we support more than 500,000 small businesses nationwide",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-gusto-inc-staff-software-engineer-time-and-scheduling": [
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "targeted at $163,000–$204,000 in Denver & most remote locations",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 0.5,
+        "quote": "Employees who are based in those locations will be expected to work from the office on designated days approximately",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "Please note that travel to Gusto's office for onboarding is required for this position.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Successful applicants typically have 8+ years of software development experience",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "Mentor other engineers to help solve some of the hardest technical problems out there in very complex domains and at a large scale",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Help scale one of the largest Ruby/Rails and Javascript/React applications in the world",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "the teams behind Gusto's customer-facing products",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "At Gusto, we're on a mission to grow the small business economy.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.8,
+        "quote": "Gusto is also committed to providing reasonable accommodations for qualified individuals with disabilities and disabled veterans in our job application procedures.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "we support more than 500,000 small businesses nationwide",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Collaborate with our Product Management, Data, Design, and Platform Engineering teams to understand customer pain points",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "prototype, iterate, and launch daily",
+        "confidence": "low"
+      }
+    ],
+    "wwr-maptiler-location-services-engineer-maps-platform-remote-in-europe": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Work remotely from anywhere in Europe, or hang out with us at our hubs in Brno (Czechia) or Unterägeri (Switzerland).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.9,
+        "quote": "Competitive financial compensation based on your experience (20-33€/hour) & annual performance bonus.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.4,
+        "quote": "Flexible working hours to help you easily balance your personal and professional life.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "learning_support",
+        "value": 0.8,
+        "quote": "Grow your career with dedicated support for continuous learning, attending conferences, and building your personal brand.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "and regular team-building events across Europe",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "regular team-building events across Europe.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "Ability to take ownership of the codebase and database, define requirements, set priorities, and drive progress with other team members.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Developing pipelines that convert large-scale data sources (e.g., Planet OSM PBF, Elevation data) into specialized data structures",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "We use TypeScript, Java, Rust, and are getting ready to add C++ to the mix",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Fluency in English and communicativeness even in a remote work environment.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "Our platform powers everything from global weather forecasting and humanitarian crisis management to flight trackers and the Swiss railways.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "We make maps easy so that everyone can understand the world better.",
+        "confidence": "low",
+        "note": "the humanitarian and public-transport uses are named, but as customers rather than as the mission"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "we don't do traditional corporate account management",
+        "confidence": "low",
+        "note": "the ad says the opposite of account management, but 'technical partnerships' still means outside contact"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "contribute to design and code reviews",
+        "confidence": "low"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "Hands-on expertise in programming, system design, and problem-solving.",
+        "confidence": "low",
+        "note": "no number of years anywhere in the ad"
+      }
+    ],
+    "wwr-proxify-ab-senior-fullstack-developer-python-3": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "Discover exclusive long-term remote positions at the world's most exciting companies.",
+        "confidence": "high",
+        "note": "Proxify is a network placing you with its clients"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.0,
+        "quote": "A one-time contracting process for endless opportunities, with no extra assessments.",
+        "confidence": "medium",
+        "note": "contracting through a network rather than employment"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Ability to work independently and deliver high-quality results in a remote setup.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "5+ years of professional software development experience with strong fullstack exposure.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 1.0,
+        "quote": "Strong problem-solving skills and excellent English communication (written and spoken).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Make architectural decisions across backend, frontend, and system integration (monolith vs microservices).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Strong experience with React.js or Vue.js (or similar modern frameworks such as Next.js/Nuxt.js).",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.8,
+        "quote": "Mentor and guide other engineers, helping elevate team best practices.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "Work in an agile environment and contribute to continuous process and delivery improvements.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": -0.6,
+        "quote": "Enjoy a harmonious work-life balance with consistent 8-hour working days with clients.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Enjoy up to 24 flex days off per year without losing pay, for full-time positions found through Proxify.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Collaborate with designers and product teams to translate requirements into technical solutions",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-proxify-ab-senior-fullstack-developer-react-js-node-js-3": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "We are looking for a Senior Fullstack Developer skilled in React.js and Node.js for one of our clients.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.0,
+        "quote": "A one-time contracting process for endless opportunities, with no extra assessments.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Discover exclusive long-term remote positions at the world's most exciting companies.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "5+ years experience as a Fullstack Developer.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "english_demand",
+        "value": 0.6,
+        "quote": "Intermediate-advanced English",
+        "confidence": "high"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": -0.6,
+        "quote": "Enjoy a harmonious work-life balance with consistent 8-hour working days with clients.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Enjoy up to 24 flex days off per year without losing pay, for full-time positions found through Proxify.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Competence in designing and implementing low-latency, stable and performing applications.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Microservices architecture",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-sofi-director-learning-and-development-operations": [
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "10 years of experience in L&D or talent development, with a focus on training design",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "Due to insurance coverage issues, we are unable to accommodate remote work from Hawaii or Alaska at this time.",
+        "confidence": "medium",
+        "note": "remote is implied by the exclusion rather than stated outright"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "The base pay range for this role is listed below.",
+        "confidence": "medium",
+        "note": "it promises a range and then never gives one"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.8,
+        "quote": "offers reasonable accommodations to candidates with physical or mental disabilities",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "We’re proud to come to work every day knowing that what we do has a direct impact on people’s lives",
+        "confidence": "low"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "We’re a next-generation financial services company and national bank using innovative, mobile-first technology",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "help our millions of members reach their goals",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "Mentor a team of experienced Senior Managers to foster a culture of creative collaboration and excellence",
+        "confidence": "low",
+        "note": "you would do the mentoring here, which is not quite the same as being brought on yourself"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Report on program impacts and necessary investments to senior leadership",
+        "confidence": "low"
+      }
+    ],
+    "wwr-stripe-backend-engineer-core-technology": [
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "Stripe is a financial infrastructure platform for businesses.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "Our mission is to increase the GDP of the internet",
+        "confidence": "low",
+        "note": "a mission is stated, but it is a commercial one"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "US-Remote, Chicago, Seattle, San Francisco",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Hands-on experience contributing to or building large-scale distributed systems",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "2–12+ years of professional hands-on software development experience",
+        "confidence": "medium",
+        "note": "a ten-year-wide band — the ad is levelling at match time, not here"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "Have the ability to thrive on a high level of autonomy and responsibility, and think of yourself as entrepreneurial",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "several popular open-source technologies like Trino/Presto, Apache Pinot, Hive Metastore, ElasticSearch etc.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Deliver value through a strong collaborative approach with multiple customers and stakeholders across Stripe",
+        "confidence": "medium",
+        "note": "customers here means other Stripe teams"
+      },
+      {
+        "dimension": "company_stage",
+        "value": 0.7,
+        "quote": "Millions of companies—from the world's largest enterprises to the most ambitious startups—use Stripe",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-superplane-product-engineer-1": [
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "This is a remote role. We currently work across GMT+2 to GMT-3 and welcome candidates in that range.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "company_stage",
+        "value": -0.7,
+        "quote": "You want an early-stage company where the pace is high, the standards are high, and the upside is big.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "you're ready to grow fast in a high-trust, high-pace environment",
+        "confidence": "high"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "You want ownership, not a narrow lane.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.5,
+        "quote": "We're looking for someone at a mid-level to senior level",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "You have solid systems judgment. APIs, data models, reliability, and trade-offs matter to you.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "You're comfortable with TypeScript and React -- the modern frontend stack.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "Build a frontier product used by engineers across the globe.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "Meaningful equity and real ownership.",
+        "confidence": "medium",
+        "note": "equity mentioned, no figure anywhere"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": -0.5,
+        "quote": "Remote role that lets you focus and create.",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-toptal-python-backend-development-talent-with-rag-and-agentic-ai-experience": [
+      {
+        "dimension": "product_vs_services",
+        "value": -0.7,
+        "quote": "The organization is developing an AI-powered platform and requires an experienced individual contributor",
+        "confidence": "high"
+      },
+      {
+        "dimension": "contract_stability",
+        "value": 0.3,
+        "quote": "Task and deliverables:",
+        "confidence": "low",
+        "note": "framed as a project with deliverables rather than a job — worth checking"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "Required: 8 or more years of professional Python backend development experience.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Design the end-to-end architecture for a scalable RAG system and AI chatbot.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "The technology environment includes Python, FastAPI, large language models, LangGraph, LangChain, vector databases",
+        "confidence": "high"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "The developer will work closely with a distributed team",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "schedule_flexibility",
+        "value": 0.0,
+        "quote": "Required: Availability for several hours of overlap with US working hours.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "Collaborate with the wider team while independently owning architecture and implementation decisions.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "talking_clients",
+        "value": 0.33,
+        "quote": "Translate business requirements into technical designs, delivery milestones, and production-ready AI solutions.",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-yooli-full-time-software-engineer-position-react-and-rest-1": [
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "contribute to the transformative tech evolution in healthcare",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "We are seeking a highly skilled\nSenior Software Engineer",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "Ensure the scalability, security, and responsiveness of backend services.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "mentoring_culture",
+        "value": 0.5,
+        "quote": "Participate in code reviews to uphold high coding standards and foster continuous improvement within the development team.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "A proven ability to thrive in collaborative, remote work environments",
+        "confidence": "medium",
+        "note": "remote working is assumed rather than stated as the arrangement"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Proficiency in\nPrisma\nfor database management.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "process_formality",
+        "value": 0.5,
+        "quote": "Familiarity with\nagile development methodologies\nand project management tools.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "You will work closely with our Chief Engineer and CTO to build and refine our software solutions",
+        "confidence": "medium"
+      }
+    ],
+    "wwr-clickhouse-ai-product-engineer-clickstack": [
+      {
+        "dimension": "company_stage",
+        "value": -0.7,
+        "quote": "As part of a rapidly scaling start up, you will be instrumental in shaping our culture.",
+        "confidence": "medium",
+        "note": "it calls itself a start-up, but it is Series D with 4,000 customers"
+      },
+      {
+        "dimension": "remote_arrangement",
+        "value": 1.0,
+        "quote": "ClickHouse is a globally distributed company and remote-friendly.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "technical_depth",
+        "value": 0.7,
+        "quote": "build agentic capabilities on top of a petabyte-scale observability platform",
+        "confidence": "high"
+      },
+      {
+        "dimension": "stack_modernity",
+        "value": 0.6,
+        "quote": "Strong backend skills in TypeScript/Node.js and/or Python.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "seniority_expectation",
+        "value": 0.8,
+        "quote": "5+ years of software engineering experience, including 1–2 years on LLM-powered systems or agents in production.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "product_vs_services",
+        "value": 0.7,
+        "quote": "ClickStack is the open-source observability platform we're building at ClickHouse",
+        "confidence": "high"
+      },
+      {
+        "dimension": "mission_alignment",
+        "value": 0.7,
+        "quote": "We’re on a mission to transform how companies use data.",
+        "confidence": "low"
+      },
+      {
+        "dimension": "wellbeing_benefits",
+        "value": 0.7,
+        "quote": "Employer contributions towards your healthcare.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "compensation_transparency",
+        "value": 0.2,
+        "quote": "These salary ranges reflect what we reasonably and in good faith believe to be the minimum and maximum pay for this role at the time of posting.",
+        "confidence": "high",
+        "note": "it talks about the range at length and never states one"
+      },
+      {
+        "dimension": "social_intensity",
+        "value": 0.6,
+        "quote": "We believe in the power of in-person connection and offer opportunities to engage with colleagues at company-wide offsites.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "travel_requirement",
+        "value": 0.4,
+        "quote": "company-wide offsites",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "team_autonomy",
+        "value": 0.7,
+        "quote": "You do well with ambiguity and ownership.",
+        "confidence": "medium"
+      },
+      {
+        "dimension": "work_intensity",
+        "value": 0.7,
+        "quote": "You move quickly, ship often, and learn from what breaks.",
+        "confidence": "high"
+      },
+      {
+        "dimension": "inclusion_commitment",
+        "value": 0.6,
+        "quote": "ClickHouse provides equal employment opportunities to all employees and applicants",
+        "confidence": "high"
+      }
+    ]
+  }
+}

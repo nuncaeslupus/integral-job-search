@@ -32,6 +32,7 @@ from jobsearch.harness import (
     DEFAULT_STORE_PATH,
     Label,
     LabelledAd,
+    Span,
     build_store,
     import_labels,
     load_store,
@@ -491,12 +492,50 @@ def test_import_refuses_malformed_rows_without_a_traceback() -> None:
     assert updated == store
 
 
-def test_import_last_row_wins_within_one_batch() -> None:
-    """Two rows targeting the same (ad, dimension, round) — the later one applies.
+def test_import_keeps_every_span_of_a_dimension_stated_twice() -> None:
+    """One dimension evidenced in two places keeps both spans, not just the last.
 
-    Matches `set`'s overwrite-in-place semantics, so importing a corrected
-    export twice in a row (an earlier draft, then a fixed one, pasted as one
-    file) behaves the same as running `set` twice would.
+    The first real export hit this: an ad that stated its pay twice, its English
+    requirement twice and its experience floor twice. Each pair shares an
+    (ad, dimension, round) key, and the apply pass used to rebuild the label
+    from whichever row it saw last — so three of eleven hand-placed spans went
+    into the store's bin while every row was still reported `applied`. Losing
+    human labelling work silently is the one outcome this importer exists to
+    prevent, so agreeing rows now merge into one label with both spans.
+    """
+    text = "Retribucion 3.085 euros al mes. Salario bruto anual 43.200 euros."
+    store = [ad(ad_id="a", text=text)]
+
+    updated, results = import_labels(
+        store,
+        [
+            row(ad_id="a", dimension="compensation_transparency", value=0.9, quote="Retribucion"),
+            row(
+                ad_id="a",
+                dimension="compensation_transparency",
+                value=0.9,
+                quote="Salario bruto anual",
+            ),
+        ],
+        known("compensation_transparency"),
+    )
+
+    assert all(r["status"] == "applied" for r in results)
+    assert len(updated[0].labels) == 1
+    label = updated[0].labels[0]
+    assert [span.extract(text) for span in label.spans] == ["Retribucion", "Salario bruto anual"]
+
+
+def test_import_refuses_one_dimension_carrying_two_values_on_one_ad() -> None:
+    """Rows that disagree on the value are two judgements, and neither is picked.
+
+    Merging agreeing spans is safe because they argue the same thing. Rows that
+    agree on the dimension and disagree on the rung do not: an ad naming an
+    office and two days at home has one `remote_arrangement`, and choosing
+    between them is the labeller's call, not the importer's. An earlier version
+    let the last row win — the same silent discard of a human judgement as the
+    dropped-span bug above, wearing a different hat — so the batch is refused
+    with both rows named instead.
     """
     store = [ad(ad_id="a", text="Guardias rotativas los martes; sin guardias los jueves.")]
 
@@ -509,9 +548,40 @@ def test_import_last_row_wins_within_one_batch() -> None:
         known("on_call_load"),
     )
 
+    assert all(r["status"] == "refused" for r in results)
+    assert "disagree on value" in results[0]["reason"]
+    assert updated == store
+
+
+def test_import_merges_the_spans_of_the_first_real_export() -> None:
+    """The export that exposed the bug, replayed: eleven spans in, eleven out."""
+    text = (
+        "Experiencia de 3 a 5 anys en el sector bancari. Angles (B2). "
+        "Retribucio 3.085 euros. Experiencia 60 mesos. Salari mensual brut 3085 euros."
+    )
+    store = [ad(ad_id="a", text=text)]
+    batch = [
+        row(ad_id="a", dimension="seniority_expectation", value=0.5, quote="Experiencia de 3 a 5"),
+        row(ad_id="a", dimension="english_demand", value=0.6, quote="Angles (B2)"),
+        row(ad_id="a", dimension="compensation_transparency", value=0.9, quote="Retribucio 3.085"),
+        row(ad_id="a", dimension="seniority_expectation", value=0.5, quote="Experiencia 60 mesos"),
+        row(
+            ad_id="a",
+            dimension="compensation_transparency",
+            value=0.9,
+            quote="Salari mensual brut",
+        ),
+    ]
+
+    updated, results = import_labels(
+        store,
+        batch,
+        known("seniority_expectation", "english_demand", "compensation_transparency"),
+    )
+
     assert all(r["status"] == "applied" for r in results)
-    assert len(updated[0].labels) == 1
-    assert updated[0].labels[0].value == 0.0
+    spans = sum(len(label.spans) for label in updated[0].labels)
+    assert spans == len(batch), "every imported span must survive into the store"
 
 
 def test_import_cli_refusal_reports_every_bad_row_and_exits_nonzero(tmp_path: Path) -> None:
@@ -777,3 +847,100 @@ def test_reconcile_returns_the_live_array_when_nothing_drifted() -> None:
 
     body = page[page.index("function reconcile"):page.index("function sourceOf")]
     assert "if (!relocated && !lost) return anns;" in body
+
+
+# ── banked labels: the corpus is the page's memory ───────────────────────────
+
+
+def test_a_banked_label_reaches_the_page_as_a_confirmed_annotation() -> None:
+    """A label already in the store arrives placed, not offered again.
+
+    Without this the page is amnesiac. Every rebuild — a new suggestion set, a
+    coined dimension, a fix to the page — handed back a corpus the labeller had
+    already worked through, with their decisions surviving only in whatever
+    `localStorage` the browser still held. The first real session ended exactly
+    there: the page gone, the work in an export file the page could not read.
+    """
+    text = "Contracte laboral indefinit. Anglès B2 necessari."
+    store = [
+        ad(
+            ad_id="a",
+            text=text,
+            labels=[
+                Label(
+                    dimension="contract_stability",
+                    value=0.9,
+                    spans=[Span(start=0, end=27)],
+                    labeller="owner",
+                    source="human",
+                )
+            ],
+        )
+    ]
+
+    banked = _PAGE._banked_payload(store[0])  # type: ignore[attr-defined]
+
+    assert banked == [
+        {
+            "dimension": "contract_stability",
+            "value": 0.9,
+            "quote": "Contracte laboral indefinit",
+            "nth": 0,
+            "negated": False,
+            "source": "human",
+        }
+    ]
+    assert "Contracte laboral indefinit" in build_page(store, DIMENSIONS)
+
+
+def test_a_banked_span_of_a_repeated_phrase_keeps_its_own_position() -> None:
+    """`nth` is what stops a repeated quote collapsing onto the first match.
+
+    Offsets cannot cross into the browser — a Python index counts code points
+    and a JavaScript one counts UTF-16 units — so the span travels as a quote.
+    A quote alone is ambiguous whenever the ad says the same thing twice, and
+    resolving it by `indexOf` would silently re-point the label at a sentence
+    the labeller never marked.
+    """
+    text = "Se ofrecen guardias. El equipo comparte guardias cada mes."
+    second = text.index("guardias", text.index("guardias") + 1)
+    store = [
+        ad(
+            ad_id="a",
+            text=text,
+            labels=[
+                Label(
+                    dimension="on_call_load",
+                    value=0.8,
+                    spans=[Span(start=second, end=second + len("guardias"))],
+                    labeller="owner",
+                )
+            ],
+        )
+    ]
+
+    banked = _PAGE._banked_payload(store[0])  # type: ignore[attr-defined]
+
+    assert banked[0]["nth"] == 1
+    # What the page's `nthIndexOf` does, in Python: the (nth+1)th occurrence.
+    at = -1
+    for _ in range(banked[0]["nth"] + 1):
+        at = text.index(banked[0]["quote"], at + 1)
+    assert at == second
+
+
+def test_every_banked_span_in_the_committed_corpus_resolves_to_itself() -> None:
+    """The round trip, over the real store: quote plus `nth` lands back exactly.
+
+    The corpus is the durable memory now, so a span that resolves anywhere but
+    where it was placed is a label pointing at words nobody judged.
+    """
+    checked = 0
+    for stored in STORE:
+        for entry in _PAGE._banked_payload(stored):  # type: ignore[attr-defined]
+            at = -1
+            for _ in range(entry["nth"] + 1):
+                at = stored.text.index(entry["quote"], at + 1)
+            assert stored.text[at : at + len(entry["quote"])] == entry["quote"]
+            checked += 1
+    assert checked, "no labels banked yet — this test would pass over nothing"

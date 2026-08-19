@@ -1,0 +1,107 @@
+# Coined by the labeller while reading feinaactiva-09202623802, the first ad of
+# the T5 pass: an ad whose duties open with "Gestió de la relació amb els
+# clients". None of the v0 22 could hold that — `social_intensity` is about time
+# spent with colleagues and `product_vs_services` about whose product you build,
+# and an in-house role can still be spent almost entirely in front of the
+# business. This is the axis those two kept missing.
+id: talking_clients
+kind: soft
+polarity: unipolar
+group: the_work
+label:
+  en: Talking to clients
+  es: Trato con clientes
+  ca: Tracte amb clients
+definition: >
+  How much of the role is spent in front of clients, users or the business —
+  gathering requirements, presenting, supporting, holding the relationship — as
+  opposed to work carried out inside the team.
+levels:
+  - value: 0.0
+    label:
+      en: "None"
+      es: "Ninguno"
+      ca: "Cap"
+    tell: "the duties are described entirely inside the team — nobody outside it appears"
+  - value: 0.33
+    label:
+      en: "A little"
+      es: "Algo"
+      ca: "Una mica"
+    tell: "contact framed as occasional — a meeting now and then, a handover, one requirement-gathering step"
+  - value: 0.67
+    label:
+      en: "Some relationship"
+      es: "Relación habitual"
+      ca: "Relació habitual"
+    tell: "regular dealings named as part of the job — habitual interlocution, requirements taken from clients, direct client contact"
+  - value: 1.0
+    label:
+      en: "Job is about that"
+      es: "El trabajo es eso"
+      ca: "La feina és això"
+    tell: "the role IS the interface — account management, solutions engineering, support, training or pre-sales"
+elicitation:
+  questions:
+    - id: tcl_q1
+      text:
+        en: >
+          Think of the last time your work put you in front of a client or the business
+          rather than your own team. What were you asked for, and how did the day go?
+        es: >
+          Piensa en la última vez que tu trabajo te puso delante de un cliente o del
+          negocio en lugar de tu equipo. ¿Qué te pidieron y cómo fue ese día?
+        ca: >
+          Pensa en l'última vegada que la teva feina et va posar davant d'un client o del
+          negoci en lloc del teu equip. Què et van demanar i com va anar el dia?
+extraction:
+  cues:
+    en:
+      # Deliberately not "customer-facing", which the corpus uses for the
+      # *product* a team builds ("Gusto's customer-facing products") rather than
+      # for anyone the engineer speaks to. Matching it would score building a
+      # consumer app as if it were account management.
+      - pattern: "(technical\\s+)?account\\s+manage(r|ment)|solutions?\\s+(architect|engineer)|point\\s+of\\s+contact"
+        value: 1.0
+        negatable: false
+      - pattern: "(work(ing)?|collaborat\\w+|partner\\w*|liais\\w+)\\s+(closely\\s+)?with\\s+[^.\\n]{0,40}(clients?|customers?|stakeholders?)"
+        value: 0.67
+        negatable: true
+      - pattern: "client\\s+meetings?|customer\\s+(calls|conversations|interviews)|user\\s+interviews"
+        value: 0.67
+        negatable: false
+    es:
+      - pattern: "atenci[óo]n\\s+al\\s+cliente|preventa|consultor[íi]a\\s+funcional"
+        value: 1.0
+        negatable: false
+      - pattern: "(trato|contacto|relaci[óo]n)\\s+(directo|directa|habitual)?\\s*con\\s+(el\\s+|los\\s+|nuestros\\s+)?(cliente|clientes|usuarios|negocio)"
+        value: 0.67
+        negatable: true
+      - pattern: "interlocuci[óo]n|toma\\s+de\\s+requisitos|reuniones\\s+con\\s+(el\\s+)?cliente|formaci[óo]n\\s+[^.\\n]{0,30}(usuarios|clientes)"
+        value: 0.67
+        negatable: false
+    ca:
+      - pattern: "atenci[óo]\\s+al\\s+client|consultoria\\s+funcional"
+        value: 1.0
+        negatable: false
+      - pattern: "(gesti[óo]|relaci[óo]|tracte|contacte)\\s+[^.\\n]{0,20}(amb\\s+(els\\s+)?clients?|del\\s+client)"
+        value: 0.67
+        negatable: true
+      - pattern: "interlocuci[óo]|requeriments\\s+de\\s+clients|acompanyar\\s+els\\s+clients"
+        value: 0.67
+        negatable: false
+  gold:
+    # The labeller's own judgement on the ad that made them coin the dimension.
+    - ad_id: feinaactiva-09202623802
+      language: ca
+      span: "Gestió de la relació amb els clients (direcció i àrees de negoci)"
+      value: 0.67
+    - ad_id: tecnoempleo-450515d772aac3661b41
+      language: es
+      span: "contacto directo con cliente"
+      value: 0.67
+    - ad_id: wwr-cloudflare-principal-partner-solutions-engineer-saarc-based-in-bangalore
+      language: en
+      span: "Technical Account Management & Architectural Health: Act as the escalated technical point of contact"
+      value: 1.0
+methods_ref: METHODS.md#26-ad-wording-as-signal
