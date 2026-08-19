@@ -1,0 +1,187 @@
+{
+  "state_paths_inside_a_repo": 0,
+  "paths_checked": 25,
+  "probes_run": 11,
+  "probes_unexpected": 0,
+  "call_sites_checked": 14,
+  "shortfalls": [],
+  "probes": [
+    {
+      "probe": "INTEGRAL_HOME at the work tree root",
+      "expected": "refused",
+      "outcome": "refused",
+      "inside_a_repo": false,
+      "detail": "INTEGRAL_HOME resolves to <tmp>/clone, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "INTEGRAL_HOME deep inside the work tree",
+      "expected": "refused",
+      "outcome": "refused",
+      "inside_a_repo": false,
+      "detail": "INTEGRAL_HOME resolves to <tmp>/clone/deep/nested/state, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "XDG_DATA_HOME inside the work tree",
+      "expected": "refused",
+      "outcome": "refused",
+      "inside_a_repo": false,
+      "detail": "XDG_DATA_HOME resolves to <tmp>/clone/share/integral-job-search, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "HOME inside the work tree, no variable set",
+      "expected": "refused",
+      "outcome": "refused",
+      "inside_a_repo": false,
+      "detail": "HOME resolves to <tmp>/clone/.integral-job-search, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "INTEGRAL_HOME outside any work tree",
+      "expected": "resolved",
+      "outcome": "resolved",
+      "inside_a_repo": false,
+      "detail": "<tmp>/elsewhere/store/profiles"
+    },
+    {
+      "probe": "INTEGRAL_DEV=1 inside the work tree — the documented escape",
+      "expected": "resolved",
+      "outcome": "resolved",
+      "inside_a_repo": false,
+      "detail": "<tmp>/clone/state/profiles"
+    },
+    {
+      "probe": "INTEGRAL_DEV=0 inside the work tree — not an escape",
+      "expected": "refused",
+      "outcome": "refused",
+      "inside_a_repo": false,
+      "detail": "INTEGRAL_HOME resolves to <tmp>/clone/state, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "INTEGRAL_DEV empty inside the work tree — not an escape",
+      "expected": "refused",
+      "outcome": "refused",
+      "inside_a_repo": false,
+      "detail": "INTEGRAL_HOME resolves to <tmp>/clone/state, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "an explicit --input-dir inside the work tree",
+      "expected": "refused",
+      "outcome": "refused",
+      "inside_a_repo": false,
+      "detail": "--input-dir resolves to <tmp>/clone/profiles, which is inside the git work tree at <tmp>/clone"
+    },
+    {
+      "probe": "an explicit --input-dir inside the work tree with INTEGRAL_DEV=1",
+      "expected": "resolved",
+      "outcome": "resolved",
+      "inside_a_repo": false,
+      "detail": "<tmp>/clone/profiles"
+    },
+    {
+      "probe": "an explicit --input-dir outside any work tree",
+      "expected": "resolved",
+      "outcome": "resolved",
+      "inside_a_repo": false,
+      "detail": "<tmp>/elsewhere/store/profiles"
+    }
+  ],
+  "call_sites": [
+    {
+      "site": ".claude/skills/step-00-identify/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-01-intake/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-02-constraints/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-03-history/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-04-traits/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-05-reactions/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-06-preferences/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-07-sourcing/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-08-understanding/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-09-ranking/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-10-feedback/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-11-application/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": ".claude/skills/step-12-interview-log/scripts/run_checkpoint.py",
+      "kind": "checkpoint",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    },
+    {
+      "site": "src/jobsearch/identity.py",
+      "kind": "module",
+      "resolves_through_resolver": true,
+      "builds_a_repo_path": false,
+      "reasons": []
+    }
+  ]
+}

@@ -631,8 +631,15 @@ The rest:
 Multi-user from day one (brief §1.3). A handful of people, file-based, not a
 multi-tenant service.
 
+The tree's root is **`$INTEGRAL_HOME/profiles/`**, not a directory inside the
+clone — `$INTEGRAL_HOME` defaults to `~/.integral-job-search/` and respects
+`$XDG_DATA_HOME` where it is set (`docs/distribution.md` §2, made mechanical by
+T51 in `jobsearch.state_home`). The resolver **refuses** to return any path
+inside a git work tree, with `--dev` / `INTEGRAL_DEV=1` as the single explicit
+escape for work on the tool itself.
+
 ```
-profiles/<handle>/
+$INTEGRAL_HOME/profiles/<handle>/
   identity.json                 handle, display name, locale, created_at
   session/
     state.json                  current step, position, pending steps, sufficiency
@@ -654,7 +661,9 @@ profiles/<handle>/
   interviews/<offer_id>/        questions asked, outcome, lessons — immutable
 ```
 
-`profiles/` is gitignored (T1) and stays so. Every derived file is regenerable
+`profiles/` is gitignored (T1) and stays so — the cheap belt behind the
+resolver's braces, since a tree resolved outside every work tree is not there
+to stage. Every derived file is regenerable
 from `evidence.jsonl` plus the offer store; **nothing derived is ever edited in
 place**, because an edit that is not an evidence row is lost at the next
 rebuild and produces a profile that cannot be explained.

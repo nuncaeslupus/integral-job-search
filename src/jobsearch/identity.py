@@ -44,10 +44,23 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from jobsearch.corpus import LANGUAGES
+from jobsearch.state_home import StateHomeRefused, profiles_root
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PROFILES_ROOT = _REPO_ROOT / "profiles"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "S3.json"
+
+
+def default_profiles_root() -> Path:
+    """The roster root, resolved from `$INTEGRAL_HOME` — never a repository path.
+
+    A function rather than the module constant this replaced (T51). The
+    constant was `_REPO_ROOT / "profiles"`, which put a candidate's tree inside
+    the clone and left `.gitignore` as the only thing keeping it out of a
+    commit; `jobsearch.state_home` makes that a refusal instead. It stays lazy
+    because resolution can *fail* — importing this module must not raise just
+    because the ambient environment points somewhere it should not.
+    """
+    return profiles_root()
 
 # Directory-safe and stable: lowercase ASCII, digits and single hyphens. The
 # handle is a directory name on three operating systems and a key in every
@@ -660,7 +673,15 @@ def hook_main(stdin_text: str, *, root: Path | None = None) -> tuple[int, str]:
     that fails closed on its own bug would make the tool unusable, and the
     store-side `ProfileLeak` is the real enforcement.
     """
-    profiles_root = Path(root) if root is not None else DEFAULT_PROFILES_ROOT
+    try:
+        roster = Path(root) if root is not None else default_profiles_root()
+    except StateHomeRefused as exc:
+        # There is no store here to protect: the resolver refused the only root
+        # this hook could have guarded. Allowing the call matches the posture
+        # in this function's docstring — the store-side `ProfileLeak` is the
+        # real enforcement, and a guard that blocked every tool call because it
+        # could not find a tree would make the session unusable.
+        return 0, f"profile guard: no candidate store to guard — {exc}"
     try:
         payload = json.loads(stdin_text)
     except json.JSONDecodeError as exc:
@@ -675,9 +696,9 @@ def hook_main(stdin_text: str, *, root: Path | None = None) -> tuple[int, str]:
     decision = guard_tool_call(
         tool_name,
         tool_input,
-        root=profiles_root,
+        root=roster,
         active=read_active_handle(
-            profiles_root, session_id=session_id if isinstance(session_id, str) else None
+            roster, session_id=session_id if isinstance(session_id, str) else None
         ),
     )
     if decision.allowed:
