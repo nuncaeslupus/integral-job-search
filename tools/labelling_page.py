@@ -231,30 +231,6 @@ main {
 }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
-/* Phones. The panes stop being independently scrollable boxes — nested scroll
-   areas inside a page that already scrolls is the classic way to trap a thumb —
-   and every control grows to a real touch target. Inputs go to 16px because
-   anything smaller makes iOS Safari zoom the viewport on focus, which throws
-   away the reading position mid-label. */
-@media (max-width: 700px) {
-  body { line-height: 1.5; }
-  header { position: static; padding: 0.6rem 0.75rem; }
-  .notice, .howto { margin-left: 0.75rem; margin-right: 0.75rem; }
-  main { margin: 0 0.75rem 1rem 0.75rem; gap: 0.75rem; }
-  .ad-pane, .dims-pane, .export { max-height: none; overflow: visible; padding: 0.75rem; }
-  .ad-text { font-size: 1rem; }
-  button { padding: 0.55rem 0.9rem; min-height: 44px; }
-  .controls { gap: 0.4rem 0.6rem; }
-  .controls label { font-size: 0.85rem; }
-  .controls input[type="text"], .controls input[type="number"], .controls select,
-  .dim-controls input, .dim-controls select { font-size: 16px; min-height: 40px; }
-  .dim-card { padding: 0.7rem; }
-  .dim-controls { gap: 0.5rem; }
-  .dim-controls label { min-height: 44px; display: flex; align-items: center; }
-  .export textarea { min-height: 6rem; }
-  footer { padding-bottom: 5rem; }
-}
-
 /* What the page is holding for you, pinned where a thumb can reach it. */
 .selection-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
@@ -291,6 +267,12 @@ main {
 .ad-pane, .dims-pane, .export {
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   padding: 0.9rem; max-height: 75vh; overflow-y: auto;
+  /* A grid item defaults to `min-width: auto`, so the track grows to its widest
+     child rather than the container. While the panes were scroll boxes their
+     overflow hid it; once mobile made them `overflow: visible` the widest
+     control pushed the column to 390px inside a 366px `main` and the page
+     overflowed by exactly the margins. Grid items have to be allowed to shrink. */
+  min-width: 0;
 }
 .ad-meta { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.5rem; }
 .ad-meta a { color: var(--accent); }
@@ -338,6 +320,31 @@ mark.cue-hit {
 .howto li { margin-bottom: 0.5rem; }
 .howto p { margin: 0.5rem 0 0 0; }
 footer { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 1rem; }
+
+/* Phones. The panes stop being independently scrollable boxes — nested scroll
+   areas inside a page that already scrolls is the classic way to trap a thumb —
+   and every control grows to a real touch target. Inputs go to 16px because
+   anything smaller makes iOS Safari zoom the viewport on focus, which throws
+   away the reading position mid-label. */
+@media (max-width: 700px) {
+  body { line-height: 1.5; }
+  header { position: static; padding: 0.6rem 0.75rem; }
+  .notice, .howto { margin-left: 0.75rem; margin-right: 0.75rem; }
+  main { margin: 0 0.75rem 1rem 0.75rem; gap: 0.75rem; }
+  .ad-pane, .dims-pane, .export { max-height: none; overflow: visible; padding: 0.75rem; }
+  .ad-text { font-size: 1rem; }
+  button { padding: 0.55rem 0.9rem; min-height: 44px; }
+  .controls { gap: 0.4rem 0.6rem; }
+  .controls label { font-size: 0.85rem; }
+  .controls input[type="text"], .controls input[type="number"], .controls select,
+  .dim-controls input, .dim-controls select { font-size: 16px; min-height: 40px; }
+  .dim-card { padding: 0.7rem; }
+  .dim-controls { gap: 0.5rem; }
+  .dim-controls label { min-height: 44px; display: flex; align-items: center; }
+  .export textarea { min-height: 6rem; }
+  footer { padding-bottom: 5rem; }
+}
+
 </style>
 </head>
 <body>
@@ -760,7 +767,12 @@ _SCRIPT = r"""
   // anything outside the text collapses the selection first, so a handler that
   // called getSelection() at click time always found it empty. Desktop had the
   // same latent bug — a click that lands a hair outside the highlight clears it.
-  var heldSelection = "";
+  // Held text is stored *with the ad it came from*. Text alone was a real hazard:
+  // navigate to the next ad with a phrase still held, tap "use selection", and a
+  // common phrase ("teletrabajo", "remote") that happens to occur once in the new
+  // ad would be recorded as evidence from an advert it was never in — silently,
+  // and into the corpus every extraction score is measured against.
+  var heldSelection = null;
 
   function rememberSelection() {
     var sel = window.getSelection ? window.getSelection() : null;
@@ -773,27 +785,32 @@ _SCRIPT = r"""
     if (!adText || !adText.contains(sel.anchorNode) || !adText.contains(sel.focusNode)) {
       return;
     }
-    heldSelection = text;
+    var ad = currentAd();
+    if (!ad) { return; }
+    heldSelection = { adId: ad.id, text: text };
     renderSelectionBar();
   }
 
   function renderSelectionBar() {
     var bar = document.getElementById("selectionBar");
     if (!bar) { return; }
-    if (!heldSelection) {
+    var ad = currentAd();
+    // A hold from another ad is not shown and not offered — dropping it at the
+    // boundary is the same rule as refusing it at capture, applied earlier.
+    if (!heldSelection || !ad || heldSelection.adId !== ad.id) {
       bar.classList.remove("active");
       return;
     }
-    var shown = heldSelection.length > 90
-      ? heldSelection.slice(0, 90) + "\u2026"
-      : heldSelection;
+    var shown = heldSelection.text.length > 90
+      ? heldSelection.text.slice(0, 90) + "\u2026"
+      : heldSelection.text;
     document.getElementById("heldSelection").innerHTML =
       "held: <b>\u201c" + escapeHtml(shown) + "\u201d</b>";
     bar.classList.add("active");
   }
 
   function dropSelection() {
-    heldSelection = "";
+    heldSelection = null;
     renderSelectionBar();
   }
 
@@ -804,7 +821,8 @@ _SCRIPT = r"""
     errEl.textContent = "";
     var live = window.getSelection ? window.getSelection() : null;
     var liveText = live && !live.isCollapsed ? live.toString() : "";
-    var text = liveText || heldSelection;
+    var held = heldSelection && heldSelection.adId === ad.id ? heldSelection.text : "";
+    var text = liveText || held;
     if (!text) {
       errEl.textContent = "select some text in the ad first";
       return;
@@ -835,9 +853,23 @@ _SCRIPT = r"""
         card.classList.remove("filtered-out");
         return;
       }
-      var haystack = card.textContent.toLowerCase();
+      // The dimension's own name, id and definition — not the whole card. Every
+      // card carries the same -1/-0.5/0.5/1 buttons, so searching textContent
+      // made "1" and "0.5" match all 22 while the box promises name-or-id.
+      var haystack = ["dim-label", "dim-id", "dim-def"].map(function (cls) {
+        var el = card.querySelector("." + cls);
+        return el ? el.textContent : "";
+      }).join(" ").toLowerCase();
       card.classList.toggle("filtered-out", haystack.indexOf(needle) === -1);
     });
+  }
+
+  function reapplyDimFilter() {
+    // `buildDimsList` destroys the cards the filter marked, so the query has to
+    // be applied again after every rebuild — otherwise moving to the next ad
+    // shows all 22 while the box still shows what you typed.
+    var filter = document.getElementById("dimFilter");
+    applyDimFilter(filter ? filter.value : "");
   }
 
   function render() {
@@ -855,6 +887,8 @@ _SCRIPT = r"""
     renderAdText(ad);
     buildDimsList(ad);
     DIMENSIONS.forEach(function (dim) { renderDimCard(dim, ad); });
+    reapplyDimFilter();
+    renderSelectionBar();
     renderProgress();
     jumpSelect.value = ad.id;
     renderExport();
