@@ -172,6 +172,24 @@ they exist before relying on the behaviour.
    so nothing is mis-reported today — but write gates as `bash`, not `sh`,
    until it is fixed.
 
+### The board is read with `--state`, never `--issues` (defect 8)
+
+The protocol's `--issues` path **does not work on this surface and fails
+silently**: the MCP server strips HTML from issue bodies, so the
+`<!-- arsenal-task: … -->` marker never arrives and `state_from_issues` returns
+an empty map for all 27 issues. Everything then defaults to `open` — which
+looks fine until the first task is finished and gets handed out again.
+
+`CLAUDE.md` carries the replacement recipe; the short version is:
+
+```bash
+uv run python -m jobsearch.board_state --issues "$ISSUES" > "$STATE"
+python3 claude-arsenal/scripts/task_select.py --tasks-dir arsenal/tasks --state "$STATE"
+```
+
+Verified against all 27 live issues: **27/27 resolved, 0 warnings**, and
+selection returns exactly the 7 tasks below.
+
 ### Verified, so you do not have to re-test it
 
 `arsenal:task` **did not exist** in this repository and **auto-created on the
