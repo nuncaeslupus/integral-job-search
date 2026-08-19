@@ -1,6 +1,7 @@
 id: contract_stability
 kind: hard
 polarity: unipolar
+group: dealbreakers
 label:
   en: Contract stability
   es: Estabilidad contractual
@@ -8,6 +9,25 @@ label:
 definition: >
   How durable the engagement is: an open-ended employment contract at one end,
   fixed-term, freelance or self-employed billing at the other.
+levels:
+  - value: 0.0
+    label:
+      en: "Freelance / self-employed"
+      es: "Autónomo o freelance"
+      ca: "Autònom o freelance"
+    tell: "you invoice the employer; there is no employment contract"
+  - value: 0.3
+    label:
+      en: "Fixed-term"
+      es: "Temporal"
+      ca: "Temporal"
+    tell: "a contract with a stated end — a project, a cover, a season"
+  - value: 0.9
+    label:
+      en: "Open-ended"
+      es: "Indefinido"
+      ca: "Indefinit"
+    tell: "an open-ended employment contract, stated as such"
 elicitation:
   questions:
     - id: cs_q1

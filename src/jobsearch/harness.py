@@ -25,6 +25,7 @@ import json
 import math
 import sys
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
@@ -39,6 +40,21 @@ DEFAULT_STORE_PATH = _REPO_ROOT / "corpus" / "labelled" / "ads.jsonl"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T4.json"
 
 Split = Literal["elicitation", "evaluation"]
+
+# How a human arrived at a label. There is deliberately no `"suggested"` member:
+# a machine suggestion that nobody looked at is not a label and never becomes
+# one — it lives in `corpus/labelled/suggestions.json` and dies in the browser
+# if it is not acted on. So every value here means a person made a judgement,
+# and the three record which judgement it was:
+#
+#   human      typed from scratch, with no suggestion involved
+#   confirmed  a suggestion the labeller read and accepted unchanged
+#   edited     a suggestion whose dimension, rung or span the labeller changed
+#
+# The split matters because `confirmed` is the one that can hide rubber-stamping.
+# Keeping it distinguishable is what lets `suggestion_confirm_rate` be compared
+# against blind agreement on the control ads instead of taken on trust.
+LabelSource = Literal["human", "confirmed", "edited"]
 
 # Share of ads assigned to the evaluation split. The evaluation half feeds
 # `extraction_macro_f1` (T15) and `rank_spearman` (T20); the elicitation half
@@ -90,6 +106,7 @@ class Label(Strict):
     negated: bool = False
     labeller: str = Field(min_length=1)
     round: int = Field(ge=1, default=1)
+    source: LabelSource = "human"
 
 
 class ImportRow(Strict):
@@ -108,6 +125,7 @@ class ImportRow(Strict):
     negated: bool = False
     labeller: str = Field(min_length=1, default="owner")
     round: int = Field(ge=1, default=1)
+    source: LabelSource = "human"
 
 
 class LabelledAd(Strict):
@@ -555,9 +573,21 @@ def _cmd_set(args: argparse.Namespace) -> int:
         return 2
     start, end = located
 
-    known = {dimension.id for dimension in load_dimensions()}
-    if args.dimension not in known:
+    known = {dimension.id: dimension for dimension in load_dimensions()}
+    dimension = known.get(args.dimension)
+    if dimension is None:
         print(f"unknown dimension {args.dimension!r}", file=sys.stderr)
+        return 2
+    # The same rung check `import` applies. A CLI that accepted an off-rung
+    # value would be a way around the labelling vocabulary, and the corpus
+    # would end up holding values macro-F1 has no class for.
+    if dimension.level_for(args.value) is None:
+        rungs = ", ".join(f"{level.value} ({level.label.en})" for level in dimension.levels)
+        print(
+            f"value {args.value} is not a declared level of {args.dimension!r} — "
+            f"pick one of: {rungs}",
+            file=sys.stderr,
+        )
         return 2
 
     label = Label(
@@ -600,7 +630,7 @@ def locate_quote(ad: LabelledAd, quote: str) -> tuple[int, int] | str:
 def import_labels(
     store: list[LabelledAd],
     rows: list[dict[str, Any]],
-    known_dimensions: set[str],
+    dimensions: Mapping[str, Dimension],
 ) -> tuple[list[LabelledAd], list[dict[str, Any]]]:
     """Validate a whole batch, then apply it — or apply nothing.
 
@@ -647,10 +677,27 @@ def import_labels(
             reason = f"no ad {row.ad_id!r} in the store"
             results.append({**base, "status": "refused", "reason": reason})
             continue
-        if row.dimension not in known_dimensions:
+        dimension = dimensions.get(row.dimension)
+        if dimension is None:
             all_valid = False
             results.append(
                 {**base, "status": "refused", "reason": f"unknown dimension {row.dimension!r}"}
+            )
+            continue
+        if dimension.level_for(row.value) is None:
+            all_valid = False
+            rungs = ", ".join(
+                f"{level.value} ({level.label.en})" for level in dimension.levels
+            )
+            results.append(
+                {
+                    **base,
+                    "status": "refused",
+                    "reason": (
+                        f"value {row.value} is not a declared level of {row.dimension!r} — "
+                        f"pick one of: {rungs}"
+                    ),
+                }
             )
             continue
 
@@ -677,6 +724,7 @@ def import_labels(
             negated=row.negated,
             labeller=row.labeller,
             round=row.round,
+            source=row.source,
         )
         kept = [
             existing
@@ -709,11 +757,24 @@ def _cmd_import(args: argparse.Namespace) -> int:
     except json.JSONDecodeError as exc:
         print(f"not valid JSON: {exc}", file=sys.stderr)
         return 2
+    # Two accepted shapes. A bare array is what the first page emitted and what
+    # a hand-written batch still is. An object is what the page emits once it can
+    # also carry `proposed_dimensions` — a dimension coined mid-read, which this
+    # command deliberately does not apply: writing `dimensions/<id>.yaml` is a
+    # change to the model's spine and belongs in a reviewed diff, not in a
+    # labelling import that also touches the corpus.
+    proposals: list[dict[str, Any]] = []
+    if isinstance(rows, dict):
+        proposals = rows.get("proposed_dimensions") or []
+        rows = rows.get("labels")
+        if rows is None:
+            print("expected a JSON object with a 'labels' array", file=sys.stderr)
+            return 2
     if not isinstance(rows, list):
         print("expected a JSON array of label rows", file=sys.stderr)
         return 2
 
-    known = {dimension.id for dimension in load_dimensions()}
+    known = {dimension.id: dimension for dimension in load_dimensions()}
     updated, results = import_labels(store, rows, known)
 
     refused = [r for r in results if r["status"] == "refused"]
@@ -739,6 +800,24 @@ def _cmd_import(args: argparse.Namespace) -> int:
             "nothing written",
             file=sys.stderr,
         )
+        # An import is atomic, so a single label on a dimension coined during
+        # labelling would hold back the whole batch — and the reason ("unknown
+        # dimension") reads like a typo rather than the known next step. Name
+        # that step here, where the refusal happens.
+        unknown = {
+            str(result.get("dimension"))
+            for result in refused
+            if "unknown dimension" in str(result.get("reason", ""))
+        }
+        pending = sorted(unknown & {str(p.get("id")) for p in proposals})
+        if pending:
+            print(
+                f"\n{len(pending)} of those name a dimension coined while labelling "
+                f"({', '.join(pending)}). Write their files first, fill in the TODOs, "
+                f"then import again:\n"
+                f"  uv run python -m jobsearch.suggestions propose {args.file}",
+                file=sys.stderr,
+            )
         return 2
 
     save_store(updated, store_path)

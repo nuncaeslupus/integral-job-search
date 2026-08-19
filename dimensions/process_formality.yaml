@@ -1,6 +1,7 @@
 id: process_formality
 kind: soft
 polarity: bipolar
+group: the_work
 label:
   en: Process formality
   es: Formalidad del proceso
@@ -8,6 +9,31 @@ label:
 definition: >
   How much prescribed ceremony the work carries — sprint rituals, formal methodologies,
   documentation gates — versus lightweight ad-hoc coordination.
+levels:
+  - value: -0.6
+    label:
+      en: "Lightweight"
+      es: "Ligero"
+      ca: "Lleuger"
+    tell: "the ad rejects ceremony — few meetings, no infinite sprints, ad-hoc coordination"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "no method or ritual is named"
+  - value: 0.5
+    label:
+      en: "Agile ceremony"
+      es: "Ceremonia ágil"
+      ca: "Cerimònia àgil"
+    tell: "scrum, sprints, stand-ups, kanban — named as how the work runs"
+  - value: 0.8
+    label:
+      en: "Heavy formal process"
+      es: "Proceso formal pesado"
+      ca: "Procés formal pesat"
+    tell: "ITIL, CMMI, ISO, waterfall, or documentation gates"
 elicitation:
   questions:
     - id: pf_q1

@@ -1,6 +1,7 @@
 id: remote_arrangement
 kind: hard
 polarity: unipolar
+group: dealbreakers
 label:
   en: Remote arrangement
   es: Modalidad de teletrabajo
@@ -8,6 +9,25 @@ label:
 definition: >
   How much of the working week is worked away from a company site, from fully remote
   through hybrid day-quotas to full on-site presence.
+levels:
+  - value: 0.0
+    label:
+      en: "On-site"
+      es: "Presencial"
+      ca: "Presencial"
+    tell: "the ad names an office, a work city, or full presence as the arrangement"
+  - value: 0.5
+    label:
+      en: "Hybrid"
+      es: "Híbrido"
+      ca: "Híbrid"
+    tell: "a split week — a stated number of days at home or in the office"
+  - value: 1.0
+    label:
+      en: "Fully remote"
+      es: "100% remoto"
+      ca: "100% teletreball"
+    tell: "the whole role is worked away from any company site"
 elicitation:
   questions:
     - id: ra_q1

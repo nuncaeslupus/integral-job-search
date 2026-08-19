@@ -1,6 +1,7 @@
 id: mission_alignment
 kind: soft
 polarity: bipolar
+group: growth
 label:
   en: Mission alignment
   es: Alineación con la misión
@@ -8,6 +9,25 @@ label:
 definition: >
   How much the stated purpose of the work matters to the candidate — public service,
   health, climate, education at one end; sectors they would refuse at the other.
+levels:
+  - value: -0.7
+    label:
+      en: "A sector to refuse"
+      es: "Un sector a rechazar"
+      ca: "Un sector a rebutjar"
+    tell: "gambling, tobacco, defence — work the candidate would rule out on purpose"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "the ad never says what the work is ultimately for"
+  - value: 0.7
+    label:
+      en: "Purpose stated"
+      es: "Propósito declarado"
+      ca: "Propòsit declarat"
+    tell: "health, education, climate, public service, or a mission named and meant"
 elicitation:
   questions:
     - id: ma_q1
@@ -57,7 +77,7 @@ extraction:
     - ad_id: wwr-stripe-backend-engineer-core-technology
       language: en
       span: "Our mission is to increase the GDP of the internet, and we have a staggering amount of work ahead. That means you have an unprecedented"
-      value: 0.6
+      value: 0.7
     - ad_id: tecnoempleo-0e9510e2527fd31cd240
       language: es
       span: "Estamos ampliando nuestros equipos en el sector defensa para asumir un proyecto relacionado con sistemas UAS/UAV. Nos gusta ir al grano te vamos a contar lo que no está"

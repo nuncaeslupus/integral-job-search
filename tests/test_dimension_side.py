@@ -30,6 +30,7 @@ TRAIT = """\
 id: ambition
 kind: soft
 polarity: unipolar
+group: the_work
 side: candidate_trait
 label:
   en: Ambition
@@ -37,6 +38,13 @@ label:
   ca: Ambició
 definition: >
   How strongly the candidate pursues advancement, scope and responsibility.
+levels:
+  - value: 0.0
+    label: {en: Absent, es: Ausente, ca: Absent}
+    tell: the ad says nothing about it
+  - value: 1.0
+    label: {en: Present, es: Presente, ca: Present}
+    tell: the ad says so plainly
 elicitation:
   questions:
     - id: amb_q1
@@ -51,6 +59,7 @@ FACT = """\
 id: languages_spoken
 kind: hard
 polarity: unipolar
+group: the_work
 side: candidate_fact
 compares_against: english_demand
 label:
@@ -59,6 +68,13 @@ label:
   ca: Idiomes parlats
 definition: >
   The languages the candidate can work in, and at what level.
+levels:
+  - value: 0.0
+    label: {en: Absent, es: Ausente, ca: Absent}
+    tell: the ad says nothing about it
+  - value: 1.0
+    label: {en: Present, es: Presente, ca: Present}
+    tell: the ad says so plainly
 elicitation:
   questions:
     - id: lang_q1

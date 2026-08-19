@@ -411,16 +411,25 @@ def test_trait_dimension_ids_excludes_non_trait_sides() -> None:
     """Only `candidate_trait` dimensions are ever measured — a `matched`
     dimension is not a trait, and must never inflate or deflate the
     denominator this metric divides by."""
-    from jobsearch.dimensions import Cue, Dimension, Elicitation, LocalisedText, Question
+    from jobsearch.dimensions import (
+        Cue,
+        Dimension,
+        Elicitation,
+        LocalisedText,
+        Question,
+        synthetic_levels,
+    )
     from jobsearch.dimensions import Extraction as _Extraction
 
     matched = Dimension(
         id="last_role_autonomy",
         kind="soft",
         polarity="bipolar",
+        group="the_work",
         side="matched",
         label=LocalisedText(en="x", es="x", ca="x"),
         definition="a matched dimension, not a trait",
+        levels=synthetic_levels(),
         elicitation=Elicitation(
             questions=[Question(id="q1", text=LocalisedText(en="x", es="x", ca="x"))]
         ),

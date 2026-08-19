@@ -1,6 +1,7 @@
 id: seniority_expectation
 kind: hard
 polarity: unipolar
+group: dealbreakers
 label:
   en: Seniority expectation
   es: Nivel de senioridad
@@ -8,6 +9,25 @@ label:
 definition: >
   How much prior experience the ad requires, expressed as a level name or a stated
   number of years.
+levels:
+  - value: 0.2
+    label:
+      en: "Junior"
+      es: "Junior"
+      ca: "Júnior"
+    tell: "no experience required, or an explicit junior/graduate/trainee opening"
+  - value: 0.5
+    label:
+      en: "Mid-level"
+      es: "Intermedio"
+      ca: "Intermedi"
+    tell: "a few years asked for, or a plain practitioner title with no seniority word"
+  - value: 0.8
+    label:
+      en: "Senior"
+      es: "Senior"
+      ca: "Sènior"
+    tell: "senior/lead/principal in the title, or a stated floor of many years"
 elicitation:
   questions:
     - id: se_q1

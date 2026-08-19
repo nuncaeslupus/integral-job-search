@@ -1,6 +1,7 @@
 id: technical_depth
 kind: soft
 polarity: bipolar
+group: the_work
 label:
   en: Technical depth
   es: Profundidad técnica
@@ -8,6 +9,25 @@ label:
 definition: >
   Whether the role is engineering hard problems — architecture, performance, systems
   design — or operating and supporting what already exists.
+levels:
+  - value: -0.6
+    label:
+      en: "Operating what exists"
+      es: "Operar lo que ya existe"
+      ca: "Operar el que ja existeix"
+    tell: "helpdesk, L2 support, ticket queues, running someone else's system"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "the ad describes duties without saying how hard the engineering is"
+  - value: 0.7
+    label:
+      en: "Engineering hard problems"
+      es: "Ingeniería de fondo"
+      ca: "Enginyeria de fons"
+    tell: "architecture, systems design, scale or performance work"
 elicitation:
   questions:
     - id: td_q1

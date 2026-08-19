@@ -1,6 +1,7 @@
 id: on_call_load
 kind: soft
 polarity: unipolar
+group: terms
 label:
   en: On-call load
   es: Carga de guardias
@@ -8,6 +9,25 @@ label:
 definition: >
   How much out-of-hours availability the role carries: on-call rotations, incident duty,
   and expectations of reachability outside the working day.
+levels:
+  - value: 0.0
+    label:
+      en: "None"
+      es: "Sin guardias"
+      ca: "Sense guàrdies"
+    tell: "no out-of-hours duty — including an ad that says so outright"
+  - value: 0.4
+    label:
+      en: "Occasional"
+      es: "Ocasional"
+      ca: "Ocasional"
+    tell: "reachability expected now and then, or a light shared rota"
+  - value: 0.8
+    label:
+      en: "Rotation or incident duty"
+      es: "Guardias o rotación"
+      ca: "Guàrdies o rotació"
+    tell: "a named on-call rotation, incident duty, or 24/7 cover"
 elicitation:
   questions:
     - id: ocl_q1

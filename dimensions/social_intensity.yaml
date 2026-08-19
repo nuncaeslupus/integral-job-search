@@ -5,6 +5,7 @@
 id: social_intensity
 kind: soft
 polarity: bipolar
+group: people
 label:
   en: Social intensity
   es: Intensidad social
@@ -12,6 +13,25 @@ label:
 definition: >
   How much of the working week is spent in unstructured group interaction —
   open-plan presence, socials, offsites — as opposed to solitary focused work.
+levels:
+  - value: -0.5
+    label:
+      en: "Solitary and focused"
+      es: "Trabajo autónomo y concentrado"
+      ca: "Treball autònom i concentrat"
+    tell: "deep work, focus time, or independent work named as the mode"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "the ad says nothing about how much group time the week holds"
+  - value: 0.6
+    label:
+      en: "Group-heavy"
+      es: "Mucha vida de grupo"
+      ca: "Molta vida de grup"
+    tell: "offsites, team days, pairing, socials — unstructured group time as a feature"
 elicitation:
   questions:
     - id: si_q1

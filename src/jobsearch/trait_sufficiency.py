@@ -100,7 +100,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 from jobsearch.decline import DeclineLedger
-from jobsearch.dimensions import Dimension, Elicitation, Extraction, LocalisedText, Question
+from jobsearch.dimensions import (
+    Dimension,
+    Elicitation,
+    Extraction,
+    LocalisedText,
+    Question,
+    synthetic_levels,
+)
 from jobsearch.interview import (
     MINIMUM_TRAIT_EPISODES,
     MINIMUM_TRAIT_OCCASIONS,
@@ -314,9 +321,11 @@ def _fixture_dimension(dimension_id: str) -> Dimension:
         id=dimension_id,
         kind="soft",
         polarity="bipolar",
+        group="the_work",
         side="candidate_trait",
         label=LocalisedText(en=dimension_id, es=dimension_id, ca=dimension_id),
         definition="a synthetic trait dimension used only to probe trait sufficiency",
+        levels=synthetic_levels(),
         elicitation=Elicitation(
             questions=[
                 Question(

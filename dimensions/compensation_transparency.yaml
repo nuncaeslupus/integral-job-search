@@ -1,6 +1,7 @@
 id: compensation_transparency
 kind: soft
 polarity: unipolar
+group: terms
 label:
   en: Pay transparency
   es: Transparencia salarial
@@ -8,6 +9,25 @@ label:
 definition: >
   Whether the ad states what the role pays — a stated band, a figure, or nothing but
   'competitive'. A property of the ad's wording, not of the amount.
+levels:
+  - value: 0.0
+    label:
+      en: "Silent on pay"
+      es: "No dice nada del sueldo"
+      ca: "No en diu res, del sou"
+    tell: "the ad never mentions money at all"
+  - value: 0.2
+    label:
+      en: "Described, never quantified"
+      es: "«Competitivo», sin cifra"
+      ca: "«Competitiu», sense xifra"
+    tell: "'competitive salary', 'salary according to experience' — a word where a number should be"
+  - value: 0.9
+    label:
+      en: "A figure or a band"
+      es: "Una cifra o una banda"
+      ca: "Una xifra o una forquilla"
+    tell: "an actual amount or range the reader can act on"
 elicitation:
   questions:
     - id: ct_q1

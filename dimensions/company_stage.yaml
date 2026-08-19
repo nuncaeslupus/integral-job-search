@@ -1,6 +1,7 @@
 id: company_stage
 kind: soft
 polarity: bipolar
+group: growth
 label:
   en: Company stage
   es: Etapa de la empresa
@@ -8,6 +9,25 @@ label:
 definition: >
   Where the employer sits between an early-stage startup and a large established
   organisation, which shapes both risk and how much structure exists.
+levels:
+  - value: -0.7
+    label:
+      en: "Early-stage startup"
+      es: "Startup en fase inicial"
+      ca: "Startup en fase inicial"
+    tell: "seed or Series A–C, a founding team, or the ad calling itself a startup"
+  - value: 0.0
+    label:
+      en: "Mid-size or unstated"
+      es: "Tamaño medio o no dicho"
+      ca: "Mida mitjana o no dita"
+    tell: "nothing that places the employer at either end"
+  - value: 0.7
+    label:
+      en: "Large and established"
+      es: "Gran organización consolidada"
+      ca: "Gran organització consolidada"
+    tell: "a multinational, a global leader, or a stated headcount in the thousands"
 elicitation:
   questions:
     - id: cs_q1
@@ -64,5 +84,5 @@ extraction:
     - ad_id: tecnoempleo-b2fb182e627ab3455b4c
       language: es
       span: "de la tecnología. Formado por más de 3.000 personas creativas digitales e innovadoras conectadas a un propósito y capaces de generar conexiones con personas de todo el mundo."
-      value: 0.6
+      value: 0.7
 methods_ref: METHODS.md#26-ad-wording-as-signal

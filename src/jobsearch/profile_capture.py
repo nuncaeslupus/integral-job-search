@@ -157,6 +157,7 @@ from jobsearch.dimensions import (
     LocalisedText,
     Question,
     Side,
+    synthetic_levels,
 )
 from jobsearch.elicit_extract import store_answer
 from jobsearch.identity import ProfileStore, create_profile
@@ -363,9 +364,11 @@ def _capture_fixture_dimension(dimension_id: str, *, side: Side) -> Dimension:
         id=dimension_id,
         kind="soft",
         polarity="bipolar",
+        group="the_work",
         side=side,
         label=LocalisedText(en=dimension_id, es=dimension_id, ca=dimension_id),
         definition="a synthetic dimension used only to probe continuous capture",
+        levels=synthetic_levels(),
         elicitation=Elicitation(
             questions=[
                 Question(

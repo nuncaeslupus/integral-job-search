@@ -27,12 +27,20 @@ VALID = """\
 id: social_intensity
 kind: soft
 polarity: bipolar
+group: the_work
 label:
   en: Social intensity
   es: Intensidad social
   ca: Intensitat social
 definition: >
   How much of the working week is spent in unstructured group interaction.
+levels:
+  - value: 0.0
+    label: {en: Absent, es: Ausente, ca: Absent}
+    tell: the ad says nothing about it
+  - value: 1.0
+    label: {en: Present, es: Presente, ca: Present}
+    tell: the ad says so plainly
 elicitation:
   questions:
     - id: si_q1

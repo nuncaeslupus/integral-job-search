@@ -1,6 +1,7 @@
 id: work_intensity
 kind: soft
 polarity: bipolar
+group: the_work
 label:
   en: Work intensity
   es: Intensidad del trabajo
@@ -8,6 +9,25 @@ label:
 definition: >
   The pace the role expects: sustained delivery pressure, urgency and 'fast-paced'
   framing at one end, a deliberate and steady pace at the other.
+levels:
+  - value: -0.6
+    label:
+      en: "Deliberate pace"
+      es: "Ritmo sostenible"
+      ca: "Ritme sostenible"
+    tell: "work-life balance, conciliación, or a sustainable pace named as a value"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "the ad says nothing about pace either way"
+  - value: 0.7
+    label:
+      en: "Sustained pressure"
+      es: "Presión sostenida"
+      ca: "Pressió sostinguda"
+    tell: "fast-paced, tight deadlines, high-growth urgency"
 elicitation:
   questions:
     - id: wi_q1
@@ -61,7 +81,7 @@ extraction:
     - ad_id: manfred-8400
       language: es
       span: "abierta y la capacidad de adaptarse a un entorno dinámico de start-up.\n* **Inglés fluido (C1):** Necesario para coordinarse de manera efectiva, tanto a nivel oral como"
-      value: 0.6
+      value: 0.7
     - ad_id: feinaactiva-FA92322289
       language: ca
       span: "18:00. Marge d’adaptació segons necessitats i conciliació personal.\n-Contractació: Indefinida.\n\nIncorporació: Immediata o segons la disponibilitat del candidat.\n\n- Residència"

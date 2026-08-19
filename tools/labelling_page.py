@@ -1,86 +1,109 @@
 #!/usr/bin/env python3
-"""T5's labelling aid — a self-contained HTML page that makes hand-labelling fast.
+"""T5's labelling aid — read the ad, react to what is already marked on it.
 
-T5 (`claude-arsenal/queue/lo-d2b2.md`) is `[HUMAN]`: a person, not an agent,
-must decide which of the 22 matched dimensions (`src/jobsearch/dimensions.py`,
-`docs/dimension-catalogue.md`) each of the 100 ads in
-`corpus/labelled/ads.jsonl` evidences, and must supply a verbatim quote for
-every value (`corpus/labelled/README.md`). Typing accented Catalan and
-Spanish quotes into a terminal 300+ times is the actual bottleneck — a
-mistyped quote is silently rejected by `harness set` (`ad.text.find` returns
--1), so every retry is a round trip through the shell.
+T5 (`claude-arsenal/queue/lo-d2b2.md`) is `[HUMAN]`: a person must decide which
+dimensions each of the 100 ads in `corpus/labelled/ads.jsonl` evidences, and
+supply a verbatim quote for every value.
 
-This tool removes the typing, not the judgement. It renders the corpus and
-the dimension model into one `file://`-openable HTML page with no network
-dependency, so the labeller reads the ad, drags the mouse over the words that
-evidence a dimension, and the page reads the *browser's own selection* back
-as the quote — a substring of `text` by construction, so it can never fail
-`harness set`'s verbatim check. `harness import` (in `jobsearch.harness`)
-then applies everything the page accumulated in one atomic batch, instead of
-one `set` invocation per label.
+The first version of this page asked that question dimension-first: 22 cards
+beside each ad, each offering a value box and a *use selection* button. That is
+2,200 decisions across the corpus to record the five or six per ad that are
+really there, and it required the labeller to hold all 22 dimensions in mind to
+notice which ones an ad had evidenced. The reading was fast; the searching was
+not.
 
-**Cue highlighting is navigation, not labelling.** The page marks where a
-dimension's extraction regex (`Dimension.extraction.cues`) matches the ad
-text, purely so the labeller's eye lands on the right paragraph. It never
-selects a dimension, never fills a value, and never fills a quote — the page
-says so in its own UI, not only here, because D-2 (`status/plan.md`) already
-records that v0's cue-derived gold is not independent of the extraction
-model, and `extraction_macro_f1` (T15) is measured against this corpus's
-labels. A page that pre-filled from a cue would let the labeller rubber-stamp
-the model's own regex as ground truth, and the gate would then measure the
-model against itself — passing meaninglessly regardless of how good or bad
-the extractor actually is. `test_cue_highlight_never_prefills_a_value` in
-`tests/test_labelling_aid.py` is the property test for this.
+This version inverts it. The ad arrives already marked: each pre-marked span is
+highlighted in the text and carries a chip naming the dimension and the rung
+proposed for it. The labeller reads once and reacts — confirm, change, delete —
+and selects text only for what the marks missed. Selecting text opens a picker
+grouped into five titled sections, so a dimension can be found without already
+knowing its name.
+
+Two things this page will not do:
+
+* **It never prefills from a cue.** `extraction_macro_f1` (T15) is measured
+  against this corpus, so a labeller confirming `Dimension.extraction.cues`
+  output would make the gate score the extractor against itself (D-2,
+  `status/plan.md`). Earlier versions guarded this by keeping cue *values* out
+  of the page; this one carries no cue data at all — no patterns, no values, no
+  highlighting derived from them. The marks come from
+  `corpus/labelled/suggestions.json`, whose provenance is recorded and whose
+  overlap with the cues is measured by `jobsearch.suggestions.cue_agreement`.
+* **It never exports something nobody looked at.** A suggestion is `pending`
+  until the labeller acts on it, and only confirmed or edited annotations reach
+  the export. `Label.source` then records which, so "the labeller agreed with
+  92% of suggestions" can be read against blind agreement on the control ads
+  rather than taken on trust.
 
 Usage:
-    uv run python tools/labelling_page.py                 # writes corpus/labelled/label.html
+    uv run python tools/labelling_page.py                 # -> corpus/labelled/label.html
     uv run python tools/labelling_page.py --out /tmp/x.html
+    uv run python tools/labelling_page.py --no-suggestions   # blind: mark nothing
 
-The generated file is gitignored (`.gitignore`) — it is a build artefact of
-the corpus and the dimension model, regenerable from either at any time, and
-carries no state of its own: the labeller's actual work lives in the browser's
-`localStorage` until it is exported and applied with `harness import`.
+The generated file is gitignored — a build artefact of the corpus, the dimension
+model and the suggestions, regenerable from them at any time. The labeller's
+work lives in the browser's `localStorage` until it is exported and applied with
+`harness import`.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
-from jobsearch.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, load_dimensions
+from jobsearch.dimensions import DEFAULT_DIMENSIONS_DIR, GROUPS, Dimension, load_dimensions
 from jobsearch.harness import DEFAULT_STORE_PATH, LabelledAd, load_store
+from jobsearch.suggestions import (
+    DEFAULT_SUGGESTIONS_PATH,
+    SuggestionSet,
+    load_suggestions,
+    validate_suggestions,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_PATH = _REPO_ROOT / "corpus" / "labelled" / "label.html"
 
+# Section headings for the picker, in the order they are offered. Ordered by how
+# often an ad settles one: an ad names its contract and location far more often
+# than it says anything about mentoring, so the sections a labeller reaches for
+# most sit where the thumb already is.
+GROUP_TITLES: dict[str, str] = {
+    "dealbreakers": "Deal-breakers",
+    "terms": "Terms & load",
+    "the_work": "The work itself",
+    "people": "People & team",
+    "growth": "Growth & meaning",
+}
+
 
 def _dimension_payload(dimensions: list[Dimension]) -> list[dict[str, Any]]:
-    """The subset of each dimension the page needs: label, definition, cues.
+    """What the page needs to *offer* a dimension: name, definition, rungs, group.
 
-    Restricted to `side == "matched"` — the 22 dimensions an ad's own wording
-    can evidence. `candidate_fact` and `candidate_trait` dimensions (none
-    currently in the committed model, but the schema allows them) are elicited
-    from the person, never extracted from an ad, so a labelling page over ad
-    text has nothing to ask about them.
+    Restricted to `side == "matched"` — the dimensions an ad's own wording can
+    evidence. A `candidate_trait` is elicited from the person and a
+    `candidate_fact` is compared against an ad-side requirement, so neither has
+    anything to ask of a page that reads ad text.
+
+    Note what is absent: `extraction.cues`. Not filtered down to safe fields —
+    absent. The page has no cue patterns and no cue values, so no rendering path
+    and no future edit to this file can derive a mark from the extractor whose
+    accuracy this corpus is meant to measure.
     """
     return [
         {
             "id": dimension.id,
-            "label": {
-                "en": dimension.label.en,
-                "es": dimension.label.es,
-                "ca": dimension.label.ca,
-            },
-            "definition": dimension.definition,
+            "group": dimension.group,
+            "label": dimension.label.en,
+            "definition": " ".join(dimension.definition.split()),
             "polarity": dimension.polarity,
-            "cues": {
-                language: [
-                    {"pattern": cue.pattern, "negatable": cue.negatable} for cue in cues
-                ]
-                for language, cues in dimension.extraction.cues.items()
-            },
+            "kind": dimension.kind,
+            "levels": [
+                {"value": level.value, "label": level.label.en, "tell": level.tell}
+                for level in dimension.levels
+            ],
         }
         for dimension in dimensions
         if dimension.side == "matched"
@@ -103,25 +126,88 @@ def _ad_payload(ads: list[LabelledAd]) -> list[dict[str, Any]]:
     ]
 
 
+def _suggestion_payload(
+    suggestions: SuggestionSet | None,
+    ads: list[LabelledAd],
+) -> dict[str, Any]:
+    """Marks per ad, resolved to offsets, plus the control ads left bare.
+
+    The quote is shipped, and the browser resolves it to offsets itself. That
+    is not a stylistic choice — a Python offset is a **code-point** index and a
+    JavaScript one is a **UTF-16 code-unit** index, and the corpus is full of
+    emoji outside the BMP (the Manfred ads open with 📢, and 🫵🏾 is two
+    surrogate pairs on its own). Every such character before a span makes the
+    JS index one unit larger than the Python one, so an offset computed here
+    and used there lands progressively further left the deeper into the ad it
+    is — silently citing the wrong words while still looking plausible. It is
+    the same failure the corpus README rules out for byte offsets, one encoding
+    layer up. Passing the quote keeps each side in its own index space, exactly
+    as `harness import` already does.
+
+    What is still checked here is uniqueness, because this is where a problem
+    can be reported with its reason visible. A quote that does not locate
+    cleanly is dropped rather than marked at a guessed position: a missing mark
+    shows up as untagged text the labeller will read anyway, while a wrong one
+    reads as somebody else's judgement.
+    """
+    if suggestions is None:
+        return {"method": "none", "control": [ad.id for ad in ads], "marks": {}, "dropped": []}
+
+    marks: dict[str, list[dict[str, Any]]] = {}
+    dropped: list[str] = []
+    by_id = {ad.id: ad for ad in ads}
+    for ad_id, proposed in suggestions.by_ad.items():
+        ad = by_id.get(ad_id)
+        if ad is None:
+            continue
+        placed: list[dict[str, Any]] = []
+        for suggestion in proposed:
+            if ad.text.count(suggestion.quote) != 1:
+                dropped.append(f"{ad_id}:{suggestion.dimension}")
+                continue
+            placed.append(
+                {
+                    "dimension": suggestion.dimension,
+                    "value": suggestion.value,
+                    "quote": suggestion.quote,
+                    "negated": suggestion.negated,
+                    "confidence": suggestion.confidence,
+                    "note": suggestion.note,
+                }
+            )
+        if placed:
+            marks[ad_id] = sorted(placed, key=lambda m: ad.text.index(m["quote"]))
+    return {
+        "method": suggestions.method,
+        "control": sorted(suggestions.blind_control),
+        "marks": marks,
+        "dropped": sorted(dropped),
+    }
+
+
 def _embed_json(data: dict[str, Any]) -> str:
     """Serialise `data` for a `<script type="application/json">` block.
 
     The HTML tokenizer ends a `<script>` element at the first literal
-    `</script` it sees, case-insensitively, regardless of the element's
-    `type` — the ad corpus is arbitrary scraped text and nothing rules out
-    that substring appearing in it. Escaping the slash (`<\\/script`) is inert
-    to `JSON.parse`, which does not treat backslash-slash as anything but a
-    literal `/`, and prevents that same substring from ever closing the tag
-    early.
+    `</script` it sees, case-insensitively, regardless of the element's `type` —
+    the corpus is arbitrary scraped text and nothing rules out that substring
+    appearing in it. Escaping the slash is inert to `JSON.parse`, which reads
+    backslash-slash as a literal `/`, and stops that substring closing the tag.
     """
     return json.dumps(data, ensure_ascii=False, sort_keys=True).replace("</", "<\\/")
 
 
-def build_page(ads: list[LabelledAd], dimensions: list[Dimension]) -> str:
+def build_page(
+    ads: list[LabelledAd],
+    dimensions: list[Dimension],
+    suggestions: SuggestionSet | None = None,
+) -> str:
     """Render the full standalone HTML page."""
     data = {
         "ads": _ad_payload(ads),
         "dimensions": _dimension_payload(dimensions),
+        "groups": [{"id": group, "title": GROUP_TITLES[group]} for group in GROUPS],
+        "suggestions": _suggestion_payload(suggestions, ads),
     }
     return (
         _HEAD
@@ -136,912 +222,999 @@ def build_page(ads: list[LabelledAd], dimensions: list[Dimension]) -> str:
     )
 
 
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Build the T5 labelling page.")
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT_PATH)
+    parser.add_argument("--store", type=Path, default=DEFAULT_STORE_PATH)
+    parser.add_argument("--dimensions", type=Path, default=DEFAULT_DIMENSIONS_DIR)
+    parser.add_argument("--suggestions", type=Path, default=DEFAULT_SUGGESTIONS_PATH)
+    parser.add_argument(
+        "--no-suggestions",
+        action="store_true",
+        help="mark nothing — every ad is labelled cold, as the control ads are",
+    )
+    args = parser.parse_args(argv)
+
+    ads = load_store(args.store)
+    dimensions = load_dimensions(args.dimensions)
+
+    suggestions = None
+    if not args.no_suggestions:
+        explicit = args.suggestions != DEFAULT_SUGGESTIONS_PATH
+        if args.suggestions.exists():
+            suggestions = load_suggestions(args.suggestions)
+        elif explicit:
+            # A path the operator typed and that is not there is a mistake, not a
+            # request for blind mode. Blind mode has its own flag.
+            print(f"suggestions file not found: {args.suggestions}", file=sys.stderr)
+            return 2
+        else:
+            print(
+                f"no {DEFAULT_SUGGESTIONS_PATH.name} yet — every ad will be blind. "
+                "Pass --no-suggestions to say you meant that.",
+                file=sys.stderr,
+            )
+
+    # The validator is the only thing that checks a suggestion set means what it
+    # says: known dimensions, values on declared rungs, quotes that locate
+    # exactly once, a control cohort that is really the cohort, and no
+    # cue-derived mark on the evaluation split. Building the page without it
+    # would let a broken set reach the labeller looking perfectly ordinary —
+    # and a labeller confirming a contaminated mark is exactly the failure the
+    # whole suggestion design exists to prevent. `_suggestion_payload` also
+    # drops quotes it cannot place, so a build that skipped this check could
+    # quietly ship fewer marks than the file promised.
+    if suggestions is not None:
+        problems = validate_suggestions(suggestions, ads, dimensions)
+        if problems:
+            print(
+                f"{args.suggestions} has {len(problems)} violation(s); no page written:",
+                file=sys.stderr,
+            )
+            for problem in problems:
+                print(f"  {problem}", file=sys.stderr)
+            return 2
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(build_page(ads, dimensions, suggestions), encoding="utf-8")
+
+    marked = sum(len(v) for v in _suggestion_payload(suggestions, ads)["marks"].values())
+    control = len(suggestions.blind_control) if suggestions else len(ads)
+    print(f"{args.out}  ({len(ads)} ads, {marked} marks, {control} control ads)")
+    if suggestions is None:
+        print("  no suggestions applied — every ad is blind", flush=True)
+    else:
+        dropped = _suggestion_payload(suggestions, ads)["dropped"]
+        if dropped:
+            print(f"  {len(dropped)} mark(s) dropped as unlocatable: {', '.join(dropped[:5])}")
+    return 0
+
+
 _HEAD = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>T5 labelling aid</title>
+<title>T5 labelling</title>
 <style>
 :root {
   color-scheme: light dark;
-  --bg: #f7f7f5;
-  --panel: #ffffff;
-  --border: #d8d8d2;
-  --text: #1c1c1a;
-  --muted: #66665f;
-  --accent: #2f6f4f;
-  --accent-contrast: #ffffff;
-  --warn-bg: #fff4e0;
-  --warn-border: #d9a441;
-  --mark-bg: #ffe9a8;
-  --mark-border: #d9a441;
-  --danger: #a4302a;
-  --done-bg: #e4f2e8;
+  --bg: #f7f7f5; --panel: #fff; --border: #d8d8d2; --text: #1c1c1a; --muted: #66665f;
+  --accent: #2f6f4f; --accent-contrast: #fff; --danger: #a4302a;
+  --warn-bg: #fff4e0; --warn-border: #d9a441;
+  --g-dealbreakers: #b5453c; --g-terms: #9a6a1e; --g-the_work: #2f6f4f;
+  --g-people: #2b5f8f; --g-growth: #6b4694;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1b1c19;
-    --panel: #242520;
-    --border: #3a3b34;
-    --text: #ecece6;
-    --muted: #b0b0a4;
-    --accent: #7fd0a3;
-    --accent-contrast: #10241a;
-    --warn-bg: #3a3016;
-    --warn-border: #b98b2c;
-    --mark-bg: #5a4a1a;
-    --mark-border: #b98b2c;
-    --danger: #e08a84;
-    --done-bg: #1f3226;
+    --bg: #1b1c19; --panel: #242520; --border: #3a3b34; --text: #ecece6; --muted: #b0b0a4;
+    --accent: #7fd0a3; --accent-contrast: #10241a; --danger: #e08a84;
+    --warn-bg: #3a3016; --warn-border: #b98b2c;
+    --g-dealbreakers: #e08a84; --g-terms: #dcb463; --g-the_work: #7fd0a3;
+    --g-people: #8fb8e0; --g-growth: #bda3e0;
   }
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0;
+  margin: 0; background: var(--bg); color: var(--text); line-height: 1.5;
   font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.45;
 }
 header {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  position: sticky; top: 0; z-index: 30; background: var(--panel);
+  border-bottom: 1px solid var(--border); padding: 0.6rem 1rem;
 }
-header h1 { font-size: 1.05rem; margin: 0 0 0.4rem 0; }
-.progress { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
-.controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-.controls label {
-  font-size: 0.8rem; color: var(--muted); display: flex; gap: 0.3rem; align-items: center;
-}
-.controls input[type="text"], .controls input[type="number"], .controls select {
-  font: inherit; padding: 0.2rem 0.35rem; border: 1px solid var(--border);
-  border-radius: 4px; background: var(--panel); color: var(--text);
-  max-width: 100%;
-}
-/* An unconstrained <select> sizes itself to its widest option, and this one
-   holds 100 ad titles — on a 390px phone it measured 728px and dragged the
-   whole layout viewport out to 778px, which is why nothing lined up under a
-   thumb. The cap is on the control, not the option text, so the menu still
-   shows titles in full when it opens. */
-.controls label { min-width: 0; }
-#jumpSelect { max-width: min(22rem, 55vw); }
-.ad-text, .quote-display, .dim-def {
-  overflow-wrap: anywhere;
-}
+.bar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+h1 { font-size: 1rem; margin: 0 0.5rem 0 0; }
+.count { font-size: 0.85rem; color: var(--muted); }
+.count b { color: var(--text); }
 button {
-  font: inherit; padding: 0.3rem 0.7rem; border-radius: 5px; border: 1px solid var(--border);
-  background: var(--panel); color: var(--text); cursor: pointer;
+  font: inherit; padding: 0.35rem 0.7rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
 }
 button.primary {
   background: var(--accent); color: var(--accent-contrast); border-color: var(--accent);
 }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-.notice {
-  margin: 0.75rem 1rem; padding: 0.6rem 0.8rem; border: 1px solid var(--warn-border);
-  background: var(--warn-bg); border-radius: 6px; font-size: 0.85rem;
-}
-main {
-  display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
-  gap: 1rem; margin: 0 1rem 1rem 1rem;
-}
-@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-
-/* What the page is holding for you, pinned where a thumb can reach it. */
-.selection-bar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  display: none; gap: 0.5rem; align-items: center; flex-wrap: wrap;
-  padding: 0.6rem 0.8rem; background: var(--panel);
-  border-top: 1px solid var(--border); box-shadow: 0 -2px 12px rgba(0,0,0,0.12);
-  font-size: 0.85rem;
-}
-.selection-bar.active { display: flex; flex-wrap: nowrap; }
-.selection-bar button { white-space: nowrap; }
-.filters { margin-top: 0.5rem; }
-.filters > summary {
-  cursor: pointer; font-size: 0.8rem; color: var(--muted); padding: 0.25rem 0;
-}
-.filters .controls { margin-top: 0.5rem; }
-@media (max-width: 700px) {
-  .filters > summary { min-height: 40px; display: flex; align-items: center; }
-}
-.selection-bar .held {
-  flex: 1 1 12rem; min-width: 0; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.selection-bar .held b { color: var(--text); font-weight: 500; }
-.dim-filter {
-  width: 100%; font: inherit; padding: 0.4rem 0.5rem; margin-bottom: 0.6rem;
-  border: 1px solid var(--border); border-radius: 5px;
-  background: var(--bg); color: var(--text);
-}
-@media (max-width: 700px) { .dim-filter { font-size: 16px; min-height: 40px; } }
-.dim-card.filtered-out { display: none; }
-.quick-values { display: flex; gap: 0.25rem; flex-wrap: wrap; }
-.quick-values button { padding: 0.3rem 0.55rem; font-size: 0.85rem; }
-@media (max-width: 700px) { .quick-values button { min-height: 40px; padding: 0.45rem 0.7rem; } }
-.ad-pane, .dims-pane, .export {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  padding: 0.9rem; max-height: 75vh; overflow-y: auto;
-  /* A grid item defaults to `min-width: auto`, so the track grows to its widest
-     child rather than the container. While the panes were scroll boxes their
-     overflow hid it; once mobile made them `overflow: visible` the widest
-     control pushed the column to 390px inside a 366px `main` and the page
-     overflowed by exactly the margins. Grid items have to be allowed to shrink. */
-  min-width: 0;
-}
-.ad-meta { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.5rem; }
+button.danger { color: var(--danger); border-color: var(--danger); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+input, select { font: inherit; padding: 0.3rem 0.4rem; border-radius: 5px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text); max-width: 100%; }
+main { display: grid; grid-template-columns: minmax(0,1.55fr) minmax(0,1fr);
+  gap: 1rem; margin: 1rem; align-items: start; }
+@media (max-width: 950px) { main { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1rem; }
+.ad-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
 .ad-meta a { color: var(--accent); }
-.ad-hint { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.5rem; }
-.ad-text {
-  white-space: pre-wrap; font-size: 0.95rem; user-select: text;
-}
-mark.cue-hit {
-  background: var(--mark-bg); border-bottom: 2px solid var(--mark-border);
-  border-radius: 2px; padding: 0 1px; cursor: help;
-}
-.dims-pane h2 { font-size: 0.95rem; margin-top: 0; }
-.dim-card {
-  border: 1px solid var(--border); border-radius: 6px; padding: 0.55rem 0.65rem;
-  margin-bottom: 0.6rem;
-}
-.dim-card.has-label { background: var(--done-bg); }
-.dim-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
-.dim-label { font-weight: 600; }
-.dim-id { font-size: 0.72rem; color: var(--muted); font-family: ui-monospace, monospace; }
-.dim-def { font-size: 0.8rem; color: var(--muted); margin: 0.15rem 0 0.4rem 0; }
-.dim-controls {
-  display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.3rem;
-}
-.dim-controls label { font-size: 0.78rem; display: flex; gap: 0.25rem; align-items: center; }
-.val-input { width: 4.5rem; font: inherit; padding: 0.15rem 0.3rem; border: 1px solid var(--border);
-  border-radius: 4px; background: var(--panel); color: var(--text); }
-.quote-display {
-  font-size: 0.82rem; font-style: italic; padding: 0.3rem 0.4rem; border-radius: 4px;
-  background: var(--bg); border: 1px dashed var(--border); min-height: 1.3em;
-}
-.quote-error { font-size: 0.78rem; color: var(--danger); min-height: 1em; }
-.export textarea {
-  width: 100%; min-height: 8rem; font-family: ui-monospace, monospace; font-size: 0.78rem;
-  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
-}
-.export-actions { display: flex; gap: 0.5rem; margin-top: 0.4rem; flex-wrap: wrap; }
-.copy-status { font-size: 0.8rem; color: var(--muted); }
-.howto {
-  margin: 1rem 1rem 0 1rem; padding: 0.75rem 1rem; border: 1px solid var(--border);
-  border-radius: 8px; background: var(--panel); font-size: 0.9rem; line-height: 1.5;
-}
-.howto summary { cursor: pointer; font-weight: 500; }
-.howto ol { margin: 0.75rem 0 0.5rem 0; padding-left: 1.4rem; }
-.howto li { margin-bottom: 0.5rem; }
-.howto p { margin: 0.5rem 0 0 0; }
-footer { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 1rem; }
+.ad-text { white-space: pre-wrap; font-size: 1rem; user-select: text; }
 
-/* Phones. The panes stop being independently scrollable boxes — nested scroll
-   areas inside a page that already scrolls is the classic way to trap a thumb —
-   and every control grows to a real touch target. Inputs go to 16px because
-   anything smaller makes iOS Safari zoom the viewport on focus, which throws
-   away the reading position mid-label. */
+/* A mark in the ad text. Pending is dashed and colourless on purpose: the
+   labeller must be able to tell at a glance what they have decided from what a
+   machine proposed, without reading a legend. */
+mark.ann {
+  background: transparent; color: inherit; padding: 0.05em 0; border-radius: 3px;
+  border-bottom: 2px dashed var(--muted); cursor: pointer;
+}
+mark.ann.confirmed { border-bottom: 2px solid var(--hue);
+  background: color-mix(in srgb, var(--hue) 14%, transparent); }
+mark.ann.focused { outline: 2px solid var(--hue); outline-offset: 2px; }
+.chip {
+  display: inline-block; vertical-align: baseline; margin-left: 0.25em;
+  font-size: 0.68em; line-height: 1.5; padding: 0 0.4em; border-radius: 999px;
+  background: color-mix(in srgb, var(--hue) 18%, transparent);
+  color: var(--hue); border: 1px solid var(--hue); white-space: nowrap; user-select: none;
+}
+mark.ann:not(.confirmed) .chip { border-style: dashed; opacity: 0.75; }
+
+.anns { list-style: none; margin: 0; padding: 0; }
+.ann-row { border: 1px solid var(--border); border-left: 3px solid var(--hue);
+  border-radius: 8px; padding: 0.5rem 0.6rem; margin-bottom: 0.5rem; }
+.ann-row.focused { box-shadow: 0 0 0 2px var(--hue); }
+.ann-row.pending { border-left-style: dashed; }
+.ann-dim { font-weight: 600; font-size: 0.9rem; color: var(--hue); }
+.ann-rung { font-size: 0.85rem; }
+.ann-quote { font-size: 0.8rem; font-style: italic; color: var(--muted);
+  margin: 0.25rem 0; overflow-wrap: anywhere; }
+.ann-acts { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.ann-acts button { padding: 0.2rem 0.5rem; font-size: 0.82rem; }
+.state { font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted); }
+
+/* The picker. Fixed rather than anchored to the selection: an anchored popup
+   near the bottom of a long ad ends up off-screen, and on a phone it fights the
+   native selection handles. */
+.picker { position: fixed; inset: auto 0 0 0; z-index: 60; max-height: 72vh;
+  display: none; flex-direction: column; background: var(--panel);
+  border-top: 1px solid var(--border); box-shadow: 0 -4px 24px rgba(0,0,0,.22); }
+.picker.open { display: flex; }
+@media (min-width: 700px) {
+  .picker { inset: auto auto 1.5rem 50%; transform: translateX(-50%);
+    width: min(38rem, 92vw); border: 1px solid var(--border); border-radius: 12px; }
+}
+.picker-head { padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border); }
+.picker-head .sel { font-size: 0.8rem; color: var(--muted); font-style: italic;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 0.4rem; }
+.picker-head input { width: 100%; font-size: 16px; }
+.picker-body { overflow-y: auto; padding: 0.4rem 0.5rem 0.8rem; }
+.grp { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--hue); margin: 0.7rem 0.3rem 0.3rem; font-weight: 600; }
+.opt { display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  padding: 0.45rem 0.5rem; border-radius: 6px; }
+.opt:hover, .opt.active { background: color-mix(in srgb, var(--hue) 14%, transparent); }
+.opt .name { font-weight: 600; font-size: 0.92rem; }
+.opt .def { display: block; font-size: 0.78rem; color: var(--muted); }
+.opt.hidden { display: none; }
+.rung .name { font-weight: 600; }
+.rung .tell { display: block; font-size: 0.78rem; color: var(--muted); }
+.picker-foot { padding: 0.5rem 0.8rem; border-top: 1px solid var(--border);
+  display: flex; gap: 0.5rem; justify-content: space-between; align-items: center; }
+.newdim { padding: 0.6rem 0.8rem; display: none; }
+.newdim.open { display: block; }
+.newdim label { display: block; font-size: 0.8rem; margin-bottom: 0.45rem; }
+.newdim input, .newdim select { width: 100%; }
+
+.notice { margin: 0 1rem; padding: 0.6rem 0.8rem; border-radius: 8px;
+  border: 1px solid var(--warn-border); background: var(--warn-bg); font-size: 0.85rem; }
+.howto { margin: 1rem; } .howto summary { cursor: pointer; font-weight: 600; }
+.howto li { margin-bottom: 0.4rem; }
+.glossary { margin-top: 0.8rem; }
+.glossary summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+.gloss-row { font-size: 0.8rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
+.gloss-row b { color: var(--hue); }
+textarea { width: 100%; min-height: 7rem; font-family: ui-monospace, monospace;
+  font-size: 0.75rem; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; }
+footer { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 1rem 1rem 5rem; }
 @media (max-width: 700px) {
-  body { line-height: 1.5; }
-  header { position: static; padding: 0.6rem 0.75rem; }
-  .notice, .howto { margin-left: 0.75rem; margin-right: 0.75rem; }
-  main { margin: 0 0.75rem 1rem 0.75rem; gap: 0.75rem; }
-  .ad-pane, .dims-pane, .export { max-height: none; overflow: visible; padding: 0.75rem; }
-  .ad-text { font-size: 1rem; }
-  button { padding: 0.55rem 0.9rem; min-height: 44px; }
-  .controls { gap: 0.4rem 0.6rem; }
-  .controls label { font-size: 0.85rem; }
-  .controls input[type="text"], .controls input[type="number"], .controls select,
-  .dim-controls input, .dim-controls select { font-size: 16px; min-height: 40px; }
-  .dim-card { padding: 0.7rem; }
-  .dim-controls { gap: 0.5rem; }
-  .dim-controls label { min-height: 44px; display: flex; align-items: center; }
-  .export textarea { min-height: 6rem; }
-  footer { padding-bottom: 5rem; }
+  header { position: static; }
+  button { min-height: 44px; } .ann-acts button { min-height: 38px; }
+  input, select { font-size: 16px; min-height: 40px; }
+  main { margin: 0.75rem; }
 }
-
 </style>
 </head>
 <body>
 """
 
+
 _BODY = """<header>
-  <h1>T5 labelling aid</h1>
-  <div class="progress" id="progress"></div>
-  <div class="controls nav-controls">
-    <button id="prevBtn">&larr; prev</button>
-    <button id="nextBtn">next &rarr;</button>
-    <button id="nextUnlabelledBtn" class="primary">next unlabelled &rarr;</button>
+  <div class="bar">
+    <h1>T5 labelling</h1>
+    <button id="prev">&larr;</button>
+    <button id="next">&rarr;</button>
+    <button id="nextTodo" class="primary">next unresolved &rarr;</button>
+    <span class="count" id="count"></span>
+    <label class="count">as <input id="labeller" value="owner" size="7"></label>
+    <label class="count">round
+      <input id="round" type="number" value="1" min="1" style="width:3.4rem"></label>
+    <select id="jump" style="max-width:min(20rem,50vw)"></select>
   </div>
-  <details class="filters" id="filtersPanel" open>
-    <summary>Filters, labeller, jump to&hellip;</summary>
-    <div class="controls">
-      <label>Labeller <input type="text" id="labellerName" value="owner" size="8"></label>
-      <label>Round
-        <input type="number" id="roundNum" value="1" min="1" style="width:3.5rem"></label>
-      <label>Split
-        <select id="splitFilter">
-          <option value="">all</option>
-          <option value="elicitation">elicitation</option>
-          <option value="evaluation">evaluation</option>
-        </select>
-      </label>
-      <label>Language
-        <select id="langFilter">
-          <option value="">all</option>
-          <option value="es">es</option>
-          <option value="en">en</option>
-          <option value="ca">ca</option>
-        </select>
-      </label>
-      <label>Jump to <select id="jumpSelect"></select></label>
-    </div>
-  </details>
 </header>
 
-<details class="howto" open>
-  <summary><strong>How to label an ad</strong> &mdash; click to collapse</summary>
+<div class="notice" id="controlNotice" hidden></div>
+
+<details class="howto card">
+  <summary>How this works &mdash; click to collapse</summary>
   <ol>
-    <li><strong>Read the ad</strong> on the left. Decide for yourself what it
-      says; do not start from the highlights (see the note below).</li>
-    <li><strong>Find a dimension it evidences</strong> in the right-hand list.
-      Each card shows the dimension&rsquo;s name and its definition. Most ads
-      evidence only a handful of the 22 &mdash; <em>you are not meant to fill in
-      every card.</em> Leave a dimension untouched when the ad says nothing
-      about it.</li>
-    <li><strong>Select the words that prove it</strong> with the mouse, in the
-      ad text, then click <em>use selection</em> on that dimension&rsquo;s card.
-      The quote is taken from the browser&rsquo;s own selection, so it is always
-      an exact substring of the ad and can never fail the importer&rsquo;s
-      verbatim check. Select the evidence itself, not the whole paragraph.</li>
-    <li><strong>Enter a value</strong> from &minus;1 to 1. The sign is what
-      matters most: <code>1</code> = the ad strongly evidences this dimension,
-      <code>0.5</code> = weakly or partially, <code>&minus;1</code> = it
-      evidences the opposite. Steps of 0.05 are allowed; do not agonise over
-      the second decimal.</li>
-    <li><strong>Tick <em>negated</em></strong> when the ad <em>denies</em> the
-      dimension in words &mdash; &ldquo;sense gu&agrave;rdies&rdquo;, &ldquo;no
-      on-call&rdquo;. That is different from the ad simply not mentioning it
-      (leave it blank) and it is measured separately, so it is worth getting
-      right.</li>
-    <li><strong>Move on</strong> with <em>next unlabelled</em>. A dimension
-      counts as done only when it has <em>both</em> a quote and a value &mdash;
-      that is what the <em>Dimensions (n/22 on this ad)</em> heading counts.
-      The counter in the header measures something different and looser: how
-      many <em>ads</em> carry at least one label, so an ad you have barely
-      started already counts there. Neither number is a target.</li>
+    <li><strong>Read the ad.</strong> Some passages arrive already marked, each
+      with a chip naming a dimension and the rung proposed for it. A dashed mark
+      is a <em>proposal</em>; nothing dashed is counted or exported.</li>
+    <li><strong>React to each mark.</strong> <kbd>Enter</kbd> confirms the
+      focused one, <kbd>Backspace</kbd> deletes it, <kbd>c</kbd> changes it.
+      <kbd>j</kbd>/<kbd>k</kbd> move between marks. A confirmed mark turns solid
+      and is coloured by its group.</li>
+    <li><strong>Select text the marks missed</strong> and pick a dimension from
+      the sections that appear, then a rung. You never type a number: each
+      dimension lists the named positions its scale actually has, with a line
+      saying what each looks like in an ad.</li>
+    <li><strong>Coin a new dimension</strong> with <em>+ new dimension</em> at
+      the bottom of the picker when an ad says something none of the existing
+      ones can hold. It is recorded in the export as a proposal, together with
+      the ad you coined it at, so the earlier ads can be swept for it rather
+      than re-read.</li>
+    <li><strong>Leave the rest alone.</strong> Most ads evidence a handful of the
+      22. Untouched is a real answer and the commonest one.</li>
   </ol>
-  <p><strong>Stopping and resuming.</strong> Your work is saved in this
-    browser as you go &mdash; closing the tab does not lose it (clearing
-    browser data does). There is no &ldquo;submit&rdquo;: when you want to hand
-    work over, scroll to <em>Export</em> at the bottom, click <em>copy
-    JSON</em>, and send that blob. You can do that after five ads or after a
-    hundred, and again later; importing is idempotent.</p>
-  <p><strong>If you are unsure about an ad</strong>, skip it rather than
-    guessing. An honest gap is fixable later; a guessed label silently becomes
-    ground truth that every extraction score is measured against.</p>
+  <p><strong>Where the marks come from.</strong> They are read from
+    <code>corpus/labelled/suggestions.json</code> and are <em>not</em> produced by
+    the extractor's own cue regexes &mdash; this page carries no cue data at all.
+    Confirming the extractor's output would make <code>extraction_macro_f1</code>
+    score it against itself (D-2). Some ads deliberately arrive with no marks so
+    your agreement rate has a baseline; the page says so when you reach one.</p>
+  <p><strong>Stopping and resuming.</strong> Work is saved in this browser as you
+    go. Export when you are done and apply it with
+    <code>uv run python -m jobsearch.harness import &lt;file&gt;</code>.</p>
 </details>
 
-<div class="notice">
-  <strong>Highlights are navigation, not labels.</strong> The shaded words show
-  where a dimension's extraction regex matches this ad &mdash; they point your eye
-  at the right paragraph and nothing more. They never choose a dimension, never
-  set a value, and never fill a quote for you: v0's cue-derived gold is not
-  independent of the extraction model (D-2), and this corpus is what
-  <code>extraction_macro_f1</code> is measured against. Copying a highlight
-  straight into a label would make that gate check the model against itself.
-  Read the ad, decide for yourself, then select the words that actually
-  evidence your decision.
-</div>
-
 <main>
-  <section class="ad-pane">
+  <section class="card">
     <div class="ad-meta" id="adMeta"></div>
-    <div class="ad-hint">Select the words below &mdash; drag with the mouse, or
-      long-press and drag on a phone &mdash; then use &ldquo;use selection&rdquo;
-      on the dimension they evidence. The selection is held for you, so tapping
-      away does not lose it.</div>
     <div class="ad-text" id="adText"></div>
+    <details class="glossary">
+      <summary>What every dimension means</summary>
+      <div id="glossary"></div>
+    </details>
   </section>
-  <section class="dims-pane">
-    <h2>Dimensions (<span id="dimDoneCount"></span>/<span id="dimTotalCount"></span>
-      on this ad)</h2>
-    <input type="search" class="dim-filter" id="dimFilter" autocomplete="off"
-      placeholder="filter dimensions by name or id&hellip;">
-    <div id="dimsList"></div>
+
+  <section class="card">
+    <div class="bar" style="justify-content:space-between;margin-bottom:0.6rem">
+      <strong id="annHead">On this ad</strong>
+      <button id="confirmAll">confirm all pending</button>
+    </div>
+    <ul class="anns" id="anns"></ul>
+    <p class="count" id="annEmpty"></p>
+    <details style="margin-top:1rem">
+      <summary class="count">Export</summary>
+      <p class="count">Only annotations you confirmed or edited are included.</p>
+      <textarea id="export" readonly></textarea>
+      <div class="bar" style="margin-top:0.4rem">
+        <button id="build" class="primary">build export</button>
+        <button id="copy">copy</button>
+        <button id="download">download</button>
+        <span class="count" id="exportNote"></span>
+      </div>
+    </details>
   </section>
 </main>
 
-<section class="export" style="margin:0 1rem 1.5rem 1rem;">
-  <h2>Export</h2>
-  <div id="exportSummary" class="ad-hint"></div>
-  <textarea id="exportBlob" readonly spellcheck="false"></textarea>
-  <div class="export-actions">
-    <button id="copyBtn" class="primary">copy JSON</button>
-    <button id="clearBtn">clear all local progress</button>
-    <span class="copy-status" id="copyStatus"></span>
+<div class="picker" id="picker">
+  <div class="picker-head">
+    <div class="sel" id="pickerSel"></div>
+    <input id="pickerSearch" autocomplete="off"
+      placeholder="type to filter, or scroll the sections">
   </div>
-  <p class="ad-hint">Paste the copied blob into a file and run
-    <code>uv run python -m jobsearch.harness import &lt;file&gt;</code>, or run it
-    with <code>-</code> and paste on stdin. Progress here lives in this browser's
-    local storage until you export and import it — closing the tab does not
-    lose it, clearing browser data does.</p>
-</section>
-
-<div class="selection-bar" id="selectionBar">
-  <span class="held" id="heldSelection"></span>
-  <button type="button" id="jumpToDims" class="primary">label it &darr;</button>
-  <button type="button" id="dropSelection" aria-label="drop selection">&times;</button>
+  <div class="picker-body" id="pickerBody"></div>
+  <div class="newdim" id="newdim">
+    <label>id (snake_case) <input id="ndId" placeholder="e.g. childcare_support"></label>
+    <label>name <input id="ndLabel" placeholder="e.g. Childcare support"></label>
+    <label>what it means <input id="ndDef" placeholder="one line a later reader can apply"></label>
+    <label>section
+      <select id="ndGroup"></select>
+    </label>
+    <label>rungs, weakest first, comma separated
+      <input id="ndRungs" value="Absent, Mentioned, Concrete">
+    </label>
+  </div>
+  <div class="picker-foot">
+    <button id="pickerNew">+ new dimension</button>
+    <button id="pickerClose">close</button>
+  </div>
 </div>
 
-<footer>generated by tools/labelling_page.py &mdash; no data leaves this page</footer>
+<footer id="footer"></footer>
 """
 
-_TAIL = "</body>\n</html>\n"
+_TAIL = """</body>
+</html>
+"""
+
 
 _SCRIPT = r"""
-(function () {
-  "use strict";
+'use strict';
+const DATA = JSON.parse(document.getElementById('jobsearch-data').textContent);
+const DIMS = new Map(DATA.dimensions.map(d => [d.id, d]));
+const ADS = DATA.ads;
+const MARKS = DATA.suggestions.marks || {};
+const CONTROL = new Set(DATA.suggestions.control || []);
+const STORE_KEY = 'jobsearch.t5.labels.v2';
 
-  var DATA = JSON.parse(document.getElementById("jobsearch-data").textContent);
-  var ADS = DATA.ads;
-  var DIMENSIONS = DATA.dimensions;
+let state = loadState();
+let current = 0;
+let focused = -1;
+let picker = null;   // {kind:'new', start, end} | {kind:'change', index}
+const drift = {};    // adId -> {relocated, lost}, reported to the labeller
 
-  var LABELS_KEY = "jobsearch-t5-labels-v1";
-  var UI_KEY = "jobsearch-t5-ui-v1";
+// ── state ─────────────────────────────────────────────────────────────────────────────────────
 
-  function loadJSON(key, fallback) {
-    try {
-      var raw = window.localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch (err) {
-      return fallback;
-    }
-  }
-  function saveJSON(key, value) {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  }
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (err) { /* a corrupt or blocked store must not stop the page loading */ }
+  return migrateV1();
+}
 
-  // { adId: { dimId: {value, negated, quote, labeller, round} } }
-  var labels = loadJSON(LABELS_KEY, {});
-  var ui = loadJSON(UI_KEY, {});
+// The previous page saved under `jobsearch-t5-labels-v1`, shaped
+// `{adId: {dimId: {value, negated, quote, ...}}}`. Reading only the new key
+// would leave that work stranded in the browser while the page looked empty,
+// and the labeller could then export a replacement corpus missing everything
+// they had already done. So it is carried over rather than abandoned.
+//
+// Carried over as **pending**, not confirmed. The old page took any float from
+// -1 to 1; the scale is now a set of named rungs, so a migrated value may sit
+// between two of them and there is no honest way to pick one on the labeller's
+// behalf. Each one is placed on its nearest rung and put back in front of them
+// to re-confirm — which is a few keystrokes per label, against losing the span
+// and the judgement entirely.
+function migrateV1() {
+  const fresh = { byAd: {}, coined: [] };
+  let raw = null;
+  try { raw = localStorage.getItem('jobsearch-t5-labels-v1'); } catch (err) { return fresh; }
+  if (!raw) return fresh;
 
-  var splitFilter = document.getElementById("splitFilter");
-  var langFilter = document.getElementById("langFilter");
-  var jumpSelect = document.getElementById("jumpSelect");
-  var labellerInput = document.getElementById("labellerName");
-  var roundInput = document.getElementById("roundNum");
-
-  splitFilter.value = ui.split || "";
-  langFilter.value = ui.lang || "";
-  labellerInput.value = ui.labeller || "owner";
-  roundInput.value = ui.round || 1;
-
-  var filtered = [];
-  var currentAdId = ui.currentAdId || (ADS.length ? ADS[0].id : null);
-
-  function applyFilters() {
-    var split = splitFilter.value;
-    var lang = langFilter.value;
-    filtered = ADS.filter(function (ad) {
-      return (!split || ad.split === split) && (!lang || ad.language === lang);
-    });
-    if (!filtered.length) { filtered = ADS.slice(); }
-    if (!filtered.some(function (a) { return a.id === currentAdId; })) {
-      currentAdId = filtered.length ? filtered[0].id : null;
-    }
-    populateJumpSelect();
-  }
-
-  function populateJumpSelect() {
-    jumpSelect.innerHTML = "";
-    filtered.forEach(function (ad) {
-      var opt = document.createElement("option");
-      opt.value = ad.id;
-      opt.textContent = ad.id + "  [" + ad.language + "/" + ad.split + "]" +
-        (isAdDone(ad.id) ? "  ✓" : "");
-      jumpSelect.appendChild(opt);
-    });
-    jumpSelect.value = currentAdId;
-  }
-
-  function escapeHtml(s) {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
-
-  function countOccurrences(haystack, needle) {
-    if (!needle) { return 0; }
-    var count = 0, pos = 0, idx;
-    while ((idx = haystack.indexOf(needle, pos)) !== -1) {
-      count += 1;
-      pos = idx + 1;
-    }
-    return count;
-  }
-
-  function currentAd() {
-    for (var i = 0; i < filtered.length; i++) {
-      if (filtered[i].id === currentAdId) { return filtered[i]; }
-    }
-    return filtered[0] || null;
-  }
-
-  function adLabels(adId) {
-    if (!labels[adId]) { labels[adId] = {}; }
-    return labels[adId];
-  }
-
-  function isDimLabelled(adId, dimId) {
-    var entry = (labels[adId] || {})[dimId];
-    return !!(
-      entry && entry.quote &&
-      entry.value !== null && entry.value !== undefined && entry.value !== ""
-    );
-  }
-
-  function isAdDone(adId) {
-    return DIMENSIONS.some(function (d) { return isDimLabelled(adId, d.id); });
-  }
-
-  function touch(adId, dimId, patch) {
-    var entry = adLabels(adId)[dimId] || {};
-    Object.assign(entry, patch, {
-      labeller: labellerInput.value || "owner",
-      round: parseInt(roundInput.value, 10) || 1,
-    });
-    adLabels(adId)[dimId] = entry;
-    saveJSON(LABELS_KEY, labels);
-  }
-
-  function clearEntry(adId, dimId) {
-    if (labels[adId]) { delete labels[adId][dimId]; }
-    saveJSON(LABELS_KEY, labels);
-  }
-
-  // ---- cue highlighting (navigation only — see the page's own notice) ----
-
-  function cueMatches(ad) {
-    var ranges = [];
-    DIMENSIONS.forEach(function (dim) {
-      var cues = (dim.cues && dim.cues[ad.language]) || [];
-      cues.forEach(function (cue) {
-        var re;
-        try {
-          re = new RegExp(cue.pattern, "gi");
-        } catch (err) {
-          return; // a pattern JS cannot compile is skipped, not fatal
-        }
-        var m;
-        while ((m = re.exec(ad.text)) !== null) {
-          if (m[0].length === 0) { re.lastIndex += 1; continue; }
-          ranges.push({
-            start: m.index, end: m.index + m[0].length,
-            dim: dim.id, label: dim.label[ad.language] || dim.id,
-          });
-          if (!re.global) { break; }
-        }
+  let old;
+  try { old = JSON.parse(raw); } catch (err) { return fresh; }
+  let carried = 0;
+  for (const [adId, byDimension] of Object.entries(old || {})) {
+    const ad = ADS.find(a => a.id === adId);
+    if (!ad) continue;
+    const anns = [];
+    for (const [dimensionId, label] of Object.entries(byDimension || {})) {
+      const dim = DIMS.get(dimensionId);
+      if (!dim || !label || typeof label.quote !== 'string') continue;
+      const at = ad.text.indexOf(label.quote);
+      if (at < 0 || ad.text.indexOf(label.quote, at + 1) >= 0) continue;
+      const nearest = dim.levels.reduce((best, level) =>
+        Math.abs(level.value - label.value) < Math.abs(best.value - label.value) ? level : best);
+      anns.push({
+        dimension: dimensionId, value: nearest.value,
+        start: at, end: at + label.quote.length, quote: label.quote,
+        negated: !!label.negated, status: 'pending', origin: null,
+        note: `carried over from the previous page (was ${label.value})`,
       });
-    });
-    ranges.sort(function (a, b) { return a.start - b.start || b.end - a.end; });
-    var merged = [];
-    var lastEnd = -1;
-    ranges.forEach(function (r) {
-      if (r.start >= lastEnd) {
-        merged.push(r);
-        lastEnd = r.end;
-      }
-    });
-    return merged;
-  }
-
-  function renderAdText(ad) {
-    var container = document.getElementById("adText");
-    var ranges = cueMatches(ad);
-    var html = "";
-    var pos = 0;
-    ranges.forEach(function (r) {
-      html += escapeHtml(ad.text.slice(pos, r.start));
-      html += '<mark class="cue-hit" title="cue: ' + escapeHtml(r.label) +
-        ' (' + escapeHtml(r.dim) + ') — navigation only, not a label">';
-      html += escapeHtml(ad.text.slice(r.start, r.end)) + "</mark>";
-      pos = r.end;
-    });
-    html += escapeHtml(ad.text.slice(pos));
-    container.innerHTML = html;
-  }
-
-  // ---- rendering ----
-
-  function renderMeta(ad) {
-    var idx = filtered.indexOf(ad) + 1;
-    document.getElementById("adMeta").innerHTML =
-      "<strong>" + escapeHtml(ad.id) + "</strong> &middot; " + escapeHtml(ad.language) +
-      " &middot; " + escapeHtml(ad.split) + " &middot; " + escapeHtml(ad.title || "") +
-      "<br><a href=\"" + escapeHtml(ad.source_url) + "\" target=\"_blank\" rel=\"noreferrer\">" +
-      escapeHtml(ad.source_url) + "</a> (" + (idx) + "/" + filtered.length + " in this filter)";
-  }
-
-  function renderProgress() {
-    var totalDone = ADS.filter(function (a) { return isAdDone(a.id); }).length;
-    document.getElementById("progress").textContent =
-      totalDone + " / " + ADS.length + " ad(s) with at least one label recorded";
-  }
-
-  function renderDimCard(dim, ad) {
-    var card = document.querySelector('.dim-card[data-dim="' + dim.id + '"]');
-    if (!card) { return; }
-    var entry = (labels[ad.id] || {})[dim.id] || {};
-    card.classList.toggle("has-label", isDimLabelled(ad.id, dim.id));
-    var hasValue = entry.value !== undefined && entry.value !== null;
-    card.querySelector(".val-input").value = hasValue ? entry.value : "";
-    card.querySelector(".negated-input").checked = !!entry.negated;
-    card.querySelector(".quote-display").textContent = entry.quote
-      ? ("“" + entry.quote + "”")
-      : "(no quote captured yet)";
-    card.querySelector(".quote-error").textContent = "";
-    updateDimDoneCount();
-  }
-
-  function updateDimDoneCount() {
-    var ad = currentAd();
-    if (!ad) { return; }
-    var done = DIMENSIONS.filter(function (d) { return isDimLabelled(ad.id, d.id); }).length;
-    document.getElementById("dimDoneCount").textContent = String(done);
-    document.getElementById("dimTotalCount").textContent = String(DIMENSIONS.length);
-  }
-
-  function buildDimsList(ad) {
-    var list = document.getElementById("dimsList");
-    list.innerHTML = "";
-    DIMENSIONS.forEach(function (dim) {
-      var card = document.createElement("div");
-      card.className = "dim-card";
-      card.setAttribute("data-dim", dim.id);
-      card.innerHTML =
-        '<div class="dim-head"><span class="dim-label">' +
-        escapeHtml(dim.label[ad.language] || dim.id) +
-        '</span><span class="dim-id">' + escapeHtml(dim.id) + "</span></div>" +
-        '<div class="dim-def">' + escapeHtml(dim.definition) + "</div>" +
-        '<div class="dim-controls">' +
-        '<label>value <input type="number" class="val-input" min="-1" max="1" ' +
-        'step="0.05" placeholder="&ndash;"></label>' +
-        '<label><input type="checkbox" class="negated-input"> negated (denies it)</label>' +
-        '<span class="quick-values">' +
-        '<button type="button" class="quick-btn" data-value="-1">&minus;1</button>' +
-        '<button type="button" class="quick-btn" data-value="-0.5">&minus;0.5</button>' +
-        '<button type="button" class="quick-btn" data-value="0.5">0.5</button>' +
-        '<button type="button" class="quick-btn" data-value="1">1</button>' +
-        "</span>" +
-        '<button type="button" class="capture-btn">use selection</button>' +
-        '<button type="button" class="clear-btn">clear</button>' +
-        "</div>" +
-        '<div class="quote-display"></div>' +
-        '<div class="quote-error"></div>';
-      list.appendChild(card);
-
-      card.querySelector(".val-input").addEventListener("input", function (e) {
-        var raw = e.target.value;
-        var value = raw === "" ? null : Math.max(-1, Math.min(1, parseFloat(raw)));
-        touch(currentAd().id, dim.id, { value: value });
-        renderDimCard(dim, currentAd());
-        renderProgress();
-        populateJumpSelect();
-        renderExport();
-      });
-      card.querySelector(".negated-input").addEventListener("change", function (e) {
-        touch(currentAd().id, dim.id, { negated: e.target.checked });
-        renderExport();
-      });
-      // A number spinner with 0.05 steps is unusable with a thumb; these are the
-      // four values that actually get typed.
-      Array.prototype.forEach.call(card.querySelectorAll(".quick-btn"), function (btn) {
-        btn.addEventListener("click", function () {
-          var value = parseFloat(btn.getAttribute("data-value"));
-          touch(currentAd().id, dim.id, { value: value });
-          renderDimCard(dim, currentAd());
-          renderProgress();
-          populateJumpSelect();
-          renderExport();
-        });
-      });
-      card.querySelector(".capture-btn").addEventListener("click", function () {
-        captureSelection(dim);
-      });
-      card.querySelector(".clear-btn").addEventListener("click", function () {
-        clearEntry(currentAd().id, dim.id);
-        renderDimCard(dim, currentAd());
-        renderProgress();
-        populateJumpSelect();
-        renderExport();
-      });
-    });
-  }
-
-  // The selection is remembered as it is made, not read when the button is
-  // pressed. On a phone that is the difference between working and not: tapping
-  // anything outside the text collapses the selection first, so a handler that
-  // called getSelection() at click time always found it empty. Desktop had the
-  // same latent bug — a click that lands a hair outside the highlight clears it.
-  // Held text is stored *with the ad it came from*. Text alone was a real hazard:
-  // navigate to the next ad with a phrase still held, tap "use selection", and a
-  // common phrase ("teletrabajo", "remote") that happens to occur once in the new
-  // ad would be recorded as evidence from an advert it was never in — silently,
-  // and into the corpus every extraction score is measured against.
-  var heldSelection = null;
-
-  function rememberSelection() {
-    var sel = window.getSelection ? window.getSelection() : null;
-    if (!sel || sel.isCollapsed) { return; }
-    var text = sel.toString();
-    if (!text.trim()) { return; }
-    var adText = document.getElementById("adText");
-    // Only selections inside the ad text count; anything else (the instructions,
-    // a dimension definition) would produce a quote no importer could locate.
-    if (!adText || !adText.contains(sel.anchorNode) || !adText.contains(sel.focusNode)) {
-      return;
+      carried++;
     }
-    var ad = currentAd();
-    if (!ad) { return; }
-    heldSelection = { adId: ad.id, text: text };
-    renderSelectionBar();
+    if (anns.length) fresh.byAd[adId] = anns;
   }
+  fresh.migrated = carried;
+  return fresh;
+}
 
-  function renderSelectionBar() {
-    var bar = document.getElementById("selectionBar");
-    if (!bar) { return; }
-    var ad = currentAd();
-    // A hold from another ad is not shown and not offered — dropping it at the
-    // boundary is the same rule as refusing it at capture, applied earlier.
-    if (!heldSelection || !ad || heldSelection.adId !== ad.id) {
-      bar.classList.remove("active");
-      return;
-    }
-    var shown = heldSelection.text.length > 90
-      ? heldSelection.text.slice(0, 90) + "\u2026"
-      : heldSelection.text;
-    document.getElementById("heldSelection").innerHTML =
-      "held: <b>\u201c" + escapeHtml(shown) + "\u201d</b>";
-    bar.classList.add("active");
-  }
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch (err) { note('could not save to this browser — export before closing the tab'); }
+}
 
-  function dropSelection() {
-    heldSelection = null;
-    renderSelectionBar();
-  }
-
-  function captureSelection(dim) {
-    var ad = currentAd();
-    var card = document.querySelector('.dim-card[data-dim="' + dim.id + '"]');
-    var errEl = card.querySelector(".quote-error");
-    errEl.textContent = "";
-    var live = window.getSelection ? window.getSelection() : null;
-    var liveText = live && !live.isCollapsed ? live.toString() : "";
-    var held = heldSelection && heldSelection.adId === ad.id ? heldSelection.text : "";
-    var text = liveText || held;
-    if (!text) {
-      errEl.textContent = "select some text in the ad first";
-      return;
-    }
-    var occurrences = countOccurrences(ad.text, text);
-    if (occurrences === 0) {
-      errEl.textContent = "that selection is not an exact match of the ad text — " +
-        "select again without crossing outside the ad";
-      return;
-    }
-    if (occurrences > 1) {
-      errEl.textContent = "that text appears " + occurrences +
-        " times in this ad — extend the selection until it is unique";
-      return;
-    }
-    touch(ad.id, dim.id, { quote: text });
-    dropSelection();
-    renderDimCard(dim, ad);
-    renderProgress();
-    populateJumpSelect();
-    renderExport();
-  }
-
-  function applyDimFilter(query) {
-    var needle = (query || "").trim().toLowerCase();
-    Array.prototype.forEach.call(document.querySelectorAll(".dim-card"), function (card) {
-      if (!needle) {
-        card.classList.remove("filtered-out");
-        return;
-      }
-      // The dimension's own name, id and definition — not the whole card. Every
-      // card carries the same -1/-0.5/0.5/1 buttons, so searching textContent
-      // made "1" and "0.5" match all 22 while the box promises name-or-id.
-      var haystack = ["dim-label", "dim-id", "dim-def"].map(function (cls) {
-        var el = card.querySelector("." + cls);
-        return el ? el.textContent : "";
-      }).join(" ").toLowerCase();
-      card.classList.toggle("filtered-out", haystack.indexOf(needle) === -1);
+// An ad is seeded from its marks the first time it is opened, never again:
+// re-seeding would resurrect a proposal the labeller deliberately deleted.
+function annotations(adId) {
+  if (!state.byAd[adId]) {
+    // Offsets are resolved here, not shipped. A Python offset counts code
+    // points and a JS offset counts UTF-16 units, so an emoji outside the BMP —
+    // and these ads are full of them — makes the two disagree by one unit each,
+    // sliding every later span leftwards into the wrong words. Locating the
+    // quote in the browser's own string keeps one index space throughout.
+    const ad = ADS.find(a => a.id === adId);
+    state.byAd[adId] = (MARKS[adId] || []).flatMap(m => {
+      const start = ad.text.indexOf(m.quote);
+      if (start < 0) return [];
+      const end = start + m.quote.length;
+      return [{
+        dimension: m.dimension, value: m.value, start, end, quote: m.quote,
+        negated: !!m.negated, status: 'pending', note: m.note || '',
+        origin: {
+          dimension: m.dimension, value: m.value,
+          start, end, negated: !!m.negated,
+        },
+      }];
     });
+    save();
+  }
+  return reconcile(adId);
+}
+
+// Saved offsets only mean anything against the text they were taken from, and
+// the store is keyed by ad id alone — so a page regenerated over a re-fetched
+// corpus can hand the same id different text, and the old numbers would then
+// mark, and export, whatever now sits at those positions. Previously confirmed
+// work would become confidently wrong labels.
+//
+// Every annotation therefore carries the quote it was placed on, and is checked
+// against the current text each time the ad is opened: unchanged ones pass
+// untouched, ones whose words merely moved are relocated by that quote, and
+// ones whose words are gone (or have become ambiguous) are dropped and reported
+// to the labeller rather than silently sliced.
+function reconcile(adId) {
+  const ad = ADS.find(a => a.id === adId);
+  const anns = state.byAd[adId] || [];
+  if (!ad) return anns;
+
+  let relocated = 0;
+  const kept = [];
+  for (const a of anns) {
+    if (a.quote === undefined) { kept.push(a); continue; }
+    if (ad.text.slice(a.start, a.end) === a.quote) { kept.push(a); continue; }
+    const at = ad.text.indexOf(a.quote);
+    if (at < 0 || ad.text.indexOf(a.quote, at + 1) >= 0) continue;
+    kept.push({ ...a, start: at, end: at + a.quote.length });
+    relocated++;
   }
 
-  function reapplyDimFilter() {
-    // `buildDimsList` destroys the cards the filter marked, so the query has to
-    // be applied again after every rebuild — otherwise moving to the next ad
-    // shows all 22 while the box still shows what you typed.
-    var filter = document.getElementById("dimFilter");
-    applyDimFilter(filter ? filter.value : "");
+  const lost = anns.length - kept.length;
+  if (!relocated && !lost) return anns;   // the live array, not the copy
+
+  // Only on real drift is the stored array replaced. Returning `kept`
+  // unconditionally would hand every caller a detached copy, and an annotation
+  // pushed onto it — every one the labeller creates — would be dropped on the
+  // next render.
+  state.byAd[adId] = kept;
+  drift[adId] = { relocated, lost };
+  save();
+  return kept;
+}
+
+// Provenance is *derived*, never stored as a flag the UI could set wrongly: an
+// annotation that still matches the proposal it came from is `confirmed`, one
+// that has moved is `edited`, one with no proposal behind it is `human`.
+function sourceOf(a) {
+  if (!a.origin) return 'human';
+  const o = a.origin;
+  const unchanged = o.dimension === a.dimension && o.value === a.value
+    && o.start === a.start && o.end === a.end && !!o.negated === !!a.negated;
+  return unchanged ? 'confirmed' : 'edited';
+}
+
+function rungOf(a) {
+  const dim = DIMS.get(a.dimension);
+  if (!dim) return null;
+  return dim.levels.find(l => l.value === a.value) || null;
+}
+
+function hue(dimensionId) {
+  const dim = DIMS.get(dimensionId);
+  return dim ? `var(--g-${dim.group})` : 'var(--muted)';
+}
+
+// ── the quote a span exports as ───────────────────────────────────────────────────────────────
+
+function occurrences(text, needle) {
+  if (!needle) return 0;
+  return text.split(needle).length - 1;
+}
+
+// `harness import` locates a label by searching for its quote and refuses one
+// that appears twice. Rather than making the labeller "extend it until unique",
+// the page widens the span itself until the text pins it down. The stored
+// offsets are untouched — only the exported quote grows.
+function uniqueQuote(text, start, end) {
+  let s = start, e = end;
+  let guard = 0;
+  while (occurrences(text, text.slice(s, e)) > 1 && guard++ < 4000) {
+    if (s > 0) s -= 1;
+    else if (e < text.length) e += 1;
+    else break;
   }
+  return text.slice(s, e);
+}
 
-  function render() {
-    var ad = currentAd();
-    if (!ad) { return; }
-    currentAdId = ad.id;
-    ui.currentAdId = currentAdId;
-    ui.split = splitFilter.value;
-    ui.lang = langFilter.value;
-    ui.labeller = labellerInput.value;
-    ui.round = roundInput.value;
-    saveJSON(UI_KEY, ui);
+// ── rendering ─────────────────────────────────────────────────────────────────────────────────
 
-    renderMeta(ad);
-    renderAdText(ad);
-    buildDimsList(ad);
-    DIMENSIONS.forEach(function (dim) { renderDimCard(dim, ad); });
-    reapplyDimFilter();
-    renderSelectionBar();
-    renderProgress();
-    jumpSelect.value = ad.id;
-    renderExport();
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderAd() {
+  const ad = ADS[current];
+  const anns = annotations(ad.id);
+
+  document.getElementById('adMeta').innerHTML =
+    `<b>${esc(ad.title || ad.id)}</b> &middot; ${esc(ad.id)} &middot; ${esc(ad.language)} &middot; `
+    + `${esc(ad.split)} &middot; `
+    + `<a href="${esc(ad.source_url)}" target="_blank" rel="noreferrer">source</a>`;
+
+  const notice = document.getElementById('controlNotice');
+  const messages = [];
+  if (CONTROL.has(ad.id)) {
+    messages.push('<b>Control ad — nothing is marked on purpose.</b> Label it as you '
+      + 'read it. These ads are what your agreement rate on the marked ones is measured against; '
+      + 'without them, agreeing with 92% of proposals cannot be told apart from rubber-stamping.');
   }
-
-  function step(delta) {
-    var idx = filtered.findIndex(function (a) { return a.id === currentAdId; });
-    if (idx === -1) { idx = 0; }
-    idx = (idx + delta + filtered.length) % filtered.length;
-    currentAdId = filtered[idx].id;
-    render();
+  if (state.migrated) {
+    messages.push(`<b>${state.migrated} label(s) carried over from the previous page.</b> They are `
+      + 'shown as proposals because the scale is now named rungs rather than a free number — '
+      + 'each one is on its nearest rung and needs confirming.');
   }
-
-  function nextUnlabelled() {
-    var idx = filtered.findIndex(function (a) { return a.id === currentAdId; });
-    for (var step_ = 1; step_ <= filtered.length; step_++) {
-      var candidate = filtered[(idx + step_) % filtered.length];
-      if (!isAdDone(candidate.id)) {
-        currentAdId = candidate.id;
-        render();
-        return;
-      }
-    }
-    // everything in this filter is done; stay put
+  const moved = drift[ad.id];
+  if (moved && (moved.relocated || moved.lost)) {
+    messages.push(`<b>This ad's text has changed since you labelled it.</b> `
+      + `${moved.relocated} mark(s) were relocated by their quote`
+      + (moved.lost ? `, and ${moved.lost} could no longer be found and were removed` : '')
+      + '.');
   }
+  notice.hidden = messages.length === 0;
+  notice.innerHTML = messages.join('<hr>');
 
-  // ---- export ----
-
-  function buildExportRows() {
-    var rows = [];
-    Object.keys(labels).forEach(function (adId) {
-      var perAd = labels[adId] || {};
-      Object.keys(perAd).forEach(function (dimId) {
-        var entry = perAd[dimId];
-        var missing = !entry || !entry.quote ||
-          entry.value === null || entry.value === undefined || entry.value === "";
-        if (missing) {
-          return;
-        }
-        rows.push({
-          ad_id: adId,
-          dimension: dimId,
-          value: Number(entry.value),
-          quote: entry.quote,
-          negated: !!entry.negated,
-          labeller: entry.labeller || "owner",
-          round: entry.round || 1,
-        });
-      });
+  // Marks are laid into the text in order, and one that overlaps a mark already
+  // laid down is left out of the text rather than nested — overlapping <mark>
+  // elements cannot be produced from a flat string without splitting one of
+  // them across the other, which puts a chip in the middle of a word. It still
+  // appears in the side panel, where it is fully actionable.
+  const ordered = anns.map((a, i) => ({ a, i }))
+    .sort((x, y) => x.a.start - y.a.start || x.a.end - y.a.end);
+  let html = '';
+  let at = 0;
+  const inline = new Set();
+  for (const { a, i } of ordered) {
+    if (a.start < at || a.start >= a.end || a.end > ad.text.length) continue;
+    const dim = DIMS.get(a.dimension);
+    const rung = rungOf(a);
+    const chip = dim
+      ? `${esc(dim.label)}: ${esc(rung ? rung.label : String(a.value))}`
+      : esc(a.dimension);
+    const cls = 'ann' + (a.status === 'confirmed' ? ' confirmed' : '')
+      + (i === focused ? ' focused' : '');
+    html += esc(ad.text.slice(at, a.start));
+    html += `<mark class="${cls}" data-i="${i}" style="--hue:${hue(a.dimension)}">`
+      + esc(ad.text.slice(a.start, a.end))
+      + `<span class="chip">${chip}${a.negated ? ' &middot; not' : ''}</span></mark>`;
+    at = a.end;
+    inline.add(i);
+  }
+  html += esc(ad.text.slice(at));
+  const el = document.getElementById('adText');
+  el.innerHTML = html;
+  el.querySelectorAll('mark.ann').forEach(m => {
+    m.addEventListener('click', ev => {
+      ev.stopPropagation(); focused = Number(m.dataset.i); render();
     });
-    rows.sort(function (a, b) {
-      return a.ad_id < b.ad_id ? -1 : a.ad_id > b.ad_id ? 1 : (a.dimension < b.dimension ? -1 : 1);
-    });
-    return rows;
-  }
+  });
+  return inline;
+}
 
-  function renderExport() {
-    var rows = buildExportRows();
-    document.getElementById("exportSummary").textContent =
-      rows.length + " label(s) ready to import, across " +
-      new Set(rows.map(function (r) { return r.ad_id; })).size + " ad(s).";
-    document.getElementById("exportBlob").value = JSON.stringify(rows, null, 2);
-  }
+function renderAnns(inline) {
+  const ad = ADS[current];
+  const anns = annotations(ad.id);
+  const list = document.getElementById('anns');
+  list.innerHTML = '';
 
-  document.getElementById("copyBtn").addEventListener("click", function () {
-    var blob = document.getElementById("exportBlob");
-    blob.select();
-    blob.setSelectionRange(0, blob.value.length);
-    var status = document.getElementById("copyStatus");
-    var done = false;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(blob.value).then(function () {
-        status.textContent = "copied";
-      }).catch(function () {
-        done = document.execCommand && document.execCommand("copy");
-        status.textContent = done ? "copied" : "select-and-copy manually (Ctrl/Cmd-C)";
-      });
-    } else {
-      done = document.execCommand && document.execCommand("copy");
-      status.textContent = done ? "copied" : "select-and-copy manually (Ctrl/Cmd-C)";
+  anns.forEach((a, i) => {
+    const dim = DIMS.get(a.dimension);
+    const rung = rungOf(a);
+    const li = document.createElement('li');
+    li.className = 'ann-row ' + (a.status === 'confirmed' ? 'confirmed' : 'pending')
+      + (i === focused ? ' focused' : '');
+    li.style.setProperty('--hue', hue(a.dimension));
+    li.innerHTML =
+      `<div class="ann-dim">${esc(dim ? dim.label : a.dimension)}`
+      + '<span class="state"> &middot; '
+      + `${a.status === 'confirmed' ? sourceOf(a) : 'proposed'}</span></div>`
+      + '<div class="ann-rung">'
+      + `${esc(rung ? rung.label : '(rung ' + a.value + ' is not in the model)')}`
+      + (a.negated ? ' <span class="state">negated</span>' : '') + '</div>'
+      + `<div class="ann-quote">&ldquo;${esc(ad.text.slice(a.start, a.end))}&rdquo;</div>`
+      + (inline.has(i) ? '' : '<div class="state">overlaps another mark — shown here only</div>');
+
+    const acts = document.createElement('div');
+    acts.className = 'ann-acts';
+    if (a.status !== 'confirmed') {
+      acts.appendChild(btn('confirm', 'primary', () => { confirmAt(i); }));
     }
+    acts.appendChild(btn('change', '', () => {
+      focused = i; openPicker({ kind: 'change', index: i });
+    }));
+    acts.appendChild(btn(a.negated ? 'un-negate' : 'negate', '', () => {
+      a.negated = !a.negated; save(); render();
+    }));
+    acts.appendChild(btn('delete', 'danger', () => {
+      anns.splice(i, 1); focused = -1; save(); render();
+    }));
+    li.appendChild(acts);
+    li.addEventListener('click', () => { focused = i; render(); });
+    list.appendChild(li);
   });
 
-  document.getElementById("clearBtn").addEventListener("click", function () {
-    var sure = window.confirm(
-      "Clear ALL locally recorded labels on this page? This cannot be undone."
-    );
-    if (!sure) { return; }
-    labels = {};
-    saveJSON(LABELS_KEY, labels);
-    render();
-  });
+  const pending = anns.filter(a => a.status !== 'confirmed').length;
+  document.getElementById('annHead').textContent =
+    `On this ad — ${anns.length - pending} kept, ${pending} to resolve`;
+  document.getElementById('annEmpty').textContent = anns.length
+    ? '' : 'Nothing marked. Select the words that evidence a dimension to add one.';
+  document.getElementById('confirmAll').disabled = pending === 0;
+}
 
-  splitFilter.addEventListener("change", function () { applyFilters(); render(); });
-  langFilter.addEventListener("change", function () { applyFilters(); render(); });
-  jumpSelect.addEventListener("change", function () { currentAdId = jumpSelect.value; render(); });
-  labellerInput.addEventListener("change", function () {
-    ui.labeller = labellerInput.value; saveJSON(UI_KEY, ui);
-  });
-  roundInput.addEventListener("change", function () {
-    ui.round = roundInput.value; saveJSON(UI_KEY, ui);
-  });
-  // On a phone the filter row costs more than a screenful before the ad even
-  // starts; it is opened by default on anything wider.
-  if (window.matchMedia && window.matchMedia("(max-width: 700px)").matches) {
-    document.getElementById("filtersPanel").open = false;
-  }
+function btn(text, cls, onClick) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  if (cls) b.className = cls;
+  b.addEventListener('click', ev => { ev.stopPropagation(); onClick(); });
+  return b;
+}
 
-  document.addEventListener("selectionchange", rememberSelection);
-  document.addEventListener("mouseup", rememberSelection);
-  document.addEventListener("touchend", rememberSelection);
-  document.getElementById("dropSelection").addEventListener("click", dropSelection);
-  document.getElementById("jumpToDims").addEventListener("click", function () {
-    var list = document.getElementById("dimsList");
-    if (list) { list.scrollIntoView({ behavior: "smooth", block: "start" }); }
-    var filter = document.getElementById("dimFilter");
-    if (filter) { filter.focus({ preventScroll: true }); }
-  });
-  document.getElementById("dimFilter").addEventListener("input", function (e) {
-    applyDimFilter(e.target.value);
-  });
-  document.getElementById("prevBtn").addEventListener("click", function () { step(-1); });
-  document.getElementById("nextBtn").addEventListener("click", function () { step(1); });
-  document.getElementById("nextUnlabelledBtn").addEventListener("click", nextUnlabelled);
+function render() {
+  const inline = renderAd();
+  renderAnns(inline);
+  const resolved = ADS.filter(a => {
+    const anns = state.byAd[a.id];
+    return anns !== undefined && anns.every(x => x.status === 'confirmed');
+  }).length;
+  document.getElementById('count').innerHTML =
+    `ad <b>${current + 1}</b>/${ADS.length} &middot; <b>${resolved}</b> fully resolved`;
+  document.getElementById('jump').value = String(current);
+  save();
+}
 
-  applyFilters();
+// ── acting on an annotation ───────────────────────────────────────────────────────────────────
+
+function confirmAt(i) {
+  const anns = annotations(ADS[current].id);
+  if (!anns[i]) return;
+  anns[i].status = 'confirmed';
+  save();
+  focused = anns.findIndex(a => a.status !== 'confirmed');
   render();
-})();
+}
+
+function nextUnresolved() {
+  for (let step = 1; step <= ADS.length; step++) {
+    const i = (current + step) % ADS.length;
+    const anns = state.byAd[ADS[i].id];
+    if (anns === undefined || anns.some(a => a.status !== 'confirmed')) {
+      current = i; focused = -1; render(); return;
+    }
+  }
+  note('every ad is resolved');
+}
+
+// ── the picker ────────────────────────────────────────────────────────────────────────────────
+
+function openPicker(mode) {
+  picker = mode;
+  const ad = ADS[current];
+  const el = document.getElementById('picker');
+  const sel = document.getElementById('pickerSel');
+  if (mode.kind === 'new') {
+    sel.textContent = '“' + ad.text.slice(mode.start, mode.end) + '”';
+  } else {
+    const a = annotations(ad.id)[mode.index];
+    sel.textContent = '“' + ad.text.slice(a.start, a.end) + '”';
+  }
+  document.getElementById('newdim').classList.remove('open');
+  document.getElementById('pickerSearch').value = '';
+  renderDimensionList();
+  el.classList.add('open');
+  document.getElementById('pickerSearch').focus();
+}
+
+function closePicker() {
+  picker = null;
+  document.getElementById('picker').classList.remove('open');
+}
+
+function renderDimensionList() {
+  const body = document.getElementById('pickerBody');
+  body.innerHTML = '';
+  for (const group of DATA.groups) {
+    const members = DATA.dimensions.filter(d => d.group === group.id);
+    if (!members.length) continue;
+    const head = document.createElement('div');
+    head.className = 'grp';
+    head.style.setProperty('--hue', `var(--g-${group.id})`);
+    head.textContent = group.title;
+    head.dataset.group = group.id;
+    body.appendChild(head);
+    for (const dim of members) {
+      const b = document.createElement('button');
+      b.className = 'opt';
+      b.dataset.dim = dim.id;
+      b.dataset.hay = (dim.label + ' ' + dim.id + ' ' + dim.definition).toLowerCase();
+      b.style.setProperty('--hue', `var(--g-${dim.group})`);
+      b.innerHTML = `<span class="name">${esc(dim.label)}</span>`
+        + `<span class="def">${esc(dim.definition)}</span>`;
+      b.addEventListener('click', () => renderRungList(dim));
+      body.appendChild(b);
+    }
+  }
+  filterList();
+}
+
+function renderRungList(dim) {
+  const body = document.getElementById('pickerBody');
+  body.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'grp';
+  head.style.setProperty('--hue', `var(--g-${dim.group})`);
+  head.textContent = dim.label + ' — pick the rung the ad evidences';
+  body.appendChild(head);
+  for (const level of dim.levels) {
+    const b = document.createElement('button');
+    b.className = 'opt rung';
+    b.style.setProperty('--hue', `var(--g-${dim.group})`);
+    b.innerHTML = `<span class="name">${esc(level.label)}</span>`
+      + `<span class="tell">${esc(level.tell)}</span>`;
+    b.addEventListener('click', () => commit(dim, level));
+    body.appendChild(b);
+  }
+  const back = document.createElement('button');
+  back.className = 'opt';
+  back.innerHTML = '<span class="name">&larr; back to all dimensions</span>';
+  back.addEventListener('click', renderDimensionList);
+  body.appendChild(back);
+}
+
+function commit(dim, level) {
+  const anns = annotations(ADS[current].id);
+  if (picker.kind === 'new') {
+    anns.push({
+      dimension: dim.id, value: level.value, start: picker.start, end: picker.end,
+      quote: ADS[current].text.slice(picker.start, picker.end),
+      negated: false, status: 'confirmed', origin: null,
+    });
+    focused = anns.length - 1;
+  } else {
+    const a = anns[picker.index];
+    a.dimension = dim.id;
+    a.value = level.value;
+    a.quote = ADS[current].text.slice(a.start, a.end);
+    a.status = 'confirmed';
+  }
+  closePicker();
+  save();
+  render();
+}
+
+function filterList() {
+  const q = document.getElementById('pickerSearch').value.trim().toLowerCase();
+  const body = document.getElementById('pickerBody');
+  const opts = body.querySelectorAll('.opt[data-hay]');
+  opts.forEach(o => o.classList.toggle('hidden', q !== '' && !o.dataset.hay.includes(q)));
+  body.querySelectorAll('.grp[data-group]').forEach(h => {
+    const any = Array.from(body.querySelectorAll(`.opt[data-dim]`))
+      .some(o => !o.classList.contains('hidden')
+        && DIMS.get(o.dataset.dim).group === h.dataset.group);
+    h.style.display = any ? '' : 'none';
+  });
+}
+
+// ── coining a dimension mid-read ──────────────────────────────────────────────────────────────
+
+// The page is opened over `file://` and cannot write `dimensions/<id>.yaml`, so
+// a coined dimension is recorded as a *proposal* in the export and materialised
+// by the CLI. It carries the ad it was coined at, because every ad before that
+// one was read without it existing — a fact the earlier ads have to be swept
+// against rather than silently assumed clean.
+function coinDimension() {
+  const id = document.getElementById('ndId').value.trim();
+  const label = document.getElementById('ndLabel').value.trim();
+  const definition = document.getElementById('ndDef').value.trim();
+  const group = document.getElementById('ndGroup').value;
+  const rungs = document.getElementById('ndRungs').value
+    .split(',').map(s => s.trim()).filter(Boolean);
+
+  if (!/^[a-z][a-z0-9_]*$/.test(id)) return note('id must be snake_case');
+  if (DIMS.has(id) || state.coined.some(c => c.id === id)) return note('that id already exists');
+  if (!label || !definition) return note('a name and a meaning are both required');
+  if (rungs.length < 2 || rungs.length > 5) return note('give it between 2 and 5 rungs');
+
+  const levels = rungs.map((name, i) => ({
+    value: Number((i / (rungs.length - 1)).toFixed(2)), label: name,
+    tell: 'coined while labelling — describe what this rung looks like in an ad',
+  }));
+  const dim = { id, group, label, definition, polarity: 'unipolar', kind: 'soft', levels };
+  state.coined.push({ ...dim, coined_at_ad: ADS[current].id, coined_at_index: current });
+  DIMS.set(id, dim);
+  DATA.dimensions.push(dim);
+  save();
+  document.getElementById('newdim').classList.remove('open');
+  note(`${label} added — it will appear in the export as a proposal`);
+  renderRungList(dim);
+}
+
+// ── export ────────────────────────────────────────────────────────────────────────────────────
+
+function buildExport() {
+  const labeller = document.getElementById('labeller').value.trim() || 'owner';
+  const round = Number(document.getElementById('round').value) || 1;
+  const labels = [];
+  let skipped = 0;
+  for (const ad of ADS) {
+    for (const a of (state.byAd[ad.id] || [])) {
+      if (a.status !== 'confirmed') { skipped++; continue; }
+      labels.push({
+        ad_id: ad.id, dimension: a.dimension, value: a.value,
+        quote: uniqueQuote(ad.text, a.start, a.end),
+        negated: !!a.negated, labeller, round, source: sourceOf(a),
+      });
+    }
+  }
+  const payload = { labels };
+  if (state.coined.length) payload.proposed_dimensions = state.coined;
+  document.getElementById('export').value = JSON.stringify(payload, null, 2);
+  document.getElementById('exportNote').textContent =
+    `${labels.length} label(s)` + (skipped ? `, ${skipped} unresolved proposal(s) left out` : '')
+    + (state.coined.length ? `, ${state.coined.length} proposed dimension(s)` : '');
+}
+
+function note(message) {
+  const footer = document.getElementById('footer');
+  footer.textContent = message;
+  setTimeout(() => { if (footer.textContent === message) footer.textContent = FOOTER; }, 4000);
+}
+
+// ── wiring ────────────────────────────────────────────────────────────────────────────────────
+
+const FOOTER = `${ADS.length} ads · ${DATA.dimensions.length} dimensions · marks from `
+  + `${DATA.suggestions.method} · ${CONTROL.size} control ads`;
+
+function go(delta) {
+  current = (current + delta + ADS.length) % ADS.length;
+  focused = -1;
+  render();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('footer').textContent = FOOTER;
+
+  const jump = document.getElementById('jump');
+  ADS.forEach((ad, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = `${i + 1}. ${ad.title || ad.id} (${ad.language})`;
+    jump.appendChild(o);
+  });
+  jump.addEventListener('change', () => { current = Number(jump.value); focused = -1; render(); });
+
+  const ndGroup = document.getElementById('ndGroup');
+  DATA.groups.forEach(g => {
+    const o = document.createElement('option');
+    o.value = g.id; o.textContent = g.title;
+    ndGroup.appendChild(o);
+  });
+
+  const gloss = document.getElementById('glossary');
+  for (const group of DATA.groups) {
+    for (const dim of DATA.dimensions.filter(d => d.group === group.id)) {
+      const row = document.createElement('div');
+      row.className = 'gloss-row';
+      row.style.setProperty('--hue', `var(--g-${dim.group})`);
+      row.innerHTML = `<b>${esc(dim.label)}</b> — ${esc(dim.definition)}<br>`
+        + dim.levels.map(l => `<i>${esc(l.label)}</i>: ${esc(l.tell)}`).join(' &middot; ');
+      gloss.appendChild(row);
+    }
+  }
+
+  document.getElementById('prev').addEventListener('click', () => go(-1));
+  document.getElementById('next').addEventListener('click', () => go(1));
+  document.getElementById('nextTodo').addEventListener('click', nextUnresolved);
+  document.getElementById('confirmAll').addEventListener('click', () => {
+    annotations(ADS[current].id).forEach(a => { a.status = 'confirmed'; });
+    focused = -1; save(); render();
+  });
+  document.getElementById('pickerClose').addEventListener('click', closePicker);
+  document.getElementById('pickerSearch').addEventListener('input', filterList);
+  document.getElementById('pickerNew').addEventListener('click', () => {
+    const panel = document.getElementById('newdim');
+    if (panel.classList.contains('open')) coinDimension();
+    else { panel.classList.add('open'); document.getElementById('ndId').focus(); }
+  });
+  document.getElementById('build').addEventListener('click', buildExport);
+  document.getElementById('copy').addEventListener('click', async () => {
+    buildExport();
+    try {
+      await navigator.clipboard.writeText(document.getElementById('export').value);
+      note('copied');
+    }
+    catch (err) { note('clipboard blocked — select the box and copy by hand'); }
+  });
+  document.getElementById('download').addEventListener('click', () => {
+    buildExport();
+    const blob = new Blob([document.getElementById('export').value], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 't5-labels.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // A selection inside the ad text opens the picker. Offsets come from the
+  // browser's own selection resolved against the rendered text, so the quote is
+  // a substring of `ad.text` by construction and cannot fail the importer's
+  // verbatim check.
+  document.getElementById('adText').addEventListener('mouseup', onSelect);
+  document.getElementById('adText').addEventListener('touchend', onSelect);
+
+  document.addEventListener('keydown', ev => {
+    if (ev.target.matches('input, textarea, select')) {
+      if (ev.key === 'Escape') { closePicker(); ev.target.blur(); }
+      return;
+    }
+    const anns = annotations(ADS[current].id);
+    if (ev.key === 'Escape') { closePicker(); return; }
+    if (ev.key === 'Enter' && focused >= 0) { ev.preventDefault(); confirmAt(focused); }
+    else if ((ev.key === 'Backspace' || ev.key === 'Delete') && focused >= 0) {
+      ev.preventDefault(); anns.splice(focused, 1); focused = -1; save(); render();
+    }
+    else if (ev.key === 'c' && focused >= 0) openPicker({ kind: 'change', index: focused });
+    else if (ev.key === 'j') { focused = Math.min(focused + 1, anns.length - 1); render(); }
+    else if (ev.key === 'k') { focused = Math.max(focused - 1, 0); render(); }
+    else if (ev.key === 'n') nextUnresolved();
+    else if (ev.key === '[') go(-1);
+    else if (ev.key === ']') go(1);
+  });
+
+  render();
+});
+
+function onSelect() {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+  const root = document.getElementById('adText');
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) return;
+
+  // Offsets are measured by walking the rendered DOM's text nodes and skipping
+  // the chip spans, which are page furniture rather than ad text. Measuring
+  // against `textContent` directly would count every chip's characters into the
+  // offset and slide every span after the first mark.
+  const offset = node => {
+    let total = 0;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      if (n === node) return total;
+      if (!n.parentElement.closest('.chip')) total += n.textContent.length;
+    }
+    return total;
+  };
+  let start = offset(range.startContainer) + range.startOffset;
+  let end = offset(range.endContainer) + range.endOffset;
+  const text = ADS[current].text;
+  // Trim whitespace the drag picked up at either edge; a quote that starts with
+  // a space is still verbatim but reads as a mis-click in the panel.
+  while (start < end && /\s/.test(text[start])) start++;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  if (end <= start) return;
+  sel.removeAllRanges();
+  openPicker({ kind: 'new', start, end });
+}
 """
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Generate the T5 labelling aid — a standalone HTML page over the corpus."
-    )
-    parser.add_argument("--store", default=str(DEFAULT_STORE_PATH), help="labelled corpus store")
-    parser.add_argument(
-        "--dimensions-dir", default=str(DEFAULT_DIMENSIONS_DIR), help="dimension model directory"
-    )
-    parser.add_argument("--out", default=str(DEFAULT_OUTPUT_PATH), help="output HTML path")
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    ads = load_store(Path(args.store))
-    dimensions = load_dimensions(Path(args.dimensions_dir))
-    page = build_page(ads, dimensions)
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(page, encoding="utf-8")
-    print(f"{len(ads)} ad(s), {len(dimensions)} dimension(s) -> {out_path}")
-    return 0
 
 
 if __name__ == "__main__":

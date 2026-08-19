@@ -1,6 +1,7 @@
 id: stack_modernity
 kind: soft
 polarity: bipolar
+group: the_work
 label:
   en: Stack modernity
   es: Modernidad del stack
@@ -8,6 +9,25 @@ label:
 definition: >
   Whether the technology named in the ad is current and actively developed, or a
   long-lived legacy estate being maintained.
+levels:
+  - value: -0.7
+    label:
+      en: "Legacy estate"
+      es: "Sistemas heredados"
+      ca: "Sistemes heretats"
+    tell: "COBOL, AS/400, Visual Basic, or the ad's own word for legacy"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "no technology named, or nothing that dates it either way"
+  - value: 0.6
+    label:
+      en: "Current and active"
+      es: "Actual y en desarrollo"
+      ca: "Actual i en desenvolupament"
+    tell: "cloud-native, containers, or a stack in active development today"
 elicitation:
   questions:
     - id: sm_q1
@@ -65,5 +85,5 @@ extraction:
     - ad_id: feinaactiva-09202624459
       language: ca
       span: "tecnològics (transformació digital, migració al núvol públic en models IaaS/PaaS/SaaS i evolució d'arquitectures), avaluant de forma crítica les estratègies abans i després"
-      value: 0.4
+      value: 0.6
 methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -1,6 +1,7 @@
 id: travel_requirement
 kind: hard
 polarity: unipolar
+group: dealbreakers
 label:
   en: Travel requirement
   es: Exigencia de viajes
@@ -8,6 +9,25 @@ label:
 definition: >
   How much physical travel or relocation the role requires — client visits, periodic
   office presence, or moving to a stated location.
+levels:
+  - value: 0.0
+    label:
+      en: "None stated"
+      es: "No se menciona"
+      ca: "No se'n parla"
+    tell: "the ad asks for no travel and names no relocation"
+  - value: 0.4
+    label:
+      en: "Occasional"
+      es: "Ocasional"
+      ca: "Ocasional"
+    tell: "client visits, or periodic presence at an office, framed as now and then"
+  - value: 0.9
+    label:
+      en: "Regular travel or relocation"
+      es: "Viajes habituales o traslado"
+      ca: "Viatges habituals o trasllat"
+    tell: "travel is part of the job, or the role requires moving to a stated place"
 elicitation:
   questions:
     - id: tr_q1
@@ -57,9 +77,9 @@ extraction:
     - ad_id: tecnoempleo-450515d772aac3661b41
       language: es
       span: "elementos finitos. Nivel alto de inglés (C1). Disponibilidad para viajar. Se valorará Conocimiento de alemán o francés. Residencia en la zona. Dominio de euskera. Perfil competencial"
-      value: 0.8
+      value: 0.9
     - ad_id: feinaactiva-FA92318000
       language: ca
       span: "entorns canviants.\n\nDisponibilitat de vehicle\n\nDisponibilitat per viatjar\n\nPermisos de conduir: b\n\nContracte laboral indefinit\n\nJornada completa\n\nAltres dades d'interès: Departament: Hardware"
-      value: 0.8
+      value: 0.9
 methods_ref: METHODS.md#26-ad-wording-as-signal

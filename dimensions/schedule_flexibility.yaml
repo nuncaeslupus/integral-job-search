@@ -1,6 +1,7 @@
 id: schedule_flexibility
 kind: soft
 polarity: unipolar
+group: terms
 label:
   en: Schedule flexibility
   es: Flexibilidad horaria
@@ -9,6 +10,25 @@ definition: >
   How far the working day can be shaped around the person — flexible start and finish,
   compressed Fridays and summers, asynchronous collaboration — rather than fixed to a
   common timetable.
+levels:
+  - value: 0.0
+    label:
+      en: "Fixed timetable"
+      es: "Horario fijo"
+      ca: "Horari fix"
+    tell: "stated hours everyone keeps, with no give named"
+  - value: 0.4
+    label:
+      en: "Some give"
+      es: "Cierta flexibilidad"
+      ca: "Certa flexibilitat"
+    tell: "flexible start and finish, or an intensive summer, inside a fixed frame"
+  - value: 0.7
+    label:
+      en: "Shaped around the person"
+      es: "Se adapta a la persona"
+      ca: "S'adapta a la persona"
+    tell: "asynchronous work, compressed weeks, or hours the person genuinely sets"
 elicitation:
   questions:
     - id: sf_q1
