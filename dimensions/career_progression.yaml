@@ -78,8 +78,10 @@ extraction:
       language: es
       span: "intensiva viernes y verano. Desarrollo de plan de carrera personalizado formación y ayuda para el aprendizaje de idiomas. Movilidad nacional e internacional. Vienes de"
       value: 0.8
+      derived_from: cue
     - ad_id: feinaactiva-FA92317375
       language: ca
       span: "Contracte indefinit.\n- Estabilitat laboral. Carrera a llarg termini.\n- Jornada completa, 40 h/setmanals, amb horari flexible d'entrada i sortida.\n- Possibilitat de 95% teletreball."
       value: 0.8
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

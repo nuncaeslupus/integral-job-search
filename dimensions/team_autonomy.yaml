@@ -78,8 +78,10 @@ extraction:
       language: en
       span: "**core values: irreverence, egalitarianism, ownership, and a find-a-way attitude**.\n\n**Their stack:**\n\n* Their ecosystem revolves around **Python, FastAPI, and SQLAlchemy**"
       value: 0.7
+      derived_from: cue
     - ad_id: manfred-8360
       language: es
       span: "en otra época. En Valsea se respira total autonomía, pero estar conectados a la vez es el truco maestro para que ningún proyecto se quede bloqueado.\n\n![](https://media-asgard.s3.eu-west-1.amazonaws.com/26/05/19/2c97e812-45bf-4521-bef1-ae7a0bf5fdbc_valsea.png)"
       value: 0.7
+      derived_from: cue
 methods_ref: METHODS.md#21-structured-behavioural-elicitation

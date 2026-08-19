@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "family.\n\n**🗣️ Continuous learning**: Free English and Spanish lessons and ongoing professional development opportunities.\n\n**💻 Pro Equipment**:"
       value: 0.8
+      derived_from: cue
     - ad_id: manfred-8379
       language: es
       span: "médico.**\n* 📚 **Presupuesto de formación personal**: 1.000 € para que sigas aprendiendo.\n* 💻 **MacBook** para"
       value: 0.8
+      derived_from: cue
     - ad_id: feinaactiva-FA92322529
       language: ca
       span: "horari flexible\nFormació contínua i oportunitats de desenvolupament professional\nAmbient de treball col·laboratiu i dinàmic"
       value: 0.8
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

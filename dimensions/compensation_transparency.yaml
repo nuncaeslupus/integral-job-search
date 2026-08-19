@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "Credits for Outsite locations\n\n- Salary - $45,000 - $50,000 USD + commission"
       value: 0.9
+      derived_from: cue
     - ad_id: tecnoempleo-f1561880d27323ff6e45
       language: es
       span: "el segundo semestre de 2026 . - Salario 30.000 - 35.000 brutos anuales - Equipo Macbook o PC a tu elección (con 24/32 GB de RAM y 1 TB de almacenamiento) - Suscripción"
       value: 0.9
+      derived_from: cue
     - ad_id: feinaactiva-09202623802
       language: ca
       span: "Contracte laboral indefinit\n\nJornada completa\n\nSalari mensual brut 3085\n\nAltres dades d'interès: Horari:\n01/07 - 15/9 de 08:15 a 15:00\n16/09 - 30/06 de 08:15 a 18:30 (1.15 dinar)"
       value: 0.9
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

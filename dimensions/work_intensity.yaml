@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "**explosive growth** while still maintaining the fast-paced agility of a startup. To fuel this momentum, they are looking to bring in a top-tier **QA Automation** **Engineer**"
       value: 0.7
+      derived_from: cue
     - ad_id: manfred-8400
       language: es
       span: "abierta y la capacidad de adaptarse a un entorno dinámico de start-up.\n* **Inglés fluido (C1):** Necesario para coordinarse de manera efectiva, tanto a nivel oral como"
       value: 0.7
+      derived_from: cue
     - ad_id: feinaactiva-FA92322289
       language: ca
       span: "18:00. Marge d’adaptació segons necessitats i conciliació personal.\n-Contractació: Indefinida.\n\nIncorporació: Immediata o segons la disponibilitat del candidat.\n\n- Residència"
       value: -0.6
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

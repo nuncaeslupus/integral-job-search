@@ -18,7 +18,9 @@ from jobsearch.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
     SCHEMA_LANGUAGES,
     Dimension,
+    evaluation_gold,
     extractor_coverage,
+    gold_provenance,
     load_dimensions,
     unmatched_gold,
     verify_gold,
@@ -149,3 +151,99 @@ def test_hard_dimensions_are_filters_not_preferences(dimensions: list[Dimension]
     misdeclared = [d.id for d in dimensions if d.kind == "hard" and d.polarity != "unipolar"]
 
     assert not misdeclared, f"hard dimensions declared bipolar: {misdeclared}"
+
+
+# --- D-2: gold provenance ---------------------------------------------------
+#
+# The divergence these guard is not that a number is wrong, but that a number
+# would be *right about the wrong thing*: `extraction_macro_f1` computed over
+# cue-derived gold asks a regex to re-find the string it was written from, and
+# passes near 1.0 while measuring nothing. The schema field is the mechanism;
+# these are what stop it being quietly bypassed.
+
+
+def test_every_gold_example_declares_where_it_came_from(dimensions: list[Dimension]) -> None:
+    """No gold without provenance, and no third kind of provenance.
+
+    Enforced by the schema rather than here — this asserts the schema is
+    actually in force over the *committed* model, which is what would break if
+    `derived_from` ever grew a default.
+    """
+    for dimension in dimensions:
+        for gold in dimension.extraction.gold:
+            assert gold.derived_from in {"cue", "human"}, (
+                f"{dimension.id}: gold {gold.ad_id} has provenance {gold.derived_from!r}"
+            )
+
+
+def test_the_committed_gold_set_is_entirely_cue_derived(dimensions: list[Dimension]) -> None:
+    """The v0 gold was selected by searching for text its own cues match.
+
+    This is the finding D-2 records, asserted rather than described. It is
+    expected to fail the day a genuine human label is committed — and that
+    failure is the signal to update D-2's scope, not to relabel the new gold.
+    """
+    measured = gold_provenance(dimensions)
+    assert measured["gold_by_provenance"]["human"] == 0
+    assert measured["gold_by_provenance"]["cue"] == sum(
+        len(d.extraction.gold) for d in dimensions
+    )
+
+
+def test_no_evaluation_example_is_derived_from_a_cue(dimensions: list[Dimension]) -> None:
+    """The gate metric: `evaluation_gold` never hands back cue-derived gold.
+
+    The one assertion here that can fail against a plausible future edit —
+    someone widening the filter to "use whatever gold we have" because every
+    dimension currently returns an empty list and that looks like a bug.
+    """
+    assert gold_provenance(dimensions)["cue_derived_gold_in_evaluation_split"] == 0
+    for golds in evaluation_gold(dimensions).values():
+        assert all(g.derived_from == "human" for g in golds)
+
+
+def test_evaluation_gold_keeps_unscoreable_dimensions_rather_than_dropping_them(
+    dimensions: list[Dimension],
+) -> None:
+    """Every dimension gets a key, even when its list is empty.
+
+    A caller that iterates the mapping must see the dimensions it *cannot*
+    score, so it can report them unmeasured. Dropping them would make a
+    macro-average over the survivors look complete — the third outcome D-2
+    insists on ("unmeasured is not a pass and not a fail") collapsing back into
+    two.
+    """
+    per_dimension = evaluation_gold(dimensions)
+    assert set(per_dimension) == {d.id for d in dimensions}
+
+
+def test_a_human_gold_span_no_cue_matches_is_not_a_violation() -> None:
+    """`unmatched_gold` exempts human labels, and must.
+
+    Before D-2 this rule applied to all gold, and `_main` treats a violation as
+    a hard failure — so the first human label whose wording the cues did not
+    anticipate would have turned the T3 gate red. That is precisely the label
+    with the most evidential value: it is where the extractor does not
+    generalise, which is the thing being measured.
+    """
+    payload = {
+        "ad_id": "manfred-8419",
+        "language": "en",
+        "span": "wording that no cue in this dimension describes",
+        "value": 1.0,
+    }
+    dimension = load_dimensions(DEFAULT_DIMENSIONS_DIR)[0]
+    cue_gold = dimension.extraction.gold[0].model_copy(update={**payload, "derived_from": "cue"})
+    human_gold = dimension.extraction.gold[0].model_copy(
+        update={**payload, "derived_from": "human"}
+    )
+
+    as_cue = dimension.model_copy(
+        update={"extraction": dimension.extraction.model_copy(update={"gold": [cue_gold]})}
+    )
+    as_human = dimension.model_copy(
+        update={"extraction": dimension.extraction.model_copy(update={"gold": [human_gold]})}
+    )
+
+    assert unmatched_gold([as_cue]), "an unreachable cue-derived gold must still be reported"
+    assert unmatched_gold([as_human]) == [], "a human label is not required to be cue-reachable"

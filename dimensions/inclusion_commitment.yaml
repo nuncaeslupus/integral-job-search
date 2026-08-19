@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "more about what’s happening at ClickHouse.\n\nEqual Opportunity & Privacy\n\nClickHouse provides equal employment opportunities to all employees and applicants and prohibits discrimination"
       value: 0.6
+      derived_from: cue
     - ad_id: manfred-8400
       language: es
       span: "de más que se recuerde que femtasy ofrece igualdad de oportunidades para todos y anima a las personas de todas las nacionalidades, géneros, orientaciones sexuales, antecedentes religiosos,"
       value: 0.6
+      derived_from: cue
     - ad_id: feinaactiva-09202623802
       language: ca
       span: "Administrador/a Base de dades amb discapacitat igual o superior al 33 % (Data Analyst)\nLlicenciatura o Grau en ciències o enginyeria. Experiència de 3 a 5 anys"
       value: 0.8
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

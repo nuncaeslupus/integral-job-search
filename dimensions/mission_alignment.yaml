@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "Our mission is to increase the GDP of the internet, and we have a staggering amount of work ahead. That means you have an unprecedented"
       value: 0.7
+      derived_from: cue
     - ad_id: tecnoempleo-0e9510e2527fd31cd240
       language: es
       span: "Estamos ampliando nuestros equipos en el sector defensa para asumir un proyecto relacionado con sistemas UAS/UAV. Nos gusta ir al grano te vamos a contar lo que no está"
       value: -0.7
+      derived_from: cue
     - ad_id: feinaactiva-FA92320466
       language: ca
       span: "Fundació Orienta és una institució monogràfica en salut mental infantojuvenil. Està adscrita al con-veni SISCAT (III Conveni Col·lectiu de"
       value: 0.7
+      derived_from: cue
 methods_ref: METHODS.md#24-reaction-elicitation-on-real-ad-text

@@ -119,7 +119,10 @@ def test_unipolar_dimension_rejects_a_negative_rung(tmp_path: Path) -> None:
 
 def test_gold_off_a_rung_is_rejected(tmp_path: Path) -> None:
     """Gold is a human judgement, so it must be sayable in the labelling vocabulary."""
-    gold = '    - ad_id: fake-1\n      language: en\n      span: "offsites"\n      value: 0.3'
+    gold = (
+        '    - ad_id: fake-1\n      language: en\n      span: "offsites"\n'
+        "      value: 0.3\n      derived_from: cue"
+    )
     directory = write(tmp_path, levels="\n".join([rung(0.0), rung(0.7)]), gold=gold)
     with pytest.raises(DimensionError, match="not declared levels"):
         load_dimensions(directory)

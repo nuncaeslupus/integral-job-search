@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "before signing off.\n\nThis position is **100% remote**, so as long as you make sure you have a good connection, you can work from wherever you want. Whether by land,"
       value: 1.0
+      derived_from: cue
     - ad_id: manfred-8379
       language: es
       span: "![](https://media-asgard.s3.eu-west-1.amazonaws.com/25/07/08/2dc9c146-1aa0-4aea-91b9-2b7f71e89ae1_6Z8A8175.png)\n\nEste puesto es **100% remoto desde España, aunque se da mucha prioridad a perfiles que estén en Barcelona o Madrid o alrededores de Cataluña.**"
       value: 1.0
+      derived_from: cue
     - ad_id: feinaactiva-09202624459
       language: ca
       span: "dades d'interès: -Modalitat de treball: presencial\n-Horari: fins 15-9-26: 08:15 a 15:00h. A partir del 16-9-26: de 08:15 a 18:30 (1.15h descans) 2 dies a la setmana."
       value: 0.0
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

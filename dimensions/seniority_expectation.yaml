@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "want to join the adventure?** **🧳**\n\n**As a Senior QA Engineer** at **FCTG,** **you will be fundamental in scaling their platform globally, guaranteeing product"
       value: 0.8
+      derived_from: cue
     - ad_id: manfred-8360
       language: es
       span: "segundo** sin que eche humo.\n\nBuscan a un/a **Senior Go Developer** que no necesite que le expliquen qué es un *offset* de **Kafka** o cómo domar una arquitectura"
       value: 0.8
+      derived_from: cue
     - ad_id: feinaactiva-09202623802
       language: ca
       span: "Llicenciatura o Grau en ciències o enginyeria. Experiència de 3 a 5 anys en el sector bancari (Analítica de dades/Bussiness Inteligence). Nivell alt en SQL i fuidesa en Data"
       value: 0.8
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

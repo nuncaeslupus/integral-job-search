@@ -81,8 +81,10 @@ extraction:
       language: en
       span: "delivery.\n\nYou want ownership, not a narrow lane.\n\nYou want an early-stage company where the pace is high, the standards are high, and the upside is big.\n\n\n\nHow To Apply\n\nWe"
       value: -0.7
+      derived_from: cue
     - ad_id: tecnoempleo-b2fb182e627ab3455b4c
       language: es
       span: "de la tecnología. Formado por más de 3.000 personas creativas digitales e innovadoras conectadas a un propósito y capaces de generar conexiones con personas de todo el mundo."
       value: 0.7
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

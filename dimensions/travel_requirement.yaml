@@ -78,8 +78,10 @@ extraction:
       language: es
       span: "elementos finitos. Nivel alto de inglés (C1). Disponibilidad para viajar. Se valorará Conocimiento de alemán o francés. Residencia en la zona. Dominio de euskera. Perfil competencial"
       value: 0.9
+      derived_from: cue
     - ad_id: feinaactiva-FA92318000
       language: ca
       span: "entorns canviants.\n\nDisponibilitat de vehicle\n\nDisponibilitat per viatjar\n\nPermisos de conduir: b\n\nContracte laboral indefinit\n\nJornada completa\n\nAltres dades d'interès: Departament: Hardware"
       value: 0.9
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal

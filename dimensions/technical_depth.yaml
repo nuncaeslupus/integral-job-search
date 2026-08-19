@@ -78,12 +78,15 @@ extraction:
       language: en
       span: "**Cruising Speed** - By this point, the project's architecture will hold no secrets for you. You'll be actively proposing and implementing system enhancements, handling Backend"
       value: 0.7
+      derived_from: cue
     - ad_id: manfred-8360
       language: es
       span: "un *offset* de **Kafka** o cómo domar una arquitectura orientada a eventos. Si quieres construir el futuro de la plataforma *byte* a *byte*, ¡ponte el cinturón y sigue"
       value: 0.7
+      derived_from: cue
     - ad_id: feinaactiva-FA92319975
       language: ca
       span: "Kestrel en ASP.NET Core.\nConeixement de l'arquitectura i funcionament d'entorns virtualitzats (VMWare, Hyper-V, XenApp).\nConeixements generals de TCP/IP.\nConeixements"
       value: 0.7
+      derived_from: cue
 methods_ref: METHODS.md#26-ad-wording-as-signal
