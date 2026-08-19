@@ -18,7 +18,13 @@ Manfred ads, and byte offsets would shift on every accent.
 "no on-call" — rather than the dimension being absent. That distinction is what
 T16 measures as `extraction_negation_recall`, and a bare score cannot carry it.
 
-**The store is currently unlabelled.** Labelling is T5, by hand.
+**The store holds 39 human labels, on 4 ads** (50 spans; 22 confirmed, 10
+written outright, 7 edited). It will not hold many more soon: the labelling
+campaign was retired on 2026-08-19 in favour of the model reading each advert
+and finding the dimensions on its own (T5, `lo-d2b2`). What is here accrued
+from use and will keep accruing that way. Read **Why so few labels, and what
+still needs them** at the end of this file before computing anything over
+`labels`.
 
 ## Catalan ads are not all remote (D-1)
 
@@ -164,3 +170,37 @@ failure this README rules out for byte offsets, one encoding layer up.
 
 The page also widens an ambiguous quote itself on export, rather than asking you
 to extend it until unique — the text determines that, not you.
+
+## Why so few labels, and what still needs them
+
+The corpus was pre-marked so that labelling would be confirm-and-move rather
+than blind — 828 marks over 84 ads, in `suggestions.json`. After working
+through part of it the owner decided the read was good enough to stop:
+
+> *"The LLM must read the text and find those dimensions alone."*
+
+That is a reasonable call about the product, and it has one consequence worth
+stating plainly here, because the numbers in `status/evidence/` depend on it.
+
+**A pre-mark is not a label, and cannot be promoted to one.** `Label.source`
+has three members — `human`, `confirmed`, `edited` — and every one of them
+means a person decided. There is deliberately no `suggested`. Anything computed
+over `suggestions.json` is the model's read of the corpus, not a measurement of
+the model against anything.
+
+**So `extraction_macro_f1` has no denominator yet.** It was specified against a
+hand-labelled corpus. Scoring extraction against the pre-marks instead would
+score the same kind of reader against its own reading of the same adverts and
+pass near 1.0 — which is exactly the failure D-2 (`lo-77a6`) was raised to catch,
+one layer up from the cue-derived gold that first raised it. The answer is not
+to lower the bar: T15 reports `n` beside the score, refuses to emit the score at
+all while `n` is below the floor, and names the dimensions it could not measure.
+Unmeasured is a third outcome, distinct from pass and from fail.
+
+**Where labels can still come from, cheaply.** The 16 blind-control ads carry no
+marks at all, so a label formed on one is an unprompted human read — the only
+kind the corpus has. Reactions (step 5) and feedback (step 10) both put the
+owner in front of real adverts in the normal course of using the tool, and both
+already append to `evidence.jsonl`. Labels harvested there cost no separate
+session. None of this is scheduled work; it is where to look when the gate needs
+a denominator.

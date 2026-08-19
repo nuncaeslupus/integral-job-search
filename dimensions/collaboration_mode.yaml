@@ -1,0 +1,121 @@
+# Coined by the labeller at tecnoempleo-9ae7135032ea738f104e as `autonomy`, on
+# "Capacidad para trabajar de forma autónoma y en equipo". Renamed here for two
+# reasons. `team_autonomy` already exists and means something else entirely —
+# who decides what gets built — so two dimensions differing by one word would be
+# picked wrongly for the rest of the project's life. And the coined scale ran
+# 0 alone, 0.5 in a team, 1 both, which is not a scale: "both" is not more of
+# whatever "in a team" is more of than "alone", so nothing could be snapped to a
+# nearest rung. The axis below is monotone in how collaborative the work is, and
+# "both" sits between the poles where it belongs.
+#
+# Distinct from `social_intensity`, which is about how much of the *week* is
+# unstructured group time — offsites, open plan, socials. This is about how the
+# work itself is delivered. An ad can pair solitary delivery with a loud social
+# calendar, and both dimensions have to be able to say so.
+id: collaboration_mode
+kind: soft
+polarity: bipolar
+group: people
+label:
+  en: Alone or with others
+  es: En solitario o en equipo
+  ca: En solitari o en equip
+definition: >
+  Whether the work itself is carried out alone or with other people — sole
+  ownership of an area at one end, continuous collaboration at the other, and
+  ads that ask for both in the middle.
+levels:
+  - value: -0.6
+    label:
+      en: "Alone"
+      es: "En solitario"
+      ca: "En solitari"
+    tell: "independent or autonomous working named as the mode, with no team named alongside it"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "the ad never says whether the work is done alone or with others"
+  - value: 0.4
+    label:
+      en: "Both"
+      es: "Las dos cosas"
+      ca: "Totes dues coses"
+    tell: "both named together — able to work independently *and* as part of a team"
+  - value: 0.8
+    label:
+      en: "In a team"
+      es: "En equipo"
+      ca: "En equip"
+    tell: "collaborative throughout — team work, cross-functional delivery, pairing, constant coordination"
+elicitation:
+  questions:
+    - id: colm_q1
+      text:
+        en: >
+          Think of a stretch of work you remember fondly. Were you heads-down on your own
+          piece of it, or in and out of other people's all day? Which suited you?
+        es: >
+          Piensa en una etapa de trabajo que recuerdes con gusto. ¿Estabas metido en tu
+          parte a solas o entrando y saliendo de la de otros? ¿Cuál te sentó mejor?
+        ca: >
+          Pensa en una etapa de feina que recordis amb gust. Estaves ficat a la teva part
+          tot sol o entrant i sortint de la dels altres? Quina et va anar millor?
+extraction:
+  cues:
+    en:
+      # The lookahead matters: "work independently within distributed engineering
+      # teams" is both modes at once, not solitary work, and belongs on 0.4.
+      - pattern: "\\bwork\\s+(both\\s+)?(independently|autonomously)\\b(?!\\s+(within|and\\s+in)\\s)"
+        value: -0.6
+        negatable: true
+      - pattern: "\\bwork\\s+(independently|autonomously)\\s+(within|and\\s+in)\\s+[^.\\n]{0,40}teams?\\b"
+        value: 0.4
+        negatable: false
+      - pattern: "\\bcross[- ]functional\\s+(team|environment)|collaborat\\w+\\s+(closely\\s+)?with\\s+[^.\\n]{0,30}team|pair(ed)?\\s+programming"
+        value: 0.8
+        negatable: false
+    es:
+      - pattern: "trabajar\\s+de\\s+(forma|manera)\\s+aut[óo]noma(?!\\s+y\\s+en\\s+equipo)"
+        value: -0.6
+        negatable: true
+      - pattern: "de\\s+(forma|manera)\\s+aut[óo]noma\\s+y\\s+en\\s+equipo|en\\s+equipo\\s+y\\s+de\\s+(forma|manera)\\s+aut[óo]noma"
+        value: 0.4
+        negatable: false
+      - pattern: "trabajar\\s+en\\s+equipo|trabajo\\s+en\\s+equipo|equipos?\\s+multidisciplinar"
+        value: 0.8
+        negatable: true
+    ca:
+      - pattern: "treballar\\s+de\\s+forma\\s+aut[òo]noma(?!\\s+i\\s+en\\s+equip)"
+        value: -0.6
+        negatable: true
+      - pattern: "de\\s+forma\\s+aut[òo]noma\\s+i\\s+en\\s+equip"
+        value: 0.4
+        negatable: false
+      - pattern: "treballar\\s+en\\s+equip|[Tt]reball\\s+en\\s+equip"
+        value: 0.8
+        negatable: true
+  gold:
+    # The labeller's own span, on the ad that made them coin the dimension.
+    - ad_id: tecnoempleo-9ae7135032ea738f104e
+      language: es
+      span: "Capacidad para trabajar de forma autónoma y en equipo."
+      value: 0.4
+    - ad_id: tecnoempleo-175115a5429143b3da42
+      language: es
+      span: "Capacidad para trabajar en equipo y asumir responsabilidades técnicas."
+      value: 0.8
+    - ad_id: wwr-proxify-ab-senior-fullstack-developer-python-3
+      language: en
+      span: "Ability to work independently and deliver high-quality results in a remote setup."
+      value: -0.6
+    - ad_id: manfred-8456
+      language: en
+      span: "a large, cross-functional environment"
+      value: 0.8
+    - ad_id: feinaactiva-FA92318000
+      language: ca
+      span: "Treball en equip i col·laboració amb altres departaments."
+      value: 0.8
+methods_ref: METHODS.md#26-ad-wording-as-signal
