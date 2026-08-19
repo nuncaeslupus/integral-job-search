@@ -327,8 +327,11 @@ _BODY = """<header>
       (leave it blank) and it is measured separately, so it is worth getting
       right.</li>
     <li><strong>Move on</strong> with <em>next unlabelled</em>. A dimension
-      counts as done only when it has <em>both</em> a quote and a value; the
-      counters at the top and on each ad reflect that.</li>
+      counts as done only when it has <em>both</em> a quote and a value &mdash;
+      that is what the <em>Dimensions (n/22 on this ad)</em> heading counts.
+      The counter in the header measures something different and looser: how
+      many <em>ads</em> carry at least one label, so an ad you have barely
+      started already counts there. Neither number is a target.</li>
   </ol>
   <p><strong>Stopping and resuming.</strong> Your work is saved in this
     browser as you go &mdash; closing the tab does not lose it (clearing
