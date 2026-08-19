@@ -14,6 +14,7 @@ the cues looks identical to one derived from them until you count.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,7 @@ from jobsearch.suggestions import (
     validate_suggestions,
     write_proposals,
 )
+from jobsearch.suggestions import main as suggestions_main
 
 DIMENSIONS = load_dimensions()
 TEXT = "Ofrecemos guardias rotativas cada mes y dos horas cada viernes para estudiar."
@@ -310,3 +312,75 @@ def test_propose_refuses_an_id_the_model_could_never_accept(tmp_path: Path) -> N
 
     with pytest.raises(SuggestionError, match="snake_case"):
         write_proposals(export, tmp_path)
+
+
+# --- the CLI itself, not just the functions behind it ----------------------
+
+
+def test_propose_is_reachable_from_the_command_line(tmp_path: Path) -> None:
+    """`argv or ["check"]` discarded `sys.argv` whenever argv was None — which is
+    every real invocation — so `propose` was unreachable from the command line
+    while its unit tests, which call `write_proposals` directly, stayed green.
+
+    The importer prints this command as the way out of a coined-dimension
+    import, so a version of it that cannot be run leaves that workflow with no
+    terminating step at all. This test drives `main` the way a shell does.
+    """
+    export = tmp_path / "export.json"
+    export.write_text(
+        json.dumps(
+            {
+                "labels": [],
+                "proposed_dimensions": [
+                    {
+                        "id": "childcare_support",
+                        "label": "Childcare support",
+                        "definition": "d",
+                        "group": "terms",
+                        "coined_at_ad": "manfred-8360",
+                        "levels": [
+                            {"value": 0.0, "label": "Nothing"},
+                            {"value": 1.0, "label": "Concrete"},
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = suggestions_main(["propose", str(export), "--dimensions", str(tmp_path)])
+
+    assert code == 0
+    assert (tmp_path / "childcare_support.yaml").exists()
+
+
+def test_the_check_form_without_a_subcommand_still_works(tmp_path: Path) -> None:
+    """The original `… --suggestions X <evidence>` form predates subcommands and
+    is what the docs and Makefile call; adding `propose` must not break it."""
+    suggestions = tmp_path / "s.json"
+    ads = load_store()
+    suggestions.write_text(
+        json.dumps(
+            {
+                "method": "llm_read",
+                "generated_at": "2026-08-19",
+                "blind_control": blind_control(ads),
+                "by_ad": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    evidence = tmp_path / "e.json"
+
+    code = suggestions_main(["--suggestions", str(suggestions), str(evidence)])
+
+    assert code == 0
+    assert json.loads(evidence.read_text(encoding="utf-8"))["suggestion_violations"] == 0
+
+
+def test_propose_reports_an_export_carrying_no_proposals(tmp_path: Path) -> None:
+    export = tmp_path / "export.json"
+    export.write_text(json.dumps({"labels": []}), encoding="utf-8")
+
+    assert suggestions_main(["propose", str(export), "--dimensions", str(tmp_path)]) == 1

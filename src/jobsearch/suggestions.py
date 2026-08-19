@@ -378,8 +378,15 @@ def main(argv: list[str] | None = None) -> int:
     propose.add_argument("export", type=Path, help="the JSON the labelling page exported")
     propose.add_argument("--dimensions", type=Path, default=DEFAULT_DIMENSIONS_DIR)
 
-    # No subcommand keeps the original behaviour: check the default paths.
-    args = parser.parse_args(argv or ["check"])
+    # `argv or ["check"]` would have discarded sys.argv whenever argv is None —
+    # which is every real CLI invocation — making `propose` unreachable from the
+    # command line while its unit tests, which call `write_proposals` directly,
+    # stayed green. Resolve argv first, then default the subcommand only when one
+    # was genuinely not given, so the older `… <evidence-path>` form still works.
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if not raw or raw[0] not in {"check", "propose"}:
+        raw = ["check", *raw]
+    args = parser.parse_args(raw)
 
     if args.command == "propose":
         try:
