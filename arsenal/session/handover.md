@@ -219,14 +219,22 @@ returns **exactly the 7 tasks the pre-migration queue offered**, with zero
 warnings:
 
 ```
-p70  lo-1af2  T25  [LAPTOP] broaden the corpus   ← sorts first; a cloud session must skip it
 p5   lo-3100  T14  lexical prefilter             ← read its scope note first
 p5   lo-77a6  D-2  the measurement               ← recommended next
 p5   lo-803e  T53  connector contract pack
 p5   lo-9f72  T55  rename to integral-job-search
 p5   lo-b422  T9   reaction elicitation
-p1   lo-277b  T12  [LAPTOP] portal connector
 ```
+
+The two `[LAPTOP]` tasks — T25 (`lo-1af2`) and T12 (`lo-277b`) — carry
+`requires: [surface:egress]`, so they are filtered out here rather than offered
+and skipped. T25 has priority 70 and would otherwise be the **first** thing an
+autonomous cloud session was handed, and it cannot be done without egress. On a
+laptop, add `--capability surface:egress` and all 7 come back.
+
+`surface:egress` is deliberately not auto-detected — `detect_surface.sh` grants
+only `surface:web` / `surface:cli` and `services:*` — so it works exactly like
+`surface:human`: never granted by accident, only when a session says it has it.
 
 ## Environment
 
