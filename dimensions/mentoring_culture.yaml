@@ -1,6 +1,7 @@
 id: mentoring_culture
 kind: soft
 polarity: unipolar
+group: people
 label:
   en: Mentoring culture
   es: Cultura de mentoría
@@ -8,6 +9,25 @@ label:
 definition: >
   Whether people are deliberately brought on by others — mentors, code review as
   teaching, pairing with seniors — rather than left to sink or swim.
+levels:
+  - value: 0.0
+    label:
+      en: "Sink or swim"
+      es: "Cada uno se busca la vida"
+      ca: "Cadascú s'espavila"
+    tell: "nothing about being brought on by anyone"
+  - value: 0.5
+    label:
+      en: "Mentioned"
+      es: "Se menciona"
+      ca: "Se'n parla"
+    tell: "mentoring or code review named, without saying what it amounts to"
+  - value: 0.8
+    label:
+      en: "Deliberate"
+      es: "Deliberado"
+      ca: "Deliberat"
+    tell: "named mentors, pairing with seniors, or review framed as teaching"
 elicitation:
   questions:
     - id: mc_q1

@@ -91,7 +91,15 @@ from typing import Any, Literal
 
 from jobsearch.candidate import CandidateConstraints
 from jobsearch.decline import DeclineLedger
-from jobsearch.dimensions import Cue, Dimension, Elicitation, Extraction, LocalisedText, Question
+from jobsearch.dimensions import (
+    Cue,
+    Dimension,
+    Elicitation,
+    Extraction,
+    LocalisedText,
+    Question,
+    synthetic_levels,
+)
 from jobsearch.elicit_extract import ExtractionResult, store_answer
 from jobsearch.profile import EvidenceLog, EvidenceRow
 from jobsearch.question_bank import BankEntry, QuestionBank, build_bank
@@ -667,9 +675,11 @@ def _fixture_dimension(
         id=dimension_id,
         kind="soft",
         polarity="bipolar",
+        group="the_work",
         side=side,
         label=LocalisedText(en=dimension_id, es=dimension_id, ca=dimension_id),
         definition="a synthetic dimension used only to probe the interview driver",
+        levels=synthetic_levels(),
         elicitation=Elicitation(
             questions=[
                 Question(

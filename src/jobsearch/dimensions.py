@@ -58,6 +58,15 @@ SCHEMA_LANGUAGES: tuple[Language, ...] = get_args(Language)
 #                    evidences these, so they are elicited and never extracted.
 Side = Literal["matched", "candidate_fact", "candidate_trait"]
 
+# Which section of the labelling picker a dimension appears under. Purely a
+# presentation axis — nothing scores on it — but it is declared here rather than
+# in the page because a picker that lists 22 flat options is the thing that made
+# hand-labelling slow: the labeller could not find a dimension without already
+# knowing its name. `dealbreakers` is exactly the `kind: hard` set today; that
+# is a coincidence of v0 content, not a rule, so the two stay independent.
+Group = Literal["dealbreakers", "terms", "the_work", "people", "growth"]
+GROUPS: tuple[Group, ...] = get_args(Group)
+
 # `METHODS.md#<github-style-slug>` — a relative link into the methods register,
 # resolved by `methods_anchors`. Any other shape is a link nothing can check.
 METHODS_REF = re.compile(r"^METHODS\.md#[a-z0-9][a-z0-9-]*$")
@@ -91,6 +100,52 @@ class LocalisedText(Strict):
         if language not in LANGUAGES:
             raise KeyError(f"unknown language {language!r}; known: {', '.join(LANGUAGES)}")
         return str(getattr(self, language))
+
+
+class Level(Strict):
+    """One named rung on a dimension's scale — the unit a human actually labels in.
+
+    The scale is `-1..1` because the ranker needs a number, but nobody can
+    answer "is this ad 0.6 or 0.7 on mentoring". A dimension therefore declares
+    the two-to-five *named* positions its scale really has, each with the value
+    it stands for and a `tell` naming what that rung looks like in ad wording.
+    The labeller clicks a name; the float is a storage detail they never see.
+
+    This is also what gives `extraction_macro_f1` (T15) a class set. Macro-F1 is
+    defined over classes, and a continuous score has none — so the levels are
+    the classes, and an extracted float is snapped to the nearest rung
+    (`Dimension.snap`) before it is compared with a human label. Without this
+    the metric had to invent a binning rule at measurement time, where it would
+    be unreviewable and could be chosen to flatter the result.
+    """
+
+    value: float = Field(ge=-1.0, le=1.0)
+    label: LocalisedText
+    tell: str = Field(min_length=1)
+
+
+def synthetic_levels() -> list[Level]:
+    """The minimal two-rung scale the synthetic test-fixture dimensions carry.
+
+    Five modules build a throwaway `Dimension` to exercise a driver that only
+    reads its id, side and questions. None of them is about the scale, but
+    `levels` is required — a dimension whose rungs are optional is a dimension a
+    real author can forget to give any, which is the drift the field exists to
+    stop. One helper keeps that requirement from being answered five slightly
+    different ways.
+    """
+    return [
+        Level(
+            value=0.0,
+            label=LocalisedText(en="Absent", es="Ausente", ca="Absent"),
+            tell="the ad says nothing about it",
+        ),
+        Level(
+            value=1.0,
+            label=LocalisedText(en="Present", es="Presente", ca="Present"),
+            tell="the ad says so plainly",
+        ),
+    ]
 
 
 class Question(Strict):
@@ -178,8 +233,10 @@ class Dimension(Strict):
     polarity: Literal["bipolar", "unipolar"]
     side: Side = "matched"
     compares_against: str = ""
+    group: Group
     label: LocalisedText
     definition: str = Field(min_length=1)
+    levels: list[Level] = Field(min_length=2, max_length=5)
     elicitation: Elicitation
     extraction: Extraction = Field(default_factory=Extraction)
     methods_ref: str = Field(pattern=METHODS_REF.pattern)
@@ -227,6 +284,81 @@ class Dimension(Strict):
                 f"unipolar dimension carries negative cue value(s): {', '.join(offenders)}"
             )
         return self
+
+    @model_validator(mode="after")
+    def _levels_are_ordered_distinct_and_fit_the_polarity(self) -> Dimension:
+        """Rungs ascend, never repeat, and respect the polarity's floor.
+
+        Two rungs at the same value are two names for one class, so a labeller
+        picking between them records nothing distinguishable and macro-F1 counts
+        them as one. Unordered rungs break the nearest-rung snap, which assumes
+        it can compare against a sorted scale.
+        """
+        values = [level.value for level in self.levels]
+        if values != sorted(values):
+            raise ValueError(f"{self.id}: levels must ascend by value, got {values}")
+        duplicates = sorted({v for v in values if values.count(v) > 1})
+        if duplicates:
+            raise ValueError(f"{self.id}: duplicate level value(s): {duplicates}")
+        if self.polarity == "unipolar" and values[0] < 0:
+            raise ValueError(
+                f"{self.id}: unipolar dimension carries negative level value(s): "
+                f"{[v for v in values if v < 0]}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _gold_lands_on_a_level(self) -> Dimension:
+        """Every gold value is a declared rung; cue values need only be in range.
+
+        The asymmetry is the point. Gold is a *human* judgement about a real ad
+        — the same kind of judgement the corpus labels record — so it has to be
+        expressible in the vocabulary a human labels in, or the two cannot be
+        compared. A cue is the extractor's continuous estimate, which is snapped
+        to the nearest rung at scoring time (`snap`) and so is free to sit
+        between them; all it must not do is point off the end of the scale,
+        where snapping would silently clamp it into a rung it never meant.
+        """
+        rungs = {level.value for level in self.levels}
+        low, high = self.levels[0].value, self.levels[-1].value
+        stray_gold = sorted({g.value for g in self.extraction.gold if g.value not in rungs})
+        if stray_gold:
+            raise ValueError(
+                f"{self.id}: gold value(s) {stray_gold} are not declared levels "
+                f"({sorted(rungs)}) — a gold example must be expressible as a rung"
+            )
+        out_of_range = sorted(
+            {
+                cue.value
+                for cues in self.extraction.cues.values()
+                for cue in cues
+                if not low <= cue.value <= high
+            }
+        )
+        if out_of_range:
+            raise ValueError(
+                f"{self.id}: cue value(s) {out_of_range} fall outside the level scale "
+                f"[{low}, {high}]"
+            )
+        return self
+
+    def snap(self, value: float) -> Level:
+        """The declared rung nearest `value` — the class an extracted score counts as.
+
+        Ties go to the rung nearer zero: a score exactly between "not stated"
+        and a signal is weaker evidence for the signal than for its absence, and
+        an arbitrary tie-break would make macro-F1 depend on float noise.
+        """
+        return min(self.levels, key=lambda level: (abs(level.value - value), abs(level.value)))
+
+    def level_for(self, value: float) -> Level | None:
+        """The rung declared at exactly `value`, or `None` — no snapping.
+
+        What the importer uses: a label arriving from the labelling page names a
+        rung, and a value that is not one is a page out of step with the model,
+        not a number to round into the nearest acceptable shape.
+        """
+        return next((level for level in self.levels if level.value == value), None)
 
     @property
     def anchor(self) -> str:

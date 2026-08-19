@@ -77,6 +77,7 @@ from jobsearch.dimensions import (
     LocalisedText,
     Question,
     load_dimensions,
+    synthetic_levels,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -233,8 +234,10 @@ def _synthetic_dimension(
         id=dimension_id,
         kind="soft",
         polarity="bipolar",
+        group="the_work",
         label=LocalisedText(en=dimension_id, es=dimension_id, ca=dimension_id),
         definition="a synthetic dimension used only to probe the bank generator",
+        levels=synthetic_levels(),
         elicitation=Elicitation(
             questions=[
                 Question(

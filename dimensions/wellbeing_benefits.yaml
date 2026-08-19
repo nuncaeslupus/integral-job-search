@@ -1,6 +1,7 @@
 id: wellbeing_benefits
 kind: soft
 polarity: unipolar
+group: terms
 label:
   en: Wellbeing benefits
   es: Beneficios de bienestar
@@ -8,6 +9,25 @@ label:
 definition: >
   Non-salary provision aimed at health and life outside work: medical cover,
   psychological support, gym or wellness allowances, extra leave.
+levels:
+  - value: 0.0
+    label:
+      en: "None named"
+      es: "Ninguno"
+      ca: "Cap"
+    tell: "no health, leave or wellbeing provision appears"
+  - value: 0.4
+    label:
+      en: "One perk"
+      es: "Una ventaja suelta"
+      ca: "Un avantatge solt"
+    tell: "a single item — gym discount, a wellness app, fruit"
+  - value: 0.7
+    label:
+      en: "Real provision"
+      es: "Provisión real"
+      ca: "Provisió real"
+    tell: "medical cover, psychological support, or extra leave the employer pays for"
 elicitation:
   questions:
     - id: wb_q1

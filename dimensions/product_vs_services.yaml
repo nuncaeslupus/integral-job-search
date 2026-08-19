@@ -1,6 +1,7 @@
 id: product_vs_services
 kind: soft
 polarity: bipolar
+group: the_work
 label:
   en: Product versus services
   es: Producto frente a servicios
@@ -8,6 +9,25 @@ label:
 definition: >
   Whether the work is on the employer's own product, or delivered into a client's
   organisation through a consultancy or staffing arrangement.
+levels:
+  - value: -0.7
+    label:
+      en: "Consultancy or staffing"
+      es: "Consultora o cesión"
+      ca: "Consultora o cessió"
+    tell: "you are placed with the employer's clients, or billed into their projects"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "the ad never says whose product you would be building"
+  - value: 0.7
+    label:
+      en: "The employer's own product"
+      es: "Producto propio"
+      ca: "Producte propi"
+    tell: "the thing you build is the thing the employer sells"
 elicitation:
   questions:
     - id: pvs_q1

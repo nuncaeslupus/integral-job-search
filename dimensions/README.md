@@ -9,30 +9,77 @@ everywhere; adding a file is additive.
 
 22 dimensions, within the plan's 20–25 range for v0.
 
-| id | kind | polarity | what it is about |
-|----|------|----------|------------------|
-| `career_progression` | soft | unipolar | a named path upward, or an unspecified future |
-| `company_stage` | soft | bipolar | early-stage startup ↔ large established organisation |
-| `compensation_transparency` | soft | unipolar | does the ad state what it pays |
-| `contract_stability` | hard | unipolar | open-ended employment ↔ fixed-term or freelance |
-| `english_demand` | hard | unipolar | how much working English the role requires |
-| `inclusion_commitment` | soft | unipolar | concrete equality/disability commitments vs silence |
-| `learning_support` | soft | unipolar | paid training, certifications, and time to use them |
-| `mentoring_culture` | soft | unipolar | people brought on deliberately, or sink-or-swim |
-| `mission_alignment` | soft | bipolar | purpose worth having ↔ sectors the candidate refuses |
-| `on_call_load` | soft | unipolar | out-of-hours availability the role carries |
-| `process_formality` | soft | bipolar | prescribed ceremony ↔ lightweight coordination |
-| `product_vs_services` | soft | bipolar | own product ↔ consultancy / staff augmentation |
-| `remote_arrangement` | hard | unipolar | fully remote ↔ hybrid quotas ↔ on-site |
-| `schedule_flexibility` | soft | unipolar | how far the working day bends around the person |
-| `seniority_expectation` | hard | unipolar | experience the ad requires |
-| `social_intensity` | soft | bipolar | unstructured group interaction ↔ solitary focused work |
-| `stack_modernity` | soft | bipolar | current, actively developed tech ↔ legacy estate |
-| `team_autonomy` | soft | bipolar | the team decides ↔ decisions arrive already made |
-| `technical_depth` | soft | bipolar | engineering hard problems ↔ operating what exists |
-| `travel_requirement` | hard | unipolar | travel or relocation the role requires |
-| `wellbeing_benefits` | soft | unipolar | health cover, mental-health support, leave |
-| `work_intensity` | soft | bipolar | sustained delivery pressure ↔ deliberate pace |
+| id | kind | polarity | group | rungs (what you actually click) |
+|----|------|----------|-------|--------------------------------|
+| `career_progression` | soft | unipolar | `growth` | No path named · Growth mentioned, undefined · A named path |
+| `company_stage` | soft | bipolar | `growth` | Early-stage startup · Mid-size or unstated · Large and established |
+| `compensation_transparency` | soft | unipolar | `terms` | Silent on pay · Described, never quantified · A figure or a band |
+| `contract_stability` | hard | unipolar | `dealbreakers` | Freelance / self-employed · Fixed-term · Open-ended |
+| `english_demand` | hard | unipolar | `dealbreakers` | Not required · Intermediate · The job runs in English |
+| `inclusion_commitment` | soft | unipolar | `people` | Silent · Boilerplate · Concrete commitment |
+| `learning_support` | soft | unipolar | `growth` | Nothing · Mentioned, nothing named · Paid and specific |
+| `mentoring_culture` | soft | unipolar | `people` | Sink or swim · Mentioned · Deliberate |
+| `mission_alignment` | soft | bipolar | `growth` | A sector to refuse · Not stated · Purpose stated |
+| `on_call_load` | soft | unipolar | `terms` | None · Occasional · Rotation or incident duty |
+| `process_formality` | soft | bipolar | `the_work` | Lightweight · Not stated · Agile ceremony · Heavy formal process |
+| `product_vs_services` | soft | bipolar | `the_work` | Consultancy or staffing · Not stated · The employer's own product |
+| `remote_arrangement` | hard | unipolar | `dealbreakers` | On-site · Hybrid · Fully remote |
+| `schedule_flexibility` | soft | unipolar | `terms` | Fixed timetable · Some give · Shaped around the person |
+| `seniority_expectation` | hard | unipolar | `dealbreakers` | Junior · Mid-level · Senior |
+| `social_intensity` | soft | bipolar | `people` | Solitary and focused · Not stated · Group-heavy |
+| `stack_modernity` | soft | bipolar | `the_work` | Legacy estate · Not stated · Current and active |
+| `team_autonomy` | soft | bipolar | `people` | Decisions arrive made · Not stated · The team decides |
+| `technical_depth` | soft | bipolar | `the_work` | Operating what exists · Not stated · Engineering hard problems |
+| `travel_requirement` | hard | unipolar | `dealbreakers` | None stated · Occasional · Regular travel or relocation |
+| `wellbeing_benefits` | soft | unipolar | `terms` | None named · One perk · Real provision |
+| `work_intensity` | soft | bipolar | `the_work` | Deliberate pace · Not stated · Sustained pressure |
+
+## Levels — the rungs a human labels in
+
+Nobody can answer "is this ad 0.6 or 0.7 on mentoring". Every dimension therefore
+declares the two-to-five **named** positions its scale really has (`levels`),
+each with the value it stands for and a `tell` naming what that rung looks like
+in ad wording. The labelling page shows the names; the float is a storage detail
+the labeller never sees.
+
+The same list is the class set `extraction_macro_f1` (T15) is computed over.
+Macro-F1 is defined over classes and a continuous score has none — so an
+extracted float is snapped to the nearest rung (`Dimension.snap`) before it is
+compared with a human label. Declaring the classes in the model, rather than
+binning at measurement time, is what keeps the binning rule reviewable instead
+of being a choice made where it could flatter the result.
+
+Hence the asymmetry the loader enforces:
+
+- a **gold** value must equal a declared rung — gold is a human judgement about
+  a real ad, so it has to be sayable in the vocabulary a human labels in;
+- a **cue** value need only lie inside the scale — it is the extractor's
+  continuous estimate and is snapped when scored. What it must not do is point
+  past either end, where snapping would silently clamp it into a rung it never
+  meant.
+
+That second rule caught four cues on first run (`company_stage` 0.7,
+`english_demand` 1.0, `mission_alignment` 0.7, `travel_requirement` 0.9) each
+reaching past the top rung the v0 model implied. The cues were right and the
+ceilings were too low, so the rungs moved up and six gold entries snapped onto
+them. Four further gold values (`stack_modernity` 0.4, `work_intensity` 0.6,
+`learning_support` 0.7, `mission_alignment` 0.7) sat between rungs and were
+snapped to the nearest. Every `span` is byte-identical — only `value` moved —
+so `verify_gold` and `unmatched_gold` are unaffected.
+
+**These gold values remain cue-derived (D-2).** Snapping them onto rungs makes
+them expressible; it does not make them independent. `extraction_macro_f1` must
+still be measured against T5's hand labels, never against this gold.
+
+## Groups — how the labelling picker is ordered
+
+`group` sorts the 22 dimensions into five titled sections so the labeller can
+find one without already knowing its name: `dealbreakers`, `terms`, `the_work`,
+`people`, `growth`. It is purely presentational — nothing scores on it — and it
+is declared in the model rather than in the page so a dimension added later
+cannot appear in an unsorted "other" bucket. `dealbreakers` happens to be
+exactly the `kind: hard` set today; that is v0 content, not a rule, so the two
+fields stay independent.
 
 `kind: hard` dimensions veto rather than trade off, so they are all `unipolar`:
 a bipolar filter has no defensible cut-off. Direction on them is expressed by

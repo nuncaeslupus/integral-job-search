@@ -1,6 +1,7 @@
 id: english_demand
 kind: hard
 polarity: unipolar
+group: dealbreakers
 label:
   en: English demand
   es: Exigencia de inglés
@@ -8,6 +9,25 @@ label:
 definition: >
   How much working English the role requires, from none through reading documentation to
   conducting the whole job in it.
+levels:
+  - value: 0.0
+    label:
+      en: "Not required"
+      es: "No requerido"
+      ca: "No requerit"
+    tell: "the ad says English is not needed, or asks for none at all"
+  - value: 0.6
+    label:
+      en: "Intermediate"
+      es: "Intermedio (B1–B2)"
+      ca: "Intermedi (B1–B2)"
+    tell: "B1/B2, or enough to read documentation and follow written threads"
+  - value: 1.0
+    label:
+      en: "The job runs in English"
+      es: "El día a día en inglés"
+      ca: "El dia a dia en anglès"
+    tell: "C1/fluent/native, or English named as the working language"
 elicitation:
   questions:
     - id: ed_q1
@@ -57,11 +77,11 @@ extraction:
     - ad_id: manfred-8389
       language: es
       span: "persistencia.\n* **Nivel de Inglés Alto**: Tu día a día será completamente en este idioma.💂\n\n**Suma puntos 🎁**"
-      value: 0.9
+      value: 1.0
     - ad_id: feinaactiva-09202624459
       language: ca
       span: "anglès (parlat Superior, escrit Superior)\n\ncatalà (parlat Superior, escrit Superior)"
-      value: 0.9
+      value: 1.0
     - ad_id: feinaactiva-09202623802
       language: ca
       span: "Anglès (B2), català i castellà (C1).\nJornada completa. Retribució 3.085,71*14."

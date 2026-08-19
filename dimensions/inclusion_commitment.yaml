@@ -1,6 +1,7 @@
 id: inclusion_commitment
 kind: soft
 polarity: unipolar
+group: people
 label:
   en: Inclusion commitment
   es: Compromiso de inclusión
@@ -8,6 +9,25 @@ label:
 definition: >
   Whether the ad states a concrete commitment on equality, disability or diversity, as
   opposed to boilerplate or silence.
+levels:
+  - value: 0.0
+    label:
+      en: "Silent"
+      es: "No dice nada"
+      ca: "No en diu res"
+    tell: "no equality, disability or diversity statement at all"
+  - value: 0.6
+    label:
+      en: "Boilerplate"
+      es: "Fórmula estándar"
+      ca: "Fórmula estàndard"
+    tell: "the standard equal-opportunity line, and nothing behind it"
+  - value: 0.8
+    label:
+      en: "Concrete commitment"
+      es: "Compromiso concreto"
+      ca: "Compromís concret"
+    tell: "a named policy, a disability-certificate route, a quota, or a running programme"
 elicitation:
   questions:
     - id: ic_q1

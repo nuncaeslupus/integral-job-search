@@ -1,6 +1,7 @@
 id: team_autonomy
 kind: soft
 polarity: bipolar
+group: people
 label:
   en: Team autonomy
   es: Autonomía del equipo
@@ -8,6 +9,25 @@ label:
 definition: >
   How much the team decides for itself — what to build, in what order, with which tools
   — as against receiving decisions already made elsewhere.
+levels:
+  - value: -0.6
+    label:
+      en: "Decisions arrive made"
+      es: "Las decisiones vienen dadas"
+      ca: "Les decisions vénen donades"
+    tell: "follow the specification, the instructions, or the client's directives"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No se dice"
+      ca: "No es diu"
+    tell: "the ad does not say who decides what gets built"
+  - value: 0.7
+    label:
+      en: "The team decides"
+      es: "El equipo decide"
+      ca: "L'equip decideix"
+    tell: "autonomy or ownership named as something the role actually carries"
 elicitation:
   questions:
     - id: ta_q1

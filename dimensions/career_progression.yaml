@@ -1,6 +1,7 @@
 id: career_progression
 kind: soft
 polarity: unipolar
+group: growth
 label:
   en: Career progression
   es: Progresión profesional
@@ -8,6 +9,25 @@ label:
 definition: >
   Whether a named path upward exists — levels, a career plan, defined promotion criteria
   — as opposed to an unspecified future.
+levels:
+  - value: 0.0
+    label:
+      en: "No path named"
+      es: "Sin recorrido"
+      ca: "Sense recorregut"
+    tell: "the ad says nothing about where the role leads"
+  - value: 0.5
+    label:
+      en: "Growth mentioned, undefined"
+      es: "Crecimiento sin concretar"
+      ca: "Creixement sense concretar"
+    tell: "'opportunities to grow' with no criteria attached to it"
+  - value: 0.8
+    label:
+      en: "A named path"
+      es: "Recorrido definido"
+      ca: "Recorregut definit"
+    tell: "levels, a career plan, or stated promotion criteria"
 elicitation:
   questions:
     - id: cp_q1

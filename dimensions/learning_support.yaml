@@ -1,6 +1,7 @@
 id: learning_support
 kind: soft
 polarity: unipolar
+group: growth
 label:
   en: Learning support
   es: Apoyo a la formación
@@ -8,6 +9,25 @@ label:
 definition: >
   What the employer puts behind learning: paid training, certification budgets,
   conference or language classes, and time to use them.
+levels:
+  - value: 0.0
+    label:
+      en: "Nothing"
+      es: "Nada"
+      ca: "Res"
+    tell: "no training, budget or study time appears"
+  - value: 0.5
+    label:
+      en: "Mentioned, nothing named"
+      es: "Se menciona, sin concretar"
+      ca: "Se'n parla, sense concretar"
+    tell: "'continuous learning' or 'professional development' with nothing attached"
+  - value: 0.8
+    label:
+      en: "Paid and specific"
+      es: "Pagado y concreto"
+      ca: "Pagat i concret"
+    tell: "a training budget, paid certifications, language classes, or conference days"
 elicitation:
   questions:
     - id: ls_q1
@@ -57,7 +77,7 @@ extraction:
     - ad_id: manfred-8456
       language: en
       span: "family.\n\n**🗣️ Continuous learning**: Free English and Spanish lessons and ongoing professional development opportunities.\n\n**💻 Pro Equipment**:"
-      value: 0.7
+      value: 0.8
     - ad_id: manfred-8379
       language: es
       span: "médico.**\n* 📚 **Presupuesto de formación personal**: 1.000 € para que sigas aprendiendo.\n* 💻 **MacBook** para"
