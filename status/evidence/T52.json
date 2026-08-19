@@ -1,0 +1,143 @@
+{
+  "unbootstrapped_first_runs": 0,
+  "first_runs_simulated": 7,
+  "shortfalls": [],
+  "arrivals": [
+    {
+      "arrival": "the SessionStart hook fires on a fresh clone",
+      "entry_point": "session-start",
+      "action": "installed",
+      "expected_action": "installed",
+      "missing": [
+        "pydantic",
+        "pyyaml"
+      ],
+      "manager": "uv",
+      "command": [
+        "uv",
+        "sync",
+        "--extra",
+        "dev"
+      ],
+      "announced": true,
+      "expected_to_speak": true,
+      "detail": "",
+      "reasons": []
+    },
+    {
+      "arrival": "no hook fired; step 0 checks before it needs the code",
+      "entry_point": "step-0",
+      "action": "installed",
+      "expected_action": "installed",
+      "missing": [
+        "pydantic",
+        "pyyaml"
+      ],
+      "manager": "uv",
+      "command": [
+        "uv",
+        "sync",
+        "--extra",
+        "dev"
+      ],
+      "announced": true,
+      "expected_to_speak": true,
+      "detail": "",
+      "reasons": []
+    },
+    {
+      "arrival": "a returning candidate whose environment is current",
+      "entry_point": "session-start",
+      "action": "current",
+      "expected_action": "current",
+      "missing": [],
+      "manager": null,
+      "command": [],
+      "announced": false,
+      "expected_to_speak": false,
+      "detail": "",
+      "reasons": []
+    },
+    {
+      "arrival": "uv is absent, so venv + pip is used instead",
+      "entry_point": "session-start",
+      "action": "installed",
+      "expected_action": "installed",
+      "missing": [
+        "pydantic",
+        "pyyaml"
+      ],
+      "manager": "pip",
+      "command": [
+        "/home/user/job-search/.venv/bin/python3",
+        "-m",
+        "pip",
+        "install",
+        "-e",
+        ".[dev]"
+      ],
+      "announced": true,
+      "expected_to_speak": true,
+      "detail": "",
+      "reasons": []
+    },
+    {
+      "arrival": "no package manager at all — reported, never raised",
+      "entry_point": "session-start",
+      "action": "unavailable",
+      "expected_action": "unavailable",
+      "missing": [
+        "pydantic",
+        "pyyaml"
+      ],
+      "manager": null,
+      "command": [],
+      "announced": true,
+      "expected_to_speak": true,
+      "detail": "No package manager is available to install them. Install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh`, or install Python 3.12+ with pip, then start again.",
+      "reasons": []
+    },
+    {
+      "arrival": "the install itself fails — reported, never raised",
+      "entry_point": "session-start",
+      "action": "failed",
+      "expected_action": "failed",
+      "missing": [
+        "pydantic",
+        "pyyaml"
+      ],
+      "manager": "uv",
+      "command": [
+        "uv",
+        "sync",
+        "--extra",
+        "dev"
+      ],
+      "announced": true,
+      "expected_to_speak": true,
+      "detail": "network unreachable",
+      "reasons": []
+    },
+    {
+      "arrival": "a later run does not repeat the announcement",
+      "entry_point": "session-start",
+      "action": "installed",
+      "expected_action": "installed",
+      "missing": [
+        "pydantic",
+        "pyyaml"
+      ],
+      "manager": "uv",
+      "command": [
+        "uv",
+        "sync",
+        "--extra",
+        "dev"
+      ],
+      "announced": false,
+      "expected_to_speak": false,
+      "detail": "",
+      "reasons": []
+    }
+  ]
+}

@@ -38,6 +38,15 @@ from typing import Any
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
+# T52's second layer, and it has to come first: this is the step that runs before
+# any other, so a session whose SessionStart hook never fired arrives here with
+# an empty environment. `jobsearch.bootstrap` is stdlib-only precisely so it can
+# be imported at this point — every import below it needs pydantic, which is one
+# of the things it installs.
+from jobsearch.bootstrap import ensure_ready  # noqa: E402
+
+ensure_ready(_REPO_ROOT, entry_point="step-0")
+
 from jobsearch.identity import IdentityError, ProfileStore  # noqa: E402
 from jobsearch.process_spec import Step, StepList, load_steps  # noqa: E402
 from jobsearch.session import SessionError, SessionStore  # noqa: E402
