@@ -38,6 +38,7 @@ from jobsearch.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, Language, lo
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STORE_PATH = _REPO_ROOT / "corpus" / "labelled" / "ads.jsonl"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T4.json"
+LABEL_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T5.json"
 
 Split = Literal["elicitation", "evaluation"]
 
@@ -491,6 +492,75 @@ def write_evidence(
     return measured
 
 
+def measure_labels(
+    store_path: Path = DEFAULT_STORE_PATH,
+    dimensions_dir: Path = DEFAULT_DIMENSIONS_DIR,
+) -> dict[str, Any]:
+    """Measure T5 — the corpus the model was built from, and what a human said about it.
+
+    `corpus_size` is T5's declared gate and the only number the threshold reads.
+    It counts *collected* ads, which is what T5 was always gated on; the
+    labelling campaign that once accompanied it was retired on 2026-08-19 in
+    favour of the model reading each advert itself, and no threshold moved when
+    it was.
+
+    Everything beside `corpus_size` exists for what comes after. D-2 requires
+    `extraction_macro_f1` (T15) to be computed only over labels a person
+    decided, to emit `n` beside every score, and to refuse the score outright
+    for a dimension below the label floor rather than report a flattering one.
+    None of that is answerable without knowing how many human labels each
+    dimension actually has, so this is where that count lives — measured from
+    the store on every `make evidence` run rather than asserted in prose.
+
+    `labels_by_dimension` counts *labels*, not spans: one label can carry
+    several spans of the same ad, and it is the label that is one judgement.
+    """
+    store = load_store(store_path)
+    dimensions = load_dimensions(dimensions_dir)
+
+    by_dimension: dict[str, int] = {}
+    by_source: dict[str, int] = {}
+    by_split: dict[str, int] = {}
+    span_count = 0
+    for ad in store:
+        for label in ad.labels:
+            by_dimension[label.dimension] = by_dimension.get(label.dimension, 0) + 1
+            by_source[label.source] = by_source.get(label.source, 0) + 1
+            by_split[ad.split] = by_split.get(ad.split, 0) + 1
+            span_count += len(label.spans)
+
+    labelled = [ad for ad in store if ad.labels]
+    return {
+        "corpus_size": len(store),
+        "labelled_ad_count": len(labelled),
+        "label_count": sum(len(ad.labels) for ad in store),
+        "span_count": span_count,
+        "labels_by_source": dict(sorted(by_source.items())),
+        "labels_by_split": dict(sorted(by_split.items())),
+        "labels_by_dimension": dict(sorted(by_dimension.items())),
+        "dimensions_without_labels": sorted(
+            d.id for d in dimensions if not by_dimension.get(d.id)
+        ),
+        "languages": dict(
+            sorted(
+                (language, sum(1 for ad in store if ad.language == language))
+                for language in LANGUAGES
+            )
+        ),
+    }
+
+
+def write_label_evidence(
+    evidence: Path = LABEL_EVIDENCE_PATH,
+    store_path: Path = DEFAULT_STORE_PATH,
+    dimensions_dir: Path = DEFAULT_DIMENSIONS_DIR,
+) -> dict[str, Any]:
+    measured = measure_labels(store_path, dimensions_dir)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 # ── labelling CLI ───────────────────────────────────────────────────────────
 
 
@@ -938,10 +1008,25 @@ def _cmd_gate(args: argparse.Namespace) -> int:
     return 1 if measured["roundtrip_losses"] or measured["unknown_dimension_labels"] else 0
 
 
+def _cmd_labels(args: argparse.Namespace) -> int:
+    measured = write_label_evidence(Path(args.evidence), Path(args.store))
+    print(json.dumps(measured, ensure_ascii=False))
+    if measured["corpus_size"] == 0:
+        print("corpus is empty — nothing measured", file=sys.stderr)
+        return 3
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m jobsearch.harness", description=__doc__)
     parser.add_argument("--store", default=str(DEFAULT_STORE_PATH))
-    sub = parser.add_subparsers(dest="command", required=True)
+    # Not `required=True`: a bare `python -m jobsearch.harness` has to do
+    # something, because that is exactly how `make evidence` invokes every
+    # module it finds. Without it this module stayed outside the drift loop
+    # and `T4.json` sat committed at `label_count: 0` while the store held
+    # 39 — a number nothing re-measured, which is the failure that target
+    # exists to prevent. `_main` maps the empty command to both gates.
+    sub = parser.add_subparsers(dest="command")
 
     init = sub.add_parser("init", help="seed the store from the raw corpus")
     init.add_argument("--raw", default=str(RAW_CORPUS_PATH))
@@ -980,11 +1065,31 @@ def build_parser() -> argparse.ArgumentParser:
     gate.add_argument("--evidence", default=str(DEFAULT_EVIDENCE_PATH))
     gate.set_defaults(func=_cmd_gate)
 
+    labels = sub.add_parser("labels", help="write status/evidence/T5.json")
+    labels.add_argument("--evidence", default=str(LABEL_EVIDENCE_PATH))
+    labels.set_defaults(func=_cmd_labels)
+
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
+    """The CLI, and the evidence writer `make evidence` calls with no arguments.
+
+    Named `_main` rather than `main` for the same reason `jobsearch.suggestions`
+    is: the evidence target derives its module list by grepping `^def _main`,
+    so under the old name this module was invisible to the drift check.
+
+    A bare run writes both of this module's evidence files and reports the worse
+    exit code. Naming a subcommand still does exactly and only that subcommand,
+    so every gate block committed against `harness gate` keeps its meaning.
+    """
     args = build_parser().parse_args(argv)
+    if getattr(args, "func", None) is None:
+        # Carry `--store` through: it is a top-level flag, so re-dispatching
+        # without it would silently measure the default corpus instead of the
+        # one the caller named.
+        shared = ["--store", args.store]
+        return max(_main([*shared, "gate"]), _main([*shared, "labels"]))
     try:
         result: int = args.func(args)
     except HarnessError as exc:
@@ -1003,4 +1108,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_main())

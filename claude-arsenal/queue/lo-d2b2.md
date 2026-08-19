@@ -9,7 +9,8 @@ key: corpus_size
 ```
 
 ```bash
-echo "no gate command defined for T5 — replace this line with the command that writes status/evidence/T5.json" >&2; exit 1
+uv run python -m jobsearch.harness labels --evidence status/evidence/T5.json
+uv run --extra dev pytest tests/test_corpus.py tests/test_corpus_raw.py -q
 ```
 
 The two blocks do different jobs and both are required. The `bash` block
@@ -18,8 +19,11 @@ number in it against the threshold. Without the first, a stale or hand-written
 evidence file passes unchallenged; without the second, a command that exits 0
 counts as a gate whatever it measured.
 
-The default command fails on purpose. A task whose measurement is undefined has
-not passed its gate — it has not been measured. Replace it as part of the work.
+`corpus_size` counts *collected* ads, which is what T5 was always gated on —
+the threshold predates the labelling campaign and did not move when the
+campaign was retired. The rest of `T5.json` — `labels_by_dimension`,
+`dimensions_without_labels`, `labels_by_split` — is what D-2 and T15 read to
+decide whether `extraction_macro_f1` can be computed at all.
 
 ## Tests
 

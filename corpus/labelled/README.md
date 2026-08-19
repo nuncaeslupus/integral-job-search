@@ -66,6 +66,8 @@ uv run python -m jobsearch.harness set <ad-id> <dimension> <value> --quote "<ver
 uv run python -m jobsearch.harness status                  # counts, splits, agreement
 uv run python -m jobsearch.harness agreement               # self-agreement report
 uv run python -m jobsearch.harness gate                    # write status/evidence/T4.json
+uv run python -m jobsearch.harness labels                  # write status/evidence/T5.json
+uv run python -m jobsearch.harness                         # both, as `make evidence` runs it
 ```
 
 `set` locates the span by searching for a quote copied out of the ad, and

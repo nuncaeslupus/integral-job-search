@@ -1,108 +1,114 @@
-# Session handover — 2026-08-18 (T51 session)
+# Session handover — 2026-08-19 (T5 closed; the labelling campaign is retired)
+
+## Read this first
+
+**The hand-labelling campaign is over, by the owner's decision.** They worked
+through four pre-marked ads, judged the model's read good enough, and said:
+
+> *"some other dimensions can be added, but the job you did is really good. So I
+> don't think we need to do this annotation step. The LLM must read the text and
+> find those dimensions alone. If, when working on a test session I can see some
+> other dimensions to be added, we'll use that time to do that."*
+
+Do not restart it. Do not ask the owner to label ads. Human labels accrue from
+ordinary use of the tool from here on.
 
 ## State
 
-**T51 is done against PR #36 — but the session's real finding was in the queue,
-not in the code.**
-
 | what | where |
 |------|-------|
-| T51 — `$INTEGRAL_HOME` resolver, candidate state refused inside any git work tree | PR #36 (open) |
-| 17 stale queue rows advanced to `merged` | `arsenal-queue` commit `6c271e8` |
-| S10 (`lo-5efb`) recorded `blocked` — it is waiting on an upstream change, not on work here | `arsenal-queue` commit `f48627c` |
+| PR #41 — 828 pre-marks, banked labels, span-merge on import, `talking_clients` | **merged** as `2b6c57a` |
+| PR #42 — T5's measurement, harness inside the drift loop | **open**, head `7faa498` |
+| T5 (`lo-d2b2`) | `done` on `arsenal-queue`, `--pr` #42; flips to `merged` when #42 lands |
+| Corpus | 100 ads · 828 pre-marks over 84 · 16 blind-control · **39 human labels over 4 ads** |
+| Dimension model | **25** (added `talking_clients`, `leadership`, `collaboration_mode`) — at the planned ceiling |
 
-## Read this first: the ledger had drifted, and the loop was about to re-do merged work
+`queue_doctor.sh`: 0 findings. All five local gates green on `7faa498`.
 
-`queue_eval.sh` handed out **S7 (`lo-9ff0`) — merged in PR #23 in July.** It was
-not a fluke. Comparing `origin/main`'s `tasks.jsonl` against `arsenal-queue`'s
-found **17 rows** that main records as `merged` (PRs #23, #24, #25, #27, #28)
-and the coordination branch still recorded as `open`, plus one (`lo-2293`,
-T29) that the coordination branch had `done` and main still has `open`.
+## What T5 closing unblocks
 
-The cause is structural, not a slip: **`queue_sync.sh` ports rows that are
-*absent* and by design "never touches existing claim/release state."** So a
-status recorded on main — by a laptop session running `reconcile_merged.sh`, or
-by session-end housekeeping that commits `tasks.jsonl` — never reaches the
-coordination branch, and nothing detects it. `queue_doctor.sh` reported **0
-findings** both before and after: it audits one ledger for internal
-consistency, and cross-branch divergence is outside what it looks at.
+T5 was the choke point: T9, T14 and D-2 blocked on it directly, and T15's whole
+chain (T16, T17, T18, T19, T20, T21, T42, T43, T44, T45, T46, S6, T47) through
+T14. Unblocked and `open` now:
 
-**Both are worth an upstream issue** (`claude-arsenal`): a `queue_sync.sh
---reconcile-status` that advances a row when the default branch's status is
-strictly further along the lifecycle, and a `queue_doctor.sh` check that
-compares the two ledgers at all. Until then, **diff the two ledgers by hand at
-session start** — the reconcile script used here is a dozen lines and worth
-carrying upstream rather than rewriting.
+```
+p5   lo-b422  T9   reaction elicitation
+p5   lo-3100  T14  lexical prefilter          ← read its scope note first
+p5   lo-77a6  D-2  the measurement            ← recommended next
+p5   lo-803e  T53  connector contract pack
+p5   lo-9f72  T55  rename to integral-job-search
+p70  lo-1af2  T25  [LAPTOP] broaden the corpus
+p1   lo-277b  T12  [LAPTOP] portal connector
+```
 
-`lo-2293` (T29) is still `open` on main while the coordination branch says
-`done`. A laptop session should run `reconcile_merged.sh` and commit the
-result, which also flips it to `merged`.
+`[LAPTOP]`-tagged tasks are refused by `release.sh done` in a cloud session.
 
-## T51, in one paragraph
+## The one thing that must not be got wrong
 
-`jobsearch.state_home` resolves the store root from `$INTEGRAL_HOME`, then
-`$XDG_DATA_HOME/integral-job-search`, then `~/.integral-job-search` — and
-**refuses any path inside a git work tree**, with `--dev` / `INTEGRAL_DEV=1` as
-the single explicit escape. Containment walks the resolved path's own ancestry
-rather than comparing against this repository (a store inside *any* checkout is
-the failure), and `.git` is tested with `exists()` because a linked work tree
-and a submodule carry it as a file. Every call site now resolves through it:
-`identity.DEFAULT_PROFILES_ROOT` became the lazy `default_profiles_root()`, and
-the thirteen step checkpoints default `--input-dir` to the resolver. Gate:
-`state_paths_inside_a_repo == 0` over `paths_checked = 22` (8 probes + 14 call
-sites). Spec §6 now states where the tree actually roots.
+Skipping the annotation step did not remove the measurement problem — it moved
+it up a layer, and D-2 (`lo-77a6`) now records the new shape.
 
-## Two lessons worth carrying
+The old failure: gold spans mined with the dimensions' own cues, so scoring
+extraction against them asked a regex to re-find the string it was written from.
+That is closed, and measured rather than asserted —
+`suggestion_cue_agreement == 0.372`, `cue_unreachable == 520/828`.
 
-1. **Evidence must be a function of the repository, not of the run.** T51's
-   probes build a throwaway git work tree, and `mkdtemp`'s name landed in the
-   committed evidence — so CI's "evidence is current" failed on a repository
-   nobody had touched. It passed locally only because `make evidence` compares
-   with `git diff`, which **does not see untracked files**: the check has no
-   teeth until the evidence is committed. Temp paths are now redacted to
-   `<tmp>`, with a test that two measurements are equal.
-2. **An audit that reads source has to read *code*.** The call-site scanner
-   first reported `identity.py`'s own paragraph explaining what T51 removed as
-   an instance of it. `tokenize` now blanks comments and docstrings — but
-   deliberately *not* ordinary string literals, because the construction being
-   hunted ends in one (`… / "profiles"`). And a file that cannot be tokenised
-   is a finding, never a silent pass: `SiteCheck.passes` reads "no recorded
-   reason", after the flag-based version let an unparseable file through clean.
+The new failure, one layer up: **the extractor T15 builds is the same kind of
+reader that wrote `suggestions.json`, doing the same job on the same adverts.**
+Scoring it against those marks measures self-consistency and passes near 1.0 for
+exactly the reason the cue-derived gold did. Independence from the cues is not
+independence from the model. The only independent reader left is the owner.
 
-3. **A guarantee enforced on one path, while a second path walks around it.**
-   Review (Qodo) found both halves of this, and both were real. The thirteen
-   checkpoints took `--input-dir` as a bare `Path`, so `--input-dir ./profiles`
-   wrote a candidate's session file into the clone with nobody passing `--dev` —
-   the resolver was airtight and the flag beside it was not. Worse, **the gate
-   had the same hole one level up**: the audit asked only "does this file
-   resolve through the resolver?", which all thirteen satisfied while every one
-   of them took the flag unguarded, so it measured 0 over a live leak. The
-   containment rule is now a function (`ensure_outside_a_work_tree`) both ways
-   in must call, and a site that accepts an explicit root must name it.
-   The second half: the leak count read the dev escape as "the variable is
-   present" while `dev_mode` authorises only `1/true/yes/on`, and the exit
-   status keyed on the metric while `shortfalls` was already populated and
-   ignored — so a demonstrably broken gate could exit 0. **When adding a gate,
-   ask what a *second* way in would do to it.**
+So, binding on T14 and T15 alike:
 
-## Queue state
+1. Score only labels whose `source` is `human`, `confirmed` or `edited`. Never
+   `suggestions.json`, never `extraction.gold`.
+2. Emit `n` beside every score, and **refuse to emit the score at all** below a
+   per-dimension label floor — naming the dimensions that could not be measured.
+   Unmeasured is a third outcome, not a pass and not a fail.
+3. Agreement against the pre-marks may still be computed. It is not F1 and must
+   never be written to the `extraction_macro_f1` key.
 
-`queue_batch.sh` now offers, in order: **T25 (`lo-1af2`, `[LAPTOP]`)** — skip in
-a cloud session — then **T14 (`lo-3100`)**, **T52 (`lo-b2de`, now unblocked by
-T51)**, **T53 (`lo-803e`)**, **T55 (`lo-9f72`, the rename)**.
+`status/evidence/T5.json` carries the counts this rests on, regenerated on every
+`make evidence` run: 14 labels in the evaluation half, no dimension above 4, and
+`mission_alignment`, `process_formality`, `social_intensity`, `work_intensity`
+with none at all.
 
-S10 is `blocked`, not open: `LISTING_BUDGET_CHARS = 8000` is still a module
-constant in the vendored `audit_library.py` with no override, so
-`claude-arsenal` issue #143 has to land first. Confirmed against the subtree
-this session — do not re-dispatch it.
+## Recommended order
 
-## Still the owner's
+1. **D-2 (`lo-77a6`)** — small, and it is the contract T14/T15 have to satisfy.
+   Give `extraction.gold` its `derived_from: cue | human` field so rule 1 is
+   enforceable by the schema rather than by memory.
+2. **T14 (`lo-3100`)** — but read its scope note first. The recommendation is to
+   **fold it into T15** as the rules stage T15's own v2 note already describes,
+   rather than give it a separate gate against a corpus that cannot support one.
+   That is a scope decision: raise it with the owner, do not decide it inside a
+   worker run.
+3. **T15 (`lo-25b1`)** — the task that *is* the owner's decision. Blocked until
+   T14 resolves either way.
 
-Whether the sources repository is public from the start, and whether this
-repository is public. Neither gates any task above.
+## Two things carried forward, both needing the owner
 
-## Next action
+- **Coining dimensions is now a live-session activity** (T26, and S11's test
+  mode). Three have been coined that way. What makes one usable: a distinct
+  value per rung, a name recognisable six months later, and a `tell` — the
+  wording that rung actually takes in an advert. `leadership` arrived with two
+  rungs meaning the same thing; `collaboration_mode` arrived as a non-monotone
+  scale named `autonomy`, colliding with `team_autonomy`. Both were repaired in
+  #41 and the reasoning is in each file's header comment.
+- **`dimensions/process_formality.yaml`** scores manfred-8360 at **+0.5** on a
+  span opening *"se huye de los sprints infinitos"* — the ad rejecting ceremony
+  — while the shipped suggestion reads it as **−0.6**. Inside D-2's scope; flagged
+  on #41, not seeded as a duplicate task.
 
-Watch PR #36 to green and merge, then **T52** (first-run bootstrap — T51 is its
-dependency and just landed) or **T55** (the rename, best done before T52–T54
-build on the old name).
+## Environment
+
+GitHub Actions is out of runner minutes. Every job on every workflow fails in
+3–5 seconds with `runner_id: 0`, `runner_name: ""`, `main`'s own HEAD included.
+Confirmed on `da389b1` (job 96236765689) and `7faa498` (job 96241015351).
+**Diagnose once per head, then run the five gates locally** — never push a
+speculative CI fix:
+
+```bash
+make lint && make test && make evidence && make verify-subtree && make verify-gates
+```
