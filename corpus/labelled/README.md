@@ -68,76 +68,99 @@ corpus acquires spans that point at the wrong words while still validating.
 
 ## Fast path — the labelling page
 
-Typing a quote correctly, in Catalan or Spanish, in a terminal, 300+ times
-(100 ads × up to 22 dimensions) is the actual bottleneck `set` alone leaves
-open — a mistyped accent is rejected outright by the same verbatim check that
-protects the corpus. `tools/labelling_page.py` and `harness import` remove
-the typing without touching the judgement:
+Labelling dimension-first meant 22 cards beside each ad: 2,200 decisions offered
+across the corpus to record the five or six per ad that are really there, and no
+way to notice a dimension without already holding all 22 in mind.
+
+`tools/labelling_page.py` inverts it. The ad arrives already marked — each span
+highlighted, with a chip naming its dimension and proposed rung:
 
 ```bash
 uv run python tools/labelling_page.py           # writes corpus/labelled/label.html
-open corpus/labelled/label.html                 # or: xdg-open / double-click — file://, no server
+open corpus/labelled/label.html                 # file://, no server, no network
 ```
 
-Work through the ads in the page: select the words in the ad that evidence a
-dimension with the mouse — the page reads the browser's own selection back as
-the quote, so it is always an exact substring of the ad and can never fail
-`set`'s verbatim check — enter a value, and tick **negated** when the ad
-*denies* the dimension ("sense guàrdies", "no on-call") rather than being
-silent about it. Progress accumulates in the browser's `localStorage`, so
-closing the tab does not lose it; a visible JSON blob on the page is the
-running export.
+Read the ad once and react to what is marked:
 
-When ready — after one ad or after all 100 — copy that blob to a file and
-apply it in one atomic batch instead of one `set` call per label:
+| key | does |
+|-----|------|
+| `Enter` | confirm the focused mark |
+| `Backspace` | delete it |
+| `c` | change its dimension or rung |
+| `j` / `k` | move between marks |
+| `n` | next unresolved ad |
+| `[` / `]` | previous / next ad |
+
+Selecting text the marks missed opens a picker grouped into five titled
+sections, with type-to-filter. Choosing a dimension offers its **named rungs**
+with a line on what each looks like in an ad — no number is ever typed, and
+every rung the page offers is one `import` accepts.
+
+Export, then apply the whole batch at once:
 
 ```bash
-uv run python -m jobsearch.harness import labels.json
-# or, piping the clipboard straight through:
-pbpaste | uv run python -m jobsearch.harness import -
+uv run python -m jobsearch.harness import t5-labels.json
 ```
 
-`import` is exactly as strict as `set` — the same verbatim-quote search, the
-same refusal of an absent or ambiguous quote — run over the whole batch before
-anything is written: one bad row refuses the entire file rather than
-half-applying it. Re-importing the same export (or a superset of it, after
-labelling more ads) is safe; it overwrites in place rather than duplicating.
+### A proposal is not a label
 
-The page also shades where a dimension's extraction regex matches the ad
-text, purely so the eye lands on the right paragraph — it never sets a value,
-never picks a dimension, and never fills a quote. v0's gold examples are
-already known to be cue-derived rather than independent (D-2,
-`status/plan.md`), and `extraction_macro_f1` is measured against this
-corpus — a page that pre-filled from its own cues would let that gate check
-the extractor against itself. The page says so in its own UI, above the ad,
-every time it is opened.
+A dashed mark is a *proposal* and is never exported. Only what you confirm or
+change reaches the corpus, and `Label.source` records which:
 
-## Self-agreement
+| source | means |
+|--------|-------|
+| `confirmed` | you read a proposal and accepted it unchanged |
+| `edited` | you changed its dimension, rung or span |
+| `human` | you created it yourself; no proposal was involved |
 
-The labelling protocol calls for re-labelling a subset at least two weeks later
-and reporting self-agreement (`status/specification.md`, open questions). Pass
-`--round 2` on the second pass; `agreement` reports **Cohen's kappa** over the
-sign of each value (negative / absent / positive).
+Provenance is *derived* by comparing against the original proposal, not stored
+as a flag the page could set wrongly.
 
-Only ads actually revisited are compared. Within those, a dimension labelled in
-one round and not the other counts as a **disagreement** — present versus absent
-— rather than being skipped: comparing only the dimensions both rounds share
-would discard exactly the cases where the two passes differed most, so agreement
-would rise the more the labeller changed their mind.
+### Where the marks come from, and why not from the cues
 
-Kappa rather than raw agreement, because most dimensions are absent on most ads:
-two passes that both score everything zero agree 100% of the time and have
-established nothing. In that degenerate case kappa is 0/0, and the report says
-`kappa: null` with the reason rather than claiming perfect agreement.
+They come from `suggestions.json`, **not** from `Dimension.extraction.cues`.
+`extraction_macro_f1` (T15) is measured against these labels, so confirming the
+extractor's own regex output would make the gate score the extractor against
+itself and pass regardless of merit — D-2. The page carries no cue data at all,
+so this is closed by construction rather than by rule.
 
-## Gate
+`jobsearch.suggestions` measures what that rule cannot prove:
 
-`corpus_harness_roundtrip_loss == 0` — write the store, read it back, and
-compare text, splits, and every span **by the text it extracts**, not merely by
-its integers. An offset that survives as a number but covers different
-characters is the failure this exists to catch.
+```bash
+uv run python -m jobsearch.suggestions        # writes status/evidence/T5-suggestions.json
+```
 
-Because the store is unlabelled until T5, the gate also measures a copy carrying
-one probe label per ad, with offsets taken from a real cue match in real ad
-text. Without it the roundtrip would preserve offsets vacuously, having none to
-preserve.
+`suggestion_cue_agreement` is the fraction of marks the cues would have produced
+anyway; `cue_unreachable` is its complement, and is the quantity that matters —
+those are the marks carrying phrasing no regex reaches.
+
+### The control ads
+
+About 15% of ads (stratified by language) ship with **no marks at all**, and the
+page says so when you reach one. Label them as you read them. Without a blind
+baseline, "the labeller agreed with 92% of proposals" cannot be told apart from
+rubber-stamping. Do not skip them — they are what the rest of the run is
+measured against.
+
+### Coining a dimension mid-read
+
+`+ new dimension` in the picker, when an ad says something none of the 22 can
+hold. It appears in the export as a *proposal* together with the ad you coined
+it at — every earlier ad was read without it existing, so those get swept for it
+rather than assumed clean. `harness import` reports proposals and never writes
+`dimensions/<id>.yaml`: changing the model's spine belongs in a reviewed diff,
+not in an import that is also writing to the corpus.
+
+### Quotes, not offsets
+
+A mark crosses into the browser as a quote, and the page resolves it there. A
+Python offset counts **code points**; a JavaScript offset counts **UTF-16 code
+units**. These ads open with 📢 and contain 🫵🏾 (two surrogate pairs), so an
+offset computed in Python and used in JS slides every later span leftwards —
+observed citing "so. Manejarás \*\*cientos de miles de eventos por segun"
+where the evidence was "Manejarás \*\*cientos de miles de eventos por
+segundo\*\*". Plausible in the panel, wrong in the corpus. It is the same
+failure this README rules out for byte offsets, one encoding layer up.
+
+The page also widens an ambiguous quote itself on export, rather than asking you
+to extend it until unique — the text determines that, not you.
