@@ -627,6 +627,25 @@ def locate_quote(ad: LabelledAd, quote: str) -> tuple[int, int] | str:
     return start, start + len(quote)
 
 
+def _merged_source(sources: list[LabelSource]) -> LabelSource:
+    """The provenance of one label evidenced by several imported spans at once.
+
+    `confirmed` is the specific claim that a person accepted a proposal exactly
+    as it came, and it is the numerator of every confirm rate we will read. A
+    label built from one confirmed span and one the labeller added themselves is
+    not that, so `confirmed` survives only when every span was confirmed, and
+    `human` only when no proposal was involved at all. Everything in between
+    reports as `edited` — a proposal was there, and what came out differs from
+    it, which is exactly what that word means.
+    """
+    unique = set(sources)
+    if unique == {"confirmed"}:
+        return "confirmed"
+    if unique == {"human"}:
+        return "human"
+    return "edited"
+
+
 def import_labels(
     store: list[LabelledAd],
     rows: list[dict[str, Any]],
@@ -652,6 +671,14 @@ def import_labels(
     Returns `(updated_store_or_original, results)`. `results` has one entry
     per row, each `{"index", "ad_id", "dimension", "status", "reason"?,
     "start"?, "end"?}` with `status` one of `"applied"` or `"refused"`.
+
+    `"applied"` is a statement about that **row**, not about the batch: it means
+    the row validated and located, and it stays `"applied"` even when a later
+    row's refusal rolls the whole import back. Whether anything reached disk is
+    the *store* return value, which is the original list untouched if any row was
+    refused — and `_cmd_import` says so in as many words ("N row(s) refused, M
+    row(s) would have applied — nothing written"). A caller must read the store,
+    or the presence of any refusal, rather than counting `"applied"` rows.
     """
     by_id = {ad.id: ad for ad in store}
     results: list[dict[str, Any]] = []
@@ -711,27 +738,72 @@ def import_labels(
         located.append((index, row, start, end))
         results.append({**base, "status": "applied", "start": start, "end": end})
 
+    # Several rows can legitimately target the same (ad, dimension, round): the
+    # labelling page lets one dimension be marked on more than one span, and
+    # `Label.spans` is a list precisely so a judgement evidenced in three places
+    # keeps all three. They are grouped here and merged into one label.
+    #
+    # This used to key the apply pass by that triple and let the last row win,
+    # which silently discarded every earlier span of a repeated dimension while
+    # reporting all of them `applied`. The first real export hit it: an ad whose
+    # pay was stated twice, whose English requirement was stated twice and whose
+    # experience floor was stated twice lost one span of each — human labelling
+    # work disappearing between the export and the store, with nothing in the
+    # results saying so.
+    grouped: dict[tuple[str, str, int], list[tuple[int, ImportRow, int, int]]] = {}
+    for entry in located:
+        grouped.setdefault((entry[1].ad_id, entry[1].dimension, entry[1].round), []).append(entry)
+
+    for (ad_id, dimension_id, round_), entries in grouped.items():
+        # Spans merge only when they say the same thing. Rows that agree on the
+        # dimension but disagree on its value are not extra evidence for one
+        # judgement, they are two judgements — and merging them would have to
+        # pick one, which is the silent choice this whole change exists to stop.
+        for field in ("value", "negated", "labeller"):
+            seen = {getattr(row, field) for _i, row, _s, _e in entries}
+            if len(seen) == 1:
+                continue
+            all_valid = False
+            shown = ", ".join(repr(value) for value in sorted(seen, key=str))
+            for index, _row, _start, _end in entries:
+                results[index] = {
+                    "index": index,
+                    "ad_id": ad_id,
+                    "dimension": dimension_id,
+                    "status": "refused",
+                    "reason": (
+                        f"{len(entries)} rows label {dimension_id!r} on {ad_id} in round "
+                        f"{round_} but disagree on {field} ({shown}) — one dimension holds "
+                        "one value per round, so these cannot be merged into one label"
+                    ),
+                }
+            break
+
     if not all_valid:
         return store, results
 
     updated_by_id = dict(by_id)
-    for _index, row, start, end in located:
-        ad = updated_by_id[row.ad_id]
+    for (ad_id, dimension_id, round_), entries in grouped.items():
+        ad = updated_by_id[ad_id]
+        agreed = entries[0][1]
         label = Label(
-            dimension=row.dimension,
-            value=row.value,
-            spans=[Span(start=start, end=end)],
-            negated=row.negated,
-            labeller=row.labeller,
-            round=row.round,
-            source=row.source,
+            dimension=dimension_id,
+            value=agreed.value,
+            spans=[
+                Span(start=start, end=end)
+                for start, end in sorted({(s, e) for _i, _r, s, e in entries})
+            ],
+            negated=agreed.negated,
+            labeller=agreed.labeller,
+            round=round_,
+            source=_merged_source([row.source for _i, row, _s, _e in entries]),
         )
         kept = [
             existing
             for existing in ad.labels
-            if not (existing.dimension == row.dimension and existing.round == row.round)
+            if not (existing.dimension == dimension_id and existing.round == round_)
         ]
-        updated_by_id[row.ad_id] = ad.model_copy(update={"labels": [*kept, label]})
+        updated_by_id[ad_id] = ad.model_copy(update={"labels": [*kept, label]})
 
     return list(updated_by_id.values()), results
 

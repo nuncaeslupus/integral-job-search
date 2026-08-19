@@ -1,0 +1,23 @@
+{
+  "method": "llm_read",
+  "generated_at": "2026-08-19T18:33:07+00:00",
+  "suggestion_violations": 0,
+  "violations": [],
+  "ads_with_suggestions": 84,
+  "blind_control_count": 16,
+  "suggestion_count": 828,
+  "suggestion_cue_agreement": 0.372,
+  "cue_unreachable": 520,
+  "cue_unreachable_examples": [
+    "feinaactiva-09202623802:team_autonomy",
+    "feinaactiva-FA20230113O56:contract_stability",
+    "feinaactiva-FA20230113O56:mission_alignment",
+    "feinaactiva-FA92317375:contract_stability",
+    "feinaactiva-FA92317375:remote_arrangement",
+    "feinaactiva-FA92317375:seniority_expectation",
+    "feinaactiva-FA92317375:stack_modernity",
+    "feinaactiva-FA92317375:compensation_transparency",
+    "feinaactiva-FA92317375:social_intensity",
+    "feinaactiva-FA92317378:remote_arrangement"
+  ]
+}

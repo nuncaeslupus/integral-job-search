@@ -166,3 +166,44 @@ def test_committed_store_labels_all_land_on_a_rung() -> None:
         and DIMENSIONS[label.dimension].level_for(label.value) is None
     ]
     assert not offenders, offenders
+
+
+@pytest.mark.parametrize(
+    ("sources", "expected"),
+    [
+        (["confirmed", "confirmed"], "confirmed"),
+        (["human", "human"], "human"),
+        (["confirmed", "human"], "edited"),
+        (["confirmed", "edited"], "edited"),
+        (["human", "edited"], "edited"),
+    ],
+)
+def test_merged_spans_only_stay_confirmed_when_every_span_was(
+    sources: list[str], expected: str
+) -> None:
+    """A confirm rate counts labels a person accepted exactly as proposed.
+
+    When two spans of one dimension merge into one label, that claim has to
+    survive the merge honestly: a label built from one confirmed span and one
+    the labeller added themselves was not accepted as proposed, and counting it
+    as `confirmed` would inflate the very number the blind-control cohort exists
+    to make readable. `confirmed` therefore needs unanimity, `human` needs no
+    proposal to have been involved at all, and every mix reports as `edited`.
+    """
+    text = "Guardias rotativas cada mes y guardias localizadas los fines de semana."
+    store = [ad(text=text)]
+    quotes = ["Guardias rotativas", "guardias localizadas"]
+
+    updated, results = import_labels(
+        store,
+        [
+            row(quote=quote, source=source)
+            for quote, source in zip(quotes, sources, strict=True)
+        ],
+        DIMENSIONS,
+    )
+
+    assert all(result["status"] == "applied" for result in results)
+    assert len(updated[0].labels) == 1
+    assert updated[0].labels[0].source == expected
+    assert len(updated[0].labels[0].spans) == 2

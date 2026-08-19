@@ -801,15 +801,32 @@ def write_evidence(
 
 
 def _main(argv: list[str]) -> int:
-    """Write one of the two gate evidence files.
+    """Write this module's gate evidence.
 
-        python -m jobsearch.dimensions [path]              → T2, schema violations
-        python -m jobsearch.dimensions --coverage [path]    → T3, extractor coverage
-        python -m jobsearch.dimensions --sides [path]       → T23, side agreement
+        python -m jobsearch.dimensions                     → T2, T3 and T23
+        python -m jobsearch.dimensions <path>              → T2, schema violations
+        python -m jobsearch.dimensions --coverage [path]   → T3, extractor coverage
+        python -m jobsearch.dimensions --sides [path]      → T23, side agreement
+
+    The bare run writes **all three**, because that is the form `make evidence`
+    uses: it derives its module list by grepping for `^def _main` and runs each
+    one once, with no way to know a module owns more than one measurement. Under
+    the old behaviour a bare run wrote T2 alone, so T3 and T23 sat in the tree
+    unregenerated and undrift-checked — and the 23rd dimension landed with both
+    of them still saying 22, which is exactly the stale-evidence failure that
+    target exists to catch. Naming a path or a flag still writes just that one,
+    so every gate block in the queue keeps its precise invocation.
     """
     coverage = "--coverage" in argv[1:]
     sides = "--sides" in argv[1:]
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+
+    if not coverage and not sides and not positional:
+        return max(
+            _main([argv[0], str(DEFAULT_EVIDENCE_PATH)]),
+            _main([argv[0], "--coverage"]),
+            _main([argv[0], "--sides"]),
+        )
 
     if sides:
         target = Path(positional[0]) if positional else DEFAULT_SIDE_EVIDENCE_PATH

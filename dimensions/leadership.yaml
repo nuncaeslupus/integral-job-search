@@ -1,0 +1,126 @@
+# Coined by the labeller at tecnoempleo-98201f7d82b073d32d45, an ad asking for
+# someone able to "liderar y coordinar equipos técnicos" and to "gestionar
+# varios interlocutores y equipos de trabajo". None of the 23 could hold it:
+# `seniority_expectation` measures years asked for, `mentoring_culture` measures
+# what the employer gives *you*, and `team_autonomy` measures who decides — none
+# of them says whether people report to you.
+#
+# The coined rungs named 0.0 "Absent" and 0.33 "No", which are one class under
+# two names; the schema refuses duplicates and a labeller could not choose
+# between them either. 0.33 is renamed to the case that was actually missing —
+# leading the work without leading anyone.
+id: leadership
+kind: soft
+polarity: unipolar
+group: people
+label:
+  en: Leadership and managing
+  es: Liderazgo y gestión de equipos
+  ca: Lideratge i gestió d'equips
+definition: >
+  How much of the role is leading other people — a team named as yours, several
+  of them, or a department — as opposed to being one of the people led. Leading
+  a project without anyone reporting to you is its own rung, not the same thing.
+levels:
+  - value: 0.0
+    label:
+      en: "Nobody to lead"
+      es: "Sin equipo a cargo"
+      ca: "Sense equip a càrrec"
+    tell: "no team is named as the role's own; a structured field may say so outright — 'Gestión de equipos: No'"
+  - value: 0.33
+    label:
+      en: "Leads work, not people"
+      es: "Lidera el trabajo, no a personas"
+      ca: "Lidera la feina, no persones"
+    tell: "leads a project, an implementation or the technical direction, with nobody named as reporting in"
+  - value: 0.67
+    label:
+      en: "A small team"
+      es: "Un equipo pequeño"
+      ca: "Un equip petit"
+    tell: "leading or coordinating one team named as part of the job"
+  - value: 1.0
+    label:
+      en: "A big team, or several"
+      es: "Un equipo grande, o varios"
+      ca: "Un equip gran, o diversos"
+    tell: "several teams, a department, or managers reporting in"
+elicitation:
+  questions:
+    - id: lead_q1
+      text:
+        en: >
+          Tell me about a time you were responsible for other people's work rather than
+          your own. How many, how did it come about, and what changed about your day?
+        es: >
+          Cuéntame alguna vez en que fuiste responsable del trabajo de otras personas y no
+          del tuyo. ¿Cuántas eran, cómo llegó a pasar y qué cambió en tu día a día?
+        ca: >
+          Explica'm alguna vegada en què vas ser responsable de la feina d'altres persones
+          i no de la teva. Quantes eren, com va anar i què va canviar del teu dia a dia?
+extraction:
+  cues:
+    en:
+      - pattern: "\\b(technical\\s+leader(ship)?|lead\\s+(the\\s+)?(architecture|implementation|delivery|design))\\b"
+        value: 0.33
+        negatable: false
+      - pattern: "\\b(lead|manage|run)\\s+(a\\s+|the\\s+|your\\s+|our\\s+)?(small\\s+)?(team|squad)\\b"
+        value: 0.67
+        negatable: true
+      - pattern: "\\b(engineering\\s+manager|head\\s+of\\s+engineering|direct\\s+reports?|(lead|manage)\\s+(several|multiple)\\s+teams)\\b"
+        value: 1.0
+        negatable: false
+    es:
+      # The noun phrase "Gestión de equipos" is deliberately not a cue for the
+      # leading rungs: tecnoempleo boards print it as a structured field whose
+      # value is often "No", so matching the phrase would score an ad that says
+      # outright there is no team to manage.
+      - pattern: "gesti[óo]n\\s+de\\s+equipos\\s+no\\b"
+        value: 0.0
+        negatable: false
+      - pattern: "(liderar|dirigir)\\s+(la\\s+)?(implementaci[óo]n|proyectos?|la\\s+arquitectura)"
+        value: 0.33
+        negatable: false
+      - pattern: "(liderar|dirigir|coordinar)\\s+(y\\s+\\w+\\s+)?(un\\s+|el\\s+|los\\s+|nuestros\\s+)?equipos?\\b"
+        value: 0.67
+        negatable: true
+      - pattern: "(gestionar|liderar|dirigir)\\s+(varios|m[úu]ltiples|diversos)\\s+[^.\\n]{0,40}equipos?|jefe\\s+de\\s+equipo|responsable\\s+de\\s+equipo"
+        value: 1.0
+        negatable: false
+    ca:
+      - pattern: "[Ll]iderar\\s+(la\\s+)?(implementaci[óo]|projectes?|l'arquitectura)"
+        value: 0.33
+        negatable: false
+      - pattern: "(liderar|dirigir|coordinar)\\s+(un\\s+|el\\s+|els\\s+)?equips?\\b|cap\\s+d'?equip"
+        value: 0.67
+        negatable: true
+      - pattern: "(diversos|m[úu]ltiples)\\s+equips|responsable\\s+d'equip"
+        value: 1.0
+        negatable: false
+  gold:
+    # The labeller's own two spans on the ad that made them coin it. They sit on
+    # different rungs, which is why the ad's single label had to be settled at
+    # the higher one: "varios ... equipos de trabajo" is more than one team.
+    - ad_id: tecnoempleo-98201f7d82b073d32d45
+      language: es
+      span: "Capacidad para liderar y coordinar equipos técnicos."
+      value: 0.67
+    - ad_id: tecnoempleo-98201f7d82b073d32d45
+      language: es
+      span: "Capacidad para gestionar varios interlocutores y equipos de trabajo."
+      value: 1.0
+    # The negative case, stated by the ad rather than inferred from silence.
+    - ad_id: tecnoempleo-799b12ca520d03c0e743
+      language: es
+      span: "Gestión de equipos No"
+      value: 0.0
+    - ad_id: wwr-faire-senior-staff-data-engineer-platform-data-and-analytics
+      language: en
+      span: "Striking the right balance of technical leadership and hands-on development."
+      value: 0.33
+    - ad_id: feinaactiva-FA92322533
+      language: ca
+      span: "Liderar projectes de TI, inclòs el disseny i implementació de nous sistemes i serveis."
+      value: 0.33
+methods_ref: METHODS.md#26-ad-wording-as-signal

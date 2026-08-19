@@ -7,7 +7,9 @@ from an ad, the axes the ranker compares on, and later the CV and interview work
 are all projections of these files. Changing an `id` is a breaking change
 everywhere; adding a file is additive.
 
-22 dimensions, within the plan's 20–25 range for v0.
+23 dimensions, within the plan's 20–25 range for v0. The 23rd, `talking_clients`,
+was coined by the labeller mid-read rather than designed up front — which is the
+labelling page's `+ new dimension` path working as intended.
 
 | id | kind | polarity | group | rungs (what you actually click) |
 |----|------|----------|-------|--------------------------------|
@@ -28,6 +30,7 @@ everywhere; adding a file is additive.
 | `seniority_expectation` | hard | unipolar | `dealbreakers` | Junior · Mid-level · Senior |
 | `social_intensity` | soft | bipolar | `people` | Solitary and focused · Not stated · Group-heavy |
 | `stack_modernity` | soft | bipolar | `the_work` | Legacy estate · Not stated · Current and active |
+| `talking_clients` | soft | unipolar | `the_work` | None · A little · Some relationship · Job is about that |
 | `team_autonomy` | soft | bipolar | `people` | Decisions arrive made · Not stated · The team decides |
 | `technical_depth` | soft | bipolar | `the_work` | Operating what exists · Not stated · Engineering hard problems |
 | `travel_requirement` | hard | unipolar | `dealbreakers` | None stated · Occasional · Regular travel or relocation |
@@ -73,7 +76,7 @@ still be measured against T5's hand labels, never against this gold.
 
 ## Groups — how the labelling picker is ordered
 
-`group` sorts the 22 dimensions into five titled sections so the labeller can
+`group` sorts the dimensions into five titled sections so the labeller can
 find one without already knowing its name: `dealbreakers`, `terms`, `the_work`,
 `people`, `growth`. It is purely presentational — nothing scores on it — and it
 is declared in the model rather than in the page so a dimension added later
