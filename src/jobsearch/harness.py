@@ -800,17 +800,28 @@ def _cmd_import(args: argparse.Namespace) -> int:
             "nothing written",
             file=sys.stderr,
         )
+        # An import is atomic, so a single label on a dimension coined during
+        # labelling would hold back the whole batch — and the reason ("unknown
+        # dimension") reads like a typo rather than the known next step. Name
+        # that step here, where the refusal happens.
+        unknown = {
+            str(result.get("dimension"))
+            for result in refused
+            if "unknown dimension" in str(result.get("reason", ""))
+        }
+        pending = sorted(unknown & {str(p.get("id")) for p in proposals})
+        if pending:
+            print(
+                f"\n{len(pending)} of those name a dimension coined while labelling "
+                f"({', '.join(pending)}). Write their files first, fill in the TODOs, "
+                f"then import again:\n"
+                f"  uv run python -m jobsearch.suggestions propose {args.file}",
+                file=sys.stderr,
+            )
         return 2
 
     save_store(updated, store_path)
     print(f"{len(applied)} label(s) applied to {store_path}")
-    for proposal in proposals:
-        print(
-            f"proposed dimension {proposal.get('id', '?')!r} "
-            f"(coined at {proposal.get('coined_at_ad', '?')}) — not applied; "
-            "run `python -m jobsearch.suggestions propose` to write its file",
-            file=sys.stderr,
-        )
     return 0
 
 

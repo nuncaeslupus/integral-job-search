@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,7 @@ from jobsearch.suggestions import (
     DEFAULT_SUGGESTIONS_PATH,
     SuggestionSet,
     load_suggestions,
+    validate_suggestions,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -235,9 +237,43 @@ def main(argv: list[str] | None = None) -> int:
 
     ads = load_store(args.store)
     dimensions = load_dimensions(args.dimensions)
+
     suggestions = None
-    if not args.no_suggestions and args.suggestions.exists():
-        suggestions = load_suggestions(args.suggestions)
+    if not args.no_suggestions:
+        explicit = args.suggestions != DEFAULT_SUGGESTIONS_PATH
+        if args.suggestions.exists():
+            suggestions = load_suggestions(args.suggestions)
+        elif explicit:
+            # A path the operator typed and that is not there is a mistake, not a
+            # request for blind mode. Blind mode has its own flag.
+            print(f"suggestions file not found: {args.suggestions}", file=sys.stderr)
+            return 2
+        else:
+            print(
+                f"no {DEFAULT_SUGGESTIONS_PATH.name} yet — every ad will be blind. "
+                "Pass --no-suggestions to say you meant that.",
+                file=sys.stderr,
+            )
+
+    # The validator is the only thing that checks a suggestion set means what it
+    # says: known dimensions, values on declared rungs, quotes that locate
+    # exactly once, a control cohort that is really the cohort, and no
+    # cue-derived mark on the evaluation split. Building the page without it
+    # would let a broken set reach the labeller looking perfectly ordinary —
+    # and a labeller confirming a contaminated mark is exactly the failure the
+    # whole suggestion design exists to prevent. `_suggestion_payload` also
+    # drops quotes it cannot place, so a build that skipped this check could
+    # quietly ship fewer marks than the file promised.
+    if suggestions is not None:
+        problems = validate_suggestions(suggestions, ads, dimensions)
+        if problems:
+            print(
+                f"{args.suggestions} has {len(problems)} violation(s); no page written:",
+                file=sys.stderr,
+            )
+            for problem in problems:
+                print(f"  {problem}", file=sys.stderr)
+            return 2
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(build_page(ads, dimensions, suggestions), encoding="utf-8")
@@ -525,6 +561,7 @@ let state = loadState();
 let current = 0;
 let focused = -1;
 let picker = null;   // {kind:'new', start, end} | {kind:'change', index}
+const drift = {};    // adId -> {relocated, lost}, reported to the labeller
 
 // ── state ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -533,7 +570,53 @@ function loadState() {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) return JSON.parse(raw);
   } catch (err) { /* a corrupt or blocked store must not stop the page loading */ }
-  return { byAd: {}, coined: [] };
+  return migrateV1();
+}
+
+// The previous page saved under `jobsearch-t5-labels-v1`, shaped
+// `{adId: {dimId: {value, negated, quote, ...}}}`. Reading only the new key
+// would leave that work stranded in the browser while the page looked empty,
+// and the labeller could then export a replacement corpus missing everything
+// they had already done. So it is carried over rather than abandoned.
+//
+// Carried over as **pending**, not confirmed. The old page took any float from
+// -1 to 1; the scale is now a set of named rungs, so a migrated value may sit
+// between two of them and there is no honest way to pick one on the labeller's
+// behalf. Each one is placed on its nearest rung and put back in front of them
+// to re-confirm — which is a few keystrokes per label, against losing the span
+// and the judgement entirely.
+function migrateV1() {
+  const fresh = { byAd: {}, coined: [] };
+  let raw = null;
+  try { raw = localStorage.getItem('jobsearch-t5-labels-v1'); } catch (err) { return fresh; }
+  if (!raw) return fresh;
+
+  let old;
+  try { old = JSON.parse(raw); } catch (err) { return fresh; }
+  let carried = 0;
+  for (const [adId, byDimension] of Object.entries(old || {})) {
+    const ad = ADS.find(a => a.id === adId);
+    if (!ad) continue;
+    const anns = [];
+    for (const [dimensionId, label] of Object.entries(byDimension || {})) {
+      const dim = DIMS.get(dimensionId);
+      if (!dim || !label || typeof label.quote !== 'string') continue;
+      const at = ad.text.indexOf(label.quote);
+      if (at < 0 || ad.text.indexOf(label.quote, at + 1) >= 0) continue;
+      const nearest = dim.levels.reduce((best, level) =>
+        Math.abs(level.value - label.value) < Math.abs(best.value - label.value) ? level : best);
+      anns.push({
+        dimension: dimensionId, value: nearest.value,
+        start: at, end: at + label.quote.length, quote: label.quote,
+        negated: !!label.negated, status: 'pending', origin: null,
+        note: `carried over from the previous page (was ${label.value})`,
+      });
+      carried++;
+    }
+    if (anns.length) fresh.byAd[adId] = anns;
+  }
+  fresh.migrated = carried;
+  return fresh;
 }
 
 function save() {
@@ -556,7 +639,7 @@ function annotations(adId) {
       if (start < 0) return [];
       const end = start + m.quote.length;
       return [{
-        dimension: m.dimension, value: m.value, start, end,
+        dimension: m.dimension, value: m.value, start, end, quote: m.quote,
         negated: !!m.negated, status: 'pending', note: m.note || '',
         origin: {
           dimension: m.dimension, value: m.value,
@@ -566,7 +649,47 @@ function annotations(adId) {
     });
     save();
   }
-  return state.byAd[adId];
+  return reconcile(adId);
+}
+
+// Saved offsets only mean anything against the text they were taken from, and
+// the store is keyed by ad id alone — so a page regenerated over a re-fetched
+// corpus can hand the same id different text, and the old numbers would then
+// mark, and export, whatever now sits at those positions. Previously confirmed
+// work would become confidently wrong labels.
+//
+// Every annotation therefore carries the quote it was placed on, and is checked
+// against the current text each time the ad is opened: unchanged ones pass
+// untouched, ones whose words merely moved are relocated by that quote, and
+// ones whose words are gone (or have become ambiguous) are dropped and reported
+// to the labeller rather than silently sliced.
+function reconcile(adId) {
+  const ad = ADS.find(a => a.id === adId);
+  const anns = state.byAd[adId] || [];
+  if (!ad) return anns;
+
+  let relocated = 0;
+  const kept = [];
+  for (const a of anns) {
+    if (a.quote === undefined) { kept.push(a); continue; }
+    if (ad.text.slice(a.start, a.end) === a.quote) { kept.push(a); continue; }
+    const at = ad.text.indexOf(a.quote);
+    if (at < 0 || ad.text.indexOf(a.quote, at + 1) >= 0) continue;
+    kept.push({ ...a, start: at, end: at + a.quote.length });
+    relocated++;
+  }
+
+  const lost = anns.length - kept.length;
+  if (!relocated && !lost) return anns;   // the live array, not the copy
+
+  // Only on real drift is the stored array replaced. Returning `kept`
+  // unconditionally would hand every caller a detached copy, and an annotation
+  // pushed onto it — every one the labeller creates — would be dropped on the
+  // next render.
+  state.byAd[adId] = kept;
+  drift[adId] = { relocated, lost };
+  save();
+  return kept;
 }
 
 // Provenance is *derived*, never stored as a flag the UI could set wrongly: an
@@ -629,12 +752,26 @@ function renderAd() {
     + `<a href="${esc(ad.source_url)}" target="_blank" rel="noreferrer">source</a>`;
 
   const notice = document.getElementById('controlNotice');
+  const messages = [];
   if (CONTROL.has(ad.id)) {
-    notice.hidden = false;
-    notice.innerHTML = '<b>Control ad — nothing is marked on purpose.</b> Label it as you '
+    messages.push('<b>Control ad — nothing is marked on purpose.</b> Label it as you '
       + 'read it. These ads are what your agreement rate on the marked ones is measured against; '
-      + 'without them, agreeing with 92% of proposals cannot be told apart from rubber-stamping.';
-  } else { notice.hidden = true; }
+      + 'without them, agreeing with 92% of proposals cannot be told apart from rubber-stamping.');
+  }
+  if (state.migrated) {
+    messages.push(`<b>${state.migrated} label(s) carried over from the previous page.</b> They are `
+      + 'shown as proposals because the scale is now named rungs rather than a free number — '
+      + 'each one is on its nearest rung and needs confirming.');
+  }
+  const moved = drift[ad.id];
+  if (moved && (moved.relocated || moved.lost)) {
+    messages.push(`<b>This ad's text has changed since you labelled it.</b> `
+      + `${moved.relocated} mark(s) were relocated by their quote`
+      + (moved.lost ? `, and ${moved.lost} could no longer be found and were removed` : '')
+      + '.');
+  }
+  notice.hidden = messages.length === 0;
+  notice.innerHTML = messages.join('<hr>');
 
   // Marks are laid into the text in order, and one that overlaps a mark already
   // laid down is left out of the text rather than nested — overlapping <mark>
@@ -847,6 +984,7 @@ function commit(dim, level) {
   if (picker.kind === 'new') {
     anns.push({
       dimension: dim.id, value: level.value, start: picker.start, end: picker.end,
+      quote: ADS[current].text.slice(picker.start, picker.end),
       negated: false, status: 'confirmed', origin: null,
     });
     focused = anns.length - 1;
@@ -854,6 +992,7 @@ function commit(dim, level) {
     const a = anns[picker.index];
     a.dimension = dim.id;
     a.value = level.value;
+    a.quote = ADS[current].text.slice(a.start, a.end);
     a.status = 'confirmed';
   }
   closePicker();

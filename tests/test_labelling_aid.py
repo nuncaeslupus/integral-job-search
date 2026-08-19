@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from jobsearch.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, load_dimensions
 from jobsearch.harness import (
     DEFAULT_STORE_PATH,
@@ -59,7 +61,9 @@ def _load_labelling_page() -> object:
     return module
 
 
-build_page = _load_labelling_page().build_page  # type: ignore[attr-defined]
+_PAGE = _load_labelling_page()
+build_page = _PAGE.build_page  # type: ignore[attr-defined]
+page_main = _PAGE.main  # type: ignore[attr-defined]
 
 # The real, committed store and model — the fixture every "does the real
 # corpus work" test in this file exercises.
@@ -679,3 +683,97 @@ def test_import_rejects_an_object_that_carries_no_labels(tmp_path: Path) -> None
     batch.write_text(json.dumps({"proposed_dimensions": []}), encoding="utf-8")
 
     assert harness_main(["--store", str(store_path), "import", str(batch)]) == 2
+
+
+def test_page_build_refuses_an_invalid_suggestion_set(tmp_path: Path) -> None:
+    """The validator is the only thing checking a suggestion set means what it
+    says. Building without it would let a contaminated set reach the labeller
+    looking perfectly ordinary — and a labeller confirming a contaminated mark
+    is the exact failure the suggestion design exists to prevent.
+    """
+    bad = tmp_path / "suggestions.json"
+    bad.write_text(
+        json.dumps(
+            {
+                "method": "llm_read",
+                "generated_at": "2026-08-19",
+                "blind_control": [],
+                "by_ad": {STORE[0].id: [
+                    {"dimension": "on_call_load", "value": 0.65, "quote": "no such words"}
+                ]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "label.html"
+
+    code = page_main(["--out", str(out), "--suggestions", str(bad)])
+
+    assert code == 2
+    assert not out.exists(), "no page may be written from a set that failed validation"
+
+
+def test_page_build_errors_on_a_suggestions_path_that_was_asked_for(tmp_path: Path) -> None:
+    """A path the operator typed and that is not there is a mistake, not a
+    request for blind mode — blind mode has its own flag."""
+    out = tmp_path / "label.html"
+
+    code = page_main(["--out", str(out), "--suggestions", str(tmp_path / "absent.json")])
+
+    assert code == 2
+    assert not out.exists()
+
+
+def test_page_build_without_suggestions_still_works_and_says_so(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Blind mode is a real mode — the control ads use it, and it is the whole
+    corpus until the suggestions exist. It must not be silent, though."""
+    out = tmp_path / "label.html"
+
+    code = page_main(["--out", str(out), "--no-suggestions"])
+
+    assert code == 0
+    assert out.exists()
+    assert "blind" in capsys.readouterr().out.lower()
+
+
+def test_an_annotation_carries_the_text_it_was_placed_on() -> None:
+    """Offsets only mean something against the text they were taken from, and the
+    saved state is keyed by ad id alone — so a page regenerated over a re-fetched
+    corpus could mark and export whatever now sits at those positions, turning
+    confirmed work into confidently wrong labels.
+    """
+    page = build_page(STORE[:1], DIMENSIONS[:1])
+
+    body = page[page.index("function reconcile"):page.index("function sourceOf")]
+    assert "ad.text.slice(a.start, a.end) === a.quote" in body, "drift must be detected"
+    assert "const at = ad.text.indexOf(a.quote);" in body, "a moved span must be relocated"
+    assert "drift[adId] = { relocated, lost };" in body, "the labeller must be told"
+
+
+def test_work_from_the_previous_page_is_carried_over_not_stranded() -> None:
+    """The old page saved under its own key. Reading only the new one would leave
+    that work in the browser while the page looked empty, and the labeller could
+    export a replacement corpus missing everything they had already done.
+    """
+    page = build_page(STORE[:1], DIMENSIONS[:1])
+
+    assert "jobsearch-t5-labels-v1" in page
+    body = page[page.index("function migrateV1"):page.index("function save")]
+    assert "status: 'pending'" in body, (
+        "a migrated value may sit between two rungs, so it must be re-confirmed, "
+        "not silently placed on the labeller's behalf"
+    )
+
+
+def test_reconcile_returns_the_live_array_when_nothing_drifted() -> None:
+    """Caught in the browser: returning the rebuilt copy unconditionally handed
+    every caller a detached array, so an annotation pushed onto it — every one
+    the labeller creates — vanished on the next render. Only real drift may
+    replace the stored array.
+    """
+    page = build_page(STORE[:1], DIMENSIONS[:1])
+
+    body = page[page.index("function reconcile"):page.index("function sourceOf")]
+    assert "if (!relocated && !lost) return anns;" in body

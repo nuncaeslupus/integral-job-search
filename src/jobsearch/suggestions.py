@@ -42,7 +42,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from jobsearch.dimensions import Dimension, load_dimensions
+from jobsearch.dimensions import (
+    DEFAULT_DIMENSIONS_DIR,
+    SNAKE_CASE,
+    Dimension,
+    load_dimensions,
+)
 from jobsearch.harness import LabelledAd, load_store, split_rank
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -133,6 +138,26 @@ def validate_suggestions(
     problems: list[str] = []
     by_id = {ad.id: ad for ad in store}
     by_dimension = {dimension.id: dimension for dimension in dimensions}
+
+    # The declared control set must BE the computed cohort, not merely a subset
+    # of real ad ids. Checking only what the file happens to list lets an empty
+    # `blind_control` pass with zero violations — a clean result over nothing,
+    # which is the one outcome a gate in this repository may never produce. The
+    # blind baseline is the whole reason a confirm rate means anything, so an
+    # undersized cohort silently removes the comparison while the probe still
+    # reports success.
+    expected = set(blind_control(store))
+    declared = set(suggestions.blind_control)
+    for ad_id in sorted(expected - declared):
+        problems.append(
+            f"{ad_id} belongs to the blind-control cohort but is not declared — "
+            "a confirm rate has no baseline to be read against without it"
+        )
+    for ad_id in sorted(declared - expected):
+        problems.append(
+            f"{ad_id} is declared blind-control but is not in the computed cohort — "
+            "the cohort is derived from the ad id so it stays stable across regeneration"
+        )
 
     for ad_id in sorted(suggestions.blind_control):
         if ad_id not in by_id:
@@ -257,11 +282,122 @@ def probe_suggestions(
     return measured
 
 
+def write_proposals(
+    export: dict[str, Any],
+    dimensions_dir: Path = DEFAULT_DIMENSIONS_DIR,
+) -> list[Path]:
+    """Materialise a labelling export's `proposed_dimensions` as reviewable stubs.
+
+    The labelling page runs over `file://` and cannot write to the repository, so
+    a dimension coined mid-read travels in the export and is written here. The
+    result is deliberately a **stub**, not a finished dimension: it carries the
+    id, name, group and rungs the labeller chose, and leaves `elicitation`,
+    `extraction` and each rung's `tell` as `TODO` markers that
+    `jobsearch.dimensions` will refuse to load until a person fills them in.
+
+    That refusal is the point. Coining a dimension changes the model's spine and
+    every gate that counts dimensions reads it; a stub that loaded cleanly would
+    let an ad-hoc idea become part of the measured model without anyone
+    deciding it should be.
+    """
+    written: list[Path] = []
+    for proposal in export.get("proposed_dimensions") or []:
+        dimension_id = str(proposal.get("id", "")).strip()
+        if not SNAKE_CASE.match(dimension_id):
+            raise SuggestionError(f"proposed dimension id {dimension_id!r} is not snake_case")
+        path = dimensions_dir / f"{dimension_id}.yaml"
+        if path.exists():
+            raise SuggestionError(f"{path} already exists — refusing to overwrite a dimension")
+        levels = proposal.get("levels") or []
+        if not 2 <= len(levels) <= 5:
+            raise SuggestionError(f"{dimension_id}: needs between 2 and 5 rungs, got {len(levels)}")
+
+        body = [
+            f"# Coined while labelling {proposal.get('coined_at_ad', 'an ad')}.",
+            "#",
+            "# This file does NOT load as written: `methods_ref` below is deliberately",
+            "# `#TODO`, which fails the anchor pattern, so `load_dimensions` refuses the",
+            "# whole model until a person finishes this. That refusal is the point —",
+            "# coining a dimension changes the model's spine and every gate that counts",
+            "# dimensions reads it, so an idea had while reading one ad must not become",
+            "# part of the measured model just because a file appeared.",
+            "#",
+            "# To finish: replace every TODO, write extraction cues and at least one gold",
+            "# example, and point methods_ref at the section of docs/METHODS.md that",
+            "# documents how this dimension is measured.",
+            f"id: {dimension_id}",
+            "kind: soft",
+            f"polarity: {proposal.get('polarity', 'unipolar')}",
+            f"group: {proposal.get('group', 'the_work')}",
+            "label:",
+            f"  en: {json.dumps(proposal.get('label', dimension_id))}",
+            "  es: TODO",
+            "  ca: TODO",
+            f"definition: {json.dumps(proposal.get('definition', 'TODO'))}",
+            "levels:",
+        ]
+        for level in levels:
+            body += [
+                f"  - value: {level['value']}",
+                "    label:",
+                f"      en: {json.dumps(level.get('label', 'TODO'))}",
+                "      es: TODO",
+                "      ca: TODO",
+                f"    tell: {json.dumps(level.get('tell', 'TODO'))}",
+            ]
+        body += [
+            "elicitation:",
+            "  questions:",
+            f"    - id: {dimension_id[:3]}_q1",
+            "      text:",
+            "        en: TODO",
+            "        es: TODO",
+            "        ca: TODO",
+            "extraction:",
+            "  cues: {}",
+            "  gold: []",
+            "methods_ref: METHODS.md#TODO",
+            "",
+        ]
+        path.write_text("\n".join(body), encoding="utf-8")
+        written.append(path)
+    return written
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__ or "")
-    parser.add_argument("--suggestions", type=Path, default=DEFAULT_SUGGESTIONS_PATH)
-    parser.add_argument("evidence", type=Path, nargs="?", default=DEFAULT_EVIDENCE_PATH)
-    args = parser.parse_args(argv)
+    parser = argparse.ArgumentParser(description="Suggestion-set checks and proposals.")
+    sub = parser.add_subparsers(dest="command")
+
+    check = sub.add_parser("check", help="measure a suggestion set (the default)")
+    check.add_argument("--suggestions", type=Path, default=DEFAULT_SUGGESTIONS_PATH)
+    check.add_argument("evidence", type=Path, nargs="?", default=DEFAULT_EVIDENCE_PATH)
+
+    propose = sub.add_parser(
+        "propose", help="write dimension stubs from a labelling export's proposed_dimensions"
+    )
+    propose.add_argument("export", type=Path, help="the JSON the labelling page exported")
+    propose.add_argument("--dimensions", type=Path, default=DEFAULT_DIMENSIONS_DIR)
+
+    # No subcommand keeps the original behaviour: check the default paths.
+    args = parser.parse_args(argv or ["check"])
+
+    if args.command == "propose":
+        try:
+            export = json.loads(args.export.read_text(encoding="utf-8"))
+            written = write_proposals(export, args.dimensions)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"{args.export}: cannot be read as JSON: {exc}", file=sys.stderr)
+            return 2
+        except SuggestionError as exc:
+            print(exc, file=sys.stderr)
+            return 2
+        if not written:
+            print("no proposed dimensions in that export", file=sys.stderr)
+            return 1
+        for path in written:
+            print(f"wrote {path} — fill in every TODO before it will load")
+        return 0
+
     try:
         measured = probe_suggestions(args.suggestions, args.evidence)
     except SuggestionError as exc:
