@@ -18,8 +18,8 @@ ordinary use of the tool from here on.
 | what | where |
 |------|-------|
 | PR #41 — 828 pre-marks, banked labels, span-merge on import, `talking_clients` | **merged** as `2b6c57a` |
-| PR #42 — T5's measurement, harness inside the drift loop | **open**, head `7faa498` |
-| T5 (`lo-d2b2`) | `done` on `arsenal-queue`, `--pr` #42; flips to `merged` when #42 lands |
+| PR #42 — T5's measurement, harness inside the drift loop | **merged** as `e71db04` |
+| T5 (`lo-d2b2`) | **`merged`** on `arsenal-queue`, `--pr` #42 |
 | Corpus | 100 ads · 828 pre-marks over 84 · 16 blind-control · **39 human labels over 4 ads** |
 | Dimension model | **25** (added `talking_clients`, `leadership`, `collaboration_mode`) — at the planned ceiling |
 
@@ -100,6 +100,32 @@ with none at all.
   span opening *"se huye de los sprints infinitos"* — the ad rejecting ceremony
   — while the shipped suggestion reads it as **−0.6**. Inside D-2's scope; flagged
   on #41, not seeded as a duplicate task.
+
+## Known: the two ledgers drift, and only one is authoritative
+
+`claude-arsenal/queue/tasks.jsonl` exists on **both** the default branch and
+`arsenal-queue`, and they do not agree. **`arsenal-queue` is the source of
+truth** — `claim.sh` and `release.sh` write there and nowhere else. As of this
+handover T5 reads `merged` there and still reads `open` on `main`.
+
+This is structural, not a slip. `queue_sync.sh` ports rows that are *absent*
+from the coordination branch and by design never touches existing claim/release
+state, so a status recorded on `main` never reaches `arsenal-queue` and nothing
+detects the divergence. `queue_doctor.sh` reports 0 findings either way: it
+audits one ledger for internal consistency, and cross-branch divergence is
+outside what it looks at. A previous session found **17 rows** apart this way
+and `queue_eval.sh` handed out a task that had merged two months earlier.
+
+So: run `queue_branch.sh` and read the coordination worktree, exactly as the
+session protocol says. Do not decide anything from the copy in the main tree.
+Worth carrying upstream as a `queue_sync.sh --reconcile-status` and a
+`queue_doctor.sh` cross-ledger check.
+
+`reconcile_merged.sh` needs `gh`, which a cloud session does not have — GitHub
+reaches it through MCP instead. Flip `done` → `merged` by hand there with
+`release.sh <id> merged --pr <url>`, or leave it for a laptop session; both
+statuses are terminal and both satisfy blocking deps, so nothing stalls either
+way.
 
 ## Environment
 
