@@ -14,7 +14,15 @@ So a shared connector is a directory (`docs/distribution.md` §5):
       connector.yaml     what to fetch, and the mapping to the offer schema
       parse.py           optional, only where the declarative form cannot express it
       fixture/           one recorded response, saved verbatim
+        list.html          required — the listing page rule 2 is checked against
+        detail.html        optional — recorded when the connector has a `detail`
       meta.yaml          site, country, language, maintainer handle, last_verified
+
+The two fixture filenames are fixed rather than discovered. Rule 2 has to know
+which recorded file is the listing in order to check anything against it, and
+"whichever file sorts first" is the kind of rule that works until somebody adds
+`README.html`. A contributor is told the name by the violation message rather
+than having to find it here.
 
 and six rules, in **one command** that a contributor's agent and CI both run,
 so a green local check and a green CI are the same judgement rather than two

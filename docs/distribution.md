@@ -115,6 +115,8 @@ connectors/<site-id>/
   connector.yaml     what to fetch and how to map it to the offer schema
   parse.py           optional, only for sites the declarative form cannot express
   fixture/           one recorded response, saved verbatim
+    list.html          required — the listing page the conformance check reads
+    detail.html        optional — recorded when the connector declares a detail page
   meta.yaml          site, country, language, maintainer handle, last_verified
 ```
 
