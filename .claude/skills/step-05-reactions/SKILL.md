@@ -51,10 +51,18 @@ Evidence rows of kind `reaction`, each tied to the offer id of its stimulus; fet
 
 ## Boundary
 
+**Invite forward; never close by offering to end the session.** Leaving is always allowed and
+never the suggestion — the exit is offered only when the session has actually run long, or the
+candidate sounds tired, and never as the standard close of this step. Naming it every time asks
+someone who has answered four steps four separate times whether they would rather leave.
+This governs the **exit** alone. §3.3's *offered skip* — "we can stop here and go look at real
+jobs with what I have" — is a move **forward** to a provisional ranking, not a way out, and is
+offered at the end of every first-run step exactly as that section requires.
+
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's telling. You didn't mention money once, and you flinched at every mention of 'fast-paced'. Want to turn that into weights, or pause?"
+"That's telling. You didn't mention money once, and you flinched at every mention of 'fast-paced'. Want to turn that into weights? It's what lets me put a number on a shorter commute."
 ```
 
 Writes `last_activity`.

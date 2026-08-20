@@ -1,118 +1,145 @@
-# Session handover — 2026-08-20 (D-14 worked; the board is unchanged otherwise)
+# Session handover — 2026-08-20 (D-15 worked; the bundle is two versions stale)
 
 ## Read this first
 
-**D-14 is done and merged.** PR
-[#100](https://github.com/nuncaeslupus/job-search/pull/100) landed as `71b3bb9`
-and closed [#90](https://github.com/nuncaeslupus/job-search/issues/90); the task
-file is archived at `arsenal/tasks/_history/t-05892c87.md` with
-`status: merged`. Nothing is owed on it. All five gates were re-run on `main`
-after the merge and pass.
+**D-15 is done and pushed, awaiting merge.** PR
+[#102](https://github.com/nuncaeslupus/job-search/pull/102) carries `Closes #93`
+in both the commit and the body; the task file is archived at
+`arsenal/tasks/_history/t-65ecce18.md` with `status: merged`. All five gates were
+run locally and pass. Qodo was reviewing when this was written — **check #102 for
+review comments before starting anything else.**
 
-The previous handover's list of ten divergences (#90–#99) stands, minus D-14.
-`task_select.py` returns **D-15** (`t-65ecce18`, #93) next — nine divergences
-are still open, all at priority 10, so read the selector rather than the numeric
-order of the D-labels.
+`task_select.py` returns **D-13** (`t-20ca057d`, #91) next once #102 merges.
+Eight divergences remain open, all at priority 10, so read the selector rather
+than the numeric order of the D-labels.
 
-## What D-14 turned out to be
+## The one thing worth acting on next: the bundle is stale, and nothing said so
 
-Not a bad sentence in a skill — an **absent** one. `step-02-constraints`
-required every constraint field to end the step `stated`, `declined` or
-`unknown`, listed what to cover, and left employment mode off that list. The
-field still had to be resolved, so the phrasing was improvised, and the
-improvisation offered an illegal arrangement.
+`claude-arsenal/bin/check_update.sh --check-only` reports:
 
-That shaped the gate. A string search for "falso autónomo" would have read
-**0** on the day the defect happened, because nothing had written the bad
-question down. So `skills_offering_an_illegal_employment_mode` counts two
-limbs, and the second is the one that bites:
+> no 'arsenal' remote configured — update checking is INERT for this repo (the
+> bundle was copied, not added as a git subtree)
 
-1. prose naming an unlawful arrangement without ruling it out;
-2. the skill that must resolve `employment_mode` carrying no rule at all.
+So no session has ever been told about an upgrade. The vendored bundle is
+**v0.33.0**; upstream is at **v0.35.0**. The remote is now wired up locally
+(`git remote add arsenal https://github.com/nuncaeslupus/claude-arsenal`), but a
+git remote is machine-local and does **not** travel with the repo — the next
+cloud session will find the check inert again unless this is fixed properly.
 
-`jobsearch.employment_mode` is a module of its own rather than a flag on
-`step_skills` because **`make evidence` runs each module once with no
-arguments** — a gate reachable only behind a flag is a gate whose drift nothing
-notices. That is already true of D-4's and D-7's numbers today
-(`step_gates --owners` / `--traits`), and worth seeding if it bites again.
+**`claude-arsenal#177` has landed upstream.** `AGENTS.md` at v0.35.0 is
+**185 lines / 9,983 bytes** against the vendored **762 lines / 39,424 bytes** —
+roughly 14.7k → 3.7k tokens resident on *every turn of every session*, since it
+is imported into `CLAUDE.md`. That is the single largest fixed cost this repo
+carries. Measured this session: ~66k of the context window is resident before
+the first tool call, and `AGENTS.md` is 14.7k of it.
 
-## Which divergences are ours, and which are upstream's (carried from the previous handover)
+Upgrade deliberately — `make arsenal-upgrade REF=v0.35.0` — then **`make reader`
+and `make evidence`**, per `CLAUDE.md`. Two versions of changes to read first
+(v0.34.0 and v0.35.0), and `verify-subtree` compares 26 assets, so expect the
+bundle half of D-22 (`claude-arsenal#175`) to have moved too.
 
-Checked deliberately, because a fix to the vendored tree gets overwritten by the
-next `make arsenal-upgrade` and fails `make verify-subtree` in the meantime.
+Not seeded as a task: it is an upgrade, not a divergence. Seed one if it is not
+done next session.
 
-**Nine of the ten are host-owned** — `.claude/skills/step-*` (D-13, D-14, D-15,
-D-17, and `run_checkpoint.py` for D-21), `src/jobsearch/*` (D-18, D-19, D-20,
-D-21), `dimensions/` and `connectors/` (D-16, D-19). Nothing under
-`claude-arsenal/`. **D-14 is now done** — it was one of the nine.
+## What D-15 turned out to be
 
-**D-22 was mixed, and is already split** (that split landed on `main` as
-`4987514`, while this session was working). Its bundle half —
-`claude-arsenal/agents/worker.md` step 4 asks a worker to "run the host lint
-gate if one exists" and no script enforces it, while `open_task_pr.sh` re-runs
-`gate_run.sh` and never asks about the repo gate — is filed upstream as
-**`claude-arsenal#175`**. The host half stays here: a `make gate` target
-running all five, for upstream's proposed `host-gate` config key to point at.
+Not four bad sentences — a rule that **already existed** in the one document the
+model never reads, contradicted by everything that does.
 
-`keyword-guard` firing only on `arsenal/**` is **correct** and was ruled out,
-not filed: a PR that is not a task PR should not need `Closes #<issue>`.
+`status/spec-v2-steps.md` has carried "Invite forward, do not offer an exit …
+Stopping is always allowed and never the default suggestion" since the document
+was settled (7370cd6, 2026-08-18). Two documents diverged from it in opposite
+directions, and the live session sat between them:
 
-## Context cost — one upstream issue filed, two fixes landed here
+| where | what it said |
+|---|---|
+| `spec-v2-steps.md`, cross-cutting rule 4 | do not offer an exit |
+| `spec-v2-steps.md`, per-step Boundary examples | *"or leave it here?"*, *"Leave it there?"*, *"or pause?"*, *"or leave it?"* (steps 1, 4, 5, 10) |
+| `spec-v2-process.md` §3.2 | required the offer, in as many words |
+| all thirteen step skills | the examples verbatim, and no rule at all |
 
-Token consumption was audited this session. Fixed here (in this PR): `.rgignore`
-excluding the vendored and generated trees from every ripgrep-backed search, and
-a `CLAUDE.md` section on searching the corpus — a line in `corpus/*/ads.jsonl`
-is a whole advert, the longest **15,640 characters**, so an unbounded content
-search across both files returns ~100KB in one result.
+Four worked demonstrations of the behaviour, zero statements of the rule. It
+behaved exactly as instructed.
 
-**Filed upstream: `claude-arsenal#177`.** `AGENTS.md` is **762 lines / ~14.7k
-tokens**, imported into every consumer repo's `CLAUDE.md`, so it is resident on
-every turn of every session — 85% of this repo's whole memory-file budget, and
-five times its own `CLAUDE.md`. It exceeds the chunking rules the same plugin
-ships (`references-and-chunking.md`: split past 400 lines, or when a section
-over 100 lines is loaded only for a subset of tasks — the worker loop is 138
-lines and the two queue-seeding sections are 66% identical to each other). The
-proposal is the shape skill-creator asks of skills: ~150-line body plus six
-`references/*.md`, worth ~11.7k tokens per turn everywhere.
+**This is a shape worth looking for again.** D-14 was silence; D-15 is silence
+*plus a contradicting example*, which is strictly worse — the model does not
+improvise, it copies. When a defect looks like bad prose, check whether the rule
+already exists somewhere the model never loads.
 
-Still the owner's to do: turn off MCP connectors this repo never uses
-(Gmail/Calendar/Drive were ~40k of a 63.7k catalogue; they dropped out of the
-session on their own late on), and decide the Actions billing question below.
+`jobsearch.session_exit` measures it on two limbs (fenced example offers to stop;
+Boundary carries no governing rule), reading the two halves of the section
+separately so the rule sentence does not trip the check it satisfies. It reads
+the requirement **out of the step spec** rather than restating it, and reports
+`-1` if that rule is ever dropped: a gate must stop reading as a pass when the
+policy it enforces is withdrawn. `step_boundaries_offering_an_exit`: 13 → 0,
+verified against a `git archive HEAD` copy of the pre-fix library.
+
+## Review round (Qodo, PR #102) — four findings, one root cause, all fixed
+
+All four were real, and they shared one mistake: **the process calls two
+different things stopping, and the first cut collapsed them.**
+
+- the **exit** ends the sitting — D-15's subject;
+- §3.3's **offered skip** — *"we can stop here and go look at real jobs with what
+  I have"* — ends the *first-run climb* and sends the candidate **forward** to a
+  provisional L1 ranking. §3.3 requires it at the end of every first-run step.
+
+`_EXIT_OFFER_RE` matched `stop here`, so §3.3's prescribed sentence read as an
+offender: a compliant boundary would have failed the gate, and the gate would
+have enforced the opposite of the process contract. The skills' rule ("never
+close by offering to stop") read as forbidding the skip too — in all thirteen
+files. Four exit phrasings ("wrap up here?", "end here?", "take a break and
+resume tomorrow?", "enough for one sitting") passed straight through.
+
+Fixed in `1c09d82`: a forward-shortcut licence requiring a real destination
+(skips recorded in the evidence, never silently dropped), the rule reworded to
+name the exit and preserve the skip, §3.2 and §3.3 each saying which stop they
+mean, and the pattern widened. Five tests, each failing against the pre-fix code.
+
+**Two lessons worth keeping.** Step 11's "Ready to send, or sit on it?" already
+had an exclusion for being a forward choice — one was excluded and the mandated
+one was not, so *if a check excludes one false positive, look for its siblings.*
+And the fix for D-15 reproduced D-15's own failure mode: a rule in one document
+contradicted by another. Fixing a cross-document divergence means reading every
+document that touches the subject, not just the two the task names.
 
 ## The board, read this session
 
-`query_status.py`: 91 tasks — open 14, claimed 0, done 1, cancelled 1,
-blocked 19, merged 56. One flag, and it is the pre-existing one:
+`query_status.py`: 91 tasks — open 13, claimed 0, done 1, cancelled 1,
+blocked 19, merged 57. One flag, the pre-existing one:
 
-> mixed-priority-convention: 32 task(s) use the size scale [10, 5, 1, 0] and 2
+> mixed-priority-convention: 31 task(s) use the size scale [10, 5, 1, 0] and 2
 > use other values [70, 60]
 
-Not from this session. `handle_sync.py` reports every task has an issue handle.
+`handle_sync.py` reports every task has an issue handle.
 
-## Two surface facts worth not rediscovering
+## Surface facts (unchanged, re-confirmed)
 
 **`github_channel.sh --detect` prints `rest`, and `rest` does not work here.**
-The probe is a `GET /rate_limit`, which the proxy answers 200; every real call
-answers **403 "GitHub access is not enabled for this session"**. So the channel
-is effectively `none` on this surface: fetch the issues with the MCP
-`list_issues` tool and hand-write the JSON the scripts read
-(`number`, `state`, `body` carrying `arsenal-task: <id>`, `labels`,
-`assignees`). `claim_task.sh` therefore exits 5 with a `manual POST` line —
-make that call with `mcp__github__create_branch` (201 = won, 422 = lost).
+Fetch issues with the MCP `list_issues` tool and hand-write the JSON the scripts
+read (`number`, `state`, `body` carrying `arsenal-task: <id>`, `labels`,
+`assignees`). `claim_task.sh` exits 5 with a `manual POST` line — make that call
+with `mcp__github__create_branch` (201 = won, 422 = lost). Won #93 that way.
 
-**`open_task_pr.sh` was not used.** It cuts `arsenal/<id>-<slug>` off the
-default branch, and this surface restricts pushes to the session's own
-designated branch. The archive, the `Closes #90` in both the commit and the PR
-body, and the PR itself were done by hand to the same shape. A session with the
-same restriction should expect to do that too — and must not skip the archive,
-which is what makes merging complete the task.
+**`gate_run.sh` cannot re-run an archived task's gate here.** Once the payload
+moves to `arsenal/tasks/_history/`, it falls back to fetching from the default
+branch and dies at exit 128 with no output, because
+`git symbolic-ref refs/remotes/origin/HEAD` is unset in this clone. Not a gate
+failure — `make verify-gates` is the check that reads `_history/`, and it does
+assert D-15 by name (proven by deleting the evidence: it fails `t-65ecce18`
+specifically). Possible upstream report if it recurs.
 
-## CI is still out of runner minutes (unchanged, and now re-confirmed)
+**`open_task_pr.sh` was not used**, again: it cuts `arsenal/<id>-<slug>` off the
+default branch and this surface only permits pushing the session's designated
+branch. The archive, the `Closes #93` in both places, and the PR were done by
+hand to the same shape. **Do not skip the archive** — it is what makes merging
+complete the task.
 
-Every job on PR #100 failed **3 seconds** after starting, with empty
-`output.text` — no runner was ever assigned. `main`'s own runs are identically
-red: #249 (`f5985908`), #250 (`75d19ff0`), #252 (`49875147`), each failing in
-5 seconds. It is not the diff. Do not push speculative fixes for it.
+## CI is still out of runner minutes (re-confirmed on #102)
+
+Job `pytest` on `d24c8ff`: `runner_id: 0`, `runner_name: ""`, 16:09:37 → 16:09:40
+— three seconds, no runner ever assigned. All five jobs the same. `main`'s own
+runs are identically red. It is not the diff; do not push speculative fixes.
 
 All five gates were run locally and pass:
 
@@ -120,20 +147,22 @@ All five gates were run locally and pass:
 make lint && make test && make evidence && make verify-subtree && make verify-gates
 ```
 
-`make test` 1080 passed / 1 skipped · `make evidence` no drift ·
-`make verify-gates` 58 terminal tasks, 58 gates asserted, 0 without a fenced
+`make test` 1103 passed / 1 skipped · `make evidence` no drift ·
+`make verify-gates` 59 terminal tasks, 59 gates asserted, 0 without a fenced
 block · `make verify-subtree` 0 diverging.
 
 That the repo gate runs only because somebody asks is **D-22**, still open.
 
-## Left open (carried forward, untouched this session)
+## Left open (carried forward)
 
+- **The bundle upgrade above** — the highest-value item on this list.
 - **A permissions edit the owner has to make**: `Bash(gh pr merge:*)`,
   `Bash(gh run list:*)`, `Bash(gh run view:*)` in `.claude/settings.json`.
   A session cannot widen its own permissions.
+- **Turn off MCP connectors this repo never uses.** Still ~12.1k tokens of
+  GitHub + remote-session tool schemas resident per turn; most are never called.
 - **`tools/profile_guard.sh` matches a candidate path mentioned in *prose***,
-  not only one being opened. Not seeded yet; decide whether the guard should
-  inspect the tool's target rather than the whole command string.
+  not only one being opened. Not seeded yet.
 - **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Resolution B exists
   since arsenal v0.33.0 (`gate: unmeasured`).
 - **Steps 5, 6, 10, 11, 12 are still `not_implemented`**, and steps 8 and 9

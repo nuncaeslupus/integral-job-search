@@ -265,8 +265,14 @@ come down.</p>
   saying what the next one buys them, and asking whether to carry on — <em>"good,
   your history's in decent shape. Traits next: that's what stops me sending you
   jobs full of people you'd hate. Keep going?"</em> Stopping is always allowed and
-  never the default suggestion. And <strong>say at the outset that this takes a while
-  and why</strong>: the more it knows, the better the work it finds.</li>
+  never the default suggestion. <strong>The exit is offered only when the session has
+  actually run long, or the candidate sounds tired</strong> — never as the standard
+  close of a step. The moment at which stopping is normal is created by pausing
+  to ask anything at all; naming the exit on top of that asks a candidate who
+  has answered four steps four separate times whether they would rather leave,
+  which reads as the tool losing interest rather than as courtesy. And <strong>say at
+  the outset that this takes a while and why</strong>: the more it knows, the better
+  the work it finds.</li>
 </ul></div>
 <div class="note" data-for="s-spec-how-to-read-a-step"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › How to read a step</span></div><textarea class="note-ta" data-key="s-spec-how-to-read-a-step" data-label="How to read a step" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
@@ -376,8 +382,8 @@ working life, with anything uncertain marked as uncertain. <strong>No document i
 produced here</strong> — no PDF, no DOCX. A CV written before there is an advert to
 write it for is a worse CV than step 11 produces.</p>
 <p><strong>Boundary.</strong> <em>"That's your history down — twelve years, four roles, and the
-Catalan I nearly missed. Want to keep going to what would rule a job out, or
-leave it here?"</em> Writes <code>last_activity</code>.</p>
+Catalan I nearly missed. Next is what would rule a job out — the quickest way to
+stop me showing you things you'd never take. Shall we?"</em> Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>intake_field_provenance == 1.0</code> — every field in <code>master.json</code> names
 where it came from: a document span, or the turn in which it was said. A field
 with no provenance is a field the tool invented. Owner: S4. State:
@@ -565,7 +571,8 @@ survive into a letter if they chose: <em>"works well under pressure"</em> is a c
 employer understands, <code>stress_tolerance: 0.72</code> is not.</p>
 <p><strong>Boundary.</strong> <em>"That's what I've got: you like a lot of autonomy, you're happier
 fixing than launching, and I don't have enough yet on how you take pressure.
-Leave it there?"</em> Writes <code>last_activity</code>.</p>
+Next I'll put some real adverts in front of you and see what you make of them —
+that's where this starts paying off."</em> Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>trait_evidence_sufficiency == 1.0</code> — every trait carries either a
 score backed by ≥2 independent episodes or <code>insufficient</code> with its count. A
 scored trait below the floor is a stereotype presented as a finding. Owner: T49 (T27 carries the floor as part of the interview; T28 keeps the evidence coming from every surface).
@@ -618,7 +625,8 @@ stimulus; fetched stimuli enter <code>offers/</code> as ordinary offers with sta
 The candidate sees the first read of what their reactions imply — the earliest
 point at which the tool tells them something about themselves.</p>
 <p><strong>Boundary.</strong> <em>"That's telling. You didn't mention money once, and you flinched
-at every mention of 'fast-paced'. Want to turn that into weights, or pause?"</em>
+at every mention of 'fast-paced'. Want to turn that into weights? It's what lets
+me put a number on a shorter commute."</em>
 Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>elicitation_eval_overlap == 0</code> — no advert used to elicit preferences
 is ever one the ranking is later scored against. Without it, <code>rank_spearman</code>
@@ -903,7 +911,7 @@ feedback is still captured, because that is them volunteering it.</p>
 changes with <code>status_changed_at</code>; a recomputed ranking. The candidate sees the
 re-ordered list and a plain statement of what changed and why.</p>
 <p><strong>Boundary.</strong> <em>"Noted — agencies out. That dropped three of them and pushed the
-Girona role to the top. Anything else, or leave it?"</em> Writes <code>last_activity</code>.</p>
+Girona role to the top. Anything else jump out?"</em> Writes <code>last_activity</code>.</p>
 <p><strong>Gate.</strong> <code>feedback_traceability == 1.0</code> — every derived value names the evidence
 rows that produced it, so "the ranking changed because you said X" is checkable
 rather than a story. Owner: T21. State: <code>not_implemented</code>.</p>

@@ -340,11 +340,27 @@ is not also machine-readable state cannot be resumed or revised. Both columns
 of the §2 table are requirements, not description.
 
 **The boundary is said out loud, and it is warm.** A step ends by naming what
-was gained, offering the next thing, and offering to stop — *"Good, I have your
-preferences now. Want to go and look at some jobs, or leave it here for today?"*
-Two things are wrong with ending silently: the candidate cannot tell that
-anything happened, and they are given no moment at which stopping is a normal
-choice rather than an abandonment.
+was gained and offering the next thing — *"Good, I have your preferences now.
+Want to go and look at some jobs?"* Two things are wrong with ending silently:
+the candidate cannot tell that anything happened, and they are given no moment
+at which stopping is a normal choice rather than an abandonment.
+
+**That moment is made by pausing to ask, not by naming the exit.** Leaving is
+always allowed and never the suggestion: the exit is offered when the session
+has actually run long or the candidate sounds tired, never as the standard close
+of a step. Offering it every time asks someone who has answered four steps four
+separate times whether they would rather leave, which reads as the tool losing
+interest. This is `status/spec-v2-steps.md`'s "Invite forward, do not offer an
+exit", stated here so the two documents cannot be read as disagreeing.
+
+**Two different things get called stopping, and only one of them is the exit.**
+The *exit* ends the sitting: the candidate goes, and comes back another day.
+§3.3's *offered skip* — *"we can stop here and go look at real jobs with what I
+have"* — ends the **first-run climb**, not the session, and sends them forward
+to a provisional ranking: sooner, and rougher. The rule above governs the exit
+alone and never suppresses the skip, which §3.3 requires at the end of every
+first-run step. Reading the two as one rule would delete a documented path
+through the process.
 
 **Gates are never mentioned.** `constraint_field_resolution` is how the
 engineers know the step is done. What the candidate hears is that we have what
@@ -356,6 +372,11 @@ The default path is the full first run, and the tool says plainly why: **the
 more it knows, the better the results.** But at the end of every first-run step
 it offers the alternative — *"we can stop here and go look at real jobs with
 what I have; the list will be rougher and I'll tell you what would sharpen it."*
+
+**This is a move forward, not the exit of §3.2**, and the "invite forward, do
+not offer an exit" rule has no bearing on it: the skip is required here at every
+first-run step, while the exit is offered only when the session has actually run
+long. What the candidate is offered is an earlier ranking, never the door.
 
 If the candidate takes it:
 

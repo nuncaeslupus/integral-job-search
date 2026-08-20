@@ -17,7 +17,7 @@ from typing import get_args
 
 import pytest
 
-from jobsearch import employment_mode
+from jobsearch import employment_mode, session_exit
 from jobsearch.candidate import EmploymentModeName
 from jobsearch.process_spec import Step, StepList, load_steps
 from jobsearch.step_skills import (
@@ -488,3 +488,339 @@ def test_an_unloadable_step_list_records_minus_one_never_zero(tmp_path: Path) ->
     measured = employment_mode.measure(bad, DEFAULT_SKILLS_DIR)
     assert measured["skills_offering_an_illegal_employment_mode"] == -1
     assert measured["steps_checked"] == 0
+
+
+# --- D-15: no step boundary closes by offering to end the session ----------
+
+
+def _boundary_skill(tmp_path: Path, step: Step, boundary: str) -> Path:
+    """A one-step synthetic library whose SKILL.md carries `boundary`.
+
+    A `## Gotchas` heading follows, so the tests exercise the same
+    section-terminated parse the real files get rather than the end-of-file
+    special case.
+    """
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / skill_dir_name(step)
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: x\ndescription: x\n---\n\n## Boundary\n\n{boundary}\n\n## Gotchas\n\n- none\n",
+        encoding="utf-8",
+    )
+    return skills_dir
+
+
+_CONFORMING_BOUNDARY = (
+    "**Invite forward; never close by offering to stop.** The exit is offered only when the\n"
+    "session has actually run long.\n\n"
+    '```text\n"That\'s traits done. Reactions next — carry on?"\n```'
+)
+
+
+def test_a_step_boundary_does_not_offer_to_end_the_session() -> None:
+    """D-15's gate over the committed library: `== 0`, and the rule is really there.
+
+    The count alone would pass on a library whose boundaries said nothing at
+    all, so the two things that make the zero meaningful are asserted with it:
+    every boundary states the governing rule, and every boundary still says
+    something out loud (§3.2 — ending silently is its own defect).
+    """
+    measured = session_exit.measure()
+    assert measured["step_boundaries_offering_an_exit"] == 0, measured["offenders"]
+    assert measured["steps_checked"] == 13
+    assert measured["boundaries_checked"] == 13
+    assert measured["rule_declared_in_step_spec"] is True
+
+    for reading in measured["readings"]:
+        assert reading["states_the_rule"], f"{reading['step']} states no rule to govern the offer"
+        assert reading["spoken_examples"] >= 1, f"{reading['step']} says nothing out loud"
+
+
+def test_the_four_boundaries_that_offered_an_exit_are_counted(tmp_path: Path) -> None:
+    """The regression limb, in the exact words the pre-fix library used.
+
+    Steps 1, 4, 5 and 10 are the four a candidate answering four steps met, and
+    each phrases the offer differently — "or leave it here?", "Leave it there?",
+    "or pause?", "or leave it?" — which is why the check is a pattern over ways
+    of saying it rather than one string.
+    """
+    said = [
+        '"Want to keep going to what would rule a job out, or leave it here?"',
+        '"I don\'t have enough yet on how you take pressure. Leave it there?"',
+        '"Want to turn that into weights, or pause?"',
+        '"Anything else, or leave it?"',
+    ]
+    for spoken in said:
+        offers, shortcuts = session_exit._exit_offers((spoken,))
+        assert offers == (spoken,), f"not read as an exit offer: {spoken}"
+        assert shortcuts == (), f"wrongly licensed as §3.3's skip: {spoken}"
+
+
+def test_a_boundary_that_states_no_rule_is_counted(tmp_path: Path, steps: StepList) -> None:
+    """The silence limb — the state every one of the thirteen skills was in.
+
+    A boundary whose example happens to invite forward still counts while no
+    rule is written down: nothing stops the next edit from copying the spec's
+    other examples back in. This is the limb that makes the gate bite, since
+    the regression limb alone reads clean the moment four sentences are
+    rewritten.
+    """
+    step = next(s for s in steps.steps if s.id == "traits")
+    skills_dir = _boundary_skill(
+        tmp_path,
+        step,
+        'What the tool says out loud:\n\n```text\n"That\'s traits done. Carry on?"\n```',
+    )
+    reading = session_exit.read_boundary(step, skills_dir)
+    assert reading.exit_offers == ()
+    assert not reading.states_the_rule
+    assert reading.offers
+    assert any("carries no rule governing" in reason for reason in reading.reasons)
+
+
+def test_stating_the_rule_is_not_read_as_offering_the_exit(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """The prose/spoken split, without which the fix would fail its own gate.
+
+    The rule sentence necessarily names the thing it forbids ("the exit is
+    offered only when…"). Were the regression limb to read the whole section,
+    every skill that stated its rule would be counted for stating it, and no
+    library could satisfy the gate at all.
+    """
+    step = next(s for s in steps.steps if s.id == "traits")
+    skills_dir = _boundary_skill(tmp_path, step, _CONFORMING_BOUNDARY)
+    reading = session_exit.read_boundary(step, skills_dir)
+    assert reading.states_the_rule
+    assert reading.exit_offers == ()
+    assert not reading.offers, reading.reasons
+
+
+def test_deferring_an_artefact_is_not_offering_to_leave(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """Step 11's "Ready to send, or sit on it?" is two ways forward, not an exit.
+
+    The check must separate ending the sitting from declining a subject or
+    deferring a document, or it would force the process to stop offering
+    genuine choices in order to score.
+    """
+    step = next(s for s in steps.steps if s.id == "application")
+    skills_dir = _boundary_skill(
+        tmp_path,
+        step,
+        "**Invite forward; the exit is offered only when the session has run long, never"
+        ' as this step\'s standard close.**\n\n```text\n"That\'s the CV and letter for the'
+        ' Girona role. Ready to send, or sit on it?"\n```',
+    )
+    reading = session_exit.read_boundary(step, skills_dir)
+    assert reading.exit_offers == ()
+    assert not reading.offers, reading.reasons
+
+
+def test_a_bare_mention_of_stopping_does_not_state_the_rule(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """Naming the subject and requiring nothing of it licenses nothing.
+
+    D-14 was reviewed into exactly this: a single marker admitted prose that
+    raised the subject and forbade nothing. Two markers here for the same
+    reason — the paragraph must name the exit *and* constrain it.
+    """
+    step = next(s for s in steps.steps if s.id == "traits")
+    skills_dir = _boundary_skill(
+        tmp_path,
+        step,
+        "Some candidates like being offered the exit at the end of a step.\n\n"
+        '```text\n"That\'s traits done. Carry on?"\n```',
+    )
+    reading = session_exit.read_boundary(step, skills_dir)
+    assert not reading.states_the_rule
+    assert reading.offers
+
+
+def test_a_dropped_spec_rule_records_minus_one_never_a_clean_zero(tmp_path: Path) -> None:
+    """The requirement going away must not read as the requirement being met.
+
+    This module enforces a rule it does not own. If the project decides a
+    boundary *should* offer an exit, the rule leaves `spec-v2-steps.md` and
+    this gate must stop reading as a pass rather than quietly keep policing a
+    policy nobody holds.
+    """
+    without_rule = tmp_path / "spec-v2-steps.md"
+    without_rule.write_text("## How to read a step\n\nFour rules apply.\n", encoding="utf-8")
+    measured = session_exit.measure(None, DEFAULT_SKILLS_DIR, without_rule)
+    assert measured["step_boundaries_offering_an_exit"] == -1
+    assert measured["rule_declared_in_step_spec"] is False
+    assert "no longer declares" in measured["offenders"][0]["reasons"][0]
+
+
+def test_a_missing_spec_document_records_minus_one_never_zero(tmp_path: Path) -> None:
+    """A moved or deleted spec is the same failure as a deleted rule."""
+    measured = session_exit.measure(None, DEFAULT_SKILLS_DIR, tmp_path / "gone.md")
+    assert measured["step_boundaries_offering_an_exit"] == -1
+
+
+def test_a_boundaryless_library_records_minus_one_never_zero(tmp_path: Path) -> None:
+    """No `## Boundary` anywhere means nothing was checked, not nothing was wrong."""
+    (tmp_path / "skills").mkdir()
+    measured = session_exit.measure(None, tmp_path / "skills")
+    assert measured["step_boundaries_offering_an_exit"] == -1
+    assert "nothing was checked" in measured["offenders"][0]["reasons"][0]
+
+
+def test_an_unloadable_step_list_records_minus_one_for_the_exit_gate(tmp_path: Path) -> None:
+    """A step list that cannot be read yields no measurement, not a passing one."""
+    bad = tmp_path / "steps.json"
+    bad.write_text("{not json", encoding="utf-8")
+    measured = session_exit.measure(bad, DEFAULT_SKILLS_DIR)
+    assert measured["step_boundaries_offering_an_exit"] == -1
+
+
+def test_a_boundary_that_says_nothing_out_loud_is_counted(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """§3.2: ending silently is its own defect, and it also measures nothing.
+
+    A section with no fenced example leaves the regression limb with no text to
+    read, so a clean count there would mean "not checked", not "checked and
+    clean".
+    """
+    step = next(s for s in steps.steps if s.id == "traits")
+    skills_dir = _boundary_skill(
+        tmp_path,
+        step,
+        "**The exit is offered only when the session has run long, and never as a"
+        " standard close.** Writes `last_activity`.",
+    )
+    reading = session_exit.read_boundary(step, skills_dir)
+    assert reading.spoken_examples == 0
+    assert reading.offers
+    assert any("no spoken example" in reason for reason in reading.reasons)
+
+
+def test_undecodable_boundary_prose_is_recorded_as_a_reason_never_raised(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """`UnicodeDecodeError` is a `ValueError` — a gate that raises records nothing."""
+    step = next(s for s in steps.steps if s.id == "traits")
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / skill_dir_name(step)
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(b"## Boundary\n\n\xff\xfe not utf-8\n")
+    reading = session_exit.read_boundary(step, skills_dir)
+    assert reading.offers
+    assert any("could not be read" in reason for reason in reading.reasons)
+
+
+def test_a_missing_skill_is_reported_not_counted_by_the_exit_gate(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """S7's gate owns "every step has a skill"; charging it twice overstates it."""
+    step = next(s for s in steps.steps if s.id == "traits")
+    reading = session_exit.read_boundary(step, tmp_path / "nonexistent")
+    assert not reading.skill_md_exists
+    assert not reading.offers
+
+
+def test_exit_evidence_matches_measure(tmp_path: Path) -> None:
+    """The committed number is what the code says now, not what it said once."""
+    target = tmp_path / "D-15.json"
+    measured = session_exit.write_evidence(target)
+    assert json.loads(target.read_text(encoding="utf-8")) == measured
+    assert measured["step_boundaries_offering_an_exit"] == 0
+
+
+# --- D-15 review round (Qodo, PR #102): the exit and the offered skip -------
+
+
+def test_the_offered_skip_is_not_read_as_an_exit(tmp_path: Path, steps: StepList) -> None:
+    """§3.3's prescribed sentence must never count as an exit offer.
+
+    The process calls two different things stopping. The *exit* ends the
+    sitting; §3.3's *skip* — "we can stop here and go look at real jobs with
+    what I have" — ends the first-run climb and sends the candidate forward to a
+    provisional ranking. Counting the second would make a required behaviour
+    unimplementable: a compliant boundary would fail the gate, and the gate
+    would enforce the opposite of the process contract.
+    """
+    spoken = (
+        '"We can stop here and go look at real jobs with what I have; the list will be'
+        ' rougher and I\'ll tell you what would sharpen it."'
+    )
+    offers, shortcuts = session_exit._exit_offers((spoken,))
+    assert offers == ()
+    assert shortcuts == (spoken,), "the skip must be recorded, not silently dropped"
+
+    step = next(s for s in steps.steps if s.id == "constraints")
+    skills_dir = _boundary_skill(
+        tmp_path,
+        step,
+        "**Never close by offering to end the session.** The exit is offered only when the"
+        f" session has run long.\n\n```text\n{spoken}\n```",
+    )
+    reading = session_exit.read_boundary(step, skills_dir)
+    assert not reading.offers, reading.reasons
+
+
+def test_exit_offers_phrased_another_way_are_still_counted(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """The pattern is enumerated, so its coverage is the whole of its worth.
+
+    Review found these four phrasings passing straight through: a boundary
+    could state the governing rule and then offer the door in the example, with
+    the count still reading zero.
+    """
+    for spoken in (
+        '"Shall we wrap up here?"',
+        '"End here, and pick it up next time?"',
+        '"Want to take a break and resume tomorrow?"',
+        '"That\'s probably enough for one sitting."',
+    ):
+        offers, shortcuts = session_exit._exit_offers((spoken,))
+        assert offers == (spoken,), f"not read as an exit offer: {spoken}"
+        assert shortcuts == ()
+
+
+def test_the_skip_licence_needs_a_forward_destination(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """An exit cannot be laundered into a skip by sounding constructive.
+
+    The licence requires the line to name going on to the jobs, the offers or
+    the ranking *now*. A sentence that sends the candidate to their ranking is
+    the skip; one that just sounds warm about leaving is the exit.
+    """
+    offers, shortcuts = session_exit._exit_offers(
+        ('"We can stop here, and it\'s been really useful — rest up."',)
+    )
+    assert offers, "a warm exit is still an exit"
+    assert shortcuts == ()
+
+
+def test_every_skill_preserves_the_offered_skip() -> None:
+    """The committed rule must forbid the exit without deleting §3.3's shortcut.
+
+    The first cut said "never close by offering to stop", which reads as
+    forbidding the skip too — §3.3 requires it at the end of every first-run
+    step, so a rule that suppressed it would remove a documented path through
+    the process.
+    """
+    for skill_md in sorted(DEFAULT_SKILLS_DIR.glob("step-*/SKILL.md")):
+        section = session_exit.boundary_section(skill_md.read_text(encoding="utf-8"))
+        assert section is not None, skill_md
+        _, prose = session_exit.split_spoken_and_prose(section)
+        assert "§3.3" in prose, f"{skill_md.parent.name} does not preserve the offered skip"
+
+
+def test_the_process_spec_distinguishes_the_exit_from_the_skip() -> None:
+    """§3.2 and §3.3 must not read as one rule, in either direction.
+
+    §3.2 forbidding the exit while §3.3 requires the skip is only coherent if
+    both say which of the two they mean. This is D-15's own failure mode — a
+    rule in one document contradicted by another — applied to the fix for it.
+    """
+    process = (Path("status") / "spec-v2-process.md").read_text(encoding="utf-8")
+    assert "Two different things get called stopping" in process
+    assert "This is a move forward, not the exit of §3.2" in process
