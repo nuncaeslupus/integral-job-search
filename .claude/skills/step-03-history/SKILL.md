@@ -1,6 +1,6 @@
 ---
 name: step-03-history
-description: Triggered by a candidate's session at step 3 (`history`) of the job-search process (`status/spec-v2-steps.json`) — builds the candidate's story bank of episodes from past roles. Do NOT use for scoring or presenting traits — that is step 4, which reads this step's evidence but never asks the candidate to rate themselves.
+description: Step 3 (`history`) of the candidate process — builds the candidate's story bank of episodes from past roles. Do NOT use for scoring or presenting traits — that is step 4, which reads this step's evidence but never asks the candidate to rate themselves.
 ---
 
 # step-03-history

@@ -39,9 +39,17 @@ this module counts, and T55's gate is the count.
 **What the allowlist holds, and why each entry is in it.** Everything here is a
 place where the old name is *correct* and sweeping it would destroy something:
 
-- `arsenal/` — the queue ledger. Its historical rows record what past tasks
-  said at the time, and the whole point of a ledger is that it is not edited
-  afterwards. Task ids are opaque and the vendored bundle keeps its own name.
+- `arsenal/tasks/_history/` — the archived rows of the queue ledger. They
+  record what a past task said at the time, and the whole point of a ledger is
+  that it is not edited afterwards. **Only the archive**: the first version of
+  this list held `arsenal/`, which also covered the *live* task files and
+  `arsenal/config.toml`, and those are not history — a live task's fenced gate
+  block is a command that still runs. Eight of them named `jobsearch.*` after
+  T55 swept everything else, two inside gate blocks, and this counter reported
+  zero. That is the dishonest-zero this docstring warns about, found in its own
+  allowlist.
+- `arsenal/tasks/_migrated-history.md` — the same ledger's pre-migration rows,
+  archived in one file rather than one per task.
 - `claude-arsenal/` and `vendor/` — upstream's code, reverted at the next
   upgrade; not ours to rename.
 - this module and `tests/test_naming.py` — a counter has to name the thing it
@@ -88,7 +96,8 @@ _REPOSITORY_REFERENCE = re.compile(
 
 #: Paths where the old name is correct. Prefix-matched, repo-relative.
 ALLOWLIST: tuple[str, ...] = (
-    "arsenal/",
+    "arsenal/tasks/_history/",
+    "arsenal/tasks/_migrated-history.md",
     "claude-arsenal/",
     "vendor/",
     "src/integral/naming.py",

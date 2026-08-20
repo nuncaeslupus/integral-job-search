@@ -1,6 +1,6 @@
 ---
 name: step-02-constraints
-description: Triggered by a candidate's session at step 2 (`constraints`) of the job-search process (`status/spec-v2-steps.json`) — settles what would rule a job out — residence, pay floor, mobility, permits. Do NOT use for a candidate volunteering trait or history content mid-conversation — capture it and route to step 3 or 4, do not force it into a constraint field.
+description: Step 2 (`constraints`) of the candidate process — settles what would rule a job out — residence, pay floor, mobility, permits. Do NOT use for a candidate volunteering trait or history content mid-conversation — capture it and route to step 3 or 4, do not force it into a constraint field.
 ---
 
 # step-02-constraints

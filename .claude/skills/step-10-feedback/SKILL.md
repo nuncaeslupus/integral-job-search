@@ -1,6 +1,6 @@
 ---
 name: step-10-feedback
-description: Triggered by a candidate's session at step 10 (`feedback`) of the job-search process (`status/spec-v2-steps.json`) — captures what the candidate thinks of the ranked offers and re-ranks. Do NOT use for writing an application document from what was said here — a rejection reason given in this step is never quoted to any employer.
+description: Step 10 (`feedback`) of the candidate process — captures what the candidate thinks of the ranked offers and re-ranks. Do NOT use for writing an application document from what was said here — a rejection reason given in this step is never quoted to any employer.
 ---
 
 # step-10-feedback

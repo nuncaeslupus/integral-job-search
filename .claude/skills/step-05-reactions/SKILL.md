@@ -1,6 +1,6 @@
 ---
 name: step-05-reactions
-description: Triggered by a candidate's session at step 5 (`reactions`) of the job-search process (`status/spec-v2-steps.json`) — captures reactions to real adverts to learn what the candidate actually values. Do NOT use for fitting weights from a completed reaction set — that is step 6's job, which reads this step's evidence rows.
+description: Step 5 (`reactions`) of the candidate process — captures reactions to real adverts to learn what the candidate actually values. Do NOT use for fitting weights from a completed reaction set — that is step 6's job, which reads this step's evidence rows.
 ---
 
 # step-05-reactions

@@ -1,6 +1,6 @@
 ---
 name: step-00-identify
-description: Triggered by a candidate's session at step 0 (`identify`) of the job-search process (`status/spec-v2-steps.json`) — resolves who the candidate is, before any file under profiles/ is touched. Do NOT use for a session already past identification (current_step is already recorded and not `identify`) — resume there instead via the process runtime.
+description: Step 0 (`identify`) of the candidate process — resolves who the candidate is, before any file under profiles/ is touched. Do NOT use for a session already past identification (current_step is already recorded and not `identify`) — resume there instead via the process runtime.
 ---
 
 # step-00-identify

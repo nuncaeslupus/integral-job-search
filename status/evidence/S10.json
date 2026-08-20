@@ -2,11 +2,11 @@
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 13000,
   "budget_source": "config",
-  "description_chars_total": 12138,
+  "description_chars_total": 11241,
   "skills_counted": 33,
-  "headroom_chars": 862,
+  "headroom_chars": 1759,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 4138,
+  "overage_against_upstream_default": 3241,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
@@ -107,68 +107,68 @@
     },
     {
       "skill": "step-00-identify",
-      "description_chars": 345,
-      "listing_chars": 365
+      "description_chars": 276,
+      "listing_chars": 296
     },
     {
       "skill": "step-01-intake",
-      "description_chars": 343,
-      "listing_chars": 361
+      "description_chars": 274,
+      "listing_chars": 292
     },
     {
       "skill": "step-02-constraints",
-      "description_chars": 357,
-      "listing_chars": 380
-    },
-    {
-      "skill": "step-03-history",
-      "description_chars": 321,
-      "listing_chars": 340
-    },
-    {
-      "skill": "step-04-traits",
-      "description_chars": 293,
+      "description_chars": 288,
       "listing_chars": 311
     },
     {
+      "skill": "step-03-history",
+      "description_chars": 252,
+      "listing_chars": 271
+    },
+    {
+      "skill": "step-04-traits",
+      "description_chars": 224,
+      "listing_chars": 242
+    },
+    {
       "skill": "step-05-reactions",
-      "description_chars": 320,
-      "listing_chars": 341
+      "description_chars": 251,
+      "listing_chars": 272
     },
     {
       "skill": "step-06-preferences",
-      "description_chars": 316,
-      "listing_chars": 339
+      "description_chars": 247,
+      "listing_chars": 270
     },
     {
       "skill": "step-07-sourcing",
-      "description_chars": 303,
-      "listing_chars": 323
+      "description_chars": 234,
+      "listing_chars": 254
     },
     {
       "skill": "step-08-understanding",
-      "description_chars": 294,
-      "listing_chars": 319
+      "description_chars": 225,
+      "listing_chars": 250
     },
     {
       "skill": "step-09-ranking",
-      "description_chars": 309,
-      "listing_chars": 328
+      "description_chars": 240,
+      "listing_chars": 259
     },
     {
       "skill": "step-10-feedback",
-      "description_chars": 330,
-      "listing_chars": 350
+      "description_chars": 261,
+      "listing_chars": 281
     },
     {
       "skill": "step-11-application",
-      "description_chars": 313,
-      "listing_chars": 336
+      "description_chars": 244,
+      "listing_chars": 267
     },
     {
       "skill": "step-12-interview-log",
-      "description_chars": 285,
-      "listing_chars": 310
+      "description_chars": 216,
+      "listing_chars": 241
     },
     {
       "skill": "test-mode",

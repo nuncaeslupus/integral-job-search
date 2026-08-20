@@ -1,6 +1,6 @@
 ---
 name: step-11-application
-description: Triggered by a candidate's session at step 11 (`application`) of the job-search process (`status/spec-v2-steps.json`) — drafts a CV and letter for one specific shortlisted offer. Do NOT use for preparing for the interview that follows an application — that is step 12, which reads this step's generated documents.
+description: Step 11 (`application`) of the candidate process — drafts a CV and letter for one specific shortlisted offer. Do NOT use for preparing for the interview that follows an application — that is step 12, which reads this step's generated documents.
 ---
 
 # step-11-application

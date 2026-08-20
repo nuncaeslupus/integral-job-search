@@ -1,6 +1,6 @@
 ---
 name: step-04-traits
-description: Triggered by a candidate's session at step 4 (`traits`) of the job-search process (`status/spec-v2-steps.json`) — scores traits from accumulated evidence — never a personality quiz. Do NOT use for deriving weights or presenting a ranked list — those read `traits.json`, they do not produce it.
+description: Step 4 (`traits`) of the candidate process — scores traits from accumulated evidence — never a personality quiz. Do NOT use for deriving weights or presenting a ranked list — those read `traits.json`, they do not produce it.
 ---
 
 # step-04-traits

@@ -3,7 +3,7 @@
 ## Board
 
 - **T55 merged** as `745a155` via
-  [#108](https://github.com/nuncaeslupus/job-search/pull/108), closing #49. The
+  #108, closing #49. The
   package is `integral`, the distribution `integral-job-search`, and
   `integral.naming` is the gate that keeps old names from creeping back.
 - **The GitHub repo has not been renamed** — that is the owner's to do, and until
@@ -22,20 +22,53 @@ chars; it is now 4,845, with everything situational moved to
 the bundle-upgrade procedure, the skill-listing budget, how to park a task, and the
 title-matching history all live there in full.
 
-Measured resident cost per turn, for whoever picks this up:
+Measured resident cost per turn, after this session:
 
 | block | chars | who owns it |
 |---|---|---|
-| the skill listing | ~13,000 | this repo — **the largest lever left** |
-| `claude-arsenal/AGENTS.md` | 10,509 | vendored; upstream's to shorten |
-| `CLAUDE.md` | 4,845 | this repo (was 8,200) |
+| the skill listing | 13,000 -> **11,241** | this repo |
+| `claude-arsenal/AGENTS.md` | 10,509 | vendored — **already split**, see below |
+| `CLAUDE.md` | 8,200 -> **4,845** | this repo |
 
-**The skill listing is the next real saving and it is not yet taken.** Thirteen
-step skills open their `description` with the same ~105-character preamble, ~1,365
-characters of pure repetition charged on every turn including sessions that never
-load a step skill. Trimming it needs `skill-creator` opened first (repo rule),
-touches 13 files, and moves the `integral.skill_budget` measurement — so it wants
-its own task and its own review, not a fold-in.
+`AGENTS.md` is not a target. It already does exactly what `CLAUDE.md` now does:
+10,509 chars resident against 38,917 held back in `claude-arsenal/references/`,
+read on demand. It is 21% resident, and it is the pattern the `CLAUDE.md` split
+copied — do not file it upstream as bloat.
+
+The skill listing came down by dropping the identical ~105-character preamble
+from all thirteen step descriptions. Budget headroom went 862 -> 1,759 chars, so
+the audit's "within 10% of 13000" warning clears **without** the number being
+raised. No skill was deleted, and deleting one was considered and rejected:
+`init.py` and `arsenal/config.toml` both say in as many words to raise the budget
+rather than delete skills to fit it, and S10 already chose the 13,000 with its
+~13KB/turn cost written down. For the record, since it was asked and checked —
+`.claude/skills/` is host-owned, the init bundle carries no `SKILL.md`, so a
+deleted skill would *not* come back at the next upgrade; and a skill can be kept
+in the repo but out of the listing by moving its directory outside
+`.claude/skills/`.
+
+## A real defect found on the way, and fixed
+
+**T55's naming sweep reported a dishonest zero.** `ALLOWLIST` opened with
+`arsenal/` — correct for the ledger's archive, wrong for everything else under
+that prefix. Eight **live** task files still named the old package, two of
+them inside fenced acceptance-gate blocks — `lo-25b1` ran `python -m
+<old>.extraction`, `lo-892b` ran `python -m <old>.connector_exchange`. Those are
+commands that run when the task is worked, against a module that no longer
+exists. (They are written `<old>` here on purpose: this file is scanned now, and
+spelling the name out is what the counter is for.) `verify-gates` does not catch it either — it asserts a fenced
+block is *present*, never that the command inside resolves. One of the eight is
+`t-20ca057d`, the next task in the queue.
+
+Fixed: the allowlist is narrowed to `arsenal/tasks/_history/` and
+`arsenal/tasks/_migrated-history.md`, the nine live files are repointed, and
+`test_a_live_task_file_is_counted_even_though_its_archive_is_not` closes the hole
+— the previous allowlist test only ever planted a reference in `_history/`, so it
+could not have failed. The sweep now reads 0 against 462 files honestly.
+
+**Worth someone's attention:** `verify-gates` asserting presence rather than
+resolvability is the general form of this. A gate block naming a module that does
+not import would pass today.
 
 ## Surface facts now live in `CLAUDE.md`
 

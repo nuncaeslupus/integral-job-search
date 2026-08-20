@@ -1,6 +1,6 @@
 ---
 name: step-07-sourcing
-description: Triggered by a candidate's session at step 7 (`sourcing`) of the job-search process (`status/spec-v2-steps.json`) — fetches and dedupes live offers against the candidate's constraints. Do NOT use for reading what an offer's text actually means — that is step 8, which runs after this step's offers land.
+description: Step 7 (`sourcing`) of the candidate process — fetches and dedupes live offers against the candidate's constraints. Do NOT use for reading what an offer's text actually means — that is step 8, which runs after this step's offers land.
 ---
 
 # step-07-sourcing

@@ -33,7 +33,8 @@ never by hand.
 multiple of 1,000 or that leaves under 400 chars of headroom, and reports `-1` —
 not a clean zero — when the library is inside a budget that was overridden, fell
 back, or was fitted to the measurement. The audit's "within 10% of 13000" warning
-is the budget working: 862 chars spare, revisit at roughly three more skills.
+is the budget working. After the step-skill preamble trim the library measures
+11,241 chars with 1,759 spare; revisit at roughly five more skills.
 **Do not silence it by raising the number.**
 
 The listing is itself resident context — roughly 13,000 characters on every turn,
