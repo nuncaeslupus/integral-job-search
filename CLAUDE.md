@@ -42,29 +42,25 @@ task, so an empty selection can no longer look healthy.
 
 **v0.36.0 dropped `body` from that fetch**, which on this 40-issue board is
 ~9k tokens down to ~1.2k: `task_id_from_issue` falls back to matching the issue
-**title** against the task files' `title:`. Two consequences bit here, and the
-first is still live.
+**title** against the task files' `title:`. Nothing had ever compared those two
+strings before, and both sides were spelling titles differently — fourteen live
+tasks silently stopped resolving. Both causes are now fixed, and the second is
+the one to remember:
 
-**Two tasks do not resolve by title, and `handle_sync.py` will offer to open
-duplicate issues for them. Do not.**
+- 36 task files stored their title JSON-escaped (`\u2014`, `\u20ac`, `\u2192`)
+  inside a double-quoted scalar that arsenal's front-matter parser does not
+  decode. They now hold the real characters. **If a new task file appears with
+  `\uXXXX` in its title, decode it** — arsenal's own writers emit them, so this
+  recurs.
+- The MCP `list_issues` tool HTML-escapes `<`, `>` and `&` in titles, so
+  `lo-0300` (`<offer_id>`) and `lo-1af2` (`>=6`) could not match. Fixed upstream
+  in **v0.36.1** (`claude-arsenal#186`): `normalise_title` unescapes. Verified
+  here — `handle_sync.py` reports every task has a handle.
 
-| task | already has | why it fails |
-|---|---|---|
-| `lo-0300` | **#64** | title holds `<offer_id>`; the tool returns `&lt;offer_id&gt;` |
-| `lo-1af2` | **#50** | title holds `>=6`, `>=15`; the tool returns `&gt;=6` |
-
-The MCP `list_issues` tool HTML-escapes `<`, `>` and `&` in titles, and
-`normalise_title` does not unescape them, so the two sides cannot match. Filed
-upstream. Until it lands, the detector is `query_status.py`, which names exactly
-which tasks failed to resolve — treat *that* list, not `handle_sync.py`'s
-output, as the question to answer.
-
-The second consequence is already fixed: 12 further tasks failed because their
-files stored titles JSON-escaped (`\u2014`, `\u20ac`, `\u2192`) inside a
-double-quoted YAML scalar that arsenal's parser does not decode. Those 36 task
-files now hold the real characters. **If a new task file appears with `\uXXXX`
-in its title, decode it** — the escapes come from arsenal's own writers, and a
-title that does not match its issue is invisible to a body-free fetch.
+`query_status.py` is the detector for this class of failure: it names exactly
+which tasks did not resolve. **Trust that list over `handle_sync.py`'s**, which
+proposes new issues for whatever it cannot resolve — on a bad fold, that means
+duplicate handles for tasks that already have one.
 
 ## `make arsenal-remote` reports; `make arsenal-upgrade REF=…` upgrades
 
