@@ -115,12 +115,20 @@ clean:  ## remove build and tool caches
 # vendored whole at vendor/claude-arsenal, while the assembled bundle holding
 # .bundle-version is claude-arsenal/. Until v0.29.0 one variable had to serve
 # both, so no setting worked and the check always failed (claude-arsenal#162).
+# `--check-only` is not optional here. Without it this target pulls the subtree
+# and COMMITS, as a side effect of a target whose name and help both say it only
+# wires up a remote and compares versions. It did exactly that on 2026-08-20.
+# And the pull it performs is not the whole upgrade: check_update.sh re-runs
+# init.py, which assembles claude-arsenal/ out of .claude/skills/init/assets/ —
+# refreshed only by `update-skills` — so the bundle is rebuilt from the OLD
+# assets and stays a version behind the subtree. `arsenal-upgrade` is the target
+# that does all four steps; this one reports.
 arsenal-remote:  ## wire up the 'arsenal' remote so check_update.sh can compare versions
 	@git remote get-url arsenal >/dev/null 2>&1 \
 		|| git remote add arsenal $(ARSENAL_REPO)
 	@git fetch --tags arsenal
 	@ARSENAL_PREFIX=$(ARSENAL_PREFIX) ARSENAL_BUNDLE_DIR=claude-arsenal \
-		bash claude-arsenal/bin/check_update.sh
+		bash claude-arsenal/bin/check_update.sh --check-only
 
 update-skills:  ## assemble .claude/skills from the vendored subtree (for CC web)
 	@test -d $(ARSENAL_PREFIX) \
