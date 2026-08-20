@@ -50,7 +50,7 @@ session-end = "handoff"
 # every turn of every session. Revisit it when the library grows — that is the
 # price of a budget that is chosen rather than fitted.
 #
-# `jobsearch.skill_budget` reads this key and measures against it, and refuses
+# `integral.skill_budget` reads this key and measures against it, and refuses
 # a value that is not a round multiple of 1,000 or that leaves under 400 chars
 # of headroom — so it cannot be quietly reset to whatever the library happens
 # to measure. `audit_library.py` still uses upstream's hardcoded 8,000

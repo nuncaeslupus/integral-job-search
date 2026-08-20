@@ -118,6 +118,20 @@ def test_an_allowlisted_path_is_not_counted(tmp_path: Path) -> None:
     assert all(entry.rstrip("/") for entry in ALLOWLIST)
 
 
+def test_a_live_task_file_is_counted_even_though_its_archive_is_not(tmp_path: Path) -> None:
+    """The allowlist covers the ledger's archive, never its live rows.
+
+    It first read `arsenal/`, which also hid `arsenal/tasks/*.md` and
+    `arsenal/config.toml`. Eight live task files still named `jobsearch.*`
+    after T55, two of them inside fenced gate blocks — commands that no longer
+    run — and this counter reported zero. A gate block is not history.
+    """
+    _git_init(tmp_path)
+    _commit(tmp_path, "arsenal/tasks/t-0000.md", "uv run python -m jobsearch.extraction\n")
+    _commit(tmp_path, "arsenal/config.toml", "# jobsearch.skill_budget reads this key\n")
+    assert measure(tmp_path)["old_name_references"] == 2
+
+
 def test_a_tree_git_cannot_read_raises_rather_than_measuring_zero(tmp_path: Path) -> None:
     """The failure #189 taught: an unmeasurable gate must not report a clean pass."""
     with pytest.raises(NamingError):

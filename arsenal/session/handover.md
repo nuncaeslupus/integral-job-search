@@ -3,7 +3,7 @@
 ## Board
 
 - **T55 merged** as `745a155` via
-  [#108](https://github.com/nuncaeslupus/job-search/pull/108), closing #49. The
+  #108, closing #49. The
   package is `integral`, the distribution `integral-job-search`, and
   `integral.naming` is the gate that keeps old names from creeping back.
 - **The GitHub repo has not been renamed** — that is the owner's to do, and until
