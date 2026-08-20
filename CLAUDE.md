@@ -46,6 +46,39 @@ v0.28.0 says so out loud: `state_from_issues` warns when issues were fetched and
 **none** resolved to a task, which is the "an empty map looks healthy" failure
 that used to pass silently.
 
+## Do NOT create the handles `handle_sync.py` proposes
+
+Session-protocol step 4 says to run `handle_sync.py` and open an issue for
+everything it prints. **On this repo everything it prints is already finished.**
+
+```
+$ python3 claude-arsenal/scripts/handle_sync.py --issues "$ISSUES" | wc -l
+51        # 51 already-merged (arsenal/tasks/_history/), 0 live
+```
+
+`missing_handles` iterates every task `load_tasks` returns — which deliberately
+includes `_history/`, so terminal ids still resolve — and filters only on "has
+an issue", never on `status`. Following step 4 literally would open 51 issues
+for tasks that merged weeks ago, each then reading as open, unclaimed work.
+
+Filed upstream as **claude-arsenal#169**. Until it is fixed: run the script if
+you like, but create a handle only for a task whose file is in
+`arsenal/tasks/` — never one from `arsenal/tasks/_history/`. Today that means
+creating none.
+
+## `make arsenal-remote` reports; `make arsenal-upgrade REF=…` upgrades
+
+`check_update.sh` without `--check-only` performs the subtree merge **and
+commits**, and the upgrade it performs is incomplete: it re-runs `init.py`,
+which assembles the bundle from `.claude/skills/init/assets/` — refreshed only
+by `make update-skills` — so the bundle is rebuilt from the pre-upgrade assets
+and stays a version behind while reporting success. That happened here on
+2026-08-20 (subtree v0.30.0, bundle v0.29.1, `verify-subtree` failing).
+
+`arsenal-remote` now passes `--check-only`, so reading the version no longer
+writes history. Upgrade deliberately, with `make arsenal-upgrade REF=v0.x.y`,
+which runs all four steps. Filed upstream as **claude-arsenal#170**.
+
 **Parking a task needs the `arsenal:cancelled` label.** `state_reason` is not
 available through these MCP tools, so upstream reads any closed issue as `done`
 unless that label is on it. Closing a task issue to park it, without the label,

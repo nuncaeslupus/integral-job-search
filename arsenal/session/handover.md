@@ -202,3 +202,40 @@ missing before a candidate reaches a ranked list:
 **S11 — "test mode" — is not built** (#63, blocked behind S10 #71). A session
 will run the steps; the meta channel for improving skills mid-session will not
 exist.
+
+---
+
+## Verified for the next session — 2026-08-20
+
+Run as a fresh session would, on `main` at `c9b0455`:
+
+| step | result |
+|------|--------|
+| `check_update.sh --check-only` | v0.30.0, current with the newest tag |
+| `init.py --repo-path . --silent` | nothing stale; **modified no files** |
+| `github_channel.sh --detect` | `rest` (writes still fall back to `manual`/exit 5 — expected) |
+| `query_status --issues` | 81 tasks — open 8, claimed 0, blocked 17, merged 54, **no warnings** |
+| `task_select --issues` | offers **T55**, **T54** |
+| five gates | lint, test (993), evidence, verify-subtree, verify-gates **55/55** |
+| `plan_v2` | drift 0 |
+| `bootstrap --check` | `unbootstrapped_first_runs: 0` over 7 simulated arrivals |
+| `step_runtime.offered` (new candidate) | `identify` (required), `constraints` (required), `history` (optional) |
+
+**Three traps were found and defused; do not undo them.**
+
+1. **`handle_sync.py` proposes 51 handles, every one for already-merged
+   `_history` work.** Following protocol step 4 literally would open 51 issues
+   for finished tasks. `missing_handles` filters on "has an issue" and never on
+   `status`. Upstream **claude-arsenal#169**; the caveat is in `CLAUDE.md`.
+2. **`make arsenal-remote` pulled and committed** as a side effect of reporting
+   a version, and left the bundle a version behind the subtree because the
+   update path rebuilds it from assets only `update-skills` refreshes. It now
+   passes `--check-only`. Upstream **claude-arsenal#170**.
+3. **T15 was still being offered by the selector** though its code is merged and
+   only the D-12 decision is outstanding — a session would have re-done it. It
+   now declares `deps: [t-e1ca8374]`, so the selector holds it until #83 is
+   decided.
+
+Upstream issues open: **#168** (a gate has no "unmeasured" outcome), **#169**,
+**#170**, **#171** (recording a merged task in `_history` is still a manual
+second act — the end-of-session bookkeeping worth removing).
