@@ -1,4 +1,4 @@
-# Session handover — 2026-08-20 (D-13 merged; bundle on v0.36.0)
+# Session handover — 2026-08-20 (D-13 merged; bundle on v0.36.1)
 
 ## Read this first
 
@@ -24,21 +24,25 @@ files' `title:`. The injected protocol block in `CLAUDE.md` says so now.
 **Nothing had ever compared those two strings before, and both sides were
 spelling titles differently.** Fourteen live tasks silently stopped resolving.
 
-- **Fixed here:** 36 task files stored their title JSON-escaped — `—`,
-  `€`, `→` — inside a double-quoted scalar that arsenal's front-matter
-  parser does not decode. They now hold the real characters. **If a new task
-  file appears with `\uXXXX` in its title, decode it**: arsenal's own writers
-  emit them, so this will recur.
-- **Still live, and it can corrupt the board:** `lo-0300` and `lo-1af2` do not
-  resolve, because the MCP `list_issues` tool **HTML-escapes `<`, `>` and `&`
-  in titles** (`&lt;offer_id&gt;`, `&gt;=6`) and `normalise_title` does not
-  unescape. They already have issues **#64** and **#50**, but `handle_sync.py`
-  now offers to open duplicates for them. **Do not create those.** Filed as
-  `claude-arsenal#186` with the one-line fix (`html.unescape`).
+**v0.36.1 closed all of it** (`claude-arsenal#186`) — and closed more than the
+half this session reported at first. Verified in the vendored source, not taken
+from the release note:
 
-The detector that works is `query_status.py` — it names exactly which tasks
-failed to resolve. Treat *that* list, not `handle_sync.py`'s output, as the
-question to answer, until #186 lands.
+- `normalise_title` HTML-unescapes (the MCP tool escapes `<`, `>`, `&`);
+- the front-matter parser decodes `\uXXXX` in a double-quoted scalar;
+- `issue_import.py` and `arsenal_migrate.py` write with `ensure_ascii=False`,
+  so **the writers no longer emit escapes** — the "decode it by hand if you see
+  one" instruction an earlier draft of `CLAUDE.md` carried is obsolete;
+- `handle_sync.py` warns on a near title match rather than proposing a handle.
+
+The 36 task files this repo decoded are correct and stay decoded. Verified on
+the real board: no unresolved tasks, and `handle_sync.py` reports every task has
+an issue handle.
+
+**`query_status.py` is the detector for this class of failure** — it names
+exactly which tasks did not resolve. Trust that list over `handle_sync.py`'s,
+which proposes a new issue for whatever it cannot resolve: on a bad fold that
+means duplicate handles for tasks that already have one.
 
 ## Five issues filed upstream, two already shipped
 
@@ -46,7 +50,9 @@ question to answer, until #186 lands.
 |---|---|---|
 | [#181](https://github.com/nuncaeslupus/claude-arsenal/issues/181) | the fetch pulls every body for one id per issue (~9k) — proposed a title fallback | **shipped in v0.36.0** |
 | [#184](https://github.com/nuncaeslupus/claude-arsenal/issues/184) | no cheap way to read a precedent module's shape | **shipped** as `bin/outline.sh` |
-| [#186](https://github.com/nuncaeslupus/claude-arsenal/issues/186) | the title fallback loses titles containing `<`, `>`, `&` | open |
+| [#186](https://github.com/nuncaeslupus/claude-arsenal/issues/186) | the title fallback loses titles containing `<`, `>`, `&` | **shipped in v0.36.1** |
+| [#188](https://github.com/nuncaeslupus/claude-arsenal/issues/188) | `outline.sh`: bare `function name {` missed, JS control flow printed as declarations, column-zero assignments in a body | open |
+| [#189](https://github.com/nuncaeslupus/claude-arsenal/issues/189) | `context_budget.py`: a missing `AGENTS.md` scores 0 and passes the gate; unguarded reads crash | open |
 | [#182](https://github.com/nuncaeslupus/claude-arsenal/issues/182) | `--detect` prints a false `rest`: the proxy answers `/rate_limit` itself | open |
 | [#183](https://github.com/nuncaeslupus/claude-arsenal/issues/183) | `check_update.sh` calls a missing remote "the bundle was copied, not a subtree" | open |
 
@@ -138,8 +144,10 @@ terminal tasks, 60 gates asserted, 0 without a fenced block.
 
 ## Left open (carried forward)
 
-- **`claude-arsenal#186` is the one that matters** — until it lands, never act
-  on `handle_sync.py`'s proposals for `lo-0300` / `lo-1af2`.
+- **`claude-arsenal#188` and `#189`** are open, both found by Qodo reviewing the
+  upgrade and both verified before filing. `#189` is the sharper one: a bundle
+  missing `AGENTS.md` scores zero resident tokens and reports "Within budget",
+  and `--fail-over` is now wired into upstream CI.
 - **A permissions edit only the owner can make**: `Bash(gh run list:*)` and
   `Bash(gh run view:*)` in `.claude/settings.json`.
 - **`tools/profile_guard.sh` matches a candidate path mentioned in *prose***,
