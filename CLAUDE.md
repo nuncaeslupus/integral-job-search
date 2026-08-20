@@ -20,128 +20,62 @@ Every session, without waiting to be asked:
 6. After any session with tasks: update `arsenal/session/handover.md`.
 
 @claude-arsenal/AGENTS.md
-<!-- /claude-arsenal: auto-managed -->
 
-<!-- host-owned: not managed by claude-arsenal -->
-## Reading the board — the plain `--issues` path works again
+## This surface has no scriptable GitHub channel
 
-`claude-arsenal` v0.28.0 stopped keying task identity on an HTML comment, and
-v0.33.0 stopped `handle_sync.py` proposing handles for archived tasks. Steps 3
-and 4 of the protocol above therefore need no workaround — run them as written,
-and open an issue for anything `handle_sync.py` prints (normally nothing).
+`github_channel.sh --detect` prints `rest`, **and REST does not work here**: the
+proxy answers `403 GitHub access is not enabled for this session`
+(`claude-arsenal#182`). Don't probe it again — the MCP GitHub tools are the only
+channel, so every GitHub step above is performed with them, and the board JSON the
+scripts read is written to disk by hand from the tool result.
 
-```bash
-# fetch with MCP list_issues, labels=["arsenal:task"], open AND closed,
-# fields number/title/state/labels/assignees — NOT body; save to $ISSUES
-python3 claude-arsenal/scripts/query_status.py --issues "$ISSUES"
-python3 claude-arsenal/scripts/task_select.py  --issues "$ISSUES"
-```
+- `claim_task.sh` returns `manual POST`; `create_branch` on `arsenal/claims/<id>`
+  is the compare-and-swap. **201 = won, 422 = lost.**
+- `open_task_pr.sh` cannot be used — it cuts a branch off the default branch, and
+  pushes here are restricted to the session's designated branch. Archive the task
+  file, put `Closes #<issue>` in **both** the commit message and the PR body, and
+  open the PR with the MCP tool.
+- Merging works via the MCP `merge_pull_request` tool.
 
-`state_from_issues` warns when issues were fetched and **none** resolved to a
-task, so an empty selection can no longer look healthy.
+Steps 3 and 4 of the protocol need no workaround — run them as written. Since the
+fetch drops `body`, issues resolve to tasks by **title**; v0.36.1 made that robust
+and `query_status.py` names anything that still fails to resolve. Trust that list
+over `handle_sync.py`'s proposals — only one of the two is wired to an action.
 
-**v0.36.0 dropped `body` from that fetch**, which on this 40-issue board is
-~9k tokens down to ~1.2k: `task_id_from_issue` falls back to matching the issue
-**title** against the task files' `title:`. Nothing had ever compared those two
-strings before, and both sides were spelling titles differently — fourteen live
-tasks silently stopped resolving. **v0.36.1 closed all of it**
-(`claude-arsenal#186`), on all four fronts:
+## Spending the context window deliberately
 
-- `normalise_title` HTML-unescapes, so a title holding `<offer_id>` matches the
-  `&lt;offer_id&gt;` the MCP tool returns;
-- the front-matter parser decodes `\uXXXX` inside a double-quoted scalar, as a
-  real YAML parser would, falling back to the literal reading when the scalar is
-  not valid JSON;
-- `issue_import.py` and `arsenal_migrate.py` write titles with
-  `ensure_ascii=False`, so no new task file carries `\u20ac` for a euro sign;
-- `handle_sync.py` warns on a **near** title match instead of proposing a
-  handle, so an unresolved-but-similar issue can no longer become a duplicate.
+`.rgignore` excludes the vendored and generated trees from every ripgrep-backed
+search, for the same reason `pyproject.toml` excludes them from ruff and mypy: they
+are not ours to change. Search one deliberately with `rg -u --no-ignore-vcs`.
 
-Nothing here needs doing by hand any more. The 36 task files whose titles this
-repo decoded are already correct, and both halves of the escaping problem are
-fixed at the source.
+**The corpus is not excluded, and it is the expensive one.** A line of
+`corpus/{raw,labelled}/ads.jsonl` is a whole advert — the longest is 15,640
+characters — so one content match returns the whole thing. Count or list first
+(`rg -c`, `rg -l`, any `output_mode` but `content`), then read the one record with
+`python3 -c` and `json.loads`, projecting only the fields you need. Same for
+`suggestions.json` and any `status/evidence/*.json`: project the key, never print
+the file.
 
-`query_status.py` remains the detector for this class of failure: it names
-exactly which tasks did not resolve. **Trust that list over `handle_sync.py`'s
-proposals** — only one of the two is wired to an action, which is why the
-near-match guard was added to the one that is.
+Three more costs, each measured here:
 
-## `make arsenal-remote` reports; `make arsenal-upgrade REF=…` upgrades
-
-`check_update.sh` without `--check-only` performs the subtree merge **and
-commits** — a history-writing side effect from a step described as a report. So
-`arsenal-remote` passes `--check-only`; reading a version should not write
-history. Upgrade deliberately with `make arsenal-upgrade REF=v0.x.y`, which runs
-all four steps (v0.33.0 fixed `claude-arsenal#170`: it re-vendors skills after a
-subtree update and refuses to report success on a stale bundle).
-
-**After any upgrade, run `make reader` and `make evidence`.** An upgrade can
-change `create_reader.py` and the bundle's asset count, which leaves the
-generated spec readers and S9's evidence stale. Both are caught by the suite —
-the point is that they are *expected* after an upgrade, and are fixed with the
-repo's own tooling, never by hand.
-
-## The skill listing budget lives in `arsenal/config.toml`
-
-`listing-budget = 13000` (S10). `integral.skill_budget` and `skill-creator`'s
-`audit_library.py` both read that key since v0.33.0 (`claude-arsenal#143`).
-
-`integral.skill_budget` is the gate: it refuses a budget that is not a round
-multiple of 1,000 or that leaves under 400 chars of headroom, and reports `-1` —
-not a clean zero — when the library is inside a budget that was overridden, fell
-back, or was fitted to the measurement. The audit's "within 10% of 13000"
-warning is the budget working: 862 chars spare, revisit at roughly three more
-skills. **Do not silence it by raising the number.**
-
-**Parking a task needs the `arsenal:cancelled` label.** `state_reason` is not
-available through these MCP tools, so upstream reads any closed issue as `done`
-without it, and closing a task issue to park it silently releases everything
-downstream. Prefer keeping it **open** and holding it out of selection with
-`requires:` — that is what #71 does — and use the label only for work genuinely
-abandoned.
-
-## Searching this repository without burning the context window
-
-`.rgignore` excludes the vendored and generated trees — `vendor/`,
-`claude-arsenal/bin|scripts/`, the generated spec readers — from every
-ripgrep-backed search, for the same reason `pyproject.toml` excludes them from
-ruff and mypy: they are not ours to change, a fix inside one is reverted by the
-next refresh, and `vendor/claude-arsenal/docs/research/` alone is a 2.9MB
-document whose lines run to thousands of words each. Search one deliberately
-with `rg -u --no-ignore-vcs` or by naming its directory.
-
-**The corpus is the expensive one, and it is not excluded**, because it is real
-project data worth searching. `corpus/raw/ads.jsonl` and
-`corpus/labelled/ads.jsonl` are 100 lines each, and a line is a whole job
-advert — the longest is **15,640 characters**. One content match returns the
-entire advert, so an unbounded content search across both files can return
-100KB in a single result. Against the corpus:
-
-- count or list files first (`rg -c`, `rg -l`, or `output_mode` other than
-  `content`), and only then read the specific record;
-- read a record with `python3 -c` and `json.loads`, projecting the fields you
-  need, rather than grepping the raw line;
-- if you do need content mode, pass `-o` so only the match comes back, or a
-  small `head_limit`.
-
-The same applies to `corpus/labelled/suggestions.json` and any generated
-`status/evidence/*.json` with a `readings`/`checks` array: project the key you
-want, do not print the file.
+- **`rg -l` with no path scans ~500 files.** Name a directory.
+- **Reading a module to learn its shape costs its whole length.** Use
+  `bash claude-arsenal/bin/outline.sh <file>`; reserve a full read for code you are
+  about to change.
+- **A review bot's PR summary lands in context whole** — Qodo's on #108 was ~14k
+  tokens and changed nothing. Skim it for findings and move on.
 
 ## Known environment state
 
-**GitHub Actions is out of runner minutes until the next billing period
-(noted 2026-08-19).** Every job on every workflow run fails in 3–5 seconds with
-`runner_id: 0` and `runner_name: ""` — no runner is ever assigned. This affects
-`main` as much as any branch: run #142 on `ba7c980` (main's own HEAD) failed
-identically, while the last green run was #137. It is not caused by any diff.
+**GitHub Actions is out of runner minutes until the next billing period** (noted
+2026-08-19). Every job fails in 3–5 seconds with `runner_id: 0` and an empty
+`runner_name` — no runner is ever assigned — on `main` as much as any branch, so it
+is not caused by any diff. Do not treat a red CI here as a signal about the code,
+and do not push speculative fixes for it. Diagnose once: `runner_id: 0` plus a
+sub-5-second duration means this. Remove this section once runs show real durations.
 
-Do not treat a red CI on this repository as a signal about the code, and do not
-push speculative "fixes" for it. Diagnose it once by checking a failed job for
-`runner_id: 0` plus a sub-5-second duration; if both hold, it is this.
-
-**Run the gate locally instead** — these are exactly what CI would run, and all
-five must pass before a merge:
+**Run the gate locally instead.** These are what CI would run, and all five must
+pass before a merge:
 
 ```bash
 make lint           # ruff + strict mypy
@@ -151,4 +85,8 @@ make verify-subtree # the arsenal bundle matches its subtree
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
-Remove this section once runs are completing with real durations again.
+## Read on demand — `docs/repo-playbook.md`
+
+Upgrading the vendored bundle, the skill-listing budget, parking a task, and the
+board's title-matching history live there. Each is needed at one moment in a
+session, not on every turn, so it is a path to open — not an import.

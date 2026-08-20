@@ -1,80 +1,71 @@
-# Session handover — 2026-08-20 (T55 open as #108; bundle on v0.36.1)
+# Session handover — 2026-08-20 (T55 merged; token-cost pass)
 
-## Read this first
+## Board
 
-- **T55 (`lo-9f72`, #49) is done and open as
-  [#108](https://github.com/nuncaeslupus/job-search/pull/108)**, not merged.
-  The task file is already archived at `arsenal/tasks/_history/lo-9f72.md` with
-  `status: merged` inside that same diff, so merging #108 closes #49, archives
-  the task and unblocks its dependents in one act.
-- **The GitHub repository is still named `job-search`.** That rename is an owner
-  action and nothing in this repo can do it. `README.md`'s clone URL and
-  `docs/distribution.md` §7 now name `nuncaeslupus/integral-job-search`, which
-  GitHub redirects to the moment the owner renames — and does not resolve until
-  then. It is the only part of the sweep that is not live.
+- **T55 merged** as `745a155` via
+  [#108](https://github.com/nuncaeslupus/job-search/pull/108), closing #49. The
+  package is `integral`, the distribution `integral-job-search`, and
+  `integral.naming` is the gate that keeps old names from creeping back.
+- **The GitHub repo has not been renamed** — that is the owner's to do, and until
+  they do it the clone URL in `README.md` is aspirational. `docs/distribution.md`
+  says so explicitly.
+- `task_select.py` next returns **`t-20ca057d` (D-21, "a step whose gate is
+  not_implemented must not report `coverage_met` and exit 0", priority 5)**.
+  Unclaimed. Steps 8 and 9 certify over unbuilt gates until it lands.
 
-## What T55 changed
+## What this session changed besides T55
 
-`src/jobsearch/` → `src/integral/` (49 modules), distribution →
-`integral-job-search`, `uv.lock` regenerated, 170 files touched. The gate is a
-reference count in `src/integral/naming.py` writing `status/evidence/T55.json`,
-picked up by `make evidence` like every other module's gate.
+A token-cost pass, at the owner's request. **`CLAUDE.md` is resident on every turn
+of every session**, so its length is charged per turn, not per read. It was 8,200
+chars; it is now 4,845, with everything situational moved to
+`docs/repo-playbook.md` — a path to open, never an import. Nothing was deleted:
+the bundle-upgrade procedure, the skill-listing budget, how to park a task, and the
+title-matching history all live there in full.
 
-**The counter refuses three lookalikes**, and this is the part worth knowing
-before anyone widens it:
+Measured resident cost per turn, for whoever picks this up:
 
-| spelled the same | what it is | swept? |
+| block | chars | who owns it |
 |---|---|---|
-| `ai-job-search` | the external precedent `status/specification.md` compares against | no |
-| `job-search process` | the thirteen-step process the step skills are named after | no |
-| `job-search-spec-v1:` | the `localStorage` key the generated readers save annotations under | no — rewriting orphans saved annotations |
+| the skill listing | ~13,000 | this repo — **the largest lever left** |
+| `claude-arsenal/AGENTS.md` | 10,509 | vendored; upstream's to shorten |
+| `CLAUDE.md` | 4,845 | this repo (was 8,200) |
 
-`arsenal/` is allowlisted from the count: the ledger's historical rows say what
-they said at the time. So is `naming.py` itself and its test — a counter has to
-name what it counts.
+**The skill listing is the next real saving and it is not yet taken.** Thirteen
+step skills open their `description` with the same ~105-character preamble, ~1,365
+characters of pure repetition charged on every turn including sessions that never
+load a step skill. Trimming it needs `skill-creator` opened first (repo rule),
+touches 13 files, and moves the `integral.skill_budget` measurement — so it wants
+its own task and its own review, not a fold-in.
 
-## Surface facts (unchanged, re-confirmed this session)
+## Surface facts now live in `CLAUDE.md`
 
-- **`github_channel.sh --detect` prints `rest`, and `rest` does not work here.**
-  Confirmed again: `--api GET /repos/…/issues` returns **HTTP 403** "GitHub
-  access is not enabled for this session". Upstream `claude-arsenal#182`. The
-  practical cost is not the failure, it is that the board JSON must then be
-  **hand-written from the MCP result** — ~2k output tokens every session, spent
-  re-typing data already in context.
-- **`claim_task.sh` returns `manual POST`**; `create_branch` on
-  `arsenal/claims/<id>` is the compare-and-swap. 201 = won, 422 = lost.
-- **`open_task_pr.sh` still cannot be used** — it cuts a branch off the default
-  branch and this surface only permits pushes to the session's designated
-  branch. Archive the task file, put `Closes #<issue>` in both the commit and
-  the PR body, and open the PR by hand.
-- **CI is still out of runner minutes.** Not re-diagnosed this session; the
-  gate was run locally instead, all five green.
+The `--detect` false `rest`, the `manual POST` claim, why `open_task_pr.sh` cannot
+be used here, and merging via MCP are all in `CLAUDE.md` now — they were being
+re-derived from this file every session. **REST was confirmed dead this session,
+not assumed**: `403 GitHub access is not enabled for this session`, straight from
+the proxy. Do not probe it again.
 
 ## Left open (carried forward)
 
-- **`claude-arsenal#188`, `#189`, `#182`, `#183`** all still open upstream.
+- **`claude-arsenal#182`** (false `rest`), **`#183`** (`check_update.sh` on a
+  missing remote), **`#188`** (`outline.sh` parsing), **`#189`** (`context_budget.py`
+  scores a missing `AGENTS.md` as 0 and passes). All still open upstream.
 - **A permissions edit only the owner can make**: `Bash(gh run list:*)` and
   `Bash(gh run view:*)` in `.claude/settings.json`.
-- **`tools/profile_guard.sh` matches a candidate path mentioned in *prose***,
-  not only one being opened. Still not seeded.
-- **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Resolution B has
-  existed since v0.33.0 (`gate: unmeasured`).
-- **`claude-arsenal#180`** — `open_task_pr.sh` reads `host-gate` from the git
-  root and runs it in the cwd. Inert here while `host-gate` is unset.
+- **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Resolution B has existed
+  since v0.33.0 (`gate: unmeasured`).
+- **`tools/profile_guard.sh` matches a candidate path mentioned in *prose***, not
+  only one being opened. Still not seeded.
 - **D-22's host half is actionable**: a `make gate` target running all five, for
   `host-gate` to point at.
-- **Steps 5, 6, 10, 11, 12 are still `not_implemented`**, and steps 8 and 9
-  certify over unbuilt gates until D-21 lands.
+- **Steps 5, 6, 10, 11, 12 are still `not_implemented`.**
 - **One pre-existing board flag**: mixed-priority-convention — 29 tasks use the
   size scale [10, 5, 1, 0] and 2 use other values [70, 60].
 
-## The gate
+## The gate, run locally (CI has no runner minutes)
 
-```bash
-make lint && make test && make evidence && make verify-subtree && make verify-gates
-```
+`make lint` · `make test` · `make evidence` · `make verify-subtree` ·
+`make verify-gates`
 
-Latest: `make test` **1140 passed / 1 skipped** (was 1126; +14 in
-`tests/test_naming.py`) · `make evidence` no drift · `make verify-subtree` 0
-diverging, 34 assets · `make verify-gates` **61** terminal tasks, 61 gates
-asserted, 0 without a fenced block.
+Latest, on this branch: **1140 passed / 1 skipped**, no evidence drift, 0 diverging
+assets of 34, 61 terminal tasks with 61 gates asserted.
