@@ -10,6 +10,7 @@ candidate's own browser session.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -18,14 +19,17 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from integral import connector_coverage, process_spec, step_skills
 from integral.connectors import (
     MINIMUM_PROBES,
+    SEARCH_SOURCE,
     ConnectorError,
     FieldSelector,
     _as_float,
     assess_staleness,
     build_list_urls,
     build_offer,
+    build_search_offer,
     collect_listing,
     compile_selector,
     load_connector,
@@ -577,3 +581,171 @@ def test_yaml_safe_load_is_the_only_loader_used() -> None:
     this test rather than silently reopening the hole."""
     with pytest.raises(yaml.YAMLError):
         yaml.safe_load("a: !!python/object/apply:os.system ['touch /tmp/pwned']")
+
+
+# ---------------------------------------------------------------------------
+# D-16 — a run with no connector for the candidate's market must say so
+
+
+def _meta(country: str = "ES", site: str = "realboard.example.com") -> str:
+    return yaml.safe_dump(
+        {
+            "site": site,
+            "country": country,
+            "language": "es",
+            "maintainer": "@someone",
+            "last_verified": "2026-08-01",
+            "policy": {"listings": "public", "robots_txt": "respected", "authentication": "none"},
+            "fixture": {"provenance": "sampled", "recorded": "2026-08-01"},
+        }
+    )
+
+
+def _library(root: Path, **packages: str) -> Path:
+    """A connector library on disk: package name -> its `meta.yaml` body."""
+    root.mkdir(parents=True, exist_ok=True)
+    for name, meta in packages.items():
+        package = root / name
+        package.mkdir()
+        (package / "meta.yaml").write_text(meta, encoding="utf-8")
+    return root
+
+
+def test_sourcing_without_a_connector_says_so() -> None:
+    """D-16's gate. `undisclosed_connectorless_sourcing == 0`.
+
+    Every sourcing situation the installed library can put a candidate in
+    either has a usable connector or comes with the disclosure the step spec
+    requires — the absence stated, both remedies offered, and search results
+    labelled as search results.
+    """
+    measured = connector_coverage.measure()
+    assert measured["shortfalls"] == []
+    assert measured["undisclosed_connectorless_sourcing"] == 0
+    # Not a vacuous zero: the situations must actually have been probed, and
+    # the one D-16 was filed from — a market nothing covers — must be among
+    # them, disclosed rather than absent.
+    assert measured["situations_probed"] >= 2
+    connectorless = [r for r in measured["readings"] if r["connectorless"]]
+    assert connectorless, "no connectorless situation was probed — the rule went unexercised"
+    assert all(r["disclosed"] and r["discloses"] for r in connectorless)
+
+
+def test_a_search_result_is_not_presented_as_a_connector_result() -> None:
+    """The other half: what a general web search produced stays legible as
+    that, in the record, after the disclosure has scrolled away.
+
+    `source` is the only place an offer says where it came from, so the
+    reserved name has to hold from both ends — the search path always stamps
+    it, and no connector may claim it.
+    """
+    offer = build_search_offer(
+        text="Se busca albañil en Bilbao. Jornada completa.",
+        url="https://aggregator.example.com/ad/1",
+        source_ref="query: albañil bilbao",
+    )
+    assert offer.source == SEARCH_SOURCE
+    assert connector_coverage.offer_provenance(offer, ["examplejobs"]) == "search"
+
+    from_connector = build_offer(
+        parse_connector(VALID), detail_fields={"text": "Se busca programador."}
+    )
+    assert connector_coverage.offer_provenance(from_connector, ["examplejobs"]) == "connector"
+
+    # And a connector cannot dress itself as the search path to reach the same
+    # `source` from the other side.
+    with pytest.raises(ConnectorError, match="reserved"):
+        parse_connector(
+            f"site: {SEARCH_SOURCE}\nlocale: en\nversion: '1.0.0'\n"
+            "last_verified: '2026-01-01'\n"
+            "list:\n  url_pattern: 'https://x.test/?page={page}'\n"
+            "  item: '.job'\n  fields:\n    text: {css: '.x'}\n"
+        )
+
+
+def test_an_offer_from_neither_path_is_not_read_as_a_connector_result() -> None:
+    """The third answer, and the reason it exists: an offer whose source names
+    no installed connector is `unattributed`, never `connector`. Reading the
+    unknown as a connector result is how a model-written record would have
+    passed itself off as a board's."""
+    offer = build_search_offer(text="An advert from somewhere.").model_copy(
+        update={"source": "infojobs"}
+    )
+    assert connector_coverage.offer_provenance(offer, ["examplejobs"]) == "unattributed"
+
+
+def test_an_example_connector_is_not_counted_as_coverage(tmp_path: Path) -> None:
+    """`examplejobs.test` is a worked example of the format, not a board. A
+    library holding only examples covers nothing, and the reading says which
+    packages were discounted rather than reporting an empty market."""
+    library = _library(tmp_path / "connectors", examplejobs_es=_meta(site="examplejobs.test"))
+    coverage = connector_coverage.assess_coverage("ES", directory=library)
+    assert not coverage.covered
+    assert coverage.example_only == ("examplejobs_es",)
+    assert connector_coverage.disclosure(coverage)
+
+
+def test_a_real_connector_for_the_market_is_coverage(tmp_path: Path) -> None:
+    """The other side of the same rule — a usable package for the candidate's
+    market means there is nothing to disclose, so the gate is not simply
+    asserting that everything is always uncovered."""
+    library = _library(tmp_path / "connectors", realboard_es=_meta())
+    coverage = connector_coverage.assess_coverage("ES", directory=library)
+    assert coverage.covered
+    assert coverage.usable == ("realboard_es",)
+    assert connector_coverage.disclosure(coverage) is None
+    # A connector for one market is not coverage of another.
+    assert not connector_coverage.assess_coverage("PT", directory=library).covered
+
+
+def test_a_skill_that_stops_disclosing_fails_the_gate(tmp_path: Path) -> None:
+    """The gate confirmed against the state D-16 was filed in: with the
+    sourcing skill's Coverage section removed, every connectorless situation
+    counts again. Without this, a zero would only mean the regexes matched
+    something, not that they would notice the defect coming back."""
+    steps = process_spec.load_steps()
+    step = connector_coverage.sourcing_step(steps)
+    assert step is not None
+    skills = tmp_path / "skills" / step_skills.skill_dir_name(step)
+    skills.mkdir(parents=True)
+    original = (
+        step_skills.DEFAULT_SKILLS_DIR / step_skills.skill_dir_name(step) / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    stripped = original.split("## Coverage — say when nothing here covers this market")[0]
+    assert stripped != original, "the section this test strips has been renamed"
+    (skills / "SKILL.md").write_text(stripped, encoding="utf-8")
+
+    measured = connector_coverage.measure(skills_dir=tmp_path / "skills")
+    assert measured["undisclosed_connectorless_sourcing"] > 0
+    assert measured["shortfalls"]
+
+
+def test_a_library_that_cannot_be_read_records_minus_one(tmp_path: Path) -> None:
+    """`-1`, never `0`. A gate that reports a clean pass on the strength of
+    having looked at nothing is the inert gate this project keeps finding."""
+    measured = connector_coverage.measure(directory=tmp_path / "gone")
+    assert measured["undisclosed_connectorless_sourcing"] == -1
+    assert measured["shortfalls"]
+
+    empty = tmp_path / "connectors"
+    empty.mkdir()
+    assert connector_coverage.measure(directory=empty)["undisclosed_connectorless_sourcing"] == -1
+
+
+def test_the_gate_stops_measuring_when_the_spec_drops_the_requirement(tmp_path: Path) -> None:
+    """D-15's rule, applied here: if the step spec no longer requires the
+    disclosure, this check is enforcing a policy the project has dropped. It
+    records `-1` and says why, rather than a pass nobody asked for."""
+    doc = tmp_path / "spec-v2-steps.md"
+    doc.write_text("## Step 7 — Sourcing\n\nNothing about connectors.\n", encoding="utf-8")
+    measured = connector_coverage.measure(steps_doc=doc)
+    assert measured["undisclosed_connectorless_sourcing"] == -1
+    assert not measured["rule_declared_in_step_spec"]
+
+
+def test_the_gate_records_the_coverage_measurement_it_made(tmp_path: Path) -> None:
+    """The evidence file carries what was measured, so `make evidence` has
+    something to detect drift against."""
+    written = tmp_path / "D-16.json"
+    measured = connector_coverage.write_evidence(written)
+    assert json.loads(written.read_text(encoding="utf-8")) == measured

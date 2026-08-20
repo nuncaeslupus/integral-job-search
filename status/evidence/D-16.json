@@ -1,0 +1,36 @@
+{
+  "undisclosed_connectorless_sourcing": 0,
+  "situations_probed": 2,
+  "connectors_installed": 1,
+  "connectors_usable": 0,
+  "rule_declared_in_step_spec": true,
+  "shortfalls": [],
+  "readings": [
+    {
+      "market": "ES",
+      "connectorless": true,
+      "usable": [],
+      "example_only": [
+        "examplejobs_es"
+      ],
+      "unreadable": [],
+      "disclosed": true,
+      "discloses": "No connector in this tool covers your market for ES, so what follows came from a general web search rather than a search of the boards you would use. I can build a connector for a board you name, or work through your own browser session on a site you are logged into.",
+      "counts": false,
+      "reasons": []
+    },
+    {
+      "market": "(no installed connector declares this market)",
+      "connectorless": true,
+      "usable": [],
+      "example_only": [
+        "examplejobs_es"
+      ],
+      "unreadable": [],
+      "disclosed": true,
+      "discloses": "No connector in this tool covers your market, so what follows came from a general web search rather than a search of the boards you would use. I can build a connector for a board you name, or work through your own browser session on a site you are logged into.",
+      "counts": false,
+      "reasons": []
+    }
+  ]
+}

@@ -613,6 +613,17 @@ storing credentials: nothing to leak, nothing to rotate, and the candidate can
 see exactly what is being done in their name. A connector file never contains a
 credential (T32).
 
+**Coverage is disclosed, not assumed.** The connector library is small and
+will not cover most markets. Where no connector covers the candidate's market,
+the step says so **before** it presents anything, and offers the two remedies
+that exist: build a connector for a portal the candidate names, or drive their
+own browser session on a source they are logged into. Results a general web
+search produced are labelled as such — `source: web_search`, a name no
+connector may claim — and are never presented as connector output. The silent
+fallback is the failure: seven adverts arrive either way, and the candidate
+has no way to tell a search of their market from a search of the open web
+(D-16).
+
 **Deduplication is by similarity, not by hash.** The same job at two boards is
 rarely byte-identical — one truncates, one adds its own summary, one rewrites the
 title — so `text_sha256` catches re-collection of one listing and nothing else

@@ -48,6 +48,43 @@ In this step that sounds like:
 - Never store a credential in a connector file — authenticated sources use the candidate's own browser session.
 - Never send anything but constraints (role, place, band) to a job source — no profile, episode, trait or CV content.
 
+## Coverage — say when nothing here covers this market
+
+Before presenting a single offer, ask what covers the candidate's market:
+
+```bash
+uv run python -m integral.connector_coverage --country ES
+```
+
+**When no connector covers the candidate's market, say so — plainly, and before the results.**
+A run that falls back to a general web search looks, from the candidate's chair, exactly like a
+run against their boards: seven adverts arrive either way, and only one of the two searched the
+market. `examplejobs_es` is not coverage — `examplejobs.test` is a worked example of T32's
+format, not a job board, and `assess_coverage` counts it as example-only for that reason.
+
+Then offer the two things that actually exist. A disclosure with no way out of it is a dead end:
+
+- **Build a connector for a named portal.** The candidate names the board they would use —
+  InfoJobs, a sector board, an employer's careers page — and T32's declarative format is what
+  gets written, with `connectors/examplejobs_es/` as the worked example to copy.
+- **Drive the candidate's own browser session** on a source that needs a login, the same route
+  this step already takes for authenticated sources. Nothing stored, nothing to rotate.
+
+**A search result is never presented as a connector result.** An offer a general web search
+produced is built through `build_search_offer` and carries `source: web_search` — a name
+`parse_connector` refuses to let any connector claim — so what a search found stays legible as
+such in the stored record and in the count the candidate is given.
+
+What that sounds like:
+
+```text
+"Before I show you these — I don't have a connector for the Spanish market. Nothing here talks
+to InfoJobs or the sector boards directly, so what follows came from a general web search, not
+from a search of the boards you'd actually use. Two things I can do about that: build a
+connector for a board you name, or work through your own browser session on a site you're
+logged into. Either of interest?"
+```
+
 ## Stop rule
 
 All configured sources have been polled and results normalised. **Hard cap: a per-run offer ceiling**, so one badly-scoped query cannot deliver hundreds of adverts nobody will read.
