@@ -124,6 +124,15 @@ class Strict(BaseModel):
 SITE_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
+# The `source` an offer carries when a general web search produced it rather
+# than a connector (D-16). It is a reserved word in the `site` vocabulary, not
+# merely a convention: `Connector` refuses it below, so no connector can ever
+# claim the name, and `source` therefore stays a reliable answer to "where did
+# this advert actually come from". Without the reservation, a connector called
+# `web_search` would make the two indistinguishable in the stored record —
+# which is the same confusion, one layer down, that D-16 is about.
+SEARCH_SOURCE = "web_search"
+
 # The whole vocabulary of things a connector may claim to extract: exactly the
 # fields `integral.offers.Offer` (T11) can hold, flattened for the nested
 # `location`/`salary` objects. Anything else — `password`, `cookie`, a
@@ -522,6 +531,22 @@ class Connector(Strict):
     list: ListPage
     detail: DetailPage | None = None
 
+    @field_validator("site")
+    @classmethod
+    def _site_is_not_a_reserved_source(cls, site: str) -> str:
+        # `SEARCH_SOURCE` is the one `site` value that means "no connector
+        # produced this" (D-16). A connector allowed to claim it would make
+        # `Offer.source` ambiguous exactly where the distinction matters —
+        # a candidate being shown web-search results as though a board had
+        # been searched — so the name is refused here rather than policed at
+        # each of the places that read `source`.
+        if site == SEARCH_SOURCE:
+            raise ValueError(
+                f"{SEARCH_SOURCE!r} is reserved for offers a general web search produced; "
+                "a connector may not claim it"
+            )
+        return site
+
     @model_validator(mode="after")
     def _something_produces_the_offer_text(self) -> Connector:
         # `Offer.text` (T11) is required and never guessed. A connector that
@@ -891,6 +916,45 @@ def build_offer(
         )
     except ValidationError as exc:
         raise ConnectorError(f"parsed fields did not produce a valid offer: {exc}") from exc
+
+
+def build_search_offer(
+    *,
+    text: str,
+    url: str | None = None,
+    title: str | None = None,
+    company: str | None = None,
+    language: Language | None = None,
+    source_ref: str | None = None,
+) -> Offer:
+    """The offer a general web search produced, stamped as such (D-16).
+
+    There is a real path — the one a session takes when no connector covers
+    the candidate's market — that turns a search hit into a stored offer. Left
+    to prose, it produced records whose `source` was whatever the model wrote,
+    and a candidate was shown seven adverts with nothing anywhere saying they
+    came from a search of the open web rather than a search of their market.
+
+    So it gets a constructor, and the constructor stamps `SEARCH_SOURCE`.
+    `source` is not a parameter: a caller who could pass one could pass a
+    board's name, which is the defect this exists to close. `source_ref`
+    carries the query or the index entry the hit came from, for the same
+    reason `build_offer` carries the listing reference — the trail back is
+    part of the record, not something to reconstruct later.
+    """
+    try:
+        return Offer(
+            id=compute_offer_id(text),
+            source=SEARCH_SOURCE,
+            source_ref=source_ref,
+            url=url,
+            title=title,
+            company=company,
+            language=language,
+            text=text,
+        )
+    except ValidationError as exc:
+        raise ConnectorError(f"search result did not produce a valid offer: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------

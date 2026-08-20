@@ -729,6 +729,16 @@ a source requires authentication, drive <strong>their own browser session</stron
 storing credentials: nothing to leak, nothing to rotate, and the candidate can
 see exactly what is being done in their name. A connector file never contains a
 credential (T32).</p>
+<p><strong>Coverage is disclosed, not assumed.</strong> The connector library is small and
+will not cover most markets. Where no connector covers the candidate's market,
+the step says so <strong>before</strong> it presents anything, and offers the two remedies
+that exist: build a connector for a portal the candidate names, or drive their
+own browser session on a source they are logged into. Results a general web
+search produced are labelled as such — <code>source: web_search</code>, a name no
+connector may claim — and are never presented as connector output. The silent
+fallback is the failure: seven adverts arrive either way, and the candidate
+has no way to tell a search of their market from a search of the open web
+(D-16).</p>
 <p><strong>Deduplication is by similarity, not by hash.</strong> The same job at two boards is
 rarely byte-identical — one truncates, one adds its own summary, one rewrites the
 title — so <code>text_sha256</code> catches re-collection of one listing and nothing else
