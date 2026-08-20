@@ -340,11 +340,18 @@ is not also machine-readable state cannot be resumed or revised. Both columns
 of the §2 table are requirements, not description.
 
 **The boundary is said out loud, and it is warm.** A step ends by naming what
-was gained, offering the next thing, and offering to stop — *"Good, I have your
-preferences now. Want to go and look at some jobs, or leave it here for today?"*
-Two things are wrong with ending silently: the candidate cannot tell that
-anything happened, and they are given no moment at which stopping is a normal
-choice rather than an abandonment.
+was gained and offering the next thing — *"Good, I have your preferences now.
+Want to go and look at some jobs?"* Two things are wrong with ending silently:
+the candidate cannot tell that anything happened, and they are given no moment
+at which stopping is a normal choice rather than an abandonment.
+
+**That moment is made by pausing to ask, not by naming the exit.** Stopping is
+always allowed and never the suggestion: the exit is offered when the session
+has actually run long or the candidate sounds tired, never as the standard close
+of a step. Offering it every time asks someone who has answered four steps four
+separate times whether they would rather leave, which reads as the tool losing
+interest. This is `status/spec-v2-steps.md`'s "Invite forward, do not offer an
+exit", stated here so the two documents cannot be read as disagreeing.
 
 **Gates are never mentioned.** `constraint_field_resolution` is how the
 engineers know the step is done. What the candidate hears is that we have what

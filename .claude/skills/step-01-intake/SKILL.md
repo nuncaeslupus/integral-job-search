@@ -52,10 +52,15 @@ Intake is offered, and declining it is ordinary: skip to Constraints, which then
 
 ## Boundary
 
+**Invite forward; never close by offering to stop.** Stopping is always allowed and never the
+suggestion — the exit is offered only when the session has actually run long, or the candidate
+sounds tired, and never as the standard close of this step. Naming it every time asks someone who
+has answered four steps four separate times whether they would rather leave.
+
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's your history down — twelve years, four roles, and the Catalan I nearly missed. Want to keep going to what would rule a job out, or leave it here?"
+"That's your history down — twelve years, four roles, and the Catalan I nearly missed. Next is what would rule a job out — the quickest way to stop me showing you things you'd never take. Shall we?"
 ```
 
 Writes `last_activity`.

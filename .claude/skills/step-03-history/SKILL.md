@@ -53,6 +53,11 @@ History is offered. A candidate who does not want to tell stories keeps a workin
 
 ## Boundary
 
+**Invite forward; never close by offering to stop.** Stopping is always allowed and never the
+suggestion — the exit is offered only when the session has actually run long, or the candidate
+sounds tired, and never as the standard close of this step. Naming it every time asks someone who
+has answered four steps four separate times whether they would rather leave.
+
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text

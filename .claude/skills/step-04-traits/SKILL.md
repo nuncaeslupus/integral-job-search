@@ -52,10 +52,15 @@ Traits is offered, and the step people are most likely to find odd. Declining le
 
 ## Boundary
 
+**Invite forward; never close by offering to stop.** Stopping is always allowed and never the
+suggestion — the exit is offered only when the session has actually run long, or the candidate
+sounds tired, and never as the standard close of this step. Naming it every time asks someone who
+has answered four steps four separate times whether they would rather leave.
+
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's what I've got: you like a lot of autonomy, you're happier fixing than launching, and I don't have enough yet on how you take pressure. Leave it there?"
+"That's what I've got: you like a lot of autonomy, you're happier fixing than launching, and I don't have enough yet on how you take pressure. Next I'll put some real adverts in front of you and see what you make of them — that's where this starts paying off."
 ```
 
 Writes `last_activity`.

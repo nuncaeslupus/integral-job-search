@@ -66,8 +66,14 @@ Four rules apply to every step and are not repeated in each:
   saying what the next one buys them, and asking whether to carry on — *"good,
   your history's in decent shape. Traits next: that's what stops me sending you
   jobs full of people you'd hate. Keep going?"* Stopping is always allowed and
-  never the default suggestion. And **say at the outset that this takes a while
-  and why**: the more it knows, the better the work it finds.
+  never the default suggestion. **The exit is offered only when the session has
+  actually run long, or the candidate sounds tired** — never as the standard
+  close of a step. The moment at which stopping is normal is created by pausing
+  to ask anything at all; naming the exit on top of that asks a candidate who
+  has answered four steps four separate times whether they would rather leave,
+  which reads as the tool losing interest rather than as courtesy. And **say at
+  the outset that this takes a while and why**: the more it knows, the better
+  the work it finds.
 
 > **✎ Notes** · `SPEC › How to read a step`
 > Also, the whole process must feel like a game, or at least something funny. The prize is getting a job, but the path must be nice.
@@ -199,8 +205,8 @@ produced here** — no PDF, no DOCX. A CV written before there is an advert to
 write it for is a worse CV than step 11 produces.
 
 **Boundary.** *"That's your history down — twelve years, four roles, and the
-Catalan I nearly missed. Want to keep going to what would rule a job out, or
-leave it here?"* Writes `last_activity`.
+Catalan I nearly missed. Next is what would rule a job out — the quickest way to
+stop me showing you things you'd never take. Shall we?"* Writes `last_activity`.
 
 **Gate.** `intake_field_provenance == 1.0` — every field in `master.json` names
 where it came from: a document span, or the turn in which it was said. A field
@@ -437,7 +443,8 @@ employer understands, `stress_tolerance: 0.72` is not.
 
 **Boundary.** *"That's what I've got: you like a lot of autonomy, you're happier
 fixing than launching, and I don't have enough yet on how you take pressure.
-Leave it there?"* Writes `last_activity`.
+Next I'll put some real adverts in front of you and see what you make of them —
+that's where this starts paying off."* Writes `last_activity`.
 
 **Gate.** `trait_evidence_sufficiency == 1.0` — every trait carries either a
 score backed by ≥2 independent episodes or `insufficient` with its count. A
@@ -504,7 +511,8 @@ The candidate sees the first read of what their reactions imply — the earliest
 point at which the tool tells them something about themselves.
 
 **Boundary.** *"That's telling. You didn't mention money once, and you flinched
-at every mention of 'fast-paced'. Want to turn that into weights, or pause?"*
+at every mention of 'fast-paced'. Want to turn that into weights? It's what lets
+me put a number on a shorter commute."*
 Writes `last_activity`.
 
 **Gate.** `elicitation_eval_overlap == 0` — no advert used to elicit preferences
@@ -867,7 +875,7 @@ changes with `status_changed_at`; a recomputed ranking. The candidate sees the
 re-ordered list and a plain statement of what changed and why.
 
 **Boundary.** *"Noted — agencies out. That dropped three of them and pushed the
-Girona role to the top. Anything else, or leave it?"* Writes `last_activity`.
+Girona role to the top. Anything else jump out?"* Writes `last_activity`.
 
 **Gate.** `feedback_traceability == 1.0` — every derived value names the evidence
 rows that produced it, so "the ranking changed because you said X" is checkable
