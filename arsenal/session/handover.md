@@ -1,91 +1,95 @@
-# Session handover — 2026-08-20 (first end-to-end test session; ten divergences seeded)
+# Session handover — 2026-08-20 (D-14 worked; the board is unchanged otherwise)
 
 ## Read this first
 
-**A full candidate session was run and it worked as far as step 7.** A simulated
-Barcelona construction worker (handle `perico`, `fiction: true`) went through
-steps 0 → 1 → 2 → 3 → 7 → 8 → 9 with the S11 meta channel open. The notes are in
-the test-mode ledger for session `test-2026-08-20-a`; read it with
-`query_notes.py --id test-2026-08-20-a`.
+**D-14 is done and waiting on a merge.** PR
+[#100](https://github.com/nuncaeslupus/job-search/pull/100) closes
+[#90](https://github.com/nuncaeslupus/job-search/issues/90); the task file is
+already archived to `arsenal/tasks/_history/t-05892c87.md` with
+`status: merged` inside that same diff, so merging it closes the issue and
+archives the task in one act. Nothing is owed afterwards.
 
-**It broke at exactly the two steps whose gates are `not_implemented`.** That is
-the single most useful result of the session, and it is not a coincidence:
+The previous handover's list of ten divergences (#90–#99) stands, minus D-14.
+`task_select.py` returns **D-13** (`t-bd59e70b`, #97) next.
 
-| step | gate state | outcome |
-|---|---|---|
-| 0, 1, 2, 3, 7 | implemented | ran correctly; checkpoints exit 0 honestly |
-| **8 understanding** | **not_implemented** | `extract()` settled **0 of 25** dimensions on all seven adverts — the dimension model is entirely software-sector. Reported success anyway. |
-| **9 ranking** | **not_implemented** | the card was assembled by a model, which T44 forbids, and dropped `offer.url` although every record carried it |
+## What D-14 turned out to be
 
-**`run_checkpoint.py` printed `"gate_state": "not_implemented"` for both and
-exited 0.** Artefact presence stood in for a check nobody ran. That is D-21.
+Not a bad sentence in a skill — an **absent** one. `step-02-constraints`
+required every constraint field to end the step `stated`, `declined` or
+`unknown`, listed what to cover, and left employment mode off that list. The
+field still had to be resolved, so the phrasing was improvised, and the
+improvisation offered an illegal arrangement.
 
-**Every offer sourced was already dead.** Owner verified: the two jobtoday
-listings 403, every tablondeanuncios one reads "puesto ocupado". They came from
-a generic `WebSearch` over indexed pages, and a search index outlives the
-advert. `offer_schema_violations` passed regardless — **schema validity is not
-liveness**. Owner's rule, now D-18: real searches run **inside the portals**; a
-generic `WebSearch` is for *discovering* portals, not for collecting adverts.
+That shaped the gate. A string search for "falso autónomo" would have read
+**0** on the day the defect happened, because nothing had written the bad
+question down. So `skills_offering_an_illegal_employment_mode` counts two
+limbs, and the second is the one that bites:
 
-## What landed
+1. prose naming an unlawful arrangement without ruling it out;
+2. the skill that must resolve `employment_mode` carrying no rule at all.
 
-**PR #89 merged (`f598590`)** — ten divergences, ten plan rows, ten issue
-handles (#90–#99). All five gates green locally before the merge.
+`jobsearch.employment_mode` is a module of its own rather than a flag on
+`step_skills` because **`make evidence` runs each module once with no
+arguments** — a gate reachable only behind a flag is a gate whose drift nothing
+notices. That is already true of D-4's and D-7's numbers today
+(`step_gates --owners` / `--traits`), and worth seeding if it bites again.
 
-| task | issue | |
-|---|---|---|
-| `t-bd59e70b` | #98 | D-13 say what the tool is doing before a long silent setup |
-| `t-05892c87` | #90 | D-14 never offer autónomo as a thing the candidate might want |
-| `t-65ecce18` | #93 | D-15 stop offering to end the session at every step boundary |
-| `t-221adf32` | #92 | D-16 sourcing has no real connector — say so, offer to build one |
-| `t-c40f0f88` | #99 | D-17 ranked offers must carry their URL |
-| `t-b1355b65` | #96 | D-18 offers stale on arrival — check freshness at source |
-| `t-e6546af7` | #97 | D-19 the dimension model is software-only |
-| `t-6f79e090` | #94 | D-20 no constraint field holds a commutable radius |
-| `t-20ca057d` | #91 | D-21 a `not_implemented` gate must not exit 0 as `coverage_met` |
-| `t-6f9328ab` | #95 | D-22 the repo gate is required by prose and enforced by nothing |
+## The board, read this session
 
-**Every gate is the failing `false` placeholder.** None is claimable until
-somebody writes a real one, which for most means the test named in its plan row
-— which does not exist yet. That is deliberate, not an oversight.
+`query_status.py`: 91 tasks — open 14, claimed 0, done 1, cancelled 1,
+blocked 19, merged 56. One flag, and it is the pre-existing one:
 
-`task_select.py` returns **D-14** as the next unblocked task.
+> mixed-priority-convention: 32 task(s) use the size scale [10, 5, 1, 0] and 2
+> use other values [70, 60]
 
-## Two things to know before starting
+Not from this session. `handle_sync.py` reports every task has an issue handle.
 
-**1. `plan_v2` is stricter than it looks, and it is right.** The first attempt
-titled these `S12-N`. `test_the_committed_plan_and_queue_agree` refused the
-board: `S12-1` is not a label (`_LABEL_RE` accepts `T\d+`, `S\d+`, `D-\d+`
-only), membership is checked **both ways**, and a plan row's `Depends` must
-match the payload's own `deps`. Two tasks needed real deps wired to `lo-a22a`
-(T44) and `lo-9e41` (T26). Seed through the plan table, not around it.
+## Two surface facts worth not rediscovering
 
-**2. Nothing runs the repo gate. That is D-22, and it bit this session.** The
-five commands ran only because the owner asked. Actions is still out of runner
-minutes, so `ci.yml` and `arsenal-queue.yml` never fire — which also means the
-issue handles above were opened **by hand**, not by the workflow.
-`open_task_pr.sh` re-runs only a task's own payload gate, and `keyword-guard`
-fires only on `arsenal/**` branches. Until D-22 lands, run before every merge:
+**`github_channel.sh --detect` prints `rest`, and `rest` does not work here.**
+The probe is a `GET /rate_limit`, which the proxy answers 200; every real call
+answers **403 "GitHub access is not enabled for this session"**. So the channel
+is effectively `none` on this surface: fetch the issues with the MCP
+`list_issues` tool and hand-write the JSON the scripts read
+(`number`, `state`, `body` carrying `arsenal-task: <id>`, `labels`,
+`assignees`). `claim_task.sh` therefore exits 5 with a `manual POST` line —
+make that call with `mcp__github__create_branch` (201 = won, 422 = lost).
+
+**`open_task_pr.sh` was not used.** It cuts `arsenal/<id>-<slug>` off the
+default branch, and this surface restricts pushes to the session's own
+designated branch. The archive, the `Closes #90` in both the commit and the PR
+body, and the PR itself were done by hand to the same shape. A session with the
+same restriction should expect to do that too — and must not skip the archive,
+which is what makes merging complete the task.
+
+## CI is still out of runner minutes (unchanged, and now re-confirmed)
+
+Every job on PR #100 failed **3 seconds** after starting, with empty
+`output.text` — no runner was ever assigned. `main`'s own runs are identically
+red: #249 (`f5985908`), #250 (`75d19ff0`), #252 (`49875147`), each failing in
+5 seconds. It is not the diff. Do not push speculative fixes for it.
+
+All five gates were run locally and pass:
 
 ```bash
 make lint && make test && make evidence && make verify-subtree && make verify-gates
 ```
 
-## Left open
+`make test` 1080 passed / 1 skipped · `make evidence` no drift ·
+`make verify-gates` 58 terminal tasks, 58 gates asserted, 0 without a fenced
+block · `make verify-subtree` 0 diverging.
 
-- **A permissions edit the owner has to make.** `Bash(gh pr merge:*)`,
-  `Bash(gh run list:*)`, `Bash(gh run view:*)` in `.claude/settings.json`'s
-  `permissions.allow`. A session cannot widen its own permissions — the
-  classifier blocks both the merge and the edit, correctly.
-- **`tools/profile_guard.sh` matches a candidate path mentioned in *prose*, not
-  only one being opened.** Writing this handover was refused because an earlier
-  draft named a ledger path in its text. Not yet seeded; decide whether the
-  guard should inspect the tool's target rather than the whole command string.
-- **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Untouched by this
-  session; resolution B exists since arsenal v0.33.0 (`gate: unmeasured`).
-- **`query_status` flags a pre-existing mixed-priority board**: 32 tasks on the
-  size scale, 2 carrying 70/60. Not from this session — every task seeded here
-  is priority 10.
-- **Steps 5, 6, 10, 11, 12 are still `not_implemented`** and were not reached.
-  Step 4 (traits) is implemented but was skipped; the runtime offered
-  `reactions`, `understanding`, `application`, `interview_log`.
+That the repo gate runs only because somebody asks is **D-22**, still open.
+
+## Left open (carried forward, untouched this session)
+
+- **A permissions edit the owner has to make**: `Bash(gh pr merge:*)`,
+  `Bash(gh run list:*)`, `Bash(gh run view:*)` in `.claude/settings.json`.
+  A session cannot widen its own permissions.
+- **`tools/profile_guard.sh` matches a candidate path mentioned in *prose***,
+  not only one being opened. Not seeded yet; decide whether the guard should
+  inspect the tool's target rather than the whole command string.
+- **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Resolution B exists
+  since arsenal v0.33.0 (`gate: unmeasured`).
+- **Steps 5, 6, 10, 11, 12 are still `not_implemented`**, and steps 8 and 9
+  still certify over unbuilt gates until D-21 lands.
