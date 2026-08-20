@@ -74,6 +74,35 @@ the requirement **out of the step spec** rather than restating it, and reports
 policy it enforces is withdrawn. `step_boundaries_offering_an_exit`: 13 → 0,
 verified against a `git archive HEAD` copy of the pre-fix library.
 
+## Review round (Qodo, PR #102) — four findings, one root cause, all fixed
+
+All four were real, and they shared one mistake: **the process calls two
+different things stopping, and the first cut collapsed them.**
+
+- the **exit** ends the sitting — D-15's subject;
+- §3.3's **offered skip** — *"we can stop here and go look at real jobs with what
+  I have"* — ends the *first-run climb* and sends the candidate **forward** to a
+  provisional L1 ranking. §3.3 requires it at the end of every first-run step.
+
+`_EXIT_OFFER_RE` matched `stop here`, so §3.3's prescribed sentence read as an
+offender: a compliant boundary would have failed the gate, and the gate would
+have enforced the opposite of the process contract. The skills' rule ("never
+close by offering to stop") read as forbidding the skip too — in all thirteen
+files. Four exit phrasings ("wrap up here?", "end here?", "take a break and
+resume tomorrow?", "enough for one sitting") passed straight through.
+
+Fixed in `1c09d82`: a forward-shortcut licence requiring a real destination
+(skips recorded in the evidence, never silently dropped), the rule reworded to
+name the exit and preserve the skip, §3.2 and §3.3 each saying which stop they
+mean, and the pattern widened. Five tests, each failing against the pre-fix code.
+
+**Two lessons worth keeping.** Step 11's "Ready to send, or sit on it?" already
+had an exclusion for being a forward choice — one was excluded and the mandated
+one was not, so *if a check excludes one false positive, look for its siblings.*
+And the fix for D-15 reproduced D-15's own failure mode: a rule in one document
+contradicted by another. Fixing a cross-document divergence means reading every
+document that touches the subject, not just the two the task names.
+
 ## The board, read this session
 
 `query_status.py`: 91 tasks — open 13, claimed 0, done 1, cancelled 1,
@@ -91,6 +120,14 @@ Fetch issues with the MCP `list_issues` tool and hand-write the JSON the scripts
 read (`number`, `state`, `body` carrying `arsenal-task: <id>`, `labels`,
 `assignees`). `claim_task.sh` exits 5 with a `manual POST` line — make that call
 with `mcp__github__create_branch` (201 = won, 422 = lost). Won #93 that way.
+
+**`gate_run.sh` cannot re-run an archived task's gate here.** Once the payload
+moves to `arsenal/tasks/_history/`, it falls back to fetching from the default
+branch and dies at exit 128 with no output, because
+`git symbolic-ref refs/remotes/origin/HEAD` is unset in this clone. Not a gate
+failure — `make verify-gates` is the check that reads `_history/`, and it does
+assert D-15 by name (proven by deleting the evidence: it fails `t-65ecce18`
+specifically). Possible upstream report if it recurs.
 
 **`open_task_pr.sh` was not used**, again: it cuts `arsenal/<id>-<slug>` off the
 default branch and this surface only permits pushing the session's designated
@@ -110,7 +147,7 @@ All five gates were run locally and pass:
 make lint && make test && make evidence && make verify-subtree && make verify-gates
 ```
 
-`make test` 1098 passed / 1 skipped · `make evidence` no drift ·
+`make test` 1103 passed / 1 skipped · `make evidence` no drift ·
 `make verify-gates` 59 terminal tasks, 59 gates asserted, 0 without a fenced
 block · `make verify-subtree` 0 diverging.
 
