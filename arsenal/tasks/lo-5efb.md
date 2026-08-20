@@ -4,7 +4,6 @@ title: "S10: the skill listing budget is structurally exceeded by 13 step skills
 priority: 10
 workspace: SOLO
 tags: [infra]
-requires: [surface:human]
 ---
 
 Surfaced by S7, which added thirteen step skills. Flagged rather than resolved
@@ -19,7 +18,57 @@ means the model cannot see what the other twelve steps are for, and the step
 skills are deliberately adjacent — knowing that step 9 exists is part of
 knowing step 8 is the wrong one to load.
 
-**This is now blocked on an upstream change, not on work here.**
+## Resolved (owner, 2026-08-20): the budget lives here, not upstream
+
+**13,000 characters, set in `arsenal/config.toml`'s `listing-budget`.** The
+decision was never the blocker; *where the raised number lives* was — and
+arsenal already answers that. The key exists, is validated by
+`arsenal_config.py`, and is documented there as the place "a consumer whose
+budget differs can set it instead of being unable to pass the audit at all
+(#143)". It is host-owned and never rewritten by an upgrade.
+
+What upstream has not done yet is wire `audit_library.py` to read it. So
+`jobsearch.skill_budget` reads the setting and measures against it, which makes
+the raise real today without touching `vendor/`; when #143 lands, the auditor
+reads the same key and the two agree without either moving. The budget is
+**not** duplicated as a Python constant — two copies of a threshold are two
+thresholds.
+
+Three properties keep a raised threshold honest, because a cap fitted to the
+measurement reports the same clean zero as a cap somebody chose:
+
+1. **round and with headroom** — `check_declaration` refuses a budget that is
+   not a whole multiple of 1,000 or that leaves under 400 spare chars, so
+   "raise it to whatever we measure" fails mechanically;
+2. **the source is recorded** — committed evidence carries
+   `budget_source: "config"`; `--budget`/`JOBSEARCH_LISTING_BUDGET_CHARS` mark a
+   reading `override`, and a missing settings file marks it `fallback` (at
+   upstream's 8,000, never this repository's number, so an absent config cannot
+   be mistaken for a present one). Only `config` can satisfy the gate;
+3. **upstream's reading stays visible** — `overage_against_upstream_default`
+   keeps "deliberately N chars above the 8,000 default" a fact anyone can read.
+
+The per-skill cost formula is upstream's, mirrored, and
+`test_the_measurement_agrees_with_the_upstream_audit` runs the real
+`audit_library.py` and asserts the totals are equal — so a formula change
+upstream fails a test here instead of leaving two numbers nobody compares.
+
+Measured after the change: **12,138 chars across 33 skills**, 862 spare,
+`steps_with_a_skill_fraction` still 1.0.
+
+**Review finding folded in (Qodo, 2026-08-20): the three properties are inside
+the gate key, not beside it.** `verify_gates` asserts the fenced
+`skill_listing_budget_overage_chars == 0` and nothing else, so a bare
+`total - budget` would have let an override — or a budget fitted to the
+measurement — report a clean zero while every guarantee above went unchecked
+outside the test suite. A library inside an unsoundly declared budget now
+reports `-1`: not a pass, and not silent either. Second finding, same shape: an
+`OSError` reading a `SKILL.md` used to cost nothing, which is a false zero
+overage — the gate passing because it could not see its input. It raises.
+
+### The original framing, kept because it was overruled deliberately
+
+**This was blocked on an upstream change, not on work here.**
 `LISTING_BUDGET_CHARS = 8000` is a module constant in
 `vendor/claude-arsenal/plugins/skill-creator/skills/skill-creator/scripts/audit_library.py:50`,
 referenced in nine places. `main()` exposes `--profile`, `--severity`, `--json`
@@ -96,9 +145,23 @@ that the cap has to be revisited each time the library grows.
 `audit_library.py` reports no listing-budget finding, with every step reachable.
 
 ```bash
-uv run --extra dev python3 -m jobsearch.step_skills
-python3 .claude/skills/skill-creator/scripts/audit_library.py .claude/skills
+uv run --extra dev python3 -m jobsearch.step_skills --check
+uv run --extra dev python3 -m jobsearch.skill_budget --check
+uv run --extra dev pytest tests/test_skill_budget.py -q
 ```
+
+The three properties are folded into the gate key rather than sitting beside
+it: `verify_gates` asserts `skill_listing_budget_overage_chars == 0` and
+nothing else, so a library inside an unsoundly declared budget — or one whose
+budget came from an override or a fallback — reports `-1` rather than a clean
+zero.
+
+`audit_library.py` is **not** the gate command. It measures against upstream's
+own 8,000-char constant, which this repository has deliberately risen above —
+so it reports a finding by design, and a gate asserted on it could only pass by
+undoing the decision. It is still run (by
+`test_the_measurement_agrees_with_the_upstream_audit`) for the one thing it is
+authoritative about: the total.
 
 ```gate
 skill_listing_budget_overage_chars == 0
@@ -115,6 +178,9 @@ come from dropping a step.
 
 ## Location
 
-`.claude/skills/`, `src/jobsearch/step_skills.py`, and — upstream, since
-option 1 was chosen — the `skill-creator` budget constant
-(`claude-arsenal` issue #143). Nothing under `vendor/` is edited here.
+`src/jobsearch/skill_budget.py` (new), `tests/test_skill_budget.py` (new),
+`arsenal/config.toml` (`listing-budget = 13000`), `status/evidence/S10.json`.
+Nothing under `vendor/` is edited —
+`test_nothing_under_vendor_was_patched_to_achieve_this` asserts the upstream
+constant is still 8,000, because a subtree edit works perfectly until the next
+`git subtree pull` reverts it, silently.

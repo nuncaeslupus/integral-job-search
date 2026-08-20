@@ -1,0 +1,179 @@
+{
+  "skill_listing_budget_overage_chars": 0,
+  "listing_budget_chars": 13000,
+  "budget_source": "config",
+  "description_chars_total": 12138,
+  "skills_counted": 33,
+  "headroom_chars": 862,
+  "upstream_default_budget_chars": 8000,
+  "overage_against_upstream_default": 4138,
+  "budget_declaration_reasons": [],
+  "steps_with_a_skill_fraction": 1.0,
+  "per_skill": [
+    {
+      "skill": "continue",
+      "description_chars": 245,
+      "listing_chars": 257
+    },
+    {
+      "skill": "coverage-gaps",
+      "description_chars": 536,
+      "listing_chars": 553
+    },
+    {
+      "skill": "dep-upgrade",
+      "description_chars": 545,
+      "listing_chars": 560
+    },
+    {
+      "skill": "design",
+      "description_chars": 257,
+      "listing_chars": 267
+    },
+    {
+      "skill": "execution",
+      "description_chars": 219,
+      "listing_chars": 232
+    },
+    {
+      "skill": "gate-check",
+      "description_chars": 523,
+      "listing_chars": 537
+    },
+    {
+      "skill": "github",
+      "description_chars": 665,
+      "listing_chars": 675
+    },
+    {
+      "skill": "init",
+      "description_chars": 246,
+      "listing_chars": 254
+    },
+    {
+      "skill": "lsp-setup",
+      "description_chars": 580,
+      "listing_chars": 593
+    },
+    {
+      "skill": "mutmut-report",
+      "description_chars": 522,
+      "listing_chars": 539
+    },
+    {
+      "skill": "pypi-release",
+      "description_chars": 513,
+      "listing_chars": 529
+    },
+    {
+      "skill": "python-bootstrap",
+      "description_chars": 508,
+      "listing_chars": 528
+    },
+    {
+      "skill": "queue-add",
+      "description_chars": 109,
+      "listing_chars": 122
+    },
+    {
+      "skill": "queue-status",
+      "description_chars": 181,
+      "listing_chars": 197
+    },
+    {
+      "skill": "review",
+      "description_chars": 204,
+      "listing_chars": 214
+    },
+    {
+      "skill": "session-end",
+      "description_chars": 458,
+      "listing_chars": 473
+    },
+    {
+      "skill": "ship",
+      "description_chars": 195,
+      "listing_chars": 203
+    },
+    {
+      "skill": "skill-creator",
+      "description_chars": 267,
+      "listing_chars": 284
+    },
+    {
+      "skill": "specify",
+      "description_chars": 255,
+      "listing_chars": 266
+    },
+    {
+      "skill": "step-00-identify",
+      "description_chars": 345,
+      "listing_chars": 365
+    },
+    {
+      "skill": "step-01-intake",
+      "description_chars": 343,
+      "listing_chars": 361
+    },
+    {
+      "skill": "step-02-constraints",
+      "description_chars": 357,
+      "listing_chars": 380
+    },
+    {
+      "skill": "step-03-history",
+      "description_chars": 321,
+      "listing_chars": 340
+    },
+    {
+      "skill": "step-04-traits",
+      "description_chars": 293,
+      "listing_chars": 311
+    },
+    {
+      "skill": "step-05-reactions",
+      "description_chars": 320,
+      "listing_chars": 341
+    },
+    {
+      "skill": "step-06-preferences",
+      "description_chars": 316,
+      "listing_chars": 339
+    },
+    {
+      "skill": "step-07-sourcing",
+      "description_chars": 303,
+      "listing_chars": 323
+    },
+    {
+      "skill": "step-08-understanding",
+      "description_chars": 294,
+      "listing_chars": 319
+    },
+    {
+      "skill": "step-09-ranking",
+      "description_chars": 309,
+      "listing_chars": 328
+    },
+    {
+      "skill": "step-10-feedback",
+      "description_chars": 330,
+      "listing_chars": 350
+    },
+    {
+      "skill": "step-11-application",
+      "description_chars": 313,
+      "listing_chars": 336
+    },
+    {
+      "skill": "step-12-interview-log",
+      "description_chars": 285,
+      "listing_chars": 310
+    },
+    {
+      "skill": "test-mode",
+      "description_chars": 439,
+      "listing_chars": 452
+    }
+  ]
+}
