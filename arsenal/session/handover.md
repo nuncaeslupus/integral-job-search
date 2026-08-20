@@ -1,88 +1,72 @@
-# Session handover — 2026-08-20 (T55 merged; token-cost pass)
+# Session handover — 2026-08-20 (D-21 merged-pending; PR #111)
 
 ## Board
 
-- **T55 merged** as `745a155` via
-  #108, closing #49. The
-  package is `integral`, the distribution `integral-job-search`, and
-  `integral.naming` is the gate that keeps old names from creeping back.
-- **The GitHub repo has not been renamed** — that is the owner's to do, and until
-  they do it the clone URL in `README.md` is aspirational. `docs/distribution.md`
-  says so explicitly.
-- `task_select.py` next returns **`t-20ca057d` (D-21, "a step whose gate is
-  not_implemented must not report `coverage_met` and exit 0", priority 5)**.
-  Unclaimed. Steps 8 and 9 certify over unbuilt gates until it lands.
+- **D-21 (`t-20ca057d`, #91) is done and open in PR #111**, archived to
+  `_history/` with `status: merged` and `Closes #91` in both the commit message
+  and the PR body. It closes and unblocks by itself on merge.
+- `task_select.py` next returns **`t-221adf32` (D-16, "sourcing has no real
+  connector — say so, and offer to build one", priority 5)**. Unclaimed.
+- One pre-existing board flag, unchanged: mixed-priority-convention — 27 tasks on
+  the size scale [10, 5, 1, 0] and 2 on other values [70, 60].
+- `query_status.py` also flags `t-20ca057d` as "archived as merged but #91 is
+  still open". That is correct and temporary: it clears when #111 merges.
 
-## What this session changed besides T55
+## What D-21 was, and what was decided
 
-A token-cost pass, at the owner's request. **`CLAUDE.md` is resident on every turn
-of every session**, so its length is charged per turn, not per read. It was 8,200
-chars; it is now 4,845, with everything situational moved to
-`docs/repo-playbook.md` — a path to open, never an import. Nothing was deleted:
-the bundle-upgrade procedure, the skill-listing budget, how to park a task, and the
-title-matching history all live there in full.
+`run_checkpoint.py` printed `"gate_state": "not_implemented"` and exited **0** in
+the same breath. A caller reading a status rather than parsing the JSON saw the
+step pass. Seven of the thirteen steps were in that position.
 
-Measured resident cost per turn, after this session:
+D-21 offered two resolutions and **both were taken**, because they answer
+different readers:
 
-| block | chars | who owns it |
-|---|---|---|
-| the skill listing | 13,000 -> **11,241** | this repo |
-| `claude-arsenal/AGENTS.md` | 10,509 | vendored — **already split**, see below |
-| `CLAUDE.md` | 8,200 -> **4,845** | this repo |
+- **The exit code**, for a caller. `integral.step_gates.checkpoint_exit` is now
+  the one place a checkpoint's exit code is decided, and it will not return 0 for
+  a step whose gate is unbuilt. The code is **3**, not 1 — reusing 1 would have
+  made "this step has no gate" indistinguishable from "this candidate has not
+  finished the step", which is the ambiguity that hid the defect. `coverage_met`
+  keeps its meaning (the artefacts *are* present); a new `certifiable` field,
+  from which the exit code is derived, carries what 0 had been standing in for.
+- **The prose**, for a person. Each of the seven skills whose gate is unbuilt now
+  says so in its `## Checkpoint` section and is told to say it before presenting
+  the step's output.
 
-`AGENTS.md` is not a target. It already does exactly what `CLAUDE.md` now does:
-10,509 chars resident against 38,917 held back in `claude-arsenal/references/`,
-read on demand. It is 21% resident, and it is the pattern the `CLAUDE.md` split
-copied — do not file it upstream as bloat.
+`steps_certified_on_an_unimplemented_gate == 0` is the gate — the metric name
+`status/plan.md` had already settled for the D-21 row, found only when
+`test_the_committed_plan_and_queue_agree` failed on a name invented here first.
+**Read the plan row before naming a metric**; the plan also named the two tests
+it wanted, and they are in `tests/test_step_gates.py` under those names.
 
-The skill listing came down by dropping the identical ~105-character preamble
-from all thirteen step descriptions. Budget headroom went 862 -> 1,759 chars, so
-the audit's "within 10% of 13000" warning clears **without** the number being
-raised. No skill was deleted, and deleting one was considered and rejected:
-`init.py` and `arsenal/config.toml` both say in as many words to raise the budget
-rather than delete skills to fit it, and S10 already chose the 13,000 with its
-~13KB/turn cost written down. For the record, since it was asked and checked —
-`.claude/skills/` is host-owned, the init bundle carries no `SKILL.md`, so a
-deleted skill would *not* come back at the next upgrade; and a skill can be kept
-in the repo but out of the listing by moving its directory outside
-`.claude/skills/`.
+## Two things worth knowing before touching this area
 
-## A real defect found on the way, and fixed
+**The package may not load code from a path.**
+`test_nothing_in_the_codebase_executes_a_contributed_parse_module` scans
+`src/integral/*.py` on the AST and forbids `spec_from_file_location`,
+`exec_module`, `exec`, `eval`, `compile`, `__import__`. The connector contract's
+whole safety argument rests on it. The first draft of `step_certification.py`
+probed by importing each checkpoint script and that test caught it — so the
+package now *reads* (AST), and `tests/test_step_certification.py` does the
+*running* (each script driven through its own `main` with `checkpoint()`
+stubbed). Both halves were confirmed to fail against the pre-D-21 tail before
+being trusted.
 
-**T55's naming sweep reported a dishonest zero.** `ALLOWLIST` opened with
-`arsenal/` — correct for the ledger's archive, wrong for everything else under
-that prefix. Eight **live** task files still named the old package, two of
-them inside fenced acceptance-gate blocks — `lo-25b1` ran `python -m
-<old>.extraction`, `lo-892b` ran `python -m <old>.connector_exchange`. Those are
-commands that run when the task is worked, against a module that no longer
-exists. (They are written `<old>` here on purpose: this file is scanned now, and
-spelling the name out is what the counter is for.) `verify-gates` does not catch it either — it asserts a fenced
-block is *present*, never that the command inside resolves. One of the eight is
-`t-20ca057d`, the next task in the queue.
-
-Fixed: the allowlist is narrowed to `arsenal/tasks/_history/` and
-`arsenal/tasks/_migrated-history.md`, the nine live files are repointed, and
-`test_a_live_task_file_is_counted_even_though_its_archive_is_not` closes the hole
-— the previous allowlist test only ever planted a reference in `_history/`, so it
-could not have failed. The sweep now reads 0 against 462 files honestly.
-
-**Worth someone's attention:** `verify-gates` asserting presence rather than
-resolvability is the general form of this. A gate block naming a module that does
-not import would pass today.
-
-## Surface facts now live in `CLAUDE.md`
-
-The `--detect` false `rest`, the `manual POST` claim, why `open_task_pr.sh` cannot
-be used here, and merging via MCP are all in `CLAUDE.md` now — they were being
-re-derived from this file every session. **REST was confirmed dead this session,
-not assumed**: `403 GitHub access is not enabled for this session`, straight from
-the proxy. Do not probe it again.
+**A new module with `_main` is picked up by `make evidence` for free.** The
+target derives its module list from `grep -l '^def _main' src/integral/*.py`, so
+`step_certification` is regenerated and drift-checked every run. `step_gates`'s
+`--owners` (D7) and `--traits` (D-4) evidence are *not* — they need flags the
+no-arg entry point never passes, so those two files are only as fresh as the last
+hand-run. That is a live hole, not a design.
 
 ## Left open (carried forward)
 
+- **`verify-gates` asserts a fenced gate block is *present*, never that the
+  command inside resolves.** The general form of D-21, and of the T55 defect
+  before it. Still not seeded.
 - **`claude-arsenal#182`** (false `rest`), **`#183`** (`check_update.sh` on a
-  missing remote), **`#188`** (`outline.sh` parsing), **`#189`** (`context_budget.py`
-  scores a missing `AGENTS.md` as 0 and passes). All still open upstream.
+  missing remote — still reports INERT here), **`#188`** (`outline.sh` parsing),
+  **`#189`** (`context_budget.py` scores a missing `AGENTS.md` as 0 and passes).
+  All still open upstream.
 - **A permissions edit only the owner can make**: `Bash(gh run list:*)` and
   `Bash(gh run view:*)` in `.claude/settings.json`.
 - **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Resolution B has existed
@@ -91,14 +75,40 @@ the proxy. Do not probe it again.
   only one being opened. Still not seeded.
 - **D-22's host half is actionable**: a `make gate` target running all five, for
   `host-gate` to point at.
-- **Steps 5, 6, 10, 11, 12 are still `not_implemented`.**
-- **One pre-existing board flag**: mixed-priority-convention — 29 tasks use the
-  size scale [10, 5, 1, 0] and 2 use other values [70, 60].
+- **Steps 5, 6, 10, 11, 12 are still `not_implemented`** — and now say so out
+  loud, at the top of their own checkpoint sections.
+- **The GitHub repo has not been renamed.** Owner's to do; `README.md`'s clone
+  URL stays aspirational until then.
 
 ## The gate, run locally (CI has no runner minutes)
 
-`make lint` · `make test` · `make evidence` · `make verify-subtree` ·
-`make verify-gates`
+Still true, and re-confirmed this session on PR #111: every job fails in 3–4
+seconds with no logs at all (the Actions log endpoint 404s, because no runner is
+ever assigned), on `main` as much as on any branch — `71cbe02` 4s, `6dc9c1a` 7s,
+`745a155` 6s. Do not read a red CI here as a signal about the code.
 
-Latest, on this branch: **1140 passed / 1 skipped**, no evidence drift, 0 diverging
-assets of 34, 61 terminal tasks with 61 gates asserted.
+All five run locally and pass on this branch:
+
+```bash
+make lint           # ruff + strict mypy — clean, 104 source files
+make test           # 1172 passed, 1 skipped
+make evidence       # no drift
+make verify-subtree # 0 diverging, 34 assets compared
+make verify-gates   # 62 terminal tasks, 62 gates asserted
+```
+
+`status/evidence/T55.json`'s `files_scanned` moved 462 → 464: two new files, and
+the task file moving into the allowlisted archive. `old_name_references` is still
+0.
+
+## Surface facts
+
+Unchanged, and all in `CLAUDE.md`: `--detect` prints a false `rest`, REST is dead
+here (`403 GitHub access is not enabled for this session` — do not probe again),
+`claim_task.sh` returns `manual POST` and `create_branch` on
+`arsenal/claims/<id>` is the compare-and-swap (201 won, 422 lost),
+`open_task_pr.sh` cannot be used, and merging goes through the MCP tool.
+
+One addition: **`init.py --silent` writes to the tree.** It restored a
+`<!-- /claude-arsenal: auto-managed -->` marker line in `CLAUDE.md` this session.
+Harmless, and it will do it again — commit it rather than reverting it.
