@@ -631,10 +631,20 @@ def connector_packages(directory: Path = DEFAULT_CONNECTORS_DIR) -> list[Path]:
 
 
 def load_connectors(directory: Path = DEFAULT_CONNECTORS_DIR) -> list[Connector]:
-    """Load every connector in `directory`, sorted by name."""
-    packages = connector_packages(directory)
-    loose = sorted(p for p in directory.iterdir() if p.suffix in {".yaml", ".yml"})
-    return [load_connector(path) for path in [*packages, *loose]]
+    """Load every connector package in `directory`, sorted by name.
+
+    Packages only. An interim version also loaded loose `<site>_<locale>.yaml`
+    files beside them, and review on #77 found the hole that opened: the
+    contract checker discovers packages, so a loose file would have been
+    *loaded at runtime and never checked* — CI reporting zero violations while
+    shipping a connector nothing had looked at. Two discovery rules for one
+    library is the bug, not the loose file.
+
+    It also could not keep its own ordering promise, since directories were
+    sorted separately from files and then concatenated, putting `zboard_en`
+    before `aboard_en`.
+    """
+    return [load_connector(path) for path in connector_packages(directory)]
 
 
 # ---------------------------------------------------------------------------

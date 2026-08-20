@@ -363,3 +363,94 @@ def test_nothing_in_the_codebase_executes_a_contributed_parse_module() -> None:
         "code-loading machinery appeared in the package — if a runner now executes a "
         f"contributed parse.py, the contract check is not what makes that safe: {offenders}"
     )
+
+
+# ---------------------------------------------------------------------------
+# review on #77 — each finding, as the test that would have caught it
+
+
+def test_a_dotfile_in_the_package_is_rejected_like_any_other_stray(package: Path) -> None:
+    """`.env` is the case rule 1 exists for, and it was the one getting through.
+
+    The layout check filtered dotfiles before comparing against the allowlist,
+    so "exactly these files" quietly meant "exactly these files, plus anything
+    hidden" — and the conventional name for a committed credential file starts
+    with a dot.
+    """
+    (package / ".env").write_text("TOKEN=hunter2\n", encoding="utf-8")
+    violations = check_package(package).violations
+    assert any(".env" in v for v in violations), violations
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "reader = open\n\n\ndef parse(t):\n    return reader('/etc/passwd')\n",
+        "loader = __import__\n\n\ndef parse(t):\n    return loader('os')\n",
+        "def parse(t):\n    return [eval][0]('1')\n",
+    ],
+)
+def test_a_forbidden_builtin_reached_through_an_alias_is_rejected(
+    package: Path, source: str
+) -> None:
+    """Naming the builtin is the violation, not calling it directly.
+
+    Matching only the call target let `reader = open` then `reader(path, 'w')`
+    through, which certified a file the contract says cannot touch the
+    filesystem.
+    """
+    (package / "parse.py").write_text(source, encoding="utf-8")
+    violations = check_package(package).violations
+    assert any("rule 3/4" in v for v in violations), violations
+
+
+def test_a_declared_detail_page_without_a_recorded_response_is_rejected(package: Path) -> None:
+    """A declared selector with no fixture is unproven, not exempt.
+
+    The check parsed the detail page only when the file happened to exist, so a
+    connector whose listing alone yields a valid offer passed with its detail
+    selectors never once run.
+    """
+    (package / "fixture" / "detail.html").unlink()
+    violations = check_package(package).violations
+    assert any("detail.html" in v for v in violations), violations
+
+
+def test_a_verification_date_that_disagrees_with_the_connector_is_rejected(package: Path) -> None:
+    """One fact, two files: the borrower-facing copy cannot be the flattering one.
+
+    `assess_staleness` judges on `connector.yaml`, so a `meta.yaml` advertising
+    a fresher date would have told a borrower the connector was maintained more
+    recently than the runtime believed.
+    """
+    _edit_meta(package, lambda m: m.__setitem__("last_verified", "2026-08-19"))
+    violations = check_package(package).violations
+    assert any("last_verified" in v for v in violations), violations
+
+
+def test_a_parse_module_that_is_not_valid_utf8_is_a_violation_not_a_crash(package: Path) -> None:
+    """Contributor bytes must not be able to stop the gate writing its evidence."""
+    (package / "parse.py").write_bytes(b"\xff\xfe\x00invalid")
+    violations = check_package(package).violations
+    assert any("rule 3/4" in v for v in violations), violations
+
+
+def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status(
+    tmp_path: Path,
+) -> None:
+    """A documented status and a message, never a traceback.
+
+    **1**, not 3: bytes nobody can decode are a fault in *that package*, so it
+    is reported beside any other violation and the rest of the library is still
+    checked. Exit 3 is reserved for the library itself being unreachable, where
+    there is nothing to report about.
+    """
+    library = tmp_path / "connectors"
+    shutil.copytree(_REFERENCE, library / _REFERENCE.name)
+    (library / _REFERENCE.name / "meta.yaml").write_bytes(b"\xff\xfe\x00invalid")
+    evidence = tmp_path / "T53.json"
+
+    assert _main(["x", str(evidence), "--connectors", str(library)]) == 1
+    measured = json.loads(evidence.read_text(encoding="utf-8"))
+    assert measured["connector_contract_violations"] == 1
+    assert "could not be read" in measured["violations"][0]

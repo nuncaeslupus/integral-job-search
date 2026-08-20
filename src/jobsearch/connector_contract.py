@@ -210,14 +210,31 @@ def _load_yaml(path: Path) -> Any:
     """
     try:
         return yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         raise ConnectorError(f"{path.name} could not be read: {exc}") from exc
+
+
+def _as_date(raw: object) -> date | None:
+    """An ISO date, or None. Never raises — the caller reports, it does not die."""
+    if isinstance(raw, date):
+        return raw
+    try:
+        return date.fromisoformat(str(raw))
+    except (TypeError, ValueError):
+        return None
 
 
 def check_layout(package: Path) -> list[str]:
     """Rule 1 — one connector, one directory, exactly those files."""
     violations: list[str] = []
-    present = {p.name for p in package.iterdir() if not p.name.startswith(".")}
+    try:
+        # Dotfiles are NOT excused. Review on #77: filtering them before the
+        # comparison let a committed `.env` through the one rule written to
+        # keep credentials out of a shared package — the check said "exactly
+        # these files" and meant "exactly these files, plus anything hidden".
+        present = {p.name for p in package.iterdir()}
+    except OSError as exc:
+        return [f"rule 1: the package could not be listed: {exc}"]
     for required in sorted(REQUIRED_ENTRIES):
         if required not in present:
             violations.append(f"rule 1: {required} is missing")
@@ -246,17 +263,13 @@ def check_meta(package: Path) -> list[str]:
         value = meta.get(key)
         if value is None or (isinstance(value, str) and not value.strip()):
             violations.append(f"rule 5: {META_FILENAME} has no {key}")
-    if "last_verified" in meta and meta["last_verified"] is not None:
+    if meta.get("last_verified") is not None:
         raw = meta["last_verified"]
-        parsed = raw if isinstance(raw, date) else None
-        if parsed is None:
-            try:
-                date.fromisoformat(str(raw))
-            except ValueError:
-                violations.append(
-                    f"rule 5: last_verified {raw!r} is not an ISO date — a date nobody "
-                    "can parse is the same as no date"
-                )
+        if not isinstance(raw, date) and _as_date(raw) is None:
+            violations.append(
+                f"rule 5: last_verified {raw!r} is not an ISO date — a date nobody "
+                "can parse is the same as no date"
+            )
 
     policy = meta.get("policy")
     if not isinstance(policy, dict):
@@ -266,6 +279,25 @@ def check_meta(package: Path) -> list[str]:
             actual = policy.get(key)
             if actual != expected:
                 violations.append(f"rule 6: policy.{key} is {actual!r}, must be {expected!r}")
+
+    # One verification fact, two files, and `assess_staleness` reads the
+    # connector's copy — so a package could advertise a fresh date to a
+    # borrower while the runtime trusted an older one (review, #77). They must
+    # agree; the borrower-facing number is not allowed to be the flattering one.
+    declared = meta.get("last_verified")
+    if declared is not None:
+        try:
+            connector = load_connector(package)
+        except ConnectorError:
+            connector = None  # rule 2 reports an unloadable connector already
+        if connector is not None:
+            stated = declared if isinstance(declared, date) else _as_date(declared)
+            if stated is not None and stated != connector.last_verified:
+                violations.append(
+                    f"rule 5: {META_FILENAME} says last_verified {stated.isoformat()} but "
+                    f"{CONNECTOR_FILENAME} says {connector.last_verified.isoformat()} — "
+                    "staleness is judged on the connector's copy, so the two cannot differ"
+                )
 
     fixture_meta = meta.get("fixture")
     if not isinstance(fixture_meta, dict):
@@ -294,7 +326,10 @@ def check_code(package: Path) -> list[str]:
         return []
     try:
         tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
-    except (OSError, SyntaxError) as exc:
+    except (OSError, SyntaxError, UnicodeDecodeError, ValueError) as exc:
+        # A file the checker cannot read is a violation, never an exception the
+        # command dies on: contributor-controlled bytes must not be able to
+        # stop the gate from writing its evidence (review, #77).
         return [f"rule 3/4: {PARSE_FILENAME} could not be parsed: {exc}"]
 
     violations: list[str] = []
@@ -318,11 +353,17 @@ def check_code(package: Path) -> list[str]:
                     f"rule 3/4: {PARSE_FILENAME} imports from {name!r}, which is not in "
                     f"the allowlist ({', '.join(sorted(ALLOWED_IMPORTS))})"
                 )
-        elif isinstance(node, ast.Call):
-            func = node.func
-            called = func.id if isinstance(func, ast.Name) else None
-            if called in FORBIDDEN_CALLS:
-                violations.append(f"rule 3/4: {PARSE_FILENAME} calls {called}()")
+        # Any *mention* in a load position, not only a direct call. Review on
+        # #77: matching the call target alone let `reader = open` then
+        # `reader(path, "w")` straight through, and `loader = __import__` with
+        # it. Naming one of these at all is the violation; there is no use for
+        # `open` in a file that turns text into text.
+        elif (
+            isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Load)
+            and node.id in FORBIDDEN_CALLS
+        ):
+            violations.append(f"rule 3/4: {PARSE_FILENAME} names {node.id}")
     return violations
 
 
@@ -337,9 +378,12 @@ def check_fixture(package: Path) -> list[str]:
     fixture_dir = package / FIXTURE_DIRNAME
     if not fixture_dir.is_dir():
         return ["rule 2: no fixture/ — no fixture, no merge"]
-    recorded = sorted(
-        p for p in fixture_dir.iterdir() if p.is_file() and not p.name.startswith(".")
-    )
+    try:
+        recorded = sorted(
+            p for p in fixture_dir.iterdir() if p.is_file() and not p.name.startswith(".")
+        )
+    except OSError as exc:
+        return [f"rule 2: fixture/ could not be listed: {exc}"]
     if not recorded:
         return ["rule 2: fixture/ is empty — no fixture, no merge"]
 
@@ -354,7 +398,7 @@ def check_fixture(package: Path) -> list[str]:
 
     try:
         items = parse_list_page(connector, listing.read_text(encoding="utf-8"))
-    except ConnectorError as exc:
+    except (ConnectorError, OSError, UnicodeDecodeError) as exc:
         return [f"rule 2: the connector could not read its own fixture: {exc}"]
     if not items:
         return [
@@ -364,11 +408,27 @@ def check_fixture(package: Path) -> list[str]:
 
     detail_fields: dict[str, str] | None = None
     detail = fixture_dir / "detail.html"
-    if connector.detail is not None and detail.is_file():
+    if connector.detail is not None:
+        # A declared detail page must be *demonstrated*, not merely declared.
+        # Review on #77: guarding on `detail.is_file()` meant a connector whose
+        # listing alone yields a valid offer passed while its detail selectors
+        # were never once run — the untested half of the connector being the
+        # half most likely to break, since detail markup changes independently.
+        if not detail.is_file():
+            return [
+                "rule 2: the connector declares a detail page but fixture/detail.html is "
+                "missing — a declared selector with no recorded response is unproven"
+            ]
         try:
             detail_fields = parse_detail_page(connector, detail.read_text(encoding="utf-8"))
-        except ConnectorError as exc:
+        except (ConnectorError, OSError, UnicodeDecodeError) as exc:
             return [f"rule 2: the connector could not read fixture/detail.html: {exc}"]
+        if not detail_fields:
+            return [
+                "rule 2: the connector's detail selectors match nothing in "
+                "fixture/detail.html — a recorded response it cannot read proves the "
+                "opposite of what it is for"
+            ]
 
     try:
         build_offer(
@@ -438,7 +498,13 @@ def _main(argv: list[str]) -> int:
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     try:
         measured = write_evidence(target, directory)
-    except ConnectorError as exc:
+    except (ConnectorError, OSError, UnicodeDecodeError) as exc:
+        # A gate that dies with a traceback has not failed — it has not run,
+        # and CI cannot tell those apart from an exit code alone. Every route
+        # out of here is a documented status (review, #77). Note that a *single*
+        # unreadable package is not this path: it is a violation of the rule
+        # whose file could not be read, reported beside the others and exiting
+        # 1. This is for the library itself being unreachable.
         print(f"connector-contract: {exc}", file=sys.stderr)
         return 3
     print(json.dumps(measured, ensure_ascii=False))

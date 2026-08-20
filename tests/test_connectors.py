@@ -159,16 +159,46 @@ def test_the_filename_must_match_the_declared_site_and_locale(tmp_path: Path) ->
         load_connector(path)
 
 
-def test_loading_the_whole_directory_sorts_by_filename(tmp_path: Path) -> None:
-    write_connector(tmp_path, "examplejobs_es.yaml")
+def test_the_package_directory_must_match_the_declared_site_and_locale(tmp_path: Path) -> None:
+    """The name moved to the directory with T53; the rule moved with it."""
+    package = tmp_path / "wrongname"
+    write_connector(package, "connector.yaml")
+    with pytest.raises(ConnectorError, match="examplejobs_es"):
+        load_connector(package)
+
+
+def test_loading_the_whole_directory_sorts_by_package_name(tmp_path: Path) -> None:
+    """Sorted by name, across the whole library — see `load_connectors`.
+
+    Written with the alphabetically-later package created first, so a loader
+    that returned discovery order rather than sorted order would fail here.
+    """
+    other = VALID.replace("site: examplejobs", "site: otherboard").replace(
+        "locale: es", "locale: en"
+    )
+    write_connector(tmp_path / "otherboard_en", "connector.yaml", other)
+    write_connector(tmp_path / "examplejobs_es", "connector.yaml")
+    from jobsearch.connectors import load_connectors
+
+    connectors = load_connectors(tmp_path)
+    assert [c.site for c in connectors] == ["examplejobs", "otherboard"]
+
+
+def test_a_loose_yaml_file_beside_the_packages_is_not_loaded(tmp_path: Path) -> None:
+    """Packages only, so runtime and the contract check discover the same set.
+
+    Review on #77: while both shapes loaded, a loose file was loaded at runtime
+    and never checked by the contract, so CI could report zero violations over
+    a connector nothing had examined.
+    """
+    write_connector(tmp_path / "examplejobs_es", "connector.yaml")
     other = VALID.replace("site: examplejobs", "site: otherboard").replace(
         "locale: es", "locale: en"
     )
     write_connector(tmp_path, "otherboard_en.yaml", other)
     from jobsearch.connectors import load_connectors
 
-    connectors = load_connectors(tmp_path)
-    assert [c.site for c in connectors] == ["examplejobs", "otherboard"]
+    assert [c.site for c in load_connectors(tmp_path)] == ["examplejobs"]
 
 
 # ---------------------------------------------------------------------------
