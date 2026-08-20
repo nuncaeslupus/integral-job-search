@@ -2,15 +2,17 @@
 
 ## Read this first
 
-**D-14 is done and waiting on a merge.** PR
-[#100](https://github.com/nuncaeslupus/job-search/pull/100) closes
-[#90](https://github.com/nuncaeslupus/job-search/issues/90); the task file is
-already archived to `arsenal/tasks/_history/t-05892c87.md` with
-`status: merged` inside that same diff, so merging it closes the issue and
-archives the task in one act. Nothing is owed afterwards.
+**D-14 is done and merged.** PR
+[#100](https://github.com/nuncaeslupus/job-search/pull/100) landed as `71b3bb9`
+and closed [#90](https://github.com/nuncaeslupus/job-search/issues/90); the task
+file is archived at `arsenal/tasks/_history/t-05892c87.md` with
+`status: merged`. Nothing is owed on it. All five gates were re-run on `main`
+after the merge and pass.
 
 The previous handover's list of ten divergences (#90–#99) stands, minus D-14.
-`task_select.py` returns **D-13** (`t-bd59e70b`, #97) next.
+`task_select.py` returns **D-15** (`t-65ecce18`, #93) next — nine divergences
+are still open, all at priority 10, so read the selector rather than the numeric
+order of the D-labels.
 
 ## What D-14 turned out to be
 
