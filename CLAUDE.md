@@ -108,6 +108,34 @@ silently releases everything downstream. Prefer keeping it **open** and holding
 it out of selection with `requires:` — that is what #71 does — and use the label
 only for work genuinely abandoned.
 
+## Searching this repository without burning the context window
+
+`.rgignore` excludes the vendored and generated trees — `vendor/`,
+`claude-arsenal/bin|scripts/`, the generated spec readers — from every
+ripgrep-backed search, for the same reason `pyproject.toml` excludes them from
+ruff and mypy: they are not ours to change, a fix inside one is reverted by the
+next refresh, and `vendor/claude-arsenal/docs/research/` alone is a 2.9MB
+document whose lines run to thousands of words each. Search one deliberately
+with `rg -u --no-ignore-vcs` or by naming its directory.
+
+**The corpus is the expensive one, and it is not excluded**, because it is real
+project data worth searching. `corpus/raw/ads.jsonl` and
+`corpus/labelled/ads.jsonl` are 100 lines each, and a line is a whole job
+advert — the longest is **15,640 characters**. One content match returns the
+entire advert, so an unbounded content search across both files can return
+100KB in a single result. Against the corpus:
+
+- count or list files first (`rg -c`, `rg -l`, or `output_mode` other than
+  `content`), and only then read the specific record;
+- read a record with `python3 -c` and `json.loads`, projecting the fields you
+  need, rather than grepping the raw line;
+- if you do need content mode, pass `-o` so only the match comes back, or a
+  small `head_limit`.
+
+The same applies to `corpus/labelled/suggestions.json` and any generated
+`status/evidence/*.json` with a `readings`/`checks` array: project the key you
+want, do not print the file.
+
 ## Known environment state
 
 **GitHub Actions is out of runner minutes until the next billing period
