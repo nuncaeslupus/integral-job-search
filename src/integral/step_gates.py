@@ -28,7 +28,7 @@ import json
 import operator
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -179,6 +179,67 @@ def apply_states(
         json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     return changed
+
+
+# ---------------------------------------------------------------------------
+# certification (D-21): a step whose gate is unbuilt cannot certify itself
+#
+# `coverage_met` answers "is every artefact this step produces present, with
+# nothing left outstanding" — a question a step can satisfy by writing files
+# nobody checked. It is deliberately *not* the acceptance gate, and every step
+# checkpoint already said so in its `note` and printed `gate_state` beside it.
+# What did not follow was the exit code. A caller that reads a status rather
+# than parsing JSON saw 0, and 0 reads as "this step passed": the checkpoint
+# named the gate, said out loud that the gate does not exist, and exited clean
+# anyway. Seven of the thirteen steps record `not_implemented`, so seven steps
+# were certifying themselves against a gate nobody has built.
+#
+# This is the first of the two resolutions D-21 put up — a step with no gate
+# cannot be certified, so its checkpoint does not exit 0 — with the code chosen
+# to carry the reason. Reusing 1 would have made an unbuilt gate
+# indistinguishable from a candidate who simply has not finished the step,
+# which is the ambiguity that let this pass unnoticed to begin with.
+
+#: Exit code: coverage is met, but the step's acceptance gate is not built, so
+#: nothing the checkpoint reported may be read as "this step passed".
+UNCERTIFIABLE = 3
+
+
+def certifiable(step: Step) -> bool:
+    """Whether a met checkpoint for `step` may be read as the step having passed.
+
+    Read from the recorded `gate.state` rather than re-derived from the
+    evidence tree, for two reasons. Drift between the two is already
+    `drift()`'s job and `make evidence` fails the build on it, so deriving here
+    would duplicate a check that exists. And a checkpoint that reached for
+    `status/evidence/` would report every step uncertifiable when the package
+    is installed rather than run from the clone, where that tree is not on disk
+    at all — refusing to certify a step for the wrong reason.
+    """
+    return step.gate.state == "implemented"
+
+
+def certification_note(step: Step) -> str:
+    """The one line a checkpoint prints when it will not certify `step`."""
+    return (
+        f"{step.id}: the artefacts are present, but this step's acceptance gate "
+        f"({step.gate.metric} {step.gate.op} {step.gate.threshold}, owned by "
+        f"{step.gate.task}) is not built — coverage is met, the step is not certified"
+    )
+
+
+def checkpoint_exit(result: Mapping[str, Any]) -> int:
+    """The exit code a step checkpoint reports — D-21's whole decision, in one place.
+
+    Takes the checkpoint's own result rather than the `Step`, so the exit code
+    and the JSON on stdout cannot disagree: `certifiable` is a field of the
+    payload the caller reads, and this returns a code derived from that same
+    field. A missing key is read as *not* met — a checkpoint that forgot to
+    compute one of these is not a checkpoint that passed.
+    """
+    if not result.get("runnable") or not result.get("coverage_met"):
+        return 1
+    return 0 if result.get("certifiable") else UNCERTIFIABLE
 
 
 # ---------------------------------------------------------------------------
