@@ -192,18 +192,23 @@ def assess_coverage(
     wanted = country.strip().upper() if country else None
     market = wanted or UNDECLARED_MARKET
 
-    def serves(package: Package) -> bool:
-        # A market nobody declared is served by nothing, by construction.
+    def declares(package: Package) -> bool:
+        # A market nobody declared is declared by nobody, by construction —
+        # including by an example. `examplejobs_es` says `country: ES`, so it
+        # is the reason Spain is uncovered and has nothing to do with any
+        # other market; listing it under `UNDECLARED_MARKET` as well would
+        # have the evidence assert a connection that does not exist.
         return wanted is not None and package.country == wanted
 
     return Coverage(
         market=market,
-        usable=tuple(p.name for p in packages if p.usable and serves(p)),
+        usable=tuple(p.name for p in packages if p.usable and declares(p)),
         example_only=tuple(
-            p.name
-            for p in packages
-            if not p.usable and is_example_site(p.site) and (p.country == wanted or wanted is None)
+            p.name for p in packages if not p.usable and is_example_site(p.site) and declares(p)
         ),
+        # Not market-scoped, and deliberately: a package nobody can read
+        # declares no market anyone can check, so it is a hole in *every*
+        # reading rather than an absence from all of them.
         unreadable=tuple(p.name for p in packages if not p.usable and not is_example_site(p.site)),
     )
 

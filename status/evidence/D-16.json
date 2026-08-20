@@ -23,9 +23,7 @@
       "market": "(no installed connector declares this market)",
       "connectorless": true,
       "usable": [],
-      "example_only": [
-        "examplejobs_es"
-      ],
+      "example_only": [],
       "unreadable": [],
       "disclosed": true,
       "discloses": "No connector in this tool covers your market, so what follows came from a general web search rather than a search of the boards you would use. I can build a connector for a board you name, or work through your own browser session on a site you are logged into.",

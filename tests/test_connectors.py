@@ -749,3 +749,33 @@ def test_the_gate_records_the_coverage_measurement_it_made(tmp_path: Path) -> No
     written = tmp_path / "D-16.json"
     measured = connector_coverage.write_evidence(written)
     assert json.loads(written.read_text(encoding="utf-8")) == measured
+
+
+def test_the_undeclared_market_is_attributed_to_no_package(tmp_path: Path) -> None:
+    """`UNDECLARED_MARKET` means exactly that: no installed package declares
+    it. An example that names a country explains *that* country being
+    uncovered and nothing else, so it must not appear in the sentinel reading
+    — evidence asserting a connection that does not exist is worse than
+    evidence saying nothing.
+    """
+    library = _library(
+        tmp_path / "connectors",
+        examplejobs_es=_meta(site="examplejobs.test"),
+        realboard_pt=_meta(country="PT"),
+    )
+    packages = connector_coverage.installed_packages(library)
+
+    undeclared = connector_coverage.assess_coverage(None, packages)
+    assert undeclared.market == connector_coverage.UNDECLARED_MARKET
+    assert not undeclared.covered
+    assert undeclared.usable == ()
+    assert undeclared.example_only == ()
+    assert connector_coverage.disclosure(undeclared)
+
+    # The example still explains the market it does declare.
+    assert connector_coverage.assess_coverage("ES", packages).example_only == ("examplejobs_es",)
+    # And a package that declares no country is not swept in either.
+    nameless = _library(tmp_path / "other", mystery=yaml.safe_dump({"site": "who.test"}))
+    assert connector_coverage.assess_coverage(
+        None, connector_coverage.installed_packages(nameless)
+    ).example_only == ()
