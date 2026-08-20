@@ -1,6 +1,6 @@
 ---
 id: lo-da9c
-title: "T40: Decline ledger \u2014 a subject declined twice is never raised again unless the candidate reopens it"
+title: "T40: Decline ledger — a subject declined twice is never raised again unless the candidate reopens it"
 priority: 10
 deps: [lo-e0fa]
 tags: [m1]

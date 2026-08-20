@@ -1,6 +1,6 @@
 ---
 id: lo-dddd
-title: "T38: Retraction rows, and deletion of a person \u2014 suppress everywhere derived; delete a named tree"
+title: "T38: Retraction rows, and deletion of a person — suppress everywhere derived; delete a named tree"
 priority: 5
 deps: [lo-e0fa]
 tags: [m1]

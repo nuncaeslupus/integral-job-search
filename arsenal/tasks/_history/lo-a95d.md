@@ -1,6 +1,6 @@
 ---
 id: lo-a95d
-title: "S5: Offer lifecycle \u2014 status, purge rule, tombstones so dedup cannot resurrect, retention for what mattered"
+title: "S5: Offer lifecycle — status, purge rule, tombstones so dedup cannot resurrect, retention for what mattered"
 priority: 68
 deps: [lo-6928, lo-5c8c, lo-9e33]
 workspace: SUPPLY

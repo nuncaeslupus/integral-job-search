@@ -1,6 +1,6 @@
 ---
 id: lo-aa45
-title: "S2: Specification v2 \u2014 one spec per step, filling the step template"
+title: "S2: Specification v2 — one spec per step, filling the step template"
 priority: 90
 deps: [lo-6928, lo-d865]
 workspace: ONTOLOGY
