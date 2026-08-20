@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 import yaml
 
-from jobsearch.connector_contract import (
+from integral.connector_contract import (
     DEFAULT_EVIDENCE_PATH,
     MINIMUM_PACKAGES,
     OPTIONAL_ENTRIES,
@@ -37,7 +37,7 @@ from jobsearch.connector_contract import (
     measure,
     write_evidence,
 )
-from jobsearch.connector_shape import measure as shape_measure
+from integral.connector_shape import measure as shape_measure
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
@@ -176,7 +176,7 @@ def test_a_parse_module_is_refused_however_well_behaved_it_is(package: Path) -> 
 
     This test previously asserted the opposite, under the docstring "the rule is
     not 'no parse.py' — the exception has to remain usable". It was not usable:
-    §5 advertised the hatch and nothing in `src/jobsearch` ever executed one, so
+    §5 advertised the hatch and nothing in `src/integral` ever executed one, so
     a connector for a site the declarative form cannot express passed every rule
     here and still could not work.
 
@@ -261,7 +261,7 @@ def test_a_package_with_no_policy_block_is_rejected(package: Path) -> None:
 
 
 def test_a_stray_file_in_the_package_is_rejected(package: Path) -> None:
-    """"Everything in the directory is the connector" is what makes review finite.
+    """ "Everything in the directory is the connector" is what makes review finite.
 
     A `notes.txt` today is a `credentials.env` tomorrow, and the reviewer who
     waved the first one through has no principle left to refuse the second.
@@ -423,7 +423,7 @@ def test_every_file_named_in_the_shared_shape_has_a_runtime_or_is_not_advertised
     advertised that rule 1 refuses (the same defect after a careless fix to only
     one of the two places).
 
-    The measurement lives in `jobsearch.connector_shape` so `make evidence`
+    The measurement lives in `integral.connector_shape` so `make evidence`
     re-derives it on every run; this asserts it from the suite as well, since a
     gate only CI re-checks is one a local run can break without noticing.
     """
@@ -467,7 +467,7 @@ def test_nothing_in_the_codebase_executes_a_contributed_parse_module() -> None:
     # binding flagged 59 honest regex compiles and nothing else.
     builtins_that_run_text = {"exec", "eval", "compile", "__import__"}
     offenders: list[str] = []
-    for module in sorted((_REPO_ROOT / "src" / "jobsearch").glob("*.py")):
+    for module in sorted((_REPO_ROOT / "src" / "integral").glob("*.py")):
         tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):

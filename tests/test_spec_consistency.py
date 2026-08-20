@@ -14,7 +14,7 @@ watch their gate pass against it.
 
 `test_no_document_states_a_superseded_gate` is the committed-document check:
 it must fail before the docs are fixed, and pass after. The rest exercise
-`jobsearch.spec_consistency` against synthetic documents so the mechanism is
+`integral.spec_consistency` against synthetic documents so the mechanism is
 shown to be general — keyed off the step spec's own declaration sentence,
 never off the literal string `story_failure_fraction` — rather than a check
 shaped to this one instance.
@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch.spec_consistency import (
+from integral.spec_consistency import (
     MINIMUM_DECLARATIONS_FOUND,
     Contradiction,
     Declaration,
@@ -80,8 +80,7 @@ def test_a_gate_shaped_restatement_of_a_different_metric_is_caught(tmp_path: Pat
     )
     target = tmp_path / "spec.md"
     target.write_text(
-        "## Success criteria\n\n"
-        "- [ ] `widget_ratio >= 0.5` — at least half of widgets pass\n",
+        "## Success criteria\n\n- [ ] `widget_ratio >= 0.5` — at least half of widgets pass\n",
         encoding="utf-8",
     )
 
@@ -172,7 +171,7 @@ def test_zero_declarations_found_is_a_hard_failure(tmp_path: Path) -> None:
         [
             sys.executable,
             "-m",
-            "jobsearch.spec_consistency",
+            "integral.spec_consistency",
             "--check",
             "--source-doc",
             str(empty_source),

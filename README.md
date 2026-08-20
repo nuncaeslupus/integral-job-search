@@ -1,4 +1,4 @@
-# job-search
+# integral-job-search
 
 Candidate-centred integral job search: one dimension model, carried end to end.
 
@@ -10,8 +10,8 @@ evidence read out of an advert, the ranking, the CV, the interview.
 ## Using it
 
 ```
-git clone https://github.com/nuncaeslupus/job-search.git
-cd job-search
+git clone https://github.com/nuncaeslupus/integral-job-search.git
+cd integral-job-search
 claude
 ```
 

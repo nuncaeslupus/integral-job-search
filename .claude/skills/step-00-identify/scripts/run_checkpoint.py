@@ -11,7 +11,7 @@ a file can answer.
 This is **not** the step's acceptance gate. `cross_user_leaks == 0`,
 owned by S3, measures something this script does not attempt, and is
 written by that task's own evidence writer — never fabricated here. Writing this step's
-number into that task's evidence file would let `jobsearch.step_gates` report a task as
+number into that task's evidence file would let `integral.step_gates` report a task as
 implemented when it is not, which is exactly the false-`done` failure the project's own
 queue protocol exists to prevent. So this script writes its own, separate file.
 
@@ -20,7 +20,7 @@ Run via (from the repo root, with the project's dev environment):
         --id <handle> [--input-dir <profiles-root>] [--dev]
 
 The profiles root defaults to the candidate store resolved from `$INTEGRAL_HOME`
-(`jobsearch.state_home`), which refuses any path inside a git work tree — candidate
+(`integral.state_home`), which refuses any path inside a git work tree — candidate
 state never lives in the clone (T51, `docs/distribution.md` §2).
 
 Exit codes: 0 the step's machine-visible coverage is met; 1 it is not (still open, or
@@ -41,10 +41,10 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 # T52's second layer, and it has to come first: this is the step that runs before
 # any other, so a session whose SessionStart hook never fired arrives here with
-# an empty environment. `jobsearch.bootstrap` is stdlib-only precisely so it can
+# an empty environment. `integral.bootstrap` is stdlib-only precisely so it can
 # be imported at this point — every import below it needs pydantic, which is one
 # of the things it installs.
-from jobsearch.bootstrap import ensure_ready, venv_interpreter  # noqa: E402
+from integral.bootstrap import ensure_ready, venv_interpreter  # noqa: E402
 
 _bootstrap = ensure_ready(_REPO_ROOT, entry_point="step-0")
 
@@ -59,15 +59,15 @@ if _bootstrap.action == "installed" and not os.environ.get("INTEGRAL_BOOTSTRAP_R
         os.environ["INTEGRAL_BOOTSTRAP_REEXEC"] = "1"
         os.execv(str(_python), [str(_python), *sys.argv])
 
-from jobsearch.identity import IdentityError, ProfileStore  # noqa: E402
-from jobsearch.process_spec import Step, StepList, load_steps  # noqa: E402
-from jobsearch.session import SessionError, SessionStore  # noqa: E402
-from jobsearch.state_home import (  # noqa: E402
+from integral.identity import IdentityError, ProfileStore  # noqa: E402
+from integral.process_spec import Step, StepList, load_steps  # noqa: E402
+from integral.session import SessionError, SessionStore  # noqa: E402
+from integral.state_home import (  # noqa: E402
     StateHomeRefused,
     ensure_outside_a_work_tree,
     profiles_root,
 )
-from jobsearch.step_runtime import (  # noqa: E402
+from integral.step_runtime import (  # noqa: E402
     ProfileView,
     is_finished,
     missing_inputs,

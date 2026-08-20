@@ -1,6 +1,6 @@
 """T2 — the dimension schema, its loader, and `methods_ref` anchor resolution.
 
-Written RED before `jobsearch.dimensions` existed, per the task payload.
+Written RED before `integral.dimensions` existed, per the task payload.
 
 The two tests the plan names are `test_dimension_missing_methods_ref_is_rejected`
 and `test_dimension_duplicate_id_is_rejected`; the rest guard the parts of the
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.dimensions import (
+from integral.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
     DEFAULT_METHODS_PATH,
     DimensionError,
@@ -233,12 +233,12 @@ def test_schema_languages_match_the_corpus_languages() -> None:
     """The schema's language keys and the corpus's language list stay in step.
 
     Pydantic needs the languages spelled out statically, so they appear twice —
-    once as `Language`, once as `jobsearch.corpus.LANGUAGES`. This is what stops
+    once as `Language`, once as `integral.corpus.LANGUAGES`. This is what stops
     the second copy drifting from the first.
     """
     from typing import get_args
 
-    from jobsearch.corpus import LANGUAGES
+    from integral.corpus import LANGUAGES
 
     assert set(get_args(Language)) == set(LANGUAGES)
 

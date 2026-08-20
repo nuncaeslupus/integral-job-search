@@ -22,8 +22,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.offers import (
+from integral.identity import ProfileStore, create_profile
+from integral.offers import (
     MINIMUM_CHECKS,
     Location,
     Offer,

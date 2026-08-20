@@ -1,4 +1,4 @@
-# CI for the job-search tool.
+# CI for the integral-job-search tool.
 #
 # This repository's whole method is that a claim carries a measurement: every
 # task declares a numeric gate, writes its evidence to `status/evidence/`, and

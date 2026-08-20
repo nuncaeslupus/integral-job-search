@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.candidate import (
+from integral.candidate import (
     Availability,
     CandidateConstraints,
     EmploymentMode,
@@ -31,11 +31,11 @@ from jobsearch.candidate import (
     TaxCountry,
     WorkAuthorisation,
 )
-from jobsearch.decline import DeclineLedger
-from jobsearch.dimensions import Dimension, LocalisedText
-from jobsearch.elicit_extract import MIN_ANSWER_CHARS
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.interview import (
+from integral.decline import DeclineLedger
+from integral.dimensions import Dimension, LocalisedText
+from integral.elicit_extract import MIN_ANSWER_CHARS
+from integral.identity import ProfileStore, create_profile
+from integral.interview import (
     EXTRA_EPISODE_TEXT,
     LESSON_FOLLOWUP_TEXT,
     MAX_EXTRA_EPISODE_ATTEMPTS,
@@ -54,8 +54,8 @@ from jobsearch.interview import (
     run_interview,
     trait_floor_state,
 )
-from jobsearch.profile import EvidenceLog
-from jobsearch.question_bank import build_bank
+from integral.profile import EvidenceLog
+from integral.question_bank import build_bank
 
 LONG_POSITIVE = (
     "We shipped a whole redesign in six weeks and I owned the rollout plan end "
@@ -373,9 +373,9 @@ def test_a_further_probe_instead_of_a_lesson_followup_is_detected() -> None:
     after a negative episode is an ordinary further question, not the lesson
     turn, must drop `negative_episode_followup_rate` below 1.0 and name the
     offending turn."""
-    from jobsearch.dimensions import LocalisedText
-    from jobsearch.elicit_extract import ExtractionResult
-    from jobsearch.question_bank import BankEntry
+    from integral.dimensions import LocalisedText
+    from integral.elicit_extract import ExtractionResult
+    from integral.question_bank import BankEntry
 
     negative_entry = BankEntry(
         bank_id="last_role_pace:q1",

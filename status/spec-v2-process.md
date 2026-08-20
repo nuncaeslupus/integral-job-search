@@ -664,7 +664,7 @@ multi-tenant service.
 The tree's root is **`$INTEGRAL_HOME/profiles/`**, not a directory inside the
 clone — `$INTEGRAL_HOME` defaults to `~/.integral-job-search/` and respects
 `$XDG_DATA_HOME` where it is set (`docs/distribution.md` §2, made mechanical by
-T51 in `jobsearch.state_home`). The resolver **refuses** to return any path
+T51 in `integral.state_home`). The resolver **refuses** to return any path
 inside a git work tree, with `--dev` / `INTEGRAL_DEV=1` as the single explicit
 escape for work on the tool itself.
 

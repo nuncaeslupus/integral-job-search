@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch.process_spec import (
+from integral.process_spec import (
     DEFAULT_PROCESS_DOC,
     DEFAULT_STEPS_PATH,
     MIN_ITEM_WORDS,

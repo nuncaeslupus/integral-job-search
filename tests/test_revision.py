@@ -18,11 +18,11 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.constraints_step import CandidateTurn
-from jobsearch.constraints_step import resolve as resolve_constraints
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog, EvidenceSubject, ProfileRevision, rebuild
-from jobsearch.revision import (
+from integral.constraints_step import CandidateTurn
+from integral.constraints_step import resolve as resolve_constraints
+from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog, EvidenceSubject, ProfileRevision, rebuild
+from integral.revision import (
     STALE_SUFFIX,
     classify,
     is_immutable,
@@ -228,9 +228,7 @@ def test_historical_artefact_is_never_revised(store: ProfileStore) -> None:
         if path.is_file() and is_immutable(path.relative_to(store.path()))
     }
     result = refresh(store)
-    after = {
-        relative: store.path(*Path(relative).parts).read_bytes() for relative in before
-    }
+    after = {relative: store.path(*Path(relative).parts).read_bytes() for relative in before}
     assert after == before
     assert set(result.untouched_historical) == set(before)
 
@@ -281,7 +279,7 @@ def test_a_declined_field_survives_a_rebuild(tmp_path: Path) -> None:
 
     T41's engine records a decline in `session/declines.jsonl`, not in the
     evidence log, and writes `state: "declined"` into `constraints.json`.
-    Before the fix, `revision.refresh` called `jobsearch.profile.rebuild`,
+    Before the fix, `revision.refresh` called `integral.profile.rebuild`,
     which regenerated `constraints.json` from the evidence log alone — a
     field the candidate explicitly refused reverted to
     indistinguishable-from-never-asked, and the tool would ask again, which
@@ -321,11 +319,7 @@ def test_an_unknown_field_survives_a_rebuild(tmp_path: Path) -> None:
 
     resolve_constraints(
         store,
-        [
-            CandidateTurn(
-                field="salary", action="state", value={"floor": 40000, "currency": "EUR"}
-            )
-        ],
+        [CandidateTurn(field="salary", action="state", value={"floor": 40000, "currency": "EUR"})],
         now="2026-08-18T09:00:00Z",
     )
     before = json.loads(store.path("profile", "constraints.json").read_text(encoding="utf-8"))

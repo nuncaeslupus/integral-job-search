@@ -13,8 +13,8 @@ import re
 
 import pytest
 
-from jobsearch.corpus import LANGUAGES, load_ads
-from jobsearch.dimensions import (
+from integral.corpus import LANGUAGES, load_ads
+from integral.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
     SCHEMA_LANGUAGES,
     Dimension,
@@ -47,9 +47,7 @@ def test_every_dimension_has_cues_in_all_three_languages(dimensions: list[Dimens
     """
     missing = {
         dimension.id: [
-            language
-            for language in SCHEMA_LANGUAGES
-            if not dimension.extraction.cues.get(language)
+            language for language in SCHEMA_LANGUAGES if not dimension.extraction.cues.get(language)
         ]
         for dimension in dimensions
     }
@@ -185,9 +183,7 @@ def test_the_committed_gold_set_is_entirely_cue_derived(dimensions: list[Dimensi
     """
     measured = gold_provenance(dimensions)
     assert measured["gold_by_provenance"]["human"] == 0
-    assert measured["gold_by_provenance"]["cue"] == sum(
-        len(d.extraction.gold) for d in dimensions
-    )
+    assert measured["gold_by_provenance"]["cue"] == sum(len(d.extraction.gold) for d in dimensions)
 
 
 def test_no_evaluation_example_is_derived_from_a_cue(dimensions: list[Dimension]) -> None:

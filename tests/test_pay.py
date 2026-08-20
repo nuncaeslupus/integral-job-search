@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch.pay import (
+from integral.pay import (
     DEFAULT_TAXES_DIR,
     Band,
     PayError,

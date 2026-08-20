@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog
-from jobsearch.scoring import (
+from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog
+from integral.scoring import (
     BATCH_THRESHOLD,
     TRIGGERS,
     Decision,
@@ -162,7 +162,7 @@ def test_the_pending_count_resets_after_a_run(store: ProfileStore) -> None:
 
 
 def test_the_decision_says_how_many_are_waiting(store: ProfileStore) -> None:
-    """"Nothing is lost by waiting" is only reassuring with a number on it."""
+    """ "Nothing is lost by waiting" is only reassuring with a number on it."""
     _say(store, 1)
     decision = decide(store, "message", threshold=5)
     assert decision.pending == 1

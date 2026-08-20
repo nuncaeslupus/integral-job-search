@@ -6,7 +6,7 @@
 # runs at session start, checks whether the environment is current, and syncs
 # when it is not. Silent when there is nothing to do.
 #
-# The rule itself lives in `jobsearch.bootstrap`, which is stdlib-only for the
+# The rule itself lives in `integral.bootstrap`, which is stdlib-only for the
 # obvious reason: it exists to prevent an ImportError, so it cannot need the
 # packages it installs. This file only decides how to reach Python.
 #
@@ -29,7 +29,7 @@ export INTEGRAL_ENTRY_POINT=session-start
 # somebody's machine without them ever being told.
 for python in python3 python; do
   if command -v "$python" >/dev/null 2>&1; then
-    PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" "$python" -m jobsearch.bootstrap --ensure >/dev/null \
+    PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" "$python" -m integral.bootstrap --ensure >/dev/null \
       || true
     exit 0
   fi

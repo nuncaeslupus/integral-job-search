@@ -1,6 +1,6 @@
 """T4 — the corpus harness: roundtrip fidelity, splits, self-agreement.
 
-Written RED before `jobsearch.harness` existed, per the task payload. The named
+Written RED before `integral.harness` existed, per the task payload. The named
 test is `test_corpus_roundtrip_preserves_text_and_offsets`; the rest cover the
 split guarantee T9 will depend on and the self-agreement report the labelling
 protocol calls for.
@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.corpus import load_ads
-from jobsearch.dimensions import load_dimensions
-from jobsearch.harness import (
+from integral.corpus import load_ads
+from integral.dimensions import load_dimensions
+from integral.harness import (
     DEFAULT_STORE_PATH,
     HarnessError,
     Label,
@@ -33,7 +33,7 @@ from jobsearch.harness import (
     split_counts,
     unknown_dimensions,
 )
-from jobsearch.harness import (
+from integral.harness import (
     _main as main,
 )
 
@@ -107,12 +107,16 @@ def test_probe_labels_take_their_offsets_from_real_ad_text() -> None:
 def test_a_span_running_past_the_end_of_the_text_is_rejected() -> None:
     """An offset outside the text is refused at construction, not at read time."""
     with pytest.raises(ValueError, match="runs past the end"):
-        ad(labels=[Label(
-            dimension="on_call_load",
-            value=0.5,
-            spans=[Span(start=0, end=len(TRICKY) + 10)],
-            labeller="test",
-        )])
+        ad(
+            labels=[
+                Label(
+                    dimension="on_call_load",
+                    value=0.5,
+                    spans=[Span(start=0, end=len(TRICKY) + 10)],
+                    labeller="test",
+                )
+            ]
+        )
 
 
 def test_split_assignment_is_deterministic() -> None:
@@ -221,12 +225,24 @@ def test_a_dimension_labelled_in_one_round_only_counts_as_disagreement() -> None
     where the two passes differed most, so agreement rises the more the
     labeller changed their mind.
     """
-    dropped = ad(labels=[
-        Label(dimension="on_call_load", value=0.8, spans=[Span(start=0, end=2)],
-              labeller="owner", round=1),
-        Label(dimension="remote_arrangement", value=0.8, spans=[Span(start=0, end=2)],
-              labeller="owner", round=2),
-    ])
+    dropped = ad(
+        labels=[
+            Label(
+                dimension="on_call_load",
+                value=0.8,
+                spans=[Span(start=0, end=2)],
+                labeller="owner",
+                round=1,
+            ),
+            Label(
+                dimension="remote_arrangement",
+                value=0.8,
+                spans=[Span(start=0, end=2)],
+                labeller="owner",
+                round=2,
+            ),
+        ]
+    )
 
     report = self_agreement([dropped])
 
@@ -236,9 +252,21 @@ def test_a_dimension_labelled_in_one_round_only_counts_as_disagreement() -> None
 
 def test_an_ad_never_revisited_is_left_out_of_the_agreement() -> None:
     """Round-1-only ads are unrevisited, not disagreed with."""
-    report = self_agreement([ad(ad_id="once", labels=[Label(
-        dimension="on_call_load", value=0.8, spans=[Span(start=0, end=2)], labeller="owner",
-    )])])
+    report = self_agreement(
+        [
+            ad(
+                ad_id="once",
+                labels=[
+                    Label(
+                        dimension="on_call_load",
+                        value=0.8,
+                        spans=[Span(start=0, end=2)],
+                        labeller="owner",
+                    )
+                ],
+            )
+        ]
+    )
 
     assert report["compared_labels"] == 0
     assert report["undefined_because"] == "nothing has been labelled twice"
@@ -249,10 +277,20 @@ def test_invalid_cli_input_exits_cleanly_instead_of_raising(tmp_path: Path) -> N
     store = tmp_path / "store.jsonl"
     save_store([ad(ad_id="x", text="Sense guàrdies aquí")], store)
 
-    code = main([
-        "--store", str(store), "set", "x", "on_call_load", "0.0",
-        "--quote", "Sense guàrdies", "--round", "0",
-    ])
+    code = main(
+        [
+            "--store",
+            str(store),
+            "set",
+            "x",
+            "on_call_load",
+            "0.0",
+            "--quote",
+            "Sense guàrdies",
+            "--round",
+            "0",
+        ]
+    )
 
     assert code == 2
 
@@ -269,12 +307,18 @@ def test_the_two_splits_are_disjoint_and_cover_the_corpus() -> None:
 
 def test_a_label_naming_an_unknown_dimension_is_reported() -> None:
     """A misspelled dimension drops out of per-dimension metrics rather than failing."""
-    store = [ad(labels=[Label(
-        dimension="sallary_transparency",
-        value=0.5,
-        spans=[Span(start=0, end=2)],
-        labeller="test",
-    )])]
+    store = [
+        ad(
+            labels=[
+                Label(
+                    dimension="sallary_transparency",
+                    value=0.5,
+                    spans=[Span(start=0, end=2)],
+                    labeller="test",
+                )
+            ]
+        )
+    ]
 
     problems = unknown_dimensions(store, load_dimensions())
 
@@ -293,21 +337,48 @@ def test_duplicate_ad_ids_in_the_store_are_refused(tmp_path: Path) -> None:
 
 
 def test_the_two_undefined_agreement_states_are_distinguishable() -> None:
-    """"Nothing re-labelled" and "re-labelled but degenerate" are different states.
+    """ "Nothing re-labelled" and "re-labelled but degenerate" are different states.
 
     Both report `kappa: None`, and a caller that reads only that field would
     tell a labeller who has just re-done forty ads to go and do them — so the
     reason is carried alongside, and the CLI prints it.
     """
-    nothing = self_agreement([ad(labels=[Label(
-        dimension="on_call_load", value=0.5, spans=[Span(start=0, end=2)], labeller="o",
-    )])])
-    degenerate = self_agreement([ad(labels=[
-        Label(dimension="on_call_load", value=0.0, spans=[Span(start=0, end=2)],
-              labeller="o", round=1),
-        Label(dimension="on_call_load", value=0.0, spans=[Span(start=0, end=2)],
-              labeller="o", round=2),
-    ])])
+    nothing = self_agreement(
+        [
+            ad(
+                labels=[
+                    Label(
+                        dimension="on_call_load",
+                        value=0.5,
+                        spans=[Span(start=0, end=2)],
+                        labeller="o",
+                    )
+                ]
+            )
+        ]
+    )
+    degenerate = self_agreement(
+        [
+            ad(
+                labels=[
+                    Label(
+                        dimension="on_call_load",
+                        value=0.0,
+                        spans=[Span(start=0, end=2)],
+                        labeller="o",
+                        round=1,
+                    ),
+                    Label(
+                        dimension="on_call_load",
+                        value=0.0,
+                        spans=[Span(start=0, end=2)],
+                        labeller="o",
+                        round=2,
+                    ),
+                ]
+            )
+        ]
+    )
 
     assert nothing["kappa"] is degenerate["kappa"] is None
     assert nothing["undefined_because"] != degenerate["undefined_because"]
@@ -317,9 +388,20 @@ def test_the_two_undefined_agreement_states_are_distinguishable() -> None:
 
 def test_self_agreement_is_undefined_until_something_is_labelled_twice() -> None:
     """Reported as `None`, never rounded up to perfect agreement."""
-    report = self_agreement([ad(labels=[Label(
-        dimension="on_call_load", value=0.5, spans=[Span(start=0, end=2)], labeller="test",
-    )])])
+    report = self_agreement(
+        [
+            ad(
+                labels=[
+                    Label(
+                        dimension="on_call_load",
+                        value=0.5,
+                        spans=[Span(start=0, end=2)],
+                        labeller="test",
+                    )
+                ]
+            )
+        ]
+    )
 
     assert report["kappa"] is None
     assert report["compared_labels"] == 0
@@ -331,13 +413,27 @@ def test_self_agreement_corrects_for_chance() -> None:
     Two passes that both score everything zero agree completely and have
     learned nothing; kappa reports that as 0, raw agreement as 1.0.
     """
+
     def two_rounds(ad_id: str, first: float, second: float) -> LabelledAd:
-        return ad(ad_id=ad_id, labels=[
-            Label(dimension="on_call_load", value=first, spans=[Span(start=0, end=2)],
-                  labeller="owner", round=1),
-            Label(dimension="on_call_load", value=second, spans=[Span(start=0, end=2)],
-                  labeller="owner", round=2),
-        ])
+        return ad(
+            ad_id=ad_id,
+            labels=[
+                Label(
+                    dimension="on_call_load",
+                    value=first,
+                    spans=[Span(start=0, end=2)],
+                    labeller="owner",
+                    round=1,
+                ),
+                Label(
+                    dimension="on_call_load",
+                    value=second,
+                    spans=[Span(start=0, end=2)],
+                    labeller="owner",
+                    round=2,
+                ),
+            ],
+        )
 
     all_zero = [two_rounds(f"z{i}", 0.0, 0.0) for i in range(4)]
     report = self_agreement(all_zero)
@@ -421,8 +517,8 @@ def test_bare_harness_run_writes_both_files_for_the_store_it_was_given(
     store = tmp_path / "ads.jsonl"
     save_store([ad(ad_id="only-one")], store)
     t4, t5 = tmp_path / "T4.json", tmp_path / "T5.json"
-    monkeypatch.setattr("jobsearch.harness.DEFAULT_EVIDENCE_PATH", t4)
-    monkeypatch.setattr("jobsearch.harness.LABEL_EVIDENCE_PATH", t5)
+    monkeypatch.setattr("integral.harness.DEFAULT_EVIDENCE_PATH", t4)
+    monkeypatch.setattr("integral.harness.LABEL_EVIDENCE_PATH", t5)
 
     assert main(["--store", str(store)]) == 0
 
@@ -443,8 +539,7 @@ def test_bare_run_reports_the_worse_of_its_two_gates(
     """
     store = tmp_path / "ads.jsonl"
     save_store([], store)
-    monkeypatch.setattr("jobsearch.harness.DEFAULT_EVIDENCE_PATH", tmp_path / "T4.json")
-    monkeypatch.setattr("jobsearch.harness.LABEL_EVIDENCE_PATH", tmp_path / "T5.json")
+    monkeypatch.setattr("integral.harness.DEFAULT_EVIDENCE_PATH", tmp_path / "T4.json")
+    monkeypatch.setattr("integral.harness.LABEL_EVIDENCE_PATH", tmp_path / "T5.json")
 
     assert main(["--store", str(store)]) == 3
-

@@ -15,7 +15,7 @@
 document's divisor. S12 added `accepts_candidate_free_text` per step there —
 whether that step's protocol (below) puts free text about the candidate in
 front of a writer at all — replacing a hand-maintained map that used to live
-in `jobsearch.profile_capture` and had to be kept in sync by hand.
+in `integral.profile_capture` and had to be kept in sync by hand.
 
 Thirteen steps, each filling the template in `status/spec-v2-brief.md` §4 plus the
 two fields `spec-v2-process.md` §10 requires every step to carry. Nothing here

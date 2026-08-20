@@ -19,9 +19,9 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.dimensions import DimensionError, load_dimensions
-from jobsearch.harness import LabelledAd, load_store
-from jobsearch.suggestions import (
+from integral.dimensions import DimensionError, load_dimensions
+from integral.harness import LabelledAd, load_store
+from integral.suggestions import (
     SuggestionError,
     SuggestionSet,
     blind_control,
@@ -29,7 +29,7 @@ from jobsearch.suggestions import (
     validate_suggestions,
     write_proposals,
 )
-from jobsearch.suggestions import _main as suggestions_main
+from integral.suggestions import _main as suggestions_main
 
 DIMENSIONS = load_dimensions()
 TEXT = "Ofrecemos guardias rotativas cada mes y dos horas cada viernes para estudiar."
@@ -150,9 +150,9 @@ def test_an_invented_control_ad_is_refused() -> None:
 
 def test_a_quote_absent_from_the_ad_is_refused() -> None:
     ads = store()
-    absent = {target_id(ads): [
-        {"dimension": "on_call_load", "value": 0.8, "quote": "nada de esto"}
-    ]}
+    absent = {
+        target_id(ads): [{"dimension": "on_call_load", "value": 0.8, "quote": "nada de esto"}]
+    }
     problems = validate_suggestions(suggestion_set(ads=ads, by_ad=absent), ads, DIMENSIONS)
     assert any("does not appear" in problem for problem in problems)
 
@@ -161,27 +161,27 @@ def test_an_ambiguous_quote_is_refused() -> None:
     """The page turns a quote into offsets by searching for it; two hits means
     the span silently lands on whichever came first."""
     ads = store(text="guardias por la tarde y guardias de noche")
-    twice = {target_id(ads): [
-        {"dimension": "on_call_load", "value": 0.8, "quote": "guardias"}
-    ]}
+    twice = {target_id(ads): [{"dimension": "on_call_load", "value": 0.8, "quote": "guardias"}]}
     problems = validate_suggestions(suggestion_set(ads=ads, by_ad=twice), ads, DIMENSIONS)
     assert any("appears 2 times" in problem for problem in problems)
 
 
 def test_a_value_off_the_rungs_is_refused() -> None:
     ads = store()
-    off = {target_id(ads): [
-        {"dimension": "on_call_load", "value": 0.65, "quote": "guardias rotativas"}
-    ]}
+    off = {
+        target_id(ads): [
+            {"dimension": "on_call_load", "value": 0.65, "quote": "guardias rotativas"}
+        ]
+    }
     problems = validate_suggestions(suggestion_set(ads=ads, by_ad=off), ads, DIMENSIONS)
     assert any("is not a rung" in problem for problem in problems)
 
 
 def test_an_unknown_dimension_is_refused() -> None:
     ads = store()
-    unknown = {target_id(ads): [
-        {"dimension": "vibes", "value": 0.8, "quote": "guardias rotativas"}
-    ]}
+    unknown = {
+        target_id(ads): [{"dimension": "vibes", "value": 0.8, "quote": "guardias rotativas"}]
+    }
     problems = validate_suggestions(suggestion_set(ads=ads, by_ad=unknown), ads, DIMENSIONS)
     assert any("unknown dimension" in problem for problem in problems)
 
@@ -298,8 +298,11 @@ def test_propose_refuses_to_overwrite_an_existing_dimension(tmp_path: Path) -> N
     (tmp_path / "on_call_load.yaml").write_text("id: on_call_load\n", encoding="utf-8")
     export = {
         "proposed_dimensions": [
-            {"id": "on_call_load", "label": "x", "levels": [
-                {"value": 0.0, "label": "a"}, {"value": 1.0, "label": "b"}]}
+            {
+                "id": "on_call_load",
+                "label": "x",
+                "levels": [{"value": 0.0, "label": "a"}, {"value": 1.0, "label": "b"}],
+            }
         ]
     }
 

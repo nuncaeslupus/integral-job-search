@@ -20,9 +20,9 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.identity import IdentityError, ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog, EvidenceSubject, rebuild
-from jobsearch.retraction import (
+from integral.identity import IdentityError, ProfileStore, create_profile
+from integral.profile import EvidenceLog, EvidenceSubject, rebuild
+from integral.retraction import (
     DeletionRefused,
     delete_profile,
     derived_files,

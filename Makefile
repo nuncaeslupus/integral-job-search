@@ -53,9 +53,9 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 # derived, never listed here — a hardcoded list silently stops covering the
 # next module somebody adds, which is the failure this target exists to catch.
 evidence:  ## regenerate every module's gate evidence and fail on any drift
-	@for m in $$(grep -l '^def _main' src/jobsearch/*.py | xargs -n1 basename | sed 's/\.py$$//'); do \
+	@for m in $$(grep -l '^def _main' src/integral/*.py | xargs -n1 basename | sed 's/\.py$$//'); do \
 		printf '  %-18s ' "$$m"; \
-		uv run python -m jobsearch.$$m >/dev/null || { echo "GATE FAILED"; exit 1; }; \
+		uv run python -m integral.$$m >/dev/null || { echo "GATE FAILED"; exit 1; }; \
 		echo ok; \
 	done
 	@git diff --exit-code --stat status/evidence/ \

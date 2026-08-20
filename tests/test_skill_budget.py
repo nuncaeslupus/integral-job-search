@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.skill_budget import (
+from integral.skill_budget import (
     BUDGET_GRANULARITY,
     CONFIG_KEY,
     CONFIG_PATH,
@@ -82,8 +82,9 @@ def test_every_step_is_still_reachable_after_the_change() -> None:
 def test_the_committed_evidence_matches_what_the_code_measures_now() -> None:
     committed = json.loads(EVIDENCE.read_text(encoding="utf-8"))
     measured = measure()
-    assert committed["skill_listing_budget_overage_chars"] == (
-        measured["skill_listing_budget_overage_chars"]
+    assert (
+        committed["skill_listing_budget_overage_chars"]
+        == (measured["skill_listing_budget_overage_chars"])
     )
     assert committed["description_chars_total"] == measured["description_chars_total"]
 
@@ -268,7 +269,7 @@ def test_the_cli_exits_nonzero_when_the_library_is_over(tmp_path: Path) -> None:
         [
             sys.executable,
             "-m",
-            "jobsearch.skill_budget",
+            "integral.skill_budget",
             "--check",
             "--skills-dir",
             str(tmp_path),
@@ -287,7 +288,7 @@ def test_the_cli_prints_the_budget_in_force_and_its_source() -> None:
     """The line the upstream issue asks for: a raise nobody can see is a raise
     nobody can question."""
     result = subprocess.run(
-        [sys.executable, "-m", "jobsearch.skill_budget", "--check"],
+        [sys.executable, "-m", "integral.skill_budget", "--check"],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,

@@ -114,7 +114,7 @@ v1 needs no egress.
 
 | T# | Description | Service | Size | Depends | Gate | Tests |
 |----|-------------|---------|------|---------|------|-------|
-| T1 | Scaffold package: uv, ruff, strict mypy, pytest, Makefile, `profiles/` gitignored | ONTOLOGY | S | — | `lint_typecheck_exit_code == 0` | `test_package_imports_cleanly_exposes_version` in `tests/test_scaffold.py` — importing `jobsearch` yields a semver `__version__` |
+| T1 | Scaffold package: uv, ruff, strict mypy, pytest, Makefile, `profiles/` gitignored | ONTOLOGY | S | — | `lint_typecheck_exit_code == 0` | `test_package_imports_cleanly_exposes_version` in `tests/test_scaffold.py` — importing `integral` yields a semver `__version__` |
 | T2 | Dimension schema (Pydantic) + loader + validator, incl. `methods_ref` anchor resolution | ONTOLOGY | M | T1 | `dimension_schema_violations == 0` | `test_dimension_missing_methods_ref_is_rejected` in `tests/test_dimension_model.py` — a dimension without `methods_ref` fails validation; `test_dimension_duplicate_id_is_rejected` — two files sharing an `id` fail to load |
 | T3 | Dimension model v0: 20–25 dimensions with ES/EN/CA cues and elicitation questions | ONTOLOGY | L | T2 | `dimension_extractor_coverage >= 0.90` | `test_every_dimension_has_cues_in_all_three_languages` in `tests/test_dimension_content.py` — each dimension carries ≥1 cue per language |
 | T4 | Corpus harness: ad store, labelling CLI, split assignment, self-agreement report | ONTOLOGY | M | T2 | `corpus_harness_roundtrip_loss == 0` | `test_corpus_roundtrip_preserves_text_and_offsets` in `tests/test_corpus.py` — writing then reading an ad preserves text byte-for-byte and label offsets |
@@ -157,10 +157,10 @@ done until its row is complete and the measured value meets the gate.
 | T# | Gate | Measured | Command | SHA | Env | Date |
 |----|------|----------|---------|-----|-----|------|
 | T1 | `lint_typecheck_exit_code == 0` | 0 | `make gate` (runs `ruff check .` + `mypy .`) | `9581811` | cloud | 2026-08-15 |
-| S1 | `process_spec_complete == 1` | 1 | `uv run python -m jobsearch.process_spec status/evidence/S1.json` | `f282705` | cloud | 2026-08-17 |
-| S1r | `process_spec_complete == 1` | 1 | `uv run python -m jobsearch.process_spec status/evidence/S1.json` | `258b2de` | cloud | 2026-08-17 |
-| S2 | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m jobsearch.step_specs status/evidence/S2.json` | `8c59a7f` | cloud | 2026-08-17 |
-| S2r | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m jobsearch.step_specs status/evidence/S2.json` | `83032bb` | cloud | 2026-08-18 |
+| S1 | `process_spec_complete == 1` | 1 | `uv run python -m integral.process_spec status/evidence/S1.json` | `f282705` | cloud | 2026-08-17 |
+| S1r | `process_spec_complete == 1` | 1 | `uv run python -m integral.process_spec status/evidence/S1.json` | `258b2de` | cloud | 2026-08-17 |
+| S2 | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m integral.step_specs status/evidence/S2.json` | `8c59a7f` | cloud | 2026-08-17 |
+| S2r | `step_specs_complete_fraction == 1.0` | 1.0 | `uv run python -m integral.step_specs status/evidence/S2.json` | `83032bb` | cloud | 2026-08-18 |
 
 > **The SHA is the commit that carries the artefact, and the value is what *that*
 > commit's own checker read.** Both S-rows originally cited their PR's base commit

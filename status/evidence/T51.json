@@ -177,7 +177,7 @@
       "reasons": []
     },
     {
-      "site": "src/jobsearch/identity.py",
+      "site": "src/integral/identity.py",
       "kind": "module",
       "resolves_through_resolver": true,
       "builds_a_repo_path": false,

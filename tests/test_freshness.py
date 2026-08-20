@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.decline import DeclineLedger
-from jobsearch.freshness import (
+from integral.decline import DeclineLedger
+from integral.freshness import (
     DEFAULT_ELAPSED_DAYS,
     FreshnessError,
     decline,
@@ -32,9 +32,9 @@ from jobsearch.freshness import (
     tree_fingerprint,
     write_evidence,
 )
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog, rebuild
-from jobsearch.session import SessionStore
+from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog, rebuild
+from integral.session import SessionStore
 
 NOW = datetime.fromisoformat("2026-08-18T09:00:00+00:00")
 
@@ -71,7 +71,7 @@ def test_every_offer_says_something(store: ProfileStore) -> None:
 
 
 def test_an_offer_is_a_conversation_not_an_audit(store: ProfileStore) -> None:
-    """"It has been eight months, let's update your file" is a form.
+    """ "It has been eight months, let's update your file" is a form.
 
     "You said you left in March — how did that end up?" is the one that gets
     an answer, so the sentence quotes the candidate rather than naming a step.

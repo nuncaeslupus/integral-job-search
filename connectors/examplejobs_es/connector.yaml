@@ -4,7 +4,7 @@
 # only the string literals a test author trusts by construction.
 #
 # `site` + `locale` must match this filename exactly (`examplejobs_es.yaml`) —
-# see `load_connector` in `src/jobsearch/connectors.py`.
+# see `load_connector` in `src/integral/connectors.py`.
 site: examplejobs
 locale: es
 version: "1.0.0"

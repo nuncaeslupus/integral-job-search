@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.dedup import Tombstone
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.lifecycle import (
+from integral.dedup import Tombstone
+from integral.identity import ProfileStore, create_profile
+from integral.lifecycle import (
     ALLOWED_TRANSITIONS,
     MINIMUM_SCENARIOS,
     PURGE_HORIZON_DAYS,
@@ -41,7 +41,7 @@ from jobsearch.lifecycle import (
     transition,
     write_evidence,
 )
-from jobsearch.offers import connect_manual
+from integral.offers import connect_manual
 
 WAREHOUSE_AD = "Warehouse Operative. Shifts, forklift certified preferred."
 
@@ -356,7 +356,7 @@ def test_explicit_revival_restores_and_keeps_the_tombstone(store: ProfileStore) 
     _, reloaded = load_lifecycle_offer(store, revival_offer.id)
     assert reloaded.revived is True
 
-    from jobsearch.lifecycle import current_tombstones
+    from integral.lifecycle import current_tombstones
 
     assert offer.id in current_tombstones(store), "the tombstone must survive a revival"
 
@@ -382,7 +382,7 @@ def test_tombstone_hash_ignores_chrome_and_volatile_stamps() -> None:
 
 
 def test_tombstone_hash_is_version_tagged() -> None:
-    from jobsearch.lifecycle import TOMBSTONE_HASH_VERSION
+    from integral.lifecycle import TOMBSTONE_HASH_VERSION
 
     assert compute_text_sha256(WAREHOUSE_AD).startswith(f"v{TOMBSTONE_HASH_VERSION}:sha256:")
 
@@ -407,7 +407,7 @@ def test_the_probe_cleans_nothing_up_by_hand() -> None:
     Asserted here by re-deriving the count independently, straight off the
     store the probe itself built and without calling any cleanup helper.
     """
-    import jobsearch.lifecycle as lifecycle_module
+    import integral.lifecycle as lifecycle_module
 
     result = probe_lifecycle()
     assert result["violations"] == []
@@ -432,7 +432,7 @@ def test_a_true_resurrection_would_be_counted_not_hidden(store: ProfileStore) ->
     the metric is a real filesystem scan and not a count of `collect_offer`
     calls that always happens to be zero.
     """
-    from jobsearch.lifecycle import _resurrected_offer_ids
+    from integral.lifecycle import _resurrected_offer_ids
 
     offer = connect_manual(WAREHOUSE_AD)
     record = track_new_offer(offer, at=_old(NOW))

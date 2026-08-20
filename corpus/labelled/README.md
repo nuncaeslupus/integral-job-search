@@ -60,14 +60,14 @@ used to elicit preferences would put memorised ads into the ranking gate.
 ## Labelling
 
 ```bash
-uv run python -m jobsearch.harness init                    # seed / re-seed, keeping labels
-uv run python -m jobsearch.harness next --language ca      # next ad awaiting labels
-uv run python -m jobsearch.harness set <ad-id> <dimension> <value> --quote "<verbatim text>"
-uv run python -m jobsearch.harness status                  # counts, splits, agreement
-uv run python -m jobsearch.harness agreement               # self-agreement report
-uv run python -m jobsearch.harness gate                    # write status/evidence/T4.json
-uv run python -m jobsearch.harness labels                  # write status/evidence/T5.json
-uv run python -m jobsearch.harness                         # both, as `make evidence` runs it
+uv run python -m integral.harness init                    # seed / re-seed, keeping labels
+uv run python -m integral.harness next --language ca      # next ad awaiting labels
+uv run python -m integral.harness set <ad-id> <dimension> <value> --quote "<verbatim text>"
+uv run python -m integral.harness status                  # counts, splits, agreement
+uv run python -m integral.harness agreement               # self-agreement report
+uv run python -m integral.harness gate                    # write status/evidence/T4.json
+uv run python -m integral.harness labels                  # write status/evidence/T5.json
+uv run python -m integral.harness                         # both, as `make evidence` runs it
 ```
 
 `set` locates the span by searching for a quote copied out of the ad, and
@@ -107,7 +107,7 @@ every rung the page offers is one `import` accepts.
 Export, then apply the whole batch at once:
 
 ```bash
-uv run python -m jobsearch.harness import t5-labels.json
+uv run python -m integral.harness import t5-labels.json
 ```
 
 ### A proposal is not a label
@@ -132,10 +132,10 @@ extractor's own regex output would make the gate score the extractor against
 itself and pass regardless of merit — D-2. The page carries no cue data at all,
 so this is closed by construction rather than by rule.
 
-`jobsearch.suggestions` measures what that rule cannot prove:
+`integral.suggestions` measures what that rule cannot prove:
 
 ```bash
-uv run python -m jobsearch.suggestions        # writes status/evidence/T5-suggestions.json
+uv run python -m integral.suggestions        # writes status/evidence/T5-suggestions.json
 ```
 
 `suggestion_cue_agreement` is the fraction of marks the cues would have produced

@@ -11,11 +11,11 @@ SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
 
 def test_package_imports_cleanly_exposes_version() -> None:
-    """Importing `jobsearch` yields a semver `__version__`."""
-    import jobsearch
+    """Importing `integral` yields a semver `__version__`."""
+    import integral
 
-    assert SEMVER.match(jobsearch.__version__), (
-        f"__version__ is {jobsearch.__version__!r}, which is not semver"
+    assert SEMVER.match(integral.__version__), (
+        f"__version__ is {integral.__version__!r}, which is not semver"
     )
 
 

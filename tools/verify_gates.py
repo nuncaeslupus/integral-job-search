@@ -61,7 +61,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from jobsearch.taskboard import load_board
+from integral.taskboard import load_board
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 QUEUE_PATH = _REPO_ROOT / "arsenal" / "tasks"

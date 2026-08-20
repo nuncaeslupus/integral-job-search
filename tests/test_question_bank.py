@@ -15,13 +15,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch.dimensions import (
+from integral.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
     SCHEMA_LANGUAGES,
     Dimension,
     load_dimensions,
 )
-from jobsearch.question_bank import (
+from integral.question_bank import (
     MINIMUM_PROBES,
     BankEntry,
     QuestionBank,
@@ -274,10 +274,10 @@ def test_write_evidence_reports_full_coverage(tmp_path: Path) -> None:
 def test_measure_raises_on_a_missing_dimensions_directory(tmp_path: Path) -> None:
     """Coverage over a model that could not load is not a measurement.
 
-    Matches `jobsearch.dimensions.write_coverage_evidence`'s stance for T3: a
+    Matches `integral.dimensions.write_coverage_evidence`'s stance for T3: a
     broken or missing model is reported as a load failure, not silently scored.
     """
-    from jobsearch.dimensions import DimensionError
+    from integral.dimensions import DimensionError
 
     missing = tmp_path / "no-such-dimensions-dir"
     with pytest.raises(DimensionError):

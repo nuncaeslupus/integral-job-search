@@ -95,7 +95,7 @@ A repo containing:
 
 ```
 .claude/skills/          the step skills — the protocols and the manner
-src/jobsearch/           schema, harness, extraction, ranking (exists)
+src/integral/           schema, harness, extraction, ranking (exists)
 dimensions/              the model (exists)
 corpus/                  ads and labels (exists)
 profiles/<handle>/       per-candidate state, gitignored (exists)

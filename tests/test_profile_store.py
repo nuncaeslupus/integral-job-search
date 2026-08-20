@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.profile import (
+from integral.identity import ProfileStore, create_profile
+from integral.profile import (
     DERIVED,
     EVIDENCE_PARTS,
     EvidenceLog,

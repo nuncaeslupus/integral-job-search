@@ -1039,7 +1039,7 @@ multi-tenant service.</p>
 <p>The tree's root is <strong><code>$INTEGRAL_HOME/profiles/</code></strong>, not a directory inside the
 clone — <code>$INTEGRAL_HOME</code> defaults to <code>~/.integral-job-search/</code> and respects
 <code>$XDG_DATA_HOME</code> where it is set (<code>docs/distribution.md</code> §2, made mechanical by
-T51 in <code>jobsearch.state_home</code>). The resolver <strong>refuses</strong> to return any path
+T51 in <code>integral.state_home</code>). The resolver <strong>refuses</strong> to return any path
 inside a git work tree, with <code>--dev</code> / <code>INTEGRAL_DEV=1</code> as the single explicit
 escape for work on the tool itself.</p>
 <pre><code>$INTEGRAL_HOME/profiles/&lt;handle&gt;/

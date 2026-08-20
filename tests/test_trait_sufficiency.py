@@ -20,15 +20,15 @@ from typing import get_args
 
 import pytest
 
-from jobsearch.decline import DeclineLedger
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.interview import (
+from integral.decline import DeclineLedger
+from integral.identity import ProfileStore, create_profile
+from integral.interview import (
     MINIMUM_TRAIT_EPISODES,
     MINIMUM_TRAIT_OCCASIONS,
     leaks_quota_language,
 )
-from jobsearch.profile import EvidenceLog
-from jobsearch.trait_sufficiency import (
+from integral.profile import EvidenceLog
+from integral.trait_sufficiency import (
     MINIMUM_TRAITS,
     Status,
     TraitSufficiencyReading,
@@ -411,7 +411,7 @@ def test_trait_dimension_ids_excludes_non_trait_sides() -> None:
     """Only `candidate_trait` dimensions are ever measured — a `matched`
     dimension is not a trait, and must never inflate or deflate the
     denominator this metric divides by."""
-    from jobsearch.dimensions import (
+    from integral.dimensions import (
         Cue,
         Dimension,
         Elicitation,
@@ -419,7 +419,7 @@ def test_trait_dimension_ids_excludes_non_trait_sides() -> None:
         Question,
         synthetic_levels,
     )
-    from jobsearch.dimensions import Extraction as _Extraction
+    from integral.dimensions import Extraction as _Extraction
 
     matched = Dimension(
         id="last_role_autonomy",
@@ -450,7 +450,7 @@ def test_probe_trait_sufficiency_is_clean(tmp_path: Path) -> None:
     """The adversarial probe this module ships (`probe_trait_sufficiency`) runs
     clean over its own scripted scenarios — the same end-to-end check every
     other gated module's test suite runs over its own probe."""
-    from jobsearch.trait_sufficiency import MINIMUM_CHECKS, probe_trait_sufficiency
+    from integral.trait_sufficiency import MINIMUM_CHECKS, probe_trait_sufficiency
 
     result = probe_trait_sufficiency(tmp_path / "profiles")
 

@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.process_spec import DEFAULT_PROCESS_DOC, StepList, load_steps
-from jobsearch.step_graph import (
+from integral.process_spec import DEFAULT_PROCESS_DOC, StepList, load_steps
+from integral.step_graph import (
     StepGraphError,
     closure_violations,
     drift_violations,

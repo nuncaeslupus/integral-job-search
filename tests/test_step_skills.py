@@ -17,10 +17,10 @@ from typing import get_args
 
 import pytest
 
-from jobsearch import employment_mode, session_exit, step_narration
-from jobsearch.candidate import EmploymentModeName
-from jobsearch.process_spec import Step, StepList, load_steps
-from jobsearch.step_skills import (
+from integral import employment_mode, session_exit, step_narration
+from integral.candidate import EmploymentModeName
+from integral.process_spec import Step, StepList, load_steps
+from integral.step_skills import (
     DEFAULT_SKILLS_DIR,
     SkillCheck,
     check_step_skill,
@@ -388,7 +388,7 @@ def test_a_lukewarm_mention_is_not_a_prohibition(tmp_path: Path, steps: StepList
 def test_stating_the_illegality_without_forbidding_it_licenses_nothing(
     tmp_path: Path, steps: StepList
 ) -> None:
-    """"illegal but not ideal" states the law and refuses nothing.
+    """ "illegal but not ideal" states the law and refuses nothing.
 
     The first version of the check took any bare negation as a prohibition, so
     this line — which offers the arrangement in the same breath as calling it
@@ -458,9 +458,7 @@ def test_undecodable_prose_is_recorded_as_a_reason_never_raised(
 def test_the_unaccented_spelling_is_caught_too(tmp_path: Path, steps: StepList) -> None:
     """A hurried edit reaches for ASCII; the check must not be defeated by it."""
     step = next(s for s in steps.steps if s.id == "constraints")
-    skills_dir = _employment_skill(
-        tmp_path, step, "Would you consider falso autonomo work?"
-    )
+    skills_dir = _employment_skill(tmp_path, step, "Would you consider falso autonomo work?")
     reading = employment_mode.read_skill(step, skills_dir)
     assert reading.unlicensed_mentions
     assert reading.offers
@@ -578,9 +576,7 @@ def test_a_boundary_that_states_no_rule_is_counted(tmp_path: Path, steps: StepLi
     assert any("carries no rule governing" in reason for reason in reading.reasons)
 
 
-def test_stating_the_rule_is_not_read_as_offering_the_exit(
-    tmp_path: Path, steps: StepList
-) -> None:
+def test_stating_the_rule_is_not_read_as_offering_the_exit(tmp_path: Path, steps: StepList) -> None:
     """The prose/spoken split, without which the fix would fail its own gate.
 
     The rule sentence necessarily names the thing it forbids ("the exit is
@@ -596,9 +592,7 @@ def test_stating_the_rule_is_not_read_as_offering_the_exit(
     assert not reading.offers, reading.reasons
 
 
-def test_deferring_an_artefact_is_not_offering_to_leave(
-    tmp_path: Path, steps: StepList
-) -> None:
+def test_deferring_an_artefact_is_not_offering_to_leave(tmp_path: Path, steps: StepList) -> None:
     """Step 11's "Ready to send, or sit on it?" is two ways forward, not an exit.
 
     The check must separate ending the sitting from declining a subject or
@@ -610,7 +604,7 @@ def test_deferring_an_artefact_is_not_offering_to_leave(
         tmp_path,
         step,
         "**Invite forward; the exit is offered only when the session has run long, never"
-        ' as this step\'s standard close.**\n\n```text\n"That\'s the CV and letter for the'
+        " as this step's standard close.**\n\n```text\n\"That's the CV and letter for the"
         ' Girona role. Ready to send, or sit on it?"\n```',
     )
     reading = session_exit.read_boundary(step, skills_dir)
@@ -677,9 +671,7 @@ def test_an_unloadable_step_list_records_minus_one_for_the_exit_gate(tmp_path: P
     assert measured["step_boundaries_offering_an_exit"] == -1
 
 
-def test_a_boundary_that_says_nothing_out_loud_is_counted(
-    tmp_path: Path, steps: StepList
-) -> None:
+def test_a_boundary_that_says_nothing_out_loud_is_counted(tmp_path: Path, steps: StepList) -> None:
     """§3.2: ending silently is its own defect, and it also measures nothing.
 
     A section with no fenced example leaves the regression limb with no text to
@@ -746,7 +738,7 @@ def test_the_offered_skip_is_not_read_as_an_exit(tmp_path: Path, steps: StepList
     """
     spoken = (
         '"We can stop here and go look at real jobs with what I have; the list will be'
-        ' rougher and I\'ll tell you what would sharpen it."'
+        " rougher and I'll tell you what would sharpen it.\""
     )
     offers, shortcuts = session_exit._exit_offers((spoken,))
     assert offers == ()
@@ -763,9 +755,7 @@ def test_the_offered_skip_is_not_read_as_an_exit(tmp_path: Path, steps: StepList
     assert not reading.offers, reading.reasons
 
 
-def test_exit_offers_phrased_another_way_are_still_counted(
-    tmp_path: Path, steps: StepList
-) -> None:
+def test_exit_offers_phrased_another_way_are_still_counted(tmp_path: Path, steps: StepList) -> None:
     """The pattern is enumerated, so its coverage is the whole of its worth.
 
     Review found these four phrasings passing straight through: a boundary
@@ -783,9 +773,7 @@ def test_exit_offers_phrased_another_way_are_still_counted(
         assert shortcuts == ()
 
 
-def test_the_skip_licence_needs_a_forward_destination(
-    tmp_path: Path, steps: StepList
-) -> None:
+def test_the_skip_licence_needs_a_forward_destination(tmp_path: Path, steps: StepList) -> None:
     """An exit cannot be laundered into a skip by sounding constructive.
 
     The licence requires the line to name going on to the jobs, the offers or
@@ -854,7 +842,7 @@ _CONFORMING_RULE = (
 )
 _CONFORMING_EXAMPLE = (
     '```text\n"Saving that now — one moment."\n'
-    '…then, once the work is finished…\n'
+    "…then, once the work is finished…\n"
     '"All set — that\'s saved."\n```'
 )
 
@@ -945,7 +933,7 @@ def test_an_example_without_a_rule_is_counted(tmp_path: Path, steps: StepList) -
 
 
 def test_a_pause_with_no_subject_is_not_a_disclosure() -> None:
-    """"One moment" alone tells the candidate nothing about what is happening."""
+    """ "One moment" alone tells the candidate nothing about what is happening."""
     assert step_narration._disclosures(('"One moment."',)) == ()
 
 
@@ -954,9 +942,7 @@ def test_a_claim_with_no_pause_is_not_a_disclosure() -> None:
     assert step_narration._disclosures(('"I am saving that."',)) == ()
 
 
-def test_first_contact_must_acknowledge_before_the_setup(
-    tmp_path: Path, steps: StepList
-) -> None:
+def test_first_contact_must_acknowledge_before_the_setup(tmp_path: Path, steps: StepList) -> None:
     """The reported defect in its exact shape: the greeting came afterwards.
 
     Both halves were present in the live transcript — the tool did eventually
@@ -1053,9 +1039,7 @@ def test_an_unloadable_step_list_records_minus_one_for_the_narration_gate(tmp_pa
     assert measured["step_skills_without_a_progress_disclosure_rule"] == -1
 
 
-def test_a_protocolless_skill_is_counted_with_its_reason(
-    tmp_path: Path, steps: StepList
-) -> None:
+def test_a_protocolless_skill_is_counted_with_its_reason(tmp_path: Path, steps: StepList) -> None:
     """A skill with no `## Protocol` has neither half, and says so."""
     step = next(s for s in steps.steps if s.id == "traits")
     skills_dir = tmp_path / "skills"
@@ -1137,9 +1121,9 @@ def test_both_specs_state_the_narration_rule_not_merely_its_name() -> None:
         # Both halves, by name: the work is announced before it starts...
         assert re.search(r"\bbefore\b", paragraph), f"{document} drops the ordering requirement"
         # ...and the pause is closed when it ends.
-        assert re.search(
-            r"clos(?:e|ed|ing)\s+when\s+it\s+(?:finishes|ends)", paragraph
-        ), f"{document} drops the requirement to close the pause"
+        assert re.search(r"clos(?:e|ed|ing)\s+when\s+it\s+(?:finishes|ends)", paragraph), (
+            f"{document} drops the requirement to close the pause"
+        )
         # ...and the person comes first, which is the reported defect itself.
         assert re.search(r"\bfirst\b", paragraph), (
             f"{document} drops the acknowledge-first ordering"
@@ -1174,9 +1158,7 @@ def test_the_rule_heading_alone_does_not_state_the_rule() -> None:
     )
 
 
-def test_an_example_that_never_closes_the_pause_is_counted(
-    tmp_path: Path, steps: StepList
-) -> None:
+def test_an_example_that_never_closes_the_pause_is_counted(tmp_path: Path, steps: StepList) -> None:
     """Opening a silence and never coming back out of it is half a disclosure.
 
     The rule requires the work to be named before it starts **and closed when
