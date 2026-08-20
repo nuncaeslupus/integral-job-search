@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from integral import stated_constraints
 from integral.candidate import (
     CONSTRAINT_FIELD_NAMES,
     STATES,
@@ -449,3 +450,119 @@ def test_the_gate_records_the_measurement_it_made(tmp_path: Path) -> None:
     measured = write_evidence(evidence)
     assert measured["unsatisfiable_hard_constraint_leaks"] == 0
     assert json.loads(evidence.read_text(encoding="utf-8")) == measured
+
+
+# ---------------------------------------------------------------------------
+# D-20 — a stated constraint must reach the filter, not stop at the log
+
+
+def test_a_stated_commute_radius_reaches_the_hard_constraint_filter() -> None:
+    """The sentence D-20 was filed from, end to end.
+
+    > "I can move, but in the province of Barcelona, or maximum to Girona or
+    > Tarragona. I want to sleep home each day."
+
+    Not relocation — he is not moving — and not a bare yes to on-site work
+    anywhere in Spain, which is what `accepts_onsite_in_country` alone said.
+    Before `commutable_regions` existed the Sevilla job survived, so the most
+    filtering thing he said changed nothing about what he was shown.
+    """
+    constraints = CandidateConstraints(
+        location=Location(
+            state="stated",
+            country="ES",
+            accepts_onsite_in_country=True,
+            commutable_regions=("Barcelona", "Girona", "Tarragona"),
+        )
+    )
+    sevilla = _offer("onsite-sevilla", delivery="onsite", region="Sevilla")
+    girona = _offer("onsite-girona", delivery="onsite", region="Girona")
+
+    result = filter_hard_constraints(constraints, [sevilla, girona])
+
+    assert result.surviving == ("onsite-girona",)
+    assert [r.field for r in result.removed] == ["location"]
+    assert "Sevilla" in result.removed[0].reason
+
+    # The radius narrows on-site work; it says nothing about remote work, which
+    # needs no travel at all. A radius that quietly vetoed remote roles would
+    # be worse than the absence it replaced.
+    remote_sevilla = _offer("remote-sevilla", region="Sevilla")
+    assert filter_hard_constraints(constraints, [remote_sevilla]).surviving == ("remote-sevilla",)
+
+    # An ad that does not say where the work is cannot be shown to violate the
+    # radius — an ad-side unknown never vetoes, exactly as `payroll_countries`
+    # does not.
+    unsaid = _offer("onsite-somewhere", delivery="onsite")
+    assert filter_hard_constraints(constraints, [unsaid]).surviving == ("onsite-somewhere",)
+
+
+def test_a_commute_radius_without_accepting_onsite_is_refused() -> None:
+    """The contradiction is refused where it is written, not left in the file
+    looking answered: a candidate who will not work on site at all has no
+    travel radius, and the filter would read the bool first and never reach
+    the regions."""
+    with pytest.raises(ValidationError, match="commutable_regions"):
+        Location(
+            state="stated",
+            country="ES",
+            accepts_onsite_in_country=False,
+            commutable_regions=("Barcelona",),
+        )
+
+
+def test_no_stated_constraint_is_recorded_only_as_prose() -> None:
+    """D-20's gate. `unfilterable_stated_constraints == 0`.
+
+    The general form of the defect, over all ten pinned fields: for each, a
+    real sentence a candidate might say is stated, and the filter must both
+    remove an offer that breaks it and keep one that does not. A field that
+    stores the answer and changes no offer's fate is prose with extra steps —
+    it looks answered from every angle while the candidate sees the same list
+    either way.
+    """
+    measured = stated_constraints.measure()
+
+    assert measured["unfilterable"] == []
+    assert measured["unfilterable_stated_constraints"] == 0
+    # Not a vacuous zero: every pinned field must have been probed, or the
+    # number is a statement about the fields somebody remembered.
+    assert measured["fields_probed"] == measured["fields_pinned"] == len(CONSTRAINT_FIELD_NAMES)
+    assert all(reading["filters"] for reading in measured["readings"])
+
+
+def test_a_constraint_that_filters_nothing_is_counted(tmp_path: Path) -> None:
+    """The gate confirmed against the state D-20 was filed in.
+
+    With the commute radius dropped — the pre-D-20 `Location`, which could hold
+    the country and the bool and nothing else — the Sevilla offer survives and
+    the probe is counted. Without this, a zero would only mean the probes ran.
+    """
+    probe = next(p for p in stated_constraints.PROBES if p.field == "location")
+    before = stated_constraints.Probe(
+        field=probe.field,
+        said=probe.said,
+        value=Location(state="stated", country="ES", accepts_onsite_in_country=True),
+        removes=probe.removes,
+        keeps=probe.keeps,
+    )
+
+    reasons = stated_constraints.check(before)
+
+    assert reasons, "the pre-D-20 Location must fail the check it exists to enforce"
+    assert "recorded but filters nothing" in reasons[0]
+
+
+def test_a_pinned_field_with_no_probe_records_minus_one() -> None:
+    """`-1`, never `0`. A field nobody probed is an unmeasured field, and a
+    clean zero over a partial set is the vacuous pass this project keeps
+    finding."""
+    original = stated_constraints.PROBES
+    stated_constraints.PROBES = tuple(p for p in original if p.field != "salary")
+    try:
+        measured = stated_constraints.measure()
+    finally:
+        stated_constraints.PROBES = original
+
+    assert measured["unfilterable_stated_constraints"] == -1
+    assert "salary" in measured["unfilterable"][0]

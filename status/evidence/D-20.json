@@ -1,0 +1,88 @@
+{
+  "unfilterable_stated_constraints": 0,
+  "fields_probed": 10,
+  "fields_pinned": 10,
+  "unfilterable": [],
+  "readings": [
+    {
+      "field": "languages",
+      "said": "I get by in English, but I would not run a meeting in it.",
+      "filters": true,
+      "removes": "needs-professional-en",
+      "keeps": "needs-conversational-en",
+      "reasons": []
+    },
+    {
+      "field": "location",
+      "said": "I can move, but in the province of Barcelona, or maximum to Girona or Tarragona. I want to sleep home each day.",
+      "filters": true,
+      "removes": "onsite-sevilla",
+      "keeps": "onsite-girona",
+      "reasons": []
+    },
+    {
+      "field": "relocation",
+      "said": "I am not moving house for a job.",
+      "filters": true,
+      "removes": "berlin",
+      "keeps": "remote-de",
+      "reasons": []
+    },
+    {
+      "field": "salary",
+      "said": "Below 55,000 gross I would not take it.",
+      "filters": true,
+      "removes": "pays-40k",
+      "keeps": "pays-60k",
+      "reasons": []
+    },
+    {
+      "field": "availability",
+      "said": "I have two months' notice, so I cannot start before the first of June.",
+      "filters": true,
+      "removes": "starts-in-april",
+      "keeps": "starts-in-july",
+      "reasons": []
+    },
+    {
+      "field": "work_authorisation",
+      "said": "I can work in Spain. Anywhere else would need sponsorship.",
+      "filters": true,
+      "removes": "us-onsite",
+      "keeps": "es-onsite",
+      "reasons": []
+    },
+    {
+      "field": "employment_mode",
+      "said": "Employed, on a payroll. I do not want to invoice as an autónomo.",
+      "filters": true,
+      "removes": "contract-only",
+      "keeps": "payroll",
+      "reasons": []
+    },
+    {
+      "field": "pay_country",
+      "said": "I need to be paid into a Spanish account.",
+      "filters": true,
+      "removes": "pays-from-uk",
+      "keeps": "pays-from-es",
+      "reasons": []
+    },
+    {
+      "field": "tax_country",
+      "said": "I am tax resident in Spain and staying that way.",
+      "filters": true,
+      "removes": "needs-pt-residency",
+      "keeps": "needs-es-residency",
+      "reasons": []
+    },
+    {
+      "field": "reach",
+      "said": "Remote only. I am not commuting anywhere.",
+      "filters": true,
+      "removes": "hybrid-role",
+      "keeps": "remote-role",
+      "reasons": []
+    }
+  ]
+}

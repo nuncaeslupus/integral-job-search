@@ -195,7 +195,31 @@ class Location(ConstraintField):
 
     country: str | None = _country_field(required=False)
     accepts_onsite_in_country: bool = False
+    #: The subdivisions — provinces, regions, whatever the country calls them —
+    #: the candidate will travel to and back from within a day. Empty means the
+    #: reach is not narrowed, and `accepts_onsite_in_country` governs alone.
+    #:
+    #: This exists because `accepts_onsite_in_country` is a single bool over a
+    #: whole country, and "I can move, but in the province of Barcelona, or at
+    #: most Girona or Tarragona — I want to sleep at home each day" is neither
+    #: relocation (he is not moving) nor a bare yes to on-site anywhere in
+    #: Spain. Without somewhere to put it the most filtering thing the
+    #: candidate said survived only as quote text on an evidence row (D-20).
+    commutable_regions: tuple[str, ...] = ()
     _required_when_stated = ("country",)
+
+    @model_validator(mode="after")
+    def _a_commute_radius_implies_accepting_onsite(self) -> Location:
+        # A candidate who will not work on site at all has no commute radius:
+        # the pair would be contradictory, and the filter would read the bool
+        # first and never reach the regions. Refuse it at construction rather
+        # than let the contradiction sit in `constraints.json` looking answered.
+        if self.commutable_regions and not self.accepts_onsite_in_country:
+            raise ValueError(
+                "Location: commutable_regions given while on-site work in the country is "
+                "declined — a travel radius for work the candidate will not do says nothing"
+            )
+        return self
 
 
 class Relocation(ConstraintField):
@@ -433,6 +457,10 @@ class OfferFacts(Strict):
     # candidate-side one) must not veto: nothing here to compare against.
     payroll_countries: tuple[str, ...] | None = None
     tax_residency_required: str | None = None
+    # The subdivision the job sits in, for `Location.commutable_regions`.
+    # `None` means the ad does not say — an ad-side unknown which, like
+    # `payroll_countries` above, must not veto: there is nothing to compare.
+    region: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +499,15 @@ def _violates_location(field_value: Location, offer: OfferFacts) -> str | None:
         return None  # a different country without relocation is not this field's job
     if not field_value.accepts_onsite_in_country:
         return "requires on-site presence in the candidate's own country, which was declined"
+    if (
+        field_value.commutable_regions
+        and offer.region is not None
+        and offer.region not in field_value.commutable_regions
+    ):
+        return (
+            f"is on site in {offer.region}, outside the area the candidate can travel "
+            f"to and from in a day ({', '.join(field_value.commutable_regions)})"
+        )
     return None
 
 
