@@ -459,17 +459,30 @@ def check_library(directory: Path = DEFAULT_CONNECTORS_DIR) -> ContractReport:
     return ContractReport(packages=[check_package(p) for p in connector_packages(directory)])
 
 
+def measure(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
+    """T53's gate over `directory` — measured, not recorded.
+
+    Split out from `write_evidence` so that *checking* a library and
+    *recording a measurement about this repository* are two separate acts. They
+    were one, and a contributor running the command this repo documents as
+    theirs — over their own directory, per `docs/distribution.md` §5 — silently
+    overwrote our committed `status/evidence/T53.json` with a result about
+    their machine (D-11).
+    """
+    report = check_library(directory)
+    return {
+        "connector_contract_violations": len(report.violations),
+        "packages_checked": len(report.packages),
+        "violations": report.violations,
+    }
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     directory: Path = DEFAULT_CONNECTORS_DIR,
 ) -> dict[str, Any]:
     """Measure T53's gate from the committed connector library and record it."""
-    report = check_library(directory)
-    measured: dict[str, Any] = {
-        "connector_contract_violations": len(report.violations),
-        "packages_checked": len(report.packages),
-        "violations": report.violations,
-    }
+    measured = measure(directory)
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return measured
@@ -484,20 +497,36 @@ def _main(argv: list[str]) -> int:
     ours: someone writing a connector on their own machine runs it over their
     own directory and gets the identical verdict CI will reach, which is the
     whole point of there being one command rather than a checklist.
+
+    Evidence is written only when the caller said where it goes, or when the
+    check ran over *this repository's* library. Recording used to be
+    unconditional, so the contributor form above — the one §5 tells people to
+    run — overwrote our committed `status/evidence/T53.json` with a
+    `packages_checked` about their directory. `make evidence` then compared the
+    result against the code and reported drift, and committing that number
+    would have broken T53's gate for a reason nothing in the diff explained
+    (D-11). A verdict about somebody else's directory is not evidence about
+    ours; the exit code and the printed JSON carry it instead.
     """
     args = argv[1:]
     directory = DEFAULT_CONNECTORS_DIR
+    own_library = True
     if "--connectors" in args:
         index = args.index("--connectors")
         if index + 1 >= len(args):
             print("connector-contract: --connectors needs a directory", file=sys.stderr)
             return 2
         directory = Path(args[index + 1])
+        own_library = False
         args = args[:index] + args[index + 2 :]
     positional = [arg for arg in args if not arg.startswith("--")]
-    target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
+    target: Path | None
+    if positional:
+        target = Path(positional[0])
+    else:
+        target = DEFAULT_EVIDENCE_PATH if own_library else None
     try:
-        measured = write_evidence(target, directory)
+        measured = measure(directory) if target is None else write_evidence(target, directory)
     except (ConnectorError, OSError, UnicodeDecodeError) as exc:
         # A gate that dies with a traceback has not failed — it has not run,
         # and CI cannot tell those apart from an exit code alone. Every route

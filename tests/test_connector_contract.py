@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 from jobsearch.connector_contract import (
+    DEFAULT_EVIDENCE_PATH,
     MINIMUM_PACKAGES,
     _main,
     check_library,
@@ -316,6 +317,52 @@ def test_the_command_reports_a_missing_directory_rather_than_passing(tmp_path: P
     """A path that is not there is not an empty library — it is a broken call."""
     evidence = tmp_path / "T53.json"
     assert _main(["x", str(evidence), "--connectors", str(tmp_path / "absent")]) == 3
+
+
+def test_the_contributors_command_leaves_our_committed_evidence_alone(tmp_path: Path) -> None:
+    """D-11 — `--connectors <theirs>` measures theirs and records nothing of ours.
+
+    `docs/distribution.md` §5 hands this exact invocation to a contributor to
+    run over their own directory, on their own machine. Recording was
+    unconditional, so it wrote *our* `status/evidence/T53.json` with a
+    `packages_checked` about theirs. `make evidence` then reported drift, and
+    committing the number would have broken T53's gate — a merged task — for a
+    reason nothing in the diff explained.
+
+    An empty directory is the sharpest form: it measures 0 packages where the
+    committed file says 1, so a regression cannot hide behind a copy of our own
+    library happening to measure the same number. Both of the command's other
+    exits are covered too, since each returns by a different route.
+    """
+    before = DEFAULT_EVIDENCE_PATH.read_bytes()
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _main(["x", "--connectors", str(empty)]) == 3, "nothing checked is not a pass"
+    assert DEFAULT_EVIDENCE_PATH.read_bytes() == before
+
+    theirs = tmp_path / "theirs"
+    shutil.copytree(_REFERENCE, theirs / _REFERENCE.name)
+    assert _main(["x", "--connectors", str(theirs)]) == 0, "an unbroken copy conforms"
+    assert DEFAULT_EVIDENCE_PATH.read_bytes() == before
+
+    (theirs / _REFERENCE.name / "meta.yaml").unlink()
+    assert _main(["x", "--connectors", str(theirs)]) == 1, "a broken copy violates"
+    assert DEFAULT_EVIDENCE_PATH.read_bytes() == before
+
+
+def test_the_gate_still_records_when_the_caller_names_a_destination(tmp_path: Path) -> None:
+    """The other half of D-11: suppressing the accident must not suppress the gate.
+
+    `make evidence` runs the bare form over this repository's own library, and
+    that must still write — a fix that quietly stopped recording would leave the
+    evidence file frozen at whatever it last said.
+    """
+    evidence = tmp_path / "T53.json"
+    assert _main(["x", str(evidence)]) == 0
+    measured = json.loads(evidence.read_text(encoding="utf-8"))
+    assert measured["packages_checked"] >= MINIMUM_PACKAGES
+    assert measured["connector_contract_violations"] == 0
 
 
 # ---------------------------------------------------------------------------
