@@ -1,241 +1,141 @@
-# Session handover — 2026-08-20 (arsenal v0.30.0; D-10/D-11/T14 settled; T15 built, D-12 found)
+# Session handover — 2026-08-20 (S10 settled, S11 built; a test session can now run)
 
 ## Read this first
 
-**One decision is waiting on you: D-12 (`t-e1ca8374`, #83).** Everything else
-from the previous handover is settled and merged.
+**The tool can now be tested.** Steps 0–4 run, and the meta channel S11 exists to
+carry notes about them is built and merged-ready in **PR #86** (`Closes #71`,
+`Closes #63`). Start a session, type `[[…]]` when the protocol is wrong, and
+end with the triage pass. The `test-mode` skill carries the protocol.
 
-D-2 binds T15 to three outcomes — a score, a failure, or **unmeasured**. With 14
-evaluation labels against a floor of 10 per dimension, unmeasured is the only
-honest one, and `jobsearch.extraction` records it as `null` +
-`extraction_status`. `gate_evidence` has only two outcomes: it reads that null
-as `non-numeric value` and hard-fails. So **T15 cannot reach terminal however
-finished its code is**, and fifteen of the twenty-six live tasks sit behind it —
-the exact shape T14 was in before #81 folded it.
-
-Two resolutions, in #83's payload. **A** splits T15's acceptance (close it on
-`prefilter_suppressed_positives == 0`, which holds today; move
-`extraction_macro_f1 >= 0.75` to its own task blocked on T25/T26). **B** gives
-the gate layer a third outcome — filed upstream as claude-arsenal#168.
-
-Do not resolve it by lowering the floor or by scoring cue-derived gold as if a
-person placed it. That is the failure D-2 exists to prevent, and it already
-happened once.
-
-**PRs merged this session:** #81 (arsenal v0.30.0, D-10, D-11, T14 fold, T9),
-#82 (history + a lint that #81 merged red). **#84 is open** with T15's
-implementation and closes nothing, deliberately.
-
-Merge any PR carrying a subtree pull **with a merge commit, never a squash**.
+**D-12 (`t-e1ca8374`, #83) is still the one decision waiting on the owner.** It
+was not touched this session. T15 still cannot reach terminal, and fifteen live
+tasks still sit behind it. Nothing here changed that — S10/S11 were an
+independent branch of the graph.
 
 ## State
 
 | what | where |
 |------|-------|
-| PR #81 — arsenal v0.30.0, D-10, D-11, T14 fold, T9 | **merged** `96c45b0` |
-| PR #82 — task history, T53 glyph, lint fix | **merged** `53cdfff` |
-| PR #84 — T15 staged extraction | **open**; closes nothing until D-12 is decided |
-| D-12 (`t-e1ca8374`, #83) | **new, needs your decision** — see above |
-| T15 (`lo-25b1`, #52) | code merged-ready, gate unmeetable; issue claimed |
-| D-10 (`t-2583900f`, #78) | **resolved — resolution A**, `parse.py` withdrawn from the shape |
-| D-11 (`t-296eb71a`, #80) | **new and fixed in the same PR** — found while investigating D-10 |
-| T14 (`lo-3100`, #46) | **cancelled**, absorbed into T15; payload in `_history`, `status: cancelled` |
-| T9 (`lo-b422`, #47) | now declares `requires: [surface:egress]` |
-| Bundle | **v0.30.0**; `merge-policy = "after-review"` |
+| PR #86 — S10 + S11 | **open**, closes #71 and #63 |
+| S10 (`lo-5efb`, #71) | **resolved** — 13,000-char budget declared here; `requires: [surface:human]` dropped |
+| S11 (`lo-5530`, #63) | **built** — marker decided (option 3), ledger outside every profile tree |
+| D-12 (`t-e1ca8374`, #83) | **unchanged, still needs the owner** |
+| PR #84 — T15 staged extraction | merged as `c9b0455` |
+| Bundle | v0.30.0; `merge-policy = "after-review"` |
+
+Merge any PR carrying a subtree pull **with a merge commit, never a squash**.
 
 ## What was decided, and how to reverse it
 
-**D-10 → resolution A.** `parse.py` is out of `docs/distribution.md` §5 and out
-of `OPTIONAL_ENTRIES`; a package containing one is refused by rule 1 with a
-message that explains rather than lints. Decided on three grounds: B is a
-milestone (separate interpreter, no network namespace, read-only fs, CPU/memory
-caps, plus a `parse(text) -> str` contract), the hatch had no user, and **T54
-(#70) was already written assuming A** — its disclosure list names connector,
-fixture and metadata. That last one is why D-10 had to be settled *before* T54.
+**S10 → the budget lives in this repository.** The owner's 2026-08-18 decision
+("raise it") was never blocked; *where the raised number lives* was, because
+upstream's `LISTING_BUDGET_CHARS` has no override and `vendor/` must not be
+patched. So `jobsearch.skill_budget` declares **13,000**, and measures 12,138
+across 33 skills with 862 spare.
 
-To reverse: `jobsearch.connector_shape` holds `EXECUTED_ENTRIES`, declared and
-empty. Building the isolated runner means adding `parse.py` there, restoring it
-to §5 and to `OPTIONAL_ENTRIES`, and re-inverting
-`test_a_parse_module_is_refused_however_well_behaved_it_is`. The gate stays
-green honestly at every step, which is the point of the constant.
+The part worth carrying forward is not the number, it is the three properties
+that keep a raised threshold from being a fitted one — because a cap tuned to
+the measurement reports the same clean zero as a cap somebody chose:
 
-**T14 → folded into T15.** Its gate was `prefilter_recall >= 0.98` against
-corpus positives T5 never supplied (39 labels, 4 ads, 14 in evaluation, four
-dimensions with none). Kept separate it blocked T15 and, through it, **fifteen
-of the twenty-six live tasks**.
+1. `check_declaration` refuses a budget that is not a multiple of 1,000 or that
+   leaves under 400 chars spare;
+2. evidence records `budget_source`, and the committed file says `declared` —
+   an `--budget` / `JOBSEARCH_LISTING_BUDGET_CHARS` reading is marked
+   `override` and a test asserts the commit was not measured that way;
+3. `overage_against_upstream_default` keeps "deliberately 4,138 above the 8,000
+   default" visible rather than hidden by the raise.
 
-Three mechanics that are each wrong alone — check them if you revisit this:
-1. `lo-3100` came out of T15's `deps` **first**; a cancelled task left in the
-   list blocks T15 permanently.
-2. The payload is in `_history` with `status: cancelled`, deliberately **not**
-   terminal, so nothing reads it as a completed prefilter and `verify-gates`
-   does not assert a gate that was never measurable.
-3. #46 was closed with `arsenal:cancelled`, **not** by a `Closes #46` — a PR
-   keyword closes as *completed*, which upstream reads as `done`.
+To reverse: change `LISTING_BUDGET_CHARS` and re-run `make evidence`. Lowering
+it below 12,138 makes the gate fail honestly, which is the point.
+`claude-arsenal#143` stays open as a convenience — when it lands, the flag can
+read the same declared value instead of the module owning it.
 
-## D-11 — the defect worth remembering
+**`audit_library.py` is deliberately not S10's gate command.** It measures
+against upstream's 8,000, which this repository has risen above on purpose, so
+it reports a finding by design. It is still run by
+`test_the_measurement_agrees_with_the_upstream_audit`, for the one thing it is
+authoritative about: the total.
 
-`docs/distribution.md` §5 hands a contributor
-`python -m jobsearch.connector_contract --connectors <their dir>`. That wrote
-**our** `status/evidence/T53.json`, so a check over somebody else's library
-replaced the number T53's gate is asserted against. It was hit by accident, on
-the first run, while investigating something else.
+**S11 → marker option 3.** `[[note]]` silent, `[[! note]]` act now, no meta
+parsing inside a paste. Two placements went one step stricter than the payload
+asked for, and both are load-bearing:
 
-The fix is that evidence is written only when the caller named a destination or
-the check ran over our own library. The part worth carrying forward is the gate:
-`evidence_writes_for_a_foreign_library` is asserted over `evidence_target` —
-the function `_main` actually calls — not over a restatement of the rule. **A
-gate that restates a rule agrees with prose the code has stopped following.**
-That is the shape of all six holes review found on #77 and of D-10 itself.
+- **the note ledger is outside every profile tree** —
+  `<profiles root>/.test-mode/<session id>.jsonl`, not the candidate's
+  `session/`. It cannot reach a derived file because it is not inside a
+  candidate; it exists before identification does, so a step-0 note has
+  somewhere real to go instead of an in-memory buffer a crash would empty; and
+  the leading dot means `list_identities` already skips it;
+- **the fiction mark is excluded by the reader, by default.**
+  `Identity.fiction` is a field, and `list_identities` drops fiction unless
+  `include_fiction=True` is asked for by name. Every existing reader stopped
+  counting simulated candidates without being changed — the opposite of a flag
+  each caller must remember to check.
 
-The same discipline is applied pre-emptively to `connector_shape --doc`.
+## The defect shape worth remembering
+
+Silent capture makes its own failures invisible **by construction**. A note
+mis-parsed, eaten by the paste guard, or dropped before the review is
+indistinguishable at runtime from no note having been made.
+
+So the work was not the capture; it was the audit trail around it.
+`unparsed_markers` counts what a guard declined, `unclosed_markers` counts a
+`[[` that never closed, both print in the review, and `render_review` prints
+even when empty — because "nothing was noted" and "something was noted and
+lost" must not look the same.
+
+The same discipline is in the gate. `probe_notes_reaching_evidence` does not
+assert that the writer never calls `EvidenceLog.append`; it runs a whole
+simulated session, writes real evidence rows alongside the notes, then sweeps
+**every byte of every profile tree** for each note's text — and
+`test_the_leak_probe_catches_a_leak_that_is_really_there` mutates a real leak
+in to prove the sweep is not passing vacuously. A gate that restates a rule
+agrees with prose the code has stopped following (D-11).
 
 ## Where the board stands
 
-`plan_queue_task_drift == 0`; `verify-gates` asserts **53/53**.
+`plan_queue_task_drift == 0`; `verify-gates` asserts **55/55**; 1,052 tests
+pass. Once #86 merges, S10 and S11 leave the queue and **nothing is blocked
+behind them**.
 
-Unblocked and autonomous-safe once #81 merges:
+Unblocked and autonomous-safe today: **T55** (`lo-9f72`, #49) and **T54**
+(`lo-892b`, #70) — what `task_select` offers.
 
-- **T15 (`lo-25b1`, #52)** — now unblocked, and it is the keystone: fifteen
-  tasks sit behind it. Its payload carries the prefilter requirements as items
-  4 and 5 of the scope section. Note D-2's binding: with
-  `evaluation_gold_count` at 0, refusing to emit `extraction_macro_f1` and
-  naming the unscoreable dimensions is currently the only correct output. Do
-  not "fix" that by relabelling cue gold as human.
-- **T54 (`lo-892b`, #70)** — no longer gated on D-10; it can be taken as
-  written.
-- **T55 (`lo-9f72`, #49)** — mechanical but wide, and the GitHub repo rename is
-  not something a session can do.
-- **T9 (`lo-b422`, #47)** — now correctly held out of cloud sessions.
+## For the next test session
 
-## Three things that will bite you
-
-### CI still cannot pass, and it is still not the code
-
-Diagnosed again this session on `1bada3d`: all five checks failed, every one
-with `runner_id: 0`, `runner_name: ""`, and a 3-second duration (09:04:27 →
-09:04:30). Both criteria in CLAUDE.md hold. Do not push speculative fixes.
-
-`merge-policy` is now **`after-review`** (claude-arsenal v0.30.0), so the config
-says this in a value it validates rather than in a prose note redefining "ci".
-The five gates are still run locally on every head and quoted on the PR — they
-are simply no longer *called* CI.
-
-### `make arsenal-remote` pulls and commits
-
-It runs `check_update.sh` **without** `--check-only`, so reading the version
-merged v0.30.0 and committed it — the exact hazard AGENTS.md step 0a warns
-about, reached through a Makefile target rather than a direct call. It also
-leaves the job half done: the pull is one of `arsenal-upgrade`'s four steps, so
-the assembled bundle sat at 0.29.1 while the subtree said 0.30.0 until
-`update-skills` + `assemble-bundle` were run by hand. Worth a queue task.
-
-### Claiming still needs one manual step
-
-Unchanged from v0.29.1: `claim_task.sh` exits **5** and prints the call; make it
-with the MCP `create_branch` tool on `arsenal/claims/<task-id>` (201 = won,
-422 = lost), then label, self-assign and comment the session id.
-
-## Follow-ups not in #81
-
-- Once #81 merges, D-10 and D-11's payloads want moving to `_history` with
-  `status: merged` and their PR — the chore #79 did for T53. Until then
-  `verify-gates` counts 53, not 55.
-- Upstream claude-arsenal#167 deferred the better fix — letting `after-ci` be
-  satisfied by a locally recorded gate result, as the evidence gates already
-  work — "for its own issue", and **no such issue exists**. It is the change
-  that would make a local gate run count as evidence rather than as prose.
-- `make arsenal-remote`'s side effect, above.
-
-## Environment
-
-Five gates on `1bada3d`, all green:
-
-```
-lint            ruff + strict mypy clean, 90 files
-test            971 passed, 1 skipped
-evidence        no drift
-verify-subtree  0 diverging, 22 assets compared
-verify-gates    53/53
-```
-
----
-
-## What T15 settled (PR #84)
-
-`jobsearch.extraction` runs three stages — normalise, cues, then the model on
-what is left. It **does not call a model**: as with `elicit_extract` (T8), the
-model is the session running the step skill, so the module says what is
-unsettled (`model_request`) and validates what comes back
-(`accept_model_scores` refuses a span not in the advert, a dimension nobody
-asked about, and a dimension scored twice). `ModelRequest` has no field a
-profile could arrive through — step 8's "never send the candidate's profile
-with the advert", made structural.
-
-**Two rules came out of measurement rather than argument.** The folded T14
-prefilter check found two real suppressions in the committed corpus:
-
-1. **A bipolar dimension is not settled by one keyword.** "Ejecutar las tareas
-   asignadas con autonomía" contains *autonomía* and means close to its
-   opposite — a person labelled it −0.6 while one +0.7 cue settled it +1. One
-   keyword is evidence of the topic, not of a direction. Unipolar dimensions are
-   exempt.
-2. **Unipolar scales have no negative class.** "Sin viajes ni guardias" was
-   labelled `0.0, negated=True` (−1) while the cue for that phrase carries `0.0`
-   (0). Two encodings of one agreement read as a disagreement.
-
-If you change the cue sets, `prefilter_suppressed_positives` is the thing to
-watch — 0 over 36 positives now, and a test inverts a committed cue to prove the
-check still fails when it should.
-
-## For a first test session
-
-Steps 0–4 run today. Step 8 can use `jobsearch.extraction` now. What is still
-missing before a candidate reaches a ranked list:
+What is still missing before a candidate reaches a ranked list is unchanged:
 
 - **T18/T19** (#57/#58) — ordering and explanations, the part the candidate sees.
 - **T12** (#51) — one live connector against recorded fixtures. `[LAPTOP]` +
-  egress, so it is yours; without it there are no real offers to rank.
-- Steps 5–6 (T9/T10) are optional for a first pass — ranking degrades to
+  egress, so it is the owner's.
+- Steps 5–6 (T9/T10) stay optional for a first pass — ranking degrades to
   unweighted rather than breaking.
 
-**S11 — "test mode" — is not built** (#63, blocked behind S10 #71). A session
-will run the steps; the meta channel for improving skills mid-session will not
-exist.
-
----
+**New dimensions come from here now.** T26's scope note records the owner's
+decision that a dimension is coined when a live session turns one up. Test mode
+is the channel that carries it: `[[the model has no name for this]]` at the
+step where it was noticed, triaged at the end.
 
 ## Verified for the next session — 2026-08-20
 
-Run as a fresh session would, on `main` at `c9b0455`:
+Run on `claude/confident-johnson-ac4jvh` at `b11f7b0`:
 
 | step | result |
 |------|--------|
-| `check_update.sh --check-only` | v0.30.0, current with the newest tag |
-| `init.py --repo-path . --silent` | nothing stale; **modified no files** |
-| `github_channel.sh --detect` | `rest` (writes still fall back to `manual`/exit 5 — expected) |
-| `query_status --issues` | 81 tasks — open 8, claimed 0, blocked 17, merged 54, **no warnings** |
-| `task_select --issues` | offers **T55**, **T54** |
-| five gates | lint, test (993), evidence, verify-subtree, verify-gates **55/55** |
+| `make lint` | ruff + strict mypy, 97 files, clean |
+| `make test` | **1052 passed**, 1 skipped |
+| `make evidence` | no drift |
+| `make verify-subtree` | 0 diverging |
+| `make verify-gates` | **55/55** |
 | `plan_v2` | drift 0 |
-| `bootstrap --check` | `unbootstrapped_first_runs: 0` over 7 simulated arrivals |
-| `step_runtime.offered` (new candidate) | `identify` (required), `constraints` (required), `history` (optional) |
+| `gate_run.sh lo-5efb` / `lo-5530` | `gate: passed`, both |
+| `validate.py .claude/skills/test-mode` | 0 fail, 1 warn (`--seed`, outside the argument canon; documented in the script) |
 
-**Three traps were found and defused; do not undo them.**
+**GitHub Actions is still out of runner minutes.** Every job on #86 failed in
+3–4 seconds with `runner_id: 0` and `runner_name: ""` — the signature
+`CLAUDE.md` documents, which hits `main` as much as any branch. Do not read a
+red CI here as a statement about the code, and do not push a fix for it.
 
-1. **`handle_sync.py` proposes 51 handles, every one for already-merged
-   `_history` work.** Following protocol step 4 literally would open 51 issues
-   for finished tasks. `missing_handles` filters on "has an issue" and never on
-   `status`. Upstream **claude-arsenal#169**; the caveat is in `CLAUDE.md`.
-2. **`make arsenal-remote` pulled and committed** as a side effect of reporting
-   a version, and left the bundle a version behind the subtree because the
-   update path rebuilds it from assets only `update-skills` refreshes. It now
-   passes `--check-only`. Upstream **claude-arsenal#170**.
-3. **T15 was still being offered by the selector** though its code is merged and
-   only the D-12 decision is outstanding — a session would have re-done it. It
-   now declares `deps: [t-e1ca8374]`, so the selector holds it until #83 is
-   decided.
-
-Upstream issues open: **#168** (a gate has no "unmeasured" outcome), **#169**,
-**#170**, **#171** (recording a merged task in `_history` is still a manual
-second act — the end-of-session bookkeeping worth removing).
+Upstream issues open: **#143** (no listing-budget override — now a convenience,
+not a blocker), **#168** (a gate has no "unmeasured" outcome), **#169**, **#170**,
+**#171**.
