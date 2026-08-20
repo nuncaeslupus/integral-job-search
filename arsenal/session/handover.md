@@ -1,20 +1,42 @@
-# Session handover — 2026-08-20 (arsenal v0.30.0; D-10, D-11, T14 settled)
+# Session handover — 2026-08-20 (arsenal v0.30.0; D-10/D-11/T14 settled; T15 built, D-12 found)
 
 ## Read this first
 
-**PR #81 is open and carries every change below.** It is the whole session.
-Merge it **with a merge commit, never a squash** — it carries the
-`git-subtree-split:` trailer for `4ea96ed`, and squashing drops it so the next
-subtree pull replays from the last split `main` remembers.
+**One decision is waiting on you: D-12 (`t-e1ca8374`, #83).** Everything else
+from the previous handover is settled and merged.
 
-The two decisions the previous handover flagged as needing an owner are now
-made. Nothing is waiting on a judgement call.
+D-2 binds T15 to three outcomes — a score, a failure, or **unmeasured**. With 14
+evaluation labels against a floor of 10 per dimension, unmeasured is the only
+honest one, and `jobsearch.extraction` records it as `null` +
+`extraction_status`. `gate_evidence` has only two outcomes: it reads that null
+as `non-numeric value` and hard-fails. So **T15 cannot reach terminal however
+finished its code is**, and fifteen of the twenty-six live tasks sit behind it —
+the exact shape T14 was in before #81 folded it.
+
+Two resolutions, in #83's payload. **A** splits T15's acceptance (close it on
+`prefilter_suppressed_positives == 0`, which holds today; move
+`extraction_macro_f1 >= 0.75` to its own task blocked on T25/T26). **B** gives
+the gate layer a third outcome — filed upstream as claude-arsenal#168.
+
+Do not resolve it by lowering the floor or by scoring cue-derived gold as if a
+person placed it. That is the failure D-2 exists to prevent, and it already
+happened once.
+
+**PRs merged this session:** #81 (arsenal v0.30.0, D-10, D-11, T14 fold, T9),
+#82 (history + a lint that #81 merged red). **#84 is open** with T15's
+implementation and closes nothing, deliberately.
+
+Merge any PR carrying a subtree pull **with a merge commit, never a squash**.
 
 ## State
 
 | what | where |
 |------|-------|
-| PR #81 — arsenal v0.30.0, D-10, D-11, T14 fold, T9 | **open**, awaiting Qodo review |
+| PR #81 — arsenal v0.30.0, D-10, D-11, T14 fold, T9 | **merged** `96c45b0` |
+| PR #82 — task history, T53 glyph, lint fix | **merged** `53cdfff` |
+| PR #84 — T15 staged extraction | **open**; closes nothing until D-12 is decided |
+| D-12 (`t-e1ca8374`, #83) | **new, needs your decision** — see above |
+| T15 (`lo-25b1`, #52) | code merged-ready, gate unmeetable; issue claimed |
 | D-10 (`t-2583900f`, #78) | **resolved — resolution A**, `parse.py` withdrawn from the shape |
 | D-11 (`t-296eb71a`, #80) | **new and fixed in the same PR** — found while investigating D-10 |
 | T14 (`lo-3100`, #46) | **cancelled**, absorbed into T15; payload in `_history`, `status: cancelled` |
@@ -136,3 +158,47 @@ evidence        no drift
 verify-subtree  0 diverging, 22 assets compared
 verify-gates    53/53
 ```
+
+---
+
+## What T15 settled (PR #84)
+
+`jobsearch.extraction` runs three stages — normalise, cues, then the model on
+what is left. It **does not call a model**: as with `elicit_extract` (T8), the
+model is the session running the step skill, so the module says what is
+unsettled (`model_request`) and validates what comes back
+(`accept_model_scores` refuses a span not in the advert, a dimension nobody
+asked about, and a dimension scored twice). `ModelRequest` has no field a
+profile could arrive through — step 8's "never send the candidate's profile
+with the advert", made structural.
+
+**Two rules came out of measurement rather than argument.** The folded T14
+prefilter check found two real suppressions in the committed corpus:
+
+1. **A bipolar dimension is not settled by one keyword.** "Ejecutar las tareas
+   asignadas con autonomía" contains *autonomía* and means close to its
+   opposite — a person labelled it −0.6 while one +0.7 cue settled it +1. One
+   keyword is evidence of the topic, not of a direction. Unipolar dimensions are
+   exempt.
+2. **Unipolar scales have no negative class.** "Sin viajes ni guardias" was
+   labelled `0.0, negated=True` (−1) while the cue for that phrase carries `0.0`
+   (0). Two encodings of one agreement read as a disagreement.
+
+If you change the cue sets, `prefilter_suppressed_positives` is the thing to
+watch — 0 over 36 positives now, and a test inverts a committed cue to prove the
+check still fails when it should.
+
+## For a first test session
+
+Steps 0–4 run today. Step 8 can use `jobsearch.extraction` now. What is still
+missing before a candidate reaches a ranked list:
+
+- **T18/T19** (#57/#58) — ordering and explanations, the part the candidate sees.
+- **T12** (#51) — one live connector against recorded fixtures. `[LAPTOP]` +
+  egress, so it is yours; without it there are no real offers to rank.
+- Steps 5–6 (T9/T10) are optional for a first pass — ranking degrades to
+  unweighted rather than breaking.
+
+**S11 — "test mode" — is not built** (#63, blocked behind S10 #71). A session
+will run the steps; the meta channel for improving skills mid-session will not
+exist.
