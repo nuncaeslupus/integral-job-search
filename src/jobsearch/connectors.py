@@ -93,6 +93,12 @@ from jobsearch.offers import Location, Offer, Salary, compute_offer_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
+# The one filename inside a connector package. Fixed, not derived: the package
+# directory already carries the site name, and repeating it inside would give
+# two places for it to disagree.
+CONNECTOR_FILENAME = "connector.yaml"
+META_FILENAME = "meta.yaml"
+FIXTURE_DIRNAME = "fixture"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T32.json"
 
 # A placeholder, not a policy: 90 days is a starting point the owner did not
@@ -576,29 +582,59 @@ def _read(path: Path) -> str:
 
 
 def load_connector(path: Path) -> Connector:
-    """Read one `connectors/<site>_<locale>.yaml` file.
+    """Read one connector, given either its package directory or its yaml file.
 
-    The filename is part of the contract, the same way a dimension's filename
+    The **name** is part of the contract, the same way a dimension's filename
     must match its `id` (`dimensions.py`): "one file per site naming the site
     and its locale" (payload) is meaningless if the file can call itself
     anything, so a mismatch is a load-time `ConnectorError` like any other.
+
+    What carries that name moved with T53. A shared connector is a *package* —
+    `connectors/<site>_<locale>/` holding `connector.yaml`, `meta.yaml` and a
+    `fixture/` — because the things a borrower needs in order to trust it
+    (who maintains it, when it last worked, a recorded response to check it
+    against offline) have nowhere to live in a lone selector file. So the
+    directory carries the name and `connector.yaml` inside it is always called
+    that; passing the yaml file directly still works, and is what the contract
+    checker and the tests do when they build one in a tmp_path.
     """
-    connector = parse_connector(_read(path))
-    expected_stem = f"{connector.site}_{connector.locale}"
-    if path.stem != expected_stem:
+    if path.is_dir():
+        package, target = path, path / CONNECTOR_FILENAME
+        if not target.is_file():
+            raise ConnectorError(f"{path.name}: no {CONNECTOR_FILENAME} in the package")
+    else:
+        # A file named connector.yaml is inside a package that carries the
+        # name; anything else is a bare file that carries it itself.
+        package, target = (path.parent, path) if path.name == CONNECTOR_FILENAME else (path, path)
+    connector = parse_connector(_read(target))
+    expected = f"{connector.site}_{connector.locale}"
+    actual = package.name if package is not target else package.stem
+    if actual != expected:
         raise ConnectorError(
-            f"{path.name}: site/locale {expected_stem!r} does not match filename "
-            f"(expected {expected_stem}{path.suffix})"
+            f"{path.name}: site/locale {expected!r} does not match its name "
+            f"(expected {expected})"
         )
     return connector
 
 
-def load_connectors(directory: Path = DEFAULT_CONNECTORS_DIR) -> list[Connector]:
-    """Load every connector in `directory`, sorted by filename stem."""
+def connector_packages(directory: Path = DEFAULT_CONNECTORS_DIR) -> list[Path]:
+    """Every connector package under `directory`, sorted by name.
+
+    A package is a directory holding a `connector.yaml`. A directory without
+    one is not silently skipped — `load_connector` raises on it — because a
+    half-made package is exactly what a contributor produces and exactly what
+    a check that ignores it would let through.
+    """
     if not directory.is_dir():
         raise ConnectorError(f"connector directory not found: {directory}")
-    paths = sorted(p for p in directory.iterdir() if p.suffix in {".yaml", ".yml"})
-    return [load_connector(path) for path in paths]
+    return sorted(p for p in directory.iterdir() if p.is_dir() and not p.name.startswith("."))
+
+
+def load_connectors(directory: Path = DEFAULT_CONNECTORS_DIR) -> list[Connector]:
+    """Load every connector in `directory`, sorted by name."""
+    packages = connector_packages(directory)
+    loose = sorted(p for p in directory.iterdir() if p.suffix in {".yaml", ".yml"})
+    return [load_connector(path) for path in [*packages, *loose]]
 
 
 # ---------------------------------------------------------------------------

@@ -122,9 +122,20 @@ Declarative first: a `connector.yaml` can be read and understood in a minute and
 cannot do anything that was not declared. `parse.py` is the exception for sites
 that need it, not the default.
 
-Six rules, short enough to be one command (`make check-connector`) that a
-contributor's agent and CI both run, so a green local check is not a different
-judgement from a green CI:
+Six rules, short enough to be one command that a contributor's agent and CI
+both run, so a green local check is not a different judgement from a green CI:
+
+```bash
+uv run python -m jobsearch.connector_contract --connectors <dir>
+```
+
+`--connectors` is what makes it the contributor's command as well as ours: it
+runs over their directory, on their machine, and reaches the identical verdict.
+It is implemented in `src/jobsearch/connector_contract.py` (T53), records
+`connector_contract_violations` into `status/evidence/T53.json`, and exits **3**
+rather than 0 when it found no package to check — an empty directory and a
+conforming one both report zero violations, and only the exit code separates
+them.
 
 1. One connector, one directory, exactly the files above.
 2. A fixture is present, and the connector's output over that fixture satisfies

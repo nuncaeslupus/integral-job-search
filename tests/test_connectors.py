@@ -42,11 +42,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CONNECTOR_LIBRARY = _REPO_ROOT / "connectors"
 _FIXTURES = _REPO_ROOT / "tests" / "fixtures" / "connectors"
 
-# The worked example committed at `connectors/examplejobs_es.yaml` — read from
+# The worked example committed at `connectors/examplejobs_es/connector.yaml` — read from
 # disk rather than copied inline, so this suite exercises the very file a
 # contributor would actually add to the library, not a look-alike string a
 # future edit to the real file could drift away from unnoticed.
-VALID = (_CONNECTOR_LIBRARY / "examplejobs_es.yaml").read_text(encoding="utf-8")
+VALID = (_CONNECTOR_LIBRARY / "examplejobs_es" / "connector.yaml").read_text(encoding="utf-8")
 
 LIST_HTML = (_FIXTURES / "examplejobs_list.html").read_text(encoding="utf-8")
 DETAIL_HTML_BEFORE = (_FIXTURES / "examplejobs_detail_before.html").read_text(encoding="utf-8")
