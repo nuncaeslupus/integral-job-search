@@ -1,4 +1,4 @@
-# Session handover — 2026-08-20 (D-13 in review; four issues filed upstream)
+# Session handover — 2026-08-20 (D-13 reviewed and ready; four issues filed upstream)
 
 ## Read this first
 
@@ -38,13 +38,13 @@ probe found the rule rather than the behaviour.
 > A check whose subject can be named by the very sentence that satisfies it is
 > not a check.
 
-It is `session_exit`'s prose/fence split in a second disguise, and it will
-appear a third time. Limb 3's subject is now read from the settled step list
-(`n == 0`), never from prose. `test_the_greeting_limb_is_read_from_the_step_list_not_the_prose`
-locks it.
+It is `session_exit`'s prose/fence split in a second disguise — and it duly
+appeared twice more in the review round below. The subject of that limb (now
+limb 4) is read from the settled step list (`n == 0`), never from prose;
+`test_the_greeting_limb_is_read_from_the_step_list_not_the_prose` locks it.
 
 Verified against the pre-fix library via `git archive HEAD`: **13** offenders,
-all thirteen on limbs 1 and 2, step 0 additionally on limb 3. After: **0**.
+all thirteen on limbs 1, 2 and 3, step 0 additionally on limb 4. After: **0**.
 
 ## The review round: three findings, and all three are one shape
 
