@@ -364,4 +364,195 @@ grep -q 'arsenal-task: t-aaaa1111' <<<"${out}" || fail "proposed body must name 
 grep -q '<!-- arsenal-task' <<<"${out}" && fail "proposed body must not use the strippable comment marker"
 rm -rf "${TASKS}/_history"
 
+# --- title fallback: a board fetched WITHOUT bodies still resolves ---------
+# The session-start fetch asks for `title`, not `body`, because a 40-issue
+# board costs ~9k tokens with bodies and ~1.2k without. That saving is only
+# safe if state still resolves, so this pins the fallback down.
+QUERY_PY="${SCRIPT_DIR}/../skills/init/assets/scripts/query_status.py"
+
+cat > "${tmpdir}/issues-nobody.json" <<'EOF'
+[{"number": 11, "title": "Base task", "state": "closed", "labels": [{"name": "arsenal:task"}]},
+ {"number": 12, "title": "Depends on base", "state": "open", "labels": [{"name": "arsenal:task"}]}]
+EOF
+
+# t-aaaa1111's issue is closed, so the dependent unblocks and sorts first.
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-nobody.json" 2>/dev/null)
+id=$(python3 -c 'import sys,json;print(json.loads(sys.stdin.readline())["id"])' <<<"${out}")
+[[ "${id}" == "t-bbbb2222" ]] || fail "bodyless issues must resolve by title, got '${id}'"
+
+# A title that matches nothing on disk must not resolve to something adjacent.
+cat > "${tmpdir}/issues-strange.json" <<'EOF'
+[{"number": 13, "title": "Nothing on disk is called this", "state": "closed",
+  "labels": [{"name": "arsenal:task"}]}]
+EOF
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-strange.json" 2>&1)
+grep -q 'none carries a task id' <<<"${out}" \
+    || fail "an unresolvable board must warn rather than read as stateless: ${out}"
+
+# Whitespace and case differences are formatting, not identity.
+cat > "${tmpdir}/issues-loose.json" <<'EOF'
+[{"number": 14, "title": "  base   TASK ", "state": "closed", "labels": [{"name": "arsenal:task"}]}]
+EOF
+out=$(python3 "${QUERY_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-loose.json" --json 2>/dev/null)
+grep -q '"id":"t-aaaa1111","title":"Base task",.*"state":"done"' <<<"${out}" \
+    || fail "normalised title match failed: ${out}"
+
+# An explicit id in the body always wins over a title that says otherwise.
+cat > "${tmpdir}/issues-conflict.json" <<'EOF'
+[{"number": 15, "title": "Base task", "state": "closed", "body": "arsenal-task: t-cccc3333",
+  "labels": [{"name": "arsenal:task"}]}]
+EOF
+out=$(python3 "${QUERY_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-conflict.json" --json 2>/dev/null)
+grep -q '"id":"t-cccc3333",.*"state":"done"' <<<"${out}" || fail "the body id must win over the title: ${out}"
+grep -q '"id":"t-aaaa1111",.*"state":"done"' <<<"${out}" \
+    && fail "the title must not also resolve when the body named another task"
+
+# Two task files sharing a title resolve to neither, and say so. Attributing
+# one task's state to another is worse than leaving it unknown.
+cat > "${TASKS}/t-dupe0001.md" <<'EOF'
+---
+id: t-dupe0001
+title: "Same name"
+---
+
+## Acceptance gate
+```bash
+true
+```
+EOF
+cat > "${TASKS}/t-dupe0002.md" <<'EOF'
+---
+id: t-dupe0002
+title: "Same name"
+---
+
+## Acceptance gate
+```bash
+true
+```
+EOF
+cat > "${tmpdir}/issues-dupe.json" <<'EOF'
+[{"number": 16, "title": "Same name", "state": "closed", "labels": [{"name": "arsenal:task"}]}]
+EOF
+out=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-dupe.json" 2>&1)
+grep -q 'matches more than one task file' <<<"${out}" \
+    || fail "an ambiguous title must warn: ${out}"
+grep -q '"state":"done"' <<<"${out}" \
+    && fail "an ambiguous title must resolve to neither task: ${out}"
+rm -f "${TASKS}/t-dupe0001.md" "${TASKS}/t-dupe0002.md"
+
+# handle_sync must NOT propose a second handle for a title-resolved issue.
+cat > "${tmpdir}/issues-handled.json" <<'EOF'
+[{"number": 17, "title": "Base task", "state": "open", "labels": [{"name": "arsenal:task"}]}]
+EOF
+out=$(python3 "${HANDLE_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-handled.json" 2>/dev/null)
+grep -q 't-aaaa1111' <<<"${out}" \
+    && fail "a title-resolved issue is already a handle — proposing another duplicates the board"
+
+# issue_for_task resolves the same way, so open_task_pr.sh can still link a PR.
+ISSUE_PY="${SCRIPT_DIR}/../skills/init/assets/scripts/issue_for_task.py"
+out=$(python3 "${ISSUE_PY}" --task t-aaaa1111 --tasks-dir "${TASKS}" \
+        --issues "${tmpdir}/issues-handled.json" 2>/dev/null)
+[[ "${out}" == "17" ]] || fail "issue_for_task must resolve a bodyless handle, got '${out}'"
+
+# --- 23: a title the GitHub tools HTML-escaped in transit still resolves -----
+#         The MCP `list_issues` tool escapes `<`, `>` and `&` in the `title`
+#         field, so the bodyless fallback compared `annotations/<offer_id>.json`
+#         against `annotations/&lt;offer_id&gt;.json` and matched nothing. The
+#         task then read as having no issue at all, and `handle_sync.py` — same
+#         resolver — proposed a duplicate handle for a task that had one.
+cat > "${TASKS}/t-esc00001.md" <<'EOF'
+---
+id: t-esc00001
+title: "T42: Local annotation pass — annotations/<offer_id>.json & >=6 families"
+---
+
+## Acceptance gate
+```bash
+true
+```
+EOF
+cat > "${tmpdir}/issues-escaped.json" <<'EOF'
+[{"number": 42, "state": "closed", "labels": [{"name": "arsenal:task"}],
+  "title": "T42: Local annotation pass — annotations/&lt;offer_id&gt;.json &amp; &gt;=6 families"}]
+EOF
+out=$(python3 "${QUERY_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-escaped.json" --json 2>/dev/null)
+grep -q '"id":"t-esc00001",.*"state":"done"' <<<"${out}" \
+    || fail "an HTML-escaped issue title must resolve to its task: ${out}"
+
+# --- 24: `\uXXXX` written by arsenal's own writers is decoded on read --------
+#         `issue_import.py` and `arsenal_migrate.py` render a title with
+#         `json.dumps`, which escapes every non-ASCII character. The parser
+#         handed back the six literal characters, so the task's title never
+#         matched the issue's. Nothing compared the two before the fallback.
+cat > "${TASKS}/t-uni00001.md" <<'EOF'
+---
+id: t-uni00001
+title: "T19: Explanations citing \u20ac/month contributions"
+---
+
+## Acceptance gate
+```bash
+true
+```
+EOF
+cat > "${tmpdir}/issues-unicode.json" <<'PYEOF'
+[{"number": 19, "state": "closed", "labels": [{"name": "arsenal:task"}],
+  "title": "T19: Explanations citing €/month contributions"}]
+PYEOF
+out=$(python3 "${QUERY_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-unicode.json" --json 2>/dev/null)
+grep -q '"id":"t-uni00001",.*"state":"done"' <<<"${out}" \
+    || fail "a \\uXXXX escape in a task title must decode to the character: ${out}"
+
+# a scalar that is not valid JSON must still read literally, not blow up the file
+cat > "${TASKS}/t-bslash01.md" <<'EOF'
+---
+id: t-bslash01
+title: "Windows path C:\Users\me and a lone \ backslash"
+---
+
+## Acceptance gate
+```bash
+true
+```
+EOF
+out=$(python3 "${QUERY_PY}" --tasks-dir "${TASKS}" --json 2>/dev/null)
+grep -q '"id":"t-bslash01","title":"Windows path C:' <<<"${out}" \
+    || fail "an undecodable quoted title must still load, read literally: ${out}"
+rm -f "${TASKS}/t-bslash01.md"
+
+# --- 25: handle_sync refuses to duplicate a handle it merely failed to fold --
+#         Resolution by title is a heuristic, so "no id resolved" can mean the
+#         fold missed. Proposing a handle then puts two issues on the board
+#         claiming one task's state; not proposing only delays the work.
+cat > "${TASKS}/t-near0001.md" <<'EOF'
+---
+id: t-near0001
+title: "T25: Broaden the corpus — annotations/<offer_id>.json, >=6 job families"
+---
+
+## Acceptance gate
+```bash
+true
+```
+EOF
+# The same title as a surface that STRIPS angle-bracketed spans rather than
+# escaping them spells it, with `>=` written the other way.
+cat > "${tmpdir}/issues-near.json" <<'EOF'
+[{"number": 50, "state": "open", "labels": [{"name": "arsenal:task"}],
+  "title": "T25: Broaden the corpus - annotations/.json, \u22656 job families"}]
+EOF
+out=$(python3 "${HANDLE_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-near.json" 2>/dev/null)
+grep -q 't-near0001' <<<"${out}" \
+    && fail "a near-identical issue title must not draw a second handle: ${out}"
+err=$(python3 "${HANDLE_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-near.json" 2>&1 >/dev/null)
+grep -q 'near-identical title' <<<"${err}" \
+    || fail "refusing to propose must say so, not go quiet: ${err}"
+grep -q '#50' <<<"${err}" || fail "the warning must name the issue to fix: ${err}"
+
+# and a task nothing resembles is still proposed — the guard must not swallow
+# the one job this script has.
+grep -q 't-aaaa1111' <<<"${out}" || fail "an unrelated task must still be proposed: ${out}"
+rm -f "${TASKS}/t-near0001.md" "${TASKS}/t-esc00001.md" "${TASKS}/t-uni00001.md"
+
 echo "PASS: task_select_test — all gates passed"

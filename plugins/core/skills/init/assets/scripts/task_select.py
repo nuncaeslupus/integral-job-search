@@ -37,6 +37,7 @@ Exit: 0 always (an empty selection is an answer, not an error).
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -71,13 +72,100 @@ TASK_PATH_RE = re.compile(
 )
 
 
-def task_id_from_issue(issue: dict[str, Any]) -> str | None:
-    """The task an issue is a handle for, or None."""
+def normalise_title(text: str) -> str:
+    """Fold a title to the form two sources can be compared on.
+
+    The unescape is the whole reason this is more than a `.split()`: the two
+    sources do not spell the same title the same way. The MCP `list_issues`
+    tool a cloud session fetches its board with HTML-escapes `<`, `>` and `&`
+    in the `title` field it returns, so a task file holding
+    `annotations/<offer_id>.json` comes back as
+    `annotations/&lt;offer_id&gt;.json`, and the two never compare equal. It
+    is the same sanitizer `TASK_MARKER_RE` above already accounts for — it
+    escapes titles where it strips bodies — and the title fallback walked
+    straight into it.
+
+    `html.unescape` is idempotent on text that carries no entities, so it is
+    safe on both sides and costs nothing on the common path.
+    """
+    return re.sub(r"\s+", " ", html.unescape(str(text))).strip().casefold()
+
+
+def loose_title_key(text: str) -> str:
+    """A deliberately lossy fold, for asking *could* these be the same title.
+
+    Never for attributing state — only for refusing to act. `normalise_title`
+    is the identity comparison and it is conservative on purpose; this one
+    drops angle-bracketed spans (a sanitizer may remove them outright rather
+    than escape them) and every non-alphanumeric character, so it says yes to
+    pairs that differ only in punctuation. That is far too coarse to mark a
+    task done on, and exactly right for `handle_sync.py` deciding whether an
+    unresolved issue might already be the handle it was about to duplicate.
+    """
+    stripped = re.sub(r"<[^>]*>", " ", html.unescape(str(text)))
+    return re.sub(r"[^0-9a-z]+", "", stripped.casefold())
+
+
+def title_index(tasks: list[dict[str, Any]]) -> dict[str, str | None]:
+    """Normalised title -> task id, or None where two task files share a title.
+
+    The `None` is the point, not an omission: a title collision must resolve to
+    nothing rather than to whichever file sorted first. Attributing one task's
+    state to another is worse than leaving it unknown — an unknown task reads as
+    `open` and gets looked at, a mis-attributed one is silently marked done.
+    """
+    index: dict[str, str | None] = {}
+    for task in tasks:
+        key = normalise_title(task.get("title") or "")
+        if not key:
+            continue
+        index[key] = None if key in index else task["id"]
+    return index
+
+
+def task_id_from_issue(
+    issue: dict[str, Any],
+    *,
+    titles: dict[str, str | None] | None = None,
+    warnings: list[str] | None = None,
+) -> str | None:
+    """The task an issue is a handle for, or None.
+
+    The body is asked first and always: the `arsenal-task:` line is an exact
+    statement of identity, and a title is a heuristic that must never override
+    one.
+
+    `titles` adds the fallback that lets a caller stop fetching bodies at all.
+    Resolving from the body means the session-start fetch has to request `body`
+    for every task issue, and on a surface where that fetch lands in the model's
+    context — Claude Code on the web, where the GitHub MCP tools are the only
+    channel — the whole board's prose is charged against the context window
+    before any work is read. Measured on a 40-issue board: ~9k tokens with
+    bodies, ~1.2k without, for a payload of one identifier per issue.
+
+    The fallback is safe to lean on because the titles are not independently
+    written: `handle_sync.py` and `arsenal-queue.yml` both title the handle from
+    the task file's `title:`, so they match verbatim. A title edited on GitHub
+    but not in the task file fails to resolve and is reported — which is the
+    existing `handle_sync.py` conversation about drifted handles, not a new one.
+    """
     body = issue.get("body") or ""
     for pattern in (TASK_MARKER_RE, TASK_PATH_RE):
         if match := pattern.search(body):
             return match.group(1)
-    return None
+    if not titles:
+        return None
+    key = normalise_title(issue.get("title") or "")
+    if not key or key not in titles:
+        return None
+    resolved = titles[key]
+    if resolved is None and warnings is not None:
+        warnings.append(
+            f"issue #{issue.get('number', '?')}: title matches more than one task file — "
+            "left unresolved. Give the issue an `arsenal-task: <id>` line, or make the "
+            "task titles distinct."
+        )
+    return resolved
 
 TERMINAL = {"done", "merged"}
 
@@ -105,6 +193,7 @@ def isolation_verdict(sentinel: Path) -> str:
 def state_from_issues(
     issues: list[dict[str, Any]],
     *,
+    titles: dict[str, str | None] | None = None,
     claimed_label: str = "arsenal:claimed",
     cancelled_label: str = "arsenal:cancelled",
     warnings: list[str] | None = None,
@@ -124,7 +213,7 @@ def state_from_issues(
     state: dict[str, str] = {}
     resolved = 0
     for issue in issues:
-        task_id = task_id_from_issue(issue)
+        task_id = task_id_from_issue(issue, titles=titles, warnings=warnings)
         if not task_id:
             continue
         resolved += 1
@@ -162,7 +251,9 @@ def state_from_issues(
         warnings.append(
             f"{len(issues)} issue(s) fetched and none carries a task id — the board is "
             "being read as stateless. Check that bodies still contain their "
-            "`arsenal-task: <id>` line; some GitHub tools strip HTML comments."
+            "`arsenal-task: <id>` line (some GitHub tools strip HTML comments), or, if "
+            "the fetch omitted `body`, that each issue title still matches its task "
+            "file's `title:`."
         )
     return state
 
@@ -172,6 +263,21 @@ def _parse_scalar(raw: str) -> Any:
     all a task file needs, and depending on PyYAML would break consumers who
     run these scripts with a bare `python3` and no site-packages."""
     text = raw.strip()
+    if len(text) >= 2 and text[0] == '"' == text[-1]:
+        # A double-quoted scalar carries escapes, and arsenal's own writers put
+        # them there: `issue_import.py` and `arsenal_migrate.py` render a title
+        # with `json.dumps`, whose default `ensure_ascii` spells a euro sign
+        # `\u20ac`. Returning the quoted text verbatim left the task's title as
+        # those six literal characters while its issue carried the real one —
+        # invisible until the title fallback compared the two. A real YAML
+        # parser decodes here, so this does too; a scalar that is not valid
+        # JSON (a lone backslash, a Windows path) falls back to the literal
+        # reading rather than failing the whole file.
+        try:
+            decoded = json.loads(text)
+        except ValueError:
+            return text[1:-1]
+        return decoded if isinstance(decoded, str) else text[1:-1]
     if text.startswith(("'", '"')) and text.endswith(("'", '"')) and len(text) >= 2:
         return text[1:-1]
     if text.lower() in {"true", "false"}:
@@ -363,6 +469,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Loaded before the issues are read, not after: the title index is built
+    # from the task files, and it is what lets an issue whose body was never
+    # fetched still resolve to its task.
+    tasks, warnings = load_tasks(args.tasks_dir)
+
     state: dict[str, str] = {}
     issue_warnings: list[str] = []
     if args.issues:
@@ -376,7 +487,9 @@ def main(argv: list[str] | None = None) -> int:
         if isinstance(payload, dict):
             payload = payload.get("issues", [])
         state = state_from_issues(
-            [i for i in payload if isinstance(i, dict)], warnings=issue_warnings
+            [i for i in payload if isinstance(i, dict)],
+            titles=title_index(tasks),
+            warnings=issue_warnings,
         )
     else:
         raw_state = ""
@@ -390,7 +503,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"task_select: --state is not valid JSON — {exc}", file=sys.stderr)
             return 2
 
-    tasks, warnings = load_tasks(args.tasks_dir)
     warnings += issue_warnings
 
     if args.all:
