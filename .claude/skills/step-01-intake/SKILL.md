@@ -1,6 +1,6 @@
 ---
 name: step-01-intake
-description: Triggered by a candidate's session at step 1 (`intake`) of the job-search process (`status/spec-v2-steps.json`) — captures the candidate's CV or working history into the store, with provenance. Do NOT use for a step that already has claimed_facts and only needs a correction pass on residence or pay — that is Constraints (step 2), not Intake.
+description: Step 1 (`intake`) of the candidate process — captures the candidate's CV or working history into the store, with provenance. Do NOT use for a step that already has claimed_facts and only needs a correction pass on residence or pay — that is Constraints (step 2), not Intake.
 ---
 
 # step-01-intake

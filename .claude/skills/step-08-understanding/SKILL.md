@@ -1,6 +1,6 @@
 ---
 name: step-08-understanding
-description: Triggered by a candidate's session at step 8 (`understanding`) of the job-search process (`status/spec-v2-steps.json`) — extracts dimension values and verbatim evidence spans from new offers. Do NOT use for ordering offers for presentation — that is step 9, which reads this step's extractions.
+description: Step 8 (`understanding`) of the candidate process — extracts dimension values and verbatim evidence spans from new offers. Do NOT use for ordering offers for presentation — that is step 9, which reads this step's extractions.
 ---
 
 # step-08-understanding

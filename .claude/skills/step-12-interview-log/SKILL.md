@@ -1,6 +1,6 @@
 ---
 name: step-12-interview-log
-description: Triggered by a candidate's session at step 12 (`interview_log`) of the job-search process (`status/spec-v2-steps.json`) — prepares for, then records, one candidate interview. Do NOT use for drafting the application itself — that is step 11, which this step reads but never regenerates.
+description: Step 12 (`interview_log`) of the candidate process — prepares for, then records, one candidate interview. Do NOT use for drafting the application itself — that is step 11, which this step reads but never regenerates.
 ---
 
 # step-12-interview-log

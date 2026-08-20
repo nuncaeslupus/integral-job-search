@@ -1,6 +1,6 @@
 ---
 name: step-06-preferences
-description: Triggered by a candidate's session at step 6 (`preferences`) of the job-search process (`status/spec-v2-steps.json`) — turns reactions into salary-equivalent weights via forced pairwise choices. Do NOT use for presenting the ranked offer list itself — that is step 9, which reads `weights.json` as an optional input.
+description: Step 6 (`preferences`) of the candidate process — turns reactions into salary-equivalent weights via forced pairwise choices. Do NOT use for presenting the ranked offer list itself — that is step 9, which reads `weights.json` as an optional input.
 ---
 
 # step-06-preferences

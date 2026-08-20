@@ -1,6 +1,6 @@
 ---
 name: step-09-ranking
-description: Triggered by a candidate's session at step 9 (`ranking`) of the job-search process (`status/spec-v2-steps.json`) — presents the live offers in order, each position's reason cited from the ad. Do NOT use for collecting the candidate's opinion of what they see — that belongs to step 10, which follows this one.
+description: Step 9 (`ranking`) of the candidate process — presents the live offers in order, each position's reason cited from the ad. Do NOT use for collecting the candidate's opinion of what they see — that belongs to step 10, which follows this one.
 ---
 
 # step-09-ranking
