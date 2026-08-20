@@ -25,12 +25,19 @@ import pytest
 import yaml
 
 from jobsearch.connector_contract import (
+    DEFAULT_EVIDENCE_PATH,
     MINIMUM_PACKAGES,
+    OPTIONAL_ENTRIES,
+    PARSE_FILENAME,
+    REQUIRED_ENTRIES,
     _main,
+    evidence_target,
     check_library,
     check_package,
+    measure,
     write_evidence,
 )
+from jobsearch.connector_shape import measure as shape_measure
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
@@ -164,13 +171,27 @@ def test_a_parse_module_that_reaches_out_by_builtin_is_rejected(package: Path, c
     assert any("rule 3/4" in v for v in check_package(package).violations)
 
 
-def test_a_parse_module_within_the_allowlist_is_accepted(package: Path) -> None:
-    """The rule is not "no parse.py" — the exception has to remain usable."""
+def test_a_parse_module_is_refused_however_well_behaved_it_is(package: Path) -> None:
+    """D-10 (#78) — the rule *is* now "no parse.py", and this is where it changed.
+
+    This test previously asserted the opposite, under the docstring "the rule is
+    not 'no parse.py' — the exception has to remain usable". It was not usable:
+    §5 advertised the hatch and nothing in `src/jobsearch` ever executed one, so
+    a connector for a site the declarative form cannot express passed every rule
+    here and still could not work.
+
+    The module below is the strongest case for the old behaviour — inside the
+    allowlist, no import that reaches out, exactly the shape §5 described. It is
+    refused anyway, and by rule 1 rather than rules 3/4: the objection is not
+    that this file might misbehave, it is that no file of this kind runs at all.
+    """
     (package / "parse.py").write_text(
         "import re\n\n\ndef parse(text: str) -> str:\n    return re.sub(r'\\s+', ' ', text)\n",
         encoding="utf-8",
     )
-    assert check_package(package).violations == ()
+    violations = check_package(package).violations
+    assert any(v.startswith("rule 1: parse.py is no longer part") for v in violations), violations
+    assert not any("rule 3/4" in v for v in violations), "refused by shape, not by lint"
 
 
 def test_a_parse_module_that_does_not_parse_is_rejected_not_skipped(package: Path) -> None:
@@ -318,8 +339,105 @@ def test_the_command_reports_a_missing_directory_rather_than_passing(tmp_path: P
     assert _main(["x", str(evidence), "--connectors", str(tmp_path / "absent")]) == 3
 
 
+def test_the_contributors_command_leaves_our_committed_evidence_alone(tmp_path: Path) -> None:
+    """D-11 — `--connectors <theirs>` measures theirs and records nothing of ours.
+
+    `docs/distribution.md` §5 hands this exact invocation to a contributor to
+    run over their own directory, on their own machine. Recording was
+    unconditional, so it wrote *our* `status/evidence/T53.json` with a
+    `packages_checked` about theirs. `make evidence` then reported drift, and
+    committing the number would have broken T53's gate — a merged task — for a
+    reason nothing in the diff explained.
+
+    An empty directory is the sharpest form: it measures 0 packages where the
+    committed file says 1, so a regression cannot hide behind a copy of our own
+    library happening to measure the same number. Both of the command's other
+    exits are covered too, since each returns by a different route.
+    """
+    before = DEFAULT_EVIDENCE_PATH.read_bytes()
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _main(["x", "--connectors", str(empty)]) == 3, "nothing checked is not a pass"
+    assert DEFAULT_EVIDENCE_PATH.read_bytes() == before
+
+    theirs = tmp_path / "theirs"
+    shutil.copytree(_REFERENCE, theirs / _REFERENCE.name)
+    assert _main(["x", "--connectors", str(theirs)]) == 0, "an unbroken copy conforms"
+    assert DEFAULT_EVIDENCE_PATH.read_bytes() == before
+
+    (theirs / _REFERENCE.name / "meta.yaml").unlink()
+    assert _main(["x", "--connectors", str(theirs)]) == 1, "a broken copy violates"
+    assert DEFAULT_EVIDENCE_PATH.read_bytes() == before
+
+
+def test_the_foreign_write_metric_is_measured_over_the_real_decision(tmp_path: Path) -> None:
+    """D-11's gate asks `evidence_target` itself, not a copy of the rule.
+
+    A gate that restates the rule agrees with prose the code has stopped
+    following — the shape of every hole review found on #77. So the number comes
+    from the same function `_main` calls, and this pins both of its answers.
+    """
+    assert measure()["evidence_writes_for_a_foreign_library"] == 0
+
+    # The contributor's shape: a foreign library, no destination named.
+    assert evidence_target((), own_library=False) is None
+    # Our own library, no destination: `make evidence`'s invocation, which must
+    # still record or the evidence file freezes at whatever it last said.
+    assert evidence_target((), own_library=True) == DEFAULT_EVIDENCE_PATH
+    # A named destination is a deliberate instruction, foreign library or not.
+    named = tmp_path / "elsewhere.json"
+    assert evidence_target((str(named),), own_library=False) == named
+    assert evidence_target((str(named),), own_library=True) == named
+
+
+def test_the_gate_still_records_when_the_caller_names_a_destination(tmp_path: Path) -> None:
+    """The other half of D-11: suppressing the accident must not suppress the gate.
+
+    `make evidence` runs the bare form over this repository's own library, and
+    that must still write — a fix that quietly stopped recording would leave the
+    evidence file frozen at whatever it last said.
+    """
+    evidence = tmp_path / "T53.json"
+    assert _main(["x", str(evidence)]) == 0
+    measured = json.loads(evidence.read_text(encoding="utf-8"))
+    assert measured["packages_checked"] >= MINIMUM_PACKAGES
+    assert measured["connector_contract_violations"] == 0
+
+
 # ---------------------------------------------------------------------------
 # the boundary the AST check does *not* provide
+
+
+def test_every_file_named_in_the_shared_shape_has_a_runtime_or_is_not_advertised() -> None:
+    """D-10 (#78) — the shape §5 documents and the shape the code runs agree.
+
+    The defect this closes: §5 advertised `parse.py` as the escape hatch for
+    sites the declarative form cannot express, and nothing executed it. A
+    connector for such a site could be written, could pass all six rules, and
+    could not work — the conformance check said yes to something the runtime had
+    no way to honour.
+
+    Both directions are asserted, because the disagreement can point either way:
+    a file advertised with no runtime (the original defect), and a file
+    advertised that rule 1 refuses (the same defect after a careless fix to only
+    one of the two places).
+
+    The measurement lives in `jobsearch.connector_shape` so `make evidence`
+    re-derives it on every run; this asserts it from the suite as well, since a
+    gate only CI re-checks is one a local run can break without noticing.
+    """
+    measured = shape_measure()
+    assert measured["advertised_connector_mechanisms_without_a_runtime"] == 0, (
+        f"§5 advertises {measured['mechanisms_without_a_runtime']}, which nothing executes"
+    )
+    assert measured["advertised_but_not_admitted_by_rule_1"] == [], (
+        f"§5 advertises {measured['advertised_but_not_admitted_by_rule_1']}, which rule 1 refuses"
+    )
+    assert PARSE_FILENAME not in measured["advertised_entries"], (
+        "parse.py is back in §5 — it needs a runtime under process isolation before it can be"
+    )
+    assert PARSE_FILENAME not in (REQUIRED_ENTRIES | OPTIONAL_ENTRIES)
 
 
 def test_nothing_in_the_codebase_executes_a_contributed_parse_module() -> None:

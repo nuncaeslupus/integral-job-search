@@ -1,164 +1,138 @@
-# Session handover — 2026-08-20 (arsenal v0.26.0 → v0.29.1; D-2 and T53 merged)
+# Session handover — 2026-08-20 (arsenal v0.30.0; D-10, D-11, T14 settled)
 
 ## Read this first
 
-**The board's local workaround is gone, and the plain `--issues` path works.**
-`CLAUDE.md` no longer tells you to derive a state map with `jobsearch.board_state`
-— that module is deleted. Run the protocol as written:
+**PR #81 is open and carries every change below.** It is the whole session.
+Merge it **with a merge commit, never a squash** — it carries the
+`git-subtree-split:` trailer for `4ea96ed`, and squashing drops it so the next
+subtree pull replays from the last split `main` remembers.
 
-```bash
-# MCP list_issues, labels=["arsenal:task"], open AND closed,
-# fields number/body/state/labels → $ISSUES
-python3 claude-arsenal/scripts/query_status.py --issues "$ISSUES"
-python3 claude-arsenal/scripts/task_select.py  --issues "$ISSUES"
-```
-
-claude-arsenal v0.28.0 stopped keying task identity on an HTML comment (a body
-resolves via a visible `arsenal-task: <id>` token **or** the
-`arsenal/tasks/<id>.md` payload link), which is exactly what the workaround
-existed to do. Verified: 27 issues, 5 tasks selected, **zero warnings**.
+The two decisions the previous handover flagged as needing an owner are now
+made. Nothing is waiting on a judgement call.
 
 ## State
 
 | what | where |
 |------|-------|
-| PR #74 — arsenal v0.26.0 → v0.29.0, board verified, workaround deleted | **merged** as `e87c243` |
-| PR #75 — D-2 (`lo-77a6`), gold provenance | **merged** as `1ed1cc0`; issue #45 closed by it |
-| PR #77 — T53 (`lo-803e`), connector contract | **merged** as `a525c3f`; issue #48 closed by it |
-| D-2 (`lo-77a6`), T53 (`lo-803e`) | **merged** — recorded in `arsenal/tasks/_history/` |
-| D-10 (`t-2583900f`, #78) | **new**, seeded from review on #77 — see below |
-| Bundle | **v0.29.1** — current with the newest tag |
+| PR #81 — arsenal v0.30.0, D-10, D-11, T14 fold, T9 | **open**, awaiting Qodo review |
+| D-10 (`t-2583900f`, #78) | **resolved — resolution A**, `parse.py` withdrawn from the shape |
+| D-11 (`t-296eb71a`, #80) | **new and fixed in the same PR** — found while investigating D-10 |
+| T14 (`lo-3100`, #46) | **cancelled**, absorbed into T15; payload in `_history`, `status: cancelled` |
+| T9 (`lo-b422`, #47) | now declares `requires: [surface:egress]` |
+| Bundle | **v0.30.0**; `merge-policy = "after-review"` |
 
-## Do this next
+## What was decided, and how to reverse it
 
-1. **D-10 (`t-2583900f`, #78) needs an owner decision before anyone starts it.**
-   `docs/distribution.md` §5 lists `parse.py` in the shared connector shape and
-   nothing executes it, so a connector for a site the declarative form cannot
-   express passes the whole conformance check and cannot work. Either drop it
-   from the shape or run it under process isolation — the payload writes out
-   both and their costs. **Do not resolve it by relaxing the static check**:
-   that check is admission lint, and its insufficiency as a sandbox is an
-   argument for isolation or removal, never for admitting more.
-2. **T14 (`lo-3100`) needs an owner decision, not a worker run.** Its payload
-   recommends folding it into T15 as the rules stage rather than gating it
-   against a corpus that cannot support one. That is a scope call. The other
-   unblocked tasks are T55 (`lo-9f72`) and T9 (`lo-b422`). T55 is mechanical
-   but wide, and one part of it — renaming the GitHub repository itself — is
-   not something a session can do. T9 fetches stimuli live from multiple
-   sources, so it likely needs `surface:egress`.
-3. **The queue is clean.** `query_status --issues` reports no problems at all
-   now that D-2 has a gate; `verify-gates` asserts **52/52**.
+**D-10 → resolution A.** `parse.py` is out of `docs/distribution.md` §5 and out
+of `OPTIONAL_ENTRIES`; a package containing one is refused by rule 1 with a
+message that explains rather than lints. Decided on three grounds: B is a
+milestone (separate interpreter, no network namespace, read-only fs, CPU/memory
+caps, plus a `parse(text) -> str` contract), the hatch had no user, and **T54
+(#70) was already written assuming A** — its disclosure list names connector,
+fixture and metadata. That last one is why D-10 had to be settled *before* T54.
+
+To reverse: `jobsearch.connector_shape` holds `EXECUTED_ENTRIES`, declared and
+empty. Building the isolated runner means adding `parse.py` there, restoring it
+to §5 and to `OPTIONAL_ENTRIES`, and re-inverting
+`test_a_parse_module_is_refused_however_well_behaved_it_is`. The gate stays
+green honestly at every step, which is the point of the constant.
+
+**T14 → folded into T15.** Its gate was `prefilter_recall >= 0.98` against
+corpus positives T5 never supplied (39 labels, 4 ads, 14 in evaluation, four
+dimensions with none). Kept separate it blocked T15 and, through it, **fifteen
+of the twenty-six live tasks**.
+
+Three mechanics that are each wrong alone — check them if you revisit this:
+1. `lo-3100` came out of T15's `deps` **first**; a cancelled task left in the
+   list blocks T15 permanently.
+2. The payload is in `_history` with `status: cancelled`, deliberately **not**
+   terminal, so nothing reads it as a completed prefilter and `verify-gates`
+   does not assert a gate that was never measurable.
+3. #46 was closed with `arsenal:cancelled`, **not** by a `Closes #46` — a PR
+   keyword closes as *completed*, which upstream reads as `done`.
+
+## D-11 — the defect worth remembering
+
+`docs/distribution.md` §5 hands a contributor
+`python -m jobsearch.connector_contract --connectors <their dir>`. That wrote
+**our** `status/evidence/T53.json`, so a check over somebody else's library
+replaced the number T53's gate is asserted against. It was hit by accident, on
+the first run, while investigating something else.
+
+The fix is that evidence is written only when the caller named a destination or
+the check ran over our own library. The part worth carrying forward is the gate:
+`evidence_writes_for_a_foreign_library` is asserted over `evidence_target` —
+the function `_main` actually calls — not over a restatement of the rule. **A
+gate that restates a rule agrees with prose the code has stopped following.**
+That is the shape of all six holes review found on #77 and of D-10 itself.
+
+The same discipline is applied pre-emptively to `connector_shape --doc`.
+
+## Where the board stands
+
+`plan_queue_task_drift == 0`; `verify-gates` asserts **53/53**.
+
+Unblocked and autonomous-safe once #81 merges:
+
+- **T15 (`lo-25b1`, #52)** — now unblocked, and it is the keystone: fifteen
+  tasks sit behind it. Its payload carries the prefilter requirements as items
+  4 and 5 of the scope section. Note D-2's binding: with
+  `evaluation_gold_count` at 0, refusing to emit `extraction_macro_f1` and
+  naming the unscoreable dimensions is currently the only correct output. Do
+  not "fix" that by relabelling cue gold as human.
+- **T54 (`lo-892b`, #70)** — no longer gated on D-10; it can be taken as
+  written.
+- **T55 (`lo-9f72`, #49)** — mechanical but wide, and the GitHub repo rename is
+  not something a session can do.
+- **T9 (`lo-b422`, #47)** — now correctly held out of cloud sessions.
 
 ## Three things that will bite you
 
-### Never squash an arsenal upgrade PR
+### CI still cannot pass, and it is still not the code
 
-This is now written above `arsenal-upgrade` in the Makefile, with the check.
-`git subtree pull --squash` records where the pull landed as a
-`git-subtree-split:` trailer on its own commit; a squash merge rewrites the
-branch into one commit and the trailer goes with it, so the **next** pull
-cannot find where the last one stopped.
+Diagnosed again this session on `1bada3d`: all five checks failed, every one
+with `runner_id: 0`, `runner_name: ""`, and a 3-second duration (09:04:27 →
+09:04:30). Both criteria in CLAUDE.md hold. Do not push speculative fixes.
 
-It already happened: before this session `origin/main` recorded exactly one
-split, `f84b4ef` (the original `git subtree add`), because the v0.26.0 upgrade
-was squash-merged as #44. The v0.27.0 pull therefore replayed v0.25→v0.27 onto
-a tree already at v0.26 and conflicted on twelve files. #74 was merged with a
-**merge commit** and main now records all four splits, so v0.29.1 should pull
-clean. Check with:
+`merge-policy` is now **`after-review`** (claude-arsenal v0.30.0), so the config
+says this in a value it validates rather than in a prose note redefining "ci".
+The five gates are still run locally on every head and quoted on the PR — they
+are simply no longer *called* CI.
 
-```bash
-git log origin/main --format=%H | while read c; do git cat-file -p $c | grep git-subtree-split:; done
-```
+### `make arsenal-remote` pulls and commits
 
-### Claiming needs one manual step on this surface
+It runs `check_update.sh` **without** `--check-only`, so reading the version
+merged v0.30.0 and committed it — the exact hazard AGENTS.md step 0a warns
+about, reached through a Makefile target rather than a direct call. It also
+leaves the job half done: the pull is one of `arsenal-upgrade`'s four steps, so
+the assembled bundle sat at 0.29.1 while the subtree said 0.30.0 until
+`update-skills` + `assemble-bundle` were run by hand. Worth a queue task.
 
-This proxy refuses GitHub API writes, so `claim_task.sh` cannot create the
-claim ref itself. Since **v0.29.1** it handles that correctly — it exits **5**
-and prints the call for you to make, rather than exiting 2 (`error:`, which the
-protocol says to halt the loop over). Verified:
+### Claiming still needs one manual step
 
-```
-$ bash claude-arsenal/bin/claim_task.sh lo-803e
-manual POST /repos/nuncaeslupus/job-search/git/refs {"ref":"refs/heads/arsenal/claims/lo-803e","sha":"1ed1cc0…"}
-exit=5
-```
+Unchanged from v0.29.1: `claim_task.sh` exits **5** and prints the call; make it
+with the MCP `create_branch` tool on `arsenal/claims/<task-id>` (201 = won,
+422 = lost), then label, self-assign and comment the session id.
 
-Make that call with the MCP `create_branch` tool, branch
-`arsenal/claims/<task-id>` — the same compare-and-swap (201 = won, 422 = lost).
-Then label the issue `arsenal:claimed`, self-assign, and comment the session id.
+## Follow-ups not in #81
 
-### CI cannot pass, and `merge-policy` now says what to do about it
-
-Still out of runner minutes: every job on every head fails in 2–5s with
-`runner_id: 0` and `runner_name: ""`. Diagnosed per head this session on
-`c72d7c7`, `bd550bf` and `3974c13`. `main`'s own HEAD fails identically.
-
-`arsenal/config.toml` is now `merge-policy = "after-ci-and-review"`, with a
-note defining what the two words mean while the outage lasts:
-
-* **ci** — the five gates run locally on the PR head (`make lint test evidence
-  verify-subtree verify-gates`, i.e. `make ci`). Quote the results on the PR.
-* **review** — the Qodo review has landed and every comment is fixed or
-  answered. An unread bot review is not a review.
-
-Delete that note when runners return. The enum has no value for "review
-required, CI unavailable" — filed as **claude-arsenal#166**.
-
-## What T53 settled
-
-A shared connector is a package — `connectors/<site-id>/` with `connector.yaml`,
-`meta.yaml`, `fixture/list.html` (+ `detail.html` when a detail page is
-declared), and optionally `parse.py`. One command checks all six rules and a
-contributor runs the same one:
-
-```bash
-uv run python -m jobsearch.connector_contract --connectors <dir>
-```
-
-It exits **3** over an empty library, because an empty directory and a
-conforming one both report zero violations and only the exit code separates
-them. `load_connectors` is packages-only — an interim version also read loose
-`<site>_<locale>.yaml` files, and review found the hole: runtime loaded them,
-the contract checker did not, so CI could report zero violations over a
-connector nothing had examined.
-
-Review on #77 found six more holes of that shape, all fixed with a regression
-test each. The pattern worth carrying forward: **every negative test breaks a
-copy of the committed package**, so the check has to fail on something that was
-passing a moment ago, for the one reason the test changed.
-
-## What D-2 settled, and what it deliberately did not
-
-`extraction.gold` entries now carry `derived_from: cue | human`, required with
-no default. All **69** committed examples are `cue`. `evaluation_gold()` returns
-only the human half and is the single function T15 may score over.
-
-**T15 (`lo-25b1`) is bound by this**: call `evaluation_gold`, report `n` beside
-any score, and refuse to emit `extraction_macro_f1` below a per-dimension label
-floor, naming the dimensions it could not score. With `evaluation_gold_count`
-at **0**, that refusal is currently the only correct output — no dimension can
-be scored for extraction at all. Do not "fix" that by relabelling cue gold as
-human; the empty result is the finding.
-
-`unmatched_gold` now applies to cue-derived gold only. The old unscoped rule
-would have failed the T3 gate on the first human label the cues did not
-anticipate — the most valuable evidence in the set read as a defect.
-
-## Upstream issues filed this session
-
-| # | state | what |
-|---|-------|------|
-| claude-arsenal#161 | **closed, fixed in v0.29.0** | `init.py` corrupted `CLAUDE.md` on every upgrade from a pre-0.27 install |
-| claude-arsenal#162 | **closed, fixed in v0.29.0** | `check_update.sh` conflated the subtree prefix with the bundle dir |
-| claude-arsenal#163 | **closed, fixed in v0.29.1** | `github_channel.sh` detects `rest` from a read-only probe, then hard-errors on writes instead of falling back to `manual` |
-| claude-arsenal#166 | open | `merge-policy` has no value for "review required, CI unavailable" |
+- Once #81 merges, D-10 and D-11's payloads want moving to `_history` with
+  `status: merged` and their PR — the chore #79 did for T53. Until then
+  `verify-gates` counts 53, not 55.
+- Upstream claude-arsenal#167 deferred the better fix — letting `after-ci` be
+  satisfied by a locally recorded gate result, as the evidence gates already
+  work — "for its own issue", and **no such issue exists**. It is the change
+  that would make a local gate run count as evidence rather than as prose.
+- `make arsenal-remote`'s side effect, above.
 
 ## Environment
 
-```bash
-make lint && make test && make evidence && make verify-subtree && make verify-gates
-```
+Five gates on `1bada3d`, all green:
 
-Five gates, all green: ruff+mypy clean over 86 files, 907 passed, no evidence
-drift, 0 diverging subtree assets, **52/52** terminal gates asserted.
-Upstream's own suite passes **16/16** against the vendored v0.29.1 bundle.
+```
+lint            ruff + strict mypy clean, 90 files
+test            971 passed, 1 skipped
+evidence        no drift
+verify-subtree  0 diverging, 22 assets compared
+verify-gates    53/53
+```

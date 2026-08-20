@@ -99,6 +99,7 @@ from __future__ import annotations
 import ast
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -130,7 +131,19 @@ PARSE_FILENAME = "parse.py"
 # know that everything in the directory is the connector, and a stray
 # `notes.txt` today is a stray `credentials.env` tomorrow.
 REQUIRED_ENTRIES = frozenset({CONNECTOR_FILENAME, META_FILENAME, FIXTURE_DIRNAME})
-OPTIONAL_ENTRIES = frozenset({PARSE_FILENAME})
+
+# Empty since D-10 (#78). `parse.py` used to be here, and `docs/distribution.md`
+# §5 advertised it as the escape hatch for sites the declarative form cannot
+# express — but nothing in this repository has ever executed one, so such a
+# connector passed the whole check and could not work. The promise is withdrawn
+# rather than implemented: executing contributed code needs process-level
+# isolation, and the allowlist below is admission lint, not a sandbox.
+OPTIONAL_ENTRIES: frozenset[str] = frozenset()
+
+# Named so the refusal can say *why* rather than "unexpected file". A
+# contributor who wrote a `parse.py` did what §5 told them to; they are owed the
+# reason it is no longer true, not a lint message.
+WITHDRAWN_ENTRIES = frozenset({PARSE_FILENAME})
 
 # Rules 3 and 4, as an allowlist. A `parse.py` turns text into text; nothing
 # here reaches a socket, a file, the environment or another process. See the
@@ -240,7 +253,14 @@ def check_layout(package: Path) -> list[str]:
             violations.append(f"rule 1: {required} is missing")
     unexpected = sorted(present - REQUIRED_ENTRIES - OPTIONAL_ENTRIES)
     for name in unexpected:
-        violations.append(f"rule 1: {name} is not part of a connector package")
+        if name in WITHDRAWN_ENTRIES:
+            violations.append(
+                f"rule 1: {name} is no longer part of a connector package — nothing "
+                "executes it, so a connector needing one cannot work (D-10). Sites the "
+                "declarative form cannot express are met by growing connector.yaml."
+            )
+        else:
+            violations.append(f"rule 1: {name} is not part of a connector package")
     if (package / FIXTURE_DIRNAME).exists() and not (package / FIXTURE_DIRNAME).is_dir():
         violations.append(f"rule 1: {FIXTURE_DIRNAME} must be a directory")
     return violations
@@ -459,17 +479,57 @@ def check_library(directory: Path = DEFAULT_CONNECTORS_DIR) -> ContractReport:
     return ContractReport(packages=[check_package(p) for p in connector_packages(directory)])
 
 
+# The invocation shapes that check a library other than ours: `--connectors DIR`
+# with no destination named, which is exactly what `docs/distribution.md` §5
+# hands a contributor. Held as data so D-11's gate can assert over the real
+# decision function rather than restating it.
+_FOREIGN_INVOCATIONS: tuple[tuple[tuple[str, ...], bool], ...] = (((), False),)
+
+
+def evidence_target(positional: Sequence[str], own_library: bool) -> Path | None:
+    """Where this invocation records, or `None` for "measured, recorded nowhere".
+
+    The one place the decision lives, so `_main` and D-11's gate cannot drift:
+    a gate that restates the rule instead of exercising it passes while the code
+    does the opposite.
+    """
+    default_target = DEFAULT_EVIDENCE_PATH if own_library else None
+    return Path(positional[0]) if positional else default_target
+
+
+def measure(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
+    """T53's gate over `directory` — measured, not recorded.
+
+    Split out from `write_evidence` so that *checking* a library and
+    *recording a measurement about this repository* are two separate acts. They
+    were one, and a contributor running the command this repo documents as
+    theirs — over their own directory, per `docs/distribution.md` §5 — silently
+    overwrote our committed `status/evidence/T53.json` with a result about
+    their machine (D-11).
+    """
+    report = check_library(directory)
+    return {
+        "connector_contract_violations": len(report.violations),
+        "packages_checked": len(report.packages),
+        # D-11. Zero invocation shapes that check somebody else's library may
+        # record into ours. Asserted over `evidence_target` itself, so restoring
+        # the old unconditional default moves this number rather than leaving a
+        # gate that agrees with prose the code no longer follows.
+        "evidence_writes_for_a_foreign_library": sum(
+            1
+            for positional, own in _FOREIGN_INVOCATIONS
+            if evidence_target(positional, own) == DEFAULT_EVIDENCE_PATH
+        ),
+        "violations": report.violations,
+    }
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     directory: Path = DEFAULT_CONNECTORS_DIR,
 ) -> dict[str, Any]:
     """Measure T53's gate from the committed connector library and record it."""
-    report = check_library(directory)
-    measured: dict[str, Any] = {
-        "connector_contract_violations": len(report.violations),
-        "packages_checked": len(report.packages),
-        "violations": report.violations,
-    }
+    measured = measure(directory)
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return measured
@@ -484,20 +544,33 @@ def _main(argv: list[str]) -> int:
     ours: someone writing a connector on their own machine runs it over their
     own directory and gets the identical verdict CI will reach, which is the
     whole point of there being one command rather than a checklist.
+
+    Evidence is written only when the caller said where it goes, or when the
+    check ran over *this repository's* library. Recording used to be
+    unconditional, so the contributor form above — the one §5 tells people to
+    run — overwrote our committed `status/evidence/T53.json` with a
+    `packages_checked` about their directory. `make evidence` then compared the
+    result against the code and reported drift, and committing that number
+    would have broken T53's gate for a reason nothing in the diff explained
+    (D-11). A verdict about somebody else's directory is not evidence about
+    ours; the exit code and the printed JSON carry it instead.
     """
     args = argv[1:]
     directory = DEFAULT_CONNECTORS_DIR
+    own_library = True
     if "--connectors" in args:
         index = args.index("--connectors")
         if index + 1 >= len(args):
             print("connector-contract: --connectors needs a directory", file=sys.stderr)
             return 2
         directory = Path(args[index + 1])
+        own_library = False
         args = args[:index] + args[index + 2 :]
     positional = [arg for arg in args if not arg.startswith("--")]
-    target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
+    # None means "measured, recorded nowhere" — see the docstring.
+    target = evidence_target(positional, own_library)
     try:
-        measured = write_evidence(target, directory)
+        measured = measure(directory) if target is None else write_evidence(target, directory)
     except (ConnectorError, OSError, UnicodeDecodeError) as exc:
         # A gate that dies with a traceback has not failed — it has not run,
         # and CI cannot tell those apart from an exit code alone. Every route
