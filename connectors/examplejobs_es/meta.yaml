@@ -1,0 +1,33 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it — which is what a borrower needs and cannot get from the
+# selectors.
+#
+# `last_verified` is the field that decays. A connector is a claim about
+# markup somebody else controls, so it is true until the site is redesigned
+# and nobody notices; `assess_staleness` reads this date, and the contract
+# check refuses a package where it is missing or unparseable rather than
+# treating "no date" as "fine".
+site: examplejobs.test
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-01"
+
+# Rule 6, recorded rather than asserted in prose. A borrower can read this
+# without opening the selectors, and the check refuses a package that claims
+# anything else — there is no vocabulary here for "authenticated" or
+# "paywalled", because a connector that needed one could not be shared.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Rule 2 and the privacy rule together: a fixture is a listing sampled *for
+# this purpose*, never an advert the candidate was reading. The set of ads a
+# person reads carries their field, level, city and the fact that they are
+# looking, and a fixture in a public repository carries whatever made it,
+# forever. `sampled` is the only accepted value.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-01"
