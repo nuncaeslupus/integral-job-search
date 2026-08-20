@@ -1,0 +1,126 @@
+{
+  "steps_certified_on_an_unimplemented_gate": 0,
+  "step_count": 13,
+  "steps_probed": 13,
+  "uncertifiable_exit_code": 3,
+  "shortfalls": [],
+  "probes": [
+    {
+      "step": "identify",
+      "n": 0,
+      "gate_state": "implemented",
+      "gate_metric": "cross_user_leaks == 0.0",
+      "gate_owner": "S3",
+      "certifiable": true,
+      "expected_exit": 0
+    },
+    {
+      "step": "intake",
+      "n": 1,
+      "gate_state": "implemented",
+      "gate_metric": "intake_field_provenance == 1.0",
+      "gate_owner": "S4",
+      "certifiable": true,
+      "expected_exit": 0
+    },
+    {
+      "step": "constraints",
+      "n": 2,
+      "gate_state": "implemented",
+      "gate_metric": "constraint_field_resolution == 1.0",
+      "gate_owner": "T41",
+      "certifiable": true,
+      "expected_exit": 0
+    },
+    {
+      "step": "history",
+      "n": 3,
+      "gate_state": "implemented",
+      "gate_metric": "story_dimension_linkage == 1.0",
+      "gate_owner": "T8",
+      "certifiable": true,
+      "expected_exit": 0
+    },
+    {
+      "step": "traits",
+      "n": 4,
+      "gate_state": "implemented",
+      "gate_metric": "trait_evidence_sufficiency == 1.0",
+      "gate_owner": "T49",
+      "certifiable": true,
+      "expected_exit": 0
+    },
+    {
+      "step": "reactions",
+      "n": 5,
+      "gate_state": "not_implemented",
+      "gate_metric": "elicitation_eval_overlap == 0.0",
+      "gate_owner": "T9",
+      "certifiable": false,
+      "expected_exit": 3
+    },
+    {
+      "step": "preferences",
+      "n": 6,
+      "gate_state": "not_implemented",
+      "gate_metric": "weight_salary_equivalent_roundtrip_error <= 0.01",
+      "gate_owner": "T10",
+      "certifiable": false,
+      "expected_exit": 3
+    },
+    {
+      "step": "sourcing",
+      "n": 7,
+      "gate_state": "implemented",
+      "gate_metric": "offer_schema_violations == 0.0",
+      "gate_owner": "T11",
+      "certifiable": true,
+      "expected_exit": 0
+    },
+    {
+      "step": "understanding",
+      "n": 8,
+      "gate_state": "not_implemented",
+      "gate_metric": "extraction_macro_f1 >= 0.75",
+      "gate_owner": "T15",
+      "certifiable": false,
+      "expected_exit": 3
+    },
+    {
+      "step": "ranking",
+      "n": 9,
+      "gate_state": "not_implemented",
+      "gate_metric": "explained_fraction == 1.0",
+      "gate_owner": "T19",
+      "certifiable": false,
+      "expected_exit": 3
+    },
+    {
+      "step": "feedback",
+      "n": 10,
+      "gate_state": "not_implemented",
+      "gate_metric": "feedback_traceability == 1.0",
+      "gate_owner": "T21",
+      "certifiable": false,
+      "expected_exit": 3
+    },
+    {
+      "step": "application",
+      "n": 11,
+      "gate_state": "not_implemented",
+      "gate_metric": "cv_generation_traceability == 1.0",
+      "gate_owner": "T45",
+      "certifiable": false,
+      "expected_exit": 3
+    },
+    {
+      "step": "interview_log",
+      "n": 12,
+      "gate_state": "not_implemented",
+      "gate_metric": "interview_lesson_linkage == 1.0",
+      "gate_owner": "S6",
+      "certifiable": false,
+      "expected_exit": 3
+    }
+  ]
+}

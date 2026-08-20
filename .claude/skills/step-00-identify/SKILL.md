@@ -89,9 +89,15 @@ this skill's own checkpoint script. It reads the candidate's
 `session/state.json` (T35) and profile tree (T34) and reports whether this step's *machine-visible*
 half of the stop rule is met — every artefact `identify` produces is present, and nothing is
 left outstanding in the recorded position — never by asking the model to eyeball the transcript
-and decide. Exit 0 means that half is satisfied; exit 1 means it is not (still open, or blocked on
-a missing input); exit 2 means the candidate or step could not be read. The script writes its
-result to the candidate's own tree at `session/checkpoint-identify.json`, never to a shared or
+and decide.
+
+Exit 0 means that half is satisfied *and* this step's acceptance gate is built, so the run
+may be read as the step having passed. Exit 1 means coverage is not met (still open, or
+blocked on a missing input). Exit 2 means the candidate or step could not be read. Exit 3
+means coverage is met but the gate is not built, so the step cannot be certified — a
+covered step is not a passed one (D-21).
+
+The script writes its result to the candidate's own tree at `session/checkpoint-identify.json`, never to a shared or
 global path.
 
 ## Gotchas

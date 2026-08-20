@@ -23,8 +23,11 @@ The profiles root defaults to the candidate store resolved from `$INTEGRAL_HOME`
 (`integral.state_home`), which refuses any path inside a git work tree — candidate
 state never lives in the clone (T51, `docs/distribution.md` §2).
 
-Exit codes: 0 the step's machine-visible coverage is met; 1 it is not (still open, or
-blocked on a missing input); 2 the candidate or step could not be read at all.
+Exit codes: 0 coverage is met *and* the step's acceptance gate is built, so a caller
+may read this as the step having passed; 1 coverage is not met (still open, or blocked on
+a missing input); 2 the candidate or step could not be read at all; 3 coverage is met but
+the gate is not built, so the step cannot be certified (D-21). Nothing but 0 may be read
+as "this step passed" — a gate that does not exist certifies nothing.
 """
 
 from __future__ import annotations
@@ -45,6 +48,11 @@ from integral.state_home import (  # noqa: E402
     StateHomeRefused,
     ensure_outside_a_work_tree,
     profiles_root,
+)
+from integral.step_gates import (  # noqa: E402
+    certifiable,
+    certification_note,
+    checkpoint_exit,
 )
 from integral.step_runtime import (  # noqa: E402
     ProfileView,
@@ -103,6 +111,10 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         "position_outstanding": outstanding,
         "started": started,
         "coverage_met": coverage_met,
+        # Whether a met checkpoint may be read as the step having passed. It is
+        # not implied by `coverage_met`: coverage counts artefacts, and the gate
+        # measures whether they are any good (D-21).
+        "certifiable": certifiable(step),
         "sufficiency": sufficiency(view, steps),
         "gate_metric": f"{step.gate.metric} {step.gate.op} {step.gate.threshold}",
         "gate_owner": step.gate.task,
@@ -113,6 +125,7 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
             f"It is not the {step.gate.metric} gate, which {step.gate.task} owns and "
             "measures separately."
         ),
+        "certification_note": (None if certifiable(step) else certification_note(step)),
     }
     store.write_json(result, "session", f"checkpoint-{STEP_ID}.json")
     return result
@@ -163,7 +176,12 @@ def main(argv: list[str] | None = None) -> int:
     if not result["runnable"]:
         print(f"{STEP_ID} is not runnable: missing {result['missing_inputs']}", file=sys.stderr)
         return 1
-    return 0 if result["coverage_met"] else 1
+    if result["certification_note"] and result["coverage_met"]:
+        print(result["certification_note"], file=sys.stderr)
+    # One shared decision, never re-spelled here: thirteen copies of this script
+    # each re-deriving their own exit code is how most of them came to exit 0 for
+    # a gate that does not exist (D-21).
+    return checkpoint_exit(result)
 
 
 if __name__ == "__main__":

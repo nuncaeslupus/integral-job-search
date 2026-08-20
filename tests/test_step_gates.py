@@ -17,9 +17,12 @@ from pathlib import Path
 
 import pytest
 
-from integral.process_spec import StepList, load_steps
+from integral.process_spec import Step, StepList, load_steps
 from integral.step_gates import (
+    UNCERTIFIABLE,
     apply_states,
+    certifiable,
+    checkpoint_exit,
     derive_state,
     drift,
     evidence_path,
@@ -219,3 +222,36 @@ def test_the_measurement_counts_drift_rather_than_restating_the_field() -> None:
     measured = measure()
     assert measured["step_gate_state_drift"] == len(measured["drift"])
     assert len(measured["implemented"]) + len(measured["not_implemented"]) == measured["steps_read"]
+
+
+# --- certification (D-21) ---------------------------------------------------
+#
+# `status/plan.md` names these two by name as D-21's check. They are the
+# smallest statement of the rule: a step with no gate is not certified by its
+# checkpoint, and a step with one still is.
+
+
+def _covered(step: Step) -> dict[str, object]:
+    """A checkpoint result for `step` with every artefact present."""
+    return {"runnable": True, "coverage_met": True, "certifiable": certifiable(step)}
+
+
+def _with_state(step_id: str, state: str) -> Step:
+    real = next(step for step in load_steps().steps if step.id == step_id)
+    return real.model_copy(update={"gate": real.gate.model_copy(update={"state": state})})
+
+
+def test_a_step_with_an_unimplemented_gate_is_not_reported_as_met() -> None:
+    """Coverage may be met; the step is not certified, and the exit code says so."""
+    step = _with_state("ranking", "not_implemented")
+    result = _covered(step)
+    assert result["coverage_met"] is True
+    assert certifiable(step) is False
+    assert checkpoint_exit(result) == UNCERTIFIABLE
+
+
+def test_an_implemented_gate_still_certifies() -> None:
+    """The refusal has to be narrow, or it says nothing about any particular step."""
+    step = _with_state("ranking", "implemented")
+    assert certifiable(step) is True
+    assert checkpoint_exit(_covered(step)) == 0

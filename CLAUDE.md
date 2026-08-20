@@ -20,6 +20,7 @@ Every session, without waiting to be asked:
 6. After any session with tasks: update `arsenal/session/handover.md`.
 
 @claude-arsenal/AGENTS.md
+<!-- /claude-arsenal: auto-managed -->
 
 ## This surface has no scriptable GitHub channel
 
