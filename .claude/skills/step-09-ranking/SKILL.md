@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Scoring and ordering them against what you've told me — one moment."
+…then, once the work is finished…
+"Thanks for waiting — here's the order, and why. …"
 ```
 
 **Never:**

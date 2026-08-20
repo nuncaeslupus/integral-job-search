@@ -38,6 +38,8 @@ In this step that sounds like:
 
 ```text
 "Writing that up while it's fresh — one moment."
+…then, once the work is finished…
+"That's it recorded. …"
 ```
 
 **Never:**

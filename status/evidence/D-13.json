@@ -15,6 +15,9 @@
       "disclosures": [
         "\"Nice to meet you, Marcos. Let me get your profile set up — one moment.\""
       ],
+      "completions": [
+        "\"Thanks for waiting. Here's how this works: …\""
+      ],
       "states_the_rule": true,
       "first_contact": true,
       "acknowledges_first": true,
@@ -29,6 +32,9 @@
       "spoken_examples": 1,
       "disclosures": [
         "\"Let me read that properly and pull out what's in it — one moment.\""
+      ],
+      "completions": [
+        "\"Thanks for waiting — that's your history in. …\""
       ],
       "states_the_rule": true,
       "first_contact": false,
@@ -45,6 +51,9 @@
       "disclosures": [
         "\"Saving those so nothing that breaks them reaches you — one moment.\""
       ],
+      "completions": [
+        "\"All set — those are saved. Nothing that breaks them will reach you. …\""
+      ],
       "states_the_rule": true,
       "first_contact": false,
       "acknowledges_first": null,
@@ -59,6 +68,9 @@
       "spoken_examples": 1,
       "disclosures": [
         "\"Let me write that one down before we carry on — a moment.\""
+      ],
+      "completions": [
+        "\"That's it written down. …\""
       ],
       "states_the_rule": true,
       "first_contact": false,
@@ -75,6 +87,9 @@
       "disclosures": [
         "\"Scoring what you've told me against the traits — bear with me a moment.\""
       ],
+      "completions": [
+        "\"Thanks for waiting. Here's what came out of that: …\""
+      ],
       "states_the_rule": true,
       "first_contact": false,
       "acknowledges_first": null,
@@ -89,6 +104,9 @@
       "spoken_examples": 1,
       "disclosures": [
         "\"Pulling up a handful of real adverts for you to react to — one moment.\""
+      ],
+      "completions": [
+        "\"Right, that's a handful ready. …\""
       ],
       "states_the_rule": true,
       "first_contact": false,
@@ -105,6 +123,9 @@
       "disclosures": [
         "\"Turning those into weights now — one moment.\""
       ],
+      "completions": [
+        "\"All set — that's your weights. …\""
+      ],
       "states_the_rule": true,
       "first_contact": false,
       "acknowledges_first": null,
@@ -119,6 +140,9 @@
       "spoken_examples": 1,
       "disclosures": [
         "\"Searching the boards with your constraints on — this takes a moment.\""
+      ],
+      "completions": [
+        "\"Thanks for waiting — here's what came back. …\""
       ],
       "states_the_rule": true,
       "first_contact": false,
@@ -135,6 +159,9 @@
       "disclosures": [
         "\"Reading those adverts properly — a moment while I go through them.\""
       ],
+      "completions": [
+        "\"That's them read. …\""
+      ],
       "states_the_rule": true,
       "first_contact": false,
       "acknowledges_first": null,
@@ -149,6 +176,9 @@
       "spoken_examples": 1,
       "disclosures": [
         "\"Scoring and ordering them against what you've told me — one moment.\""
+      ],
+      "completions": [
+        "\"Thanks for waiting — here's the order, and why. …\""
       ],
       "states_the_rule": true,
       "first_contact": false,
@@ -165,6 +195,9 @@
       "disclosures": [
         "\"Re-ranking with that in — one moment.\""
       ],
+      "completions": [
+        "\"All set — that's the new order. …\""
+      ],
       "states_the_rule": true,
       "first_contact": false,
       "acknowledges_first": null,
@@ -178,7 +211,11 @@
       "has_protocol_section": true,
       "spoken_examples": 1,
       "disclosures": [
-        "\"Drafting the CV and the letter for this one — this takes a moment.\""
+        "\"Drafting the CV and the letter for this one — this takes a moment.\"",
+        "\"Thanks for waiting — here's the draft. …\""
+      ],
+      "completions": [
+        "\"Thanks for waiting — here's the draft. …\""
       ],
       "states_the_rule": true,
       "first_contact": false,
@@ -194,6 +231,9 @@
       "spoken_examples": 1,
       "disclosures": [
         "\"Writing that up while it's fresh — one moment.\""
+      ],
+      "completions": [
+        "\"That's it recorded. …\""
       ],
       "states_the_rule": true,
       "first_contact": false,

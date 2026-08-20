@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Searching the boards with your constraints on — this takes a moment."
+…then, once the work is finished…
+"Thanks for waiting — here's what came back. …"
 ```
 
 **Never:**

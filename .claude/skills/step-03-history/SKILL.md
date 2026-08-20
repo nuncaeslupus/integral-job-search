@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Let me write that one down before we carry on — a moment."
+…then, once the work is finished…
+"That's it written down. …"
 ```
 
 **Never:**

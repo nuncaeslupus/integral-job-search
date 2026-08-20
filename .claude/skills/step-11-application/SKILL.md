@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Drafting the CV and the letter for this one — this takes a moment."
+…then, once the work is finished…
+"Thanks for waiting — here's the draft. …"
 ```
 
 **Never:**

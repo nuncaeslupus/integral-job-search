@@ -852,7 +852,11 @@ _CONFORMING_RULE = (
     "**Say what is happening before a silence.** Work the candidate waits through is named\n"
     "**before** it starts, in one short line, and closed when it finishes.\n"
 )
-_CONFORMING_EXAMPLE = '```text\n"Saving that now — one moment."\n```'
+_CONFORMING_EXAMPLE = (
+    '```text\n"Saving that now — one moment."\n'
+    '…then, once the work is finished…\n'
+    '"All set — that\'s saved."\n```'
+)
 
 
 def test_every_step_skill_requires_acknowledging_before_a_silent_setup() -> None:
@@ -872,6 +876,7 @@ def test_every_step_skill_requires_acknowledging_before_a_silent_setup() -> None
     for reading in measured["readings"]:
         assert reading["states_the_rule"], f"{reading['step']} states no rule to govern the silence"
         assert reading["disclosures"], f"{reading['step']} demonstrates the disclosure nowhere"
+        assert reading["completions"], f"{reading['step']} never closes the pause it opened"
 
 
 def test_the_silent_library_is_counted(tmp_path: Path, steps: StepList) -> None:
@@ -925,6 +930,7 @@ def test_the_rule_sentence_does_not_trip_the_check_it_satisfies(
     reading = step_narration.read_narration(step, skills_dir)
     assert reading.states_the_rule
     assert reading.disclosures == ('"Saving that now — one moment."',)
+    assert reading.completions == ('"All set — that\'s saved."',)
     assert not reading.lacks_the_rule
 
 
@@ -974,7 +980,7 @@ def test_first_contact_must_acknowledge_before_the_setup(
         step,
         _CONFORMING_RULE
         + '\n```text\n"Nice to meet you, Marcos. Let me get your profile'
-        + ' set up — one moment."\n```',
+        + ' set up — one moment."\n"Thanks for waiting. Here\'s how this works."\n```',
     )
     ok = step_narration.read_narration(step, before)
     assert ok.acknowledges_first is True
@@ -1099,16 +1105,100 @@ def test_narration_evidence_matches_measure(tmp_path: Path) -> None:
     assert measured["step_skills_without_a_progress_disclosure_rule"] == 0
 
 
-def test_both_specs_carry_the_narration_rule() -> None:
+def _rule_paragraph(document: Path) -> str:
+    """The paragraph of `document` that carries the narration rule."""
+    text = document.read_text(encoding="utf-8")
+    for paragraph in re.split(r"\n(?=- \*\*)|\n\s*\n", text):
+        if step_narration.CROSS_CUTTING_RULE_RE.search(paragraph):
+            return paragraph
+    return ""
+
+
+def test_both_specs_state_the_narration_rule_not_merely_its_name() -> None:
     """The two documents agree, which is the whole of D-15's root cause.
 
     D-15 was one rule stated in `spec-v2-steps.md` and contradicted in
     `spec-v2-process.md` §3.2, with the live session sitting between them. The
-    same rule is therefore added to both at once, and this test is what keeps
-    them from drifting apart again.
+    same rule is therefore added to both at once.
+
+    Searching both documents for the rule's *title* is not enough, and review
+    on PR #105 said so: either document could reverse or gut the substantive
+    requirement while keeping the phrase, and a test looking only for the
+    phrase would still pass. So each document is held to the same standard the
+    skills are — `_states_the_rule`, which requires governing language with the
+    title struck out — and to both halves of the requirement by name.
     """
+    for document in (Path("status/spec-v2-steps.md"), Path("status/spec-v2-process.md")):
+        paragraph = _rule_paragraph(document)
+        assert paragraph, f"{document} no longer carries the narration rule at all"
+        assert step_narration._states_the_rule(paragraph), (
+            f"{document} names the rule but no longer governs anything with it"
+        )
+        # Both halves, by name: the work is announced before it starts...
+        assert re.search(r"\bbefore\b", paragraph), f"{document} drops the ordering requirement"
+        # ...and the pause is closed when it ends.
+        assert re.search(
+            r"clos(?:e|ed|ing)\s+when\s+it\s+(?:finishes|ends)", paragraph
+        ), f"{document} drops the requirement to close the pause"
+        # ...and the person comes first, which is the reported defect itself.
+        assert re.search(r"\bfirst\b", paragraph), (
+            f"{document} drops the acknowledge-first ordering"
+        )
+
     steps_doc = Path("status/spec-v2-steps.md").read_text(encoding="utf-8")
-    process_doc = Path("status/spec-v2-process.md").read_text(encoding="utf-8")
-    assert step_narration.CROSS_CUTTING_RULE_RE.search(steps_doc)
-    assert step_narration.CROSS_CUTTING_RULE_RE.search(process_doc)
     assert "Five rules apply to every step" in steps_doc
+
+
+# --- D-13 review round (Qodo, PR #105) -------------------------------------
+
+
+def test_the_rule_heading_alone_does_not_state_the_rule() -> None:
+    """The phrase naming a rule may not also be the evidence it governs anything.
+
+    "Say what is happening before a silence" carries a subject token *and* the
+    governor `before`. So a Protocol section stripped down to nothing but the
+    bold heading — every word of the actual instruction deleted — satisfied
+    both halves of limb 1 and the gate reported conformance.
+
+    That is the self-trip this module already avoided once between its limbs,
+    recurring *inside* one of them. Governance is now searched for with the
+    title struck out.
+    """
+    assert not step_narration._states_the_rule("**Say what is happening before a silence.**")
+    assert not step_narration._states_the_rule(
+        "**Say what is happening before a silence.** It is a good idea."
+    )
+    assert step_narration._states_the_rule(
+        "**Say what is happening before a silence.** Work the candidate waits through is "
+        "named before it starts, and never after."
+    )
+
+
+def test_an_example_that_never_closes_the_pause_is_counted(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """Opening a silence and never coming back out of it is half a disclosure.
+
+    The rule requires the work to be named before it starts **and closed when
+    it finishes**, and the owner's correction names both halves. The first cut
+    demonstrated only the opening half in twelve of thirteen skills and passed
+    its own gate — a prose requirement nothing measured. On this task above
+    all, an undemonstrated half is an unimplemented one.
+    """
+    step = next(s for s in steps.steps if s.id == "traits")
+    skills_dir = _protocol_skill(
+        tmp_path,
+        step,
+        _CONFORMING_RULE + '\n```text\n"Saving that now — one moment."\n```',
+    )
+    reading = step_narration.read_narration(step, skills_dir)
+    assert reading.disclosures
+    assert reading.completions == ()
+    assert reading.lacks_the_rule
+    assert any("closing the pause" in reason for reason in reading.reasons)
+
+
+def test_every_step_skill_shows_the_candidate_the_pause_ending() -> None:
+    """The committed library closes every pause it opens, in its own words."""
+    for reading in step_narration.probe():
+        assert reading.completions, f"{reading.step} opens a silence it never closes"

@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Re-ranking with that in — one moment."
+…then, once the work is finished…
+"All set — that's the new order. …"
 ```
 
 **Never:**

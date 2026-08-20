@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Turning those into weights now — one moment."
+…then, once the work is finished…
+"All set — that's your weights. …"
 ```
 
 **Never:**

@@ -38,6 +38,8 @@ In this step that sounds like:
 
 ```text
 "Reading those adverts properly — a moment while I go through them."
+…then, once the work is finished…
+"That's them read. …"
 ```
 
 **Never:**

@@ -36,22 +36,23 @@ uv run --extra dev pytest tests/test_step_skills.py -q
 The number is measured over the step-skill library itself — the prose actually
 put in front of the model — rather than over a restatement of the rule.
 
-A skill counts as **lacking a progress disclosure rule** on any of three limbs:
+A skill counts as **lacking a progress disclosure rule** on any of four limbs:
 
 1. its `## Protocol` prose carries no rule governing what is said before work
    the candidate waits through;
 2. it carries no spoken example performing the disclosure — a line naming the
-   work *and* marking the wait, which is the text a model copies; or
-3. at step 0, where the candidate first says who they are, the spoken example
+   work *and* marking the wait, which is the text a model copies;
+3. it never closes the pause it opened; or
+4. at step 0, where the candidate first says who they are, the spoken example
    names the setup before it acknowledges them.
 
-Limbs 1 and 2 read different halves of the section — limb 1 only the prose,
-limb 2 only the fenced blocks. Without that split the sentence stating the rule
-would trip the check it satisfies, and no library could pass.
+Limb 1 reads only the prose and limbs 2 to 4 only the fenced blocks. Without
+that split the sentence stating the rule would trip the check it satisfies, and
+no library could pass.
 
 Verified by running the gate against the pre-fix library (`--skills-dir` over a
-`git archive HEAD` copy): **13** offenders, all thirteen failing both limb 1 and
-limb 2, and step 0 additionally failing limb 3. After the fix: 0.
+`git archive HEAD` copy): **13** offenders, all thirteen failing limbs 1, 2 and
+3, and step 0 additionally failing limb 4. After the fix: 0.
 
 ## What the spec requires
 
@@ -93,6 +94,35 @@ the rule rather than the behaviour and reported twelve false offenders.
 That is the self-trip `session_exit` split its two limbs to avoid, in a second
 disguise — and the general lesson is that a check whose subject can be named by
 the very sentence that satisfies it is not a check.
+
+## The review round, and the same lesson a third time
+
+Qodo's review on [#105](https://github.com/nuncaeslupus/job-search/pull/105)
+found three real defects, and two of them are that same sentence again.
+
+- **The rule's heading satisfied limb 1 by itself.** "Say what is happening
+  before a silence" carries a subject token *and* the governor `before`, so a
+  Protocol section stripped to nothing but the bold heading — every word of the
+  instruction deleted — passed `_states_the_rule`. Governance is now searched
+  for with the title struck out: the phrase that *names* a rule may never also
+  be the evidence that it constrains anything.
+- **Twelve of thirteen examples opened a silence and never closed it.** The
+  rule requires the work to be named before it starts *and* closed when it
+  finishes, and the owner's correction names both halves — "Thanks for waiting,
+  XXX / Here's how this works...". Only step 0 demonstrated the return, and the
+  gate passed anyway, because nothing measured the closing half. On this task
+  above all, an undemonstrated half is an unimplemented one: the whole finding
+  is that the model reproduces the example it was given. Limb 3 now measures
+  it, and all thirteen examples close their pause.
+- **The spec-drift test read only the rule's title**, so either document could
+  reverse the substantive requirement and still pass. Each document is now held
+  to the same `_states_the_rule` standard the skills are, and to both halves of
+  the requirement by name.
+
+Three findings, one shape: **a requirement stated in prose and checked by its
+own name is not checked.** It has now appeared at the boundary between limbs
+(D-15), inside a limb's subject detection (the twelve false offenders), inside a
+limb's governance detection (the heading), and in a test over the specs.
 
 ## Location
 

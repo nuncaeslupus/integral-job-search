@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Let me read that properly and pull out what's in it — one moment."
+…then, once the work is finished…
+"Thanks for waiting — that's your history in. …"
 ```
 
 **Never:**

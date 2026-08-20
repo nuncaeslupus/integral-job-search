@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Pulling up a handful of real adverts for you to react to — one moment."
+…then, once the work is finished…
+"Right, that's a handful ready. …"
 ```
 
 **Never:**

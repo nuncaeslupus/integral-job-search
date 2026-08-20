@@ -45,15 +45,19 @@ holds:
    the candidate waits through — the limb the whole library failed on the day
    of the session;
 2. it carries no spoken example performing the disclosure — a line naming the
-   work *and* marking the wait, which is the text a model copies; or
-3. at the step where the candidate first says who they are, its spoken
+   work *and* marking the wait, which is the text a model copies;
+3. it never closes the pause it opened — the rule requires the work to be
+   named before it starts *and* closed when it finishes, and the owner's
+   correction names both halves; or
+4. at the step where the candidate first says who they are, its spoken
    example names the work before acknowledging the person. That is the
    reported defect in its exact shape: the acknowledgement is not optional and
    it is not afterwards.
 
-Limbs 1 and 2 read different halves of the section — limb 1 only the prose,
-limb 2 only the fenced blocks — for the reason `session_exit` records: without
-the split, the sentence stating the rule would trip the check it satisfies.
+Limb 1 reads only the prose and limbs 2 to 4 only the fenced blocks, for the
+reason `session_exit` records: without the split, the sentence stating the rule
+would trip the check it satisfies. The same hazard recurs *inside* limb 1, and
+review on PR #105 found it there — see `_GOVERNS_RE`.
 
 ## Why the spec is read rather than restated
 
@@ -117,6 +121,14 @@ _DISCLOSURE_SUBJECT_RE = re.compile(
 # Ordering and prohibition. `before` and `first` matter as much as `never`
 # here: the defect this gate exists for is not that the tool said nothing, but
 # that it said it afterwards.
+#
+# **Governance is looked for with the rule's own title removed**, and that is
+# not a detail. The title — "Say what is happening before a silence" — contains
+# a subject token *and* the governor `before`, so a Protocol section carrying
+# nothing but the bold heading, with every word of the actual instruction
+# deleted, satisfied both halves and reported conformance (found by review on
+# PR #105). The phrase that *names* a rule may never also be the evidence that
+# the rule constrains anything.
 _GOVERNS_RE = re.compile(
     r"\b(?:never|must\s+not|do(?:es)?\s+not|always|before|first(?:,|\s)|only\s+(?:when|if))",
     re.I,
@@ -145,7 +157,29 @@ _WORK_MARKER_RE = re.compile(
     re.I,
 )
 
-# --- limb 3: the acknowledgement, at first contact --------------------------
+# --- limb 3: closing the pause ---------------------------------------------
+#
+# The rule requires the work to be named before it starts **and closed when it
+# finishes**, and the owner's correction names both halves explicitly ("Thanks
+# for waiting, XXX / Here's how this works..."). The first cut demonstrated
+# only the opening half in twelve of the thirteen skills, and the gate passed
+# anyway — a prose requirement nothing measured (found by review on PR #105).
+#
+# On this task above all, an undemonstrated half is an unimplemented one: the
+# whole finding D-13 records is that the model reproduces the example it was
+# given.
+_COMPLETION_RE = re.compile(
+    r"\b(?:"
+    r"thanks?\s+(?:you\s+)?for\s+waiting"
+    r"|that'?s\s+(?:it\s+|that\s+|them\s+|those\s+|all\s+)?"
+    r"(?:saved|done|written|recorded|sorted|read|noted|set\s+up)\b"
+    r"|all\s+(?:set|done)\b|there\s+we\s+go\b|back\s+with\s+you\b"
+    r"|right,\s+(?:that'?s|so)\b"
+    r")",
+    re.I,
+)
+
+# --- limb 4: the acknowledgement, at first contact --------------------------
 #
 # Which step this applies to is read from the settled step list — `n == 0` —
 # and deliberately **not** from a regex over the skill's prose. The first cut
@@ -180,6 +214,7 @@ class NarrationReading(Strict):
     has_protocol_section: bool = False
     spoken_examples: int = 0
     disclosures: tuple[str, ...] = ()
+    completions: tuple[str, ...] = ()
     states_the_rule: bool = False
     first_contact: bool = False
     acknowledges_first: bool | None = None
@@ -205,10 +240,17 @@ def protocol_section(text: str) -> str | None:
 
 
 def _states_the_rule(prose: str) -> bool:
-    """Does one paragraph both name the silence and govern what is said in it?"""
+    """Does one paragraph both name the silence and govern what is said in it?
+
+    The governing half is searched for in the paragraph **with the rule's title
+    phrase struck out**, so that repeating the heading is never itself the
+    evidence that the heading is obeyed.
+    """
     for paragraph in re.split(r"\n\s*\n", prose):
         joined = " ".join(paragraph.split())
-        if _DISCLOSURE_SUBJECT_RE.search(joined) and _GOVERNS_RE.search(joined):
+        if not _DISCLOSURE_SUBJECT_RE.search(joined):
+            continue
+        if _GOVERNS_RE.search(CROSS_CUTTING_RULE_RE.sub(" ", joined)):
             return True
     return False
 
@@ -222,6 +264,17 @@ def _disclosures(spoken: tuple[str, ...]) -> tuple[str, ...]:
             if not line:
                 continue
             if _WAIT_MARKER_RE.search(line) and _WORK_MARKER_RE.search(line):
+                found.append(line)
+    return tuple(found)
+
+
+def _completions(spoken: tuple[str, ...]) -> tuple[str, ...]:
+    """Every spoken line that comes back to the candidate once the work is done."""
+    found: list[str] = []
+    for block in spoken:
+        for raw_line in block.splitlines():
+            line = raw_line.strip()
+            if line and _COMPLETION_RE.search(line):
                 found.append(line)
     return tuple(found)
 
@@ -284,6 +337,7 @@ def read_narration(step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR) -> Narrati
 
     spoken, prose = split_spoken_and_prose(section)
     disclosures = _disclosures(spoken)
+    completions = _completions(spoken)
     states_rule = _states_the_rule(prose)
     first_contact = step.n == 0
     acknowledges_first = _acknowledges_before_the_work(spoken) if first_contact else None
@@ -299,6 +353,11 @@ def read_narration(step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR) -> Narrati
             "carries no spoken example naming the work and marking the wait, so the text a "
             "model copies still opens the silence without a word"
         )
+    if not completions:
+        reasons.append(
+            "carries no spoken line closing the pause, so the example demonstrates opening a "
+            "silence and never coming back out of it"
+        )
     if first_contact and not acknowledges_first:
         reasons.append(
             "is where the candidate first says who they are, and its spoken example names the "
@@ -313,6 +372,7 @@ def read_narration(step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR) -> Narrati
         has_protocol_section=True,
         spoken_examples=len(spoken),
         disclosures=disclosures,
+        completions=completions,
         states_the_rule=states_rule,
         first_contact=first_contact,
         acknowledges_first=acknowledges_first,

@@ -39,6 +39,8 @@ In this step that sounds like:
 
 ```text
 "Scoring what you've told me against the traits — bear with me a moment."
+…then, once the work is finished…
+"Thanks for waiting. Here's what came out of that: …"
 ```
 
 **Never:**

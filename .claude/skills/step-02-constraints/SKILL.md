@@ -40,6 +40,8 @@ In this step that sounds like:
 
 ```text
 "Saving those so nothing that breaks them reaches you — one moment."
+…then, once the work is finished…
+"All set — those are saved. Nothing that breaks them will reach you. …"
 ```
 
 **Never:**
