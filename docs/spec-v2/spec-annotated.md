@@ -1,6 +1,6 @@
 # Job Search — Specification v2 — Specification (annotated edition)
 
-> Generated 2026-08-17. This is the specification with a **note slot** after every section. Read it in any Markdown app. To annotate, replace the `_(your notes…)_` placeholder under any section. When done, send the file back — notes are acted on.
+> Generated 2026-08-20. This is the specification with a **note slot** after every section. Read it in any Markdown app. To annotate, replace the `_(your notes…)_` placeholder under any section. When done, send the file back — notes are acted on.
 
 ---
 
@@ -728,8 +728,15 @@ The rest:
 Multi-user from day one (brief §1.3). A handful of people, file-based, not a
 multi-tenant service.
 
+The tree's root is **`$INTEGRAL_HOME/profiles/`**, not a directory inside the
+clone — `$INTEGRAL_HOME` defaults to `~/.integral-job-search/` and respects
+`$XDG_DATA_HOME` where it is set (`docs/distribution.md` §2, made mechanical by
+T51 in `jobsearch.state_home`). The resolver **refuses** to return any path
+inside a git work tree, with `--dev` / `INTEGRAL_DEV=1` as the single explicit
+escape for work on the tool itself.
+
 ```
-profiles/<handle>/
+$INTEGRAL_HOME/profiles/<handle>/
   identity.json                 handle, display name, locale, created_at
   session/
     state.json                  current step, position, pending steps, sufficiency
@@ -751,7 +758,9 @@ profiles/<handle>/
   interviews/<offer_id>/        questions asked, outcome, lessons — immutable
 ```
 
-`profiles/` is gitignored (T1) and stays so. Every derived file is regenerable
+`profiles/` is gitignored (T1) and stays so — the cheap belt behind the
+resolver's braces, since a tree resolved outside every work tree is not there
+to stage. Every derived file is regenerable
 from `evidence.jsonl` plus the offer store; **nothing derived is ever edited in
 place**, because an edit that is not an evidence row is lost at the next
 rebuild and produces a profile that cannot be explained.
@@ -1003,8 +1012,8 @@ Every step in §2 names one gate metric. Ten reuse metrics that already exist in
 | metric | step | owner |
 |--------|------|-------|
 | `intake_field_provenance` | 1 Intake | S4 — every field in `master.json` traces to a document span or a conversation turn |
-| `constraint_field_resolution` | 2 Constraints | T24 — every constraint field is `stated`, `declined` or `unknown`, never blank |
-| `trait_evidence_sufficiency` | 4 Traits | T28 — every trait carries either a score with ≥2 independent episodes, or `insufficient` |
+| `constraint_field_resolution` | 2 Constraints | T41 — every constraint field is `stated`, `declined` or `unknown`, never blank (the field set itself is pinned by T24) |
+| `trait_evidence_sufficiency` | 4 Traits | T49 — every trait carries either a score with ≥2 independent episodes, or `insufficient` |
 | `interview_lesson_linkage` | 12 Interview log | S6 (to be seeded) — every interview produces ≥1 evidence row linked to a dimension or a story |
 
 Every metric is currently `not_implemented` at the step level, which is a
@@ -1066,13 +1075,17 @@ work look complete.
    relevant — is settled; the source list is not.
 4. **CV templates** remain out of v1 (brief §2.7). The store is designed to feed
    templates rather than one layout, which is all that is owed now.
-5. **How this is distributed** is undecided, and it decides one thing here. A
-   public repository with private per-person copies, a fork per candidate, or an
-   application with a UI all keep `profiles/` off the internet in different
-   ways. `.gitignore` is sufficient for a repository someone clones; it is not a
-   plan for anything else. The tree in §6 does not depend on the answer, so the
-   question can wait — but not past the point where someone other than the owner
-   installs this.
+5. ~~**How this is distributed** is undecided~~ — **settled 2026-08-18, and
+   recorded in `docs/distribution.md`.** The tool is installed by cloning the
+   repository, and the per-user tree of §6 resolves from `$INTEGRAL_HOME`
+   (default `~/.integral-job-search/`) rather than from a path inside the
+   clone — a resolver that refuses any location inside a git work tree, so
+   "candidate data never reaches a repository" is a property of the code and not
+   of a `.gitignore` line. As anticipated here, the tree in §6 did not depend on
+   the answer: nothing in it changes, only where its root resolves from.
+   Job-site connectors live in a separate repository and enter as a dependency;
+   contributing one is offered, disclosed in full, and may be declined without
+   consequence (§5.4's non-insistence rule, applied to contribution).
 6. **Which sources Sourcing uses** (§2.6) is the same shape of question as (3):
    the requirement — specialised boards, cross-border reach, the payment and tax
    questions asked at the right moment — is settled, and the list of connectors

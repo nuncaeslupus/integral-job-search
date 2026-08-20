@@ -58,3 +58,4 @@ session-end = "handoff"
 # listing-budget finding here by design; the total it prints is the number our
 # own measurement is asserted against.
 listing-budget = 13000
+queue-automation = true
