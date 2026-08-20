@@ -1,0 +1,33 @@
+# Search exclusions (ripgrep — what Claude Code's Grep and Glob run on).
+#
+# These trees are vendored or generated: nothing here is ours to change, and a
+# fix applied inside one is reverted by the next `make update-skills` /
+# `make arsenal-upgrade` / `init.py` refresh. `pyproject.toml` already excludes
+# the same paths from ruff and mypy for exactly that reason — this is the third
+# tool that should not be reading them.
+#
+# The cost is not only noise. `vendor/claude-arsenal/docs/research/` holds a
+# 2.9MB research document whose lines run to several thousand words each, so a
+# single repository-wide grep that happens to match inside it returns thousands
+# of tokens of irrelevant prose in one result.
+#
+# `!` re-includes a path. Search a vendored tree deliberately with
+# `rg --no-ignore-vcs -u` or by naming its directory as the search path.
+
+vendor/
+claude-arsenal/bin/
+claude-arsenal/scripts/
+.claude/skills/skill-creator/references/
+
+# Generated readers — the committed HTML/annotated copies of specs that live in
+# source form elsewhere. Matching both means every spec hit is reported twice.
+docs/spec-v2/spec-reader.html
+docs/spec-v2-steps/spec-reader.html
+
+# Caches and build output.
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/

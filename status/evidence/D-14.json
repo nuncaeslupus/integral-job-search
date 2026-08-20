@@ -1,0 +1,154 @@
+{
+  "skills_offering_an_illegal_employment_mode": 0,
+  "steps_checked": 13,
+  "owning_steps": [
+    "constraints"
+  ],
+  "lawful_modes": [
+    "employed",
+    "contracting"
+  ],
+  "unlawful_arrangements": [
+    "falso autónomo",
+    "falso autonomo",
+    "falsos autónomos",
+    "falsos autonomos",
+    "false self-employment",
+    "bogus self-employment"
+  ],
+  "offenders": [],
+  "readings": [
+    {
+      "step": "identify",
+      "n": 0,
+      "skill_dir": "step-00-identify",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "intake",
+      "n": 1,
+      "skill_dir": "step-01-intake",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "constraints",
+      "n": 2,
+      "skill_dir": "step-02-constraints",
+      "skill_md_exists": true,
+      "owns_employment_mode": true,
+      "licensed_mentions": [
+        "- Never offer *falso autónomo* as a mode the candidate might want: it is an illegal arrangement — being engaged as self-employed while working under an employer's direction and hours — and not one of the two recordable modes. It may be asked about as something happening to them now, and named when warning them off an advert; it is never put to them as a choice."
+      ],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "history",
+      "n": 3,
+      "skill_dir": "step-03-history",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "traits",
+      "n": 4,
+      "skill_dir": "step-04-traits",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "reactions",
+      "n": 5,
+      "skill_dir": "step-05-reactions",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "preferences",
+      "n": 6,
+      "skill_dir": "step-06-preferences",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "sourcing",
+      "n": 7,
+      "skill_dir": "step-07-sourcing",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "understanding",
+      "n": 8,
+      "skill_dir": "step-08-understanding",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "ranking",
+      "n": 9,
+      "skill_dir": "step-09-ranking",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "feedback",
+      "n": 10,
+      "skill_dir": "step-10-feedback",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "application",
+      "n": 11,
+      "skill_dir": "step-11-application",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    },
+    {
+      "step": "interview_log",
+      "n": 12,
+      "skill_dir": "step-12-interview-log",
+      "skill_md_exists": true,
+      "owns_employment_mode": false,
+      "licensed_mentions": [],
+      "unlicensed_mentions": [],
+      "reasons": []
+    }
+  ]
+}

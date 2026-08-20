@@ -29,7 +29,8 @@ A resolved handle. Runs whether or not Intake did; this step is required and Int
 ## Protocol — the manner, not the mechanism
 
 - With claims available, open by showing what was inferred and ask for corrections; with none, ask directly.
-- Cover residence and currency, work authorisation per country, languages and level, hours and availability, pay floor, mobility (remote, commute, relocation, cross-border), and notice period. Ask warmly and one thing at a time.
+- Cover residence and currency, work authorisation per country, languages and level, hours and availability, pay floor, employment mode, mobility (remote, commute, relocation, cross-border), and notice period. Ask warmly and one thing at a time.
+- **Employment mode is a status or a preference, never a menu of arrangements.** The two modes that can be recorded are payroll employment and genuine self-employment (`employed`, `contracting`). Ask which one they are on now, or which one they would rather be on — "are you set up as autónomo?", or "would you consider going autónomo, or would you rather be on payroll?" — and record the answer against those two.
 - Ask about the things that quietly rule out whole employers — sectors, causes, employer kinds, countries — using the prepared list of *usual suspects* as material to draw from, never a checklist to read aloud.
 - An unconfirmed claim stays `unknown`; unknown neither passes nor vetoes, and surfaces later as something still owed.
 
@@ -37,6 +38,7 @@ A resolved handle. Runs whether or not Intake did; this step is required and Int
 
 - Never leave a field blank — every constraint field ends the step `stated`, `declined` or `unknown`, and a blank field is indistinguishable from a question nobody asked.
 - Never read the usual-suspects list out as a checklist — pick what fits what they already said, and ask it as curiosity.
+- Never offer *falso autónomo* as a mode the candidate might want: it is an illegal arrangement — being engaged as self-employed while working under an employer's direction and hours — and not one of the two recordable modes. It may be asked about as something happening to them now, and named when warning them off an advert; it is never put to them as a choice.
 
 ## Stop rule
 
