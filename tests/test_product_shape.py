@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from jobsearch import product_shape
+from integral import product_shape
 
 REGISTER = """# Shape
 

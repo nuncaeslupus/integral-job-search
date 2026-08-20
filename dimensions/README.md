@@ -1,7 +1,7 @@
 # Dimension model v0 (T3)
 
 One file per dimension, `dimensions/<id>.yaml`, conforming to
-`status/specification.md` §5.1 and validated by `jobsearch.dimensions`. This is
+`status/specification.md` §5.1 and validated by `integral.dimensions`. This is
 the spine: the questions the elicitation engine asks, the cues extraction reads
 from an ad, the axes the ranker compares on, and later the CV and interview work
 are all projections of these files. Changing an `id` is a breaking change
@@ -209,8 +209,8 @@ list is reported rather than failed so the gaps stay visible.
 ## Working on the model
 
 ```bash
-uv run python -m jobsearch.dimensions status/evidence/T2.json     # schema violations (T2)
-uv run python -m jobsearch.dimensions --coverage status/evidence/T3.json  # extractor coverage (T3)
+uv run python -m integral.dimensions status/evidence/T2.json     # schema violations (T2)
+uv run python -m integral.dimensions --coverage status/evidence/T3.json  # extractor coverage (T3)
 uv run --extra dev pytest tests/test_dimension_model.py tests/test_dimension_content.py -q
 ```
 

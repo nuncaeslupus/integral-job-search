@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.bootstrap import (
+from integral.bootstrap import (
     UV_INSTALLER,
     CommandResult,
     _run,
@@ -414,7 +414,7 @@ def test_bootstrap_imports_without_third_party_dependencies() -> None:
     subprocess half proves the whole import actually completes with `src/` on
     the path and nothing else, which is the situation on a fresh clone.
     """
-    source = (_REPO_ROOT / "src" / "jobsearch" / "bootstrap.py").read_text(encoding="utf-8")
+    source = (_REPO_ROOT / "src" / "integral" / "bootstrap.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     imported: set[str] = set()
     for node in ast.walk(tree):
@@ -423,11 +423,11 @@ def test_bootstrap_imports_without_third_party_dependencies() -> None:
         elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
             imported.add(node.module.split(".")[0])
 
-    third_party = imported - set(sys.stdlib_module_names) - {"jobsearch"}
+    third_party = imported - set(sys.stdlib_module_names) - {"integral"}
     assert not third_party, f"bootstrap must be stdlib-only, but imports {sorted(third_party)}"
 
     completed = subprocess.run(
-        [sys.executable, "-c", "import jobsearch.bootstrap as b; print(b.MARKER_NAME)"],
+        [sys.executable, "-c", "import integral.bootstrap as b; print(b.MARKER_NAME)"],
         cwd=_REPO_ROOT,
         env={"PYTHONPATH": str(_REPO_ROOT / "src"), "PATH": "/usr/bin:/bin"},
         capture_output=True,
@@ -443,9 +443,9 @@ def test_step_zero_bootstraps_before_it_imports_anything_that_needs_pydantic() -
     script = (
         _REPO_ROOT / ".claude" / "skills" / "step-00-identify" / "scripts" / "run_checkpoint.py"
     ).read_text(encoding="utf-8")
-    bootstrap_at = script.index("from jobsearch.bootstrap import ensure_ready")
+    bootstrap_at = script.index("from integral.bootstrap import ensure_ready")
     ensure_at = script.index("ensure_ready(_REPO_ROOT")
-    identity_at = script.index("from jobsearch.identity import")
+    identity_at = script.index("from integral.identity import")
     assert bootstrap_at < ensure_at < identity_at
 
 
@@ -473,7 +473,7 @@ def test_the_hook_does_not_discard_the_announcement() -> None:
     """
     hook = (_REPO_ROOT / "tools" / "bootstrap_hook.sh").read_text(encoding="utf-8")
     invocation = next(
-        line for line in hook.splitlines() if "jobsearch.bootstrap" in line and "python" in line
+        line for line in hook.splitlines() if "integral.bootstrap" in line and "python" in line
     )
     assert ">/dev/null" in invocation, "stdout is a machine status line and may go"
     assert "2>&1" not in invocation and "2>/dev/null" not in invocation
@@ -486,7 +486,7 @@ def test_step_zero_re_execs_into_the_venv_after_installing() -> None:
     ).read_text(encoding="utf-8")
     assert "os.execv" in script
     assert "INTEGRAL_BOOTSTRAP_REEXEC" in script, "and it must not be able to loop"
-    assert script.index("os.execv") < script.index("from jobsearch.identity import")
+    assert script.index("os.execv") < script.index("from integral.identity import")
 
 
 # ---------------------------------------------------------------------------
@@ -535,7 +535,7 @@ def test_the_evidence_is_a_function_of_the_repository_not_of_the_run(tmp_path: P
 @pytest.mark.parametrize("flag", ["--check", "--ensure"])
 def test_the_command_line_exits_zero_on_a_working_checkout(flag: str) -> None:
     completed = subprocess.run(
-        [sys.executable, "-m", "jobsearch.bootstrap", flag],
+        [sys.executable, "-m", "integral.bootstrap", flag],
         cwd=_REPO_ROOT,
         capture_output=True,
         text=True,

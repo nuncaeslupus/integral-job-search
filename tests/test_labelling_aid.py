@@ -8,7 +8,7 @@ mechanically safe:
 * `tools/labelling_page.py` renders every ad and every matched dimension into
   one `file://`-openable page, with the corpus's own text as the only source
   of a "quote" a selection can ever produce.
-* `jobsearch.harness.import_labels` (and its CLI shell, `harness import`)
+* `integral.harness.import_labels` (and its CLI shell, `harness import`)
   applies the JSON batch that page emits with the same verbatim-quote
   strictness as `set`, atomically.
 * the D-2 property (`status/plan.md`): cue highlighting is navigation, never
@@ -27,8 +27,8 @@ from typing import Any
 
 import pytest
 
-from jobsearch.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, load_dimensions
-from jobsearch.harness import (
+from integral.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, load_dimensions
+from integral.harness import (
     DEFAULT_STORE_PATH,
     Label,
     LabelledAd,
@@ -39,8 +39,8 @@ from jobsearch.harness import (
     locate_quote,
     save_store,
 )
-from jobsearch.harness import _main as main
-from jobsearch.suggestions import SuggestionSet
+from integral.harness import _main as main
+from integral.suggestions import SuggestionSet
 
 
 def _load_labelling_page() -> Any:
@@ -183,7 +183,13 @@ def test_the_page_carries_no_cue_data_at_all() -> None:
 
     for dimension in embedded["dimensions"]:
         assert set(dimension) == {
-            "id", "group", "label", "definition", "polarity", "kind", "levels"
+            "id",
+            "group",
+            "label",
+            "definition",
+            "polarity",
+            "kind",
+            "levels",
         }, f"{dimension['id']} carries {sorted(dimension)}"
 
     blob = json.dumps(embedded)
@@ -240,7 +246,7 @@ def test_only_a_resolved_annotation_is_exported() -> None:
     """
     page = build_page(STORE[:1], DIMENSIONS[:1])
 
-    body = page[page.index("function buildExport"):page.index("function note")]
+    body = page[page.index("function buildExport") : page.index("function note")]
     assert "if (a.status !== 'confirmed') { skipped++; continue; }" in body
     assert "const derived = sourceOf(a);" in body
     assert "source: derived," in body
@@ -254,7 +260,7 @@ def test_provenance_is_derived_from_the_proposal_not_stored_as_a_flag() -> None:
     """
     page = build_page(STORE[:1], DIMENSIONS[:1])
 
-    body = page[page.index("function sourceOf"):page.index("function rungOf")]
+    body = page[page.index("function sourceOf") : page.index("function rungOf")]
     assert "if (!o) return 'human';" in body
     assert "unchanged ? 'confirmed' : 'edited'" in body
 
@@ -333,9 +339,7 @@ def test_a_mark_crosses_to_the_browser_as_a_quote_not_an_offset() -> None:
             "method": "llm_read",
             "generated_at": "2026-08-19",
             "by_ad": {
-                ad_record.id: [
-                    {"dimension": "stack_modernity", "value": 0.6, "quote": quote}
-                ]
+                ad_record.id: [{"dimension": "stack_modernity", "value": 0.6, "quote": quote}]
             },
         }
     )
@@ -428,9 +432,7 @@ def test_import_is_idempotent(tmp_path: Path) -> None:
     store_path = tmp_path / "store.jsonl"
     save_store([ad(ad_id="a", text="Ofrecemos guardias rotativas cada mes.")], store_path)
     rows_path = tmp_path / "rows.json"
-    rows_path.write_text(
-        json.dumps([row(ad_id="a", quote="guardias rotativas")]), encoding="utf-8"
-    )
+    rows_path.write_text(json.dumps([row(ad_id="a", quote="guardias rotativas")]), encoding="utf-8")
 
     assert main(["--store", str(store_path), "import", str(rows_path)]) == 0
     once = load_store(store_path)
@@ -682,7 +684,12 @@ def test_split_shares_are_stable_input_for_the_page(tmp_path: Path) -> None:
     """
     seeded = build_store(
         [
-            {"id": f"x-{i}", "language": "en", "text": f"role {i}", "source_url": "https://e.invalid"}
+            {
+                "id": f"x-{i}",
+                "language": "en",
+                "text": f"role {i}",
+                "source_url": "https://e.invalid",
+            }
             for i in range(4)
         ]
     )
@@ -698,7 +705,7 @@ def test_split_shares_are_stable_input_for_the_page(tmp_path: Path) -> None:
 
 def _embedded_data(page: str) -> dict[str, Any]:
     match = re.search(
-        r'<script type="application/json" id="jobsearch-data">(.*?)</script>', page, re.S
+        r'<script type="application/json" id="integral-data">(.*?)</script>', page, re.S
     )
     assert match, "page must embed its data as a json script block"
     # build_page escapes "</" to "<\/" so the JSON block cannot terminate early;
@@ -714,9 +721,7 @@ def test_import_accepts_the_pages_export_object(tmp_path: Path) -> None:
     store_path = tmp_path / "store.jsonl"
     save_store([ad(text="Ofrecemos guardias rotativas cada mes.")], store_path)
     batch = tmp_path / "batch.json"
-    batch.write_text(
-        json.dumps({"labels": [row(quote="guardias rotativas")]}), encoding="utf-8"
-    )
+    batch.write_text(json.dumps({"labels": [row(quote="guardias rotativas")]}), encoding="utf-8")
 
     code = main(["--store", str(store_path), "import", str(batch)])
 
@@ -738,8 +743,11 @@ def test_import_does_not_write_a_coined_dimension_into_the_model(tmp_path: Path)
             {
                 "labels": [row(quote="guardias rotativas")],
                 "proposed_dimensions": [
-                    {"id": "childcare_support", "label": "Childcare support",
-                     "coined_at_ad": "test-1"}
+                    {
+                        "id": "childcare_support",
+                        "label": "Childcare support",
+                        "coined_at_ad": "test-1",
+                    }
                 ],
             }
         ),
@@ -775,9 +783,11 @@ def test_page_build_refuses_an_invalid_suggestion_set(tmp_path: Path) -> None:
                 "method": "llm_read",
                 "generated_at": "2026-08-19",
                 "blind_control": [],
-                "by_ad": {STORE[0].id: [
-                    {"dimension": "on_call_load", "value": 0.65, "quote": "no such words"}
-                ]},
+                "by_ad": {
+                    STORE[0].id: [
+                        {"dimension": "on_call_load", "value": 0.65, "quote": "no such words"}
+                    ]
+                },
             }
         ),
         encoding="utf-8",
@@ -823,7 +833,7 @@ def test_an_annotation_carries_the_text_it_was_placed_on() -> None:
     """
     page = build_page(STORE[:1], DIMENSIONS[:1])
 
-    body = page[page.index("function reconcile"):page.index("function sourceOf")]
+    body = page[page.index("function reconcile") : page.index("function sourceOf")]
     assert "ad.text.slice(a.start, a.end) === a.quote" in body, "drift must be detected"
     assert "const at = ad.text.indexOf(a.quote);" in body, "a moved span must be relocated"
     assert "drift[adId] = { relocated, lost };" in body, "the labeller must be told"
@@ -836,8 +846,8 @@ def test_work_from_the_previous_page_is_carried_over_not_stranded() -> None:
     """
     page = build_page(STORE[:1], DIMENSIONS[:1])
 
-    assert "jobsearch-t5-labels-v1" in page
-    body = page[page.index("function migrateV1"):page.index("function save")]
+    assert "integral-t5-labels-v1" in page
+    body = page[page.index("function migrateV1") : page.index("function save")]
     assert "status: 'pending'" in body, (
         "a migrated value may sit between two rungs, so it must be re-confirmed, "
         "not silently placed on the labeller's behalf"
@@ -852,7 +862,7 @@ def test_reconcile_returns_the_live_array_when_nothing_drifted() -> None:
     """
     page = build_page(STORE[:1], DIMENSIONS[:1])
 
-    body = page[page.index("function reconcile"):page.index("function sourceOf")]
+    body = page[page.index("function reconcile") : page.index("function sourceOf")]
     assert "if (!relocated && !lost) return anns;" in body
 
 

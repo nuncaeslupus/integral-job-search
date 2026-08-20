@@ -83,10 +83,10 @@ repo's own tooling, never by hand.
 
 ## The skill listing budget lives in `arsenal/config.toml`
 
-`listing-budget = 13000` (S10). `jobsearch.skill_budget` and `skill-creator`'s
+`listing-budget = 13000` (S10). `integral.skill_budget` and `skill-creator`'s
 `audit_library.py` both read that key since v0.33.0 (`claude-arsenal#143`).
 
-`jobsearch.skill_budget` is the gate: it refuses a budget that is not a round
+`integral.skill_budget` is the gate: it refuses a budget that is not a round
 multiple of 1,000 or that leaves under 400 chars of headroom, and reports `-1` —
 not a clean zero — when the library is inside a budget that was overridden, fell
 back, or was fitted to the measurement. The audit's "within 10% of 13000"

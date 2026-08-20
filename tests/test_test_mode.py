@@ -27,9 +27,9 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.identity import ProfileStore, create_profile, list_identities, resolve_handle
-from jobsearch.profile import EvidenceLog
-from jobsearch.test_mode import (
+from integral.identity import ProfileStore, create_profile, list_identities, resolve_handle
+from integral.profile import EvidenceLog
+from integral.test_mode import (
     LEDGER_DIR,
     PASTE_CHARS,
     MetaChannel,
@@ -98,8 +98,11 @@ def test_the_visible_conversation_is_byte_identical_with_and_without_notes(
 
     words = base.split(" ")
     for cut in range(1, len(words) + 1):
-        typed = " ".join(words[:cut]) + " " + note + (
-            (" " + " ".join(words[cut:])) if words[cut:] else ""
+        typed = (
+            " ".join(words[:cut])
+            + " "
+            + note
+            + ((" " + " ".join(words[cut:])) if words[cut:] else "")
         )
         assert parse_turn(typed).visible == base, f"seam broke at word {cut} of {base!r}"
 
@@ -268,9 +271,7 @@ def test_a_session_that_identifies_its_candidate_records_the_newer_handle(
     the handle becoming known afterwards must reach triage, not be shadowed by
     the header written when nobody was identified yet."""
     channel(tmp_path).feed("Hola [[antes de identificar]]", step="identify")
-    later = MetaChannel(
-        tmp_path / "profiles", session_id="s-1", handle="marta-ruiz", now=STAMP
-    )
+    later = MetaChannel(tmp_path / "profiles", session_id="s-1", handle="marta-ruiz", now=STAMP)
     assert later.review().handle == "marta-ruiz"
 
 
@@ -385,7 +386,7 @@ def test_an_empty_marker_is_not_a_note_and_is_reported(tmp_path: Path) -> None:
 
 
 def test_a_review_with_no_notes_still_prints(tmp_path: Path) -> None:
-    """"No notes were captured" and "notes were captured and then lost" must not
+    """ "No notes were captured" and "notes were captured and then lost" must not
     look the same, and under silent capture only a printed count separates them."""
     live = channel(tmp_path)
     rendered = render_review(live.review())
@@ -561,7 +562,8 @@ def test_the_gate_reading_is_zero_and_is_not_vacuous() -> None:
 def test_the_committed_evidence_matches_what_the_code_measures_now() -> None:
     committed = json.loads((REPO_ROOT / "status" / "evidence" / "S11.json").read_text())
     measured = measure()
-    assert committed["test_notes_reaching_candidate_evidence"] == (
-        measured["test_notes_reaching_candidate_evidence"]
+    assert (
+        committed["test_notes_reaching_candidate_evidence"]
+        == (measured["test_notes_reaching_candidate_evidence"])
     )
     assert committed["notes_captured_in_probe"] == measured["notes_captured_in_probe"]

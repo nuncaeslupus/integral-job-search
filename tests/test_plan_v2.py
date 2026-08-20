@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from jobsearch import plan_v2
+from integral import plan_v2
 
 HEADER = "| T# | Description | Step | Size | Depends | Gate | Tests | St |"
 DIVIDER = "|----|-------------|------|------|---------|------|-------|----|"
@@ -59,9 +59,7 @@ def _payload(tmp_path: Path, name: str, gate: str) -> None:
 
 
 def test_task_in_the_queue_without_a_plan_row_is_drift(tmp_path: Path) -> None:
-    measured = plan_v2.measure(
-        _plan(tmp_path), _queue(tmp_path, "T1: Do it", "T9: Unplanned work")
-    )
+    measured = plan_v2.measure(_plan(tmp_path), _queue(tmp_path, "T1: Do it", "T9: Unplanned work"))
     assert measured["plan_queue_task_drift"] == 1
     assert measured["in_queue_only"] == ["T9"]
 
@@ -84,9 +82,7 @@ def test_duplicate_labels_are_reported_not_collapsed(tmp_path: Path) -> None:
     Comparing sets hides multiplicity: one plan row and two T1 tasks would
     otherwise report zero drift while the queue holds a task nobody planned.
     """
-    measured = plan_v2.measure(
-        _plan(tmp_path), _queue(tmp_path, "T1: Do it", "T1: Do it again")
-    )
+    measured = plan_v2.measure(_plan(tmp_path), _queue(tmp_path, "T1: Do it", "T1: Do it again"))
     assert measured["plan_queue_task_drift"] == 1
     assert measured["duplicate_labels"] == ["T1 appears 2 times in the queue"]
 

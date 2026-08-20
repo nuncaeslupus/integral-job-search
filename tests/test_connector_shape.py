@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.connector_shape import (
+from integral.connector_shape import (
     DEFAULT_DOC_PATH,
     DEFAULT_EVIDENCE_PATH,
     ShapeError,

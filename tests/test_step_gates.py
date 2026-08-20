@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.process_spec import StepList, load_steps
-from jobsearch.step_gates import (
+from integral.process_spec import StepList, load_steps
+from integral.step_gates import (
     apply_states,
     derive_state,
     drift,
@@ -85,9 +85,7 @@ def test_failing_evidence_does_not_read_implemented(steps: StepList, evidence: P
     assert "not satisfied" in reading.why
 
 
-def test_every_comparison_the_schema_allows_is_applied(
-    steps: StepList, evidence: Path
-) -> None:
+def test_every_comparison_the_schema_allows_is_applied(steps: StepList, evidence: Path) -> None:
     """A `>=` gate read as `==` would fail every step that overshot its floor."""
     for step in steps.steps:
         threshold = step.gate.threshold
@@ -113,9 +111,7 @@ def test_a_missing_key_is_not_a_measurement(steps: StepList, evidence: Path) -> 
     assert "records no" in reading.why
 
 
-def test_a_value_that_is_not_a_number_is_not_a_measurement(
-    steps: StepList, evidence: Path
-) -> None:
+def test_a_value_that_is_not_a_number_is_not_a_measurement(steps: StepList, evidence: Path) -> None:
     """A boolean is not a number here, even though Python says otherwise.
 
     `cross_user_leaks: true` would compare equal to 1 and read as a real
@@ -193,9 +189,7 @@ def test_applying_states_changes_only_the_state_field(tmp_path: Path, evidence: 
         }
 
 
-def test_applying_twice_changes_nothing_the_second_time(
-    tmp_path: Path, evidence: Path
-) -> None:
+def test_applying_twice_changes_nothing_the_second_time(tmp_path: Path, evidence: Path) -> None:
     steps_file = tmp_path / "steps.json"
     steps_file.write_text(
         Path("status/spec-v2-steps.json").read_text(encoding="utf-8"), encoding="utf-8"
@@ -224,6 +218,4 @@ def test_the_measurement_counts_drift_rather_than_restating_the_field() -> None:
     """
     measured = measure()
     assert measured["step_gate_state_drift"] == len(measured["drift"])
-    assert len(measured["implemented"]) + len(measured["not_implemented"]) == measured[
-        "steps_read"
-    ]
+    assert len(measured["implemented"]) + len(measured["not_implemented"]) == measured["steps_read"]

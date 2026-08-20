@@ -18,7 +18,7 @@ process (`status/spec-v2-steps.md`) — the previous step finished, or the step 
 `offered()`/`decide_resumption()` (T34/T35) names `interview_log` as where this candidate should
 be. Phase: **per_opportunity**.
 
-If the runtime (`jobsearch.step_runtime.offered`) is not offering `interview_log` for this candidate, defer to whichever step it does offer instead of running this one out of turn.
+If the runtime (`integral.step_runtime.offered`) is not offering `interview_log` for this candidate, defer to whichever step it does offer instead of running this one out of turn.
 
 ## Preconditions and inputs
 

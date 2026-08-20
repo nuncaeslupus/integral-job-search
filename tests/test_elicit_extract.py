@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.decline import DeclineLedger
-from jobsearch.dimensions import Dimension, LocalisedText
-from jobsearch.elicit_extract import (
+from integral.decline import DeclineLedger
+from integral.dimensions import Dimension, LocalisedText
+from integral.elicit_extract import (
     MAX_ANSWER_CHARS,
     MIN_ANSWER_CHARS,
     MINIMUM_CHECKS,
@@ -32,9 +32,9 @@ from jobsearch.elicit_extract import (
     story_dimension_linkage,
     write_evidence,
 )
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog
-from jobsearch.question_bank import BankEntry, build_bank
+from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog
+from integral.question_bank import BankEntry, build_bank
 
 
 @pytest.fixture
@@ -61,8 +61,7 @@ def profile(tmp_path: Path) -> tuple[EvidenceLog, DeclineLedger]:
 
 
 ORDINARY_ANSWER = (
-    "They let me pick my own priorities every sprint and nobody second-guessed "
-    "the schedule."
+    "They let me pick my own priorities every sprint and nobody second-guessed the schedule."
 )
 
 
@@ -158,9 +157,7 @@ def test_answer_links_to_the_asked_dimension_by_construction(
     """The dimension a bank question targets is fixed at bank-generation time,
     not guessed from the reply — so it is always first in `candidate_dimensions`.
     """
-    dims, denied = candidate_dimensions(
-        entries["elx_autonomy"], "no cue-bearing text here", model
-    )
+    dims, denied = candidate_dimensions(entries["elx_autonomy"], "no cue-bearing text here", model)
     assert dims == ("elx_autonomy",)
     assert denied == ()
 
@@ -427,7 +424,7 @@ def test_measure_is_deterministic() -> None:
 def test_a_denied_subject_is_linked_but_marked_denied(
     model: list[Dimension], entries: dict[str, BankEntry]
 ) -> None:
-    """"There was no on-call rotation" and "the on-call rotation ran every
+    """ "There was no on-call rotation" and "the on-call rotation ran every
     third week" used to produce byte-identical output.
 
     Dropping the denial would be wrong — it answers the question, and

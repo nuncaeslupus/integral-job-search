@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.identity import (
+from integral.identity import (
     ACTIVE_FILE,
     MINIMUM_PROBES,
     ROSTER_FILE,
@@ -126,9 +126,12 @@ def test_no_user_identified_refuses_to_read_or_write(tmp_path: Path) -> None:
     resolution = resolve_handle(root)
     with pytest.raises(IdentityError):
         resolution.store(root)
-    assert guard_decision(
-        root / "ada-lovelace" / "profile" / "evidence.jsonl", root=root, active=None
-    ).allowed is False
+    assert (
+        guard_decision(
+            root / "ada-lovelace" / "profile" / "evidence.jsonl", root=root, active=None
+        ).allowed
+        is False
+    )
 
 
 def test_single_existing_profile_is_confirmed_not_assumed(tmp_path: Path) -> None:
@@ -260,11 +263,9 @@ def test_correct_operation_never_trips_the_hook(
         guard_decision(
             root / first.handle / "profile" / "evidence.jsonl", root=root, active=first.handle
         ),
-        guard_decision(
-            root / first.handle / "cv" / "master.json", root=root, active=first.handle
-        ),
+        guard_decision(root / first.handle / "cv" / "master.json", root=root, active=first.handle),
         # and everything that is not a profile at all
-        guard_decision(root.parent / "src" / "jobsearch" / "identity.py", root=root, active=None),
+        guard_decision(root.parent / "src" / "integral" / "identity.py", root=root, active=None),
         guard_decision("README.md", root=root, active=first.handle),
     ]
     refused = [decision for decision in allowed if not decision.allowed]
@@ -279,8 +280,9 @@ def test_the_hook_refuses_a_read_under_another_handle(
         root / second.handle / "profile" / "evidence.jsonl", root=root, active=first.handle
     )
     assert decision == Decision(
-        False, f"{second.handle}/profile/evidence.jsonl belongs to '{second.handle}', "
-        f"not to '{first.handle}'"
+        False,
+        f"{second.handle}/profile/evidence.jsonl belongs to '{second.handle}', "
+        f"not to '{first.handle}'",
     )
 
 
@@ -417,8 +419,8 @@ def test_a_shell_expansion_does_not_walk_past_the_scanner(
     for command in (
         f'cat "$PWD/profiles/{second.handle}/profile/evidence.jsonl"',
         f'cat "$(pwd)/profiles/{second.handle}/profile/evidence.jsonl"',
-        f"cat ~/job-search/profiles/{second.handle}/profile/evidence.jsonl",
-        f"cat ../job-search/profiles/{second.handle}/profile/evidence.jsonl",
+        f"cat ~/integral-job-search/profiles/{second.handle}/profile/evidence.jsonl",
+        f"cat ../integral-job-search/profiles/{second.handle}/profile/evidence.jsonl",
     ):
         decision = guard_tool_call("Bash", {"command": command}, root=root, active=first.handle)
         assert not decision.allowed, command

@@ -4,7 +4,7 @@ The gate is `dedup_precision >= 0.95`: of the pairs the algorithm flags as
 duplicates, the fraction that really are. Precision rather than recall
 because a false merge silently drops a role from the candidate's list with
 nothing to tell them it happened, while a missed duplicate is only noise —
-see `jobsearch.dedup`'s module docstring for the full argument.
+see `integral.dedup`'s module docstring for the full argument.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.dedup import (
+from integral.dedup import (
     MINIMUM_CLUSTER_PAIRS,
     MINIMUM_PAIRS,
     SIMILARITY_THRESHOLD,
@@ -34,7 +34,7 @@ from jobsearch.dedup import (
     tombstone_match,
     write_evidence,
 )
-from jobsearch.offers import Offer
+from integral.offers import Offer
 
 
 def _offer_hex(n: int, text: str, **fields: object) -> Offer:

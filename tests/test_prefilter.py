@@ -13,16 +13,16 @@ labelled the other way, so the model is never asked and the wrong answer stands.
 
 from __future__ import annotations
 
-from jobsearch.dimensions import Cue, Extraction, load_dimensions
-from jobsearch.extraction import (
+from integral.dimensions import Cue, Extraction, load_dimensions
+from integral.extraction import (
     cue_findings,
     normalise,
     prefilter_suppression,
     rules_stage,
     unsettled_dimensions,
 )
-from jobsearch.harness import load_store
-from jobsearch.offers import Offer, compute_offer_id
+from integral.harness import load_store
+from integral.offers import Offer, compute_offer_id
 
 _DIMENSIONS = load_dimensions()
 _STORE = load_store()
@@ -84,7 +84,13 @@ def test_a_dimension_the_cues_miss_still_reaches_the_model() -> None:
     base = next(d for d in _DIMENSIONS if d.id == "travel_requirement")
     nothing = Extraction(cues={"es": [Cue(pattern="zzz", value=1.0)]})
     blind = base.model_copy(update={"extraction": nothing})
-    ad = normalise(Offer(id=compute_offer_id("Viajes constantes."), source="t",
-                         text="Viajes constantes.", language="es"))
+    ad = normalise(
+        Offer(
+            id=compute_offer_id("Viajes constantes."),
+            source="t",
+            text="Viajes constantes.",
+            language="es",
+        )
+    )
     assert cue_findings(ad, blind) is None
     assert unsettled_dimensions([blind], rules_stage(ad, [blind])) == ["travel_requirement"]

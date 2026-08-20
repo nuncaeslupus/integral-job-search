@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.corpus import load_ads
-from jobsearch.corpus_scope import TARGET_MIX, measure
+from integral.corpus import load_ads
+from integral.corpus_scope import TARGET_MIX, measure
 
 TOLERANCE = 0.10
 
@@ -29,7 +29,7 @@ def test_every_language_slice_matches_its_declared_scope() -> None:
     rather than filtered for — and three documents say so independently:
     `status/plan.md`'s T4b row, `corpus/raw/README.md`'s "Known divergence"
     section, and this test's own `TARGET_MIX` (imported from
-    `jobsearch.corpus_scope`, not restated here). Before this test existed, a
+    `integral.corpus_scope`, not restated here). Before this test existed, a
     plan-row edit or a README rewrite could silently re-narrow the Catalan
     slice back to "remote programming" while the other two documents kept
     saying otherwise — the exact silent-drift failure D-1 was filed over. This

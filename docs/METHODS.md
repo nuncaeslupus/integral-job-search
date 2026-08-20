@@ -248,26 +248,26 @@ popular role is *more* likely to dominate a small batch, not less, so this was t
 the feature exists for, not an edge case, and the gate's precision-only metric could not see it
 (recall is not measured — see below). The fix runs the comparison in two passes: pass one scores
 every pair on raw, unfiltered shingles against a stricter cutoff
-(`jobsearch.dedup._RAW_CLUSTER_THRESHOLD`, calibrated so shared-template overlap alone never
+(`integral.dedup._RAW_CLUSTER_THRESHOLD`, calibrated so shared-template overlap alone never
 crosses it) purely to find which offers are copies of the same ad, and collapses each such
 cluster to one representative (the union of its members' shingle sets). Pass two counts
 boilerplate frequency over those representatives — so three copies of one ad contribute one
 entry to the corpus, the same as a genuinely unique ad — and re-scores every pair with that
-filter. See `jobsearch.dedup._cluster_representatives` and
+filter. See `integral.dedup._cluster_representatives` and
 `tests/test_dedup.py::test_majority_duplicate_cluster_is_not_erased_as_boilerplate`.
 
 **Limits.** The 0.25 similarity threshold and the 8-word shingle width are calibrated against a
-seven-offer, twenty-one-pair seeded fixture (`jobsearch.dedup._fixture_batch`), not a broad
+seven-offer, twenty-one-pair seeded fixture (`integral.dedup._fixture_batch`), not a broad
 corpus — flagged in §5. Boilerplate filtering needs at least three items in its reference
 population to define "common" against; a bare pair falls back to unfiltered similarity, so a
 two-offer comparison sharing a long boilerplate block is not protected by this mechanism
-(`jobsearch.dedup.similarity` vs. `jobsearch.dedup.find_duplicates`, whose docstrings say so).
+(`integral.dedup.similarity` vs. `integral.dedup.find_duplicates`, whose docstrings say so).
 The gate measures precision, never recall — see the module docstring's asymmetry argument,
 echoed in §4.4's `dedup_precision` row: a false merge silently drops a role from the candidate's
 list with nothing to tell them it happened, while a missed duplicate is only noise. Because a
 missed-duplicate defect (the majority-cluster case above) is structurally invisible to a
-precision-only gate, `jobsearch.dedup.probe_dedup` also runs a dedicated recall probe over a
-second, majority-cluster fixture (`jobsearch.dedup._majority_cluster_fixture`, at least three
+precision-only gate, `integral.dedup.probe_dedup` also runs a dedicated recall probe over a
+second, majority-cluster fixture (`integral.dedup._majority_cluster_fixture`, at least three
 near-identical copies) and records `majority_cluster_recall` / `majority_cluster_missed`
 alongside `dedup_precision` in the same evidence file — a measurement, not a prose note, so the
 defect coming back would be caught. `dedup_precision` remains the sole declared gate; the recall
@@ -424,7 +424,7 @@ common to more than half a reference population of cluster representatives (§2.
 shingles(text)             = { word[i:i+8] for i in range(len(words) - 7) }   # 8-word windows
 
 # pass 1 — cluster offers into copies of the same ad, on RAW (unfiltered) shingles
-cluster_threshold          = 0.30                                    # jobsearch.dedup._RAW_CLUSTER_THRESHOLD
+cluster_threshold          = 0.30                                    # integral.dedup._RAW_CLUSTER_THRESHOLD
 same_ad(a, b)               = jaccard(shingles(a), shingles(b)) > cluster_threshold
 clusters(batch)             = connected components of `batch` under `same_ad` (union-find)
 representative(cluster)     = ⋃ { shingles(o) : o in cluster }       # one entry per cluster, not per offer
@@ -437,7 +437,7 @@ similarity(a, b, batch)     = |shingles(a)\boilerplate − shingles(b)\boilerpla
 ```
 
 Two offers are reported as the same ad when `similarity > 0.25`
-(`jobsearch.dedup.SIMILARITY_THRESHOLD`). That value is not assumed; it is the point roughly
+(`integral.dedup.SIMILARITY_THRESHOLD`). That value is not assumed; it is the point roughly
 midway between the lowest score any seeded duplicate pair reached (0.489, after boilerplate
 filtering) and the highest score any seeded non-duplicate pair reached (0.0) in the calibration
 fixture referenced in §2.8 — comfortable margin on both sides of the observed gap, rather than a
@@ -497,7 +497,7 @@ Recorded so they are not mistaken for settled.
    the role; ES and EN stay remote-filtered at source. Labelling (T5) must extract
    `remote_arrangement` per Catalan ad from its own text, never assume the slice is remote
    because ES/EN are. See `corpus/raw/README.md` ("Known divergence") and
-   `jobsearch.corpus_scope`, which checks `status/plan.md`, the README and
+   `integral.corpus_scope`, which checks `status/plan.md`, the README and
    `tests/test_corpus_raw.py::TARGET_MIX` against each other mechanically.
 
 ---
@@ -506,7 +506,7 @@ Recorded so they are not mistaken for settled.
 
 | Date | Change |
 |---|---|
-| 2026-08-18 | §5 added: the Catalan corpus slice is documented as IT-at-large rather than remote-programming (D-1); `status/plan.md`'s T4b row and `corpus/raw/README.md` restated to match, and `jobsearch.corpus_scope` checks the two against `tests/test_corpus_raw.py::TARGET_MIX` mechanically. |
+| 2026-08-18 | §5 added: the Catalan corpus slice is documented as IT-at-large rather than remote-programming (D-1); `status/plan.md`'s T4b row and `corpus/raw/README.md` restated to match, and `integral.corpus_scope` checks the two against `tests/test_corpus_raw.py::TARGET_MIX` mechanically. |
 | 2026-08-18 | §2.8/§4.6 updated: near-duplicate detection reworked to two passes — boilerplate frequency is now counted over crosspost-cluster representatives, not raw offers, fixing a majority-duplicate-cluster blind spot a precision-only gate could not see (T13 review finding). `SIMILARITY_THRESHOLD` unchanged; new `_RAW_CLUSTER_THRESHOLD = 0.30` calibrated for pass 1. |
 | 2026-08-18 | §2.8/§4.6 added: cross-source near-duplicate detection by shingled Jaccard similarity, and its threshold's calibration (T13). |
 | 2026-08-18 | §4.5 added: net-from-gross pay estimation, and its committed/generated rule-source split (T33). |

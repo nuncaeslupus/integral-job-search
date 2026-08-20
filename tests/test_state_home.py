@@ -1,6 +1,6 @@
 """T51 — candidate state resolves from `$INTEGRAL_HOME`, never from inside a clone.
 
-`docs/distribution.md` §2 is the design; `jobsearch.state_home` is the
+`docs/distribution.md` §2 is the design; `integral.state_home` is the
 mechanism. What these tests hold to is the sentence that makes it a mechanism
 rather than a convention: **the resolver refuses to return any path inside a
 git work tree**, and `--dev` is the single, explicit way past it.
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.state_home import (
+from integral.state_home import (
     APP_DIR,
     DEV_ENV,
     HOME_ENV,
@@ -214,7 +214,7 @@ def test_a_call_site_taking_an_unguarded_input_dir_is_caught(tmp_path: Path) -> 
     unguarded = tmp_path / "unguarded.py"
     unguarded.write_text(
         "from pathlib import Path\n"
-        "from jobsearch.state_home import profiles_root\n"
+        "from integral.state_home import profiles_root\n"
         "def main(args):\n"
         '    parser.add_argument("--input-dir", default=None)\n'
         "    return Path(args.input_dir) if args.input_dir else profiles_root()\n"
@@ -262,7 +262,7 @@ def test_a_docstring_naming_the_construction_is_not_an_offender(tmp_path: Path) 
     """The audit reads code. Prose explaining what T51 removed is not a call site."""
     explainer = tmp_path / "explainer.py"
     explainer.write_text(
-        "from jobsearch.state_home import profiles_root\n"
+        "from integral.state_home import profiles_root\n"
         '"""The constant this replaced was `_REPO_ROOT / \'profiles\'`."""\n'
         "ROOT = profiles_root()\n"
     )
@@ -282,7 +282,7 @@ def test_blanking_keeps_line_numbers(tmp_path: Path) -> None:
 def test_an_unparseable_call_site_is_reported_not_waved_through(tmp_path: Path) -> None:
     """A file the audit cannot read is a finding, never a silent pass."""
     broken = tmp_path / "broken.py"
-    broken.write_text("from jobsearch.state_home import profiles_root\ndef (:\n")
+    broken.write_text("from integral.state_home import profiles_root\ndef (:\n")
     check = check_call_site(broken, tmp_path)
     assert not check.passes
     assert any("could not be tokenised" in reason for reason in check.reasons)
@@ -347,7 +347,7 @@ def test_a_probe_that_comes_out_wrong_is_not_masked_by_the_dev_variable() -> Non
 
 def test_an_unexpected_probe_outcome_fails_the_command(monkeypatch: pytest.MonkeyPatch) -> None:
     """Exit status keys on any shortfall, not only on a non-zero metric."""
-    from jobsearch import state_home
+    from integral import state_home
 
     broken = ProbeCheck(
         probe="a probe that came out the wrong way",

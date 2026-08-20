@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.dimensions import (
+from integral.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
     GROUPS,
     DimensionError,

@@ -5,7 +5,7 @@
 the pre-D-1 documents (which said "remote programming" everywhere) and pass
 once `status/plan.md`'s T4b row and `corpus/raw/README.md`'s "Known
 divergence" section both carry the agreed scope. The rest drive
-`jobsearch.corpus_scope.measure` against synthetic documents so the mechanism
+`integral.corpus_scope.measure` against synthetic documents so the mechanism
 is shown to fail for the right reason — a missing anchor phrase, a missing
 section, a missing row — not just to happen to pass on the two real files
 today.
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jobsearch.corpus_scope import (
+from integral.corpus_scope import (
     CATALAN_SCOPE_ANCHOR,
     DEFAULT_PLAN,
     TARGET_MIX,

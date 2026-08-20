@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.reader_notes import (
+from integral.reader_notes import (
     MINIMUM_PROBES,
     ReaderTarget,
     all_readings,
@@ -34,11 +34,7 @@ from jobsearch.reader_notes import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
-_BEFORE_SPEC = (
-    "# Doc\n\n"
-    "## 9. Alpha\n\nbody\n\n"
-    "## 10. Open, and deliberately so\n\nbody\n"
-)
+_BEFORE_SPEC = "# Doc\n\n## 9. Alpha\n\nbody\n\n## 10. Open, and deliberately so\n\nbody\n"
 _AFTER_SPEC = (
     "# Doc\n\n"
     "## 8. Inserted\n\nbody\n\n"
@@ -218,14 +214,22 @@ def test_derived_titles_match_the_real_generator(tmp_path: Path) -> None:
     `markdown` package the real tool needs to even import). Run the real tool
     whenever it is actually available and hold the two to the same answer, so
     a drift between them is caught here instead of only ever in production."""
-    script = (
-        _REPO_ROOT / ".claude" / "skills" / "specify" / "scripts" / "create_reader.py"
-    )
+    script = _REPO_ROOT / ".claude" / "skills" / "specify" / "scripts" / "create_reader.py"
     doc = _REPO_ROOT / "status" / "spec-v2-process.md"
     result = subprocess.run(
         [
-            "uv", "run", "--with", "markdown", "python3", str(script),
-            "--input", str(doc), "--output-dir", str(tmp_path), "--name", "X",
+            "uv",
+            "run",
+            "--with",
+            "markdown",
+            "python3",
+            str(script),
+            "--input",
+            str(doc),
+            "--output-dir",
+            str(tmp_path),
+            "--name",
+            "X",
         ],
         capture_output=True,
         text=True,
@@ -312,10 +316,10 @@ def test_evidence_records_the_metric_the_gate_reads(tmp_path: Path) -> None:
 
 
 def test_the_gate_module_runs_as_a_script() -> None:
-    """`python -m jobsearch.reader_notes --check` is what `make evidence` and
+    """`python -m integral.reader_notes --check` is what `make evidence` and
     a reviewer both actually run — exercise the CLI, not just the functions."""
     result = subprocess.run(
-        [sys.executable, "-m", "jobsearch.reader_notes", "--check"],
+        [sys.executable, "-m", "integral.reader_notes", "--check"],
         capture_output=True,
         text=True,
         cwd=_REPO_ROOT,

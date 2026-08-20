@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.session import (
+from integral.identity import ProfileStore, create_profile
+from integral.session import (
     Position,
     Resumption,
     SessionError,
@@ -110,9 +110,7 @@ def test_state_naming_somebody_else_refuses_to_resume(
     """A copied tree must not quietly resume the wrong person."""
     first, second = sessions
     first.record(at="2026-08-17T10:00:00Z", current_step="history")
-    second.store.write_text(
-        first.path.read_text(encoding="utf-8"), "session", "state.json"
-    )
+    second.store.write_text(first.path.read_text(encoding="utf-8"), "session", "state.json")
     with pytest.raises(SessionError, match="refusing to resume"):
         second.read()
 
@@ -209,7 +207,7 @@ def test_an_explicit_request_outranks_everything(
 def test_carrying_on_resumes_the_current_step_at_its_position(
     sessions: tuple[SessionStore, SessionStore],
 ) -> None:
-    """"let's carry on" resumes `current_step` at `position` (§5.3 rule 2)."""
+    """ "let's carry on" resumes `current_step` at `position` (§5.3 rule 2)."""
     live, _ = sessions
     live.record(
         at="2026-08-17T10:00:00Z",

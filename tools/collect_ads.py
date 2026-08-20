@@ -28,7 +28,7 @@ import py3langid
 import requests
 from bs4 import BeautifulSoup
 
-from jobsearch.corpus import LANGUAGES, language_counts, load_ads, save_ads, write_evidence
+from integral.corpus import LANGUAGES, language_counts, load_ads, save_ads, write_evidence
 
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "

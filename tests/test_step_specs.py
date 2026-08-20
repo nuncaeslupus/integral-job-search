@@ -11,14 +11,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch.process_spec import DEFAULT_STEPS_PATH, Step, load_steps
-from jobsearch.step_gates import (
+from integral.process_spec import DEFAULT_STEPS_PATH, Step, load_steps
+from integral.step_gates import (
     OwnershipReading,
     gate_ownership,
     measure_gate_ownership,
     measure_trait_gate_ownership,
 )
-from jobsearch.step_specs import (
+from integral.step_specs import (
     DEFAULT_STEP_SPECS_DOC,
     MIN_FIELD_WORDS,
     REQUIRED_FIELDS,
@@ -66,7 +66,7 @@ def test_every_step_declares_whether_it_takes_candidate_free_text() -> None:
     stops a step being added to `spec-v2-steps.json` without one — the
     migration's own "did every step actually get a value" test, over the
     committed file this repo ships. `None` is a real, undeclared state, not
-    coerced to `False`; `jobsearch.profile_capture.unclassified_free_text_steps`
+    coerced to `False`; `integral.profile_capture.unclassified_free_text_steps`
     is the same check as a reusable gate metric, exercised more thoroughly
     (including the failure case) in `tests/test_profile_capture.py`."""
     steps = load_steps()
@@ -298,9 +298,7 @@ _OPEN_DIVERGENCES: frozenset[str] = frozenset()
 
 
 def _assert_no_problem_matching(readings: list[OwnershipReading], needle: str) -> None:
-    offending = [
-        (r.step, r.task, p) for r in readings for p in r.problems if needle in p
-    ]
+    offending = [(r.step, r.task, p) for r in readings for p in r.problems if needle in p]
     assert offending == [], offending
 
 

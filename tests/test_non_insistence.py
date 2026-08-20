@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.decline import (
+from integral.decline import (
     Ask,
     DeclineError,
     DeclineLedger,
@@ -25,8 +25,8 @@ from jobsearch.decline import (
     probe_declines,
     write_evidence,
 )
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog
+from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog
 
 
 @pytest.fixture
@@ -130,7 +130,7 @@ def test_the_ledger_is_append_only(ledger: DeclineLedger) -> None:
 def test_a_decline_is_not_filed_as_evidence_about_the_candidate(
     ledger: DeclineLedger,
 ) -> None:
-    """"What do you know about me?" must not come back as a list of refusals.
+    """ "What do you know about me?" must not come back as a list of refusals.
 
     §5.4 guarantees that question is answerable at any point; answering it with
     what somebody would not discuss is the opposite of what it is for.

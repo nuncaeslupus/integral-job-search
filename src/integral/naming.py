@@ -1,0 +1,228 @@
+"""What is left of the old name after the rename to `integral-job-search` (T55).
+
+The name was settled on 2026-08-18 (`docs/product-shape.md`, question 5). The
+rename that followed is mechanical — nothing in the design was ever named after
+the project — but it is wide: the package, the distribution, the repository, and
+every document that spells one of them out.
+
+Wide and mechanical is exactly the shape of change that finishes at 95%. A
+surviving *import* fails loudly the first time that module is loaded, so it gets
+found. A surviving *document* fails silently and much later: it sends the next
+reader to a repository that no longer answers, and nothing in the test suite has
+an opinion about prose. Counting is the only way to know the sweep finished, so
+this module counts, and T55's gate is the count.
+
+**Two names, counted separately, because they are swept by different rules.**
+
+- The *package* was `jobsearch` and is now `integral`. Any surviving occurrence
+  of that token is a defect: it is not a word, and nothing else in this
+  repository is called it.
+- The *repository* was `job-search` and is now `integral-job-search`. That one
+  cannot be swept by substring, because three other things spell it the same
+  way and none of them is this project:
+
+  - `ai-job-search`, the external precedent `status/specification.md` compares
+    against — a different project, whose name renaming ours must not touch;
+  - the **`job-search process`**, the thirteen-step process the step skills are
+    named after (`status/spec-v2-steps.json`). The process is not the project;
+    renaming the repository does not rename it, and the task that ordered this
+    rename says so in as many words;
+  - `job-search-spec-v1:`, the `localStorage` namespace the generated spec
+    readers key annotations under. Rewriting it would not update a name, it
+    would orphan every annotation a reader has already saved.
+
+  So the repository name is matched on its own, with no letter, digit,
+  underscore or hyphen on either side, and not where the word `process` or
+  `session` follows it. That admits `# job-search` and `cd job-search`, and
+  refuses all three of the above.
+
+**What the allowlist holds, and why each entry is in it.** Everything here is a
+place where the old name is *correct* and sweeping it would destroy something:
+
+- `arsenal/` — the queue ledger. Its historical rows record what past tasks
+  said at the time, and the whole point of a ledger is that it is not edited
+  afterwards. Task ids are opaque and the vendored bundle keeps its own name.
+- `claude-arsenal/` and `vendor/` — upstream's code, reverted at the next
+  upgrade; not ours to rename.
+- this module and `tests/test_naming.py` — a counter has to name the thing it
+  counts, and its test has to be able to construct a violation.
+- `status/evidence/T55.json` — the payload this writes, which quotes what it
+  found.
+
+The list is small and each line is justified above, which is the property that
+matters: an allowlist is how a reference counter reaches zero dishonestly, so it
+stays short enough to read in one sitting and every entry names its reason.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T55.json"
+
+#: The names this rename replaced, and what replaced them.
+OLD_PACKAGE = "jobsearch"
+NEW_PACKAGE = "integral"
+OLD_REPOSITORY = "job-search"
+NEW_REPOSITORY = "integral-job-search"
+
+#: The distribution, and the one package the wheel ships.
+DISTRIBUTION_NAME = NEW_REPOSITORY
+WHEEL_PACKAGE = f"src/{NEW_PACKAGE}"
+
+# The package token. It is not a word, so a bare match is already unambiguous.
+_PACKAGE_REFERENCE = re.compile(rf"(?<![\w-]){OLD_PACKAGE}(?![\w-])")
+
+# The repository name — see the module docstring for each thing this refuses.
+# `\s+` rather than a literal space so a line break between the two words of
+# "job-search process" does not turn a process reference into a false positive.
+_REPOSITORY_REFERENCE = re.compile(
+    rf"(?<![\w-]){OLD_REPOSITORY}(?![\w-])(?!\s+(?:process|session))"
+)
+
+#: Paths where the old name is correct. Prefix-matched, repo-relative.
+ALLOWLIST: tuple[str, ...] = (
+    "arsenal/",
+    "claude-arsenal/",
+    "vendor/",
+    "src/integral/naming.py",
+    "tests/test_naming.py",
+    "status/evidence/T55.json",
+)
+
+
+class NamingError(Exception):
+    """The sweep could not be measured — never silently a count of zero."""
+
+
+def _tracked_files(repo_root: Path) -> tuple[Path, ...]:
+    """Every file the repository ships, from git itself.
+
+    Tracked files, not a directory walk: a rename is about what this repository
+    publishes, and a walk would also count build output, virtualenvs and
+    whatever else happens to be sitting in the tree. When git cannot answer,
+    this raises rather than returning an empty list — a measurement that could
+    not run must not read as a clean sweep.
+    """
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repo_root), "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise NamingError(f"{repo_root}: could not list tracked files: {exc}") from exc
+    names = [name for name in completed.stdout.decode("utf-8").split("\0") if name]
+    if not names:
+        raise NamingError(f"{repo_root}: git lists no tracked files")
+    return tuple(repo_root / name for name in names)
+
+
+def _is_allowlisted(relative: str) -> bool:
+    return any(relative == entry or relative.startswith(entry) for entry in ALLOWLIST)
+
+
+def measure(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
+    """T55's gate: surviving references to the old package and repository names."""
+    package: list[str] = []
+    repository: list[str] = []
+    scanned = 0
+
+    for path in _tracked_files(repo_root):
+        relative = path.relative_to(repo_root).as_posix()
+        if _is_allowlisted(relative):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            # Binary, or gone since git listed it. Neither can hold a name a
+            # reader would follow, and neither is a measurement failure.
+            continue
+        scanned += 1
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if _PACKAGE_REFERENCE.search(line):
+                package.append(f"{relative}:{line_number}")
+        # Matched over the whole text, not line by line, so the lookahead can
+        # see a `process` that the line break put on the following line.
+        for match in _REPOSITORY_REFERENCE.finditer(text):
+            line_number = text.count("\n", 0, match.start()) + 1
+            repository.append(f"{relative}:{line_number}")
+
+    return {
+        "old_name_references": len(package) + len(repository),
+        "old_package_references": len(package),
+        "old_repository_references": len(repository),
+        "files_scanned": scanned,
+        "package_reference_sites": package,
+        "repository_reference_sites": repository,
+    }
+
+
+def write_evidence(
+    evidence: Path = DEFAULT_EVIDENCE_PATH,
+    repo_root: Path = _REPO_ROOT,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T55.json`."""
+    measured = measure(repo_root)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _main(argv: list[str]) -> int:
+    """Write T55's gate evidence. Exit 1 when any reference to the old name survives.
+
+        python -m integral.naming [evidence-path] [--repo PATH]
+
+    `--repo` measures a checkout other than this one, and then writes nothing
+    unless the caller also said where — the same rule `connector_shape` (D-10)
+    and `connector_contract` (D-11) follow, for the same reason: a measurement
+    of some other tree is not evidence about this repository, and recording it
+    unconditionally is how a committed number gets replaced by the answer to a
+    different question.
+    """
+    args = list(argv[1:])
+    repo_root = _REPO_ROOT
+    own_repo = True
+    if "--repo" in args:
+        index = args.index("--repo")
+        if index + 1 >= len(args):
+            print("naming: --repo needs a path", file=sys.stderr)
+            return 2
+        repo_root = Path(args[index + 1])
+        own_repo = False
+        args = args[:index] + args[index + 2 :]
+    positional = [arg for arg in args if not arg.startswith("--")]
+    default_target = DEFAULT_EVIDENCE_PATH if own_repo else None
+    target: Path | None = Path(positional[0]) if positional else default_target
+    try:
+        measured = measure(repo_root) if target is None else write_evidence(target, repo_root)
+    except NamingError as exc:
+        # Exit 3, not 1: nothing was counted, so nothing passed and nothing failed.
+        print(f"naming: {exc}", file=sys.stderr)
+        return 3
+
+    for site in measured["package_reference_sites"]:
+        print(
+            f"✗ {site} still names the old package `{OLD_PACKAGE}` — "
+            f"the package is `{NEW_PACKAGE}` (T55)",
+            file=sys.stderr,
+        )
+    for site in measured["repository_reference_sites"]:
+        print(
+            f"✗ {site} still names the old repository `{OLD_REPOSITORY}` — "
+            f"the repository is `{NEW_REPOSITORY}` (T55)",
+            file=sys.stderr,
+        )
+    print(json.dumps(measured, ensure_ascii=False))
+    return 1 if measured["old_name_references"] else 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(_main(sys.argv))

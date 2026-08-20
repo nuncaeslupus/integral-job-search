@@ -21,8 +21,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch.dimensions import load_dimensions
-from jobsearch.harness import (
+from integral.dimensions import load_dimensions
+from integral.harness import (
     Label,
     LabelledAd,
     Span,
@@ -140,10 +140,17 @@ def test_the_cli_set_path_enforces_the_same_rungs(tmp_path: Path) -> None:
 
     completed = subprocess.run(
         [
-            sys.executable, "-m", "jobsearch.harness",
-            "--store", str(store_path),
-            "set", "test-1", "on_call_load", "0.65",
-            "--quote", "guardias rotativas",
+            sys.executable,
+            "-m",
+            "integral.harness",
+            "--store",
+            str(store_path),
+            "set",
+            "test-1",
+            "on_call_load",
+            "0.65",
+            "--quote",
+            "guardias rotativas",
         ],
         capture_output=True,
         text=True,
@@ -196,10 +203,7 @@ def test_merged_spans_only_stay_confirmed_when_every_span_was(
 
     updated, results = import_labels(
         store,
-        [
-            row(quote=quote, source=source)
-            for quote, source in zip(quotes, sources, strict=True)
-        ],
+        [row(quote=quote, source=source) for quote, source in zip(quotes, sources, strict=True)],
         DIMENSIONS,
     )
 

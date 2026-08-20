@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.dimensions import (
+from integral.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
     DEFAULT_METHODS_PATH,
     DimensionError,
@@ -115,13 +115,7 @@ def test_a_trait_dimension_carrying_cues_is_rejected(tmp_path: Path) -> None:
     ambition. It evidences the employer's prose. Left permitted, the extractor
     would score a personality trait from marketing copy.
     """
-    cues = (
-        "extraction:\n"
-        "  cues:\n"
-        "    en:\n"
-        '      - pattern: "ambitious"\n'
-        "        value: 0.6\n"
-    )
+    cues = 'extraction:\n  cues:\n    en:\n      - pattern: "ambitious"\n        value: 0.6\n'
     body = TRAIT.replace("methods_ref:", cues + "methods_ref:")
     write(tmp_path, "ambition", body)
 
@@ -180,13 +174,7 @@ def test_a_candidate_fact_carrying_its_own_cues_is_a_violation(tmp_path: Path) -
     the requirement and once as the candidate's own attribute — which is
     double-counting dressed as thoroughness.
     """
-    cues = (
-        "extraction:\n"
-        "  cues:\n"
-        "    en:\n"
-        '      - pattern: "english"\n'
-        "        value: 0.6\n"
-    )
+    cues = 'extraction:\n  cues:\n    en:\n      - pattern: "english"\n        value: 0.6\n'
     write(tmp_path, "languages_spoken", FACT.replace("methods_ref:", cues + "methods_ref:"))
 
     violations = side_violations(load_dimensions(tmp_path))

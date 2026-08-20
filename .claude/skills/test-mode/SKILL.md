@@ -45,10 +45,10 @@ This tool's main input is pasted job adverts, and adverts are full of brackets: 
 
 So meta parsing is suspended whenever the turn is a paste — a turn whose first line is `/paste`, or one long enough to be one. Inside a paste, `[[…]]` is advert text and stays in the advert.
 
-Do this through `jobsearch.test_mode.parse_turn`, never by eye:
+Do this through `integral.test_mode.parse_turn`, never by eye:
 
 ```python
-from jobsearch.test_mode import MetaChannel
+from integral.test_mode import MetaChannel
 
 channel = MetaChannel(profiles_root, session_id=session_id, simulated=False)
 visible = channel.feed(turn_text, step="constraints")   # notes go to the ledger
@@ -60,7 +60,7 @@ visible = channel.feed(turn_text, step="constraints")   # notes go to the ledger
 
 ## Simulated candidates
 
-Inventing answers is often the only way to exercise a step at all — waiting for a real run to reach step 9 makes step 9 untestable. A simulated run is allowed, and its profile is created through `jobsearch.test_mode.create_simulated_profile`, which marks it `fiction: true`.
+Inventing answers is often the only way to exercise a step at all — waiting for a real run to reach step 9 makes step 9 untestable. A simulated run is allowed, and its profile is created through `integral.test_mode.create_simulated_profile`, which marks it `fiction: true`.
 
 `identity.list_identities` excludes fiction profiles by default, so nothing that reads real profiles counts an invented one. Never hand-write a simulated profile with `create_profile` — the mark is set at creation because a profile cannot be discovered to have been simulated afterwards.
 

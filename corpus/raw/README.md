@@ -63,8 +63,8 @@ position's own arrangement — and one of those four
 VIC"). The remaining 9 Catalan ads say nothing about work location at all.
 
 `status/plan.md` (T4b row), `tests/test_corpus_raw.py` (`TARGET_MIX`, via
-`jobsearch.corpus_scope`) and this section are checked against each other
-mechanically by `jobsearch.corpus_scope` — `corpus_language_slice_mismatch == 0`
+`integral.corpus_scope`) and this section are checked against each other
+mechanically by `integral.corpus_scope` — `corpus_language_slice_mismatch == 0`
 fails if any of the three stops agreeing with the other two, rather than
 trusting three hand-edited documents to stay in sync. **Labelling (T5) must
 extract `remote_arrangement` from each Catalan ad's own text — never assume a
@@ -76,7 +76,8 @@ assume it is on-site either; both directions are represented.**
 Reading the corpus needs nothing but the stdlib:
 
 ```python
-from jobsearch.corpus import load_ads, language_counts
+from integral.corpus import load_ads, language_counts
+
 ads = load_ads()  # raises on any entry without a resolvable source_url
 ```
 
@@ -84,7 +85,7 @@ Collecting more needs the scraping stack and egress to the boards:
 
 ```bash
 uv run --extra collect python tools/collect_ads.py --target-es 60 --target-en 25 --target-ca 15
-uv run python -m jobsearch.corpus status/evidence/T4b.json   # recount → evidence
+uv run python -m integral.corpus status/evidence/T4b.json   # recount → evidence
 make test
 ```
 

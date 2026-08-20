@@ -129,7 +129,7 @@ escape hatch "for sites that need it". Nothing ever executed it. A connector for
 a site the declarative form cannot express could be written, could pass the
 whole conformance check, and could not work: `connectors.py` interprets
 `connector.yaml` and matches selectors, and there is no import machinery
-anywhere in `src/jobsearch`. A promise a contributor can act on and the tool
+anywhere in `src/integral`. A promise a contributor can act on and the tool
 cannot keep is worse than no promise, so the promise is withdrawn (D-10, #78).
 
 Withdrawn rather than implemented, because implementing it honestly is not a
@@ -144,7 +144,7 @@ Sites the declarative grammar cannot reach — JS-rendered pages are already
 outside it, see `connectors.py`, "What the format does not cover" — are met by
 growing the grammar, when there is a real site to grow it against.
 
-The withdrawal is measured, not just written down: `jobsearch.connector_shape`
+The withdrawal is measured, not just written down: `integral.connector_shape`
 counts the executable mechanisms this section advertises that no runtime
 executes, and records it as `advertised_connector_mechanisms_without_a_runtime`
 in `status/evidence/D10.json`. Re-advertising a `parse.py` here without also
@@ -155,12 +155,12 @@ Six rules, short enough to be one command that a contributor's agent and CI
 both run, so a green local check is not a different judgement from a green CI:
 
 ```bash
-uv run python -m jobsearch.connector_contract --connectors <dir>
+uv run python -m integral.connector_contract --connectors <dir>
 ```
 
 `--connectors` is what makes it the contributor's command as well as ours: it
 runs over their directory, on their machine, and reaches the identical verdict.
-It is implemented in `src/jobsearch/connector_contract.py` (T53), records
+It is implemented in `src/integral/connector_contract.py` (T53), records
 `connector_contract_violations` into `status/evidence/T53.json`, and exits **3**
 rather than 0 when it found no package to check — an empty directory and a
 conforming one both report zero violations, and only the exit code separates
@@ -247,10 +247,17 @@ building before the volume exists to justify it.
 
 ## 7. Still open
 
-- ~~**The name.**~~ **Settled: `integral-job-search`** (2026-08-18). The rename
-  is T55. `integral` alone is taken on PyPI by an unrelated numerical-integration
-  package; since nothing here is published to PyPI that constrains only a future
-  decision to publish, and `integral-job-search` is free there in any case.
+- ~~**The name.**~~ **Settled: `integral-job-search`** (2026-08-18), and
+  **T55 swept it** (2026-08-20): the package is `integral`, the distribution is
+  `integral-job-search`, and `integral.naming` counts what is left of the old
+  name so a half-finished rename cannot pass unnoticed. `integral` alone is taken
+  on PyPI by an unrelated numerical-integration package; since nothing here is
+  published to PyPI that constrains only a future decision to publish, and
+  `integral-job-search` is free there in any case.
+  **One half is not the repository's to do**: renaming the GitHub repository is
+  an owner action, and the clone URL in `README.md` names the new one. GitHub
+  redirects the old path once the rename happens; until it does, that URL is the
+  one thing here that does not yet resolve.
 - **Whether the sources repository is public from the start.** Public is the
   obvious end state; starting private costs nothing and is reversible.
 - **Whether this repository is public.** Independent of the above, and not

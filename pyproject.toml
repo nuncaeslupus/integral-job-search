@@ -1,5 +1,5 @@
 [project]
-name = "jobsearch"
+name = "integral-job-search"
 version = "0.1.0"
 description = "Candidate-centred integral job search: one dimension model, carried end to end."
 requires-python = ">=3.12"
@@ -10,14 +10,14 @@ dependencies = [
 
 [project.optional-dependencies]
 # Only `tools/collect_ads.py` needs these. Reading and validating the committed
-# corpus (`jobsearch.corpus`) is stdlib-only, so the T4b gate runs without them.
+# corpus (`integral.corpus`) is stdlib-only, so the T4b gate runs without them.
 collect = [
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
     "py3langid>=0.3",
     "requests>=2.32",
 ]
-# Only `jobsearch.cv_store`'s PDF importer needs this. DOCX is a zip of XML —
+# Only `integral.cv_store`'s PDF importer needs this. DOCX is a zip of XML —
 # stdlib `zipfile` + `xml.etree` read it directly — and the S4 gate
 # (`intake_field_provenance`) is measured over the DOCX-import and
 # build-from-nothing paths, neither of which needs it, so it runs without
@@ -38,7 +38,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/jobsearch"]
+packages = ["src/integral"]
 
 [tool.ruff]
 line-length = 100

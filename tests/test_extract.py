@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.dimensions import Cue, Dimension, Extraction, Language, load_dimensions
-from jobsearch.extraction import (
+from integral.dimensions import Cue, Dimension, Extraction, Language, load_dimensions
+from integral.extraction import (
     DimensionScore,
     EvidenceSpan,
     ExtractionError,
@@ -30,7 +30,7 @@ from jobsearch.extraction import (
     unsettled_dimensions,
     write_evidence,
 )
-from jobsearch.offers import Offer, compute_offer_id
+from integral.offers import Offer, compute_offer_id
 
 _DIMENSIONS = load_dimensions()
 
@@ -163,7 +163,7 @@ def test_disagreeing_cues_on_a_bipolar_dimension_go_to_the_model() -> None:
 
 
 def test_a_negatable_cue_inverts_rather_than_disappearing() -> None:
-    """"no on-call" is evidence *against*, not absence of evidence."""
+    """ "no on-call" is evidence *against*, not absence of evidence."""
     dimension = _with_cues(
         _dimension("on_call_load"), [Cue(pattern=r"guardias", value=0.8, negatable=True)]
     )
@@ -268,7 +268,7 @@ def test_a_span_whose_quote_does_not_match_its_own_length_is_rejected() -> None:
 
 
 def test_an_extraction_names_what_it_could_not_settle() -> None:
-    """"The advert does not say" is a finding a ranking is entitled to show.
+    """ "The advert does not say" is a finding a ranking is entitled to show.
 
     Omitting the key instead would be indistinguishable from a dimension
     nobody looked at.

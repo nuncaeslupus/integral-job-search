@@ -30,13 +30,13 @@ from typing import Any
 
 import pytest
 
-from jobsearch.decline import DeclineLedger
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.lifecycle import LifecycleRecord, save_lifecycle_offer, track_new_offer, transition
-from jobsearch.offers import Offer, connect_manual
-from jobsearch.process_spec import DEFAULT_STEPS_PATH, StepList, load_steps
-from jobsearch.profile import EvidenceLog, EvidenceSubject, rebuild
-from jobsearch.profile_capture import (
+from integral.decline import DeclineLedger
+from integral.identity import ProfileStore, create_profile
+from integral.lifecycle import LifecycleRecord, save_lifecycle_offer, track_new_offer, transition
+from integral.offers import Offer, connect_manual
+from integral.process_spec import DEFAULT_STEPS_PATH, StepList, load_steps
+from integral.profile import EvidenceLog, EvidenceSubject, rebuild
+from integral.profile_capture import (
     MINIMUM_CHECKS,
     MINIMUM_SUBJECT_CHECKS,
     SURFACE_DRIVERS,
@@ -168,7 +168,7 @@ def test_capture_writes_nothing_for_blank_text(profile: tuple[EvidenceLog, Decli
 def test_capture_refuses_to_write_a_retraction(profile: tuple[EvidenceLog, DeclineLedger]) -> None:
     """The generic primitive is not a side door around T38's own naming
     discipline — a retraction must always name the row it suppresses, which
-    only `jobsearch.retraction`'s own callers do."""
+    only `integral.retraction`'s own callers do."""
     log, ledger = profile
     with pytest.raises(ProfileCaptureError):
         capture(
@@ -349,9 +349,7 @@ def test_lifecycle_transition_alone_still_does_not_write_evidence(
 # --- the derived surface set: classification completeness and the 3-way split
 
 
-def _steps_with_raw_edit(
-    tmp_path: Path, edit: Callable[[list[dict[str, Any]]], None]
-) -> StepList:
+def _steps_with_raw_edit(tmp_path: Path, edit: Callable[[list[dict[str, Any]]], None]) -> StepList:
     """A `StepList` loaded from a copy of the committed JSON after `edit`
     mutates its raw `steps` array in place — used to prove a declaration (or
     its absence) drives measurement, without touching the committed file."""
@@ -493,7 +491,7 @@ def test_coverage_is_unchanged_by_the_migration(
 def test_intake_is_a_measured_surface_not_a_pending_one(
     store_for: Callable[[str], ProfileStore],
 ) -> None:
-    """T50: S4 (`jobsearch.cv_store`) now gives intake a real free-text path
+    """T50: S4 (`integral.cv_store`) now gives intake a real free-text path
     (`add_conversation_entry`/`set_conversation_scalar`), so it belongs among
     the measured surfaces rather than the pending ones — the only thing that
     distinguishes this task from a no-op, per the payload."""
@@ -567,7 +565,7 @@ def test_cli_exits_nonzero_when_coverage_is_below_one(tmp_path: Path) -> None:
     violation, and a violation is exit code 1 — proven here over the same
     broken-driver scenario the deliberate-break test exercises, not asserted
     by reading the source."""
-    from jobsearch.profile_capture import _main
+    from integral.profile_capture import _main
 
     evidence_path = tmp_path / "T28-broken.json"
     # `_main` always measures the *real* drivers (the CLI has no hook to
@@ -679,9 +677,7 @@ def test_probe_capture_runs_at_least_the_minimum_checks(tmp_path: Path) -> None:
 # verification, and the CLI contract around `captures_without_a_subject`.
 
 
-TwoOffers = tuple[
-    ProfileStore, tuple[Offer, LifecycleRecord], tuple[Offer, LifecycleRecord]
-]
+TwoOffers = tuple[ProfileStore, tuple[Offer, LifecycleRecord], tuple[Offer, LifecycleRecord]]
 
 
 @pytest.fixture
@@ -706,12 +702,20 @@ def test_two_rejections_of_different_offers_are_distinguishable_in_the_log(
     store, (offer_a, record_a), (offer_b, record_b) = two_offers
 
     _, _, row_a = capture_offer_decision_reason(
-        store, offer_a, record_a, "screened_out",
-        at="2026-08-18T09:01:00Z", reason="Too far from home.",
+        store,
+        offer_a,
+        record_a,
+        "screened_out",
+        at="2026-08-18T09:01:00Z",
+        reason="Too far from home.",
     )
     _, _, row_b = capture_offer_decision_reason(
-        store, offer_b, record_b, "screened_out",
-        at="2026-08-18T09:01:30Z", reason="Too far from home.",
+        store,
+        offer_b,
+        record_b,
+        "screened_out",
+        at="2026-08-18T09:01:30Z",
+        reason="Too far from home.",
     )
 
     assert row_a is not None and row_b is not None
@@ -733,8 +737,12 @@ def test_a_captured_reason_survives_rebuild_with_its_subject(
     save_lifecycle_offer(store, offer, record)
 
     _, _, row = capture_offer_decision_reason(
-        store, offer, record, "screened_out",
-        at="2026-08-18T09:01:00Z", reason="Weekends don't work for me any more.",
+        store,
+        offer,
+        record,
+        "screened_out",
+        at="2026-08-18T09:01:00Z",
+        reason="Weekends don't work for me any more.",
     )
     assert row is not None
 
@@ -774,8 +782,10 @@ def test_captures_without_a_subject_flags_an_offer_reaction_with_no_about(
     would take."""
     log, ledger = profile
     row = capture(
-        log, ledger,
-        step="feedback", kind="statement",
+        log,
+        ledger,
+        step="feedback",
+        kind="statement",
         text="Too far from home.",
         source="offer_reaction",
         recorded_at="2026-08-18T09:00:00Z",
@@ -792,8 +802,10 @@ def test_captures_without_a_subject_ignores_non_artefact_sources(
     "in response to what" its own way."""
     log, ledger = profile
     row = capture(
-        log, ledger,
-        step="history", kind="statement",
+        log,
+        ledger,
+        step="history",
+        kind="statement",
         text="I've only ever worked in small teams.",
         source="conversation",
         recorded_at="2026-08-18T09:00:00Z",
@@ -815,8 +827,12 @@ def test_retraction_does_not_strip_a_captured_rows_subject(
     record = track_new_offer(offer, at="2026-08-18T09:00:00Z")
     save_lifecycle_offer(store, offer, record)
     _, _, row = capture_offer_decision_reason(
-        store, offer, record, "screened_out",
-        at="2026-08-18T09:01:00Z", reason="The pay band is too low.",
+        store,
+        offer,
+        record,
+        "screened_out",
+        at="2026-08-18T09:01:00Z",
+        reason="The pay band is too low.",
     )
     assert row is not None
 
@@ -843,15 +859,19 @@ def test_revision_refresh_does_not_lose_a_captured_rows_subject(
 ) -> None:
     """T37's `refresh` reads the same log; a subject-carrying row must come
     out the other side of it unchanged."""
-    from jobsearch.revision import refresh
+    from integral.revision import refresh
 
     store = store_for("subject-survives-refresh")
     offer = connect_manual("Site Supervisor, contract.")
     record = track_new_offer(offer, at="2026-08-18T09:00:00Z")
     save_lifecycle_offer(store, offer, record)
     _, _, row = capture_offer_decision_reason(
-        store, offer, record, "screened_out",
-        at="2026-08-18T09:01:00Z", reason="Contract, not permanent — no thanks.",
+        store,
+        offer,
+        record,
+        "screened_out",
+        at="2026-08-18T09:01:00Z",
+        reason="Contract, not permanent — no thanks.",
     )
     assert row is not None
 
@@ -873,7 +893,7 @@ def test_a_pre_d8_row_with_no_about_key_loads_and_rebuilds(
     field left unset."""
     import json
 
-    from jobsearch.profile import EVIDENCE_PARTS, ProfileError
+    from integral.profile import EVIDENCE_PARTS, ProfileError
 
     store = store_for("subject-legacy-row")
     legacy = {
@@ -919,7 +939,7 @@ def test_deliberately_dropped_subject_moves_the_metric_above_zero(tmp_path: Path
 def test_cli_subject_gate_exits_nonzero_when_a_capture_has_no_subject(tmp_path: Path) -> None:
     """`_main --subject-gate`'s own contract: `captures_without_a_subject != 0`
     is a violation, exit code 1 — the real (correctly-wired) code passes."""
-    from jobsearch.profile_capture import _main
+    from integral.profile_capture import _main
 
     evidence_path = tmp_path / "D8.json"
     exit_code = _main(["prog", "--subject-gate", "--write-evidence", str(evidence_path)])

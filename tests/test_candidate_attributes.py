@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch.candidate import (
+from integral.candidate import (
     CONSTRAINT_FIELD_NAMES,
     STATES,
     Availability,
@@ -107,7 +107,7 @@ def test_states_match_step_runtime_resolved_states() -> None:
     A drift here would make T24's schema and the reader that already depends
     on it disagree about what a valid state is, silently.
     """
-    from jobsearch.step_runtime import RESOLVED_STATES
+    from integral.step_runtime import RESOLVED_STATES
 
     assert STATES == RESOLVED_STATES
 
@@ -215,7 +215,7 @@ def test_a_declined_field_does_not_veto_and_is_not_reported_outstanding() -> Non
 
 
 def test_conditional_relocation_needs_its_condition_checked() -> None:
-    """"Would move for the right role" is not a yes.
+    """ "Would move for the right role" is not a yes.
 
     A `conditional` relocation, by itself, must filter exactly like `no` for
     any offer that needs it — only an explicit per-offer confirmation
@@ -256,7 +256,7 @@ def test_conditional_relocation_needs_its_condition_checked() -> None:
 
 
 def test_relocation_willingness_yes_still_respects_stated_destinations() -> None:
-    """"Yes" is not "yes to anywhere" once destinations are named."""
+    """ "Yes" is not "yes to anywhere" once destinations are named."""
     constraints = CandidateConstraints(
         relocation=Relocation(state="stated", willingness="yes", destinations=("DE",))
     )

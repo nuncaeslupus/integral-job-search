@@ -4,10 +4,10 @@
   "negative_control": "this-fact-is-false: step 8 (Understanding) has no hard cap on questions and runs until the candidate ends the session",
   "load_prompts": [
     "The candidate's session is at step 8 (understanding) — run it.",
-    "jobsearch.step_runtime offered() names 'understanding' next; continue the process."
+    "integral.step_runtime offered() names 'understanding' next; continue the process."
   ],
   "no_load_prompts": [
     "Generic prompt that should NOT activate step-08-understanding",
-    "Audit the job-search codebase's test coverage."
+    "Audit the integral-job-search codebase's test coverage."
   ]
 }

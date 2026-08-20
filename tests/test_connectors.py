@@ -1,6 +1,6 @@
 """T32 — the declarative connector format and its interpreter.
 
-Written RED before `jobsearch.connectors` existed, per the task payload.
+Written RED before `integral.connectors` existed, per the task payload.
 `test_a_connector_file_cannot_introduce_executable_behaviour` is the gate as a
 single test; the rest guard the parts of the contract review alone would
 otherwise have to hold: unknown/credential fields refused at load, a markup
@@ -18,7 +18,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from jobsearch.connectors import (
+from integral.connectors import (
     MINIMUM_PROBES,
     ConnectorError,
     FieldSelector,
@@ -91,7 +91,7 @@ def test_the_gate_never_shells_out_over_a_malicious_url_pattern() -> None:
     connector = parse_connector(
         "site: acme\nlocale: en\nversion: '1.0.0'\nlast_verified: '2026-01-01'\n"
         "list:\n"
-        "  url_pattern: \"https://x.test/$(rm -rf /)?page={page}\"\n"
+        '  url_pattern: "https://x.test/$(rm -rf /)?page={page}"\n'
         "  item: '.job'\n"
         "  fields:\n    text: {css: '.x'}\n"
     )
@@ -146,8 +146,8 @@ def test_an_unknown_top_level_field_is_rejected_at_load() -> None:
 
 def test_a_field_name_outside_the_offer_vocabulary_is_rejected() -> None:
     body = VALID.replace(
-        "    company:\n      css: \".job-company\"\n",
-        "    company:\n      css: \".job-company\"\n    internal_score:\n      css: \".score\"\n",
+        '    company:\n      css: ".job-company"\n',
+        '    company:\n      css: ".job-company"\n    internal_score:\n      css: ".score"\n',
     )
     with pytest.raises(ConnectorError, match="internal_score"):
         parse_connector(body)
@@ -178,7 +178,7 @@ def test_loading_the_whole_directory_sorts_by_package_name(tmp_path: Path) -> No
     )
     write_connector(tmp_path / "otherboard_en", "connector.yaml", other)
     write_connector(tmp_path / "examplejobs_es", "connector.yaml")
-    from jobsearch.connectors import load_connectors
+    from integral.connectors import load_connectors
 
     connectors = load_connectors(tmp_path)
     assert [c.site for c in connectors] == ["examplejobs", "otherboard"]
@@ -196,7 +196,7 @@ def test_a_loose_yaml_file_beside_the_packages_is_not_loaded(tmp_path: Path) -> 
         "locale: es", "locale: en"
     )
     write_connector(tmp_path, "otherboard_en.yaml", other)
-    from jobsearch.connectors import load_connectors
+    from integral.connectors import load_connectors
 
     assert [c.site for c in load_connectors(tmp_path)] == ["examplejobs"]
 
@@ -213,7 +213,7 @@ def test_no_connector_stores_a_credential() -> None:
         with pytest.raises(ConnectorError):
             parse_connector(VALID + f"{bad}: leaked\n")
         body = VALID.replace(
-            "    company:\n      css: \".job-company\"\n",
+            '    company:\n      css: ".job-company"\n',
             f"    company:\n      css: \".job-company\"\n    {bad}:\n      css: '.x'\n",
         )
         with pytest.raises(ConnectorError):
@@ -247,9 +247,7 @@ def test_a_site_markup_change_is_a_single_field_edit() -> None:
     connector = parse_connector(VALID)
 
     before = parse_detail_page(connector, DETAIL_HTML_BEFORE)
-    assert before["text"] == (
-        "Build and operate our payments API. Python, remote-friendly."
-    )
+    assert before["text"] == ("Build and operate our payments API. Python, remote-friendly.")
 
     after_with_old_selector = parse_detail_page(connector, DETAIL_HTML_AFTER)
     assert "text" not in after_with_old_selector
@@ -432,9 +430,7 @@ def test_build_list_urls_honours_pagination_mode_none() -> None:
 
     # No page_count override: the connector's own (contradictory) max_pages
     # must not leak through — mode: none means exactly one page.
-    assert build_list_urls(contradictory_connector) == [
-        "https://www.examplejobs.test/jobs?page=1"
-    ]
+    assert build_list_urls(contradictory_connector) == ["https://www.examplejobs.test/jobs?page=1"]
 
     # An explicit page_count override is still honoured as given — mode only
     # overrides the *default* derived from the connector's own max_pages.
@@ -563,9 +559,7 @@ def test_a_stale_connector_returning_nothing_is_reported_not_silent() -> None:
     assert fresh_result.stale is False
     assert fresh_result.message is None
 
-    stale_result = collect_listing(
-        connector, empty_html, today=date(2027, 2, 1), max_age_days=90
-    )
+    stale_result = collect_listing(connector, empty_html, today=date(2027, 2, 1), max_age_days=90)
     assert stale_result.items == ()
     assert stale_result.stale is True
     assert stale_result.message is not None

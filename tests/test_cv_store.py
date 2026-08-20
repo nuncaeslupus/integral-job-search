@@ -26,8 +26,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from jobsearch import cv_store as cv_store_module
-from jobsearch.cv_store import (
+from integral import cv_store as cv_store_module
+from integral.cv_store import (
     _LEAK_PROBE_MARKER,
     MINIMUM_CHECKS,
     MINIMUM_FIELDS_MEASURED,
@@ -54,9 +54,9 @@ from jobsearch.cv_store import (
     write_evidence,
     write_master,
 )
-from jobsearch.decline import DeclineError, DeclineLedger
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.profile import EvidenceLog
+from integral.decline import DeclineError, DeclineLedger
+from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog
 
 
 @pytest.fixture
@@ -230,10 +230,10 @@ def test_docx_extraction_reads_headers_and_footers_in_document_order() -> None:
     stable or every span offset moves between runs.
     """
     docx_bytes = _wrap_docx_body(
-        '<w:p><w:r><w:t>Body paragraph.</w:t></w:r></w:p>',
+        "<w:p><w:r><w:t>Body paragraph.</w:t></w:r></w:p>",
         extra_parts={
-            "word/header1.xml": '<w:p><w:r><w:t>Ada Lovelace</w:t></w:r></w:p>',
-            "word/footer1.xml": '<w:p><w:r><w:t>Page 1 of 1</w:t></w:r></w:p>',
+            "word/header1.xml": "<w:p><w:r><w:t>Ada Lovelace</w:t></w:r></w:p>",
+            "word/footer1.xml": "<w:p><w:r><w:t>Page 1 of 1</w:t></w:r></w:p>",
         },
     )
     tmp = Path("/tmp") / "cv_store_docx_headers_test.docx"
@@ -619,7 +619,7 @@ def test_write_evidence_writes_the_measured_json(tmp_path: Path) -> None:
 
 
 def test_cli_exits_zero_when_the_real_scenarios_pass(tmp_path: Path) -> None:
-    from jobsearch.cv_store import _main
+    from integral.cv_store import _main
 
     evidence_path = tmp_path / "S4.json"
     exit_code = _main(["prog", "--write-evidence", str(evidence_path)])
@@ -635,8 +635,8 @@ def test_cli_exits_nonzero_when_intake_field_provenance_is_below_one(
     measured metric below 1.0 and make `_main` exit non-zero — not merely
     the probe's own internal bookkeeping.
     """
-    from jobsearch import cv_store
-    from jobsearch.cv_store import _main
+    from integral import cv_store
+    from integral.cv_store import _main
 
     def broken_probe(root: Path) -> dict[str, object]:
         stripped = Experience(title="x", organisation="y")  # no provenance
@@ -697,8 +697,8 @@ def test_cli_exits_three_when_too_few_checks_ran(
     """A clean score without exercising the real scenarios is not a
     measurement — the same `MINIMUM_CHECKS`-floor pattern T28/T6/D-6 each
     enforce for their own probes."""
-    from jobsearch import cv_store
-    from jobsearch.cv_store import _main
+    from integral import cv_store
+    from integral.cv_store import _main
 
     def thin_probe(root: Path) -> dict[str, object]:
         return {
@@ -832,7 +832,7 @@ def test_atomic_write_leaves_no_partial_file_when_interrupted(
 
 
 def test_invalid_fields_do_not_leave_an_orphan_evidence_row(store: ProfileStore) -> None:
-    """`EvidenceLog.append` is append-only with no rollback (`jobsearch.
+    """`EvidenceLog.append` is append-only with no rollback (`integral.
     profile`'s own module docstring) — if `add_conversation_entry` writes
     the row before validating `fields`, an invalid submission leaves a
     permanent, unreferenced row nothing can ever remove. Validate first."""
@@ -976,7 +976,7 @@ def test_an_entry_with_several_fields_is_one_provenance_measurement() -> None:
     """Documents the chosen granularity: `measure_provenance` counts one
     measurement for a whole `Experience` (title, organisation, start, end,
     description), not one per leaf attribute — see `_named_fields`."""
-    from jobsearch.cv_store import _named_fields
+    from integral.cv_store import _named_fields
 
     entry = Experience(
         title="Backend Engineer",

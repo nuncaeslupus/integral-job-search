@@ -2,7 +2,7 @@
   "spec_version": "2.1",
   "settled_on": "2026-08-17",
   "source": "status/spec-v2-process.md",
-  "note": "The machine-readable step list. S2's gate divides by step_count, so the count lives here and not only in prose. Every step carries a named gate metric; `not_implemented` is a valid state, a blank metric is not. `required` marks the five steps without which there is nothing to show the candidate; every other step is offered and may be declined or deferred without blocking. S12: every step also carries `accepts_candidate_free_text` — whether that step's protocol puts free text about the candidate in front of a writer at all; `null` means undeclared and is caught by jobsearch.profile_capture's own gate, never silently treated as false.",
+  "note": "The machine-readable step list. S2's gate divides by step_count, so the count lives here and not only in prose. Every step carries a named gate metric; `not_implemented` is a valid state, a blank metric is not. `required` marks the five steps without which there is nothing to show the candidate; every other step is offered and may be declined or deferred without blocking. S12: every step also carries `accepts_candidate_free_text` — whether that step's protocol puts free text about the candidate in front of a writer at all; `null` means undeclared and is caught by integral.profile_capture's own gate, never silently treated as false.",
   "step_count": 13,
   "phases": {
     "first_run": "Steps 0-6. Run once, in order, the first time a candidate uses the tool. Re-entered later by revision or by a freshness trigger, never repeated wholesale.",

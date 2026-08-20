@@ -18,9 +18,9 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.identity import ProfileStore, create_profile
-from jobsearch.process_spec import StepList, load_steps
-from jobsearch.step_runtime import (
+from integral.identity import ProfileStore, create_profile
+from integral.process_spec import StepList, load_steps
+from integral.step_runtime import (
     DETECTORS,
     REQUIRED_TRACE,
     ProfileView,
@@ -73,9 +73,7 @@ def test_step_without_its_required_inputs_is_never_offered(
     assert "sourcing" in {entry.step for entry in blocked(view, steps)}
 
 
-def test_a_blocked_step_says_what_it_is_waiting_for(
-    store: ProfileStore, steps: StepList
-) -> None:
+def test_a_blocked_step_says_what_it_is_waiting_for(store: ProfileStore, steps: StepList) -> None:
     entry = next(item for item in blocked(ProfileView(store), steps) if item.step == "sourcing")
     assert entry.missing == ("constraints",)
     assert "constraints" in entry.reason()
@@ -166,9 +164,7 @@ def test_a_handle_alone_is_l0(store: ProfileStore, steps: StepList) -> None:
     assert sufficiency(ProfileView(store), steps) == "L0"
 
 
-def test_an_empty_weights_file_is_not_fitted_weights(
-    store: ProfileStore, steps: StepList
-) -> None:
+def test_an_empty_weights_file_is_not_fitted_weights(store: ProfileStore, steps: StepList) -> None:
     """T6 writes it shaped-but-empty at every rebuild, so this matters.
 
     Treating the placeholder as weights would make every ranking read L2 from
@@ -195,9 +191,7 @@ def test_unresolved_constraints_are_not_resolved_constraints(
     assert sufficiency(ProfileView(store), steps) == "L1"
 
 
-def test_a_malformed_derived_file_reads_as_absent(
-    store: ProfileStore, steps: StepList
-) -> None:
+def test_a_malformed_derived_file_reads_as_absent(store: ProfileStore, steps: StepList) -> None:
     """Reading it as present would offer a step that then cannot run."""
     store.write_text("{not json", "profile", "constraints.json")
     assert sufficiency(ProfileView(store), steps) == "L0"
@@ -217,9 +211,7 @@ def test_no_detector_names_an_artefact_the_graph_does_not(steps: StepList) -> No
     assert set(DETECTORS) <= declared | set(steps.external_artefacts)
 
 
-def test_the_situation_answers_all_three_questions(
-    store: ProfileStore, steps: StepList
-) -> None:
+def test_the_situation_answers_all_three_questions(store: ProfileStore, steps: StepList) -> None:
     situation = look(ProfileView(store), steps)
     assert situation.sufficiency == "L0"
     assert situation.offered

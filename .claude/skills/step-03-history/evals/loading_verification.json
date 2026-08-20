@@ -4,10 +4,10 @@
   "negative_control": "this-fact-is-false: step 3 (History) has no hard cap on questions and runs until the candidate ends the session",
   "load_prompts": [
     "The candidate's session is at step 3 (history) — run it.",
-    "jobsearch.step_runtime offered() names 'history' next; continue the process."
+    "integral.step_runtime offered() names 'history' next; continue the process."
   ],
   "no_load_prompts": [
     "Generic prompt that should NOT activate step-03-history",
-    "Audit the job-search codebase's test coverage."
+    "Audit the integral-job-search codebase's test coverage."
   ]
 }

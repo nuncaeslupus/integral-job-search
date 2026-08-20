@@ -29,7 +29,7 @@ Run via (from the repo root, with the project's dev environment):
         --id <session-id> [--input-dir <profiles-root>] [--seed 1,3]
 
 The profiles root defaults to the candidate store resolved from `$INTEGRAL_HOME`
-(`jobsearch.state_home`), which refuses any path inside a git work tree —
+(`integral.state_home`), which refuses any path inside a git work tree —
 candidate state never lives in the clone (T51, `docs/distribution.md` §2).
 
 Exit codes: 0 the ledger was read; 1 notes were captured but something was also
@@ -47,8 +47,8 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
-from jobsearch.state_home import StateHomeRefused, profiles_root  # noqa: E402
-from jobsearch.test_mode import (  # noqa: E402
+from integral.state_home import StateHomeRefused, profiles_root  # noqa: E402
+from integral.test_mode import (  # noqa: E402
     MetaNoteError,
     NoteLedger,
     build_review,

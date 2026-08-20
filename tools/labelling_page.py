@@ -28,7 +28,7 @@ Two things this page will not do:
   of the page; this one carries no cue data at all — no patterns, no values, no
   highlighting derived from them. The marks come from
   `corpus/labelled/suggestions.json`, whose provenance is recorded and whose
-  overlap with the cues is measured by `jobsearch.suggestions.cue_agreement`.
+  overlap with the cues is measured by `integral.suggestions.cue_agreement`.
 * **It never exports something nobody looked at.** A suggestion is `pending`
   until the labeller acts on it, and only confirmed or edited annotations reach
   the export. `Label.source` then records which, so "the labeller agreed with
@@ -54,9 +54,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from jobsearch.dimensions import DEFAULT_DIMENSIONS_DIR, GROUPS, Dimension, load_dimensions
-from jobsearch.harness import DEFAULT_STORE_PATH, LabelledAd, load_store
-from jobsearch.suggestions import (
+from integral.dimensions import DEFAULT_DIMENSIONS_DIR, GROUPS, Dimension, load_dimensions
+from integral.harness import DEFAULT_STORE_PATH, LabelledAd, load_store
+from integral.suggestions import (
     DEFAULT_SUGGESTIONS_PATH,
     SuggestionSet,
     load_suggestions,
@@ -255,7 +255,7 @@ def build_page(
     }
     return (
         _HEAD
-        + '<script type="application/json" id="jobsearch-data">'
+        + '<script type="application/json" id="integral-data">'
         + _embed_json(data)
         + "</script>\n"
         + _BODY
@@ -526,7 +526,7 @@ _BODY = """<header>
     your agreement rate has a baseline; the page says so when you reach one.</p>
   <p><strong>Stopping and resuming.</strong> Work is saved in this browser as you
     go. Export when you are done and apply it with
-    <code>uv run python -m jobsearch.harness import &lt;file&gt;</code>. Once applied,
+    <code>uv run python -m integral.harness import &lt;file&gt;</code>. Once applied,
     it is in the corpus: every page built after that arrives with those labels
     already placed and marked <em>banked</em>, so a lost tab costs you nothing
     since the last export. <em>restore</em> below reads an export file straight
@@ -603,7 +603,7 @@ _TAIL = """</body>
 
 _SCRIPT = r"""
 'use strict';
-const DATA = JSON.parse(document.getElementById('jobsearch-data').textContent);
+const DATA = JSON.parse(document.getElementById('integral-data').textContent);
 const DIMS = new Map(DATA.dimensions.map(d => [d.id, d]));
 const ADS = DATA.ads;
 const MARKS = DATA.suggestions.marks || {};
@@ -612,7 +612,7 @@ const MARKS = DATA.suggestions.marks || {};
 // suggestion for that dimension is dropped rather than re-offered.
 const BANKED = Object.fromEntries(DATA.ads.map(a => [a.id, a.labels || []]));
 const CONTROL = new Set(DATA.suggestions.control || []);
-const STORE_KEY = 'jobsearch.t5.labels.v2';
+const STORE_KEY = 'integral.t5.labels.v2';
 
 let state = loadState();
 let current = 0;
@@ -630,7 +630,7 @@ function loadState() {
   return migrateV1();
 }
 
-// The previous page saved under `jobsearch-t5-labels-v1`, shaped
+// The previous page saved under `integral-t5-labels-v1`, shaped
 // `{adId: {dimId: {value, negated, quote, ...}}}`. Reading only the new key
 // would leave that work stranded in the browser while the page looked empty,
 // and the labeller could then export a replacement corpus missing everything
@@ -645,7 +645,7 @@ function loadState() {
 function migrateV1() {
   const fresh = { byAd: {}, coined: [] };
   let raw = null;
-  try { raw = localStorage.getItem('jobsearch-t5-labels-v1'); } catch (err) { return fresh; }
+  try { raw = localStorage.getItem('integral-t5-labels-v1'); } catch (err) { return fresh; }
   if (!raw) return fresh;
 
   let old;
