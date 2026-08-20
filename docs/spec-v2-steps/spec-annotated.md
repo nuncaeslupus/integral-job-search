@@ -1,6 +1,6 @@
 # Job Search — Specification v2 — Specification (annotated edition)
 
-> Generated 2026-08-18. This is the specification with a **note slot** after every section. Read it in any Markdown app. To annotate, replace the `_(your notes…)_` placeholder under any section. When done, send the file back — notes are acted on.
+> Generated 2026-08-20. This is the specification with a **note slot** after every section. Read it in any Markdown app. To annotate, replace the `_(your notes…)_` placeholder under any section. When done, send the file back — notes are acted on.
 
 ---
 
