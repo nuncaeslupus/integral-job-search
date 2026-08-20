@@ -33,6 +33,14 @@ If the runtime (`jobsearch.step_runtime.offered`) is not offering `reactions` fo
 - Vary the question; the same prompt fifteen times reads as a form.
 - Capture their words verbatim and extract afterwards — never ask them to categorise their own reaction.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Pulling up a handful of real adverts for you to react to — one moment."
+```
+
 **Never:**
 
 - **Stimuli are never invented.** An imagined advert reads plausibly and represents nothing — this is how wrong cues once entered the dimension model with gold examples demonstrating their own error.

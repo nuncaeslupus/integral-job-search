@@ -33,6 +33,14 @@ Reaction evidence, or enough constraint and history evidence to seed the choices
 - Keep it moving, say what the answers are revealing as they go, and stop early when the fit is identifiable rather than running the full set for completeness.
 - When a choice contradicts a stated preference, do not correct them — record both and let the fit reconcile it.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Turning those into weights now — one moment."
+```
+
 **Never:**
 
 - Never use a slider or a 1-to-10 rating — both measure self-belief, not revealed preference.

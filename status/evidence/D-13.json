@@ -1,0 +1,204 @@
+{
+  "step_skills_without_a_progress_disclosure_rule": 0,
+  "steps_checked": 13,
+  "protocols_checked": 13,
+  "rule_declared_in_step_spec": true,
+  "offenders": [],
+  "readings": [
+    {
+      "step": "identify",
+      "n": 0,
+      "skill_dir": "step-00-identify",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Nice to meet you, Marcos. Let me get your profile set up — one moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": true,
+      "acknowledges_first": true,
+      "reasons": []
+    },
+    {
+      "step": "intake",
+      "n": 1,
+      "skill_dir": "step-01-intake",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Let me read that properly and pull out what's in it — one moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "constraints",
+      "n": 2,
+      "skill_dir": "step-02-constraints",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Saving those so nothing that breaks them reaches you — one moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "history",
+      "n": 3,
+      "skill_dir": "step-03-history",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Let me write that one down before we carry on — a moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "traits",
+      "n": 4,
+      "skill_dir": "step-04-traits",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Scoring what you've told me against the traits — bear with me a moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "reactions",
+      "n": 5,
+      "skill_dir": "step-05-reactions",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Pulling up a handful of real adverts for you to react to — one moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "preferences",
+      "n": 6,
+      "skill_dir": "step-06-preferences",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Turning those into weights now — one moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "sourcing",
+      "n": 7,
+      "skill_dir": "step-07-sourcing",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Searching the boards with your constraints on — this takes a moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "understanding",
+      "n": 8,
+      "skill_dir": "step-08-understanding",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Reading those adverts properly — a moment while I go through them.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "ranking",
+      "n": 9,
+      "skill_dir": "step-09-ranking",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Scoring and ordering them against what you've told me — one moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "feedback",
+      "n": 10,
+      "skill_dir": "step-10-feedback",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Re-ranking with that in — one moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "application",
+      "n": 11,
+      "skill_dir": "step-11-application",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Drafting the CV and the letter for this one — this takes a moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    },
+    {
+      "step": "interview_log",
+      "n": 12,
+      "skill_dir": "step-12-interview-log",
+      "skill_md_exists": true,
+      "has_protocol_section": true,
+      "spoken_examples": 1,
+      "disclosures": [
+        "\"Writing that up while it's fresh — one moment.\""
+      ],
+      "states_the_rule": true,
+      "first_contact": false,
+      "acknowledges_first": null,
+      "reasons": []
+    }
+  ]
+}

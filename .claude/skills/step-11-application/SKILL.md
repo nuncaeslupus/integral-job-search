@@ -33,6 +33,14 @@ An offer with status `shortlisted`, and `cv/master.json` with enough in it to dr
 - Where the advert asks for something they lack, say so and offer the options honestly: apply anyway and address the gap in the letter, or leave this one.
 - **This is where personal details are collected** — the name to print, contact details, whatever this employer's form requires — asked for the document being produced, not gathered speculatively months earlier.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Drafting the CV and the letter for this one — this takes a moment."
+```
+
 **Never:**
 
 - Never claim a qualification, a year of experience or a language the store does not hold — the generated document is the candidate's word, the one thing here that reaches a stranger.

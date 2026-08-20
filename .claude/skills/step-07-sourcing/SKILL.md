@@ -33,6 +33,14 @@ If the runtime (`jobsearch.step_runtime.offered`) is not offering `sourcing` for
 - **Deduplication is by similarity, not by hash** — the same job at two boards is rarely byte-identical.
 - Where a source needs a login, drive the candidate's **own browser session** rather than storing credentials — nothing to leak, nothing to rotate.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Searching the boards with your constraints on — this takes a moment."
+```
+
 **Never:**
 
 - Never store a credential in a connector file — authenticated sources use the candidate's own browser session.

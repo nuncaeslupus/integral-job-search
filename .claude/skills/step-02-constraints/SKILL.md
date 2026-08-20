@@ -34,6 +34,14 @@ A resolved handle. Runs whether or not Intake did; this step is required and Int
 - Ask about the things that quietly rule out whole employers — sectors, causes, employer kinds, countries — using the prepared list of *usual suspects* as material to draw from, never a checklist to read aloud.
 - An unconfirmed claim stays `unknown`; unknown neither passes nor vetoes, and surfaces later as something still owed.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Saving those so nothing that breaks them reaches you — one moment."
+```
+
 **Never:**
 
 - Never leave a field blank — every constraint field ends the step `stated`, `declined` or `unknown`, and a blank field is indistinguishable from a question nobody asked.
