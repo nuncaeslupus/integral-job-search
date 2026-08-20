@@ -31,8 +31,14 @@ isolation: worktree
 env:
   CLAUDE_CODE_DISABLE_1M_CONTEXT: "1"
   CLAUDE_CODE_DISABLE_FAST_MODE: "1"
-  CLAUDE_CODE_SUBAGENT_MODEL: "claude-sonnet-4-6"
+  CLAUDE_CODE_SUBAGENT_MODEL: "<models.workers from arsenal/config.toml>"
 ```
+
+The orchestrator resolves that last value before dispatch with
+`python3 claude-arsenal/scripts/arsenal_config.py --get models.workers`
+(default `sonnet`). It is not written literally here because which model runs
+the workers is the host repo's choice, and a value hardcoded in a vendored file
+is one an upgrade silently replaces.
 
 ## Relative-path directive (required)
 
@@ -67,10 +73,12 @@ Verify `pwd` at the start of the task if unsure.
    until all tests from step 2 pass. Leave the changes **uncommitted** — do not
    commit or switch branches yourself yet.
 
-4. **Run the gates:** the host lint gate if one exists (`make lint`,
-   `npm run lint`, …), then `claude-arsenal/bin/gate_run.sh <task_id>`, which
-   executes the fenced bash block in the task file.
-   - **Gate fails** (lint or `gate_run.sh` exit non-zero) → **open no PR.**
+4. **Run the gates.** `open_task_pr.sh` runs them itself before it touches git —
+   the repo's own `host-gate` from `arsenal/config.toml` if one is declared,
+   then `gate_run.sh <task_id>` — and refuses to open a PR if either fails.
+   Running them here first is still worth it: it surfaces the failure before the
+   PR attempt rather than during it.
+   - **Gate fails** (host gate or `gate_run.sh` exit non-zero) → **open no PR.**
      Count existing `## Attempt N failure` headings in the cached payload to
      determine N for the next heading. Return outcome `open` to the orchestrator
      with failure notes structured as follows, for it to append under
