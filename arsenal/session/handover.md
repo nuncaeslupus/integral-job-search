@@ -50,9 +50,20 @@ vacuous-pass shape as D-21, one level along.
 **`make lint` does not check formatting.** It runs `ruff check` and `mypy`,
 never `ruff format --check`, so format drift accumulates unnoticed: a repo-wide
 `ruff format` here rewrapped `step_certification.py` and its test, untouched
-work from the previous session. That was reverted in `fca469e` rather than
-ridden along on D-16. **Format only the files you touched**, or seed a task for
-the drift — do not sweep it into an unrelated PR.
+work from the previous session. **Format only the files you touched** —
+`ruff format <paths-you-changed>`, never `ruff format src tests`. This was
+reverted twice in one session (`fca469e`, then `b3fcc8f`) because the second
+`make`-style sweep re-did it. Or seed a task for the drift; do not sweep it
+into an unrelated PR.
+
+**A `meta.yaml` is not a connector.** The first cut of `read_package` decided
+`usable` from metadata alone, so a directory holding a plausible `meta.yaml`
+and nothing that fetches reported as covering its market and suppressed the
+disclosure outright — D-16's own failure, through the back door of its own fix.
+It now calls `load_connector`, the runtime's own definition of loadable, which
+also brings the directory-name contract along for free. **When a check asks
+"does X exist", make it ask the loader, not the filesystem.** Found by
+CodeRabbit on #112, reproduced before fixing.
 
 ## Left open (carried forward)
 
@@ -91,7 +102,7 @@ All five run locally and pass on this branch:
 
 ```bash
 make lint           # ruff + strict mypy — clean, 105 source files
-make test           # 1184 passed, 1 skipped
+make test           # 1186 passed, 1 skipped
 make evidence       # no drift
 make verify-subtree # 0 diverging, 34 assets compared
 make verify-gates   # 63 terminal tasks, 63 gates asserted
