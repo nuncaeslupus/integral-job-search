@@ -551,8 +551,9 @@ def test_the_four_boundaries_that_offered_an_exit_are_counted(tmp_path: Path) ->
         '"Anything else, or leave it?"',
     ]
     for spoken in said:
-        offers = session_exit._exit_offers((spoken,))
+        offers, shortcuts = session_exit._exit_offers((spoken,))
         assert offers == (spoken,), f"not read as an exit offer: {spoken}"
+        assert shortcuts == (), f"wrongly licensed as §3.3's skip: {spoken}"
 
 
 def test_a_boundary_that_states_no_rule_is_counted(tmp_path: Path, steps: StepList) -> None:
@@ -728,3 +729,98 @@ def test_exit_evidence_matches_measure(tmp_path: Path) -> None:
     measured = session_exit.write_evidence(target)
     assert json.loads(target.read_text(encoding="utf-8")) == measured
     assert measured["step_boundaries_offering_an_exit"] == 0
+
+
+# --- D-15 review round (Qodo, PR #102): the exit and the offered skip -------
+
+
+def test_the_offered_skip_is_not_read_as_an_exit(tmp_path: Path, steps: StepList) -> None:
+    """§3.3's prescribed sentence must never count as an exit offer.
+
+    The process calls two different things stopping. The *exit* ends the
+    sitting; §3.3's *skip* — "we can stop here and go look at real jobs with
+    what I have" — ends the first-run climb and sends the candidate forward to a
+    provisional ranking. Counting the second would make a required behaviour
+    unimplementable: a compliant boundary would fail the gate, and the gate
+    would enforce the opposite of the process contract.
+    """
+    spoken = (
+        '"We can stop here and go look at real jobs with what I have; the list will be'
+        ' rougher and I\'ll tell you what would sharpen it."'
+    )
+    offers, shortcuts = session_exit._exit_offers((spoken,))
+    assert offers == ()
+    assert shortcuts == (spoken,), "the skip must be recorded, not silently dropped"
+
+    step = next(s for s in steps.steps if s.id == "constraints")
+    skills_dir = _boundary_skill(
+        tmp_path,
+        step,
+        "**Never close by offering to end the session.** The exit is offered only when the"
+        f" session has run long.\n\n```text\n{spoken}\n```",
+    )
+    reading = session_exit.read_boundary(step, skills_dir)
+    assert not reading.offers, reading.reasons
+
+
+def test_exit_offers_phrased_another_way_are_still_counted(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """The pattern is enumerated, so its coverage is the whole of its worth.
+
+    Review found these four phrasings passing straight through: a boundary
+    could state the governing rule and then offer the door in the example, with
+    the count still reading zero.
+    """
+    for spoken in (
+        '"Shall we wrap up here?"',
+        '"End here, and pick it up next time?"',
+        '"Want to take a break and resume tomorrow?"',
+        '"That\'s probably enough for one sitting."',
+    ):
+        offers, shortcuts = session_exit._exit_offers((spoken,))
+        assert offers == (spoken,), f"not read as an exit offer: {spoken}"
+        assert shortcuts == ()
+
+
+def test_the_skip_licence_needs_a_forward_destination(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """An exit cannot be laundered into a skip by sounding constructive.
+
+    The licence requires the line to name going on to the jobs, the offers or
+    the ranking *now*. A sentence that sends the candidate to their ranking is
+    the skip; one that just sounds warm about leaving is the exit.
+    """
+    offers, shortcuts = session_exit._exit_offers(
+        ('"We can stop here, and it\'s been really useful — rest up."',)
+    )
+    assert offers, "a warm exit is still an exit"
+    assert shortcuts == ()
+
+
+def test_every_skill_preserves_the_offered_skip() -> None:
+    """The committed rule must forbid the exit without deleting §3.3's shortcut.
+
+    The first cut said "never close by offering to stop", which reads as
+    forbidding the skip too — §3.3 requires it at the end of every first-run
+    step, so a rule that suppressed it would remove a documented path through
+    the process.
+    """
+    for skill_md in sorted(DEFAULT_SKILLS_DIR.glob("step-*/SKILL.md")):
+        section = session_exit.boundary_section(skill_md.read_text(encoding="utf-8"))
+        assert section is not None, skill_md
+        _, prose = session_exit.split_spoken_and_prose(section)
+        assert "§3.3" in prose, f"{skill_md.parent.name} does not preserve the offered skip"
+
+
+def test_the_process_spec_distinguishes_the_exit_from_the_skip() -> None:
+    """§3.2 and §3.3 must not read as one rule, in either direction.
+
+    §3.2 forbidding the exit while §3.3 requires the skip is only coherent if
+    both say which of the two they mean. This is D-15's own failure mode — a
+    rule in one document contradicted by another — applied to the fix for it.
+    """
+    process = (Path("status") / "spec-v2-process.md").read_text(encoding="utf-8")
+    assert "Two different things get called stopping" in process
+    assert "This is a move forward, not the exit of §3.2" in process

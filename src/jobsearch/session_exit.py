@@ -99,16 +99,58 @@ _FENCE_RE = re.compile(r"^```[^\n]*\n(?P<inner>.*?)^```\s*$", re.M | re.S)
 # — not declining a subject (§5.4's business) and not deferring an artefact:
 # step 11's "Ready to send, or sit on it?" chooses between two ways forward and
 # is deliberately not matched.
+#
+# The list is enumerated rather than semantic, so it is only ever as good as its
+# coverage: review found "wrap up here?", "end here?" and "take a break and
+# resume tomorrow?" passing straight through an earlier cut. Widened here, and
+# it will need widening again — a boundary that states its rule and then
+# contradicts it in the example is the only case limb 2 does not already catch,
+# which is what bounds the damage when a phrasing is missing.
 _EXIT_OFFER_RE = re.compile(
     r"\b(?:"
     r"leave\s+(?:it|that|this|things)\b"
     r"|or\s+pause\b|pause\s+(?:here|there|for\s+(?:now|today))\b"
     r"|stop\s+(?:here|there|for\s+(?:now|today))\b|or\s+stop\b"
     r"|call\s+it\s+(?:a\s+day|there|quits)\b"
-    r"|had\s+enough\b|enough\s+for\s+(?:now|today)\b"
+    r"|wrap\s+(?:it\s+|things\s+|up\s+)?up\b|wrap\s+up\b"
+    r"|end\s+(?:it\s+)?(?:here|there|for\s+(?:now|today))\b|end\s+the\s+session\b"
+    r"|take\s+a\s+break\b|have\s+a\s+break\b"
+    r"|resume\s+(?:later|tomorrow|another\s+(?:time|day))\b"
+    r"|had\s+enough\b|enough\s+for\s+(?:now|today|one\s+(?:day|sitting|go))\b"
+    r"|that'?s\s+it\s+for\s+(?:now|today)\b"
     r"|come\s+back\s+(?:to\s+(?:it|this)\s+)?(?:later|another\s+(?:time|day))\b"
     r"|pick\s+(?:it|this)\s+up\s+(?:later|another\s+(?:time|day))\b"
     r")"
+)
+
+# §3.3's **offered skip**, which is not the exit and must never be counted as
+# one. The process calls two different things stopping, and only one of them
+# ends the sitting:
+#
+#   - the *exit* — the candidate leaves, and comes back another day;
+#   - the *skip* — *"we can stop here and go look at real jobs with what I
+#     have"* — the candidate stops the first-run climb and goes **forward** to a
+#     provisional L1 ranking, sooner and rougher.
+#
+# `spec-v2-process.md` §3.3 requires the skip at the end of **every** first-run
+# step, so a check that read its prescribed sentence as an exit offer would make
+# the required behaviour unimplementable: a compliant boundary would fail
+# `step_boundaries_offering_an_exit == 0`, and the gate would enforce the
+# opposite of the process contract. Found by review, and the same false positive
+# step 11's "Ready to send, or sit on it?" already had a case for — one forward
+# choice was excluded and the other, the mandated one, was not.
+#
+# The licence requires a forward *destination*, not merely a soft word: the line
+# has to name going on to the jobs, the offers, or the provisional ranking now.
+# A genuine exit offer cannot be laundered through it, because a sentence that
+# sends the candidate to their ranking is the skip.
+_FORWARD_SHORTCUT_RE = re.compile(
+    r"\b(?:go(?:ing)?\s+(?:and\s+)?(?:to\s+)?)?(?:look\s+at|see|show\s+you|going\s+to)\s+"
+    r"(?:some\s+|the\s+|a\s+|real\s+|new\s+)*(?:jobs|offers|adverts|ads|roles|list|ranking)\b"
+    r"|\bwith\s+what\s+i(?:'ve\s+got|\s+have|\s+know)\b"
+    r"|\bprovisional\s+(?:ranking|list)\b"
+    r"|\bfirst\s+pass\b",
+    re.I,
 )
 
 # A Boundary's prose governs the offer when one paragraph both names the thing
@@ -141,6 +183,7 @@ class BoundaryReading(Strict):
     has_boundary_section: bool = False
     spoken_examples: int = 0
     exit_offers: tuple[str, ...] = ()
+    forward_shortcuts: tuple[str, ...] = ()
     states_the_rule: bool = False
     reasons: tuple[str, ...] = ()
 
@@ -173,15 +216,22 @@ def split_spoken_and_prose(section: str) -> tuple[tuple[str, ...], str]:
     return spoken, _FENCE_RE.sub("\n", section)
 
 
-def _exit_offers(spoken: tuple[str, ...]) -> tuple[str, ...]:
-    """Every spoken line offering to stop, verbatim, so a failure names itself."""
+def _exit_offers(spoken: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Split every spoken line that names stopping into exit offers and §3.3 skips.
+
+    Returned as two tuples rather than one count, so the evidence records what
+    was excluded and why. A check that silently drops the lines it decided not
+    to count is one nobody can audit.
+    """
     offers: list[str] = []
+    skips: list[str] = []
     for block in spoken:
         for raw_line in block.splitlines():
             line = raw_line.strip()
-            if line and _EXIT_OFFER_RE.search(line.lower()):
-                offers.append(line)
-    return tuple(offers)
+            if not line or not _EXIT_OFFER_RE.search(line.lower()):
+                continue
+            (skips if _FORWARD_SHORTCUT_RE.search(line) else offers).append(line)
+    return tuple(offers), tuple(skips)
 
 
 def _states_the_rule(prose: str) -> bool:
@@ -234,7 +284,7 @@ def read_boundary(step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR) -> Boundary
         )
 
     spoken, prose = split_spoken_and_prose(section)
-    offers = _exit_offers(spoken)
+    offers, shortcuts = _exit_offers(spoken)
     states_rule = _states_the_rule(prose)
 
     reasons: list[str] = []
@@ -260,6 +310,7 @@ def read_boundary(step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR) -> Boundary
         has_boundary_section=True,
         spoken_examples=len(spoken),
         exit_offers=offers,
+        forward_shortcuts=shortcuts,
         states_the_rule=states_rule,
         reasons=tuple(reasons),
     )
