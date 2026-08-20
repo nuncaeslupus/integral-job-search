@@ -31,9 +31,9 @@ from jobsearch.connector_contract import (
     PARSE_FILENAME,
     REQUIRED_ENTRIES,
     _main,
-    evidence_target,
     check_library,
     check_package,
+    evidence_target,
     measure,
     write_evidence,
 )
