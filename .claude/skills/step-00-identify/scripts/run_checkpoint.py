@@ -196,12 +196,14 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(result, ensure_ascii=False))
     if not result["runnable"]:
         print(f"{STEP_ID} is not runnable: missing {result['missing_inputs']}", file=sys.stderr)
-        return 1
-    if result["certification_note"] and result["coverage_met"]:
+    if result["certification_note"] and result["runnable"] and result["coverage_met"]:
         print(result["certification_note"], file=sys.stderr)
-    # One shared decision, never re-spelled here: thirteen copies of this script
-    # each re-deriving their own exit code is how most of them came to exit 0 for
-    # a gate that does not exist (D-21).
+    # One shared decision, never re-spelled here — not even for the codes this
+    # script would get right. Thirteen copies each re-deriving their own exit
+    # code is how most of them came to exit 0 for a gate that does not exist
+    # (D-21), and an early `return 1` beside the diagnostic above is the same
+    # shape: correct today, and silently stale the day `checkpoint_exit` learns
+    # a new answer. Everything computed goes through the one function.
     return checkpoint_exit(result)
 
 

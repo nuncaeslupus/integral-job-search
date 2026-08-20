@@ -264,6 +264,37 @@ def test_a_script_with_no_main_is_counted(tmp_path: Path) -> None:
     assert any("defines no main()" in reason for reason in probe.reasons)
 
 
+def test_a_nested_helpers_zero_is_not_read_as_mains(tmp_path: Path) -> None:
+    """`ast.walk` descends into nested defs; the returns there are not `main`'s.
+
+    Latent in the committed scripts — none of them nest — which is exactly why
+    it needs a test: a false positive on a gate is a gate somebody switches off.
+    """
+    step = _step("not_implemented")
+    body = _NEW_TAIL.replace(
+        "def main(argv=None):\n",
+        "def main(argv=None):\n"
+        "    def _tally(rows):\n"
+        "        if not rows:\n"
+        "            return 0\n"
+        "        return len(rows)\n\n"
+        "    _tally([])\n",
+    )
+    probe = probe_checkpoint(step, _synthetic_skill(tmp_path, step, body))
+    assert probe.routes_through_the_shared_decision, probe.reasons
+
+
+def test_mains_own_zero_is_still_caught_when_a_helper_nests(tmp_path: Path) -> None:
+    """Narrowing the walk must not narrow it past the thing it is looking for."""
+    step = _step("not_implemented")
+    body = _NEW_TAIL.replace(
+        "    return checkpoint_exit(result)",
+        "    def _noop():\n        return None\n\n    _noop()\n    return 0",
+    )
+    probe = probe_checkpoint(step, _synthetic_skill(tmp_path, step, body))
+    assert any("can return 0" in reason for reason in probe.reasons), probe.reasons
+
+
 def test_a_bare_return_is_read_as_a_zero(tmp_path: Path) -> None:
     """`return` with no value is `None`, and `sys.exit(None)` is a clean exit."""
     step = _step("not_implemented")
@@ -377,3 +408,25 @@ def test_every_committed_skill_agrees_with_its_recorded_gate_state(steps: StepLi
     for step in sorted(steps.steps, key=lambda s: s.n):
         text = step_certification.skill_doc(step).read_text(encoding="utf-8")
         assert (UNBUILT_ANNOUNCEMENT in text) is (step.gate.state != "implemented"), step.id
+
+
+def test_no_committed_checkpoint_decides_any_exit_code_for_itself(steps: StepList) -> None:
+    """Not even the codes it would get right.
+
+    `checkpoint_exit` already answers 1 for a step that is not runnable, so an
+    early `return 1` beside the diagnostic was a second implementation that
+    agreed by coincidence — correct until the shared function learns a new
+    answer, which is the drift D-21 is about.
+    """
+    for step in sorted(steps.steps, key=lambda s: s.n):
+        source = checkpoint_script(step).read_text(encoding="utf-8")
+        main = source[source.index("def main(") :]
+        decided_here = [
+            line.strip()
+            for line in main.splitlines()
+            if line.strip().startswith("return ")
+            and line.strip() != "return checkpoint_exit(result)"
+        ]
+        # 2 is the pre-flight code: the candidate could not be read, so there is
+        # no result to hand anybody. Every other code comes from the one place.
+        assert decided_here == ["return 2", "return 2"], (step.id, decided_here)

@@ -136,13 +136,33 @@ def _function(tree: ast.Module, name: str) -> ast.FunctionDef | None:
     return None
 
 
+#: Bodies whose `return`s belong to them, not to the function enclosing them.
+#: `ast.Lambda` is deliberately absent: a lambda body is an expression and can
+#: never hold a `Return` node, so listing it would add a branch no input reaches
+#: — and a test for it could not fail.
+_NESTED_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
 def _returns(function: ast.FunctionDef) -> list[ast.Return]:
-    """Every `return` this function itself makes — a nested def's are its own."""
+    """Every `return` this function itself makes — a nested def's are its own.
+
+    Walked by hand rather than with `ast.walk`, which descends into nested
+    definitions: a helper inside `main` that returned 0 would have been read as
+    `main` returning 0 and reported as a step certifying itself. Nothing in the
+    thirteen scripts nests today, so the bug was latent — but a gate that cries
+    wolf is a gate somebody switches off, which costs more than the check saves.
+    """
     found: list[ast.Return] = []
-    for node in ast.walk(function):
-        if isinstance(node, ast.Return) and node is not None:
+    stack: list[ast.AST] = list(ast.iter_child_nodes(function))
+    while stack:
+        node = stack.pop()
+        if isinstance(node, _NESTED_SCOPES):
+            continue
+        if isinstance(node, ast.Return):
             found.append(node)
-    return found
+        stack.extend(ast.iter_child_nodes(node))
+    # Source order, so the reasons a shortfall lists read down the function.
+    return sorted(found, key=lambda node: (node.lineno, node.col_offset))
 
 
 def _is_decider_call(value: ast.expr | None) -> bool:
