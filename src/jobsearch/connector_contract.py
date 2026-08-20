@@ -99,6 +99,7 @@ from __future__ import annotations
 import ast
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -130,7 +131,19 @@ PARSE_FILENAME = "parse.py"
 # know that everything in the directory is the connector, and a stray
 # `notes.txt` today is a stray `credentials.env` tomorrow.
 REQUIRED_ENTRIES = frozenset({CONNECTOR_FILENAME, META_FILENAME, FIXTURE_DIRNAME})
-OPTIONAL_ENTRIES = frozenset({PARSE_FILENAME})
+
+# Empty since D-10 (#78). `parse.py` used to be here, and `docs/distribution.md`
+# §5 advertised it as the escape hatch for sites the declarative form cannot
+# express — but nothing in this repository has ever executed one, so such a
+# connector passed the whole check and could not work. The promise is withdrawn
+# rather than implemented: executing contributed code needs process-level
+# isolation, and the allowlist below is admission lint, not a sandbox.
+OPTIONAL_ENTRIES: frozenset[str] = frozenset()
+
+# Named so the refusal can say *why* rather than "unexpected file". A
+# contributor who wrote a `parse.py` did what §5 told them to; they are owed the
+# reason it is no longer true, not a lint message.
+WITHDRAWN_ENTRIES = frozenset({PARSE_FILENAME})
 
 # Rules 3 and 4, as an allowlist. A `parse.py` turns text into text; nothing
 # here reaches a socket, a file, the environment or another process. See the
@@ -240,7 +253,14 @@ def check_layout(package: Path) -> list[str]:
             violations.append(f"rule 1: {required} is missing")
     unexpected = sorted(present - REQUIRED_ENTRIES - OPTIONAL_ENTRIES)
     for name in unexpected:
-        violations.append(f"rule 1: {name} is not part of a connector package")
+        if name in WITHDRAWN_ENTRIES:
+            violations.append(
+                f"rule 1: {name} is no longer part of a connector package — nothing "
+                "executes it, so a connector needing one cannot work (D-10). Sites the "
+                "declarative form cannot express are met by growing connector.yaml."
+            )
+        else:
+            violations.append(f"rule 1: {name} is not part of a connector package")
     if (package / FIXTURE_DIRNAME).exists() and not (package / FIXTURE_DIRNAME).is_dir():
         violations.append(f"rule 1: {FIXTURE_DIRNAME} must be a directory")
     return violations
@@ -459,6 +479,24 @@ def check_library(directory: Path = DEFAULT_CONNECTORS_DIR) -> ContractReport:
     return ContractReport(packages=[check_package(p) for p in connector_packages(directory)])
 
 
+# The invocation shapes that check a library other than ours: `--connectors DIR`
+# with no destination named, which is exactly what `docs/distribution.md` §5
+# hands a contributor. Held as data so D-11's gate can assert over the real
+# decision function rather than restating it.
+_FOREIGN_INVOCATIONS: tuple[tuple[tuple[str, ...], bool], ...] = (((), False),)
+
+
+def evidence_target(positional: Sequence[str], own_library: bool) -> Path | None:
+    """Where this invocation records, or `None` for "measured, recorded nowhere".
+
+    The one place the decision lives, so `_main` and D-11's gate cannot drift:
+    a gate that restates the rule instead of exercising it passes while the code
+    does the opposite.
+    """
+    default_target = DEFAULT_EVIDENCE_PATH if own_library else None
+    return Path(positional[0]) if positional else default_target
+
+
 def measure(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
     """T53's gate over `directory` — measured, not recorded.
 
@@ -473,6 +511,15 @@ def measure(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
     return {
         "connector_contract_violations": len(report.violations),
         "packages_checked": len(report.packages),
+        # D-11. Zero invocation shapes that check somebody else's library may
+        # record into ours. Asserted over `evidence_target` itself, so restoring
+        # the old unconditional default moves this number rather than leaving a
+        # gate that agrees with prose the code no longer follows.
+        "evidence_writes_for_a_foreign_library": sum(
+            1
+            for positional, own in _FOREIGN_INVOCATIONS
+            if evidence_target(positional, own) == DEFAULT_EVIDENCE_PATH
+        ),
         "violations": report.violations,
     }
 
@@ -520,11 +567,8 @@ def _main(argv: list[str]) -> int:
         own_library = False
         args = args[:index] + args[index + 2 :]
     positional = [arg for arg in args if not arg.startswith("--")]
-    target: Path | None
-    if positional:
-        target = Path(positional[0])
-    else:
-        target = DEFAULT_EVIDENCE_PATH if own_library else None
+    # None means "measured, recorded nowhere" — see the docstring.
+    target = evidence_target(positional, own_library)
     try:
         measured = measure(directory) if target is None else write_evidence(target, directory)
     except (ConnectorError, OSError, UnicodeDecodeError) as exc:

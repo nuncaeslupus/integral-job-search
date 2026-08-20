@@ -113,16 +113,43 @@ exactly one shape to write and to read.
 ```
 connectors/<site-id>/
   connector.yaml     what to fetch and how to map it to the offer schema
-  parse.py           optional, only for sites the declarative form cannot express
   fixture/           one recorded response, saved verbatim
     list.html          required — the listing page the conformance check reads
     detail.html        optional — recorded when the connector declares a detail page
   meta.yaml          site, country, language, maintainer handle, last_verified
 ```
 
-Declarative first: a `connector.yaml` can be read and understood in a minute and
-cannot do anything that was not declared. `parse.py` is the exception for sites
-that need it, not the default.
+Declarative only: a `connector.yaml` can be read and understood in a minute and
+cannot do anything that was not declared. A package carries no executable code
+at all, and a `parse.py` inside one is refused by rule 1 like any other
+unexpected file.
+
+**This shape used to advertise an optional `parse.py`** — described here as the
+escape hatch "for sites that need it". Nothing ever executed it. A connector for
+a site the declarative form cannot express could be written, could pass the
+whole conformance check, and could not work: `connectors.py` interprets
+`connector.yaml` and matches selectors, and there is no import machinery
+anywhere in `src/jobsearch`. A promise a contributor can act on and the tool
+cannot keep is worse than no promise, so the promise is withdrawn (D-10, #78).
+
+Withdrawn rather than implemented, because implementing it honestly is not a
+parser. Executing contributed code needs process-level isolation — a separate
+interpreter, no network namespace, a read-only filesystem, CPU and memory caps
+— and the AST allowlist under rules 3 and 4 is admission lint, not a sandbox: a
+static allowlist cannot bound what Python does once it runs. That is a
+milestone of work to keep a hatch nothing currently needs, and the one
+committed connector has no `parse.py`.
+
+Sites the declarative grammar cannot reach — JS-rendered pages are already
+outside it, see `connectors.py`, "What the format does not cover" — are met by
+growing the grammar, when there is a real site to grow it against.
+
+The withdrawal is measured, not just written down: `jobsearch.connector_shape`
+counts the executable mechanisms this section advertises that no runtime
+executes, and records it as `advertised_connector_mechanisms_without_a_runtime`
+in `status/evidence/D10.json`. Re-advertising a `parse.py` here without also
+building the runtime for it fails that gate, rather than failing a contributor
+some months later.
 
 Six rules, short enough to be one command that a contributor's agent and CI
 both run, so a green local check is not a different judgement from a green CI:
@@ -143,9 +170,14 @@ them.
 2. A fixture is present, and the connector's output over that fixture satisfies
    the offer schema offline.
 3. No network of its own — only the HTTP client the runner provides, which owns
-   rate limiting, robots.txt, timeouts and the user agent (checked statically).
-4. No filesystem writes, no subprocess, no environment or credential reads
-   (same check).
+   rate limiting, robots.txt, timeouts and the user agent.
+4. No filesystem writes, no subprocess, no environment or credential reads.
+
+   Rules 3 and 4 now hold **structurally**: rule 1 admits no Python module, and
+   data cannot open a socket. The static AST allowlist that used to enforce them
+   over `parse.py` is retained as a second line — it fires on a module smuggled
+   in past rule 1 — but it is no longer what holds them, which matters because
+   it was never strong enough to be.
 5. `meta.yaml` is complete, including `last_verified`.
 6. Policy: public listings only; robots.txt respected; no authentication,
    paywall or captcha bypass.

@@ -1,0 +1,11 @@
+{
+  "advertised_connector_mechanisms_without_a_runtime": 0,
+  "advertised_entries": [
+    "connector.yaml",
+    "list.html",
+    "detail.html",
+    "meta.yaml"
+  ],
+  "mechanisms_without_a_runtime": [],
+  "advertised_but_not_admitted_by_rule_1": []
+}
