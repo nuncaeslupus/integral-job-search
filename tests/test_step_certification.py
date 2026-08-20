@@ -168,7 +168,9 @@ def test_at_least_one_step_is_actually_refused(steps: StepList) -> None:
     assert refused, "no step records not_implemented — this gate is passing vacuously"
 
 
-def _synthetic_skill(tmp_path: Path, step: Step, body: str, *, prose: str | None = None) -> Path:
+def _synthetic_skill(
+    tmp_path: Path, step: Step, body: str, *, prose: str | None = None
+) -> Path:
     skills = tmp_path / "skills"
     skill_dir = skills / f"step-{step.n:02d}-{step.id.replace('_', '-')}"
     (skill_dir / "scripts").mkdir(parents=True)
@@ -180,7 +182,7 @@ def _synthetic_skill(tmp_path: Path, step: Step, body: str, *, prose: str | None
 
 
 #: The tail as it stood before D-21, reduced to the part that decided the code.
-_OLD_TAIL = """from integral.step_gates import certifiable
+_OLD_TAIL = '''from integral.step_gates import certifiable
 
 
 def checkpoint(root, handle):
@@ -190,9 +192,9 @@ def checkpoint(root, handle):
 def main(argv=None):
     result = checkpoint(None, None)
     return 0 if result["coverage_met"] else 1
-"""
+'''
 
-_NEW_TAIL = """from integral.step_gates import certifiable, checkpoint_exit
+_NEW_TAIL = '''from integral.step_gates import certifiable, checkpoint_exit
 
 
 def checkpoint(root, handle):
@@ -204,7 +206,7 @@ def main(argv=None):
     if not result["coverage_met"]:
         return 1
     return checkpoint_exit(result)
-"""
+'''
 
 
 def test_the_old_tail_is_what_this_counts(tmp_path: Path) -> None:

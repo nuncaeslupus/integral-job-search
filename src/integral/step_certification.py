@@ -114,7 +114,8 @@ def _announcement_reasons(step: Step, skills_dir: Path) -> list[str]:
         return [f"{SKILL_DOC} says the gate is unbuilt, but {step.gate.task} has built it"]
     if not certifiable(step) and not announces:
         return [
-            f"{SKILL_DOC} does not say {step.gate.metric} is unbuilt (no {UNBUILT_ANNOUNCEMENT!r})"
+            f"{SKILL_DOC} does not say {step.gate.metric} is unbuilt "
+            f"(no {UNBUILT_ANNOUNCEMENT!r})"
         ]
     return []
 
@@ -256,7 +257,9 @@ def probe_checkpoint(step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR) -> Check
             if _is_decider_call(node.value):
                 continue
             if _can_yield_zero(node.value):
-                reasons.append(f"main() line {node.lineno} can return 0 without asking {DECIDER}")
+                reasons.append(
+                    f"main() line {node.lineno} can return 0 without asking {DECIDER}"
+                )
 
     return probe(*reasons)
 
