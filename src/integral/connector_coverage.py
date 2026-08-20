@@ -55,6 +55,7 @@ from integral.connectors import (
     SEARCH_SOURCE,
     ConnectorError,
     build_search_offer,
+    load_connector,
 )
 from integral.offers import Offer
 from integral.process_spec import Step, StepList, load_steps
@@ -151,6 +152,16 @@ def read_package(path: Path) -> Package:
         return Package(
             path.name, site, None, language, False, f"{META_FILENAME} declares no country"
         )
+    try:
+        # `meta.yaml` says who looks after a package; `connector.yaml` is the
+        # only thing that can actually fetch anything. Reading the first alone
+        # let a directory of plausible metadata report as coverage and suppress
+        # the disclosure entirely — D-16's own failure, through the back door.
+        # `load_connector` is the runtime's own definition of loadable, name
+        # check included, so coverage means what a sourcing run would find.
+        load_connector(path)
+    except ConnectorError as exc:
+        return Package(path.name, site, country, language, False, str(exc))
     return Package(path.name, site, country, language, True, None)
 
 

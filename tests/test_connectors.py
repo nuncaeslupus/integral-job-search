@@ -601,13 +601,39 @@ def _meta(country: str = "ES", site: str = "realboard.example.com") -> str:
     )
 
 
+def _connector_yaml(name: str) -> str:
+    """A minimal loadable `connector.yaml` for a package directory `<site>_<locale>`."""
+    site, _, locale = name.rpartition("_")
+    return (
+        f"site: {site}\nlocale: {locale}\nversion: '1.0.0'\nlast_verified: '2026-08-01'\n"
+        "list:\n"
+        "  url_pattern: 'https://x.test/jobs?page={page}'\n"
+        "  item: '.job'\n"
+        "  fields:\n    text: {css: '.body'}\n"
+    )
+
+
 def _library(root: Path, **packages: str) -> Path:
-    """A connector library on disk: package name -> its `meta.yaml` body."""
+    """A connector library on disk: package name -> its `meta.yaml` body.
+
+    Each package also gets a loadable `connector.yaml`, because that is what
+    makes it a package — metadata alone declares a maintainer, not a way to
+    fetch anything. `_metadata_only` is how a test asks for the other case.
+    """
     root.mkdir(parents=True, exist_ok=True)
     for name, meta in packages.items():
         package = root / name
         package.mkdir()
         (package / "meta.yaml").write_text(meta, encoding="utf-8")
+        (package / "connector.yaml").write_text(_connector_yaml(name), encoding="utf-8")
+    return root
+
+
+def _metadata_only(root: Path, name: str, meta: str) -> Path:
+    """A directory holding `meta.yaml` and nothing that can fetch."""
+    package = root / name
+    package.mkdir(parents=True, exist_ok=True)
+    (package / "meta.yaml").write_text(meta, encoding="utf-8")
     return root
 
 
@@ -775,7 +801,33 @@ def test_the_undeclared_market_is_attributed_to_no_package(tmp_path: Path) -> No
     # The example still explains the market it does declare.
     assert connector_coverage.assess_coverage("ES", packages).example_only == ("examplejobs_es",)
     # And a package that declares no country is not swept in either.
-    nameless = _library(tmp_path / "other", mystery=yaml.safe_dump({"site": "who.test"}))
-    assert connector_coverage.assess_coverage(
-        None, connector_coverage.installed_packages(nameless)
-    ).example_only == ()
+    nameless = _metadata_only(tmp_path / "other", "mystery", yaml.safe_dump({"site": "who.test"}))
+    assert (
+        connector_coverage.assess_coverage(
+            None, connector_coverage.installed_packages(nameless)
+        ).example_only
+        == ()
+    )
+
+
+def test_metadata_alone_is_not_coverage(tmp_path: Path) -> None:
+    """`meta.yaml` says who maintains a package; `connector.yaml` is the only
+    thing that can fetch anything. A directory of plausible metadata reporting
+    as coverage would suppress the disclosure outright — D-16's own failure,
+    reached through the back door — so a package counts only when the runtime
+    could actually load it.
+    """
+    library = _metadata_only(tmp_path / "connectors", "fakeboard_es", _meta(site="fakeboard.com"))
+    coverage = connector_coverage.assess_coverage("ES", directory=library)
+    assert not coverage.covered
+    assert coverage.usable == ()
+    assert coverage.unreadable == ("fakeboard_es",)
+    assert connector_coverage.disclosure(coverage)
+
+    # A package whose connector.yaml contradicts its directory name cannot be
+    # loaded at runtime either, so it is not coverage however good its meta is.
+    misnamed = tmp_path / "misnamed" / "realboard_es"
+    misnamed.mkdir(parents=True)
+    (misnamed / "meta.yaml").write_text(_meta(), encoding="utf-8")
+    (misnamed / "connector.yaml").write_text(_connector_yaml("otherboard_en"), encoding="utf-8")
+    assert not connector_coverage.assess_coverage("ES", directory=tmp_path / "misnamed").covered
