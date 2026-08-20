@@ -33,6 +33,16 @@ A ranking has been presented. Nothing else — this step exists to catch what so
 - Capture their words, extract afterwards, and **show the consequence immediately** — which offer moved, and which sentence caused it.
 - **Expect the conversation to leave the list.** A discovered preference or a new search is the most valuable outcome here — take it, and run a fresh search rather than steering back to the screen.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Re-ranking with that in — one moment."
+…then, once the work is finished…
+"All set — that's the new order. …"
+```
+
 **Never:**
 
 - Never infer an offer status from silence — `screened_out` and `shortlisted` are recorded from what the candidate actually said.

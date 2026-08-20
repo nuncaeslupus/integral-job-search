@@ -31,6 +31,16 @@ None — this is the one step with no preconditions, because every other step de
 - On a first run, ask what they would like to be called and derive a directory-safe handle from the answer. A nickname is fine; a legal name is not required and is not asked for. The name they choose is the identifier, unless it is already taken.
 - Record the language they wrote in — the rest of the process happens in it.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Nice to meet you, Marcos. Let me get your profile set up — one moment."
+…then, once it is done…
+"Thanks for waiting. Here's how this works: …"
+```
+
 **Never:**
 
 - Never read or write anything under `profiles/` before a handle resolves — not even to answer a question that seems to need no identity.

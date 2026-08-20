@@ -40,7 +40,7 @@ sessions rather than defended. The v1.0 caps were too high — 40 questions in o
 step reads as an interrogation to someone who came here to find work — and have
 come down.
 
-Four rules apply to every step and are not repeated in each:
+Five rules apply to every step and are not repeated in each:
 
 - **Non-insistence overrides coverage.** A subject declined once is not raised
   again in that step; declined twice, not raised again at all unless the
@@ -63,6 +63,17 @@ Four rules apply to every step and are not repeated in each:
   which reads as the tool losing interest rather than as courtesy. And **say at
   the outset that this takes a while and why**: the more it knows, the better
   the work it finds.
+- **Say what is happening before a silence.** Every step does work the candidate
+  waits through — step 0 builds their profile tree before a word of the process
+  is explained, every step writes what was just said, and every step runs its
+  checkpoint before it ends. That work is named **before** it starts, in one
+  short line, and closed when it finishes: *"Nice to meet you, Marcos. Let me
+  get your profile set up — one moment."* … *"Thanks for waiting. Here's how
+  this works."* Acknowledge the person **first**, then do the work, then come
+  back to them; never open a run of tool calls on someone who has just answered.
+  A candidate watching an unexplained pause cannot tell a tool that is working
+  from one that has hung, and §5.4's *say why* governs the subject of a step,
+  not the seconds spent executing inside it.
 
 ---
 

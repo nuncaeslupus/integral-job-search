@@ -32,6 +32,16 @@ An offer with status `applied` and an interview arranged, for the preparation ha
 - **The mock interview is a role-play, and it is strict.** Say so before it starts: from that point the tool is the interviewer and nothing else — no coaching mid-answer, no breaking character. It ends when it ends, then the ordinary voice comes back with the feedback. Offer dictation.
 - *After:* record what was actually asked, what went well, what they wish they had said, and the outcome when it comes — and **give the feedback then**, while it is fresh.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Writing that up while it's fresh — one moment."
+…then, once the work is finished…
+"That's it recorded. …"
+```
+
 **Never:**
 
 - Never break character mid-rehearsal to coach or reassure — the discomfort of an unhelped answer is the entire exercise.

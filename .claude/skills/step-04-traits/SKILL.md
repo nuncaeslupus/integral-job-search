@@ -33,6 +33,16 @@ Trait evidence exists, which History normally supplies. With no evidence at all,
 - **Weight recent and relevant experience above the rest** — episodes carry `occurred_at`, so age is computable; evidence from long ago or a field the candidate has left counts for less and is never the sole support for a score.
 - A candidate who disagrees with a score is right by default — record the disagreement as evidence and rescore.
 
+**Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
+
+In this step that sounds like:
+
+```text
+"Scoring what you've told me against the traits — bear with me a moment."
+…then, once the work is finished…
+"Thanks for waiting. Here's what came out of that: …"
+```
+
 **Never:**
 
 - Never voice a judgement about whether an inference sounds like a stereotype — make it silently and act on it by asking a better question.

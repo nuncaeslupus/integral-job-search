@@ -5,7 +5,7 @@
     {
       "expr": "story_failure_fraction >= 0.33",
       "document": "status/spec-v2-steps.md",
-      "line": 352,
+      "line": 363,
       "text": "**`story_failure_fraction >= 0.33` is superseded and must not be gated on.** The"
     }
   ],

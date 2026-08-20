@@ -719,6 +719,15 @@ The rest:
 
 - **Say why.** Each step opens with what it is for and what it will store — once
   per step, not per question.
+- **Say what is happening before a silence.** *Say why* governs the subject of a
+  step; this governs the seconds spent executing inside it. Work the candidate
+  waits through — building their profile tree, running a checkpoint, saving what
+  they have just said — is named **before** it starts and closed when it
+  finishes, in one short line each time. The person is acknowledged **first**,
+  then the work happens, then the conversation resumes: *"Nice to meet you,
+  Marcos. Let me get your profile set up — one moment."* … *"Thanks for waiting.
+  Here's how this works."* An unexplained pause is indistinguishable from a tool
+  that has hung, and the candidate has no way to ask.
 - **Knowing them is how it helps them.** The tool says so, and means it: every
   question exists because an answer improves the offers they get. A question
   that cannot be justified that way should not be asked.
