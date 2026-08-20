@@ -12,10 +12,23 @@ type `[[…]]` when the protocol is wrong, and end with the triage pass. The
 its hardcoded 8,000 — the auditor and `jobsearch.skill_budget` read the same key,
 which is why S10 put the number in the settings file rather than in a constant.
 
-**D-12 (`t-e1ca8374`, #83) is still the one decision waiting on the owner.** It
-was not touched this session. T15 still cannot reach terminal, and fifteen live
-tasks still sit behind it. Nothing here changed that — S10/S11 were an
-independent branch of the graph.
+**D-12 (`t-e1ca8374`, #83) is still the one decision waiting on the owner — but
+the choice has changed.** S10/S11 were an independent branch of the graph and
+did not touch it. The **arsenal upgrade did**: `claude-arsenal#168` landed in
+v0.33.0, so **resolution B now exists**.
+
+`gate_evidence.py` takes an optional `status-key` — a dotted path to a string
+reading `unmeasured` — and exits **3**, which `gate_run.sh` prints as
+`gate: unmeasured` rather than collapsing into a failure. That is exactly the
+third outcome D-2 requires and the gate layer lacked: a score, a failure, or
+"the check ran and found the measurement cannot honestly be made".
+
+So T15 could declare `extraction_status` as its `status-key` and stop being
+stuck, without splitting its acceptance (resolution A) and without lowering the
+floor or scoring cue-derived gold (which D-2 forbids and which already happened
+once). **A is still available and still cheaper. B is no longer blocked.** The
+decision is the owner's; what changed is that it is now a real choice between
+two live options rather than one option and an upstream wait.
 
 ## State
 
@@ -33,11 +46,12 @@ Merge any PR carrying a subtree pull **with a merge commit, never a squash**.
 
 ## What was decided, and how to reverse it
 
-**S10 → the budget lives in this repository.** The owner's 2026-08-18 decision
-("raise it") was never blocked; *where the raised number lives* was, because
-upstream's `LISTING_BUDGET_CHARS` has no override and `vendor/` must not be
-patched. So `jobsearch.skill_budget` declares **13,000**, and measures 12,138
-across 33 skills with 862 spare.
+**S10 → the budget lives in `arsenal/config.toml`.** The owner's 2026-08-18
+decision ("raise it") was never blocked; *where the raised number lives* was.
+Arsenal already defined the `listing-budget` key for exactly this, so
+**13,000** goes there and `jobsearch.skill_budget` reads it — no Python
+constant beside it, because two copies of a threshold are two thresholds.
+Measured: 12,138 across 33 skills, 862 spare.
 
 The part worth carrying forward is not the number, it is the three properties
 that keep a raised threshold from being a fitted one — because a cap tuned to
@@ -45,9 +59,11 @@ the measurement reports the same clean zero as a cap somebody chose:
 
 1. `check_declaration` refuses a budget that is not a multiple of 1,000 or that
    leaves under 400 chars spare;
-2. evidence records `budget_source`, and the committed file says `declared` —
-   an `--budget` / `JOBSEARCH_LISTING_BUDGET_CHARS` reading is marked
-   `override` and a test asserts the commit was not measured that way;
+2. evidence records `budget_source`, and the committed file says `config` —
+   `--budget` / `JOBSEARCH_LISTING_BUDGET_CHARS` mark a reading `override`, and
+   a missing settings file marks it `fallback` (at upstream's 8,000, never our
+   number, so an absent config cannot be mistaken for a present one). Only
+   `config` satisfies the gate;
 3. `overage_against_upstream_default` keeps "deliberately 4,138 above the 8,000
    default" visible rather than hidden by the raise.
 

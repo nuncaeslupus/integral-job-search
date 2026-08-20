@@ -46,25 +46,20 @@ v0.28.0 says so out loud: `state_from_issues` warns when issues were fetched and
 **none** resolved to a task, which is the "an empty map looks healthy" failure
 that used to pass silently.
 
-## Do NOT create the handles `handle_sync.py` proposes
+## `handle_sync.py` is safe again — v0.33.0 fixed it
 
-Session-protocol step 4 says to run `handle_sync.py` and open an issue for
-everything it prints. **On this repo everything it prints is already finished.**
+This file used to say "do NOT create the handles `handle_sync.py` proposes",
+because `missing_handles` iterated every task `load_tasks` returns — including
+`_history/` — and filtered only on "has an issue", never on `status`. On this
+repo it printed **51** proposals, every one for work that merged weeks ago.
+Following protocol step 4 literally would have opened 51 issues for finished
+tasks, each then reading as open, unclaimed work.
 
-```
-$ python3 claude-arsenal/scripts/handle_sync.py --issues "$ISSUES" | wc -l
-51        # 51 already-merged (arsenal/tasks/_history/), 0 live
-```
+**Fixed upstream in v0.33.0** (`claude-arsenal#169`): it filters terminal
+tasks. Verified here — 1 line, `handle_sync: every task has an issue handle`.
 
-`missing_handles` iterates every task `load_tasks` returns — which deliberately
-includes `_history/`, so terminal ids still resolve — and filters only on "has
-an issue", never on `status`. Following step 4 literally would open 51 issues
-for tasks that merged weeks ago, each then reading as open, unclaimed work.
-
-Filed upstream as **claude-arsenal#169**. Until it is fixed: run the script if
-you like, but create a handle only for a task whose file is in
-`arsenal/tasks/` — never one from `arsenal/tasks/_history/`. Today that means
-creating none.
+So step 4 of the protocol is correct as written again: run it, and open an
+issue for anything it prints.
 
 ## `make arsenal-remote` reports; `make arsenal-upgrade REF=…` upgrades
 
@@ -77,7 +72,34 @@ and stays a version behind while reporting success. That happened here on
 
 `arsenal-remote` now passes `--check-only`, so reading the version no longer
 writes history. Upgrade deliberately, with `make arsenal-upgrade REF=v0.x.y`,
-which runs all four steps. Filed upstream as **claude-arsenal#170**.
+which runs all four steps. **`claude-arsenal#170` is fixed in v0.33.0** — the
+script re-vendors skills after a subtree update and refuses to report success
+while the bundle version is still stale, which is the half that used to lie.
+The `--check-only` habit is kept anyway: reading a version should not write
+history even when the write would be correct.
+
+**After any upgrade, run `make reader` and `make evidence`.** v0.33.0 changed
+`create_reader.py`, which left both generated spec readers stale, and grew the
+bundle from 22 assets to 26, which moved S9's evidence. Both are caught by the
+suite (`test_regenerating_the_reader_produces_no_diff`, the `make evidence`
+drift check) — the point is that they are *expected* after an upgrade and are
+fixed with the repo's own tooling, never by hand.
+
+## The skill listing budget lives in `arsenal/config.toml`
+
+`listing-budget = 13000` (S10). `jobsearch.skill_budget` reads it, and since
+v0.33.0 so does `skill-creator`'s `audit_library.py` — `claude-arsenal#143`
+landed, so the auditor no longer hardcodes 8,000 and both read the same key.
+
+`jobsearch.skill_budget` is still the gate: it refuses a budget that is not a
+round multiple of 1,000 or that leaves under 400 chars of headroom, records
+where the number came from, and reports `-1` — not a clean zero — when the
+library is inside a budget that was overridden, fell back, or was fitted to the
+measurement.
+
+The audit's remaining "within 10% of 13000" warning is the budget working: 862
+chars spare, revisit at roughly three more skills. **Do not silence it by
+raising the number.**
 
 **Parking a task needs the `arsenal:cancelled` label.** `state_reason` is not
 available through these MCP tools, so upstream reads any closed issue as `done`
