@@ -1,28 +1,31 @@
 # claude-arsenal host configuration — yours; upstream never rewrites this file.
 
 # How far must a task PR get before it may be merged?
-#   always | after-ci | after-ci-and-review | never
+#   always | after-review | after-ci | after-ci-and-review | never
 #
-# Review is now required as well as CI, because CI alone cannot currently say
-# anything: GitHub Actions is out of runner minutes, so every job fails in
-# seconds with no runner assigned (see "Known environment state" in CLAUDE.md).
-# A policy of `after-ci` against a CI that can only be red is either a block on
-# all merges or a rule everyone learns to wave through, and the second is what
-# actually happens.
+# `after-review`, added in claude-arsenal v0.30.0 for this repository's exact
+# situation (claude-arsenal#166). GitHub Actions is out of runner minutes, so
+# every job on every head fails in seconds with no runner ever assigned — CI is
+# not red about the code, it is not reporting at all. `after-ci` against a CI
+# that can only be red is either a block on every merge for the duration or a
+# rule everyone learns to wave through, and the second is what actually
+# happens — including on the day CI starts meaning something again.
 #
-# So, while the outage lasts, read this policy as:
+# This is not a weakened `after-ci-and-review`; it is the other axis. `after-ci`
+# is "the machines agree"; `after-review` is "a reader agrees".
 #
-#   ci      the five gates run locally on the PR's head — `make lint test
-#           evidence verify-subtree verify-gates`. These are exactly what CI
-#           runs, in CI's order (`make ci`), so this is the same assertion by
-#           another route, not a weaker one. Quote the results on the PR.
 #   review  the Qodo review has landed and every comment it raises is fixed or
 #           answered on the thread. An unread bot review is not a review.
 #
-# When runners come back, delete this note: `after-ci-and-review` then means
-# what it says, and the local run goes back to being a pre-push check rather
-# than the evidence.
-merge-policy = "after-ci-and-review"
+# Independently of this policy, the five gates are still run locally on every PR
+# head — `make ci` — and their results quoted on the PR. That is a pre-merge
+# check this repo runs regardless. It is deliberately no longer *called* CI
+# here: the note this block replaces redefined "ci" to mean the local run,
+# which put load-bearing policy in prose that nothing validates, and a local run
+# is not the same assertion as a green CI however identical the commands.
+#
+# When runners return, set `after-ci-and-review`.
+merge-policy = "after-review"
 
 # test-first writes a failing test before the change; test-after writes tests
 # alongside it.

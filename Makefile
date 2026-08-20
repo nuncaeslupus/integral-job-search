@@ -1,7 +1,7 @@
 .PHONY: help sync build lint format test gate evidence verify-gates verify-subtree ci arsenal-remote arsenal-upgrade reader reader-process reader-steps clean update-skills assemble-bundle
 
 ARSENAL_REPO    ?= https://github.com/nuncaeslupus/claude-arsenal.git
-ARSENAL_REF     ?= v0.29.0  # pin to a tag — upgrade deliberately
+ARSENAL_REF     ?= v0.30.0  # pin to a tag — upgrade deliberately
 ARSENAL_PLUGINS ?= all      # comma list, or "all" to include skill-creator
 ARSENAL_PREFIX  ?= vendor/claude-arsenal
 
