@@ -1,6 +1,6 @@
 ---
 id: lo-99de
-title: "T39: Scoring triggers \u2014 step boundary, explicit request, batch threshold N; never per message"
+title: "T39: Scoring triggers — step boundary, explicit request, batch threshold N; never per message"
 priority: 10
 deps: [lo-67f4]
 tags: [m3]

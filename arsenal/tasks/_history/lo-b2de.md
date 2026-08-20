@@ -1,6 +1,6 @@
 ---
 id: lo-b2de
-title: "T52: First-run bootstrap \u2014 the tool installs its own dependencies, and says so"
+title: "T52: First-run bootstrap — the tool installs its own dependencies, and says so"
 priority: 5
 deps: [lo-4b79]
 workspace: PROFILE

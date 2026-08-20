@@ -1,6 +1,6 @@
 ---
 id: lo-bd03
-title: "T48: Step gate state register \u2014 derive each step's state from status/evidence/ instead of hand-editing it"
+title: "T48: Step gate state register — derive each step's state from status/evidence/ instead of hand-editing it"
 priority: 10
 deps: [lo-c5ad]
 tags: [m1]

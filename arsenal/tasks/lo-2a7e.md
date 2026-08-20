@@ -1,6 +1,6 @@
 ---
 id: lo-2a7e
-title: "T45: Per-advert generation \u2014 CV and letter from store entries only, versioned, with a claim manifest"
+title: "T45: Per-advert generation — CV and letter from store entries only, versioned, with a claim manifest"
 priority: 1
 deps: [lo-25b1]
 tags: [m4]

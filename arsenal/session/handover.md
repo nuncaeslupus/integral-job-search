@@ -1,190 +1,156 @@
-# Session handover — 2026-08-20 (D-13 reviewed and ready; four issues filed upstream)
+# Session handover — 2026-08-20 (D-13 merged; bundle on v0.36.0)
 
 ## Read this first
 
-**[#105](https://github.com/nuncaeslupus/job-search/pull/105) — D-13** is open on
-`claude/continue-3avmas` at `eca6bd6`, closing
-[#97](https://github.com/nuncaeslupus/job-search/issues/97). Task archived at
-`arsenal/tasks/_history/t-bd59e70b.md`. All five gates pass locally on that
-head. **Qodo's review has landed and been worked**: three of its four findings
-were real and are fixed in `eca6bd6`; the fourth is answered on its thread and
-**left open for the owner** (see below). Waiting on the review is what caught
-them — its round on #102 found four real defects too.
+- **D-13 merged** as `bc802f9` via
+  [#105](https://github.com/nuncaeslupus/job-search/pull/105), closing #97.
+  Task archived at `arsenal/tasks/_history/t-bd59e70b.md`.
+- **The bundle is on v0.36.0**, open as a PR on `claude/continue-3avmas`.
 
-`task_select.py` returns the next task once #105 lands. Seven divergences remain
-open — read the selector, not the numeric order of the D-labels.
+`task_select.py` now returns **`lo-9f72` (T55, "Rename the project to
+integral-job-search", priority 5)**. The handover before this one said the
+remaining divergences were "all priority 10" — **that was wrong.** Only D-17 is
+10, and it is blocked on `lo-a22a` (T44). D-16, D-18, D-20, D-21 and D-22 are
+priority 5; D-19 is 1. Read the selector, never the D-label order.
 
-## D-13, and the false positive worth not rediscovering
+## The board fetch dropped `body` — and what that broke
 
-The fix: a fifth cross-cutting rule — **"Say what is happening before a
-silence"** — in `status/spec-v2-steps.md` *and* §5.4 of
-`status/spec-v2-process.md`, added to both at once because D-15's root cause was
-one rule stated in one document and contradicted in the other. All thirteen step
-skills carry it in their `## Protocol` section with a worked example in that
-step's own words. `jobsearch.step_narration` measures it.
+**v0.36.0 is "make context cost a budgeted, enforced constraint"**, and it lands
+both context issues this repo filed today. The fetch is now
+`number/title/state/labels/assignees` — **~9k tokens down to ~1.2k** — because
+`task_id_from_issue` falls back to matching the issue **title** against the task
+files' `title:`. The injected protocol block in `CLAUDE.md` says so now.
 
-**The rule was absent, not broken.** §5.4 already required the tool to *say why*
-— what a step is for and what it stores — which governs the *subject* of a step
-and says nothing about the seconds spent executing inside it. Given no
-instruction, the model did the efficient thing and worked in silence.
+**Nothing had ever compared those two strings before, and both sides were
+spelling titles differently.** Fourteen live tasks silently stopped resolving.
 
-**The first cut of limb 3 flagged twelve false offenders**, and the mechanism
-generalises. Limb 3 asks whether the step where the candidate first says who
-they are acknowledges them *before* the setup. Detecting which step that is by
-searching the prose for "creates their profile" matched **all thirteen skills**
-— because the shared rule sentence I had just added names profile creation. The
-probe found the rule rather than the behaviour.
+- **Fixed here:** 36 task files stored their title JSON-escaped — `—`,
+  `€`, `→` — inside a double-quoted scalar that arsenal's front-matter
+  parser does not decode. They now hold the real characters. **If a new task
+  file appears with `\uXXXX` in its title, decode it**: arsenal's own writers
+  emit them, so this will recur.
+- **Still live, and it can corrupt the board:** `lo-0300` and `lo-1af2` do not
+  resolve, because the MCP `list_issues` tool **HTML-escapes `<`, `>` and `&`
+  in titles** (`&lt;offer_id&gt;`, `&gt;=6`) and `normalise_title` does not
+  unescape. They already have issues **#64** and **#50**, but `handle_sync.py`
+  now offers to open duplicates for them. **Do not create those.** Filed as
+  `claude-arsenal#186` with the one-line fix (`html.unescape`).
 
-> A check whose subject can be named by the very sentence that satisfies it is
-> not a check.
+The detector that works is `query_status.py` — it names exactly which tasks
+failed to resolve. Treat *that* list, not `handle_sync.py`'s output, as the
+question to answer, until #186 lands.
 
-It is `session_exit`'s prose/fence split in a second disguise — and it duly
-appeared twice more in the review round below. The subject of that limb (now
-limb 4) is read from the settled step list (`n == 0`), never from prose;
-`test_the_greeting_limb_is_read_from_the_step_list_not_the_prose` locks it.
+## Five issues filed upstream, two already shipped
 
-Verified against the pre-fix library via `git archive HEAD`: **13** offenders,
-all thirteen on limbs 1, 2 and 3, step 0 additionally on limb 4. After: **0**.
+| issue | what | status |
+|---|---|---|
+| [#181](https://github.com/nuncaeslupus/claude-arsenal/issues/181) | the fetch pulls every body for one id per issue (~9k) — proposed a title fallback | **shipped in v0.36.0** |
+| [#184](https://github.com/nuncaeslupus/claude-arsenal/issues/184) | no cheap way to read a precedent module's shape | **shipped** as `bin/outline.sh` |
+| [#186](https://github.com/nuncaeslupus/claude-arsenal/issues/186) | the title fallback loses titles containing `<`, `>`, `&` | open |
+| [#182](https://github.com/nuncaeslupus/claude-arsenal/issues/182) | `--detect` prints a false `rest`: the proxy answers `/rate_limit` itself | open |
+| [#183](https://github.com/nuncaeslupus/claude-arsenal/issues/183) | `check_update.sh` calls a missing remote "the bundle was copied, not a subtree" | open |
 
-## The review round: three findings, and all three are one shape
+**#183 is confirmed by this session's own upgrade**: `make arsenal-remote` added
+the remote and the subtree then merged cleanly. The bundle always was a subtree;
+only the remote was missing, exactly as the issue says.
 
-Qodo found three real defects in the first cut, and two of them are the *same
-defect this task already records once*, recurring in new places.
+**Use `claude-arsenal/bin/outline.sh <file>`** before reading a module whole.
+That is what #184 bought, and this session paid ~6k learning why.
 
-- **The rule's own heading satisfied limb 1.** "Say what is happening before a
-  silence" carries a subject token **and** the governor `before`, so a Protocol
-  section stripped to nothing but the bold heading — every word of the
-  instruction deleted — passed `_states_the_rule`. Governance is now searched
-  for with the title struck out.
-- **Twelve of thirteen examples opened a silence and never closed it.** The rule
-  requires the work named before it starts *and closed when it finishes*, and
-  the owner's correction names both halves. Only step 0 showed the return, and
-  the gate passed because nothing measured the closing half — the very failure
-  D-13 exists to fix, committed inside the fix for it. A third limb now measures
-  it; all thirteen examples close their pause.
-- **The spec-drift test read only the rule's title**, so either document could
-  gut the requirement and still pass. Each is now held to `_states_the_rule` and
-  to all three halves by name.
+## D-13, and the shape that appeared four times
+
+A fifth cross-cutting rule — **"Say what is happening before a silence"** — in
+`status/spec-v2-steps.md` *and* §5.4 of `status/spec-v2-process.md`, carried by
+all thirteen step skills with a worked example each, measured by
+`jobsearch.step_narration` over four limbs.
+
+**The rule was absent, not broken.** §5.4's *say why* governs the subject of a
+step and says nothing about the seconds spent executing inside it.
+
+Qodo's review found three real defects. **All three, plus one found before the
+review, are one shape:**
 
 > **A requirement stated in prose and checked by its own name is not checked.**
 
-It has now appeared four times in one task: between the limbs (D-15's lesson),
-in limb 3's subject detection (twelve false offenders), in limb 1's governance
-detection (the heading), and in a test over the specs. **Expect it again.** When
-adding a check, ask what the conforming text will contain, and whether that text
-alone would satisfy the check.
+1. limb 3's subject detection searched the prose for "creates their profile" —
+   and matched all thirteen skills, because the shared rule sentence names
+   profile creation. Twelve false offenders.
+2. the rule's own heading carries a subject token *and* the governor `before`,
+   so a Protocol section stripped to nothing but the heading passed limb 1.
+3. twelve of thirteen examples opened a silence and never closed it — the rule
+   requires both halves, and nothing measured the closing one.
+4. the spec-drift test asserted the rule's *title* appeared in both documents,
+   so either could gut the requirement and still pass.
 
-**The fourth finding is not fixed and its thread is open**: Qodo asks for
+**Expect a fifth.** When adding a check, ask what the *conforming* text will
+contain, and whether that text alone would satisfy the check.
+
+One review finding was **not** fixed: Qodo wants
 `test_<what>_<condition>_<expected_result>` naming, which
-`.claude/skills/execution/SKILL.md:71` does state. Answered on the thread —
-this file's ~40 existing tests all use the prose form, `status/plan.md`
-prescribes one of the new names verbatim, and the convention belongs to task
-payloads (a RED test named before any code exists) rather than to every test in
-the suite. **A repo-wide rename is the owner's call**, and would need its own
-task: it touches the plan rows that cite those names, which `make verify-gates`
-reads.
+`.claude/skills/execution/SKILL.md:71` does state. Answered on the thread — the
+file's ~40 tests all use the prose form, `status/plan.md` prescribes one of the
+new names verbatim, and the convention belongs to task payloads. The owner
+merged over it, so it stands; a repo-wide rename would need its own task and
+would touch the plan rows `make verify-gates` reads.
 
-## Four issues filed upstream, three of them about context cost
-
-The owner asked for anything that looks wrong to go to `claude-arsenal`.
-
-- **[#181](https://github.com/nuncaeslupus/claude-arsenal/issues/181)** —
-  `task_id_from_issue` resolves only from the issue **body**, so the session-start
-  fetch must pull every task issue's full prose into context: **~9k tokens** on
-  this 40-issue board, of which the useful payload is one identifier per issue.
-  Proposed a **title fallback** — the titles already match the task files'
-  `title:` verbatim, because `handle_sync.py` and `arsenal-queue.yml` both title
-  the handle from the task file. With it, the documented fetch drops `body` and
-  costs **~1.2k**.
-- **[#182](https://github.com/nuncaeslupus/claude-arsenal/issues/182)** —
-  `github_channel.sh --detect` prints `rest` here because the agent proxy answers
-  `GET /rate_limit` **itself**, 200, without the credentials ever reaching
-  GitHub. Real calls then 403. This is *not* the read/write gap the code's
-  comment already anticipates — the probe never left the proxy. A false `rest` is
-  worse than `none`, which is a handled outcome. Proposed probing `GET /user`.
-- **[#183](https://github.com/nuncaeslupus/claude-arsenal/issues/183)** —
-  `check_update.sh` reports a missing `arsenal` remote as *"the bundle was
-  copied, not added as a git subtree"*. Two independent facts: remotes are not
-  cloned. `verify-subtree` says `subtree_recorded_in_history: true` on the same
-  tree, and the script's own line 197 does the correct check but is unreachable.
-- **[#184](https://github.com/nuncaeslupus/claude-arsenal/issues/184)** — the
-  protocol asks a worker to follow an existing module's shape and names no cheap
-  way to read one. Reading `session_exit.py` whole cost ~6k for a shape worth
-  ~400 tokens. Proposed a `references/worker-loop.md` note and a `bin/outline.sh`.
-
-## Context economy — what actually costs, measured
-
-The owner asked directly. On this surface, per session:
+## Context economy — measured, since the owner asked
 
 | item | cost | note |
 |---|---|---|
-| task-issue fetch with bodies | **~9k** | the big one — see #181 |
+| task-issue fetch | **~1.2k** | was ~9k — v0.36.0's title fallback |
 | MCP tool schemas (github + CCR) | ~12k resident | most of github's 60 tools are deferred |
 | system tools + prompt | ~30k | fixed |
-| `handover.md` | **~1.9k** | **not** worth shrinking; it is what stops re-derivation |
+| `handover.md` | ~2k | **not** worth shrinking; it stops re-derivation |
 | `AGENTS.md` + `CLAUDE.md` | ~6k | already won by #177's chunking |
 
-**Gmail/Calendar/Drive are gone** — the owner deleted them, and `ListConnectors`
-now returns `[]`. Remove the "turn off unused connectors" item from any future
-carry-forward list; it is done.
+**Gmail/Calendar/Drive are deleted** — `ListConnectors` returns `[]`. That
+carry-forward item is closed; do not re-add it.
 
-`claude-arsenal` was attached with `add_repo` for issue filing and **deliberately
-not cloned** — the API is all a filing session needs, and a shallow clone through
-the proxy costs 5–10 minutes for nothing.
+`claude-arsenal` is attached via `add_repo` for issue filing and **deliberately
+not cloned** — the API is all a filing session needs.
 
 ## CI is still out of runner minutes
 
-Re-confirmed on all three heads of #105 — `d4ff6d2`, `e97aa72` and `eca6bd6`.
-Every one: five checks failed, `runner_id: 0`, empty `runner_name`, every job
-**completing 2–4 seconds after it started** (`eca6bd6`: 17:59:46 → 17:59:48/49).
-No runner is ever assigned. Not the diff. Do not push speculative fixes.
+Confirmed on every head of #105 — `d4ff6d2`, `e97aa72`, `eca6bd6` — five checks
+failed each time, `runner_id: 0`, empty `runner_name`, jobs completing **2–4
+seconds** after they start. No runner is ever assigned. Not the diff.
 
-All five gates run locally on that head:
+All five gates run locally before each push:
 
 ```bash
 make lint && make test && make evidence && make verify-subtree && make verify-gates
 ```
 
-`make test` 1123 passed / 1 skipped · `make evidence` no drift ·
-`make verify-subtree` 0 diverging, 33 assets · `make verify-gates` **60**
+Latest: `make test` 1126 passed / 1 skipped · `make evidence` no drift ·
+`make verify-subtree` 0 diverging, **34** assets · `make verify-gates` 60
 terminal tasks, 60 gates asserted, 0 without a fenced block.
 
-`status/evidence/D3.json` moved by eleven lines — it records where a superseded
-expression sits in the step spec, and the new rule shifted it. Expected, and
-regenerated with `make evidence`, never by hand.
+## Surface facts
 
-## Surface facts, unchanged and re-confirmed
-
-**`github_channel.sh --detect` prints `rest`, and `rest` does not work here** —
-now filed as #182. Fetch issues with the MCP `list_issues` tool and hand-write
-the JSON the scripts read (`number`, `state`, `body` carrying the task id,
-`labels`, `assignees`). Older `lo-*` issues carry no `arsenal-task:` line — they
-resolve through the `arsenal/tasks/<id>.md` payload link, so keep that link.
-
-**`claim_task.sh` returns `manual POST`** on this surface; `create_branch` on
-`arsenal/claims/<id>` is the compare-and-swap. 201 = won.
-
-**`open_task_pr.sh` still was not used** — it cuts `arsenal/<id>-<slug>` off the
-default branch, and this surface restricts pushes to the session's designated
-branch. Archive, `Closes #<issue>` in both commit and PR body, and the PR were
-done by hand to the same shape.
-
-**Merging works** via the MCP `merge_pull_request` tool.
+- **`github_channel.sh --detect` prints `rest`, and `rest` does not work here**
+  (filed as #182). Use the MCP tools and hand-write the JSON the scripts read.
+- **`claim_task.sh` returns `manual POST`**; `create_branch` on
+  `arsenal/claims/<id>` is the compare-and-swap. 201 = won, 422 = lost.
+- **`open_task_pr.sh` still cannot be used** — it cuts a branch off the default
+  branch, and this surface restricts pushes to the session's designated branch.
+  Archive, `Closes #<issue>` in both commit and PR body, and the PR by hand.
+- **Merging works** via the MCP `merge_pull_request` tool.
 
 ## Left open (carried forward)
 
-- **#105 is ready to merge** — review worked, five gates green on `eca6bd6`.
-  The only open thread is the test-naming one, which is the owner's call and
-  does not block.
+- **`claude-arsenal#186` is the one that matters** — until it lands, never act
+  on `handle_sync.py`'s proposals for `lo-0300` / `lo-1af2`.
 - **A permissions edit only the owner can make**: `Bash(gh run list:*)` and
   `Bash(gh run view:*)` in `.claude/settings.json`.
 - **`tools/profile_guard.sh` matches a candidate path mentioned in *prose***,
   not only one being opened. Still not seeded.
-- **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Resolution B has existed
-  since v0.33.0 (`gate: unmeasured`).
+- **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Resolution B has
+  existed since v0.33.0 (`gate: unmeasured`).
 - **`claude-arsenal#180`** — `open_task_pr.sh` reads `host-gate` from the git
   root and runs it in the cwd. Inert here while `host-gate` is unset.
+- **D-22's host half is actionable**: a `make gate` target running all five, for
+  `host-gate` to point at.
 - **Steps 5, 6, 10, 11, 12 are still `not_implemented`**, and steps 8 and 9
   certify over unbuilt gates until D-21 lands.
-- **One pre-existing board flag**: mixed-priority-convention — 30 tasks use the
+- **One pre-existing board flag**: mixed-priority-convention — 29 tasks use the
   size scale [10, 5, 1, 0] and 2 use other values [70, 60].

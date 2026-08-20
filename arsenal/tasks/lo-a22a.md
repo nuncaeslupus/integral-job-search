@@ -1,6 +1,6 @@
 ---
 id: lo-a22a
-title: "T44: Ranking presentation \u2014 the offer card as a filled template, unknown as unknown, provisional labelled"
+title: "T44: Ranking presentation — the offer card as a filled template, unknown as unknown, provisional labelled"
 priority: 5
 deps: [lo-bbc7, lo-b313]
 tags: [m2]

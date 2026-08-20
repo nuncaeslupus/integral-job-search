@@ -6,7 +6,9 @@ Every session, without waiting to be asked:
 1. Read `arsenal/session/handover.md` for the previous session's context.
 2. List the repository's issues labelled `arsenal:task` — **open and closed** — and
    save the JSON. Use whatever GitHub access this surface has; run
-   `claude-arsenal/bin/github_channel.sh --detect` to find out which.
+   `claude-arsenal/bin/github_channel.sh --detect` to find out which. Request
+   `number`, `title`, `state`, `labels`, `assignees` and **not `body`** — the bodies
+   are the bulk of that fetch and nothing downstream reads them.
 3. Run `python3 claude-arsenal/scripts/query_status.py --issues <that file>` for the
    board, and report anything it flags.
 4. Pick up work: `python3 claude-arsenal/scripts/task_select.py --issues <that file>`
@@ -30,13 +32,39 @@ and open an issue for anything `handle_sync.py` prints (normally nothing).
 
 ```bash
 # fetch with MCP list_issues, labels=["arsenal:task"], open AND closed,
-# fields number/body/state/labels/assignees; save to $ISSUES
+# fields number/title/state/labels/assignees — NOT body; save to $ISSUES
 python3 claude-arsenal/scripts/query_status.py --issues "$ISSUES"
 python3 claude-arsenal/scripts/task_select.py  --issues "$ISSUES"
 ```
 
 `state_from_issues` warns when issues were fetched and **none** resolved to a
 task, so an empty selection can no longer look healthy.
+
+**v0.36.0 dropped `body` from that fetch**, which on this 40-issue board is
+~9k tokens down to ~1.2k: `task_id_from_issue` falls back to matching the issue
+**title** against the task files' `title:`. Two consequences bit here, and the
+first is still live.
+
+**Two tasks do not resolve by title, and `handle_sync.py` will offer to open
+duplicate issues for them. Do not.**
+
+| task | already has | why it fails |
+|---|---|---|
+| `lo-0300` | **#64** | title holds `<offer_id>`; the tool returns `&lt;offer_id&gt;` |
+| `lo-1af2` | **#50** | title holds `>=6`, `>=15`; the tool returns `&gt;=6` |
+
+The MCP `list_issues` tool HTML-escapes `<`, `>` and `&` in titles, and
+`normalise_title` does not unescape them, so the two sides cannot match. Filed
+upstream. Until it lands, the detector is `query_status.py`, which names exactly
+which tasks failed to resolve — treat *that* list, not `handle_sync.py`'s
+output, as the question to answer.
+
+The second consequence is already fixed: 12 further tasks failed because their
+files stored titles JSON-escaped (`\u2014`, `\u20ac`, `\u2192`) inside a
+double-quoted YAML scalar that arsenal's parser does not decode. Those 36 task
+files now hold the real characters. **If a new task file appears with `\uXXXX`
+in its title, decode it** — the escapes come from arsenal's own writers, and a
+title that does not match its issue is invisible to a body-free fetch.
 
 ## `make arsenal-remote` reports; `make arsenal-upgrade REF=…` upgrades
 

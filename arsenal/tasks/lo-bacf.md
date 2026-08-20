@@ -1,6 +1,6 @@
 ---
 id: lo-bacf
-title: "T10: Preference weights: forced pairwise choices \u2192 part-worths \u2192 salary-equivalent scale"
+title: "T10: Preference weights: forced pairwise choices → part-worths → salary-equivalent scale"
 priority: 5
 deps: [lo-b422]
 workspace: PROFILE
