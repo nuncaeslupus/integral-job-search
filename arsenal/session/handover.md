@@ -1,4 +1,4 @@
-# Session handover — 2026-08-19 (arsenal v0.26.0 → v0.29.1; D-2 merged)
+# Session handover — 2026-08-20 (arsenal v0.26.0 → v0.29.1; D-2 and T53 merged)
 
 ## Read this first
 
@@ -24,16 +24,29 @@ existed to do. Verified: 27 issues, 5 tasks selected, **zero warnings**.
 |------|-------|
 | PR #74 — arsenal v0.26.0 → v0.29.0, board verified, workaround deleted | **merged** as `e87c243` |
 | PR #75 — D-2 (`lo-77a6`), gold provenance | **merged** as `1ed1cc0`; issue #45 closed by it |
-| D-2 (`lo-77a6`) | **merged** — recorded in `arsenal/tasks/_history/lo-77a6.md` |
+| PR #77 — T53 (`lo-803e`), connector contract | **merged** as `a525c3f`; issue #48 closed by it |
+| D-2 (`lo-77a6`), T53 (`lo-803e`) | **merged** — recorded in `arsenal/tasks/_history/` |
+| D-10 (`t-2583900f`, #78) | **new**, seeded from review on #77 — see below |
 | Bundle | **v0.29.1** — current with the newest tag |
 
 ## Do this next
 
-1. **T14 (`lo-3100`) needs an owner decision, not a worker run.** Its payload
+1. **D-10 (`t-2583900f`, #78) needs an owner decision before anyone starts it.**
+   `docs/distribution.md` §5 lists `parse.py` in the shared connector shape and
+   nothing executes it, so a connector for a site the declarative form cannot
+   express passes the whole conformance check and cannot work. Either drop it
+   from the shape or run it under process isolation — the payload writes out
+   both and their costs. **Do not resolve it by relaxing the static check**:
+   that check is admission lint, and its insufficiency as a sandbox is an
+   argument for isolation or removal, never for admitting more.
+2. **T14 (`lo-3100`) needs an owner decision, not a worker run.** Its payload
    recommends folding it into T15 as the rules stage rather than gating it
    against a corpus that cannot support one. That is a scope call. The other
-   unblocked tasks are T53 (`lo-803e`), T55 (`lo-9f72`), T9 (`lo-b422`).
-2. **The queue is clean.** `query_status --issues` reports no problems at all
+   unblocked tasks are T55 (`lo-9f72`) and T9 (`lo-b422`). T55 is mechanical
+   but wide, and one part of it — renaming the GitHub repository itself — is
+   not something a session can do. T9 fetches stimuli live from multiple
+   sources, so it likely needs `surface:egress`.
+3. **The queue is clean.** `query_status --issues` reports no problems at all
    now that D-2 has a gate; `verify-gates` asserts **52/52**.
 
 ## Three things that will bite you
@@ -90,6 +103,29 @@ note defining what the two words mean while the outage lasts:
 
 Delete that note when runners return. The enum has no value for "review
 required, CI unavailable" — filed as **claude-arsenal#166**.
+
+## What T53 settled
+
+A shared connector is a package — `connectors/<site-id>/` with `connector.yaml`,
+`meta.yaml`, `fixture/list.html` (+ `detail.html` when a detail page is
+declared), and optionally `parse.py`. One command checks all six rules and a
+contributor runs the same one:
+
+```bash
+uv run python -m jobsearch.connector_contract --connectors <dir>
+```
+
+It exits **3** over an empty library, because an empty directory and a
+conforming one both report zero violations and only the exit code separates
+them. `load_connectors` is packages-only — an interim version also read loose
+`<site>_<locale>.yaml` files, and review found the hole: runtime loaded them,
+the contract checker did not, so CI could report zero violations over a
+connector nothing had examined.
+
+Review on #77 found six more holes of that shape, all fixed with a regression
+test each. The pattern worth carrying forward: **every negative test breaks a
+copy of the committed package**, so the check has to fail on something that was
+passing a moment ago, for the one reason the test changed.
 
 ## What D-2 settled, and what it deliberately did not
 
