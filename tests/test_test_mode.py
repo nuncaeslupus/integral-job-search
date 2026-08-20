@@ -27,13 +27,14 @@ from pathlib import Path
 
 import pytest
 
-from jobsearch.identity import ProfileStore, create_profile, list_identities
+from jobsearch.identity import ProfileStore, create_profile, list_identities, resolve_handle
 from jobsearch.profile import EvidenceLog
 from jobsearch.test_mode import (
     LEDGER_DIR,
     PASTE_CHARS,
     MetaChannel,
     NoteLedger,
+    TallyRow,
     build_review,
     create_simulated_profile,
     detect_guard,
@@ -199,6 +200,22 @@ def test_an_act_now_note_is_separated_from_a_silent_one(tmp_path: Path) -> None:
     assert [note.act_now for note in live.ledger.notes()] == [False, True]
 
 
+def test_an_act_now_note_is_reachable_and_a_silent_one_is_not(tmp_path: Path) -> None:
+    """`[[! …]]` is the one documented exception to the silence, so it needs a
+    door. A distinction the parser records and no caller can read is a feature
+    that does not exist at runtime — but the door opens onto act-now notes
+    only, and only the last turn's."""
+    live = channel(tmp_path)
+    live.feed("Vale [[una observación silenciosa]]", step="intake")
+    assert live.pending_actions() == ()
+
+    live.feed("Vale [[! arregla esto ahora]]", step="intake")
+    assert live.pending_actions() == ("arregla esto ahora",)
+
+    live.feed("Sigo hablando", step="intake")
+    assert live.pending_actions() == ()
+
+
 def test_feed_returns_only_the_visible_text(tmp_path: Path) -> None:
     """The mechanical form of "the session proceeds exactly as a real one": a
     caller cannot reach a note through the call that captured it."""
@@ -218,6 +235,55 @@ def test_notes_survive_to_the_end_of_the_session_and_are_recoverable(tmp_path: P
     assert path.is_file()
     reopened = NoteLedger(path)
     assert [note.text for note in reopened.notes()] == ["primera", "segunda"]
+
+
+def test_a_reopened_session_keeps_numbering_where_it_left_off(tmp_path: Path) -> None:
+    """A test session outlives the process running it. Restarting at 1 would
+    mint a second note 1, and `seed_specs` selects every row whose number the
+    owner confirmed — so one confirmation would seed two unrelated notes."""
+    first = channel(tmp_path)
+    first.feed("Uno [[primera]]", step="identify")
+    first.feed("Dos [[segunda]]", step="intake")
+
+    resumed = channel(tmp_path)
+    resumed.feed("Tres [[tercera]]", step="constraints")
+
+    review = resumed.review()
+    assert [row.n for row in review.rows] == [1, 2, 3]
+    assert len(seed_specs(review, [1])) == 1
+
+
+def test_reopening_a_session_does_not_re_announce_identical_metadata(tmp_path: Path) -> None:
+    live = channel(tmp_path)
+    live.feed("Uno [[primera]]", step="identify")
+    channel(tmp_path)
+    headers = [row for row in live.ledger.raw_rows() if row.get("kind") == "session"]
+    assert len(headers) == 1
+
+
+def test_a_session_that_identifies_its_candidate_records_the_newer_handle(
+    tmp_path: Path,
+) -> None:
+    """A note made before identification is the point of the ledger's placement;
+    the handle becoming known afterwards must reach triage, not be shadowed by
+    the header written when nobody was identified yet."""
+    channel(tmp_path).feed("Hola [[antes de identificar]]", step="identify")
+    later = MetaChannel(
+        tmp_path / "profiles", session_id="s-1", handle="marta-ruiz", now=STAMP
+    )
+    assert later.review().handle == "marta-ruiz"
+
+
+def test_two_session_ids_that_slug_alike_do_not_share_a_ledger(tmp_path: Path) -> None:
+    """`a/b` and `a?b` both slug to `a-b`. Sharing one file would show one
+    session's observations during another session's review."""
+    root = tmp_path / "profiles"
+    assert ledger_path(root, "a/b") != ledger_path(root, "a?b")
+
+    MetaChannel(root, session_id="a/b", now=STAMP).feed("Hola [[de la primera]]", step="identify")
+    second = MetaChannel(root, session_id="a?b", now=STAMP)
+    second.feed("Hola [[de la segunda]]", step="identify")
+    assert [row.text for row in second.review().rows] == ["de la segunda"]
 
 
 def test_the_ledger_is_outside_every_profile_tree(tmp_path: Path) -> None:
@@ -276,6 +342,40 @@ def test_the_review_reports_markers_the_guard_declined(tmp_path: Path) -> None:
     assert "were not read as notes" in render_review(review)
 
 
+def test_the_loss_counters_survive_the_process_that_counted_them(tmp_path: Path) -> None:
+    """The failure this feature exists to prevent, reproduced inside it.
+
+    The counters used to live on the live channel, so `query_notes.py` — which
+    runs in a *different* process — rebuilt a review reporting zero losses
+    however many markers had been eaten, and exited 0. A count that does not
+    outlive the session is a log line, not an audit trail.
+    """
+    live = channel(tmp_path)
+    live.feed("/paste\n[[uno]] y [[dos]]", step="sourcing")
+    live.feed("Hola [[sin cerrar", step="identify")
+    live.feed("Vale [[]]", step="identify")
+
+    reopened = build_review(NoteLedger(live.ledger.path))
+    assert reopened.unparsed_markers == 2
+    assert reopened.unclosed_markers == 2
+    assert reopened.unparsed_markers == live.review().unparsed_markers
+
+
+def test_a_turn_that_loses_nothing_writes_no_tally(tmp_path: Path) -> None:
+    """A tally per turn would bury the notes in rows saying nothing happened."""
+    live = channel(tmp_path)
+    live.feed("Hola [[una nota limpia]]", step="identify")
+    assert not [row for row in live.ledger.raw_rows() if row.get("kind") == "tally"]
+    assert live.ledger.losses() == (0, 0)
+
+
+def test_a_tally_row_is_not_mistaken_for_a_note(tmp_path: Path) -> None:
+    live = channel(tmp_path)
+    live.feed("Hola [[una nota]]", step="identify")
+    live.ledger.append_tally(TallyRow(unparsed_markers=1, at="2026-08-20T12:00:00+00:00"))
+    assert [note.text for note in live.ledger.notes()] == ["una nota"]
+
+
 def test_an_empty_marker_is_not_a_note_and_is_reported(tmp_path: Path) -> None:
     live = channel(tmp_path)
     live.feed("Hola [[]]", step="identify")
@@ -322,6 +422,21 @@ def test_a_confirmed_note_seeds_a_task_naming_its_step_and_skill(tmp_path: Path)
     assert spec.command()[:2] == ["python3", ".claude/skills/queue-add/scripts/new_task.py"]
 
 
+def test_a_seed_command_carries_the_body_not_just_the_title(tmp_path: Path) -> None:
+    """`new_task.py --body` defaults to empty, so a command printing only the
+    title seeds a truncated one-liner and loses the note's full text and the
+    step it was made at — the context triage exists to carry into the queue."""
+    live = channel(tmp_path)
+    long_note = "la pregunta sobre el salario llegó demasiado pronto y sonó a interrogatorio, " * 2
+    live.feed(f"Hola [[{long_note}]]", step="constraints")
+    command = seed_specs(live.review(), [1])[0].command()
+
+    assert "--body" in command
+    body = command[command.index("--body") + 1]
+    assert long_note.strip() in body
+    assert "step-02-constraints" in body
+
+
 def test_a_confirmed_number_that_matches_no_note_loses_nothing(tmp_path: Path) -> None:
     live = channel(tmp_path)
     live.feed("Uno [[primera]]", step="identify")
@@ -362,6 +477,35 @@ def test_a_real_profile_is_not_fiction_and_needs_no_migration(tmp_path: Path) ->
     listed = list_identities(root)
     assert [item.handle for item in listed] == ["marta-ruiz"]
     assert listed[0].fiction is False
+
+
+def test_a_simulated_profile_can_still_be_resolved_by_test_mode(tmp_path: Path) -> None:
+    """Excluding fiction from the roster is right, but resolution reads the
+    roster too — so the exclusion left a simulated profile unreachable even by
+    name, and a simulated run could not enter the step flow it exists to
+    exercise. The escape hatch is off by default and must be asked for."""
+    root = tmp_path / "profiles"
+    invented = create_simulated_profile(root, "Candidata Ficticia", now=STAMP)
+
+    ordinary = resolve_handle(root, named=invented.handle)
+    assert not ordinary.is_resolved
+
+    in_test_mode = resolve_handle(root, named=invented.handle, include_fiction=True)
+    assert in_test_mode.is_resolved
+    assert in_test_mode.handle == invented.handle
+
+
+def test_a_real_candidates_session_is_never_resolved_onto_an_invented_profile(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "profiles"
+    create_simulated_profile(root, "Candidata Ficticia", now=STAMP)
+    real = create_profile(root, "Marta Ruiz", now=STAMP)
+
+    # One real profile exists, so §6.1 case 2 offers it — the invented one is
+    # not in the set at all, and cannot be what a real session lands on.
+    resolution = resolve_handle(root, confirmed=True)
+    assert resolution.handle == real.handle
 
 
 def test_a_simulated_profile_says_so_when_the_tool_names_it(tmp_path: Path) -> None:

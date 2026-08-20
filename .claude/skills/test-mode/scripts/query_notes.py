@@ -13,6 +13,12 @@ addressed in, plus the counts that separate "nothing was noted" from "something
 was noted and lost": markers a paste guard declined, and markers that never
 closed.
 
+Everything it prints comes out of the ledger file, counters included. That
+matters more than it looks: this runs in a different process from the session
+that captured the notes, so anything the live channel kept in memory is gone by
+the time the owner asks for the list. A count that does not survive the session
+cannot audit it.
+
 It is also the end-of-session pass. `--seed` takes the numbers the owner
 confirmed and prints the `new_task.py` invocation for each — printed, never
 run, because "seed only what was confirmed" has to be a decision a person makes

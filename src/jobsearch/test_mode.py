@@ -97,6 +97,7 @@ one reads the bytes the rule is about (D-11).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -109,7 +110,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from jobsearch.identity import ProfileStore, create_profile, list_identities
+from jobsearch.identity import (
+    Identity,
+    Language,
+    ProfileStore,
+    create_profile,
+    list_identities,
+)
 from jobsearch.process_spec import load_steps
 from jobsearch.profile import EvidenceLog, tree_bytes
 from jobsearch.step_skills import skill_dir_name
@@ -338,6 +345,28 @@ class NoteRow(Strict):
     at: str
 
 
+class TallyRow(Strict):
+    """Markers a turn declined to capture — written, because they are the audit.
+
+    The counters used to live on the live `MetaChannel` and were handed to
+    `build_review` directly. That worked for exactly as long as the process
+    did: `query_notes.py` — the documented end-of-session command — reopens the
+    ledger in a *new* process, so it rebuilt a review that reported zero lost
+    markers however many had been eaten, and exited 0.
+
+    Which is the failure this feature exists to prevent, reproduced inside the
+    mechanism meant to expose it. A count that does not survive the session is
+    not an audit trail; it is a log line. So a turn that loses a marker appends
+    a row, and every reader gets the same answer from the same file.
+    """
+
+    kind: Literal["tally"] = "tally"
+    unparsed_markers: int = 0
+    unclosed_markers: int = 0
+    step: str | None = None
+    at: str
+
+
 class SessionRow(Strict):
     """The ledger's opening line — entering test mode, in the record.
 
@@ -354,9 +383,18 @@ class SessionRow(Strict):
 
 
 def ledger_path(profiles_root: Path, session_id: str) -> Path:
-    """Where this session's notes live. One file per session, named by it."""
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "-", session_id).strip("-") or "unnamed"
-    return Path(profiles_root) / LEDGER_DIR / f"{safe}.jsonl"
+    """Where this session's notes live. One file per session, named by it.
+
+    The readable part is the id with anything unsafe replaced, which is lossy —
+    `a/b` and `a?b` both slug to `a-b`. Two sessions sharing one file would mix
+    their notes and show one session's observations during another's review, so
+    the digest of the **raw** id is appended and it is what actually
+    distinguishes them. The slug is there to make the directory legible; the
+    digest is there to make it correct.
+    """
+    slug = re.sub(r"[^A-Za-z0-9_.-]", "-", session_id).strip("-") or "unnamed"
+    digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:8]
+    return Path(profiles_root) / LEDGER_DIR / f"{slug}-{digest}.jsonl"
 
 
 class NoteLedger:
@@ -375,6 +413,10 @@ class NoteLedger:
         self._append(row.model_dump(mode="json"))
 
     def append(self, row: NoteRow) -> NoteRow:
+        self._append(row.model_dump(mode="json"))
+        return row
+
+    def append_tally(self, row: TallyRow) -> TallyRow:
         self._append(row.model_dump(mode="json"))
         return row
 
@@ -403,14 +445,40 @@ class NoteLedger:
     def notes(self) -> list[NoteRow]:
         """Every note in the ledger, read back from disk."""
         return [
-            NoteRow.model_validate(row) for row in self.raw_rows() if row.get("kind") != "session"
+            NoteRow.model_validate(row)
+            for row in self.raw_rows()
+            if row.get("kind") not in {"session", "tally"}
         ]
 
+    def losses(self) -> tuple[int, int]:
+        """Markers this session declined or could not close, summed from disk."""
+        unparsed = 0
+        unclosed = 0
+        for row in self.raw_rows():
+            if row.get("kind") != "tally":
+                continue
+            tally = TallyRow.model_validate(row)
+            unparsed += tally.unparsed_markers
+            unclosed += tally.unclosed_markers
+        return unparsed, unclosed
+
     def header(self) -> SessionRow | None:
+        """The session's metadata — the **last** row, not the first.
+
+        A session that is reopened after its handle is known writes a second
+        header, and the newer one is the true one. Returning the first would
+        mean a run that identified its candidate mid-session still reported
+        `handle: null` at triage.
+        """
+        found: SessionRow | None = None
         for row in self.raw_rows():
             if row.get("kind") == "session":
-                return SessionRow.model_validate(row)
-        return None
+                found = SessionRow.model_validate(row)
+        return found
+
+    def highest_note_number(self) -> int:
+        """The largest `n` on disk — where a reopened session resumes from."""
+        return max((note.n for note in self.notes()), default=0)
 
 
 # ---------------------------------------------------------------------------
@@ -467,21 +535,18 @@ def _skill_for_step(step: str | None) -> str | None:
     return None
 
 
-def build_review(
-    ledger: NoteLedger,
-    *,
-    unparsed_markers: int = 0,
-    unclosed_markers: int = 0,
-) -> Review:
+def build_review(ledger: NoteLedger) -> Review:
     """Every captured note, with its step and its skill named.
 
-    Read from the ledger file, never from a caller's list: the test that
-    matters here (`test_every_captured_note_appears_in_the_end_of_session_
-    review`) is only worth anything if the review's source is the same durable
-    thing the capture wrote to.
+    **Every field comes from the ledger file, including the loss counters.**
+    Read from a caller's list — or worse, from a caller's memory — and the
+    review is only as good as the process that happens to be running it, which
+    is exactly how the standalone triage command came to report zero losses
+    however many markers had been eaten.
     """
     header = ledger.header()
     notes = ledger.notes()
+    unparsed_markers, unclosed_markers = ledger.losses()
     return Review(
         session_id=header.session_id if header else "",
         simulated=header.simulated if header else False,
@@ -520,11 +585,20 @@ class TaskSpec:
     body: str
 
     def command(self) -> list[str]:
+        """The invocation, with the body — `new_task.py --body` defaults empty.
+
+        Printing only `--title` would seed a task carrying a truncated one-line
+        summary and nothing else, losing the note's full text and the step it
+        was made at: the actionable context the whole triage pass exists to
+        carry into the queue.
+        """
         return [
             "python3",
             ".claude/skills/queue-add/scripts/new_task.py",
             "--title",
             self.title,
+            "--body",
+            self.body,
         ]
 
 
@@ -591,18 +665,28 @@ class MetaChannel:
         self.simulated = simulated
         self.handle = handle
         self.ledger = NoteLedger(ledger_path(self.profiles_root, session_id))
-        self._n = 0
-        self._unparsed = 0
-        self._unclosed = 0
         self._clock = now
-        self.ledger.open_session(
-            SessionRow(
-                session_id=session_id,
-                simulated=simulated,
-                handle=handle,
-                at=self._stamp(),
-            )
+        # A test session spans many turns and may outlive the process running
+        # it. Resuming from the ledger's own highest number, rather than from
+        # zero, is what stops a restart minting a second note 1 — which would
+        # make triage ambiguous, because `seed_specs` selects every row whose
+        # number the owner confirmed.
+        self._n = self.ledger.highest_note_number()
+        self._acting_now: tuple[MetaNote, ...] = ()
+
+        entering = SessionRow(
+            session_id=session_id,
+            simulated=simulated,
+            handle=handle,
+            at=self._stamp(),
         )
+        current = self.ledger.header()
+        if current is None or (current.simulated, current.handle) != (simulated, handle):
+            # Written once on entry, and again only when the metadata actually
+            # changed — a session that identifies its candidate part-way
+            # through. Re-announcing identical metadata on every reopen would
+            # bury the moment test mode was entered under copies of itself.
+            self.ledger.open_session(entering)
 
     def _stamp(self) -> str:
         return (self._clock or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
@@ -617,14 +701,14 @@ class MetaChannel:
         correction.
         """
         parsed = parse_turn(text, guard=guard)
-        self._unparsed += parsed.unparsed_markers
-        self._unclosed += parsed.unclosed_markers
+        unclosed = parsed.unclosed_markers
+        captured: list[MetaNote] = []
         for note in parsed.notes:
             if not note.text:
                 # An empty `[[]]` is a slip, not an observation. Counted as
                 # unclosed so it shows up in the review rather than becoming a
                 # blank row nobody can act on.
-                self._unclosed += 1
+                unclosed += 1
                 continue
             self._n += 1
             self.ledger.append(
@@ -636,25 +720,53 @@ class MetaChannel:
                     at=self._stamp(),
                 )
             )
+            captured.append(note)
+
+        if parsed.unparsed_markers or unclosed:
+            # To the ledger, not to an attribute: the triage command runs in
+            # another process and must see the same losses this one did.
+            self.ledger.append_tally(
+                TallyRow(
+                    unparsed_markers=parsed.unparsed_markers,
+                    unclosed_markers=unclosed,
+                    step=step,
+                    at=self._stamp(),
+                )
+            )
+
+        self._acting_now = tuple(note for note in captured if note.act_now)
         return parsed.visible
+
+    def pending_actions(self) -> tuple[str, ...]:
+        """What `[[! …]]` in the **last** turn asked for, and nothing else.
+
+        `feed` returns only the visible text so a silent note cannot reach the
+        conversation. But `[[! …]]` is the one marker documented as an
+        exception — the owner explicitly asking for something to be acted on
+        now — and a distinction the parser records, the ledger stores, and no
+        caller can ever read is a feature that does not exist at runtime.
+
+        So the exception gets its own door, and a narrow one: only the last
+        turn's act-now notes, never the silent ones, and it must be opened
+        deliberately. Reading it is the caller saying "I am about to break the
+        silence, as instructed"; ignoring it leaves every note silent, which is
+        the safe default.
+        """
+        return tuple(note.text for note in self._acting_now)
 
     def review(self) -> Review:
         """What to show at the end, before anything is seeded."""
-        return build_review(
-            self.ledger,
-            unparsed_markers=self._unparsed,
-            unclosed_markers=self._unclosed,
-        )
+        return build_review(self.ledger)
 
 
 def create_simulated_profile(
     profiles_root: Path,
     display_name: str,
     *,
-    language: str = "es",
+    language: Language = "es",
     handle: str | None = None,
     now: datetime | None = None,
-) -> Any:
+) -> Identity:
     """Create a profile for an invented candidate, marked as fiction.
 
     A thin wrapper on `identity.create_profile` so a simulated run cannot
@@ -664,7 +776,7 @@ def create_simulated_profile(
     return create_profile(
         profiles_root,
         display_name,
-        language=language,  # type: ignore[arg-type]
+        language=language,
         handle=handle,
         now=now,
         fiction=True,

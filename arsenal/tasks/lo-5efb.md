@@ -49,6 +49,16 @@ upstream fails a test here instead of leaving two numbers nobody compares.
 Measured after the change: **12,138 chars across 33 skills**, 862 spare,
 `steps_with_a_skill_fraction` still 1.0.
 
+**Review finding folded in (Qodo, 2026-08-20): the three properties are inside
+the gate key, not beside it.** `verify_gates` asserts the fenced
+`skill_listing_budget_overage_chars == 0` and nothing else, so a bare
+`total - budget` would have let an override — or a budget fitted to the
+measurement — report a clean zero while every guarantee above went unchecked
+outside the test suite. A library inside an unsoundly declared budget now
+reports `-1`: not a pass, and not silent either. Second finding, same shape: an
+`OSError` reading a `SKILL.md` used to cost nothing, which is a false zero
+overage — the gate passing because it could not see its input. It raises.
+
 ### The original framing, kept because it was overruled deliberately
 
 **This was blocked on an upstream change, not on work here.**

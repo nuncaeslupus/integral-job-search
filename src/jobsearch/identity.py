@@ -385,6 +385,7 @@ def resolve_handle(
     *,
     named: str | None = None,
     confirmed: bool = False,
+    include_fiction: bool = False,
 ) -> Resolution:
     """The §6.1 resolution order, as far as it can go without asking.
 
@@ -396,8 +397,17 @@ def resolve_handle(
     `confirmed=True` is the caller reporting that the human answered yes to the
     offer this function made last time. It is the only way case 2 becomes a
     resolution, which is what makes case 2 a confirmation rather than a default.
+
+    `include_fiction=True` lets a **test-mode** session resolve the simulated
+    candidate it created (S11). Excluding fiction from the roster is right, and
+    is what makes the mark mean something — but resolution reads the roster
+    too, so excluding it here as well left a simulated profile unreachable even
+    when its handle was supplied by name, and a simulated run could not enter
+    the step flow it exists to exercise. The flag is off by default and has to
+    be asked for, so a real candidate's session can never be resolved onto an
+    invented profile by accident.
     """
-    identities = list_identities(root)
+    identities = list_identities(root, include_fiction=include_fiction)
 
     if named:
         wanted = named.strip()

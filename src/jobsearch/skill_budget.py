@@ -50,8 +50,15 @@ asserts the totals are equal, so a formula change upstream shows up as a failing
 test rather than as two numbers nobody compares. A gate that restates a rule
 agrees with prose the code has stopped following (D-11).
 
-The gate is `skill_listing_budget_overage_chars == 0`, and S10's other
-requirement — that the saving cannot come from dropping a step — is
+The gate is `skill_listing_budget_overage_chars == 0`, and **the three
+properties above are folded into that one number** rather than left beside it.
+The fenced gate `verify_gates` asserts reads this key and nothing else, so a
+bare `total - budget` would let an override — or a budget fitted to the
+measurement — report a clean zero while every guarantee here went unchecked
+outside the test suite. A library inside an unsoundly declared budget reports
+`-1`: not a pass, and not a silent one either.
+
+S10's other requirement — that the saving cannot come from dropping a step — is
 `jobsearch.step_skills`' `steps_with_a_skill_fraction`, which is measured there
 and asserted here in `measure` so one reading answers both halves.
 """
@@ -149,14 +156,21 @@ def _frontmatter(skill_md: Path) -> dict[str, Any]:
 
     Mirrors `audit_library._load_frontmatter`: a file that does not open with
     `---` has no front matter, an unterminated block has none, and a YAML error
-    is not an exception here. A skill that cannot be parsed simply costs
+    is not an exception here. A skill that cannot be *parsed* simply costs
     nothing, which is what upstream counts, and counting it differently would
     put our total and the audit's out of step for a file neither can read.
+
+    A file that cannot be **read** is a different thing entirely, and is raised
+    rather than swallowed. The caller has already established the file exists,
+    so an `OSError` here means the library could not be measured — and a
+    measurement missing a skill reports a smaller total, which is a *false zero
+    overage*: the gate passing precisely because it could not see its input.
+    Upstream propagates the same failure, so this also keeps the two agreeing.
     """
     try:
         text = skill_md.read_text(encoding="utf-8")
-    except OSError:
-        return {}
+    except OSError as exc:
+        raise SkillBudgetError(f"{skill_md} exists but could not be read: {exc}") from exc
     if not text.startswith("---\n"):
         return {}
     end = text.find("\n---\n", 4)
@@ -331,8 +345,17 @@ def measure(
 
     steps = measure_step_skills(skills_dir=skills_dir)
 
+    # The gate key is zero **only** when the library is inside a soundly
+    # declared budget. Reporting a bare `total - in_force` would let an
+    # override, or a budget fitted to the measurement, produce a clean zero —
+    # and the fenced S10 gate asserts that number and nothing else, so every
+    # roundness, headroom and provenance guarantee would have been enforced by
+    # the tests and the CLI while `verify_gates` waved it through. A guarantee
+    # the terminal gate does not check is a guarantee that decays.
+    overage = max(0, total - in_force)
+    sound = source == "declared" and declaration.passes
     return {
-        "skill_listing_budget_overage_chars": max(0, total - in_force),
+        "skill_listing_budget_overage_chars": overage if (overage or sound) else -1,
         "listing_budget_chars": in_force,
         "budget_source": source,
         "description_chars_total": total,
@@ -429,11 +452,13 @@ def _main(argv: list[str]) -> int:
             f"over budget by {measured['skill_listing_budget_overage_chars']} chars",
             file=sys.stderr,
         )
-    failed = (
-        measured["skill_listing_budget_overage_chars"] != 0
-        or measured["budget_declaration_reasons"]
-    )
-    return 1 if failed else 0
+    if measured["skill_listing_budget_overage_chars"] == -1:
+        print(
+            "the library is inside its budget, but that budget was not soundly declared — "
+            "reported as unmeasured rather than as a pass",
+            file=sys.stderr,
+        )
+    return 1 if measured["skill_listing_budget_overage_chars"] != 0 else 0
 
 
 if __name__ == "__main__":

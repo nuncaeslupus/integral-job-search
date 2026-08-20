@@ -192,6 +192,38 @@ def test_a_missing_library_is_refused_not_measured_as_zero(tmp_path: Path) -> No
     assert measure(tmp_path / "nowhere")["skill_listing_budget_overage_chars"] == -1
 
 
+def test_an_override_never_reports_a_clean_pass(tmp_path: Path) -> None:
+    """The fenced S10 gate asserts this one key and nothing else, so a bare
+    `total - budget` would let an override wave the whole declaration through.
+    A library inside an unsoundly declared budget is unmeasured, not passing."""
+    generous = measure(budget=20_000)
+    assert generous["description_chars_total"] < 20_000
+    assert generous["budget_source"] == "override"
+    assert generous["skill_listing_budget_overage_chars"] == -1
+
+
+def test_a_fitted_budget_never_reports_a_clean_pass() -> None:
+    total = measure()["description_chars_total"]
+    fitted = measure(budget=total)
+    assert fitted["budget_declaration_reasons"]
+    assert fitted["skill_listing_budget_overage_chars"] == -1
+
+
+def test_an_unreadable_skill_file_fails_rather_than_costing_nothing(tmp_path: Path) -> None:
+    """A measurement missing a skill reports a smaller total — a false zero
+    overage, the gate passing precisely because it could not see its input."""
+    write_skill(tmp_path, "readable", "a description")
+    # A directory standing where the file should be: `exists()` is true and the
+    # read fails, which is the shape of the bug without depending on file modes
+    # (a suite running as root can read a 0o000 file, so a chmod would prove
+    # nothing here).
+    (tmp_path / "unreadable" / "SKILL.md").mkdir(parents=True)
+
+    with pytest.raises(SkillBudgetError):
+        skill_costs(tmp_path)
+    assert measure(tmp_path)["skill_listing_budget_overage_chars"] == -1
+
+
 def test_a_library_over_its_budget_reports_the_overage(tmp_path: Path) -> None:
     write_skill(tmp_path, "big", "x" * 500)
     measured = measure(tmp_path, budget=100)

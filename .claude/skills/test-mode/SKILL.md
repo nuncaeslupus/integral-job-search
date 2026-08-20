@@ -56,6 +56,8 @@ visible = channel.feed(turn_text, step="constraints")   # notes go to the ledger
 
 `feed` returns **only** the visible text. That is deliberate: a caller that cannot reach the notes cannot accidentally let one change the next question.
 
+`[[! …]]` is the one exception, and it has its own door — `channel.pending_actions()` returns what the **last** turn asked for and nothing else. Call it only to act on an explicit act-now instruction; leaving it uncalled keeps every note silent, which is the safe default.
+
 ## Simulated candidates
 
 Inventing answers is often the only way to exercise a step at all — waiting for a real run to reach step 9 makes step 9 untestable. A simulated run is allowed, and its profile is created through `jobsearch.test_mode.create_simulated_profile`, which marks it `fiction: true`.
@@ -70,7 +72,9 @@ Silent capture makes its own failures invisible, so check the ledger rather than
 uv run python3 ${CLAUDE_SKILL_DIR}/scripts/query_notes.py --id <session-id>
 ```
 
-It prints every note with its step and the skill it is addressed in, plus two counts that matter more than the notes: markers a paste guard declined, and markers that never closed. Exit 1 means something was captured *and* something was lost — read it before triage.
+It prints every note with its step and the skill it is addressed in, plus two counts that matter more than the notes: markers a paste guard declined, and markers that never closed. Exit 1 means something was lost — read it before triage.
+
+Every figure comes out of the ledger file, counters included, so the command reports the same losses whether it runs inside the session or days later from a different process.
 
 ## Ending the session
 
@@ -89,6 +93,8 @@ Required, not optional. A note captured and never surfaced is the failure this w
 ## Gotchas
 
 - **A note before identification still has somewhere to go.** The ledger is keyed by session, not by handle, so a note made during step 0 — where a session's tone is set, and so the step most worth criticising — is written to disk like any other. Do not hold notes in memory waiting for a profile.
+- **Resolving the simulated candidate needs asking for.** `list_identities` and `resolve_handle` both exclude fiction by default; pass `include_fiction=True` to reach the invented profile, and only in a test session. Without it a simulated run cannot enter the step flow at all.
+- **Numbering resumes from the ledger.** Reopening a session continues where it left off rather than minting a second note 1 — which would make `--seed 1` ambiguous between two unrelated observations.
 - **`[[` with no `]]` is not a note.** It is counted as unclosed and reported, never silently swallowed along with the rest of the turn. If the owner's note seems to have vanished, this is the first thing to check.
 - **An empty `[[]]` is a slip, not an observation.** Counted, not stored — a blank triage row is one nobody can act on.
 - **A long typed turn trips the paste guard.** The threshold cannot tell a pasted advert from a long typed answer, which is why every marker it declines is counted and shown. If the owner writes at length and expects a note captured, `/paste` discipline is what keeps the two apart.
