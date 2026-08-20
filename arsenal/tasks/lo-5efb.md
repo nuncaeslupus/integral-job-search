@@ -4,7 +4,6 @@ title: "S10: the skill listing budget is structurally exceeded by 13 step skills
 priority: 10
 workspace: SOLO
 tags: [infra]
-requires: [surface:human]
 ---
 
 Surfaced by S7, which added thirteen step skills. Flagged rather than resolved
@@ -19,7 +18,40 @@ means the model cannot see what the other twelve steps are for, and the step
 skills are deliberately adjacent — knowing that step 9 exists is part of
 knowing step 8 is the wrong one to load.
 
-**This is now blocked on an upstream change, not on work here.**
+## Resolved (owner, 2026-08-20): the budget lives here, not upstream
+
+**13,000 characters, declared in `jobsearch.skill_budget`.** The decision was
+never the blocker; *where the raised number lives* was. Upstream's constant has
+no override, and `vendor/` must not be patched — so the number lives in the
+repository whose per-turn context cost it is, and this repository measures
+against it. `claude-arsenal#143` stays open and becomes a convenience rather
+than a precondition: when it lands, `--listing-budget` can read the same
+declared value instead of the module owning it.
+
+Three properties keep a raised threshold honest, because a cap fitted to the
+measurement reports the same clean zero as a cap somebody chose:
+
+1. **round and with headroom** — `check_declaration` refuses a budget that is
+   not a whole multiple of 1,000 or that leaves under 400 spare chars, so
+   "raise it to whatever we measure" fails mechanically;
+2. **the source is recorded** — committed evidence carries
+   `budget_source: "declared"`, and a `--budget`/`JOBSEARCH_LISTING_BUDGET_CHARS`
+   override marks the reading, so a gate cannot be satisfied by an environment
+   variable set for one run;
+3. **upstream's reading stays visible** — `overage_against_upstream_default`
+   keeps "deliberately N chars above the 8,000 default" a fact anyone can read.
+
+The per-skill cost formula is upstream's, mirrored, and
+`test_the_measurement_agrees_with_the_upstream_audit` runs the real
+`audit_library.py` and asserts the totals are equal — so a formula change
+upstream fails a test here instead of leaving two numbers nobody compares.
+
+Measured after the change: **12,138 chars across 33 skills**, 862 spare,
+`steps_with_a_skill_fraction` still 1.0.
+
+### The original framing, kept because it was overruled deliberately
+
+**This was blocked on an upstream change, not on work here.**
 `LISTING_BUDGET_CHARS = 8000` is a module constant in
 `vendor/claude-arsenal/plugins/skill-creator/skills/skill-creator/scripts/audit_library.py:50`,
 referenced in nine places. `main()` exposes `--profile`, `--severity`, `--json`
@@ -96,9 +128,17 @@ that the cap has to be revisited each time the library grows.
 `audit_library.py` reports no listing-budget finding, with every step reachable.
 
 ```bash
-uv run --extra dev python3 -m jobsearch.step_skills
-python3 .claude/skills/skill-creator/scripts/audit_library.py .claude/skills
+uv run --extra dev python3 -m jobsearch.step_skills --check
+uv run --extra dev python3 -m jobsearch.skill_budget --check
+uv run --extra dev pytest tests/test_skill_budget.py -q
 ```
+
+`audit_library.py` is **not** the gate command. It measures against upstream's
+own 8,000-char constant, which this repository has deliberately risen above —
+so it reports a finding by design, and a gate asserted on it could only pass by
+undoing the decision. It is still run (by
+`test_the_measurement_agrees_with_the_upstream_audit`) for the one thing it is
+authoritative about: the total.
 
 ```gate
 skill_listing_budget_overage_chars == 0
@@ -115,6 +155,8 @@ come from dropping a step.
 
 ## Location
 
-`.claude/skills/`, `src/jobsearch/step_skills.py`, and — upstream, since
-option 1 was chosen — the `skill-creator` budget constant
-(`claude-arsenal` issue #143). Nothing under `vendor/` is edited here.
+`src/jobsearch/skill_budget.py` (new), `tests/test_skill_budget.py` (new),
+`status/evidence/S10.json`. Nothing under `vendor/` is edited —
+`test_nothing_under_vendor_was_patched_to_achieve_this` asserts the upstream
+constant is still 8,000, because a subtree edit works perfectly until the next
+`git subtree pull` reverts it, silently.

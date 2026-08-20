@@ -116,10 +116,18 @@ class Identity(Strict):
     language: Language
     locale: str = Field(pattern=r"^[a-z]{2}(?:-[A-Z]{2})?$")
     created_at: str
+    # S11: this candidate was invented to exercise a step, not interviewed.
+    # Defaulted rather than required so every profile written before test mode
+    # existed still loads, and *false* by default rather than optional: a
+    # profile that does not say it is fiction is a person. The mark is enforced
+    # by `list_identities`, which is the reader — a mark nothing checks is
+    # decoration.
+    fiction: bool = False
 
     def summary(self) -> str:
         """How the tool refers to this person out loud."""
-        return f"{self.display_name} ({self.handle})"
+        suffix = " — simulated" if self.fiction else ""
+        return f"{self.display_name} ({self.handle}){suffix}"
 
 
 # ---------------------------------------------------------------------------
@@ -301,12 +309,21 @@ class ProfileStore:
 # the roster and the four-step resolution
 
 
-def list_identities(root: Path) -> list[Identity]:
-    """Every profile that exists, in handle order.
+def list_identities(root: Path, *, include_fiction: bool = False) -> list[Identity]:
+    """Every *real* profile that exists, in handle order.
 
     A directory without a readable `identity.json` is skipped rather than
     guessed at: the roster is what the tool reads names out of, and a half
     written profile has no name to read.
+
+    **A simulated candidate is not in the roster** (S11). Test mode may invent
+    a candidate in order to exercise a step that no real run has reached yet,
+    and the profile it leaves behind is marked `fiction: true`. Excluding it
+    here — in the reader, defaulted on — is what makes the mark mean something:
+    every existing caller stops counting fiction without being changed, which
+    is the opposite of a flag each of them must remember to check.
+    `include_fiction=True` is for the test-mode tooling that has to see its own
+    work, and it has to be asked for by name.
     """
     root = Path(root)
     if not root.is_dir():
@@ -321,9 +338,12 @@ def list_identities(root: Path) -> list[Identity]:
             # profile; the roster is the one place that has to say so out loud.
             continue
         try:
-            found.append(ProfileStore(root, child.name).identity())
+            identity = ProfileStore(root, child.name).identity()
         except (IdentityError, ProfileLeak):
             continue
+        if identity.fiction and not include_fiction:
+            continue
+        found.append(identity)
     return found
 
 
@@ -440,12 +460,19 @@ def create_profile(
     locale: str | None = None,
     handle: str | None = None,
     now: datetime | None = None,
+    fiction: bool = False,
 ) -> Identity:
     """Create a profile — always an explicit act (§6.1 case 4).
 
     A handle that already exists is refused rather than suffixed: two people
     who would collide are asked for something to tell them apart, and a
     `-2` invented here is a name nobody chose and nobody recognises.
+
+    `fiction=True` records that this candidate was invented to exercise a step
+    (S11). It is written into `identity.json` at creation, because that is the
+    only moment anybody knows: a profile cannot be discovered to have been
+    simulated afterwards, so a mark that could be added later would be one that
+    could be forgotten.
     """
     chosen = _validate_handle(handle) if handle else derive_handle(display_name)
     root = Path(root)
@@ -469,6 +496,7 @@ def create_profile(
         language=language,
         locale=locale or language,
         created_at=stamp,
+        fiction=fiction,
     )
     store = ProfileStore(root, chosen)
     payload = json.dumps(identity.model_dump(), indent=2, ensure_ascii=False, sort_keys=True) + "\n"

@@ -1,0 +1,14 @@
+{
+  "skill": "test-mode",
+  "canary": "test-mode-loaded-2026-08-20-afe6c69e-c576a153e5be4d45",
+  "negative_control": "test mode retracts a note when the owner asks mid-session",
+  "load_prompts": [
+    "I want to start a test session to begin testing what we have",
+    "Trabajé seis años en Seat [[should have asked which plant]]",
+    "we're done testing — show me the notes and let's triage them"
+  ],
+  "no_load_prompts": [
+    "What's the pay floor you settled on last time?",
+    "Rank the offers you sourced this morning"
+  ]
+}
