@@ -190,11 +190,25 @@ python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --capability surface:cli --max 9 -
     </dev/null 2>&1 >/dev/null | grep -q "capped at 1" \
     || fail "the clamp must say why the batch shrank"
 
-# a missing sentinel is not a clamp: an unprobed surface is not a known-bad one
+# A missing sentinel DOES clamp, and this expectation is the inverse of what it
+# used to be (#147). "Unprobed is not known-bad" reads as caution but is the
+# unsafe direction here: the sentinel is absent precisely on the first round,
+# before anything has shown that workers get their own tree, and the cost of
+# guessing wrong is N workers dispatched into one shared checkout. Only a proven
+# `available` — recorded from the worker's own toplevel, not from a branch name
+# that need not have changed — permits fan-out. It also makes the protocol's
+# "dispatch the first batch as a single worker" mechanical instead of a step the
+# orchestrator has to remember.
 rm -f "${sentinel}"
 n=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --capability surface:cli --max 9 \
         --isolation-sentinel "${sentinel}" </dev/null 2>/dev/null | wc -l)
-[[ "${n}" -gt 1 ]] || fail "an absent sentinel must not clamp the batch (got ${n})"
+[[ "${n}" -eq 1 ]] || fail "an unproven sentinel must clamp the batch to 1 (got ${n})"
+
+# ...and a proven `available` is what lifts it.
+printf 'available\n' > "${sentinel}"
+n=$(python3 "${SELECT_PY}" --tasks-dir "${TASKS}" --capability surface:cli --max 9 \
+        --isolation-sentinel "${sentinel}" </dev/null 2>/dev/null | wc -l)
+[[ "${n}" -gt 1 ]] || fail "a proven 'available' must permit a parallel batch (got ${n})"
 
 # the environment override wins over the file, for a surface probed by hand
 echo "available" > "${sentinel}"
@@ -315,5 +329,39 @@ done
 printf 'merge-policy = "after-reviews"\n' > "${tmpdir}/arsenal/config.toml"
 python3 "${CONFIG_PY}" --repo-root "${tmpdir}" --get merge-policy >/dev/null 2>&1 \
     && fail "a near-miss like after-reviews must still be rejected"
+
+# --- 22: handle_sync proposes no handle for finished work ---
+#         load_tasks includes _history/ so terminal ids resolve; handle_sync
+#         inherited the tasks without inheriting the filter. In a repo that has
+#         been running a while, everything it printed was finished work, and a
+#         session following the protocol opens an issue for each — dozens of
+#         tasks that read as open and unclaimed and get handed straight back out.
+HANDLE_PY="${SCRIPT_DIR}/../skills/init/assets/scripts/handle_sync.py"
+mkdir -p "${TASKS}/_history"
+cat > "${TASKS}/_history/t-old99999.md" <<'EOF'
+---
+id: t-old99999
+title: "Merged weeks ago"
+priority: 1
+status: merged
+pr: https://github.com/o/r/pull/9
+---
+
+## Acceptance gate
+```bash
+true
+```
+EOF
+echo '[]' > "${tmpdir}/issues-none.json"
+out=$(python3 "${HANDLE_PY}" --tasks-dir "${TASKS}" --issues "${tmpdir}/issues-none.json" 2>/dev/null)
+grep -q 't-old99999' <<<"${out}" && fail "a merged task needs no issue handle — its state is already final"
+grep -q 't-aaaa1111' <<<"${out}" || fail "a live task with no handle must still be proposed"
+
+# and the proposed body must carry the VISIBLE marker, not the comment form
+# that a sanitizer strips (see the identity fix): a handle nothing can resolve
+# is worse than no handle.
+grep -q 'arsenal-task: t-aaaa1111' <<<"${out}" || fail "proposed body must name the task visibly: ${out}"
+grep -q '<!-- arsenal-task' <<<"${out}" && fail "proposed body must not use the strippable comment marker"
+rm -rf "${TASKS}/_history"
 
 echo "PASS: task_select_test — all gates passed"
