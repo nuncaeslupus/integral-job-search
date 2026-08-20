@@ -34,6 +34,49 @@ arguments** — a gate reachable only behind a flag is a gate whose drift nothin
 notices. That is already true of D-4's and D-7's numbers today
 (`step_gates --owners` / `--traits`), and worth seeding if it bites again.
 
+## Which divergences are ours, and which are upstream's (carried from the previous handover)
+
+Checked deliberately, because a fix to the vendored tree gets overwritten by the
+next `make arsenal-upgrade` and fails `make verify-subtree` in the meantime.
+
+**Nine of the ten are host-owned** — `.claude/skills/step-*` (D-13, D-14, D-15,
+D-17, and `run_checkpoint.py` for D-21), `src/jobsearch/*` (D-18, D-19, D-20,
+D-21), `dimensions/` and `connectors/` (D-16, D-19). Nothing under
+`claude-arsenal/`. **D-14 is now done** — it was one of the nine.
+
+**D-22 was mixed, and is already split** (that split landed on `main` as
+`4987514`, while this session was working). Its bundle half —
+`claude-arsenal/agents/worker.md` step 4 asks a worker to "run the host lint
+gate if one exists" and no script enforces it, while `open_task_pr.sh` re-runs
+`gate_run.sh` and never asks about the repo gate — is filed upstream as
+**`claude-arsenal#175`**. The host half stays here: a `make gate` target
+running all five, for upstream's proposed `host-gate` config key to point at.
+
+`keyword-guard` firing only on `arsenal/**` is **correct** and was ruled out,
+not filed: a PR that is not a task PR should not need `Closes #<issue>`.
+
+## Context cost — one upstream issue filed, two fixes landed here
+
+Token consumption was audited this session. Fixed here (in this PR): `.rgignore`
+excluding the vendored and generated trees from every ripgrep-backed search, and
+a `CLAUDE.md` section on searching the corpus — a line in `corpus/*/ads.jsonl`
+is a whole advert, the longest **15,640 characters**, so an unbounded content
+search across both files returns ~100KB in one result.
+
+**Filed upstream: `claude-arsenal#177`.** `AGENTS.md` is **762 lines / ~14.7k
+tokens**, imported into every consumer repo's `CLAUDE.md`, so it is resident on
+every turn of every session — 85% of this repo's whole memory-file budget, and
+five times its own `CLAUDE.md`. It exceeds the chunking rules the same plugin
+ships (`references-and-chunking.md`: split past 400 lines, or when a section
+over 100 lines is loaded only for a subset of tasks — the worker loop is 138
+lines and the two queue-seeding sections are 66% identical to each other). The
+proposal is the shape skill-creator asks of skills: ~150-line body plus six
+`references/*.md`, worth ~11.7k tokens per turn everywhere.
+
+Still the owner's to do: turn off MCP connectors this repo never uses
+(Gmail/Calendar/Drive were ~40k of a 63.7k catalogue; they dropped out of the
+session on their own late on), and decide the Actions billing question below.
+
 ## The board, read this session
 
 `query_status.py`: 91 tasks — open 14, claimed 0, done 1, cancelled 1,
