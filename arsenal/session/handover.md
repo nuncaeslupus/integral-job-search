@@ -3,12 +3,13 @@
 ## Read this first
 
 **[#105](https://github.com/nuncaeslupus/job-search/pull/105) — D-13** is open on
-`claude/continue-3avmas` as `d4ff6d2`, closing
+`claude/continue-3avmas` at `eca6bd6`, closing
 [#97](https://github.com/nuncaeslupus/job-search/issues/97). Task archived at
 `arsenal/tasks/_history/t-bd59e70b.md`. All five gates pass locally on that
-head. **It was deliberately not merged**: Qodo's review was still running, and
-its round on #102 found four real defects, so merging past it throws away the
-most useful check this repo has.
+head. **Qodo's review has landed and been worked**: three of its four findings
+were real and are fixed in `eca6bd6`; the fourth is answered on its thread and
+**left open for the owner** (see below). Waiting on the review is what caught
+them — its round on #102 found four real defects too.
 
 `task_select.py` returns the next task once #105 lands. Seven divergences remain
 open — read the selector, not the numeric order of the D-labels.
@@ -44,6 +45,44 @@ locks it.
 
 Verified against the pre-fix library via `git archive HEAD`: **13** offenders,
 all thirteen on limbs 1 and 2, step 0 additionally on limb 3. After: **0**.
+
+## The review round: three findings, and all three are one shape
+
+Qodo found three real defects in the first cut, and two of them are the *same
+defect this task already records once*, recurring in new places.
+
+- **The rule's own heading satisfied limb 1.** "Say what is happening before a
+  silence" carries a subject token **and** the governor `before`, so a Protocol
+  section stripped to nothing but the bold heading — every word of the
+  instruction deleted — passed `_states_the_rule`. Governance is now searched
+  for with the title struck out.
+- **Twelve of thirteen examples opened a silence and never closed it.** The rule
+  requires the work named before it starts *and closed when it finishes*, and
+  the owner's correction names both halves. Only step 0 showed the return, and
+  the gate passed because nothing measured the closing half — the very failure
+  D-13 exists to fix, committed inside the fix for it. A third limb now measures
+  it; all thirteen examples close their pause.
+- **The spec-drift test read only the rule's title**, so either document could
+  gut the requirement and still pass. Each is now held to `_states_the_rule` and
+  to all three halves by name.
+
+> **A requirement stated in prose and checked by its own name is not checked.**
+
+It has now appeared four times in one task: between the limbs (D-15's lesson),
+in limb 3's subject detection (twelve false offenders), in limb 1's governance
+detection (the heading), and in a test over the specs. **Expect it again.** When
+adding a check, ask what the conforming text will contain, and whether that text
+alone would satisfy the check.
+
+**The fourth finding is not fixed and its thread is open**: Qodo asks for
+`test_<what>_<condition>_<expected_result>` naming, which
+`.claude/skills/execution/SKILL.md:71` does state. Answered on the thread —
+this file's ~40 existing tests all use the prose form, `status/plan.md`
+prescribes one of the new names verbatim, and the convention belongs to task
+payloads (a RED test named before any code exists) rather than to every test in
+the suite. **A repo-wide rename is the owner's call**, and would need its own
+task: it touches the plan rows that cite those names, which `make verify-gates`
+reads.
 
 ## Four issues filed upstream, three of them about context cost
 
@@ -95,9 +134,10 @@ the proxy costs 5–10 minutes for nothing.
 
 ## CI is still out of runner minutes
 
-Re-confirmed on `d4ff6d2`: all five checks failed, `runner_id: 0`, empty
-`runner_name`, job **completed 3 seconds after it started** (17:43:04 →
-17:43:07). Not the diff. Do not push speculative fixes.
+Re-confirmed on all three heads of #105 — `d4ff6d2`, `e97aa72` and `eca6bd6`.
+Every one: five checks failed, `runner_id: 0`, empty `runner_name`, every job
+**completing 2–4 seconds after it started** (`eca6bd6`: 17:59:46 → 17:59:48/49).
+No runner is ever assigned. Not the diff. Do not push speculative fixes.
 
 All five gates run locally on that head:
 
@@ -133,7 +173,9 @@ done by hand to the same shape.
 
 ## Left open (carried forward)
 
-- **#105 needs Qodo's review addressed, then merging.**
+- **#105 is ready to merge** — review worked, five gates green on `eca6bd6`.
+  The only open thread is the test-naming one, which is the owner's call and
+  does not block.
 - **A permissions edit only the owner can make**: `Bash(gh run list:*)` and
   `Bash(gh run view:*)` in `.claude/settings.json`.
 - **`tools/profile_guard.sh` matches a candidate path mentioned in *prose***,
