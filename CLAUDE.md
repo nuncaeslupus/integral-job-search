@@ -23,90 +23,54 @@ Every session, without waiting to be asked:
 <!-- host-owned: not managed by claude-arsenal -->
 ## Reading the board — the plain `--issues` path works again
 
-`claude-arsenal` v0.28.0 stopped keying task identity on an HTML comment. A body
-now resolves via a visible `arsenal-task: <id>` token **or** the ordinary
-`arsenal/tasks/<id>.md` payload link, so the marker this surface's GitHub MCP
-tools strip is no longer load-bearing, and the whole local workaround
-(`jobsearch.board_state` plus `--state`) is gone with it. Verified on this
-surface: 27 issues fetched, `task_select.py --issues` returns the same five
-tasks with **zero** warnings, and `query_status.py --issues` reports one real
-problem instead of 27 spurious "no issue handle" lines.
-
-Steps 3 and 4 of the protocol above are therefore correct as written:
+`claude-arsenal` v0.28.0 stopped keying task identity on an HTML comment, and
+v0.33.0 stopped `handle_sync.py` proposing handles for archived tasks. Steps 3
+and 4 of the protocol above therefore need no workaround — run them as written,
+and open an issue for anything `handle_sync.py` prints (normally nothing).
 
 ```bash
 # fetch with MCP list_issues, labels=["arsenal:task"], open AND closed,
-# fields number/body/state/labels; save to $ISSUES
+# fields number/body/state/labels/assignees; save to $ISSUES
 python3 claude-arsenal/scripts/query_status.py --issues "$ISSUES"
 python3 claude-arsenal/scripts/task_select.py  --issues "$ISSUES"
 ```
 
-If a future selection ever comes back empty or unwarned when it should not be,
-v0.28.0 says so out loud: `state_from_issues` warns when issues were fetched and
-**none** resolved to a task, which is the "an empty map looks healthy" failure
-that used to pass silently.
-
-## `handle_sync.py` is safe again — v0.33.0 fixed it
-
-This file used to say "do NOT create the handles `handle_sync.py` proposes",
-because `missing_handles` iterated every task `load_tasks` returns — including
-`_history/` — and filtered only on "has an issue", never on `status`. On this
-repo it printed **51** proposals, every one for work that merged weeks ago.
-Following protocol step 4 literally would have opened 51 issues for finished
-tasks, each then reading as open, unclaimed work.
-
-**Fixed upstream in v0.33.0** (`claude-arsenal#169`): it filters terminal
-tasks. Verified here — 1 line, `handle_sync: every task has an issue handle`.
-
-So step 4 of the protocol is correct as written again: run it, and open an
-issue for anything it prints.
+`state_from_issues` warns when issues were fetched and **none** resolved to a
+task, so an empty selection can no longer look healthy.
 
 ## `make arsenal-remote` reports; `make arsenal-upgrade REF=…` upgrades
 
 `check_update.sh` without `--check-only` performs the subtree merge **and
-commits**, and the upgrade it performs is incomplete: it re-runs `init.py`,
-which assembles the bundle from `.claude/skills/init/assets/` — refreshed only
-by `make update-skills` — so the bundle is rebuilt from the pre-upgrade assets
-and stays a version behind while reporting success. That happened here on
-2026-08-20 (subtree v0.30.0, bundle v0.29.1, `verify-subtree` failing).
+commits** — a history-writing side effect from a step described as a report. So
+`arsenal-remote` passes `--check-only`; reading a version should not write
+history. Upgrade deliberately with `make arsenal-upgrade REF=v0.x.y`, which runs
+all four steps (v0.33.0 fixed `claude-arsenal#170`: it re-vendors skills after a
+subtree update and refuses to report success on a stale bundle).
 
-`arsenal-remote` now passes `--check-only`, so reading the version no longer
-writes history. Upgrade deliberately, with `make arsenal-upgrade REF=v0.x.y`,
-which runs all four steps. **`claude-arsenal#170` is fixed in v0.33.0** — the
-script re-vendors skills after a subtree update and refuses to report success
-while the bundle version is still stale, which is the half that used to lie.
-The `--check-only` habit is kept anyway: reading a version should not write
-history even when the write would be correct.
-
-**After any upgrade, run `make reader` and `make evidence`.** v0.33.0 changed
-`create_reader.py`, which left both generated spec readers stale, and grew the
-bundle from 22 assets to 26, which moved S9's evidence. Both are caught by the
-suite (`test_regenerating_the_reader_produces_no_diff`, the `make evidence`
-drift check) — the point is that they are *expected* after an upgrade and are
-fixed with the repo's own tooling, never by hand.
+**After any upgrade, run `make reader` and `make evidence`.** An upgrade can
+change `create_reader.py` and the bundle's asset count, which leaves the
+generated spec readers and S9's evidence stale. Both are caught by the suite —
+the point is that they are *expected* after an upgrade, and are fixed with the
+repo's own tooling, never by hand.
 
 ## The skill listing budget lives in `arsenal/config.toml`
 
-`listing-budget = 13000` (S10). `jobsearch.skill_budget` reads it, and since
-v0.33.0 so does `skill-creator`'s `audit_library.py` — `claude-arsenal#143`
-landed, so the auditor no longer hardcodes 8,000 and both read the same key.
+`listing-budget = 13000` (S10). `jobsearch.skill_budget` and `skill-creator`'s
+`audit_library.py` both read that key since v0.33.0 (`claude-arsenal#143`).
 
-`jobsearch.skill_budget` is still the gate: it refuses a budget that is not a
-round multiple of 1,000 or that leaves under 400 chars of headroom, records
-where the number came from, and reports `-1` — not a clean zero — when the
-library is inside a budget that was overridden, fell back, or was fitted to the
-measurement.
-
-The audit's remaining "within 10% of 13000" warning is the budget working: 862
-chars spare, revisit at roughly three more skills. **Do not silence it by
-raising the number.**
+`jobsearch.skill_budget` is the gate: it refuses a budget that is not a round
+multiple of 1,000 or that leaves under 400 chars of headroom, and reports `-1` —
+not a clean zero — when the library is inside a budget that was overridden, fell
+back, or was fitted to the measurement. The audit's "within 10% of 13000"
+warning is the budget working: 862 chars spare, revisit at roughly three more
+skills. **Do not silence it by raising the number.**
 
 **Parking a task needs the `arsenal:cancelled` label.** `state_reason` is not
 available through these MCP tools, so upstream reads any closed issue as `done`
-unless that label is on it. Closing a task issue to park it, without the label,
-silently releases everything downstream. Prefer keeping it **open** and holding
-it out of selection with `requires:` — that is what #71 does — and use the label
-only for work genuinely abandoned.
+without it, and closing a task issue to park it silently releases everything
+downstream. Prefer keeping it **open** and holding it out of selection with
+`requires:` — that is what #71 does — and use the label only for work genuinely
+abandoned.
 
 ## Searching this repository without burning the context window
 
