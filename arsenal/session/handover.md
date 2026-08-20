@@ -71,6 +71,25 @@ fires only on `arsenal/**` branches. Until D-22 lands, run before every merge:
 make lint && make test && make evidence && make verify-subtree && make verify-gates
 ```
 
+## One is upstream, nine are ours
+
+Checked deliberately, because a fix to the vendored tree gets overwritten by the
+next `make arsenal-upgrade` and fails `make verify-subtree` in the meantime.
+
+**Nine are host-owned** — `.claude/skills/step-*` (D-13, D-14, D-15, D-17, and
+`run_checkpoint.py` for D-21), `src/jobsearch/*` (D-18, D-19, D-20, D-21),
+`dimensions/` and `connectors/` (D-16, D-19). Nothing under `claude-arsenal/`.
+
+**D-22 was mixed, and is now split.** Its bundle half —
+`claude-arsenal/agents/worker.md` step 4 asks a worker to "run the host lint
+gate if one exists" and no script enforces it, while `open_task_pr.sh` re-runs
+`gate_run.sh` and never asks about the repo gate — is filed upstream as
+**`claude-arsenal#175`**. The host half stays here: a `make gate` target
+running all five, for upstream's proposed `host-gate` config key to point at.
+
+`keyword-guard` firing only on `arsenal/**` is **correct** and was ruled out,
+not filed: a PR that is not a task PR should not need `Closes #<issue>`.
+
 ## Left open
 
 - **A permissions edit the owner has to make.** `Bash(gh pr merge:*)`,
