@@ -24,17 +24,20 @@ files' `title:`. The injected protocol block in `CLAUDE.md` says so now.
 **Nothing had ever compared those two strings before, and both sides were
 spelling titles differently.** Fourteen live tasks silently stopped resolving.
 
-- **Fixed here:** 36 task files stored their title JSON-escaped — `—`,
-  `€`, `→` — inside a double-quoted scalar that arsenal's front-matter
-  parser does not decode. They now hold the real characters. **If a new task
-  file appears with `\uXXXX` in its title, decode it**: arsenal's own writers
-  emit them, so this will recur.
-- **Fixed upstream in v0.36.1** (`claude-arsenal#186`): `lo-0300` and `lo-1af2`
-  did not resolve because the MCP `list_issues` tool **HTML-escapes `<`, `>` and
-  `&` in titles** (`&lt;offer_id&gt;`, `&gt;=6`) and `normalise_title` did not
-  unescape. It does now. Verified here: no unresolved tasks, and
-  `handle_sync.py` reports every task has a handle. **The duplicate-handle risk
-  this carried is gone** — earlier notes warning about it are superseded.
+**v0.36.1 closed all of it** (`claude-arsenal#186`) — and closed more than the
+half this session reported at first. Verified in the vendored source, not taken
+from the release note:
+
+- `normalise_title` HTML-unescapes (the MCP tool escapes `<`, `>`, `&`);
+- the front-matter parser decodes `\uXXXX` in a double-quoted scalar;
+- `issue_import.py` and `arsenal_migrate.py` write with `ensure_ascii=False`,
+  so **the writers no longer emit escapes** — the "decode it by hand if you see
+  one" instruction an earlier draft of `CLAUDE.md` carried is obsolete;
+- `handle_sync.py` warns on a near title match rather than proposing a handle.
+
+The 36 task files this repo decoded are correct and stay decoded. Verified on
+the real board: no unresolved tasks, and `handle_sync.py` reports every task has
+an issue handle.
 
 **`query_status.py` is the detector for this class of failure** — it names
 exactly which tasks did not resolve. Trust that list over `handle_sync.py`'s,
