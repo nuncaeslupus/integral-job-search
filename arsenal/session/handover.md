@@ -89,8 +89,9 @@ while the candidate sees the same list either way.
 
 **The plan row named `tests/test_candidate.py`, which does not exist** — the
 candidate tests are in `tests/test_candidate_attributes.py`. The plan's *test
-names* were honoured; the path was stale. Check the file exists before trusting
-a plan row's path, the same way you check the metric name.
+names* were honoured, and the row's path was corrected rather than annotated.
+Check the file exists before trusting a plan row's path, the same way you check
+the metric name — and fix the row, do not write a note explaining it.
 
 ## Left open (carried forward)
 
