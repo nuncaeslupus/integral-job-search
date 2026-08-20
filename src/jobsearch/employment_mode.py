@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, get_args
@@ -106,7 +107,18 @@ UNLAWFUL_ARRANGEMENTS: tuple[str, ...] = (
 # licensed mention says both things on its own line: that the thing is against
 # the law, and that it is never offered.
 _ILLEGALITY_MARKERS: tuple[str, ...] = ("illegal", "unlawful", "against the law")
-_PROHIBITION_MARKERS: tuple[str, ...] = ("never", "not ", "no ")
+
+# A prohibition marker must forbid an *act*, not merely negate something. The
+# first version of this list carried bare `"not "` and `"no "`, which made
+# "it is illegal but not ideal" read as a licensed prohibition — a sentence
+# that states the illegality and then refuses nothing, which is precisely the
+# lukewarm mention this check exists to reject. Word boundaries rather than
+# substrings, so "cannot" does not match "not" and "nowhere" does not match
+# "no".
+_PROHIBITION_RE = re.compile(
+    r"\b(?:never|must\s+not|may\s+not|do(?:es)?\s+not|don't|cannot|can't|"
+    r"not\s+(?:allowed|offered|an\s+option|a\s+choice|on\s+the\s+menu))\b"
+)
 
 
 class Strict(BaseModel):
@@ -156,8 +168,8 @@ def _mentions(text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         lowered = line.lower()
         if not any(term in lowered for term in UNLAWFUL_ARRANGEMENTS):
             continue
-        forbids = any(marker in lowered for marker in _ILLEGALITY_MARKERS) and any(
-            marker in lowered for marker in _PROHIBITION_MARKERS
+        forbids = any(marker in lowered for marker in _ILLEGALITY_MARKERS) and bool(
+            _PROHIBITION_RE.search(lowered)
         )
         (licensed if forbids else unlicensed).append(line)
     return tuple(licensed), tuple(unlicensed)
@@ -183,7 +195,10 @@ def read_skill(step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR) -> SkillReadin
 
     try:
         text = skill_md.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
+        # `UnicodeDecodeError` is a `ValueError`, not an `OSError`, so catching
+        # the latter alone let undecodable prose crash `probe`/`measure` — a
+        # gate that raises records no number at all.
         return SkillReading(
             step=step.id,
             n=step.n,
@@ -242,12 +257,41 @@ def measure(
         }
 
     readings = probe(steps, skills_dir)
+    owning = [r.step for r in readings if r.owns_employment_mode]
     offenders = [reading for reading in readings if reading.offers]
+
+    # The silence limb is the half that makes this gate bite, and it only runs
+    # over a step that owns the question. If a rename on either side — the
+    # `constraints` artefact, or the `employment_mode` field — leaves no owning
+    # step, the count would read a clean `0` over a check that examined
+    # nothing. `-1` instead, which no `== 0` gate can pass: "could not be
+    # measured" must be distinguishable from "measured and clean", and a
+    # measurement is not allowed to look healthiest at the moment it stops
+    # happening.
+    if not owning:
+        return {
+            "skills_offering_an_illegal_employment_mode": -1,
+            "steps_checked": len(readings),
+            "owning_steps": [],
+            "lawful_modes": list(LAWFUL_MODES),
+            "unlawful_arrangements": list(UNLAWFUL_ARRANGEMENTS),
+            "offenders": [
+                {
+                    "step": None,
+                    "skill_dir": None,
+                    "reasons": [
+                        f"no step produces {CONSTRAINTS_ARTEFACT!r} carrying the "
+                        f"{EMPLOYMENT_MODE_FIELD!r} field — the silence limb measured nothing"
+                    ],
+                }
+            ],
+            "readings": [r.model_dump(mode="json") for r in readings],
+        }
 
     return {
         "skills_offering_an_illegal_employment_mode": len(offenders),
         "steps_checked": len(readings),
-        "owning_steps": [r.step for r in readings if r.owns_employment_mode],
+        "owning_steps": owning,
         "lawful_modes": list(LAWFUL_MODES),
         "unlawful_arrangements": list(UNLAWFUL_ARRANGEMENTS),
         "offenders": [

@@ -385,6 +385,76 @@ def test_a_lukewarm_mention_is_not_a_prohibition(tmp_path: Path, steps: StepList
     assert reading.offers
 
 
+def test_stating_the_illegality_without_forbidding_it_licenses_nothing(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """"illegal but not ideal" states the law and refuses nothing.
+
+    The first version of the check took any bare negation as a prohibition, so
+    this line — which offers the arrangement in the same breath as calling it
+    illegal — read as licensed and satisfied the gate. A prohibition marker has
+    to forbid an act, not merely negate something.
+    """
+    step = next(s for s in steps.steps if s.id == "constraints")
+    skills_dir = _employment_skill(
+        tmp_path,
+        step,
+        "You can offer falso autónomo — it is illegal, but not ideal is closer to the truth.",
+    )
+    reading = employment_mode.read_skill(step, skills_dir)
+    assert reading.unlicensed_mentions
+    assert reading.offers
+
+
+def test_a_negation_inside_another_word_is_not_a_prohibition(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """Word boundaries: "nowhere" is not "no", "cannot" is not a bare "not"."""
+    step = next(s for s in steps.steps if s.id == "constraints")
+    skills_dir = _employment_skill(
+        tmp_path,
+        step,
+        "Falso autónomo is illegal and nowhere near as common as it used to be.",
+    )
+    reading = employment_mode.read_skill(step, skills_dir)
+    assert reading.unlicensed_mentions
+    assert reading.offers
+
+
+def test_no_owning_step_records_minus_one_never_a_clean_zero(tmp_path: Path) -> None:
+    """A rename that switches the silence limb off must not read as a pass.
+
+    The limb only runs over the step that owns the question. If none does, a
+    count of offenders is `0` over a check that examined nothing — a
+    measurement at its healthiest-looking the moment it stops happening.
+    """
+    spec = json.loads(Path("status/spec-v2-steps.json").read_text(encoding="utf-8"))
+    for step in spec["steps"]:
+        step["produces"] = [p for p in step["produces"] if p != "constraints"]
+    drifted = tmp_path / "steps.json"
+    drifted.write_text(json.dumps(spec), encoding="utf-8")
+
+    measured = employment_mode.measure(drifted, DEFAULT_SKILLS_DIR)
+    assert measured["skills_offering_an_illegal_employment_mode"] == -1
+    assert measured["owning_steps"] == []
+    assert "silence limb measured nothing" in measured["offenders"][0]["reasons"][0]
+
+
+def test_undecodable_prose_is_recorded_as_a_reason_never_raised(
+    tmp_path: Path, steps: StepList
+) -> None:
+    """`UnicodeDecodeError` is a `ValueError`, so catching `OSError` alone let it through."""
+    step = next(s for s in steps.steps if s.id == "constraints")
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / skill_dir_name(step)
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(b"\xff\xfe not utf-8 at all")
+
+    reading = employment_mode.read_skill(step, skills_dir)
+    assert reading.offers
+    assert any("could not be read" in reason for reason in reading.reasons)
+
+
 def test_the_unaccented_spelling_is_caught_too(tmp_path: Path, steps: StepList) -> None:
     """A hurried edit reaches for ASCII; the check must not be defeated by it."""
     step = next(s for s in steps.steps if s.id == "constraints")
