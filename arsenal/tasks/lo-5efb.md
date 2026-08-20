@@ -20,13 +20,19 @@ knowing step 8 is the wrong one to load.
 
 ## Resolved (owner, 2026-08-20): the budget lives here, not upstream
 
-**13,000 characters, declared in `jobsearch.skill_budget`.** The decision was
-never the blocker; *where the raised number lives* was. Upstream's constant has
-no override, and `vendor/` must not be patched — so the number lives in the
-repository whose per-turn context cost it is, and this repository measures
-against it. `claude-arsenal#143` stays open and becomes a convenience rather
-than a precondition: when it lands, `--listing-budget` can read the same
-declared value instead of the module owning it.
+**13,000 characters, set in `arsenal/config.toml`'s `listing-budget`.** The
+decision was never the blocker; *where the raised number lives* was — and
+arsenal already answers that. The key exists, is validated by
+`arsenal_config.py`, and is documented there as the place "a consumer whose
+budget differs can set it instead of being unable to pass the audit at all
+(#143)". It is host-owned and never rewritten by an upgrade.
+
+What upstream has not done yet is wire `audit_library.py` to read it. So
+`jobsearch.skill_budget` reads the setting and measures against it, which makes
+the raise real today without touching `vendor/`; when #143 lands, the auditor
+reads the same key and the two agree without either moving. The budget is
+**not** duplicated as a Python constant — two copies of a threshold are two
+thresholds.
 
 Three properties keep a raised threshold honest, because a cap fitted to the
 measurement reports the same clean zero as a cap somebody chose:
@@ -35,9 +41,10 @@ measurement reports the same clean zero as a cap somebody chose:
    not a whole multiple of 1,000 or that leaves under 400 spare chars, so
    "raise it to whatever we measure" fails mechanically;
 2. **the source is recorded** — committed evidence carries
-   `budget_source: "declared"`, and a `--budget`/`JOBSEARCH_LISTING_BUDGET_CHARS`
-   override marks the reading, so a gate cannot be satisfied by an environment
-   variable set for one run;
+   `budget_source: "config"`; `--budget`/`JOBSEARCH_LISTING_BUDGET_CHARS` mark a
+   reading `override`, and a missing settings file marks it `fallback` (at
+   upstream's 8,000, never this repository's number, so an absent config cannot
+   be mistaken for a present one). Only `config` can satisfy the gate;
 3. **upstream's reading stays visible** — `overage_against_upstream_default`
    keeps "deliberately N chars above the 8,000 default" a fact anyone can read.
 
@@ -143,6 +150,12 @@ uv run --extra dev python3 -m jobsearch.skill_budget --check
 uv run --extra dev pytest tests/test_skill_budget.py -q
 ```
 
+The three properties are folded into the gate key rather than sitting beside
+it: `verify_gates` asserts `skill_listing_budget_overage_chars == 0` and
+nothing else, so a library inside an unsoundly declared budget — or one whose
+budget came from an override or a fallback — reports `-1` rather than a clean
+zero.
+
 `audit_library.py` is **not** the gate command. It measures against upstream's
 own 8,000-char constant, which this repository has deliberately risen above —
 so it reports a finding by design, and a gate asserted on it could only pass by
@@ -166,7 +179,8 @@ come from dropping a step.
 ## Location
 
 `src/jobsearch/skill_budget.py` (new), `tests/test_skill_budget.py` (new),
-`status/evidence/S10.json`. Nothing under `vendor/` is edited —
+`arsenal/config.toml` (`listing-budget = 13000`), `status/evidence/S10.json`.
+Nothing under `vendor/` is edited —
 `test_nothing_under_vendor_was_patched_to_achieve_this` asserts the upstream
 constant is still 8,000, because a subtree edit works perfectly until the next
 `git subtree pull` reverts it, silently.

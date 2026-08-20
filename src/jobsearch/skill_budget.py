@@ -9,19 +9,25 @@ budget** — every step description stays visible, and the cap is revisited each
 time the library grows.
 
 What was blocked was never the decision; it was *where the raised number
-lives*. Upstream's constant is hardcoded with no override
-(`claude-arsenal` issue #143), and **`vendor/` must not be patched** — a
+lives*. **`arsenal/config.toml`'s `listing-budget` is where** — arsenal already
+defines the key, validates it, and documents it as the place "a consumer whose
+budget differs can set it instead of being unable to pass the audit at all
+(#143)". It is host-owned, versioned, and never rewritten by an upgrade.
+
+What upstream has not done *yet* is wire `audit_library.py` to read it: the
+constant there is still hardcoded, and **`vendor/` must not be patched** — a
 subtree edit is reverted by the next `git subtree pull`, silently, which is the
 exact failure S9 exists to remove and which `make verify-subtree` would fail on
-in the meantime. So the number lives *here*, in the repository whose cost it
-is, and this module measures against it.
+in the meantime. So this module reads the setting and measures against it,
+which is what makes the raise real today; when #143 lands, the auditor reads
+the same key and the two agree without either moving.
 
 **Three properties, because a raised threshold is only honest if all three
 hold.** They are the same three the upstream issue asks for, implemented on
 this side of the boundary:
 
-1. **The number is declared, not fitted.** `LISTING_BUDGET_CHARS` below is a
-   round figure a person chose, with the reasoning written next to it.
+1. **The number is declared, not fitted.** The value in `arsenal/config.toml`
+   is a round figure a person chose, with the reasoning written beside it.
    `check_declaration` refuses a budget that is not a whole multiple of
    `BUDGET_GRANULARITY` or that leaves less than `MIN_HEADROOM_CHARS` — so a
    budget quietly reset to whatever the library happened to measure fails
@@ -30,12 +36,14 @@ this side of the boundary:
    invites.
 
 2. **The effective number and its source are printed.** `measure` records
-   `listing_budget_chars` **and** `budget_source`, and `--budget` /
-   `JOBSEARCH_LISTING_BUDGET_CHARS` mark the reading `override`. Committed
-   evidence carries `budget_source: "declared"`, and
+   `listing_budget_chars` **and** `budget_source` — `config` when it came from
+   the settings file, `fallback` when that file could not be read, `override`
+   for `--budget` / `JOBSEARCH_LISTING_BUDGET_CHARS`. Committed evidence
+   carries `config`, and
    `test_committed_evidence_was_measured_against_the_declared_budget` asserts
-   it — so the gate can never be satisfied by an environment variable set for
-   one run.
+   it, so the gate can never be satisfied by an environment variable set for
+   one run — nor by the fallback quietly standing in for a settings file that
+   has gone missing.
 
 3. **The upstream default is still reported.** `overage_against_upstream_default`
    keeps the 8,000-char reading visible next to ours, so "we are over
@@ -69,6 +77,7 @@ import argparse
 import json
 import os
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
@@ -82,19 +91,21 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "S10.json"
 # ---------------------------------------------------------------------------
 # the declared budget
 
-# **13,000 characters, chosen 2026-08-20.** The library measures 11,686 across
-# 32 skills, and test mode (S11) is the 33rd. 13,000 accepts the thirteen step
-# skills at their current width and leaves room for roughly three more skills
-# before the question has to be asked again — which is the point of a budget
-# that is revisited rather than one that is fitted.
-#
-# What this costs, stated plainly so nobody has to reconstruct it: about 13KB
-# of context on every turn of every session, in exchange for the model being
-# able to see what all thirteen steps are for. The step skills are deliberately
-# adjacent — knowing that step 9 exists is part of knowing step 8 is the wrong
-# one to load — and a dispatcher that hid twelve of them would have bought the
-# characters back by removing exactly that.
-LISTING_BUDGET_CHARS = 13_000
+# `arsenal/config.toml`'s `listing-budget` is the declared budget, and this
+# module reads it from there. See that file for the number and the reasoning
+# beside it — deliberately not duplicated here, because two copies of a
+# threshold are two thresholds.
+CONFIG_PATH = _REPO_ROOT / "arsenal" / "config.toml"
+CONFIG_KEY = "listing-budget"
+
+# Used only when `arsenal/config.toml` cannot be read at all — a checkout with
+# no host config, or a fixture. It is upstream's default rather than this
+# repository's 13,000 on purpose: a fallback that silently equalled the real
+# budget would make a missing settings file indistinguishable from a present
+# one, and this module's whole subject is thresholds you can tell apart from
+# their absence. A reading that falls back is marked `fallback` and cannot
+# satisfy the gate.
+FALLBACK_BUDGET_CHARS = 8_000
 
 # `audit_library.py`'s constant, quoted rather than imported: `.claude/skills/`
 # is regenerated by `make update-skills` and importing across that boundary
@@ -114,7 +125,7 @@ MIN_HEADROOM_CHARS = 400
 
 ENV_OVERRIDE = "JOBSEARCH_LISTING_BUDGET_CHARS"
 
-BudgetSource = Literal["declared", "override"]
+BudgetSource = Literal["config", "fallback", "override"]
 
 
 class SkillBudgetError(Exception):
@@ -229,14 +240,38 @@ def skill_costs(skills_dir: Path = DEFAULT_SKILLS_DIR) -> list[SkillCost]:
 # the budget itself
 
 
+def configured_budget(config: Path = CONFIG_PATH) -> tuple[int, BudgetSource]:
+    """`arsenal/config.toml`'s `listing-budget`, or the fallback.
+
+    A malformed value is an error rather than a silent fallback: someone
+    editing the setting and mistyping it must not get a measurement taken
+    against a different number than the one they wrote. A *missing file* is the
+    only case that falls back, and the reading says so.
+    """
+    try:
+        payload = tomllib.loads(config.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return FALLBACK_BUDGET_CHARS, "fallback"
+    if CONFIG_KEY not in payload:
+        return FALLBACK_BUDGET_CHARS, "fallback"
+    value = payload[CONFIG_KEY]
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise SkillBudgetError(
+            f"{config}: {CONFIG_KEY} must be a positive integer, got {value!r}"
+        )
+    return value, "config"
+
+
 def effective_budget(
-    budget: int | None = None, env: dict[str, str] | None = None
+    budget: int | None = None,
+    env: dict[str, str] | None = None,
+    config: Path = CONFIG_PATH,
 ) -> tuple[int, BudgetSource]:
     """The budget in force, and where it came from.
 
-    Precedence is explicit argument, then environment, then the declared
-    constant. The *source* is returned alongside rather than inferred by the
-    caller, because the whole complaint against upstream's constant was that a
+    Precedence is explicit argument, then environment, then the settings file.
+    The *source* is returned alongside rather than inferred by the caller,
+    because the whole complaint against upstream's constant was that a
     threshold whose value and origin are invisible is one nobody can tell has
     been quietly raised. A reading that cannot say where its number came from
     is the same problem with an extra step.
@@ -249,7 +284,7 @@ def effective_budget(
             return _validated(int(raw)), "override"
         except ValueError as exc:
             raise SkillBudgetError(f"{ENV_OVERRIDE} is not an integer: {raw!r}") from exc
-    return LISTING_BUDGET_CHARS, "declared"
+    return configured_budget(config)
 
 
 def _validated(budget: int) -> int:
@@ -324,7 +359,7 @@ def measure(
         return {
             "skill_listing_budget_overage_chars": -1,
             "listing_budget_chars": 0,
-            "budget_source": "declared",
+            "budget_source": "fallback",
             "description_chars_total": 0,
             "skills_counted": 0,
             "headroom_chars": 0,
@@ -353,7 +388,7 @@ def measure(
     # the tests and the CLI while `verify_gates` waved it through. A guarantee
     # the terminal gate does not check is a guarantee that decays.
     overage = max(0, total - in_force)
-    sound = source == "declared" and declaration.passes
+    sound = source == "config" and declaration.passes
     return {
         "skill_listing_budget_overage_chars": overage if (overage or sound) else -1,
         "listing_budget_chars": in_force,
@@ -415,8 +450,8 @@ def _main(argv: list[str]) -> int:
         default=None,
         metavar="CHARS",
         help=(
-            "measure against CHARS instead of the declared budget; marks the reading "
-            f"as an override (also settable with {ENV_OVERRIDE})"
+            f"measure against CHARS instead of {CONFIG_KEY} in arsenal/config.toml; "
+            f"marks the reading as an override (also settable with {ENV_OVERRIDE})"
         ),
     )
     args = parser.parse_args(argv[1:])
@@ -454,7 +489,8 @@ def _main(argv: list[str]) -> int:
         )
     if measured["skill_listing_budget_overage_chars"] == -1:
         print(
-            "the library is inside its budget, but that budget was not soundly declared — "
+            "the library is inside its budget, but that budget did not come from "
+            f"{CONFIG_KEY} in arsenal/config.toml, or is not soundly declared — "
             "reported as unmeasured rather than as a pass",
             file=sys.stderr,
         )

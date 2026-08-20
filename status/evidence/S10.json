@@ -1,7 +1,7 @@
 {
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 13000,
-  "budget_source": "declared",
+  "budget_source": "config",
   "description_chars_total": 12138,
   "skills_counted": 33,
   "headroom_chars": 862,

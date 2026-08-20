@@ -37,4 +37,24 @@ session-end = "handoff"
 # The skills-listing character budget the auditor enforces. Raise it if your
 # surface's real budget differs, rather than deleting skills to fit a number
 # that is not yours.
-listing-budget = 8000
+#
+# **13,000, raised from 8,000 on 2026-08-20 (S10).** Thirteen step skills (S7)
+# put this library structurally past upstream's default: 32 skills measured
+# 11,686 chars before test mode, and no amount of trimming fits thirteen
+# deliberately-adjacent descriptions into the ~989 chars that would have been
+# left. The owner's decision was to raise the budget rather than hide twelve
+# steps behind a dispatcher, because knowing step 9 exists is part of knowing
+# step 8 is the wrong one to load.
+#
+# What it costs, stated so nobody has to reconstruct it: ~13KB of context on
+# every turn of every session. Revisit it when the library grows — that is the
+# price of a budget that is chosen rather than fitted.
+#
+# `jobsearch.skill_budget` reads this key and measures against it, and refuses
+# a value that is not a round multiple of 1,000 or that leaves under 400 chars
+# of headroom — so it cannot be quietly reset to whatever the library happens
+# to measure. `audit_library.py` still uses upstream's hardcoded 8,000
+# (claude-arsenal#143 asks it to read this key), which is why it reports a
+# listing-budget finding here by design; the total it prints is the number our
+# own measurement is asserted against.
+listing-budget = 13000

@@ -33,13 +33,16 @@ import pytest
 
 from jobsearch.skill_budget import (
     BUDGET_GRANULARITY,
+    CONFIG_KEY,
+    CONFIG_PATH,
     DEFAULT_SKILLS_DIR,
     ENV_OVERRIDE,
-    LISTING_BUDGET_CHARS,
+    FALLBACK_BUDGET_CHARS,
     MIN_HEADROOM_CHARS,
     UPSTREAM_DEFAULT_BUDGET_CHARS,
     SkillBudgetError,
     check_declaration,
+    configured_budget,
     effective_budget,
     listing_cost,
     measure,
@@ -86,8 +89,9 @@ def test_the_committed_evidence_matches_what_the_code_measures_now() -> None:
 
 
 def test_committed_evidence_was_measured_against_the_declared_budget() -> None:
-    """A gate an environment variable can satisfy for one run is not a gate."""
-    assert json.loads(EVIDENCE.read_text(encoding="utf-8"))["budget_source"] == "declared"
+    """A gate an environment variable can satisfy for one run is not a gate —
+    and nor is one the fallback can satisfy when the settings file is gone."""
+    assert json.loads(EVIDENCE.read_text(encoding="utf-8"))["budget_source"] == "config"
 
 
 def test_the_evidence_still_reports_the_overage_against_upstreams_default() -> None:
@@ -104,8 +108,34 @@ def test_the_evidence_still_reports_the_overage_against_upstreams_default() -> N
 
 
 def test_the_declared_budget_is_a_number_somebody_chose() -> None:
-    assert LISTING_BUDGET_CHARS % BUDGET_GRANULARITY == 0
-    assert LISTING_BUDGET_CHARS > UPSTREAM_DEFAULT_BUDGET_CHARS
+    declared, source = configured_budget()
+    assert source == "config"
+    assert declared % BUDGET_GRANULARITY == 0
+    assert declared > UPSTREAM_DEFAULT_BUDGET_CHARS
+
+
+def test_the_budget_lives_in_the_arsenal_settings_file() -> None:
+    """`arsenal/config.toml` is where arsenal itself says a consumer whose
+    budget differs should set it (claude-arsenal#143). One declared home, not a
+    Python constant beside it — two copies of a threshold are two thresholds."""
+    assert f"{CONFIG_KEY} = " in CONFIG_PATH.read_text(encoding="utf-8")
+    assert configured_budget()[0] == measure()["listing_budget_chars"]
+
+
+def test_a_missing_settings_file_falls_back_and_says_so(tmp_path: Path) -> None:
+    """The fallback is upstream's 8,000, never this repository's number: a
+    fallback that silently equalled the real budget would make a missing
+    settings file indistinguishable from a present one."""
+    assert configured_budget(tmp_path / "nothing.toml") == (FALLBACK_BUDGET_CHARS, "fallback")
+
+
+def test_a_malformed_budget_is_refused_rather_than_falling_back(tmp_path: Path) -> None:
+    """Someone mistyping the setting must not get a measurement taken against a
+    different number than the one they wrote."""
+    config = tmp_path / "config.toml"
+    config.write_text(f'{CONFIG_KEY} = "lots"\n', encoding="utf-8")
+    with pytest.raises(SkillBudgetError):
+        configured_budget(config)
 
 
 def test_a_budget_fitted_to_the_measurement_is_refused() -> None:
@@ -122,7 +152,7 @@ def test_a_budget_with_no_headroom_is_refused() -> None:
     snug = check_declaration(12_000, "override", 11_800)
     assert not snug.passes
     assert any("headroom" in reason for reason in snug.reasons)
-    assert check_declaration(13_000, "declared", total).passes
+    assert check_declaration(13_000, "config", total).passes
 
 
 def test_the_declared_budget_leaves_room_for_at_least_one_more_skill() -> None:
@@ -131,10 +161,11 @@ def test_the_declared_budget_leaves_room_for_at_least_one_more_skill() -> None:
 
 
 def test_the_reading_says_where_its_budget_came_from() -> None:
-    assert effective_budget() == (LISTING_BUDGET_CHARS, "declared")
+    declared, _ = configured_budget()
+    assert effective_budget() == (declared, "config")
     assert effective_budget(20_000) == (20_000, "override")
     assert effective_budget(None, {ENV_OVERRIDE: "20000"}) == (20_000, "override")
-    assert effective_budget(None, {}) == (LISTING_BUDGET_CHARS, "declared")
+    assert effective_budget(None, {}) == (declared, "config")
 
 
 def test_an_unusable_budget_is_refused_rather_than_guessed_at() -> None:
@@ -262,7 +293,7 @@ def test_the_cli_prints_the_budget_in_force_and_its_source() -> None:
         cwd=REPO_ROOT,
     )
     assert result.returncode == 0
-    assert f"listing budget: {LISTING_BUDGET_CHARS} chars (declared)" in result.stderr
+    assert f"listing budget: {configured_budget()[0]} chars (config)" in result.stderr
     assert f"above upstream's {UPSTREAM_DEFAULT_BUDGET_CHARS}-char default" in result.stderr
 
 
