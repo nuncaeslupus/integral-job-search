@@ -14,6 +14,7 @@ for a reason nobody intended — a missing key the check happens to look at firs
 
 from __future__ import annotations
 
+import ast
 import json
 import shutil
 from collections.abc import Callable
@@ -315,3 +316,50 @@ def test_the_command_reports_a_missing_directory_rather_than_passing(tmp_path: P
     """A path that is not there is not an empty library — it is a broken call."""
     evidence = tmp_path / "T53.json"
     assert _main(["x", str(evidence), "--connectors", str(tmp_path / "absent")]) == 3
+
+
+# ---------------------------------------------------------------------------
+# the boundary the AST check does *not* provide
+
+
+def test_nothing_in_the_codebase_executes_a_contributed_parse_module() -> None:
+    """The property that actually holds the line: `parse.py` is never run.
+
+    Rules 3 and 4 are admission lint. A static allowlist cannot bound what
+    Python *would* do if it ran — an attribute chain off a literal reaches
+    `object.__subclasses__`, and a name can be assembled from strings — so
+    reading them as "contributed code is safe to execute" is wrong in the
+    direction that matters.
+
+    What makes that irrelevant today is that nothing executes it. This asserts
+    it rather than leaving it a fact somebody could undo in a later commit
+    without noticing what it cost.
+
+    Matched on the AST, not on the text: grepping for "importlib" flags
+    `bootstrap.py`, which reads installed *distributions* via
+    `importlib.metadata` and loads no code, and flags this file's own prose.
+    A check that cries wolf on two honest uses is a check somebody deletes.
+
+    Raised by review on PR #77.
+    """
+    # Attribute calls: `importlib.import_module(...)`, `loader.exec_module(...)`.
+    loaders = {"import_module", "spec_from_file_location", "exec_module", "SourceFileLoader"}
+    # Bare calls only. `compile` as an *attribute* is `re.compile`, which every
+    # other module here uses for regexes; matching the name rather than the
+    # binding flagged 59 honest regex compiles and nothing else.
+    builtins_that_run_text = {"exec", "eval", "compile", "__import__"}
+    offenders: list[str] = []
+    for module in sorted((_REPO_ROOT / "src" / "jobsearch").glob("*.py")):
+        tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr in loaders:
+                offenders.append(f"{module.name}:{node.lineno} calls .{func.attr}()")
+            elif isinstance(func, ast.Name) and func.id in (loaders | builtins_that_run_text):
+                offenders.append(f"{module.name}:{node.lineno} calls {func.id}()")
+    assert offenders == [], (
+        "code-loading machinery appeared in the package — if a runner now executes a "
+        f"contributed parse.py, the contract check is not what makes that safe: {offenders}"
+    )

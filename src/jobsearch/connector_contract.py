@@ -38,7 +38,7 @@ that drift:
 6. policy: public listings only, robots.txt respected, no authentication,
    paywall or captcha bypass.
 
-## Why rules 3 and 4 are static, and what that buys
+## Why rules 3 and 4 are static — and exactly how far that goes
 
 They are checked by reading `parse.py` as an **AST**, never by running it.
 Running it to see what it does is the thing the rules exist to prevent: by the
@@ -49,6 +49,25 @@ list of the attacks somebody thought of; `importlib`, `ctypes`, `os.system`
 via a re-export, and `builtins.__import__` are all things a blocklist misses on
 the day it is written. The allowlist is short because the job is small: a
 `parse.py` turns text into text.
+
+**This is admission lint, not a sandbox, and the difference matters.** A static
+allowlist cannot bound what Python *would* do if it ran: an attribute chain off
+a literal reaches `object.__subclasses__`, a name can be assembled from strings,
+and neither is an import or a call this walker can name. Anyone reading these
+rules as "contributed code is safe to execute" would be wrong, and would be
+wrong in the direction that matters.
+
+What actually holds the line is one property, and it is stronger than the lint:
+**nothing in this repository ever executes a connector's `parse.py`.** The
+interpreter in `connectors.py` reads `connector.yaml` and matches selectors; it
+has no import machinery, and `test_nothing_in_the_codebase_executes_a_contributed_parse_module`
+asserts that rather than trusting it. So today `parse.py` is a file the contract
+*admits* and nothing *runs*.
+
+The day a runner does want to execute one, this check is not what makes that
+safe — process-level isolation is, or dropping `parse.py` in favour of widening
+the declarative grammar. Raised by review on #77 and recorded here rather than
+in a thread, because the person who needs it is whoever writes that runner.
 
 This is the same argument `connectors.py` makes for its selector grammar, and
 it is deliberately the same shape: match against a closed vocabulary, never
