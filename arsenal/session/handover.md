@@ -2,10 +2,15 @@
 
 ## Read this first
 
-**The tool can now be tested.** Steps 0–4 run, and the meta channel S11 exists to
-carry notes about them is built and merged-ready in **PR #86** (`Closes #71`,
-`Closes #63`). Start a session, type `[[…]]` when the protocol is wrong, and
-end with the triage pass. The `test-mode` skill carries the protocol.
+**The tool can now be tested.** Steps 0–4 run, and the meta channel S11 exists
+to carry notes about them is **merged** (PR #86, `3da8bd6`). Start a session,
+type `[[…]]` when the protocol is wrong, and end with the triage pass. The
+`test-mode` skill carries the protocol.
+
+**Arsenal is at v0.33.0** (PR #87). That release lands `claude-arsenal#143`, so
+`audit_library.py` now reads `arsenal/config.toml`'s `listing-budget` instead of
+its hardcoded 8,000 — the auditor and `jobsearch.skill_budget` read the same key,
+which is why S10 put the number in the settings file rather than in a constant.
 
 **D-12 (`t-e1ca8374`, #83) is still the one decision waiting on the owner.** It
 was not touched this session. T15 still cannot reach terminal, and fifteen live
@@ -16,12 +21,13 @@ independent branch of the graph.
 
 | what | where |
 |------|-------|
-| PR #86 — S10 + S11 | **open**, closes #71 and #63 |
+| PR #86 — S10 + S11 | **merged** `3da8bd6`, closed #71 and #63 |
+| PR #87 — arsenal v0.33.0 | **open** — merge with a merge commit, never a squash |
 | S10 (`lo-5efb`, #71) | **resolved** — 13,000-char budget declared here; `requires: [surface:human]` dropped |
 | S11 (`lo-5530`, #63) | **built** — marker decided (option 3), ledger outside every profile tree |
 | D-12 (`t-e1ca8374`, #83) | **unchanged, still needs the owner** |
 | PR #84 — T15 staged extraction | merged as `c9b0455` |
-| Bundle | v0.30.0; `merge-policy = "after-review"` |
+| Bundle | **v0.33.0**; `merge-policy = "after-review"`, `queue-automation = true` |
 
 Merge any PR carrying a subtree pull **with a merge commit, never a squash**.
 
@@ -45,16 +51,22 @@ the measurement reports the same clean zero as a cap somebody chose:
 3. `overage_against_upstream_default` keeps "deliberately 4,138 above the 8,000
    default" visible rather than hidden by the raise.
 
-To reverse: change `LISTING_BUDGET_CHARS` and re-run `make evidence`. Lowering
-it below 12,138 makes the gate fail honestly, which is the point.
-`claude-arsenal#143` stays open as a convenience — when it lands, the flag can
-read the same declared value instead of the module owning it.
+To reverse: change `listing-budget` in `arsenal/config.toml` and re-run
+`make evidence`. Lowering it below 12,138 makes the gate fail honestly, which is
+the point. **`claude-arsenal#143` has since landed in v0.33.0**, so the auditor
+reads the same key — the prediction the placement was made on, confirmed within
+the hour.
 
-**`audit_library.py` is deliberately not S10's gate command.** It measures
-against upstream's 8,000, which this repository has risen above on purpose, so
-it reports a finding by design. It is still run by
+**`audit_library.py` is still not S10's gate command**, but no longer because
+it disagrees: since v0.33.0 it reads the same key and reports `0 fail`. It is not
+the gate because it does not write evidence and does not check that the budget
+was *declared* rather than fitted. It is run by
 `test_the_measurement_agrees_with_the_upstream_audit`, for the one thing it is
 authoritative about: the total.
+
+Its remaining warning — "within 10% of 13000" — is the budget working. 862 chars
+spare, revisit at roughly three more skills. **Do not silence it by raising the
+number**; that is the fitted-threshold move the declaration checks exist to catch.
 
 **S11 → marker option 3.** `[[note]]` silent, `[[! note]]` act now, no meta
 parsing inside a paste. Two placements went one step stricter than the payload
@@ -94,9 +106,8 @@ agrees with prose the code has stopped following (D-11).
 
 ## Where the board stands
 
-`plan_queue_task_drift == 0`; `verify-gates` asserts **55/55**; 1,052 tests
-pass. Once #86 merges, S10 and S11 leave the queue and **nothing is blocked
-behind them**.
+`plan_queue_task_drift == 0`; `verify-gates` asserts **55/55**; 1,069 tests
+pass. S10 and S11 are closed and **nothing is blocked behind them**.
 
 Unblocked and autonomous-safe today: **T55** (`lo-9f72`, #49) and **T54**
 (`lo-892b`, #70) — what `task_select` offers.
@@ -118,14 +129,16 @@ step where it was noticed, triaged at the end.
 
 ## Verified for the next session — 2026-08-20
 
-Run on `claude/confident-johnson-ac4jvh` at `b11f7b0`:
+Run on `claude/confident-johnson-ac4jvh` after the v0.33.0 upgrade:
 
 | step | result |
 |------|--------|
 | `make lint` | ruff + strict mypy, 97 files, clean |
-| `make test` | **1052 passed**, 1 skipped |
+| `make test` | **1069 passed**, 1 skipped |
 | `make evidence` | no drift |
-| `make verify-subtree` | 0 diverging |
+| `make verify-subtree` | 26 assets, 0 diverging |
+| `check_update.sh --check-only` | `v0.33.0 — current with the newest tag` |
+| `audit_library.py` | library **0 fail** (reads `listing-budget` since #143) |
 | `make verify-gates` | **55/55** |
 | `plan_v2` | drift 0 |
 | `gate_run.sh lo-5efb` / `lo-5530` | `gate: passed`, both |
@@ -136,6 +149,19 @@ Run on `claude/confident-johnson-ac4jvh` at `b11f7b0`:
 `CLAUDE.md` documents, which hits `main` as much as any branch. Do not read a
 red CI here as a statement about the code, and do not push a fix for it.
 
-Upstream issues open: **#143** (no listing-budget override — now a convenience,
-not a blocker), **#168** (a gate has no "unmeasured" outcome), **#169**, **#170**,
-**#171**.
+**Two upgrade consequences worth knowing about, both already handled:**
+`create_reader.py` changed, so both generated spec readers went stale —
+`make reader` fixes it and `test_regenerating_the_reader_produces_no_diff`
+catches it. And the bundle grew 22 → 26 assets, moving S9's evidence; its gate
+is unchanged.
+
+**`.github/workflows/arsenal-queue.yml` is new**, installed by `init.py` and
+recorded as `queue-automation = true`. It closes queue holes a session cannot:
+a merged task PR whose `Closes` did not fire, a claim held by a crashed session,
+a task file merged with no issue handle. It cannot run until runner minutes
+return. Deleting the file is the opt-out.
+
+Upstream issues open: **#168** (a gate has no "unmeasured" outcome), **#169**
+(`handle_sync.py` proposes handles for `_history` work), **#170**
+(`check_update.sh` upgrades as a side effect of reporting), **#171**.
+**#143 is closed** — v0.33.0.
