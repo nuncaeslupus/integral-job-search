@@ -1,6 +1,6 @@
 {
   "offers_presented_without_a_liveness_check": 0,
-  "scenarios_probed": 6,
+  "scenarios_probed": 7,
   "dead_phrases_known": 9,
   "violations": [],
   "readings": [
@@ -57,6 +57,17 @@
       "presented": false,
       "expired": false,
       "reason": "the source returned 302 — that describes another page or a cache, not this advert; follow it and check the final response",
+      "reasons": []
+    },
+    {
+      "scenario": "a retired advert whose redirect lands on the listings page",
+      "source": "web_search",
+      "index_sourced": true,
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the fetch landed on https://board.example.com/ofertas rather than the advert at https://board.example.com/oferta/12345 — that is some other page, not this vacancy",
       "reasons": []
     },
     {

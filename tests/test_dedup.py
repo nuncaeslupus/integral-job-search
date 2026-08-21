@@ -465,12 +465,13 @@ def test_a_redirect_is_not_evidence_the_advert_is_live() -> None:
         assert liveness.presentable([offer], {offer.id: check})[0] == []
 
 
-def test_liveness_does_not_un_retire_a_record() -> None:
+@pytest.mark.parametrize("status", ["expired", "archived"])
+def test_liveness_does_not_un_retire_a_record(status: str) -> None:
     """Liveness answers "is the advert still there", never "should this
     candidate see it". A `live` verdict on an expired record would put it back
     in the list while the record itself still reads `expired` — two answers to
     one question, and the candidate sees the wrong one."""
-    retired = _advert("retired").model_copy(update={"status": "expired"})
+    retired = _advert("retired").model_copy(update={"status": status})
     live_again = liveness.read_response(retired.id, 200, "Se busca albañil.")
 
     assert live_again.liveness == "live"
@@ -481,4 +482,38 @@ def test_liveness_does_not_un_retire_a_record() -> None:
     # An ordinary record with the same verdict is shown — the withholding is
     # about the record's retirement, not about the check.
     ordinary = _advert("ordinary")
-    assert liveness.presentable([ordinary], {ordinary.id: live_again})[0] == [ordinary]
+    ordinary_check = liveness.read_response(ordinary.id, 200, "Se busca albañil.")
+    assert liveness.presentable([ordinary], {ordinary.id: ordinary_check})[0] == [ordinary]
+
+
+def test_a_redirect_that_lands_on_another_page_is_not_this_advert() -> None:
+    """Following the redirect fixes the status code, not the problem.
+
+    A board retiring an advert commonly sends it to a generic listings page,
+    which answers 200 and carries no closure phrase. Judged on the response
+    alone that reads `live` — and the candidate is shown a vacancy that is
+    really a search page. What settles it is *where the fetch landed*.
+    """
+    offer = _advert("moved", source=SEARCH_SOURCE)
+    listings = "<h1>Ofertas de empleo</h1><p>Encuentra tu próximo trabajo</p>"
+
+    strayed = liveness.read_response(
+        offer.id,
+        200,
+        listings,
+        advert_url="https://board.example.com/oferta/12345",
+        final_url="https://board.example.com/ofertas",
+    )
+    assert strayed.liveness == "unverified"
+    assert "not this vacancy" in strayed.reason
+    assert liveness.presentable([offer], {offer.id: strayed})[0] == []
+
+    # Landing where it was sent is the ordinary case, and stays live.
+    arrived = liveness.read_response(
+        offer.id,
+        200,
+        "Se busca albañil. Jornada completa.",
+        advert_url="https://board.example.com/oferta/12345",
+        final_url="https://board.example.com/oferta/12345/",
+    )
+    assert arrived.liveness == "live", "a trailing slash is not a different page"

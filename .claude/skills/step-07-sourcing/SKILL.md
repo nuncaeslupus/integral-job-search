@@ -75,6 +75,11 @@ produced is built through `build_search_offer` and carries `source: web_search` 
 `parse_connector` refuses to let any connector claim — so what a search found stays legible as
 such in the stored record and in the count the candidate is given.
 
+**And a search hit is a pointer, not an advert.** It is where the advert *was* when the index
+last looked. What turns it into an offer is fetching it at source and finding it live — see
+`## Liveness` below. So a general web search discovers portals and points at vacancies; it never
+collects one.
+
 What that sounds like:
 
 ```text
@@ -88,9 +93,14 @@ logged into. Either of interest?"
 ## Liveness — a search index is not a vacancy
 
 **Real searches are run inside the portals.** A general web search is for *discovering which portals
-exist* for this candidate's field, never for collecting adverts. The index is a memory of a page, and
-the page moves on: of the seven offers one test session produced, two answered 403 and the rest read
-"Puesto ocupado". Not one was a live vacancy, and the candidate was shown all seven (D-18).
+exist* for this candidate's field, and for pointing at vacancies to go and check — never for
+collecting adverts as offers. The index is a memory of a page, and the page moves on: of the seven
+offers one test session produced, two answered 403 and the rest read "Puesto ocupado". Not one was a
+live vacancy, and the candidate was shown all seven (D-18).
+
+This is the same rule `## Coverage` above states from the other end: a connectorless market is
+disclosed, a search hit is labelled `source: web_search`, and *neither of those makes it an offer*.
+The fetch does.
 
 **Fetch the advert's own page before it becomes an offer.** Not the search result, not the listing
 row — the advert's own URL, following any redirect to its final destination. Then read the response
@@ -99,9 +109,13 @@ through `integral.liveness`:
 ```python
 from integral.liveness import presentable, read_response, expire
 
-check = read_response(offer.id, status_code, body)   # the FINAL response, after redirects
-offer = expire(offer, check)                          # dead -> status "expired"
-shown, withheld = presentable(offers, checks)         # only checked-and-live reach the candidate
+check = read_response(                 # pass where the fetch LANDED, not only where it was sent:
+    offer.id, status_code, body,       # a retired advert often 301s to a generic listings page,
+    advert_url=offer.url,              # which answers 200 and is not the advert. A landing page
+    final_url=where_it_landed,         # that is a different page reads `unverified`.
+)
+offer = expire(offer, check)                    # dead -> status "expired"
+shown, withheld = presentable(offers, checks)   # only checked-and-live reach the candidate
 ```
 
 Three answers, and the third is not a rounding error:

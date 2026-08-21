@@ -117,13 +117,41 @@ class SourceCheck:
         return self.liveness == "live"
 
 
-def read_response(offer_id: str, status: int | None, body: str | None) -> SourceCheck:
+def same_page(a: str | None, b: str | None) -> bool:
+    """Do two URLs name the same page, ignoring a fragment or trailing slash?"""
+    if a is None or b is None:
+        return True  # nothing to compare — `read_response` decides what that means
+    return a.split("#", 1)[0].rstrip("/") == b.split("#", 1)[0].rstrip("/")
+
+
+def read_response(
+    offer_id: str,
+    status: int | None,
+    body: str | None,
+    *,
+    advert_url: str | None = None,
+    final_url: str | None = None,
+) -> SourceCheck:
     """Turn one fetch of the advert's own URL into a verdict.
 
     `status is None` means the fetch never happened or never returned — which
     is `unverified`, not `live`. Nothing here defaults to alive: that default
     is precisely how seven dead adverts were presented as vacancies.
+
+    `final_url` is where the fetch actually landed after redirects. A board
+    retiring an advert commonly sends it to a generic listings page, which
+    answers 200, carries no closure phrase, and is not the advert: following
+    the redirect fixes the status code and not the problem. When the landing
+    page is a different page from the one asked for, the verdict is
+    `unverified` — we read something, but not this vacancy.
     """
+    if advert_url is not None and final_url is not None and not same_page(advert_url, final_url):
+        return SourceCheck(
+            offer_id,
+            "unverified",
+            f"the fetch landed on {final_url} rather than the advert at {advert_url} — "
+            "that is some other page, not this vacancy",
+        )
     if status is None:
         return SourceCheck(offer_id, "unverified", "the advert's own page was never fetched")
     if status in GONE_STATUSES:
@@ -232,6 +260,8 @@ class Scenario:
     status: int | None
     body: str | None
     expect: Liveness
+    advert_url: str | None = None
+    final_url: str | None = None
 
 
 #: The seven offers of 2026-08-20, generalised. Every arrival shape the session
@@ -273,6 +303,15 @@ SCENARIOS: tuple[Scenario, ...] = (
         "unverified",
     ),
     Scenario(
+        "a retired advert whose redirect lands on the listings page",
+        SEARCH_SOURCE,
+        200,
+        "<h1>Ofertas de empleo</h1><p>Encuentra tu próximo trabajo</p>",
+        "unverified",
+        advert_url="https://board.example.com/oferta/12345",
+        final_url="https://board.example.com/ofertas",
+    ),
+    Scenario(
         "a connector listing, fetched and open",
         "examplejobs",
         200,
@@ -299,7 +338,13 @@ def probe() -> list[dict[str, Any]]:
     readings = []
     for scenario in SCENARIOS:
         offer = _offer_for(scenario)
-        check = read_response(offer.id, scenario.status, scenario.body)
+        check = read_response(
+            offer.id,
+            scenario.status,
+            scenario.body,
+            advert_url=scenario.advert_url,
+            final_url=scenario.final_url,
+        )
         shown, _ = presentable([offer], {offer.id: check})
         expired = expire(offer, check).status == "expired"
         reasons = []
