@@ -21,6 +21,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from integral import repo_gate
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VERIFIER = REPO_ROOT / "tools" / "verify_arsenal_subtree.py"
 
@@ -180,10 +182,18 @@ def test_the_makefile_no_longer_pins_a_bare_sha() -> None:
 
 
 def test_ci_runs_the_subtree_check() -> None:
-    """A check nothing invokes protects nothing."""
+    """A check nothing invokes protects nothing.
+
+    Asserted through the dependency graph rather than by looking for the word
+    on the `ci:` line. D-22 gave the five a single home in `host-gate` and made
+    `ci` depend on it, because two lists of the same five drift and the one
+    that drifts is the one nobody runs — a substring check would have called
+    that arrangement broken while the check was in fact still running.
+    """
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     assert "\nverify-subtree:" in makefile
-    assert "verify-subtree" in makefile.split("ci:", 1)[1].split("\n", 1)[0]
+    rules = repo_gate.make_rules(REPO_ROOT / "Makefile")
+    assert "verify-subtree" in repo_gate.reached_from("ci", rules)
 
 
 def _recipe(makefile: str, target: str) -> str:

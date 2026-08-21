@@ -79,12 +79,19 @@ sub-5-second duration means this. Remove this section once runs show real durati
 pass before a merge:
 
 ```bash
+make host-gate      # all five, one command — run this
 make lint           # ruff + strict mypy
 make test           # pytest
 make evidence       # regenerate every measurement, fail on drift
 make verify-subtree # the arsenal bundle matches its subtree
 make verify-gates   # every done/merged task can still show its measurement
 ```
+
+`host-gate` is the name `claude-arsenal` points a worker at, and
+`integral.repo_gate` checks that every target listed here is real and is
+reached by it — so a sixth line added above cannot quietly go unrun (D-22).
+Note `make gate` is a different thing: it records T1's lint exit code, one
+check, and is not the repo gate.
 
 ## Read on demand — `docs/repo-playbook.md`
 

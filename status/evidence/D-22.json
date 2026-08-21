@@ -1,0 +1,46 @@
+{
+  "required_gates_with_no_enforcement_point": 0,
+  "gates_required": 6,
+  "aggregate_target": "host-gate",
+  "requirement_declared": true,
+  "payload_gate_is_not_the_repo_gate": true,
+  "unenforced": [],
+  "readings": [
+    {
+      "target": "host-gate",
+      "is_a_target": true,
+      "reached_by_aggregate": true,
+      "reasons": []
+    },
+    {
+      "target": "lint",
+      "is_a_target": true,
+      "reached_by_aggregate": true,
+      "reasons": []
+    },
+    {
+      "target": "test",
+      "is_a_target": true,
+      "reached_by_aggregate": true,
+      "reasons": []
+    },
+    {
+      "target": "evidence",
+      "is_a_target": true,
+      "reached_by_aggregate": true,
+      "reasons": []
+    },
+    {
+      "target": "verify-subtree",
+      "is_a_target": true,
+      "reached_by_aggregate": true,
+      "reasons": []
+    },
+    {
+      "target": "verify-gates",
+      "is_a_target": true,
+      "reached_by_aggregate": true,
+      "reasons": []
+    }
+  ]
+}
