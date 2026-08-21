@@ -1,12 +1,17 @@
-# Session handover — 2026-08-21 (D-16, D-20 merged; D-22 merged-pending, PR #114)
+# Session handover — 2026-08-21 (D-16, D-20, D-22 merged; D-18 merged-pending, PR #115)
 
 ## Board
 
 - **D-21 (#91), D-16 (#92), D-20 (#94) all merged** — `7e1bf3f`, `429733c`,
   `f57340a`. Issues closed, task files archived on `main`, no lingering flags.
-- **D-22 (`t-6f9328ab`, #95) is done and open in PR #114**, archived to
-  `_history/` with `status: merged` and `Closes #95` in both the commit message
+- **D-22 (`t-6f9328ab`, #95) merged** as PR #114 → `a39a713`. `make host-gate`
+  is live: one command for the five, and `ci` depends on it.
+- **D-18 (`t-b1355b65`, #96) is done and open in PR #115**, archived to
+  `_history/` with `status: merged` and `Closes #96` in both the commit message
   and the PR body. It closes and unblocks by itself on merge.
+- **The owner merges clean PRs through me now** — gate green via `make host-gate`,
+  review answered, no conflict, CI red only for the runner-minutes exhaustion
+  (verified per PR). Report what was merged; do not ask first.
 - **Run the selector, do not trust this line.** A previous handover predicted
   D-17 next and the selector returned D-20. The queue is the truth.
 - One pre-existing board flag, unchanged: mixed-priority-convention — 25 tasks
@@ -35,6 +40,28 @@ target nobody runs. Reachability is transitive so `ci: host-gate` counts.
 `open_task_pr.sh` re-runs the payload gate and never the repo gate, so a green
 task PR can still break `make test`. Patching the vendored script here would be
 reverted by the next subtree upgrade.
+
+## What D-18 was
+
+Seven offers sourced in the test session, not one a live vacancy: two 403s, the
+rest reading "Puesto ocupado". They came from a general `WebSearch` over indexed
+pages — **a search index outlives the advert**.
+
+`src/integral/liveness.py` decides `live` / `dead` / `unverified` from a fetch of
+the advert's own page, and only checked-and-alive reaches the candidate. An offer
+with no check is withheld *on the absence*, because the absence is the defect.
+
+**Two departures from the task as filed, both deliberate:**
+
+- It said to wire in `integral.freshness`. That is T36 — proactive re-entry, "ask
+  the returning candidate what changed" — and its `Offer` is a question, not an
+  advert. **A name collision.** Check what a module is before wiring it.
+- It said to treat 403 as expiry. A 403 is anti-bot or a filled vacancy,
+  indistinguishable; `dead` would tombstone a possibly-open vacancy and stop it
+  ever being offered again. So 403 withholds without claiming to know why.
+
+**Still not wired to a fetch.** The verdict logic and its gate exist; the sourcing
+path does not yet make the request. That needs the egress T12 waits on.
 
 ## Lessons worth keeping
 
@@ -69,6 +96,10 @@ annotated.
 
 ## Left open (carried forward)
 
+- **Nothing fetches the advert page yet** — D-18 built the verdict, not the
+  request. Needs T12's egress. Not seeded.
+- **`liveness.DEAD_PHRASES` is hand-kept** (nine, ES+EN). A board that phrases
+  closure differently reads as live. `dead_phrases_known` is in the evidence.
 - **Nothing forces a human to run `make host-gate`.** The measurement keeps the
   list honest; a pre-push hook or upstream's call is what would make skipping it
   impossible. The remaining half of D-22. Not seeded.
@@ -105,8 +136,8 @@ signal about the code, and do not push fixes for it.
 make host-gate      # lint, test, evidence, verify-subtree, verify-gates
 ```
 
-Green on this branch: lint clean over 107 source files, 1198 passed / 1 skipped,
-no evidence drift, 34 subtree assets matching, 65 terminal tasks with 65 gates
+Green on this branch: lint clean over 108 source files, 1198 passed / 1 skipped,
+no evidence drift, 34 subtree assets matching, 66 terminal tasks with 66 gates
 asserted.
 
 `status/evidence/T55.json`'s `files_scanned` moved 466 → 467. The scan counts
