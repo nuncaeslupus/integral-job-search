@@ -1,0 +1,85 @@
+{
+  "offers_presented_without_a_liveness_check": 0,
+  "scenarios_probed": 7,
+  "dead_phrases_known": 9,
+  "violations": [],
+  "readings": [
+    {
+      "scenario": "a search hit nobody fetched",
+      "source": "web_search",
+      "index_sourced": true,
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the advert's own page was never fetched",
+      "reasons": []
+    },
+    {
+      "scenario": "jobtoday, 403",
+      "source": "web_search",
+      "index_sourced": true,
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the source returned 403 — we were blocked, which is not evidence the advert is gone, only that it could not be read",
+      "reasons": []
+    },
+    {
+      "scenario": "tablondeanuncios, puesto ocupado",
+      "source": "web_search",
+      "index_sourced": true,
+      "liveness": "dead",
+      "expected": "dead",
+      "presented": false,
+      "expired": true,
+      "reason": "the advert's own page says 'puesto ocupado'",
+      "reasons": []
+    },
+    {
+      "scenario": "a board listing retired at source",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "liveness": "dead",
+      "expected": "dead",
+      "presented": false,
+      "expired": true,
+      "reason": "the source returned 404 — the advert is gone",
+      "reasons": []
+    },
+    {
+      "scenario": "a retired advert redirected to the listings page",
+      "source": "web_search",
+      "index_sourced": true,
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the source returned 302 — that describes another page or a cache, not this advert; follow it and check the final response",
+      "reasons": []
+    },
+    {
+      "scenario": "a retired advert whose redirect lands on the listings page",
+      "source": "web_search",
+      "index_sourced": true,
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the fetch landed on https://board.example.com/ofertas rather than the advert at https://board.example.com/oferta/12345 — that is some other page, not this vacancy",
+      "reasons": []
+    },
+    {
+      "scenario": "a connector listing, fetched and open",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "liveness": "live",
+      "expected": "live",
+      "presented": true,
+      "expired": false,
+      "reason": "fetched from source, 200, no closure notice",
+      "reasons": []
+    }
+  ]
+}

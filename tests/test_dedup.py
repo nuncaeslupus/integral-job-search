@@ -9,11 +9,14 @@ see `integral.dedup`'s module docstring for the full argument.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from integral import liveness
+from integral.connectors import SEARCH_SOURCE
 from integral.dedup import (
     MINIMUM_CLUSTER_PAIRS,
     MINIMUM_PAIRS,
@@ -346,3 +349,171 @@ def test_write_evidence_persists_the_measurement(tmp_path: Path) -> None:
     measured = write_evidence(target)
     assert target.exists()
     assert measured["dedup_precision"] >= 0.95
+
+
+# ---------------------------------------------------------------------------
+# D-18 — an advert is verified at its source before it is offered
+
+
+def _advert(offer_id_seed: str, *, source: str = "examplejobs", text: str = "Se busca.") -> Offer:
+    return Offer(
+        id="sha256:" + hashlib.sha256(offer_id_seed.encode("utf-8")).hexdigest(),
+        source=source,
+        text=text,
+    )
+
+
+def test_a_dead_advert_is_marked_expired_not_offered() -> None:
+    """The tablondeanuncios case, end to end.
+
+    Every listing from that board read "Puesto ocupado" and every one was
+    presented as a vacancy. A closure notice in the advert's own body is the
+    advert saying it is over, so the offer is expired and withheld — both, not
+    either.
+    """
+    offer = _advert("ocupado", text="<h1>Albañil</h1><p>PUESTO OCUPADO</p>")
+    check = liveness.read_response(offer.id, 200, offer.text)
+
+    assert check.liveness == "dead"
+    assert "puesto ocupado" in check.reason
+    assert liveness.expire(offer, check).status == "expired"
+
+    shown, withheld = liveness.presentable([offer], {offer.id: check})
+    assert shown == []
+    assert [w.liveness for w in withheld] == ["dead"]
+
+    # A server that retires the listing outright says the same thing.
+    gone = _advert("gone")
+    gone_check = liveness.read_response(gone.id, 404, None)
+    assert gone_check.liveness == "dead"
+    assert liveness.expire(gone, gone_check).status == "expired"
+
+
+def test_a_search_index_hit_is_verified_at_source_before_it_becomes_an_offer() -> None:
+    """D-18's gate. `offers_presented_without_a_liveness_check == 0`.
+
+    A search index is a memory of a page, and the page moves on. An offer that
+    a general web search produced and nobody fetched is withheld — the default
+    is not "alive", because that default is exactly how seven dead adverts
+    reached a candidate.
+    """
+    hit = _advert("indexed", source=SEARCH_SOURCE, text="Albañil en Bilbao.")
+    assert liveness.index_sourced(hit)
+
+    # Never fetched: withheld, and not claimed dead either.
+    unchecked = liveness.read_response(hit.id, None, None)
+    assert unchecked.liveness == "unverified"
+    assert liveness.presentable([hit], {hit.id: unchecked})[0] == []
+    assert liveness.expire(hit, unchecked).status == "new"
+
+    # An offer with no check at all must not slip through on the absence.
+    assert liveness.presentable([hit], {})[0] == []
+
+    # Fetched and open: this is the one the candidate may see.
+    fetched = liveness.read_response(hit.id, 200, "Se busca albañil. Jornada completa.")
+    assert fetched.liveness == "live"
+    assert liveness.presentable([hit], {hit.id: fetched})[0] == [hit]
+
+    measured = liveness.measure()
+    assert measured["violations"] == []
+    assert measured["offers_presented_without_a_liveness_check"] == 0
+    assert any(r["expected"] == "live" and r["presented"] for r in measured["readings"])
+
+
+def test_a_403_is_not_evidence_the_advert_is_gone() -> None:
+    """The jobtoday case, and the reason there are three verdicts.
+
+    A 403 is an anti-bot rule or a filled vacancy, indistinguishable from
+    here. Both keep the offer away from the candidate; only one deserves a
+    tombstone, and tombstoning a live vacancy would stop it ever being offered
+    again (§7.4).
+    """
+    offer = _advert("jobtoday", source=SEARCH_SOURCE)
+    check = liveness.read_response(offer.id, 403, None)
+
+    assert check.liveness == "unverified"
+    assert "not evidence the advert is gone" in check.reason
+    assert liveness.presentable([offer], {offer.id: check})[0] == []
+    assert liveness.expire(offer, check).status == "new"
+
+
+def test_every_offer_needs_a_source_check_including_a_connector_s() -> None:
+    """A connector reads a listing page, and a listing page is an index too —
+    just a smaller one. The web-search case is the loudest, not the only one."""
+    assert liveness.needs_source_check(_advert("from-connector"))
+    assert liveness.needs_source_check(_advert("from-search", source=SEARCH_SOURCE))
+
+
+def test_a_closure_notice_survives_casing_and_whitespace() -> None:
+    """Boards do not agree on markup. "Puesto  Ocupado" across a line break is
+    the same sentence, and a check that missed it would pass the advert."""
+    assert liveness.dead_phrase_in("PUESTO\n  OCUPADO") == "puesto ocupado"
+    assert liveness.dead_phrase_in("Esta Oferta   Ya No Está Disponible") is not None
+    assert liveness.dead_phrase_in("Se busca albañil, jornada completa") is None
+
+
+def test_a_redirect_is_not_evidence_the_advert_is_live() -> None:
+    """A board retiring an advert commonly 301s it to a generic listings page,
+    which renders perfectly and says nothing about the vacancy. `304` is a
+    statement about a cache, not about today. Reading either as live is how a
+    dead advert looks alive with a 200 attached to the wrong page."""
+    offer = _advert("redirected", source=SEARCH_SOURCE)
+    for status in (301, 302, 303, 304, 307, 308):
+        check = liveness.read_response(offer.id, status, "<h1>Ofertas de empleo</h1>")
+        assert check.liveness == "unverified", f"{status} read as {check.liveness}"
+        assert "follow it" in check.reason
+        assert liveness.presentable([offer], {offer.id: check})[0] == []
+
+
+@pytest.mark.parametrize("status", ["expired", "archived"])
+def test_liveness_does_not_un_retire_a_record(status: str) -> None:
+    """Liveness answers "is the advert still there", never "should this
+    candidate see it". A `live` verdict on an expired record would put it back
+    in the list while the record itself still reads `expired` — two answers to
+    one question, and the candidate sees the wrong one."""
+    retired = _advert("retired").model_copy(update={"status": status})
+    live_again = liveness.read_response(retired.id, 200, "Se busca albañil.")
+
+    assert live_again.liveness == "live"
+    shown, withheld = liveness.presentable([retired], {retired.id: live_again})
+    assert shown == []
+    assert "does not un-retire" in withheld[0].reason
+
+    # An ordinary record with the same verdict is shown — the withholding is
+    # about the record's retirement, not about the check.
+    ordinary = _advert("ordinary")
+    ordinary_check = liveness.read_response(ordinary.id, 200, "Se busca albañil.")
+    assert liveness.presentable([ordinary], {ordinary.id: ordinary_check})[0] == [ordinary]
+
+
+def test_a_redirect_that_lands_on_another_page_is_not_this_advert() -> None:
+    """Following the redirect fixes the status code, not the problem.
+
+    A board retiring an advert commonly sends it to a generic listings page,
+    which answers 200 and carries no closure phrase. Judged on the response
+    alone that reads `live` — and the candidate is shown a vacancy that is
+    really a search page. What settles it is *where the fetch landed*.
+    """
+    offer = _advert("moved", source=SEARCH_SOURCE)
+    listings = "<h1>Ofertas de empleo</h1><p>Encuentra tu próximo trabajo</p>"
+
+    strayed = liveness.read_response(
+        offer.id,
+        200,
+        listings,
+        advert_url="https://board.example.com/oferta/12345",
+        final_url="https://board.example.com/ofertas",
+    )
+    assert strayed.liveness == "unverified"
+    assert "not this vacancy" in strayed.reason
+    assert liveness.presentable([offer], {offer.id: strayed})[0] == []
+
+    # Landing where it was sent is the ordinary case, and stays live.
+    arrived = liveness.read_response(
+        offer.id,
+        200,
+        "Se busca albañil. Jornada completa.",
+        advert_url="https://board.example.com/oferta/12345",
+        final_url="https://board.example.com/oferta/12345/",
+    )
+    assert arrived.liveness == "live", "a trailing slash is not a different page"

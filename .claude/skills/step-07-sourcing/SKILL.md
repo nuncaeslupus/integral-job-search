@@ -75,6 +75,11 @@ produced is built through `build_search_offer` and carries `source: web_search` 
 `parse_connector` refuses to let any connector claim — so what a search found stays legible as
 such in the stored record and in the count the candidate is given.
 
+**And a search hit is a pointer, not an advert.** It is where the advert *was* when the index
+last looked. What turns it into an offer is fetching it at source and finding it live — see
+`## Liveness` below. So a general web search discovers portals and points at vacancies; it never
+collects one.
+
 What that sounds like:
 
 ```text
@@ -83,6 +88,63 @@ to InfoJobs or the sector boards directly, so what follows came from a general w
 from a search of the boards you'd actually use. Two things I can do about that: build a
 connector for a board you name, or work through your own browser session on a site you're
 logged into. Either of interest?"
+```
+
+## Liveness — a search index is not a vacancy
+
+**Real searches are run inside the portals.** A general web search is for *discovering which portals
+exist* for this candidate's field, and for pointing at vacancies to go and check — never for
+collecting adverts as offers. The index is a memory of a page, and the page moves on: of the seven
+offers one test session produced, two answered 403 and the rest read "Puesto ocupado". Not one was a
+live vacancy, and the candidate was shown all seven (D-18).
+
+This is the same rule `## Coverage` above states from the other end: a connectorless market is
+disclosed, a search hit is labelled `source: web_search`, and *neither of those makes it an offer*.
+The fetch does.
+
+**Fetch the advert's own page before it becomes an offer.** Not the search result, not the listing
+row — the advert's own URL, following any redirect to its final destination. Then read the response
+through `integral.liveness`:
+
+```python
+from integral.liveness import presentable, read_response, expire
+
+check = read_response(                 # pass where the fetch LANDED, not only where it was sent:
+    offer.id, status_code, body,       # a retired advert often 301s to a generic listings page,
+    advert_url=offer.url,              # which answers 200 and is not the advert. A landing page
+    final_url=where_it_landed,         # that is a different page reads `unverified`.
+)
+offer = expire(offer, check)                    # dead -> status "expired"
+shown, withheld = presentable(offers, checks)   # only checked-and-live reach the candidate
+```
+
+Three answers, and the third is not a rounding error:
+
+- **live** — fetched, and the body carries no closure notice. Only these reach the candidate.
+- **dead** — the server says 404/410, or the body says "puesto ocupado", "oferta cerrada", "vacante
+  cubierta", "position filled". Mark it `expired` and tombstone it.
+- **unverified** — a 403, a timeout, or nobody fetched it. **Withheld, but not expired**: being
+  blocked is not evidence the job is gone, and tombstoning a live vacancy stops it ever being offered
+  again. Say the count rather than hiding it.
+
+A **3xx** is one of these too: a retired advert is commonly redirected to a generic listings page that
+renders perfectly and says nothing about the vacancy, and a `304` describes a cache rather than today.
+Follow the redirect and judge what it lands on.
+
+**Never present an unverified advert as a live offer.** The default is not "alive" — that default is
+exactly how seven dead adverts reached someone looking for work. `presentable` enforces it: an offer
+with no check is withheld *on the absence*, and a record already `expired` or `archived` is not
+un-retired by a later `live` verdict.
+
+**Report the withheld count.** Silently dropping four of nine looks identical to nine having been
+found — and the candidate then wonders why so little came back.
+
+What that sounds like when it happens:
+
+```text
+"Nine came back, but I could only confirm four are still open. Three had already been filled — I've
+retired those — and two I couldn't reach at all, so I've left them aside rather than waste your time
+on a maybe. Here are the four."
 ```
 
 ## Stop rule
