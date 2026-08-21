@@ -175,7 +175,8 @@ class CandidateTurn:
     evidence about the candidate (`integral.decline`'s module docstring).
 
     `value` is the payload `FIELD_MODELS[field]` expects when `state="stated"`
-    — e.g. `{"country": "ES", "accepts_onsite_in_country": True}` for
+    — e.g. `{"country": "ES", "accepts_onsite_in_country": True,
+    "commutable_regions": ["Barcelona", "Girona"]}` for
     `location`. `text` is the human quote recorded alongside it; a caller that
     leaves it blank still gets a evidence row, just a less legible one.
     """

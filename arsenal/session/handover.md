@@ -1,15 +1,18 @@
-# Session handover — 2026-08-20 (D-16 merged-pending; PR #112)
+# Session handover — 2026-08-20 (D-16 merged; D-20 merged-pending, PR #113)
 
 ## Board
 
-- **D-16 (`t-221adf32`, #92) is done and open in PR #112**, archived to
-  `_history/` with `status: merged` and `Closes #92` in both the commit message
+- **D-16 (`t-221adf32`, #92) merged** as PR #112 → `429733c`. Board clean:
+  #92 closed, task archived on `main`, no lingering flag.
+- **D-20 (`t-6f79e090`, #94) is done and open in PR #113**, archived to
+  `_history/` with `status: merged` and `Closes #94` in both the commit message
   and the PR body. It closes and unblocks by itself on merge.
-- D-21's PR #111 **merged** since the last handover; #91 is closed and the
-  "archived as merged but #91 is still open" flag has cleared.
-- `task_select.py` next returns **`t-6f52a4b9` (D-17, "ranked offers must carry
-  their URL", priority 9, S)** — check it yourself, the queue is the truth.
-- One pre-existing board flag, unchanged: mixed-priority-convention — 27 tasks
+- D-21's PR #111 also merged earlier in the session.
+- **The selector, not the guess.** This handover previously predicted D-17
+  would come next; the selector actually returned D-20. Run
+  `task_select.py` and believe it — the queue is the truth, and the line above
+  is a snapshot.
+- One pre-existing board flag, unchanged: mixed-priority-convention — 26 tasks
   on the size scale [10, 5, 1, 0] and 2 on other values [70, 60].
 
 ## What D-16 was
@@ -65,10 +68,38 @@ also brings the directory-name contract along for free. **When a check asks
 "does X exist", make it ask the loader, not the filesystem.** Found by
 CodeRabbit on #112, reproduced before fixing.
 
+## What D-20 was
+
+The candidate said "I can move, but in the province of Barcelona, or maximum to
+Girona or Tarragona — I want to sleep home each day", and none of T24's ten
+pinned fields could hold it, so the most filtering sentence of the session
+became quote text while the filter kept offering Sevilla.
+
+It went into **`Location.commutable_regions`, not an eleventh field** —
+`Location` already owned "the on-site work they'll do without moving", and
+`accepts_onsite_in_country` was that question asked as one bool over a whole
+country. **Growing a field per sentence is how a pinned contract stops being
+one**; prefer narrowing an existing field whose semantics already fit.
+
+`unfilterable_stated_constraints` (`src/integral/stated_constraints.py`) probes
+all ten pinned fields, each with an offer the constraint must remove *and* one
+it must keep. The second failure mode is the one that matters: a field that
+accepts a value and changes no offer's fate looks answered from every angle
+while the candidate sees the same list either way.
+
+**The plan row named `tests/test_candidate.py`, which does not exist** — the
+candidate tests are in `tests/test_candidate_attributes.py`. The plan's *test
+names* were honoured, and the row's path was corrected rather than annotated.
+Check the file exists before trusting a plan row's path, the same way you check
+the metric name — and fix the row, do not write a note explaining it.
+
 ## Left open (carried forward)
 
 - **Format drift is unenforced** — `make lint` has no `ruff format --check`.
-  New, and not seeded.
+  Not seeded.
+- **A commute radius is a region list, not a distance.** "Within 50km" still has
+  nowhere to go; converting kilometres to regions needs a gazetteer this repo
+  does not have. Not seeded.
 - **`connectors/` still holds no connector for a real board.** That is T12, not
   D-16: this task was about saying so. The first real package makes
   `connectors_usable` non-zero and turns the ES reading covered.
@@ -101,14 +132,14 @@ red CI here as a signal about the code.
 All five run locally and pass on this branch:
 
 ```bash
-make lint           # ruff + strict mypy — clean, 105 source files
-make test           # 1186 passed, 1 skipped
+make lint           # ruff + strict mypy — clean, 106 source files
+make test           # 1191 passed, 1 skipped
 make evidence       # no drift
 make verify-subtree # 0 diverging, 34 assets compared
-make verify-gates   # 63 terminal tasks, 63 gates asserted
+make verify-gates   # 64 terminal tasks, 64 gates asserted
 ```
 
-`status/evidence/T55.json`'s `files_scanned` moved 464 → 465. Note the scan
+`status/evidence/T55.json`'s `files_scanned` moved 465 → 466. Note the scan
 counts **tracked** files only: regenerating evidence before `git add` gave 463
 and looked like drift. Stage first, then `make evidence`.
 
