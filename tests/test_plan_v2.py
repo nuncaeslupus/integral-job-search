@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from integral import plan_v2
+from integral import plan_v2, repo_gate
 
 HEADER = "| T# | Description | Step | Size | Depends | Gate | Tests | St |"
 DIVIDER = "|----|-------------|------|------|---------|------|-------|----|"
@@ -302,3 +302,148 @@ def test_a_plan_dependency_on_a_blocked_task_is_still_drift(tmp_path: Path) -> N
     assert measured["dependency_mismatches"] == [
         "T2 depends on T1 in the plan and not in the queue"
     ]
+
+
+# ---------------------------------------------------------------------------
+# D-22 — a gate the docs require must have something that runs it
+
+
+def _gate_docs(tmp_path: Path, *targets: str) -> Path:
+    doc = tmp_path / "CLAUDE.md"
+    listed = "\n".join(f"make {t}" for t in targets)
+    doc.write_text(
+        f"**Run the gate locally.** These are what CI would run, and all five must\n"
+        f"pass before a merge:\n\n```bash\n{listed}\n```\n",
+        encoding="utf-8",
+    )
+    return doc
+
+
+def _gate_makefile(tmp_path: Path, body: str) -> Path:
+    path = tmp_path / "Makefile"
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+_FIVE = "lint test evidence verify-subtree verify-gates"
+_RULES = "".join(f"{t}:\n\ttrue\n" for t in _FIVE.split())
+
+
+def test_every_gate_the_docs_require_has_a_runnable_enforcement_point() -> None:
+    """D-22's gate. `required_gates_with_no_enforcement_point == 0`.
+
+    Every `make` target `CLAUDE.md` requires before a merge is a real target
+    *and* is reached by `make host-gate`, so one command runs the whole gate.
+    Prose saying five things must pass is not an enforcement point; a target
+    that runs them is.
+    """
+    measured = repo_gate.measure()
+
+    assert measured["unenforced"] == []
+    assert measured["required_gates_with_no_enforcement_point"] == 0
+    # Not a vacuous zero: the requirement must still be declared, and the list
+    # must actually have been read.
+    assert measured["requirement_declared"]
+    # Six: the five checks plus `host-gate` itself, which the instructions now
+    # name as the one command to run.
+    assert measured["gates_required"] == 6
+    assert all(r["is_a_target"] and r["reached_by_aggregate"] for r in measured["readings"])
+    assert {r["target"] for r in measured["readings"]} >= {
+        "lint",
+        "test",
+        "evidence",
+        "verify-subtree",
+        "verify-gates",
+    }
+
+
+def test_a_task_pr_runs_the_repo_gate_not_only_its_payload_gate() -> None:
+    """Hole 2 of D-22, as far as the host can close it.
+
+    A worker re-runs `gate_run.sh` on its own payload and nothing in that path
+    runs the repo suite, so a green task PR can break `make test`. The worker
+    half is upstream's (`claude-arsenal#175`) — patching the vendored script
+    here would be reverted by the next subtree upgrade and would fail
+    `make verify-subtree` meanwhile.
+
+    What the host owes is an enforcement point that is *more* than the payload
+    gate, under the name upstream's `host-gate` key points at. If `host-gate`
+    ever collapsed to what `gate` does — one lint run, recorded — the
+    distinction that makes this hole visible would be gone with it.
+    """
+    rules = repo_gate.make_rules()
+
+    assert repo_gate.AGGREGATE_TARGET in rules, "the host provides no repo-gate entry point"
+    assert repo_gate.payload_gate_is_not_the_repo_gate(rules)
+
+    repo = repo_gate.reached_from(repo_gate.AGGREGATE_TARGET, rules)
+    payload = repo_gate.reached_from(repo_gate.PAYLOAD_TARGET, rules)
+    # The payload gate runs lint and records its exit code. The repo gate runs
+    # the suite, the evidence regeneration and both verifiers on top.
+    assert {"test", "evidence", "verify-subtree", "verify-gates"} <= repo
+    assert "test" not in payload
+
+
+def test_a_required_gate_the_aggregate_forgets_is_counted(tmp_path: Path) -> None:
+    """The rot this check exists for: somebody adds a line to the docs and the
+    target nobody wired up is the target nobody runs. It exists, it is
+    runnable, and `make host-gate` sails past it."""
+    doc = _gate_docs(tmp_path, *_FIVE.split(), "audit")
+    makefile = _gate_makefile(tmp_path, f"{_RULES}audit:\n\ttrue\nhost-gate: {_FIVE}\n\ttrue\n")
+
+    measured = repo_gate.measure(doc, makefile)
+
+    assert measured["required_gates_with_no_enforcement_point"] == 1
+    assert "audit" in measured["unenforced"][0]
+    assert "does not reach it" in measured["unenforced"][0]
+
+
+def test_a_required_gate_that_is_not_a_target_is_counted(tmp_path: Path) -> None:
+    """The docs naming a command nothing defines — the same shape as D-20's
+    plan row pointing at a file that does not exist."""
+    doc = _gate_docs(tmp_path, *_FIVE.split(), "typecheck")
+    makefile = _gate_makefile(tmp_path, f"{_RULES}host-gate: {_FIVE} typecheck\n\ttrue\n")
+
+    measured = repo_gate.measure(doc, makefile)
+
+    assert measured["required_gates_with_no_enforcement_point"] == 1
+    assert "no such target exists" in measured["unenforced"][0]
+
+
+def test_the_aggregate_may_be_reached_through_another_target(tmp_path: Path) -> None:
+    """`ci` depends on `host-gate` rather than repeating its five, because two
+    lists of the same five drift and the one that drifts is the one nobody
+    runs. A check that only looked one level down would call that arrangement
+    broken and push the repo back to the duplication."""
+    doc = _gate_docs(tmp_path, *_FIVE.split())
+    makefile = _gate_makefile(
+        tmp_path, f"{_RULES}inner: {_FIVE}\n\ttrue\nhost-gate: inner\n\ttrue\n"
+    )
+
+    assert repo_gate.measure(doc, makefile)["required_gates_with_no_enforcement_point"] == 0
+
+
+def test_no_enforcement_point_at_all_records_minus_one(tmp_path: Path) -> None:
+    """`-1`, never `0`. Before D-22 the five existed and `ci` listed them, but
+    nothing carried the name a worker could be pointed at — and a clean zero
+    there would have said the gate was enforced."""
+    doc = _gate_docs(tmp_path, *_FIVE.split())
+    makefile = _gate_makefile(tmp_path, f"{_RULES}ci: {_FIVE}\n\ttrue\n")
+
+    measured = repo_gate.measure(doc, makefile)
+
+    assert measured["required_gates_with_no_enforcement_point"] == -1
+    assert "host-gate" in measured["unenforced"][0]
+
+
+def test_the_check_stops_measuring_when_the_docs_drop_the_requirement(tmp_path: Path) -> None:
+    """If the instructions no longer require the gate before a merge, this is
+    enforcing a policy the project has dropped. It records `-1` and says so."""
+    doc = tmp_path / "CLAUDE.md"
+    doc.write_text("Some prose. ```bash\nmake lint\n```\n", encoding="utf-8")
+    makefile = _gate_makefile(tmp_path, f"{_RULES}host-gate: {_FIVE}\n\ttrue\n")
+
+    measured = repo_gate.measure(doc, makefile)
+
+    assert measured["required_gates_with_no_enforcement_point"] == -1
+    assert not measured["requirement_declared"]

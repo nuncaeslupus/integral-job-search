@@ -1,4 +1,4 @@
-.PHONY: help sync build lint format test gate evidence verify-gates verify-subtree ci arsenal-remote arsenal-upgrade reader reader-process reader-steps clean update-skills assemble-bundle
+.PHONY: help sync build lint format test gate evidence verify-gates verify-subtree host-gate ci arsenal-remote arsenal-upgrade reader reader-process reader-steps clean update-skills assemble-bundle
 
 ARSENAL_REPO    ?= https://github.com/nuncaeslupus/claude-arsenal.git
 ARSENAL_REF     ?= v0.30.0  # pin to a tag — upgrade deliberately
@@ -74,7 +74,18 @@ verify-gates:  ## assert every done/merged task's declared gate still holds
 verify-subtree:  ## assert claude-arsenal/ still matches its subtree source
 	uv run python tools/verify_arsenal_subtree.py
 
-ci: lint test evidence verify-gates verify-subtree  ## everything CI runs, in CI's order
+# The repo gate: the five `CLAUDE.md` says must pass before a merge, as one
+# command. The name is the one `claude-arsenal`'s `host-gate` key points at, so
+# a worker that gains the hook has something real to call — `gate` was already
+# taken by T1's lint-exit-code recorder, and reusing it would have made "the
+# payload gate ran" indistinguishable from "the repo gate ran", which is the
+# confusion D-22 is about.
+#
+# The list lives here once. `ci` depends on it rather than repeating it: two
+# lists of the same five drift, and the one that drifts is the one nobody runs.
+host-gate: lint test evidence verify-subtree verify-gates  ## the five CLAUDE.md requires before a merge
+
+ci: host-gate  ## everything CI runs — the same five, by one name
 
 # The readers are generated but committed, so a spec edit without a regenerate
 # leaves a reviewer annotating text that has changed underneath them — and
