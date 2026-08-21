@@ -136,11 +136,11 @@ signal about the code, and do not push fixes for it.
 make host-gate      # lint, test, evidence, verify-subtree, verify-gates
 ```
 
-Green on this branch: lint clean over 108 source files, 1198 passed / 1 skipped,
+Green on this branch: lint clean over 108 source files, 1205 passed / 1 skipped,
 no evidence drift, 34 subtree assets matching, 66 terminal tasks with 66 gates
 asserted.
 
-`status/evidence/T55.json`'s `files_scanned` moved 466 → 467. The scan counts
+`status/evidence/T55.json`'s `files_scanned` moved 467 → 468. The scan counts
 **tracked** files only: regenerate evidence *after* `git add`, or the count looks
 like drift.
 
