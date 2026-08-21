@@ -92,8 +92,19 @@ exist* for this candidate's field, never for collecting adverts. The index is a 
 the page moves on: of the seven offers one test session produced, two answered 403 and the rest read
 "Puesto ocupado". Not one was a live vacancy, and the candidate was shown all seven (D-18).
 
-**Fetch the advert's own page before it becomes an offer.** Three answers, and the third is not a
-rounding error:
+**Fetch the advert's own page before it becomes an offer.** Not the search result, not the listing
+row — the advert's own URL, following any redirect to its final destination. Then read the response
+through `integral.liveness`:
+
+```python
+from integral.liveness import presentable, read_response, expire
+
+check = read_response(offer.id, status_code, body)   # the FINAL response, after redirects
+offer = expire(offer, check)                          # dead -> status "expired"
+shown, withheld = presentable(offers, checks)         # only checked-and-live reach the candidate
+```
+
+Three answers, and the third is not a rounding error:
 
 - **live** — fetched, and the body carries no closure notice. Only these reach the candidate.
 - **dead** — the server says 404/410, or the body says "puesto ocupado", "oferta cerrada", "vacante
@@ -102,8 +113,17 @@ rounding error:
   blocked is not evidence the job is gone, and tombstoning a live vacancy stops it ever being offered
   again. Say the count rather than hiding it.
 
+A **3xx** is one of these too: a retired advert is commonly redirected to a generic listings page that
+renders perfectly and says nothing about the vacancy, and a `304` describes a cache rather than today.
+Follow the redirect and judge what it lands on.
+
 **Never present an unverified advert as a live offer.** The default is not "alive" — that default is
-exactly how seven dead adverts reached someone looking for work.
+exactly how seven dead adverts reached someone looking for work. `presentable` enforces it: an offer
+with no check is withheld *on the absence*, and a record already `expired` or `archived` is not
+un-retired by a later `live` verdict.
+
+**Report the withheld count.** Silently dropping four of nine looks identical to nine having been
+found — and the candidate then wonders why so little came back.
 
 What that sounds like when it happens:
 

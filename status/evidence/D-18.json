@@ -1,6 +1,6 @@
 {
   "offers_presented_without_a_liveness_check": 0,
-  "scenarios_probed": 5,
+  "scenarios_probed": 6,
   "dead_phrases_known": 9,
   "violations": [],
   "readings": [
@@ -46,6 +46,17 @@
       "presented": false,
       "expired": true,
       "reason": "the source returned 404 — the advert is gone",
+      "reasons": []
+    },
+    {
+      "scenario": "a retired advert redirected to the listings page",
+      "source": "web_search",
+      "index_sourced": true,
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the source returned 302 — that describes another page or a cache, not this advert; follow it and check the final response",
       "reasons": []
     },
     {

@@ -450,3 +450,35 @@ def test_a_closure_notice_survives_casing_and_whitespace() -> None:
     assert liveness.dead_phrase_in("PUESTO\n  OCUPADO") == "puesto ocupado"
     assert liveness.dead_phrase_in("Esta Oferta   Ya No Está Disponible") is not None
     assert liveness.dead_phrase_in("Se busca albañil, jornada completa") is None
+
+
+def test_a_redirect_is_not_evidence_the_advert_is_live() -> None:
+    """A board retiring an advert commonly 301s it to a generic listings page,
+    which renders perfectly and says nothing about the vacancy. `304` is a
+    statement about a cache, not about today. Reading either as live is how a
+    dead advert looks alive with a 200 attached to the wrong page."""
+    offer = _advert("redirected", source=SEARCH_SOURCE)
+    for status in (301, 302, 303, 304, 307, 308):
+        check = liveness.read_response(offer.id, status, "<h1>Ofertas de empleo</h1>")
+        assert check.liveness == "unverified", f"{status} read as {check.liveness}"
+        assert "follow it" in check.reason
+        assert liveness.presentable([offer], {offer.id: check})[0] == []
+
+
+def test_liveness_does_not_un_retire_a_record() -> None:
+    """Liveness answers "is the advert still there", never "should this
+    candidate see it". A `live` verdict on an expired record would put it back
+    in the list while the record itself still reads `expired` — two answers to
+    one question, and the candidate sees the wrong one."""
+    retired = _advert("retired").model_copy(update={"status": "expired"})
+    live_again = liveness.read_response(retired.id, 200, "Se busca albañil.")
+
+    assert live_again.liveness == "live"
+    shown, withheld = liveness.presentable([retired], {retired.id: live_again})
+    assert shown == []
+    assert "does not un-retire" in withheld[0].reason
+
+    # An ordinary record with the same verdict is shown — the withholding is
+    # about the record's retirement, not about the check.
+    ordinary = _advert("ordinary")
+    assert liveness.presentable([ordinary], {ordinary.id: live_again})[0] == [ordinary]

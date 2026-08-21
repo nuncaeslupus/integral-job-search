@@ -60,6 +60,13 @@ GONE_STATUSES = frozenset({404, 410})
 #: indistinguishable from here, and only one of them deserves a tombstone.
 BLOCKED_STATUSES = frozenset({401, 403, 429})
 
+#: Statuses that answer about some *other* page, or about the past. A board
+#: retiring an advert commonly 301s it to a generic listings page, which
+#: renders perfectly and says nothing about the vacancy; `304 Not Modified` is
+#: a statement about a cache, not about today. Neither is evidence of life, so
+#: the caller must follow the redirect and hand back the final response.
+INDIRECT_STATUSES = frozenset({301, 302, 303, 304, 307, 308})
+
 #: What a filled or withdrawn advert says in its own body, on the boards this
 #: candidate's market actually uses. Matched on normalised text, so casing and
 #: runs of whitespace do not decide whether a vacancy is open.
@@ -89,6 +96,13 @@ def dead_phrase_in(text: str) -> str | None:
     return next((phrase for phrase in DEAD_PHRASES if phrase in haystack), None)
 
 
+#: Statuses that mean the record is retired. Liveness answers "is the advert
+#: still there", never "should this candidate see it" — so a `live` verdict on
+#: a retired record must not put it back in the list. Showing one would also
+#: contradict the record itself, which still reads `expired`.
+RETIRED_STATUSES: frozenset[str] = frozenset({"expired", "archived"})
+
+
 @dataclass(frozen=True)
 class SourceCheck:
     """What fetching one advert's own page established."""
@@ -114,6 +128,13 @@ def read_response(offer_id: str, status: int | None, body: str | None) -> Source
         return SourceCheck(offer_id, "unverified", "the advert's own page was never fetched")
     if status in GONE_STATUSES:
         return SourceCheck(offer_id, "dead", f"the source returned {status} — the advert is gone")
+    if status in INDIRECT_STATUSES:
+        return SourceCheck(
+            offer_id,
+            "unverified",
+            f"the source returned {status} — that describes another page or a cache, not this "
+            "advert; follow it and check the final response",
+        )
     if status in BLOCKED_STATUSES:
         return SourceCheck(
             offer_id,
@@ -162,7 +183,16 @@ def presentable(
         check = checks.get(offer.id) or SourceCheck(
             offer.id, "unverified", "no liveness check was run against the advert's own page"
         )
-        if check.presentable:
+        if offer.status in RETIRED_STATUSES:
+            withheld.append(
+                SourceCheck(
+                    offer.id,
+                    check.liveness,
+                    f"the record is {offer.status} — liveness does not un-retire an offer, "
+                    "whatever the source now says",
+                )
+            )
+        elif check.presentable:
             shown.append(offer)
         else:
             withheld.append(check)
@@ -234,6 +264,13 @@ SCENARIOS: tuple[Scenario, ...] = (
         404,
         None,
         "dead",
+    ),
+    Scenario(
+        "a retired advert redirected to the listings page",
+        SEARCH_SOURCE,
+        302,
+        "<h1>Ofertas de empleo</h1><p>Encuentra tu próximo trabajo</p>",
+        "unverified",
     ),
     Scenario(
         "a connector listing, fetched and open",
