@@ -447,3 +447,36 @@ def test_the_check_stops_measuring_when_the_docs_drop_the_requirement(tmp_path: 
 
     assert measured["required_gates_with_no_enforcement_point"] == -1
     assert not measured["requirement_declared"]
+
+
+def test_a_make_command_outside_the_requirement_block_is_not_a_gate(tmp_path: Path) -> None:
+    """The instructions show `make` commands for other purposes — regenerating
+    a reader, upgrading the subtree. Scanning the whole file would promote each
+    of them into a gate required before every merge, and then fail this check
+    over a target nobody ever claimed belonged to the gate.
+    """
+    doc = tmp_path / "CLAUDE.md"
+    doc.write_text(
+        "## Upgrading\n\n```bash\nmake arsenal-upgrade REF=v0.1.0\n```\n\n"
+        "These are what CI would run, and all five must pass before a merge:\n\n"
+        f"```bash\n{chr(10).join('make ' + t for t in _FIVE.split())}\n```\n\n"
+        "## Afterwards\n\n```bash\nmake reader-steps\n```\n",
+        encoding="utf-8",
+    )
+    makefile = _gate_makefile(tmp_path, f"{_RULES}host-gate: {_FIVE}\n\ttrue\n")
+
+    assert repo_gate.required_gates(doc) == _FIVE.split()
+    assert repo_gate.measure(doc, makefile)["required_gates_with_no_enforcement_point"] == 0
+
+
+def test_a_requirement_with_no_block_after_it_records_minus_one(tmp_path: Path) -> None:
+    """The requirement stated and the list gone is not a pass — there is
+    nothing to check the Makefile against."""
+    doc = tmp_path / "CLAUDE.md"
+    doc.write_text("all five must pass before a merge. Trust me.\n", encoding="utf-8")
+    makefile = _gate_makefile(tmp_path, f"{_RULES}host-gate: {_FIVE}\n\ttrue\n")
+
+    measured = repo_gate.measure(doc, makefile)
+
+    assert measured["required_gates_with_no_enforcement_point"] == -1
+    assert "names no `make` targets" in measured["unenforced"][0]

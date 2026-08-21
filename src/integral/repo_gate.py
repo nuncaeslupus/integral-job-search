@@ -62,6 +62,12 @@ _REQUIREMENT_RE = re.compile(r"all\s+five\s+must\s*\n?\s*pass\s+before\s+a\s+mer
 # `make <target>` lines inside a fenced block — how CLAUDE.md states the list.
 _MAKE_COMMAND_RE = re.compile(r"^\s*make\s+([a-z][a-z0-9-]*)\s*(?:#.*)?$", re.M)
 
+# The fenced block that follows the requirement. Only that block is the list:
+# scanning the whole file would promote any other `make …` the instructions
+# happen to show — `make reader-steps`, `make arsenal-upgrade` — into a gate
+# required before every merge, and then demand `host-gate` reach it.
+_FENCE_RE = re.compile(r"^```[^\n]*\n(?P<inner>.*?)^```", re.M | re.S)
+
 # A Makefile rule: `name: deps  ## help`. Only the first colon matters.
 _RULE_RE = re.compile(r"^([a-z][a-z0-9-]*)\s*:(?!=)([^\n#]*)", re.M)
 
@@ -81,9 +87,21 @@ class Reading:
 
 
 def required_gates(instructions: Path = DEFAULT_INSTRUCTIONS) -> list[str]:
-    """The `make` targets the instructions require before a merge, in order."""
+    """The `make` targets the instructions require before a merge, in order.
+
+    Scoped to the fenced block the requirement introduces, not the whole file.
+    A `make` command shown anywhere else is an instruction about something
+    else, and treating it as a merge gate would fail this check over a target
+    nobody ever claimed belonged to the gate.
+    """
     text = instructions.read_text(encoding="utf-8")
-    return list(dict.fromkeys(_MAKE_COMMAND_RE.findall(text)))
+    requirement = _REQUIREMENT_RE.search(text)
+    if requirement is None:
+        return []
+    block = _FENCE_RE.search(text, requirement.end())
+    if block is None:
+        return []
+    return list(dict.fromkeys(_MAKE_COMMAND_RE.findall(block.group("inner"))))
 
 
 def requirement_is_declared(instructions: Path = DEFAULT_INSTRUCTIONS) -> bool:
