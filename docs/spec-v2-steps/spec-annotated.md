@@ -1,6 +1,6 @@
 # Job Search — Specification v2 — Specification (annotated edition)
 
-> Generated 2026-08-20. This is the specification with a **note slot** after every section. Read it in any Markdown app. To annotate, replace the `_(your notes…)_` placeholder under any section. When done, send the file back — notes are acted on.
+> Generated 2026-08-22. This is the specification with a **note slot** after every section. Read it in any Markdown app. To annotate, replace the `_(your notes…)_` placeholder under any section. When done, send the file back — notes are acted on.
 
 ---
 
@@ -764,7 +764,7 @@ which is itself worth knowing."* Writes `last_activity`.
 
 **Gate.** `extraction_macro_f1 >= 0.75` on the evaluation split, with
 `extraction_negation_recall >= 0.80` (T16) and `ontology_hit_rate >= 0.85`
-(T17) alongside. Owner: T15. State: `not_implemented`.
+(T17) alongside. Owner: T56. State: `not_implemented`.
 
 **Resume.** Extraction is per offer and idempotent, so an interrupted run
 resumes at the first offer without a current extraction.

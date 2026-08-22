@@ -731,7 +731,7 @@ which is itself worth knowing."* Writes `last_activity`.
 
 **Gate.** `extraction_macro_f1 >= 0.75` on the evaluation split, with
 `extraction_negation_recall >= 0.80` (T16) and `ontology_hit_rate >= 0.85`
-(T17) alongside. Owner: T15. State: `not_implemented`.
+(T17) alongside. Owner: T56. State: `not_implemented`.
 
 **Resume.** Extraction is per offer and idempotent, so an interrupted run
 resumes at the first offer without a current extraction.
