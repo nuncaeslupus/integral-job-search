@@ -590,7 +590,11 @@ class TaskSpec:
         """
         return [
             "python3",
-            ".claude/skills/queue-add/scripts/new_task.py",
+            # Resolved at run time: `queue-add` ships in the installed `core`
+            # plugin, not in the working tree (T58). A literal
+            # `.claude/skills/...` path here would print a command that no
+            # longer exists on any machine.
+            "$(uv run python -m integral.plugin_path core skills/queue-add/scripts/new_task.py)",
             "--title",
             self.title,
             "--body",

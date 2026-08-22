@@ -420,7 +420,11 @@ def test_a_confirmed_note_seeds_a_task_naming_its_step_and_skill(tmp_path: Path)
     spec = seed_specs(live.review(), [1])[0]
     assert "la pregunta llegó pronto" in spec.title
     assert "step-02-constraints" in spec.body
-    assert spec.command()[:2] == ["python3", ".claude/skills/queue-add/scripts/new_task.py"]
+    # Resolved at run time rather than a literal path: `queue-add` ships in the
+    # installed `core` plugin since T58, so a `.claude/skills/...` path would
+    # print a command that exists on no machine.
+    assert spec.command()[0] == "python3"
+    assert "integral.plugin_path core skills/queue-add/scripts/new_task.py" in spec.command()[1]
 
 
 def test_a_seed_command_carries_the_body_not_just_the_title(tmp_path: Path) -> None:
