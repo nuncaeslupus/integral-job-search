@@ -45,9 +45,16 @@ over `handle_sync.py`'s proposals — only one of the two is wired to an action.
 
 ## Spending the context window deliberately
 
-`.rgignore` excludes the vendored and generated trees from every ripgrep-backed
-search, for the same reason `pyproject.toml` excludes them from ruff and mypy: they
-are not ours to change. Search one deliberately with `rg -u --no-ignore-vcs`.
+`.rgignore` excludes the generated trees from every ripgrep-backed search, for the
+same reason `pyproject.toml` excludes them from ruff and mypy: they are not ours to
+change. Search one deliberately with `rg -u --no-ignore-vcs`.
+
+**The arsenal skills are not in this repository.** They come from the `core` and
+`skill-workshop` plugins under `~/.claude/plugins/`, so `.claude/skills/` holds
+only the fourteen this repo owns. A script inside one is resolved with
+`uv run python -m integral.plugin_path <plugin> <path>` — never a literal path,
+and never a glob over the plugin cache, which also holds versions the loader
+refused.
 
 **The corpus is not excluded, and it is the expensive one.** A line of
 `corpus/{raw,labelled}/ads.jsonl` is a whole advert — the longest is 15,640
@@ -94,6 +101,6 @@ check, and is not the repo gate.
 
 ## Read on demand — `docs/repo-playbook.md`
 
-Upgrading the vendored bundle, the skill-listing budget, parking a task, and the
-board's title-matching history live there. Each is needed at one moment in a
+Installing and updating the arsenal plugins, the skill-listing budget, parking a
+task, and the board's title-matching history live there. Each is needed at one moment in a
 session, not on every turn, so it is a path to open — not an import.

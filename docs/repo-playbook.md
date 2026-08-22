@@ -9,37 +9,75 @@ bundle, when adding a skill, when parking a task — so it is a file to open, ne
 an import. This is the same split `claude-arsenal/AGENTS.md` makes with its
 `references/` directory, and for the same reason.
 
-## `make arsenal-remote` reports; `make arsenal-upgrade REF=…` upgrades
+## Installing and updating the arsenal plugins
 
-`check_update.sh` without `--check-only` performs the subtree merge **and commits**
-— a history-writing side effect from a step described as a report. So
-`arsenal-remote` passes `--check-only`; reading a version should not write history.
-Upgrade deliberately with `make arsenal-upgrade REF=v0.x.y`, which runs all four
-steps (v0.33.0 fixed `claude-arsenal#170`: it re-vendors skills after a subtree
-update and refuses to report success on a stale bundle).
+Upstream is a Claude Code **marketplace**, not a vendored tree (T58). There is
+nothing in this repository to pull or verify; the plugins live under
+`~/.claude/plugins/` and are managed from inside a session:
 
-**After any upgrade, run `make reader` and `make evidence`.** An upgrade can change
-`create_reader.py` and the bundle's asset count, which leaves the generated spec
-readers and S9's evidence stale. Both are caught by the suite — the point is that
-they are *expected* after an upgrade, and are fixed with the repo's own tooling,
-never by hand.
+```text
+/plugin marketplace add github:nuncaeslupus/claude-arsenal
+/plugin install skill-workshop@claude-arsenal   # first — its hook gates skill edits
+/plugin install core@claude-arsenal
+```
+
+**Updating takes two commands, and the first is the one that gets forgotten.**
+`/plugin update claude-arsenal` re-reads the marketplace clone; it does not
+refresh it. If that clone is behind, the update re-installs what is already
+there and reports nothing:
+
+```text
+/plugin marketplace update claude-arsenal
+/plugin update claude-arsenal
+```
+
+**A failed install leaves the old version registered and says so only once.**
+v1.0.0 shipped `plugins/core` with a bare-string `author` where the loader wants
+an object, so `core` would not register and the consumer stayed on whatever they
+had — 0.1.0, from months earlier, missing `init`, `continue`, `queue-add`,
+`queue-status` and `gate-check` entirely. Check what is actually registered
+rather than what you asked for:
+
+```bash
+python3 -c "import json,pathlib;d=json.load(open(pathlib.Path.home()/'.claude/plugins/installed_plugins.json'));print({k:[e['version'] for e in v] for k,v in d['plugins'].items() if 'arsenal' in k})"
+```
+
+That bug is fixed upstream in v1.0.1 along with `make validate-manifests`, which
+now refuses a manifest the loader would reject before it can be tagged.
+
+**After any update, run `make reader` and `make evidence`.** An update can change
+`create_reader.py`, which leaves the generated spec readers stale. Both are
+caught by the suite — the point is that they are *expected* after an update, and
+are fixed with the repo's own tooling, never by hand.
+
+**Never reference a plugin file by a literal path.** Use
+`uv run python -m integral.plugin_path <plugin> <relative-path>`. It reads
+`installed_plugins.json`, so it returns the version that is actually registered;
+the plugin cache also holds every version ever fetched, including ones the
+loader refused, and a glob for "the newest directory" will happily return one of
+those.
 
 ## The skill listing budget lives in `arsenal/config.toml`
 
 `listing-budget = 13000` (S10). `integral.skill_budget` and `skill-creator`'s
 `audit_library.py` both read that key since v0.33.0 (`claude-arsenal#143`).
 
+`listing-budget = 5000` since T58, and the number covers **this repository's
+fourteen skills only** — the thirteen step skills plus `test-mode`. The nineteen
+arsenal skills that used to sit beside them are plugins now, and upstream
+budgets its own with `make audit`. The library measures 3,958 chars with 1,042
+spare.
+
 `integral.skill_budget` is the gate: it refuses a budget that is not a round
 multiple of 1,000 or that leaves under 400 chars of headroom, and reports `-1` —
 not a clean zero — when the library is inside a budget that was overridden, fell
-back, or was fitted to the measurement. The audit's "within 10% of 13000" warning
-is the budget working. After the step-skill preamble trim the library measures
-11,241 chars with 1,759 spare; revisit at roughly five more skills.
-**Do not silence it by raising the number.**
+back, or was fitted to the measurement. **Do not silence it by raising the
+number.**
 
-The listing is itself resident context — roughly 13,000 characters on every turn,
-the largest single block this repo controls. A new skill's `description` is paid
-for on every turn of every session, including the sessions that never load it.
+The listing is resident context on every turn, and a new skill's `description` is
+paid for in every session including the ones that never load it. Note the *total*
+a session pays is still the host's fourteen plus every installed plugin's — this
+gate covers the half this repository controls, which is the half it can fix.
 
 ## Parking a task needs the `arsenal:cancelled` label
 
