@@ -1,163 +1,122 @@
-# Session handover — 2026-08-21 (D-16, D-20, D-22 merged; D-18 merged-pending, PR #115)
+# Session handover — 2026-08-22 (D-12 merged; T15 done, open in PR #118)
 
 ## Board
 
-- **D-21 (#91), D-16 (#92), D-20 (#94) all merged** — `7e1bf3f`, `429733c`,
-  `f57340a`. Issues closed, task files archived on `main`, no lingering flags.
-- **D-22 (`t-6f9328ab`, #95) merged** as PR #114 → `a39a713`. `make host-gate`
-  is live: one command for the five, and `ci` depends on it.
-- **D-18 (`t-b1355b65`, #96) is done and open in PR #115**, archived to
-  `_history/` with `status: merged` and `Closes #96` in both the commit message
-  and the PR body. It closes and unblocks by itself on merge.
-- **The owner merges clean PRs through me now** — gate green via `make host-gate`,
-  review answered, no conflict, CI red only for the runner-minutes exhaustion
-  (verified per PR). Report what was merged; do not ask first.
-- **Run the selector, do not trust this line.** A previous handover predicted
-  D-17 next and the selector returned D-20. The queue is the truth.
-- One pre-existing board flag, unchanged: mixed-priority-convention — 25 tasks
-  on the size scale [10, 5, 1, 0] and 2 on other values [70, 60].
+- **D-12 (`t-e1ca8374`, #83) merged** as PR #116 → `bcaf87c`. Issue closed, task
+  archived. This is the one that had been held for an owner decision.
+- **T15 (`lo-25b1`, #52) is done and open in PR #118**, archived to `_history/`
+  with `status: merged` and `Closes #52` in both the commit message and the PR
+  body. It closes and unblocks by itself on merge.
+- **T56 (`lo-6f53`) is new**, with issue **#117** created by hand — Actions has
+  no runner minutes, so `arsenal-queue.yml` cannot open handles. Check for
+  missing handles with `handle_sync.py` after every session that adds a task.
+- Board after #116: 92 tasks, 67 merged. #118 makes it 68.
+- One pre-existing flag, unchanged: mixed-priority-convention — 23 tasks on the
+  size scale [10, 5, 1, 0] and 2 on other values [70, 60].
 
-## What D-22 was
+## THIS SURFACE HAS `gh` — the CLAUDE.md note is stale
 
-`CLAUDE.md` said five things must pass before a merge and nothing ran them. The
-aggregate in fact already existed as `ci` — but named for the thing that cannot
-run here (Actions has no runner minutes), and nothing checked that the docs' list
-still matched it.
+`github_channel.sh --detect` prints **`gh`**, and `gh` works: issue list, issue
+create, PR create, PR merge, `git push` to any branch. The "no scriptable GitHub
+channel / MCP tools only / manual POST" section in `CLAUDE.md` describes the web
+surface, not this one. **Detect before believing it.** Everything this session
+did went through `gh` and ordinary `git push`, including `claim_task.sh`, which
+returns `won`/`lost` here rather than `manual POST`.
 
-**`make host-gate`** is now the name, because that is the key `claude-arsenal`
-points a worker at; `ci` depends on it rather than repeating the five. `gate` was
-already taken by T1's lint-exit-code recorder, and reusing it would have made
-"the payload gate ran" indistinguishable from "the repo gate ran" — which is the
-confusion the task is about.
+`open_task_pr.sh` still was not used — archiving by hand and opening with
+`gh pr create` is two commands and needs no `ARSENAL_*` overrides.
 
-`required_gates_with_no_enforcement_point` (`src/integral/repo_gate.py`) reads the
-`make` targets `CLAUDE.md` requires and asks two things of each: is it a real
-target, and does `host-gate` reach it. **The second is the one that rots** —
-somebody adds a sixth line to the docs and the target nobody wired up is the
-target nobody runs. Reachability is transitive so `ci: host-gate` counts.
+## What D-12 was
 
-**The worker half is upstream's and still open** (`claude-arsenal#175`):
-`open_task_pr.sh` re-runs the payload gate and never the repo gate, so a green
-task PR can still break `make test`. Patching the vendored script here would be
-reverted by the next subtree upgrade.
+D-2 binds an extraction score to three outcomes — a number, a failure, or
+**unmeasured** — and the gate layer had two. `extraction_macro_f1: null` beside
+`extraction_status: "unmeasured"` landed in `gate_evidence`'s "not numeric"
+branch and read as a hard failure, so T15 could not reach terminal and fifteen
+tasks sat behind it.
 
-## What D-18 was
+**Resolution A + B, on the owner's decision.**
 
-Seven offers sourced in the test session, not one a live vacancy: two 403s, the
-rest reading "Puesto ocupado". They came from a general `WebSearch` over indexed
-pages — **a search index outlives the advert**.
+- **B's upstream half had already landed.** `claude-arsenal#168` shipped in the
+  vendored bundle before the task was picked up: `gate_evidence.py` takes a
+  `status-key:` line and exits 3 for a metric the evidence file *positively
+  asserts* is unmeasured; `gate_run.sh` prints `gate: unmeasured`. Nothing
+  vendored was edited. **Read the vendored script before designing around its
+  absence** — the payload's "What the code does" section was two weeks stale.
+- **B alone would have unblocked nothing.** Exit 3 is still a hard stop in
+  `open_task_pr.sh:116` and in `tools/verify_gates.py:127` (`returncode == 0`),
+  both deliberately. The third outcome makes a state *recordable*, never
+  *terminal*. That distinction is the whole finding.
+- **So the split is the half that moved the queue.** T15's gate became
+  `prefilter_suppressed_positives == 0` (already 0 over 36 positives);
+  `extraction_macro_f1 >= 0.75` became T56, blocked on T25 + T26, with
+  `status-key: extraction_status` so waiting for labels records as unmeasured.
 
-`src/integral/liveness.py` decides `live` / `dead` / `unverified` from a fetch of
-the advert's own page, and only checked-and-alive reaches the candidate. An offer
-with no check is withheld *on the absence*, because the absence is the defect.
+`src/integral/task_gate.py` measures the **disease**: `unrecordable_task_gates`
+counts any task gate whose evidence holds a non-numeric value at its key with no
+`status-key` to say why. **1 of 67 before the split, 0 of 68 after.** Only a
+positively asserted status counts — a `status-key` naming a key the evidence file
+does not carry is a typo, not a third outcome.
 
-**Two departures from the task as filed, both deliberate:**
+Splitting T15's gate moved step 8's gate owner, which D-7's ownership check
+enforces across **four** places: `status/spec-v2-steps.json`,
+`status/spec-v2-steps.md`, `docs/spec-v2-steps/spec-annotated.md` (regenerate
+with `make reader-steps`, do not hand-edit), and `status/evidence/D-21.json`.
 
-- It said to wire in `integral.freshness`. That is T36 — proactive re-entry, "ask
-  the returning candidate what changed" — and its `Offer` is a question, not an
-  advert. **A name collision.** Check what a module is before wiring it.
-- It said to treat 403 as expiry. A 403 is anti-bot or a filled vacancy,
-  indistinguishable; `dead` would tombstone a possibly-open vacancy and stop it
-  ever being offered again. So 403 withholds without claiming to know why.
+## What T15 was
 
-**Still not wired to a fetch.** The verdict logic and its gate exist; the sourcing
-path does not yet make the request. That needs the egress T12 waits on.
+**No new code.** The extractor has been complete since 2026-08-20; only the gate
+held it open. The work was correcting the payload's `## Tests` section — it still
+named macro-F1 as T15's test, which is now T56's — and flipping the plan
+checkbox to ☑, which merging does not do by itself.
+
+`test_extraction_matches_corpus_labels` stays in T15 and asserts the **refusal**
+(null, unmeasured, dimensions named). When the corpus grows past the floor that
+test is what should start failing, and that is T56's signal to implement scoring.
+
+## Claim refs had accumulated — 14 of them, 13 for merged tasks
+
+`claim_task.sh lo-25b1` returned **`lost`** and it was a **stale lock**: issue #52
+was open, unassigned and carried no `arsenal:claimed` label, and the ref pointed
+at a commit merged two days earlier. `claiming-internals.md` says claim refs
+accumulate roughly one per task ever claimed and should be pruned from a CLI
+session occasionally — nothing had ever pruned them here.
+
+**Diagnose a `lost` before obeying it, and never route around it.** The check is
+the issue, not the ref: assignee + `arsenal:claimed` label is the system's own
+visible record of who holds a task. All 14 refs are now pruned; a fresh claim
+won cleanly.
 
 ## Lessons worth keeping
 
-**Prefer narrowing an existing field to adding one.** D-20's commute radius went
-into `Location.commutable_regions` because `Location` already owned "on-site work
-without moving" and `accepts_onsite_in_country` was that question asked as one
-bool. Growing a field per sentence is how a pinned contract stops being one.
+**`make evidence` compares against *committed* evidence**, so a legitimate new
+measurement reads as drift until it is committed. Commit, then re-run
+`host-gate`. Two rounds of this per session is normal, not a bug.
 
-**When a check asks "does X exist", ask the loader, not the filesystem.** D-16's
-first cut decided connector coverage from `meta.yaml` alone, so a directory of
-plausible metadata suppressed the disclosure outright — D-16's own failure through
-the back door of its own fix. It now calls `load_connector`.
+**`T55.json`'s `files_scanned` moves with every added or archived file** — the
+naming scan reads `arsenal/tasks/*.md` and not `_history/`. Adding three files
+took it 468 → 471; archiving one payload took it 471 → 470. Expect to commit it.
 
-**A vacuous zero is the recurring bug in this repo.** Every measurement here
-records `-1` rather than `0` when it could not look: no packages, no probes, the
-requirement deleted from the docs. Three tasks in a row needed it.
+**`ruff` is not on PATH** — `uv run --extra dev ruff format <paths>`. Format only
+the files you touched; `make lint` still does not check formatting.
 
-**Confirm RED before trusting a zero.** Each of D-16, D-20 and D-22 has a test
-that reconstructs the pre-fix state and asserts the count goes positive.
+**`test_naming` also fails on an untracked directory, not only on a reference.**
+A stale `__pycache__/` sat under a `src/` directory named for the pre-T55 package;
+it was never committed, so CI never saw it and only the local gate went red. The
+check asserts that directory does not exist, so removing it is the whole fix.
 
-**`make lint` does not check formatting** — no `ruff format --check`. Format only
-the files you touched: `ruff format <paths>`, **never** `ruff format src tests`. I
-did the repo-wide sweep twice in one session and reverted it twice (`fca469e`,
-`b3fcc8f`).
-
-**Do not push while a review bot is running.** Two CodeRabbit reviews aborted with
-"head commit changed" because a docs commit landed mid-review. Let it finish.
-
-**Check a plan row's path as well as its metric.** D-20's row named
-`tests/test_candidate.py`, which does not exist; the row was corrected rather than
-annotated.
+**And it scans this file.** Writing the old package name here — even to describe
+that bug — trips the same check. Name the rename, not the path.
 
 ## Left open (carried forward)
 
-- **Nothing fetches the advert page yet** — D-18 built the verdict, not the
-  request. Needs T12's egress. Not seeded.
-- **`liveness.DEAD_PHRASES` is hand-kept** (nine, ES+EN). A board that phrases
-  closure differently reads as live. `dead_phrases_known` is in the evidence.
-- **Nothing forces a human to run `make host-gate`.** The measurement keeps the
-  list honest; a pre-push hook or upstream's call is what would make skipping it
-  impossible. The remaining half of D-22. Not seeded.
-- **Format drift is unenforced** — `make lint` has no `ruff format --check`. Not
-  seeded.
-- **A commute radius is a region list, not a distance.** "Within 50km" has nowhere
-  to go; converting km to regions needs a gazetteer this repo lacks. Not seeded.
-- **`connectors/` still holds no connector for a real board** — T12, not D-16.
-- **`verify-gates` asserts a fenced gate block is *present*, never that the command
-  inside resolves.** The general form of D-21 and T55. Still not seeded.
-- **`claude-arsenal#175`** (worker never runs the host gate — D-22's other half),
-  **`#182`** (false `rest`), **`#183`** (`check_update.sh` on a missing remote),
-  **`#188`** (`outline.sh` parsing), **`#189`** (`context_budget.py` scores a
-  missing `AGENTS.md` as 0 and passes). All open upstream.
-- **A permissions edit only the owner can make**: `Bash(gh run list:*)` and
-  `Bash(gh run view:*)` in `.claude/settings.json`.
-- **D-12 (`t-e1ca8374`, #83) still waits on the owner.** Resolution B has existed
-  since v0.33.0 (`gate: unmeasured`).
-- **`tools/profile_guard.sh` matches a candidate path mentioned in *prose***. Not
-  seeded.
-- **Steps 5, 6, 10, 11, 12 are still `not_implemented`**, and say so out loud.
-- **The GitHub repo has not been renamed.** Owner's to do.
-
-## The gate, run locally (CI has no runner minutes)
-
-Unchanged and re-diagnosed rather than assumed: jobs are created and completed
-three seconds apart with `runner_id: 0` and an empty `runner_name` — no runner is
-ever assigned, on `main` as much as any branch. Do not read a red CI here as a
-signal about the code, and do not push fixes for it.
-
-**One command now runs all five:**
-
-```bash
-make host-gate      # lint, test, evidence, verify-subtree, verify-gates
-```
-
-Green on this branch: lint clean over 108 source files, 1205 passed / 1 skipped,
-no evidence drift, 34 subtree assets matching, 66 terminal tasks with 66 gates
-asserted.
-
-`status/evidence/T55.json`'s `files_scanned` moved 467 → 468. The scan counts
-**tracked** files only: regenerate evidence *after* `git add`, or the count looks
-like drift.
-
-## Surface facts
-
-Unchanged, all in `CLAUDE.md`: `--detect` prints a false `rest`, REST is dead here
-(`403 GitHub access is not enabled for this session` — do not probe again),
-`claim_task.sh` returns `manual POST` and `create_branch` on
-`arsenal/claims/<id>` is the compare-and-swap (201 won, 422 lost),
-`open_task_pr.sh` cannot be used, and merging goes through the MCP tool.
-
-Two additions:
-
-- **Editing `status/spec-v2-steps.md` requires `make reader-steps`.**
-  `test_regenerating_the_reader_produces_no_diff` fails until
-  `docs/spec-v2-steps/` is regenerated and committed, and the failure does not
-  say that a spec edit caused it.
-- **A merged PR deletes the branch.** `git push` then fails with "stale info" on
-  a `--force-with-lease` against a remote-tracking ref that no longer exists.
-  `git remote prune origin` and push normally.
+- **PR #118 (T15) merged.** CodeRabbit passed with one minor finding, taken:
+  T15's plan-row test inventory did not name
+  `test_the_suppression_check_would_notice_a_bad_cue` (the teeth check for the
+  new gate metric) or `test_extraction_matches_corpus_labels` (which stays as
+  T15's refusal check), so the row disagreed with the payload. Both added.
+  Merging unblocked eleven tasks: T16, T17, T18, T42, T43, T45, and behind them
+  S6, T19, T21, T44, T46, T47, T22, T20.
+- **Nothing fetches the advert page yet** — D-18 built the liveness verdict, not
+  the request. Needs T12's egress. Not seeded.
+- **The worker half of D-22 is upstream's and still open** (`claude-arsenal#175`):
+  `open_task_pr.sh` re-runs the payload gate and never the repo gate.
