@@ -97,15 +97,25 @@ def test_the_egress_check_would_notice_a_planted_leak() -> None:
     assert egress_leaks([leaked], markers) != []
 
 
-def test_a_marker_json_escaping_would_hide_is_still_found() -> None:
+@pytest.mark.parametrize(
+    "marker",
+    [
+        pytest.param('only for a "staff" role\nnot otherwise', id="quote-and-newline"),
+        pytest.param(r"C:\Users\ada\constraints", id="backslash"),
+    ],
+)
+@pytest.mark.parametrize("position", ["value", "key"])
+def test_a_marker_json_escaping_would_hide_is_still_found(marker: str, position: str) -> None:
     """JSON escapes quotes, backslashes and newlines; a raw substring scan does not.
 
     A candidate whose stated condition contains a quote is not exotic — "only for
     a 'staff' role" is an ordinary sentence — and the escaped form of it never
-    appears verbatim in the serialised payload.
+    appears verbatim in the serialised payload. Keys are scanned as well as
+    values, because a payload that carried the candidate's own words as a field
+    name would leak them just as completely.
     """
-    marker = 'only for a "staff" role\nnot otherwise'
-    payload = json.dumps({"text": _TEXT, "candidate_condition": marker})
+    body = {marker: True} if position == "key" else {"candidate_condition": marker}
+    payload = json.dumps({"text": _TEXT, **body})
     assert marker not in payload, "the fixture must actually be escaped, or it proves nothing"
     assert egress_leaks([payload], [marker]) != []
 
