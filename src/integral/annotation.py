@@ -31,6 +31,7 @@ be a second thing to keep in step with §3.4.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -224,13 +225,40 @@ def outbound_payloads(offers: list[Offer], dimensions: list[Dimension]) -> list[
     return payloads
 
 
+def _searchable(payload: str) -> list[str]:
+    """The payload as raw bytes *and* as its decoded strings.
+
+    Raw alone is not enough: JSON escapes quotes, backslashes and newlines, so a
+    stated string containing any of them would sail past a substring scan — a
+    false negative in the one check that cannot be wrong. Decoded alone is not
+    enough either: a payload that does not parse must still be scanned rather
+    than silently skipped.
+    """
+    haystacks = [payload]
+
+    def walk(node: Any) -> None:
+        if isinstance(node, str):
+            haystacks.append(node)
+        elif isinstance(node, dict):
+            for key, value in node.items():
+                haystacks.append(key)
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    with contextlib.suppress(json.JSONDecodeError):
+        walk(json.loads(payload))
+    return haystacks
+
+
 def egress_leaks(payloads: list[str], markers: list[str]) -> list[str]:
     """Every candidate string that appears in an outbound payload."""
     return sorted(
         f"payload {index}: carries {marker!r}"
         for index, payload in enumerate(payloads)
         for marker in markers
-        if marker in payload
+        if any(marker in haystack for haystack in _searchable(payload))
     )
 
 
@@ -263,7 +291,19 @@ def fixture_constraints() -> CandidateConstraints:
 
 
 def _sample_offers(limit: int = EGRESS_SAMPLE) -> list[Offer]:
-    """Real corpus adverts as offers, so the scan runs over text that is sent."""
+    """Real corpus adverts as offers, so the scan runs over text that is sent.
+
+    Refuses a short corpus rather than scanning whatever is there. A slice that
+    quietly returns four adverts still reports `annotation_profile_egress: 0`,
+    and a gate that got smaller without saying so is the one failure a privacy
+    number must not have.
+    """
+    ads = load_store()
+    if len(ads) < limit:
+        raise AnnotationError(
+            f"the egress scan needs {limit} corpus adverts to run over, and the corpus "
+            f"holds {len(ads)}"
+        )
     return [
         Offer(
             id=compute_offer_id(ad.text),
@@ -273,7 +313,7 @@ def _sample_offers(limit: int = EGRESS_SAMPLE) -> list[Offer]:
             title=ad.title or None,
             company=ad.company or None,
         )
-        for ad in load_store()[:limit]
+        for ad in ads[:limit]
     ]
 
 

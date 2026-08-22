@@ -20,6 +20,7 @@ import pytest
 from pydantic import ValidationError
 
 from integral.annotation import (
+    EGRESS_SAMPLE,
     annotate,
     egress_leaks,
     fixture_constraints,
@@ -96,6 +97,25 @@ def test_the_egress_check_would_notice_a_planted_leak() -> None:
     assert egress_leaks([leaked], markers) != []
 
 
+def test_a_marker_json_escaping_would_hide_is_still_found() -> None:
+    """JSON escapes quotes, backslashes and newlines; a raw substring scan does not.
+
+    A candidate whose stated condition contains a quote is not exotic — "only for
+    a 'staff' role" is an ordinary sentence — and the escaped form of it never
+    appears verbatim in the serialised payload.
+    """
+    marker = 'only for a "staff" role\nnot otherwise'
+    payload = json.dumps({"text": _TEXT, "candidate_condition": marker})
+    assert marker not in payload, "the fixture must actually be escaped, or it proves nothing"
+    assert egress_leaks([payload], [marker]) != []
+
+
+def test_a_payload_that_does_not_parse_is_still_scanned() -> None:
+    """Unparseable is not a reason to stop looking."""
+    markers = stated_strings(fixture_constraints())
+    assert egress_leaks([f"not json at all {markers[0]}"], markers) != []
+
+
 def test_annotation_is_recomputed_when_constraints_change(store: ProfileStore) -> None:
     """An annotation is derived: it stamps the revision it was read against."""
     offer = _offer()
@@ -128,5 +148,7 @@ def test_extraction_schema_stays_candidate_independent() -> None:
 def test_the_gate_measures_real_adverts() -> None:
     measured = measure()
     assert measured["annotation_profile_egress"] == 0
-    assert measured["outbound_payloads_scanned"] > 0
+    # The full sample, not "some": a scan that quietly got smaller still reports
+    # zero leaks, and the denominator is half of what this number means.
+    assert measured["outbound_payloads_scanned"] == EGRESS_SAMPLE
     assert measured["profile_strings_planted"] > 0
