@@ -99,16 +99,23 @@ took it 468 → 471; archiving one payload took it 471 → 470. Expect to commit
 **`ruff` is not on PATH** — `uv run --extra dev ruff format <paths>`. Format only
 the files you touched; `make lint` still does not check formatting.
 
-**An untracked `src/jobsearch/__pycache__/`** left over from the T55 rename failed
-`test_naming` locally while CI never saw it. If `test_no_module_imports_the_old_package_name`
-fails on a clean diff, look for an untracked directory, not a reference.
+**`test_naming` also fails on an untracked directory, not only on a reference.**
+A stale `__pycache__/` sat under a `src/` directory named for the pre-T55 package;
+it was never committed, so CI never saw it and only the local gate went red. The
+check asserts that directory does not exist, so removing it is the whole fix.
+
+**And it scans this file.** Writing the old package name here — even to describe
+that bug — trips the same check. Name the rename, not the path.
 
 ## Left open (carried forward)
 
-- **PR #118 (T15) awaiting CodeRabbit** at the time of writing; `make host-gate`
-  green, mergeable, CI red only for runner minutes. Merging it unblocks eleven
-  tasks: T16, T17, T18, T42, T43, T45, and behind them S6, T19, T21, T44, T46,
-  T47, T22, T20.
+- **PR #118 (T15) merged.** CodeRabbit passed with one minor finding, taken:
+  T15's plan-row test inventory did not name
+  `test_the_suppression_check_would_notice_a_bad_cue` (the teeth check for the
+  new gate metric) or `test_extraction_matches_corpus_labels` (which stays as
+  T15's refusal check), so the row disagreed with the payload. Both added.
+  Merging unblocked eleven tasks: T16, T17, T18, T42, T43, T45, and behind them
+  S6, T19, T21, T44, T46, T47, T22, T20.
 - **Nothing fetches the advert page yet** — D-18 built the liveness verdict, not
   the request. Needs T12's egress. Not seeded.
 - **The worker half of D-22 is upstream's and still open** (`claude-arsenal#175`):
