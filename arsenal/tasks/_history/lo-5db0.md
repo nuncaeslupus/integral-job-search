@@ -5,6 +5,8 @@ priority: 10
 deps: [lo-25b1]
 workspace: MATCH
 tags: [m2]
+status: merged
+issue: 55
 ---
 
 ## Acceptance gate
