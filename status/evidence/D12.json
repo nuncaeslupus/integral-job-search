@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 71,
+  "evidence_gates_read": 72,
   "gates_declaring_status_key": 2,
   "unrecordable": [],
   "readings": [
@@ -8,6 +8,14 @@
       "task": "lo-0204",
       "key": "lint_typecheck_exit_code",
       "evidence": "status/evidence/T1.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-0300",
+      "key": "annotation_profile_egress",
+      "evidence": "status/evidence/T42.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
