@@ -82,7 +82,7 @@
       "n": 8,
       "gate_state": "not_implemented",
       "gate_metric": "extraction_macro_f1 >= 0.75",
-      "gate_owner": "T15",
+      "gate_owner": "T56",
       "certifiable": false,
       "expected_exit": 3
     },

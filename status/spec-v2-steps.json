@@ -281,7 +281,7 @@
         "op": ">=",
         "threshold": 0.75,
         "state": "not_implemented",
-        "task": "T15"
+        "task": "T56"
       },
       "reentry_events": [
         "new_offers_collected",
