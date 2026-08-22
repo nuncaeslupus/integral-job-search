@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 69,
-  "gates_declaring_status_key": 1,
+  "evidence_gates_read": 71,
+  "gates_declaring_status_key": 2,
   "unrecordable": [],
   "readings": [
     {
@@ -141,6 +141,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "lo-5db0",
+      "key": "discarded_concepts",
+      "evidence": "status/evidence/T17.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "lo-5efb",
       "key": "skill_listing_budget_overage_chars",
       "evidence": "status/evidence/S10.json",
@@ -211,6 +219,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "lo-7c14",
+      "key": "ontology_hit_rate",
+      "evidence": "status/evidence/T17.json",
+      "value_is_numeric": false,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "lo-803d",

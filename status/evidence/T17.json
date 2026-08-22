@@ -1,0 +1,19 @@
+{
+  "ontology_hit_rate": null,
+  "ontology_status": "unmeasured",
+  "concepts_read": 828,
+  "mapped_concepts": 828,
+  "unmapped_concepts": 0,
+  "unmapped_concept_names": [],
+  "discarded_concepts": 0,
+  "sources": [
+    {
+      "name": "corpus/labelled/suggestions.json",
+      "concepts_read": 828,
+      "mapped": 828,
+      "unmapped": 0,
+      "unmapped_capable": false
+    }
+  ],
+  "known_dimensions": 25
+}
