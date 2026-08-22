@@ -75,21 +75,20 @@ is not caused by any diff. Do not treat a red CI here as a signal about the code
 and do not push speculative fixes for it. Diagnose once: `runner_id: 0` plus a
 sub-5-second duration means this. Remove this section once runs show real durations.
 
-**Run the gate locally instead.** These are what CI would run, and all five must
+**Run the gate locally instead.** These are what CI would run, and all four must
 pass before a merge:
 
 ```bash
-make host-gate      # all five, one command — run this
+make host-gate      # all four, one command — run this
 make lint           # ruff + strict mypy
 make test           # pytest
 make evidence       # regenerate every measurement, fail on drift
-make verify-subtree # the arsenal bundle matches its subtree
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
-reached by it — so a sixth line added above cannot quietly go unrun (D-22).
+reached by it — so a fifth line added above cannot quietly go unrun (D-22).
 Note `make gate` is a different thing: it records T1's lint exit code, one
 check, and is not the repo gate.
 

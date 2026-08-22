@@ -298,20 +298,20 @@ def test_the_cli_prints_the_budget_in_force_and_its_source() -> None:
     assert f"above upstream's {UPSTREAM_DEFAULT_BUDGET_CHARS}-char default" in result.stderr
 
 
-def test_nothing_under_vendor_was_patched_to_achieve_this() -> None:
-    """The sequence S10's payload forbids short-cutting: a subtree edit works
-    perfectly until the next `git subtree pull` reverts it, silently."""
-    upstream = (
-        REPO_ROOT
-        / "vendor"
-        / "claude-arsenal"
-        / "plugins"
-        / "skill-creator"
-        / "skills"
-        / "skill-creator"
-        / "scripts"
-        / "audit_library.py"
-    )
-    assert f"LISTING_BUDGET_CHARS = {UPSTREAM_DEFAULT_BUDGET_CHARS}" in upstream.read_text(
-        encoding="utf-8"
-    )
+def test_nothing_upstream_was_patched_to_achieve_this() -> None:
+    """S10's payload forbids short-cutting the budget by editing upstream.
+
+    It used to read the vendored auditor and assert its constant was untouched.
+    T58 removed the vendored tree — upstream is installed from the marketplace
+    now — so there is no longer a copy here to patch, and `arsenal_source`'s
+    `vendored_upstream_files == 0` is what asserts that. What survives from this
+    test is the half that is still ours to hold: the budget in force is declared
+    in `arsenal/config.toml`, not fitted to whatever the library happens to
+    measure.
+    """
+    from integral.arsenal_source import measure as arsenal_measure
+
+    assert arsenal_measure()["vendored_upstream_files"] == 0
+    reading = measure()
+    assert reading["budget_source"] == "config"
+    assert reading["listing_budget_chars"] % 1000 == 0
