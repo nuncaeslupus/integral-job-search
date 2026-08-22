@@ -31,7 +31,6 @@ from pathlib import Path
 
 import pytest
 
-from integral.plugin_path import PluginNotInstalled, resolve
 from integral.skill_budget import (
     BUDGET_GRANULARITY,
     CONFIG_KEY,
@@ -54,16 +53,25 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = REPO_ROOT / "status" / "evidence" / "S10.json"
 
 
-def _audit_script() -> Path:
-    """Upstream's auditor, from the installed plugin rather than the working tree.
-
-    T58 moved it there with the rest of the arsenal skills, and v1.0.0 renamed
-    `skill-creator` to `skill-workshop`. A machine without the plugin skips this
-    cross-check rather than failing it: the check is that our formula still
-    agrees with upstream's, and there is nothing to disagree with when upstream
-    is not installed.
-    """
-    return resolve("skill-workshop", "skills/skill-workshop/scripts/audit_library.py")
+# `skill-workshop` is a separate plugin and `/init` vendors only `core`'s
+# skills, so upstream's auditor is not in this working tree. It is resolved from
+# the marketplace clone, which every machine that ran `/init` has — and the
+# cross-check skips rather than fails where it is absent, because the check is
+# that our formula still agrees with upstream's and there is nothing to disagree
+# with when upstream is not there at all.
+AUDIT = (
+    Path.home()
+    / ".claude"
+    / "plugins"
+    / "marketplaces"
+    / "claude-arsenal"
+    / "plugins"
+    / "skill-workshop"
+    / "skills"
+    / "skill-workshop"
+    / "scripts"
+    / "audit_library.py"
+)
 
 
 def write_skill(root: Path, name: str, description: str) -> None:
@@ -107,25 +115,13 @@ def test_committed_evidence_was_measured_against_the_declared_budget() -> None:
     assert json.loads(EVIDENCE.read_text(encoding="utf-8"))["budget_source"] == "config"
 
 
-def test_the_evidence_still_reports_the_reading_against_upstreams_default() -> None:
-    """The comparison stays; the direction it used to assert does not.
-
-    S10 raised the cap to 13,000 because the library was over upstream's 8,000
-    deliberately, and this asserted `> 0` so that fact could not go invisible.
-    T58 moved the nineteen arsenal skills to the marketplace, and what is left
-    is the fourteen this repo owns — 3,671 chars, comfortably *under* upstream's
-    default. The overage is 0 because the skills it was about left, not because
-    anything was trimmed, so asserting `> 0` now would only pass while something
-    was wrong.
-
-    What must not go invisible is the comparison itself, so the reading is still
-    recorded and still checked against upstream's number. The other half of the
-    listing — the plugins — is budgeted by upstream's own `make audit`.
-    """
+def test_the_evidence_still_reports_the_overage_against_upstreams_default() -> None:
+    """We are over upstream's 8,000 deliberately. Raising our own cap must not
+    make that fact invisible — it is the number the next person needs to decide
+    whether the decision still holds."""
     committed = json.loads(EVIDENCE.read_text(encoding="utf-8"))
     assert committed["upstream_default_budget_chars"] == UPSTREAM_DEFAULT_BUDGET_CHARS
-    assert committed["overage_against_upstream_default"] == 0
-    assert committed["description_chars_total"] < UPSTREAM_DEFAULT_BUDGET_CHARS
+    assert committed["overage_against_upstream_default"] > 0
 
 
 # ---------------------------------------------------------------------------
@@ -133,18 +129,10 @@ def test_the_evidence_still_reports_the_reading_against_upstreams_default() -> N
 
 
 def test_the_declared_budget_is_a_number_somebody_chose() -> None:
-    """Round, and above what the library measures — not above upstream's default.
-
-    It used to assert `> UPSTREAM_DEFAULT_BUDGET_CHARS`, which held only while
-    this repo carried the nineteen vendored arsenal skills. T58 moved those to
-    the marketplace and the fourteen that remain fit inside upstream's 8,000, so
-    that comparison would now pin the budget *higher* than the library needs —
-    the opposite of what S10 is for. What makes the number "one somebody chose"
-    is that it is round and leaves room, which is what this asserts.
-    """
     declared, source = configured_budget()
     assert source == "config"
     assert declared % BUDGET_GRANULARITY == 0
+    assert declared > UPSTREAM_DEFAULT_BUDGET_CHARS
     assert declared > measure()["description_chars_total"]
 
 
@@ -216,12 +204,10 @@ def test_an_unusable_budget_is_refused_rather_than_guessed_at() -> None:
 def test_the_measurement_agrees_with_the_upstream_audit() -> None:
     """The per-skill formula is upstream's, mirrored. If it changes there, this
     fails here — rather than leaving two numbers nobody compares."""
-    try:
-        audit = _audit_script()
-    except PluginNotInstalled as exc:
-        pytest.skip(f"skill-workshop@claude-arsenal is not resolvable: {exc}")
+    if not AUDIT.is_file():
+        pytest.skip(f"upstream's auditor is not on this machine: {AUDIT}")
     result = subprocess.run(
-        [sys.executable, str(audit), str(DEFAULT_SKILLS_DIR)],
+        [sys.executable, str(AUDIT), str(DEFAULT_SKILLS_DIR)],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
@@ -332,28 +318,27 @@ def test_the_cli_prints_the_budget_in_force_and_its_source() -> None:
     )
     assert result.returncode == 0
     assert f"listing budget: {configured_budget()[0]} chars (config)" in result.stderr
-    # Printed only when the library is actually over upstream's default, which
-    # it stopped being when the arsenal skills left (T58). Asserting it
-    # unconditionally would make this test pass only while that was true.
-    over = measure()["overage_against_upstream_default"]
-    line = f"above upstream's {UPSTREAM_DEFAULT_BUDGET_CHARS}-char default"
-    assert (line in result.stderr) is bool(over)
+    assert f"above upstream's {UPSTREAM_DEFAULT_BUDGET_CHARS}-char default" in result.stderr
 
 
 def test_nothing_upstream_was_patched_to_achieve_this() -> None:
     """S10's payload forbids short-cutting the budget by editing upstream.
 
-    It used to read the vendored auditor and assert its constant was untouched.
-    T58 removed the vendored tree — upstream is installed from the marketplace
-    now — so there is no longer a copy here to patch, and `arsenal_source`'s
-    `vendored_upstream_files == 0` is what asserts that. What survives from this
-    test is the half that is still ours to hold: the budget in force is declared
-    in `arsenal/config.toml`, not fitted to whatever the library happens to
-    measure.
+    It used to read the vendored *subtree*'s auditor and assert its constant was
+    untouched — a copy that a `git subtree pull` would silently revert. T58
+    removed the subtree, so that copy is gone and `arsenal_source`'s
+    `upstream_subtree_files == 0` is what asserts it stays gone.
+
+    The vendored **skills** under `.claude/skills/` are a different thing and are
+    supposed to be here, but the same rule applies to them: `/init` overwrites
+    any folder carrying `.arsenal-vendored`, so a budget won by editing one would
+    last exactly until the next refresh. What this asserts is the half that is
+    ours to hold — the budget in force is declared in `arsenal/config.toml`, not
+    fitted to whatever the library happens to measure.
     """
     from integral.arsenal_source import measure as arsenal_measure
 
-    assert arsenal_measure()["vendored_upstream_files"] == 0
+    assert arsenal_measure()["upstream_subtree_files"] == 0
     reading = measure()
     assert reading["budget_source"] == "config"
     assert reading["listing_budget_chars"] % 1000 == 0

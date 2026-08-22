@@ -1,21 +1,31 @@
-"""T58 — upstream is installed, not vendored.
+"""T58 — no subtree; the skills are vendored, and that is the point.
 
-`claude-arsenal` v1.0.0 is a Claude Code marketplace. Its two plugins live in
-`~/.claude/plugins/cache/`, installed once per machine, so this repository
-carries no copy of upstream's tree and has nothing to pull, re-vendor or verify.
+Two things that sound alike are held apart here, and getting them the wrong way
+round is what this module exists to prevent.
 
-What it does still carry is the assembled bundle under `claude-arsenal/` — every
-protocol step calls into it, and upstream's own session protocol prescribes it.
-That is not a vendored tree: it is generated, and `init.py` out of the installed
-`core` plugin refreshes it on turn one of every session. The distinction this
-module measures is exactly that one.
-
-The failure it guards is re-vendoring by reflex. A subtree pull whose squash
-merge drops the `git-subtree-split:` trailer replays from a stale base and
+**The subtree is gone.** `vendor/claude-arsenal` was a copy of upstream's whole
+repository, maintained by `git subtree pull`. A squash merge drops the
+`git-subtree-split:` trailer, so the next pull replays from a stale base and
 conflicts on files that carry no local edits by construction; the standing
 resolution was "take upstream's tree verbatim", a ceremony performed every
-upgrade to reconcile a copy nobody edits. Removing the tree removed the class,
-and this keeps it removed.
+upgrade to reconcile a copy nobody edits. `/init` writes what this repo needs
+now, so there is nothing to pull and nothing to reconcile.
+
+**The skills are vendored on purpose, and must stay that way.** `/init` at
+v2.0.0 copies upstream's skills into `.claude/skills/` and marks each with
+`.arsenal-vendored`. That is not the old duplication: it is the only thing that
+works on every surface. A cloud session — Claude Code on the web, `claude
+--cloud`, the apps, routines — runs on a fresh clone on another machine, never
+sees `~/.claude/`, and **does not install plugins the repo asks for**. Upstream
+verified that against a live session rather than inferring it from docs
+(`claude-arsenal#200`): with a correct declaration committed and the tag
+reachable from inside the sandbox, `known_marketplaces.json` was absent and
+`installed_plugins.json` empty. What a cloud session loads is what was
+committed.
+
+So the count that must be zero is the **subtree**, and the count that must be
+non-zero is the **vendored skills**. Both are reported, because "we removed the
+tree" and "we removed the skills" would otherwise be the same clean zero.
 """
 
 from __future__ import annotations
@@ -34,9 +44,14 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T58.json"
 #: is a prefix it can guess wrong.
 VENDOR_PREFIX = "vendor/"
 
-#: The machinery a re-vendoring would need. Reported beside the count so a
-#: reviewer can see the removal is complete rather than take the zero on trust.
+#: The machinery a subtree would need. Reported beside the count so a reviewer
+#: can see the removal is complete rather than take the zero on trust.
 SUBTREE_MARKERS = ("git subtree", "verify-subtree", "arsenal-upgrade", "update-skills")
+
+#: `/init` stamps this into every skill folder it owns. It is what lets the
+#: vendoring be counted without guessing which skills are upstream's — and what
+#: lets `/init` leave a skill this repo authored alone.
+VENDOR_MARKER = ".arsenal-vendored"
 
 
 class ArsenalSourceError(Exception):
@@ -72,14 +87,26 @@ def subtree_machinery(makefile: Path | None = None) -> list[str]:
     return [marker for marker in SUBTREE_MARKERS if marker in text]
 
 
+def vendored_skills(root: Path = _REPO_ROOT) -> list[str]:
+    """The skill folders `/init` owns, by their marker rather than by a name list."""
+    skills = root / ".claude" / "skills"
+    if not skills.is_dir():
+        return []
+    return sorted(d.name for d in skills.iterdir() if (d / VENDOR_MARKER).is_file())
+
+
 def measure(root: Path = _REPO_ROOT) -> dict[str, Any]:
     """T58's gate."""
     files = tracked_files(root)
     vendored = vendored_files(files)
     machinery = subtree_machinery()
+    skills = vendored_skills(root)
     return {
-        "vendored_upstream_files": len(vendored),
-        "vendored": vendored[:20],
+        "upstream_subtree_files": len(vendored),
+        "subtree_paths": vendored[:20],
+        # Non-zero on purpose. A cloud session installs no plugins, so skills
+        # that are not committed do not exist there at all.
+        "vendored_skills": len(skills),
         "subtree_machinery_in_makefile": machinery,
         # The bundle is generated, not vendored, and it must survive: every
         # protocol step calls into it. Counted so "we removed the tree" cannot
@@ -97,14 +124,22 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
 
 
 def _main(argv: list[str]) -> int:
-    """Write T58's gate evidence. Exit 1 if upstream is vendored here again."""
+    """Write T58's gate evidence. Exit 1 on a subtree, or on skills that are not committed."""
     args = [arg for arg in argv[1:] if not arg.startswith("--")]
     measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
-    if measured["vendored_upstream_files"]:
+    if measured["upstream_subtree_files"]:
         print(
-            f"vendored_upstream_files: {measured['vendored_upstream_files']} tracked file(s) "
-            f"under {VENDOR_PREFIX!r} — upstream is installed from the marketplace here, "
-            "not vendored.",
+            f"upstream_subtree_files: {measured['upstream_subtree_files']} tracked file(s) "
+            f"under {VENDOR_PREFIX!r} — `/init` writes what this repo needs; there is no "
+            "subtree to maintain.",
+            file=sys.stderr,
+        )
+        return 1
+    if not measured["vendored_skills"]:
+        print(
+            "vendored_skills: 0 — `.claude/skills/` carries no `/init`-owned skill. A cloud "
+            "session installs no plugins, so uncommitted skills do not exist there. "
+            "Run `/init`.",
             file=sys.stderr,
         )
         return 1

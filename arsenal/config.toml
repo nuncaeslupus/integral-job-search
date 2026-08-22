@@ -57,5 +57,5 @@ session-end = "handoff"
 # (claude-arsenal#143 asks it to read this key), which is why it reports a
 # listing-budget finding here by design; the total it prints is the number our
 # own measurement is asserted against.
-listing-budget = 5000
+listing-budget = 11000
 queue-automation = true

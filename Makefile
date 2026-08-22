@@ -71,11 +71,6 @@ ci: host-gate  ## everything CI runs — the same four, by one name
 # leaves a reviewer annotating text that has changed underneath them — and
 # nothing fails. `test_regenerating_the_reader_produces_no_diff` catches it;
 # this is the one-line fix it tells you to run.
-# The generator lives in the installed `core` plugin, not in the working tree —
-# T58 moved the arsenal skills to the marketplace. integral.plugin_path reads the
-# registered install rather than globbing the cache, which holds every version
-# ever fetched including ones the loader refused, and fails with a message
-# naming what to install rather than an empty string make would treat as a path.
 READER_NAME ?= Job Search — Specification v2
 
 # Regenerating both on every edit stamps a fresh date into the one you did not
@@ -85,11 +80,11 @@ READER_NAME ?= Job Search — Specification v2
 reader: reader-process reader-steps  ## regenerate both annotatable spec readers
 
 reader-process:  ## regenerate the process-spec reader only
-	uv run --with markdown python3 $$(uv run python -m integral.plugin_path core skills/specify/scripts/create_reader.py) \
+	uv run --with markdown python3 .claude/skills/specify/scripts/create_reader.py \
 		--input status/spec-v2-process.md --output-dir docs/spec-v2 --name "$(READER_NAME)"
 
 reader-steps:  ## regenerate the step-spec reader only
-	uv run --with markdown python3 $$(uv run python -m integral.plugin_path core skills/specify/scripts/create_reader.py) \
+	uv run --with markdown python3 .claude/skills/specify/scripts/create_reader.py \
 		--input status/spec-v2-steps.md --output-dir docs/spec-v2-steps --name "$(READER_NAME)"
 
 clean:  ## remove build and tool caches

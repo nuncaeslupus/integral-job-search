@@ -49,12 +49,13 @@ over `handle_sync.py`'s proposals — only one of the two is wired to an action.
 same reason `pyproject.toml` excludes them from ruff and mypy: they are not ours to
 change. Search one deliberately with `rg -u --no-ignore-vcs`.
 
-**The arsenal skills are not in this repository.** They come from the `core` and
-`skill-workshop` plugins under `~/.claude/plugins/`, so `.claude/skills/` holds
-only the fourteen this repo owns. A script inside one is resolved with
-`uv run python -m integral.plugin_path <plugin> <path>` — never a literal path,
-and never a glob over the plugin cache, which also holds versions the loader
-refused.
+**The arsenal skills are committed here, and that is deliberate.** `/init`
+vendors them into `.claude/skills/` and marks each with `.arsenal-vendored`;
+your own skills are left alone. Do not replace them with a plugin declaration:
+a cloud session runs on a fresh clone, never sees `~/.claude/`, and **installs
+no plugins the repo asks for** — upstream verified that against a live session
+(`claude-arsenal#200`). What a cloud session loads is what was committed. Refresh
+them by re-running `/init`, never by hand-editing a vendored file.
 
 **The corpus is not excluded, and it is the expensive one.** A line of
 `corpus/{raw,labelled}/ads.jsonl` is a whole advert — the longest is 15,640

@@ -62,7 +62,7 @@
     },
     {
       "task": "lo-3e91",
-      "key": "vendored_upstream_files",
+      "key": "upstream_subtree_files",
       "evidence": "status/evidence/T58.json",
       "value_is_numeric": true,
       "declares_status_key": false,

@@ -1,15 +1,100 @@
 {
   "skill_listing_budget_overage_chars": 0,
-  "listing_budget_chars": 5000,
+  "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 3958,
-  "skills_counted": 14,
-  "headroom_chars": 1042,
+  "description_chars_total": 9231,
+  "skills_counted": 31,
+  "headroom_chars": 1769,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 0,
+  "overage_against_upstream_default": 1231,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
+    {
+      "skill": "continue",
+      "description_chars": 245,
+      "listing_chars": 257
+    },
+    {
+      "skill": "coverage-gaps",
+      "description_chars": 436,
+      "listing_chars": 453
+    },
+    {
+      "skill": "dep-upgrade",
+      "description_chars": 399,
+      "listing_chars": 414
+    },
+    {
+      "skill": "design",
+      "description_chars": 257,
+      "listing_chars": 267
+    },
+    {
+      "skill": "execution",
+      "description_chars": 219,
+      "listing_chars": 232
+    },
+    {
+      "skill": "gate-check",
+      "description_chars": 384,
+      "listing_chars": 398
+    },
+    {
+      "skill": "github",
+      "description_chars": 383,
+      "listing_chars": 393
+    },
+    {
+      "skill": "init",
+      "description_chars": 246,
+      "listing_chars": 254
+    },
+    {
+      "skill": "mutmut-report",
+      "description_chars": 379,
+      "listing_chars": 396
+    },
+    {
+      "skill": "pypi-release",
+      "description_chars": 341,
+      "listing_chars": 357
+    },
+    {
+      "skill": "python-bootstrap",
+      "description_chars": 357,
+      "listing_chars": 377
+    },
+    {
+      "skill": "queue-add",
+      "description_chars": 109,
+      "listing_chars": 122
+    },
+    {
+      "skill": "queue-status",
+      "description_chars": 181,
+      "listing_chars": 197
+    },
+    {
+      "skill": "review",
+      "description_chars": 204,
+      "listing_chars": 214
+    },
+    {
+      "skill": "session-end",
+      "description_chars": 458,
+      "listing_chars": 473
+    },
+    {
+      "skill": "ship",
+      "description_chars": 195,
+      "listing_chars": 203
+    },
+    {
+      "skill": "specify",
+      "description_chars": 255,
+      "listing_chars": 266
+    },
     {
       "skill": "step-00-identify",
       "description_chars": 276,

@@ -9,64 +9,72 @@ bundle, when adding a skill, when parking a task — so it is a file to open, ne
 an import. This is the same split `claude-arsenal/AGENTS.md` makes with its
 `references/` directory, and for the same reason.
 
-## Installing and updating the arsenal plugins
+## Installing and updating claude-arsenal
 
-Upstream is a Claude Code **marketplace**, not a vendored tree (T58). There is
-nothing in this repository to pull or verify; the plugins live under
-`~/.claude/plugins/` and are managed from inside a session:
+**The skills live in this repo, committed.** That is what makes them work
+everywhere. A cloud session — Claude Code on the web, `claude --cloud`, the apps,
+routines — runs on a fresh clone on another machine, never reads your
+`~/.claude/`, and does not install plugins your repository asks for. Upstream
+verified that against a live session rather than inferring it from docs
+(`claude-arsenal#200`): with a correct declaration committed, the marketplace
+public and the pinned tag returning 200 from inside the sandbox,
+`known_marketplaces.json` was absent and `installed_plugins.json` empty.
 
-```text
-/plugin marketplace add github:nuncaeslupus/claude-arsenal
-/plugin install skill-workshop@claude-arsenal   # first — its hook gates skill edits
-/plugin install core@claude-arsenal
-```
-
-**Updating takes two commands, and the first is the one that gets forgotten.**
-`/plugin update claude-arsenal` re-reads the marketplace clone; it does not
-refresh it. If that clone is behind, the update re-installs what is already
-there and reports nothing:
+`/init` is the whole update. It vendors the skills into `.claude/skills/`,
+refreshes `claude-arsenal/`, and wires the skill-edit gate into
+`.claude/settings.json`.
 
 ```text
-/plugin marketplace update claude-arsenal
-/plugin update claude-arsenal
+/plugin marketplace update claude-arsenal   # refresh the clone FIRST
+/plugin update claude-arsenal               # then the plugin
+/init
 ```
 
-**A failed install leaves the old version registered and says so only once.**
-v1.0.0 shipped `plugins/core` with a bare-string `author` where the loader wants
-an object, so `core` would not register and the consumer stayed on whatever they
-had — 0.1.0, from months earlier, missing `init`, `continue`, `queue-add`,
-`queue-status` and `gate-check` entirely. Check what is actually registered
+No plugin on this machine? The same script runs straight from a clone, which is
+also the way to pin a version deliberately:
+
+```bash
+git clone --depth 1 --branch v2.0.0 https://github.com/nuncaeslupus/claude-arsenal.git /tmp/arsenal
+python3 /tmp/arsenal/plugins/core/skills/init/scripts/init.py --repo-path .
+```
+
+Then commit — `/init` writes, it does not commit.
+
+**Two failure modes, both silent, both hit here on 2026-08-22.**
+
+`/plugin update` re-reads the marketplace clone; it does not refresh it. With a
+stale clone it re-installs what is already there and reports nothing. And a
+failed install leaves the **old** version registered: v1.0.0 shipped
+`plugins/core` with a bare-string `author` where the loader wants an object, so
+`core` would not register and this machine sat on 0.1.0 from months earlier —
+missing `init`, `continue`, `queue-add`, `queue-status` and `gate-check`
+entirely — while the marketplace looked healthy. Check what is *registered*
 rather than what you asked for:
 
 ```bash
 python3 -c "import json,pathlib;d=json.load(open(pathlib.Path.home()/'.claude/plugins/installed_plugins.json'));print({k:[e['version'] for e in v] for k,v in d['plugins'].items() if 'arsenal' in k})"
 ```
 
-That bug is fixed upstream in v1.0.1 along with `make validate-manifests`, which
-now refuses a manifest the loader would reject before it can be tagged.
+Fixed upstream in v1.0.1 along with `make validate-manifests`, which now refuses
+a manifest the loader would reject before it can be tagged.
 
 **After any update, run `make reader` and `make evidence`.** An update can change
 `create_reader.py`, which leaves the generated spec readers stale. Both are
-caught by the suite — the point is that they are *expected* after an update, and
-are fixed with the repo's own tooling, never by hand.
-
-**Never reference a plugin file by a literal path.** Use
-`uv run python -m integral.plugin_path <plugin> <relative-path>`. It reads
-`installed_plugins.json`, so it returns the version that is actually registered;
-the plugin cache also holds every version ever fetched, including ones the
-loader refused, and a glob for "the newest directory" will happily return one of
-those.
+caught by the suite — the point is that they are *expected*, and are fixed with
+the repo's own tooling, never by hand. Use `reader-steps` or `reader-process`
+rather than `reader` unless you changed both: `reader` stamps a fresh date into
+the document you did not touch.
 
 ## The skill listing budget lives in `arsenal/config.toml`
 
 `listing-budget = 13000` (S10). `integral.skill_budget` and `skill-creator`'s
 `audit_library.py` both read that key since v0.33.0 (`claude-arsenal#143`).
 
-`listing-budget = 5000` since T58, and the number covers **this repository's
-fourteen skills only** — the thirteen step skills plus `test-mode`. The nineteen
-arsenal skills that used to sit beside them are plugins now, and upstream
-budgets its own with `make audit`. The library measures 3,958 chars with 1,042
-spare.
+`listing-budget = 11000` since T58 — down from 13,000, because v2.0.0 trimmed
+seven oversized descriptions and dropped `lsp-setup` and the old `skill-creator`.
+The library measures 9,231 chars over 31 skills with 1,769 spare, which is the
+same headroom discipline S10 chose originally (~5 more skills), not the tightest
+legal number.
 
 `integral.skill_budget` is the gate: it refuses a budget that is not a round
 multiple of 1,000 or that leaves under 400 chars of headroom, and reports `-1` —
@@ -75,9 +83,7 @@ back, or was fitted to the measurement. **Do not silence it by raising the
 number.**
 
 The listing is resident context on every turn, and a new skill's `description` is
-paid for in every session including the ones that never load it. Note the *total*
-a session pays is still the host's fourteen plus every installed plugin's — this
-gate covers the half this repository controls, which is the half it can fix.
+paid for in every session including the ones that never load it.
 
 ## Parking a task needs the `arsenal:cancelled` label
 
