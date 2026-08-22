@@ -1,16 +1,16 @@
-# Session handover — 2026-08-22 (D-12 merged; T15 done, open in PR #118)
+# Session handover — 2026-08-22 (D-12 and T15 both merged; T56 seeded)
 
 ## Board
 
 - **D-12 (`t-e1ca8374`, #83) merged** as PR #116 → `bcaf87c`. Issue closed, task
   archived. This is the one that had been held for an owner decision.
-- **T15 (`lo-25b1`, #52) is done and open in PR #118**, archived to `_history/`
-  with `status: merged` and `Closes #52` in both the commit message and the PR
-  body. It closes and unblocks by itself on merge.
+- **T15 (`lo-25b1`, #52) merged** as PR #118. Issue closed, task archived,
+  claim released. It needed no new code — the extractor had been complete since
+  2026-08-20 and only its gate held it open.
 - **T56 (`lo-6f53`) is new**, with issue **#117** created by hand — Actions has
   no runner minutes, so `arsenal-queue.yml` cannot open handles. Check for
   missing handles with `handle_sync.py` after every session that adds a task.
-- Board after #116: 92 tasks, 67 merged. #118 makes it 68.
+- Board after both: 92 tasks, 67 merged, 8 open, 15 blocked (was 19).
 - One pre-existing flag, unchanged: mixed-priority-convention — 23 tasks on the
   size scale [10, 5, 1, 0] and 2 on other values [70, 60].
 
@@ -109,13 +109,12 @@ that bug — trips the same check. Name the rename, not the path.
 
 ## Left open (carried forward)
 
-- **PR #118 (T15) merged.** CodeRabbit passed with one minor finding, taken:
-  T15's plan-row test inventory did not name
-  `test_the_suppression_check_would_notice_a_bad_cue` (the teeth check for the
-  new gate metric) or `test_extraction_matches_corpus_labels` (which stays as
-  T15's refusal check), so the row disagreed with the payload. Both added.
-  Merging unblocked eleven tasks: T16, T17, T18, T42, T43, T45, and behind them
-  S6, T19, T21, T44, T46, T47, T22, T20.
+- **T15's merge freed the queue.** It has **15** live transitive dependents,
+  four of them ready now — **T16** (negation), **T17** (`ontology_hit_rate`),
+  **T42** (local annotation), **T45** (CV/letter generation) — and eleven still
+  behind other deps: T18, T19, T20, T21, T22, T43, T44, T46, T47, S6, D-17.
+  The selector returns T17. (D-12's payload said "fifteen" but listed fourteen;
+  the missing one is D-17.)
 - **Nothing fetches the advert page yet** — D-18 built the liveness verdict, not
   the request. Needs T12's egress. Not seeded.
 - **The worker half of D-22 is upstream's and still open** (`claude-arsenal#175`):
