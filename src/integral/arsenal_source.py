@@ -81,7 +81,6 @@ def measure(root: Path = _REPO_ROOT) -> dict[str, Any]:
         "vendored_upstream_files": len(vendored),
         "vendored": vendored[:20],
         "subtree_machinery_in_makefile": machinery,
-        "tracked_files": len(files),
         # The bundle is generated, not vendored, and it must survive: every
         # protocol step calls into it. Counted so "we removed the tree" cannot
         # be confused with "we removed the bundle".
