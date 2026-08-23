@@ -19,21 +19,33 @@ PR #132 ("one priority scale on the board") is not from this session.
 
 ## The thing worth carrying forward
 
-**Check robots.txt before choosing a board, not after building against it.**
+**Read the whole robots.txt, not the block that confirms your first reading.**
 
-T12 was most of the way to a connector on tecnoempleo.com before its robots.txt was
-read. It names `ClaudeBot`, `Claude`, `anthropic-ai`, `Claude-Web`, `Claude-SearchBot`
-and `AnthropicBot`, each with `Disallow: /`. The recordings were deleted and the board
-switched. `remoteok.com` blanket-blocks `ClaudeBot` too.
+T12 was most of the way to a connector on tecnoempleo.com when its robots.txt was read;
+the recordings were deleted and the board switched. That switch was fine, but the reason
+recorded for it was **wrong**, and it stayed wrong in three documents for a day.
 
-This is not a T12 detail. **`tools/collect_ads.py` still has `from_tecnoempleo` and
-`from_remoteok` adapters, and 53 of the corpus's committed ads came from tecnoempleo**
-(T4b, long before this session). Nothing was changed about that here — removing 53 ads
-and a source adapter is the repo owner's call, not a worker's. It needs a decision:
+tecnoempleo names `ClaudeBot`, `Claude`, `anthropic-ai`, `Claude-Web`, `Claude-SearchBot`
+and `AnthropicBot` with `Disallow: /` — and its `User-agent: *` block disallows four
+specific paths, **none of them the job listings**. Bingbot gets a `Crawl-delay`, not a
+refusal. remoteok is the same shape, and its own comment is explicit that those crawlers
+may "crawl and cite public job listings". The rule is about **who is asking**, not about
+the paths. Reading the named block and stopping turned "AI crawlers excluded" into
+"the board says no", which is not what either file says.
 
-1. leave it (the ads are already collected; the block post-dates the collection), or
-2. drop both adapters and re-collect those 53 from permitted boards, or
-3. keep the adapters but stop running them.
+What followed from getting it right (PR #138, 2026-08-24):
+
+- `tools/collect_ads.py` sent a **Chrome user-agent string**, and had since T4b. robots.txt
+  is addressed to whoever the client says it is, so that was evasion, not compliance — and
+  it bought nothing, since `*` allowed those paths all along. It now sends
+  `integral-job-search/0.1 (+<repo url>)`.
+- `src/integral/robots.py` (stdlib-only, like `integral.corpus`) decides every fetch inside
+  `get()`, the single fetch path. An unreadable robots.txt refuses; only a 404 permits.
+- All eight collector URLs verified ALLOW as the new agent, tecnoempleo and remoteok included.
+
+**Still the owner's call**: `from_tecnoempleo` and `from_remoteok` stay in the collector, and
+the 53 committed tecnoempleo ads stay in the corpus. Both are on permitted paths, so there
+is no longer a compliance reason to remove them — only a preference, if the owner has one.
 
 Whichever way, `connectors/trabajos_es/meta.yaml` shows the shape of the check that
 would have caught it: `policy.robots_txt: respected` is a field a package must assert,
