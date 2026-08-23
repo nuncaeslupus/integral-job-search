@@ -32,6 +32,43 @@ were declined with reasons posted to the PR:
 - *"remove the stale failing-command paragraph"* — arsenal template text, carried into
   every archive including `_history/lo-b422.md`. Editing one copy makes drift, not less.
 
+## Also carried forward — read the whole robots.txt, not the block that confirms you
+
+T12 was most of the way to a connector on tecnoempleo.com when its robots.txt was read;
+the recordings were deleted and the board switched. The switch was fine; the **reason
+recorded for it was wrong**, and it stayed wrong in three documents for a day.
+
+tecnoempleo names `ClaudeBot`, `Claude`, `anthropic-ai`, `Claude-Web`, `Claude-SearchBot`
+and `AnthropicBot` with `Disallow: /` — and its `User-agent: *` block disallows four
+specific paths, **none of them the job listings**. Bingbot gets a `Crawl-delay`, not a
+refusal. remoteok is the same shape and says outright that those crawlers may "crawl and
+cite public job listings". The rule is about **who is asking**, not about the paths.
+Reading the named block and stopping turned "AI crawlers excluded" into "the board says
+no", which is not what either file says.
+
+What followed (PR #138):
+
+- `tools/collect_ads.py` had sent a **Chrome user-agent string** since T4b. robots.txt is
+  addressed to whoever the client says it is, so that was evasion, not compliance — and it
+  bought nothing, since `*` allowed those paths all along.
+- `src/integral/robots.py` (stdlib-only, like `integral.corpus`) decides every fetch inside
+  `get()`. An unreadable robots.txt refuses; only a 404 permits.
+- CodeRabbit then found the hole in it: `requests` follows redirects itself, so the check
+  saw the first URL and the fetch returned the last. Redirects are now followed by hand,
+  one hop at a time, each asking that origin's own rules.
+
+**Still the owner's call**: `from_tecnoempleo`/`from_remoteok` and the 53 committed
+tecnoempleo ads stay. Both are on permitted paths, so there is no compliance reason to
+remove them — only a preference.
+
+## A fixture can publish the recording machine's own IP
+
+`trabajos.com` stamps the *client's* address into every response
+(`<!-- IP: … - CODPAIS:100 -->`). Saved verbatim, the fixture published a home IP — here
+and in the public `integral-connectors` repo it is copied into. Redacted in both, that
+repo's history rewritten, and `tests/test_connector_contract.py` now refuses an IPv4
+literal in **any** fixture, because the next board will write it somewhere else.
+
 ## The thing worth carrying forward
 
 **A regulariser will answer a question the data cannot, and say nothing about it.**
@@ -118,7 +155,7 @@ GitHub Actions is still out of runner minutes: `runner_id: 0`, empty `runner_nam
 ending in 3–6 seconds. Red CI here says nothing about the code. `make host-gate` locally is
 the real gate.
 
-**Do not work in `/home/ivant/dev/job-search` itself.** Another session lives there and the
+**Do not work in the primary checkout itself** (`~/dev/`, the clone without a `-wt` suffix). Another session lives there and the
 branch moves under you — it went `task/lo-1af2` → `task/lo-277b` → `connectors-sources-repo`
 during this session, and an edit of mine was silently overwritten inside forty seconds. Cut
 a `git worktree` off `origin/main` per task and remove it when the PR merges.

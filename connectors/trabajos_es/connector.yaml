@@ -1,0 +1,68 @@
+# Trabajos.com — the first connector in this library pointed at a real board.
+# `examplejobs_es` is a worked example against a fictitious site; this one is
+# read from markup somebody else controls, which is the whole point of T12.
+#
+# Why this board. Every other board the corpus collector already reads was
+# ruled out, and the reasons are worth recording because they will come up
+# again:
+#
+#   tecnoempleo.com   robots.txt names `ClaudeBot`, `Claude`, `anthropic-ai`,
+#                     `Claude-Web`, `Claude-SearchBot` and `AnthropicBot` with
+#                     `Disallow: /`. `meta.yaml` here has to assert
+#                     `robots_txt: respected`; against that board it would be a
+#                     false statement.
+#   remoteok.com      same — a blanket `Disallow: /` for `ClaudeBot`.
+#   weworkremotely,   permitted, but their listings are not in the served HTML:
+#   remotive,         they are JSON APIs or JavaScript applications, and this
+#   getmanfred,       engine matches CSS selectors against markup. There is
+#   feinaactiva,      nothing on the page for a selector to find.
+#   EURES
+#
+# trabajos.com serves its listings server-rendered, and its robots.txt
+# disallows four specific paths (none of them these) with no AI-agent rule.
+site: trabajos
+locale: es
+version: "1.0.0"
+last_verified: "2026-08-23"
+# Listings are public; reading them needs no account.
+auth: none
+
+list:
+  # ponytail: one page, deliberately. The board pages by *offset* —
+  # `&DESDE=41`, `&DESDE=81`, forty at a time — and `Pagination` can only
+  # emit consecutive integers (`start + offset`), so a stride of 40 is not
+  # expressible in this schema at all. Declaring `mode: none` states what
+  # this connector actually does instead of encoding a lie about it; the
+  # acceptance gate measures parse fidelity over a recorded page, which
+  # pagination does not affect. A `step:` field on `Pagination` is the
+  # upgrade path if crawling depth ever matters.
+  url_pattern: "https://www.trabajos.com/ofertas-empleo/atencion_al_cliente"
+  pagination:
+    mode: none
+    max_pages: 1
+  # One `.listado2014.card.oferta` per offer — forty on a full page. These are
+  # the board's own semantic class names, not layout utilities, so they are a
+  # better bet against a restyle than the grid classes around them.
+  item: ".listado2014.card.oferta"
+  fields:
+    detail_url:
+      css: "a.oferta.j4m_link"
+      attr: href
+    title:
+      css: "a.oferta.j4m_link"
+    company:
+      css: "a.empresa"
+    location_raw:
+      css: "span.location"
+    # The listing carries a truncated teaser ("…"). It is here so the connector
+    # still produces a body if the detail page is unreachable; the detail page's
+    # full text overrides it whenever both are present.
+    text:
+      css: "div.doextended"
+
+detail:
+  fields:
+    title:
+      css: "h1"
+    text:
+      css: "div.subtitulo"
