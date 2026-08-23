@@ -198,13 +198,19 @@ def log_interview(
     that quietly drops the unlinkable ones, because there is no path that writes
     a record without at least one row behind it.
     """
-    if not any(lesson.links_to_something for lesson in lessons):
+    episodes = _episodes(log)
+    reach = [(lesson, _linked_dimensions(lesson, episodes)) for lesson in lessons]
+    # Tested on the **resolved** reach, not on `links_to_something`. A lesson
+    # citing an episode that T8 never linked to a dimension has a non-empty
+    # `stories` and resolves to nothing, so the shape check would have let it
+    # through and `lesson_linkage` would then have reported the record
+    # unlinked — the gate failing through a path nothing refused. The guard and
+    # the measurement have to agree about what counts as a link.
+    if not any(dimensions for _, dimensions in reach):
         raise InterviewLogError(
             f"{offer_id}: nothing to log — an interview that taught us nothing about a "
             "dimension or a story is a diary entry, and the profile learns nothing from it"
         )
-    episodes = _episodes(log)
-    reach = [(lesson, _linked_dimensions(lesson, episodes)) for lesson in lessons]
 
     interview_id = next_interview_id(store, offer_id)
     # Reserve the directory before writing a row. Two callers can read the same
@@ -268,6 +274,17 @@ def record_outcome(
     where = _interview_dir(store, offer_id, interview_id)
     if not (where / "held.json").exists():
         raise InterviewLogError(f"{offer_id} {interview_id} has no record to attach an outcome to")
+    # Checked before the append, not left to `_write_once`. The log is
+    # append-only, so a row written for an outcome that is then refused cannot
+    # be taken back — it would sit there for good, about an interview whose
+    # reply was already recorded. `_write_once` is still the authority that
+    # creates the file; this only keeps the ordinary case from leaving a row
+    # behind.
+    if (where / "outcome.json").exists():
+        raise InterviewLogError(
+            f"{offer_id} {interview_id} already has an outcome — the record is historical "
+            "and is never revised, only appended to (process spec §3.4)"
+        )
     row = log.append(
         recorded_at=recorded_at,
         step=STEP,

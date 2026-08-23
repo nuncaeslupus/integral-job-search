@@ -127,6 +127,35 @@ def test_an_interview_that_taught_nothing_is_refused(store: ProfileStore, log: E
     assert log.effective_rows() == []
 
 
+def test_a_lesson_citing_an_episode_linked_to_nothing_is_refused(
+    store: ProfileStore, log: EvidenceLog
+) -> None:
+    """The guard and the measurement have to agree about what counts as a link.
+
+    An episode T8 never linked to a dimension gives a lesson a non-empty
+    `stories` that resolves to nothing. Testing the *shape* of the lesson let
+    that through, and `lesson_linkage` then reported the record unlinked — the
+    gate failing through a path nothing refused.
+    """
+    unlinked_episode = log.append(
+        recorded_at="2026-01-04T09:00:00Z",
+        step="history",
+        kind="episode",
+        text="something that happened, not yet attached to anything",
+        source="conversation",
+    )
+    with pytest.raises(InterviewLogError, match="diary entry"):
+        log_interview(
+            store,
+            log,
+            offer_id="girona-1",
+            held_on="2026-02-10",
+            lessons=(Lesson(text="that story came up", stories=(unlinked_episode.id,)),),
+        )
+    assert logged_interviews(store) == []
+    assert lesson_linkage(store, log)["interview_lesson_linkage"] is None
+
+
 def test_the_linkage_check_would_notice_a_record_written_by_hand(
     store: ProfileStore, log: EvidenceLog
 ) -> None:
@@ -225,7 +254,8 @@ def test_outcome_arriving_days_later_resumes_the_record(
     assert read_outcome(store, "girona-1", held.interview_id) == outcome
     assert read_held(store, "girona-1", held.interview_id) == held
 
-    with pytest.raises(InterviewLogError, match="never revised"):
+    before = len(log.effective_rows())
+    with pytest.raises(InterviewLogError, match="already has an outcome"):
         record_outcome(
             store,
             log,
@@ -234,6 +264,10 @@ def test_outcome_arriving_days_later_resumes_the_record(
             recorded_at="2026-02-20",
             result="offer",
         )
+    # And it wrote no row on the way out. The log is append-only, so a row
+    # written for an outcome that is then refused could never be taken back.
+    assert len(log.effective_rows()) == before
+    assert read_outcome(store, "girona-1", held.interview_id) == outcome
 
 
 def test_an_outcome_for_an_interview_nobody_logged_is_refused(
@@ -349,17 +383,30 @@ def test_a_row_about_an_interview_nobody_logged_is_named(
     assert measured["rows_about_an_interview_with_no_record"] == ["girona-9/iv-001"]
 
 
+@pytest.mark.parametrize("borrow", [False, True])
 def test_a_record_naming_a_row_that_is_not_its_own_is_named(
-    store: ProfileStore, log: EvidenceLog
+    store: ProfileStore, log: EvidenceLog, borrow: bool
 ) -> None:
-    """`evidence_ids` is a convenience copy, and it must not be able to lie."""
-    held = log_interview(store, log, offer_id="girona-1", held_on="2026-02-10", lessons=(LESSON,))
-    held_path = store.path("interviews", "girona-1", held.interview_id, "held.json")
+    """`evidence_ids` is a convenience copy, and it must not be able to lie.
+
+    Both arms, because they fail differently: a row id that resolves to nothing
+    is a typo or a truncated log, and a row id that resolves to *another
+    interview's* row is the one that reads as plausible — the file names a real
+    row, and only its `about` says the lesson was learned somewhere else.
+    """
+    first = log_interview(store, log, offer_id="girona-1", held_on="2026-02-10", lessons=(LESSON,))
+    other = log_interview(store, log, offer_id="girona-2", held_on="2026-02-11", lessons=(LESSON,))
+    stolen = other.evidence_ids[0] if borrow else "ev-999999"
+
+    held_path = store.path("interviews", "girona-1", first.interview_id, "held.json")
     held_path.write_text(
-        held.model_copy(update={"evidence_ids": ("ev-999999",)}).model_dump_json(), encoding="utf-8"
+        first.model_copy(update={"evidence_ids": (stolen,)}).model_dump_json(), encoding="utf-8"
     )
 
     measured = lesson_linkage(store, log)
     assert measured["records_naming_a_row_that_is_not_theirs"] == [
-        f"girona-1/{held.interview_id}: ev-999999"
+        f"girona-1/{first.interview_id}: {stolen}"
     ]
+    # The fraction is untouched either way: both interviews still have a row of
+    # their own in the log, which is what `interview_lesson_linkage` asks.
+    assert measured["interview_lesson_linkage"] == 1.0
