@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""T4b: collect real, verbatim remote-programming job ads into corpus/raw/ads.jsonl.
+"""Collect real, verbatim job ads into corpus/raw/ads.jsonl.
 
 Ads must be real and carry a resolvable source URL (spec risk register: a corpus of
 invented ads makes every numeric gate pass while measuring nothing). Nothing here
 generates text — every record is fetched from a live board and stored verbatim.
 
+T4b built the remote-programming slice; T25 broadens it to the other job families,
+whose advertising vocabulary is not guessable from programming ads.
+
 Usage:
-    python tools/collect_ads.py --target-es 60 --target-en 25 --target-ca 15
+    python tools/collect_ads.py --target-es 60 --target-en 25 --target-ca 15 \\
+                               --target-family 15
 
 Re-running merges into the existing file by `id`, so collection can happen in
 several sittings and across sources.
@@ -28,7 +32,16 @@ import py3langid
 import requests
 from bs4 import BeautifulSoup
 
-from integral.corpus import LANGUAGES, language_counts, load_ads, save_ads, write_evidence
+from integral.corpus import (
+    LANGUAGES,
+    classify_family,
+    job_family_counts,
+    language_counts,
+    load_ads,
+    save_ads,
+    write_evidence,
+    write_family_evidence,
+)
 
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -85,7 +98,7 @@ def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
 
 
 def record(
-    ad_id: str, source: str, url: str, title: str, company: str, text: str
+    ad_id: str, source: str, url: str, title: str, company: str, text: str, job_family: str
 ) -> dict[str, Any] | None:
     if len(text) < 400:  # a stub, not an ad
         return None
@@ -97,6 +110,7 @@ def record(
         "language": detect_language(text),
         "title": title.strip(),
         "company": company.strip(),
+        "job_family": job_family,
         "text": text,
     }
 
@@ -155,6 +169,7 @@ def from_manfred(session: requests.Session, limit: int) -> Iterator[dict[str, An
             detail.get("position", ""),
             (detail.get("company") or {}).get("name", ""),
             text,
+            "programming",
         )
         if rec:
             yield rec
@@ -193,6 +208,7 @@ def from_tecnoempleo(session: requests.Session, limit: int) -> Iterator[dict[str
                 str(posting.get("title", "")),
                 str((posting.get("hiringOrganization") or {}).get("name", "")),
                 clean(str(posting.get("description", ""))),
+                "programming",
             )
             if rec:
                 count += 1
@@ -217,6 +233,7 @@ def from_remotive(session: requests.Session, limit: int) -> Iterator[dict[str, A
             job.get("title", ""),
             job.get("company_name", ""),
             clean(job.get("description", "")),
+            "programming",
         )
         if rec:
             count += 1
@@ -253,6 +270,7 @@ def from_weworkremotely(session: requests.Session, limit: int) -> Iterator[dict[
                 title,
                 company,
                 clean(item.description.get_text() if item.description else ""),
+                "programming",
             )
             if rec:
                 count += 1
@@ -275,6 +293,7 @@ def from_remoteok(session: requests.Session, limit: int) -> Iterator[dict[str, A
             job.get("position", ""),
             job.get("company", ""),
             clean(job.get("description", "")),
+            "programming",
         )
         if rec:
             count += 1
@@ -360,26 +379,134 @@ def from_feinaactiva(session: requests.Session, limit: int) -> Iterator[dict[str
     for ref in refs:
         if count >= limit:
             return
-        detail = get(session, f"{base}/{ref}").json()
-        text = clean(
-            "\n\n".join(
-                [
-                    str(detail.get("description") or ""),
-                    str(detail.get("job") or ""),
-                    *[str(x) for x in detail.get("requirements") or []],
-                    *[str(x) for x in detail.get("conditions") or []],
-                ]
-            )
-        )
+        title, company, text = feinaactiva_detail(session, ref)
         rec = record(
             f"feinaactiva-{ref}",
             "feinaactiva",
             f"https://feinaactiva.gencat.cat/search/offers/detail/{ref}",
-            str(detail.get("title", "")),
-            str((detail.get("business") or {}).get("name", "")),
+            title,
+            company,
             text,
+            "programming",
         )
         if rec and rec["language"] == "ca" and len(rec["text"]) >= CA_MIN_CHARS:
+            count += 1
+            yield rec
+
+
+# --------------------------------------------------------- T25: other job families
+
+# The corpus started as 100 remote-programming ads and the dimensions were written from
+# them. Feina Activa is the one board in reach that advertises *every* family natively in
+# the corpus's own languages, so the breadth slice comes from there rather than from the
+# remote boards, whose non-tech categories are only more flavours of office work.
+#
+# ponytail: keyword search finds candidates, title regexes decide the family — no
+# classifier. Recall over precision within a family, as with ROLE_RE; but a title that
+# matches *two* families is dropped rather than guessed, because a miscategorised ad
+# teaches the dimension model the wrong vocabulary for both.
+FAMILY_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "hospitality": ("cambrer", "cuiner", "ajudant de cuina", "hostaleria", "recepcionista hotel"),
+    "healthcare": ("infermer", "auxiliar infermeria", "fisioterapeuta", "cuidador", "gerocultor"),
+    "trades": ("electricista", "lampista", "fuster", "soldador", "paleta", "mecanic"),
+    # Retail needed the longest keyword list: the shop-counter roles are advertised
+    # under their trade name ("carnisser", "peixater") far more often than under a
+    # generic "dependent", and the five obvious terms alone returned 11.
+    "retail": (
+        "dependent",
+        "caixer",
+        "venedor botiga",
+        "reposador",
+        "comerc",
+        "botiga",
+        "supermercat",
+        "carnisser",
+        "peixater",
+        "xarcuter",
+        "encarregat botiga",
+        "venedor",
+    ),
+    "teaching": (
+        "professor",
+        "mestre",
+        "educador",
+        "monitor",
+        "docent",
+        "professor angles",
+        "professor particular",
+        "academia",
+        "educador infantil",
+        "monitor de lleure",
+        "monitor menjador",
+        "formador",
+        "professor autoescola",
+        "tecnic educacio infantil",
+    ),
+    "administrative": ("administratiu", "comptable", "secretari", "auxiliar administratiu"),
+}
+
+
+def feinaactiva_detail(session: requests.Session, ref: str) -> tuple[str, str, str]:
+    """One Feina Activa offer as (title, company, verbatim text)."""
+    detail = get(session, f"https://feinaactiva.gencat.cat/api/offers/{ref}").json()
+    text = clean(
+        "\n\n".join(
+            [
+                str(detail.get("description") or ""),
+                str(detail.get("job") or ""),
+                *[str(x) for x in detail.get("requirements") or []],
+                *[str(x) for x in detail.get("conditions") or []],
+            ]
+        )
+    )
+    return str(detail.get("title", "")), str((detail.get("business") or {}).get("name", "")), text
+
+
+def from_feinaactiva_family(
+    session: requests.Session, family: str, limit: int, known: set[str] | None = None
+) -> Iterator[dict[str, Any]]:
+    """Ads for one non-programming family, found by keyword and confirmed by title.
+
+    `known` is the ids already in the corpus. Skipping them here rather than letting the
+    caller drop them as duplicates is what makes a top-up run add anything: `limit` counts
+    records yielded, so without this the second sitting re-walks the same refs and the
+    caller discards every one of them.
+    """
+    base = "https://feinaactiva.gencat.cat/api/offers"
+    refs: list[str] = []
+    seen: set[str] = set()
+    for keyword in FAMILY_KEYWORDS[family]:
+        for offset in range(0, 100, 20):
+            page = get(session, f"{base}/list?keywords={keyword}&limit=20&offset={offset}").json()
+            hits = page.get("included", [])
+            for offer in hits:
+                ref = offer["reference"]
+                if ref not in seen and classify_family(offer["content"]["title"]) == family:
+                    seen.add(ref)
+                    refs.append(ref)
+            if len(hits) < 20:
+                break
+    count = 0
+    for ref in refs:
+        if count >= limit:
+            return
+        if known and f"feinaactiva-{ref}" in known:
+            continue
+        title, company, text = feinaactiva_detail(session, ref)
+        # The list title is a summary; the detail title is the one the ad is filed under,
+        # so the family is confirmed against that before the record is kept.
+        if classify_family(title) != family:
+            continue
+        rec = record(
+            f"feinaactiva-{ref}",
+            "feinaactiva",
+            f"https://feinaactiva.gencat.cat/search/offers/detail/{ref}",
+            title,
+            company,
+            text,
+            family,
+        )
+        if rec:
             count += 1
             yield rec
 
@@ -399,6 +526,7 @@ def from_urls(session: requests.Session, urls: list[str], source: str) -> Iterat
             str(posting.get("title", "")),
             str((posting.get("hiringOrganization") or {}).get("name", "")),
             clean(str(posting.get("description", ""))),
+            "programming",
         )
         if rec:
             yield rec
@@ -409,8 +537,15 @@ def main() -> int:
     ap.add_argument("--target-es", type=int, default=60)
     ap.add_argument("--target-en", type=int, default=25)
     ap.add_argument("--target-ca", type=int, default=15)
+    ap.add_argument(
+        "--target-family",
+        type=int,
+        default=15,
+        help="ads per non-programming family (T25's floor is 15)",
+    )
     ap.add_argument("--ca-urls", type=Path, help="file of Catalan ad URLs, one per line")
     ap.add_argument("--evidence", type=Path, default=Path("status/evidence/T4b.json"))
+    ap.add_argument("--family-evidence", type=Path, default=Path("status/evidence/T25.json"))
     args = ap.parse_args()
 
     ads = {ad["id"]: ad for ad in load_ads()}
@@ -440,6 +575,14 @@ def main() -> int:
         if missing > 0:
             absorb(name, fetch(session, missing))
 
+    for family in FAMILY_KEYWORDS:
+        have = job_family_counts(list(ads.values())).get(family, 0)
+        if have < args.target_family:
+            absorb(
+                family,
+                from_feinaactiva_family(session, family, args.target_family - have, set(ads)),
+            )
+
     if args.ca_urls and args.ca_urls.exists():
         lines = args.ca_urls.read_text().splitlines()
         urls = [u.strip() for u in lines if u.strip().startswith("http")]
@@ -450,7 +593,10 @@ def main() -> int:
     counts = language_counts(all_ads)
     print(f"total={len(all_ads)} {counts}")
 
+    print(f"families={job_family_counts(all_ads)}")
+
     write_evidence(args.evidence, all_ads)
+    write_family_evidence(args.family_evidence, all_ads)
     return 0
 
 

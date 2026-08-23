@@ -14,8 +14,16 @@ TOLERANCE = 0.10
 
 
 def test_raw_corpus_meets_size_and_language_mix() -> None:
-    ads = load_ads()
-    assert len(ads) >= 100, f"raw corpus has {len(ads)} ads, need >= 100"
+    """T4b's size and mix, measured over the slice T4b actually collected.
+
+    T25 added other job families from Feina Activa, which advertises in ca/es only.
+    `TARGET_MIX` describes the remote-programming sample and nothing else — applying
+    it to the whole file would fail on the breadth slice's arrival while saying
+    nothing about whether the programming slice still holds its shape, which is the
+    property D-1 pinned here.
+    """
+    ads = [ad for ad in load_ads() if ad["job_family"] == "programming"]
+    assert len(ads) >= 100, f"raw programming corpus has {len(ads)} ads, need >= 100"
     for lang, target in TARGET_MIX.items():
         count = sum(1 for ad in ads if ad["language"] == lang)
         assert abs(count - target) <= TOLERANCE * target, (

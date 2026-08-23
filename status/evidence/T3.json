@@ -45,15 +45,11 @@
   ],
   "language_slices_with_no_corpus_hit": [
     "career_progression:en",
-    "company_stage:ca",
     "english_demand:en",
     "mentoring_culture:ca",
     "on_call_load:en",
     "on_call_load:ca",
     "social_intensity:es",
-    "social_intensity:ca",
-    "team_autonomy:ca",
-    "travel_requirement:en",
-    "wellbeing_benefits:ca"
+    "travel_requirement:en"
   ]
 }
