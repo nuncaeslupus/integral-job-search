@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 81,
+  "evidence_gates_read": 83,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -16,6 +16,14 @@
       "task": "lo-0300",
       "key": "annotation_profile_egress",
       "evidence": "status/evidence/T42.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-1af2",
+      "key": "corpus_job_family_count",
+      "evidence": "status/evidence/T25.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
@@ -384,6 +392,14 @@
       "task": "lo-b2de",
       "key": "unbootstrapped_first_runs",
       "evidence": "status/evidence/T52.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-b422",
+      "key": "elicitation_eval_overlap",
+      "evidence": "status/evidence/T9.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

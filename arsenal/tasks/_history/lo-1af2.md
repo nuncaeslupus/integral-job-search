@@ -1,10 +1,12 @@
 ---
 id: lo-1af2
 title: "T25: [LAPTOP] Broaden the corpus beyond remote programming — >=6 job families, >=15 ads each"
-priority: 70
+priority: 1
 workspace: ONTOLOGY
 tags: [laptop, m4]
 requires: [surface:egress]
+status: merged
+pr: https://github.com/nuncaeslupus/job-search/pull/131
 ---
 
 ## Acceptance gate
@@ -16,7 +18,8 @@ key: corpus_job_family_count
 ```
 
 ```bash
-echo "no gate command defined for T25 — replace this line with the command that writes status/evidence/T25.json" >&2; exit 1
+uv run --extra dev pytest tests/test_corpus_families.py -q
+uv run --extra dev python -m integral.corpus
 ```
 
 ## What this is
