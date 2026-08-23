@@ -141,7 +141,7 @@ class Strict(BaseModel):
 # `Offer` (T11). A reaction (T17) or an interview record (S6) will each add
 # their own kind when they land — additive to this `Literal` and to nothing
 # else, since `EvidenceRow.about` is already `Optional[EvidenceSubject]`.
-SubjectKind = Literal["offer"]
+SubjectKind = Literal["offer", "interview"]
 
 # T11's own offer-id shape (`integral.offers._OFFER_ID_PATTERN`), duplicated
 # rather than imported. `profile.py` is imported by nearly every other module
@@ -151,6 +151,10 @@ SubjectKind = Literal["offer"]
 # graph for no real gain, the same reasoning `_last_pinned_value` gives for
 # keeping its own copy of a T41 encoding rather than importing it back.
 _OFFER_SUBJECT_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
+# S6: `<offer_id>/<iv-id>` — which interview, for which offer. Two components
+# because an offer has rounds, and "what the second interview taught us" is a
+# different row from what the first one did.
+_INTERVIEW_SUBJECT_ID = re.compile(r"^[^/]+/iv-\d{3,}$")
 
 
 class EvidenceSubject(Strict):
@@ -164,9 +168,11 @@ class EvidenceSubject(Strict):
     the whole reason this field exists (`status/plan.md`'s T21 row,
     `feedback_traceability == 1.0`).
 
-    Only `kind="offer"` is validated against a real id shape today — see
-    `_OFFER_SUBJECT_ID` — because it is the only kind any writer produces yet.
-    A future kind defines its own id shape when it lands, not this one.
+    Each kind validates its own id shape, and nothing else validates it for
+    them — see `_OFFER_SUBJECT_ID` and `_INTERVIEW_SUBJECT_ID`. A kind with no
+    shape of its own would let a label a human can read but nothing downstream
+    can look up back into the log, which is the failure this field exists to
+    prevent.
     """
 
     kind: SubjectKind
@@ -176,6 +182,8 @@ class EvidenceSubject(Strict):
     def _check(self) -> EvidenceSubject:
         if self.kind == "offer" and not _OFFER_SUBJECT_ID.match(self.id):
             raise ValueError(f"{self.id!r} is not a T11 offer id (sha256:<64 lowercase hex>)")
+        if self.kind == "interview" and not _INTERVIEW_SUBJECT_ID.match(self.id):
+            raise ValueError(f"{self.id!r} is not an S6 interview id (<offer_id>/iv-<N>)")
         return self
 
 

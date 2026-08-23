@@ -7,12 +7,12 @@
     "history",
     "identify",
     "intake",
+    "interview_log",
     "sourcing",
     "traits"
   ],
   "not_implemented": [
     "feedback",
-    "interview_log",
     "preferences",
     "ranking",
     "reactions",

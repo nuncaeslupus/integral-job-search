@@ -97,8 +97,11 @@ blocked on a missing input). Exit 2 means the candidate or step could not be rea
 means coverage is met but the gate is not built, so the step cannot be certified — a
 covered step is not a passed one (D-21).
 
-**`interview_lesson_linkage` is not built, so this checkpoint exits 3 at best.** Say so when presenting this
-step's output: the artefacts are there, and nothing has measured whether they are any good.
+**`interview_lesson_linkage` is built (S6), so this checkpoint can reach 0.** The gate is a
+build-time measurement over the interview records against the evidence log, not something this
+skill computes or asserts in prose — what it means for the conversation is that an interview
+which taught the profile nothing is not something to record and move on from. If the candidate
+has no lesson to give, that is a question still to ask, not a field to leave empty.
 
 The script writes its result to the candidate's own tree at `session/checkpoint-interview_log.json`, never to a shared or
 global path.

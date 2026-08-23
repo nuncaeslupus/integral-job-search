@@ -116,11 +116,11 @@
     {
       "step": "interview_log",
       "n": 12,
-      "gate_state": "not_implemented",
+      "gate_state": "implemented",
       "gate_metric": "interview_lesson_linkage == 1.0",
       "gate_owner": "S6",
-      "certifiable": false,
-      "expected_exit": 3
+      "certifiable": true,
+      "expected_exit": 0
     }
   ]
 }
