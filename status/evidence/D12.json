@@ -701,6 +701,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-c40f0f88",
+      "key": "ranked_offers_without_a_url",
+      "evidence": "status/evidence/T44.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "t-e1ca8374",
       "key": "unrecordable_task_gates",
       "evidence": "status/evidence/D12.json",
