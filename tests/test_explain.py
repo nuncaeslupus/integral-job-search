@@ -134,6 +134,7 @@ def test_the_drivers_account_for_the_delta_exactly() -> None:
 
     for explanation in explanations.values():
         total = sum(driver["contribution_eur_month"] for driver in explanation["drivers"])
+        assert explanation["salary_equivalent_delta_eur_month"] is not None
         assert total == pytest.approx(explanation["salary_equivalent_delta_eur_month"])
 
 
@@ -262,3 +263,52 @@ def test_write_evidence_records_the_gate_key(tmp_path: Path) -> None:
     evidence = tmp_path / "T19.json"
     write_evidence(evidence)
     assert json.loads(evidence.read_text(encoding="utf-8"))["explained_fraction"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# An offer that reached the frontier with no salary-equivalent total.
+# `rank` withholds one when the salary is missing or a priced dimension is
+# unset, and the offer still ranks — so `explain` is handed exactly the case
+# where the drivers it can compute do not add up to anything.
+
+
+def test_an_offer_with_no_total_gets_no_delta() -> None:
+    """A partial sum published as "the delta" is a number for a quantity that
+    does not exist."""
+    partial = _candidate("sha256:" + "b" * 64, 3600.0, {"remote": 1.0})  # commute unset
+    explanations = explain(_ranking([partial]), [partial], _WEIGHTS)
+    explanation = explanations[partial.offer_id]
+
+    assert explanation["salary_equivalent_delta_eur_month"] is None
+    assert "commute" in explanation["delta_unavailable"]
+    assert explanation["drivers"], "the contributions it does have are still true"
+
+
+def test_an_offer_with_no_salary_gets_no_delta() -> None:
+    unpaid = _candidate(
+        "sha256:" + "c" * 64, None, {"remote": 1.0, "commute": 0.5, "mentoring": 0.0}
+    )
+    explanations = explain(_ranking([unpaid]), [unpaid], _WEIGHTS)
+    explanation = explanations[unpaid.offer_id]
+
+    assert explanation["salary_equivalent_delta_eur_month"] is None
+    assert "no salary" in explanation["delta_unavailable"]
+
+
+def test_an_offer_with_a_total_still_carries_its_reason_for_having_one() -> None:
+    """`delta_unavailable` is absent-as-None, not omitted: a reader checking the
+    key must not have to tell "no reason" from "the key was not written"."""
+    whole = _market()[0]
+    explanation = explain(_ranking([whole]), [whole], _WEIGHTS)[whole.offer_id]
+
+    assert explanation["delta_unavailable"] is None
+    assert explanation["salary_equivalent_delta_eur_month"] is not None
+
+
+def test_the_uncited_count_is_unaffected_by_a_missing_total() -> None:
+    """Citation and arithmetic are separate properties — a driver with a span is
+    cited whether or not its offer's total exists."""
+    partial = _candidate("sha256:" + "d" * 64, 3600.0, {"remote": 1.0})
+    measured = explained_fraction(_ranking([partial]), [partial], _WEIGHTS)
+
+    assert measured["explained_fraction"] == 1.0

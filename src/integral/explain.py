@@ -25,6 +25,15 @@ second term — and every driver is one of its addends. That makes the explanati
 checkable by arithmetic rather than by reading: the drivers sum to the delta, or
 the explanation is a story told beside the ranking instead of about it.
 
+**An offer with no total has no delta, and says so.** `rank` withholds a
+salary-equivalent total when the salary is missing or any priced dimension is
+unset, and such an offer still reaches the frontier — it sorts last rather than
+being dropped. Summing whatever drivers it happens to have would publish a
+partial sum under the name of a quantity that does not exist. The drivers stay,
+because each is a true statement about one dimension with the advert's words
+behind it; the sum is `None` and `delta_unavailable` names which of §4.3's two
+inputs is missing.
+
 **Unpriced and neutral dimensions are not drivers.** A dimension T10 never priced
 moved the total by nothing, and so did one scored at exactly neutral. Listing
 either would pad the account with lines that explain no part of the number.
@@ -56,7 +65,7 @@ from pathlib import Path
 from typing import Any
 
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, priced_dimensions, rank
+from integral.rank import Candidate, priced_dimensions, rank, salary_equivalent_total
 
 # §4.3's site is `integral.rank`; this module explains that formula's second
 # term rather than implementing a formula of its own, so it declares no
@@ -122,13 +131,36 @@ def explain(
                 "ranking and the offers it was built from do not agree"
             )
         found = drivers_for(candidate, weights)
+        # A frontier offer can have no salary-equivalent total: `rank` withholds
+        # one when the salary is missing or any priced dimension is unset, and
+        # such an offer still ranks (it sorts last rather than being dropped).
+        # Summing the drivers it *does* have would publish a partial sum under
+        # the name of a quantity that is undefined — €600 of delta on an offer
+        # whose total does not exist. The drivers stay: each is a true statement
+        # about one dimension, with the advert's words behind it. Only their sum
+        # is unavailable, and it says so.
+        total = salary_equivalent_total(candidate, weights)
         explanations[offer_id] = {
-            "salary_equivalent_delta_eur_month": sum(
-                driver["contribution_eur_month"] for driver in found
+            "salary_equivalent_delta_eur_month": (
+                sum(driver["contribution_eur_month"] for driver in found)
+                if total is not None
+                else None
             ),
+            "delta_unavailable": None if total is not None else _why_no_total(candidate, weights),
             "drivers": found,
         }
     return explanations
+
+
+def _why_no_total(candidate: Candidate, weights: Mapping[str, Any] | None) -> str:
+    """Which of §4.3's two inputs this offer is missing, named rather than implied."""
+    if candidate.salary_per_month is None:
+        return "the advert states no salary, so there is no total to take a share of"
+    missing = sorted(name for name in priced_dimensions(weights) if name not in candidate.scores)
+    return (
+        f"the advert does not settle {', '.join(missing)}, so the total is unknown "
+        "and these contributions do not add up to it"
+    )
 
 
 def explained_fraction(
