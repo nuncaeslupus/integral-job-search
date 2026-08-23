@@ -8,6 +8,7 @@
     "identify",
     "intake",
     "interview_log",
+    "reactions",
     "sourcing",
     "traits"
   ],
@@ -15,7 +16,6 @@
     "feedback",
     "preferences",
     "ranking",
-    "reactions",
     "understanding"
   ],
   "drift": []

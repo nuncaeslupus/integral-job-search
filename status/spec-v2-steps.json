@@ -184,7 +184,7 @@
         "metric": "elicitation_eval_overlap",
         "op": "==",
         "threshold": 0,
-        "state": "not_implemented",
+        "state": "implemented",
         "task": "T9"
       },
       "reentry_events": [

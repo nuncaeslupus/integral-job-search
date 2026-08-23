@@ -10,12 +10,12 @@
     "constraints",
     "history",
     "traits",
+    "reactions",
     "sourcing",
     "application",
     "interview_log"
   ],
   "steps_not_implemented": [
-    "reactions",
     "preferences",
     "understanding",
     "ranking",
