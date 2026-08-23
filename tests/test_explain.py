@@ -312,3 +312,15 @@ def test_the_uncited_count_is_unaffected_by_a_missing_total() -> None:
     measured = explained_fraction(_ranking([partial]), [partial], _WEIGHTS)
 
     assert measured["explained_fraction"] == 1.0
+
+
+def test_an_l1_offer_with_a_salary_does_not_blame_the_advert() -> None:
+    """Nothing is priced, so there is no total — an omission on the candidate's
+    side of the process, not the employer's. The earlier wording produced "the
+    advert does not settle , so…" and attributed it to the ad."""
+    whole = _market()[0]
+    explanation = explain(_ranking([whole], None), [whole], None)[whole.offer_id]
+
+    assert explanation["salary_equivalent_delta_eur_month"] is None
+    assert "no preference weights" in explanation["delta_unavailable"]
+    assert "does not settle ," not in explanation["delta_unavailable"]

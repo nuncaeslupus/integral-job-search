@@ -153,10 +153,24 @@ def explain(
 
 
 def _why_no_total(candidate: Candidate, weights: Mapping[str, Any] | None) -> str:
-    """Which of §4.3's two inputs this offer is missing, named rather than implied."""
+    """Which of §4.3's inputs is missing, named rather than implied.
+
+    Three reasons, and the third is not the advert's fault. With nothing priced
+    the ranking is L1 and there is no salary-equivalent quantity to take a share
+    of at all — an omission on the candidate's side of the process, not the
+    employer's. Folding it into the "the advert does not settle …" branch left
+    that sentence with an empty list in it and blamed the advert for a fit that
+    has not been run.
+    """
+    priced = priced_dimensions(weights)
+    if not priced:
+        return (
+            "no preference weights have been fitted yet, so there is no "
+            "salary-equivalent total for these contributions to be a share of"
+        )
     if candidate.salary_per_month is None:
         return "the advert states no salary, so there is no total to take a share of"
-    missing = sorted(name for name in priced_dimensions(weights) if name not in candidate.scores)
+    missing = sorted(name for name in priced if name not in candidate.scores)
     return (
         f"the advert does not settle {', '.join(missing)}, so the total is unknown "
         "and these contributions do not add up to it"
