@@ -62,11 +62,11 @@
     {
       "step": "preferences",
       "n": 6,
-      "gate_state": "not_implemented",
+      "gate_state": "implemented",
       "gate_metric": "weight_salary_equivalent_roundtrip_error <= 0.01",
       "gate_owner": "T10",
-      "certifiable": false,
-      "expected_exit": 3
+      "certifiable": true,
+      "expected_exit": 0
     },
     {
       "step": "sourcing",
