@@ -50,6 +50,7 @@ from integral.cv_store import (
     Certification,
     CVMaster,
     Education,
+    Episode,
     Experience,
     LanguageEntry,
     Skill,
@@ -178,6 +179,8 @@ def render_entry(section: str, entry: SourcedEntry) -> str:
         return f"{entry.name}{issued}{when}"
     if isinstance(entry, LanguageEntry):
         return f"{entry.language} ({entry.level})"
+    if isinstance(entry, Episode):
+        return entry.text
     if isinstance(entry, SourcedText):
         return entry.text
     raise GenerationError(f"no rendering is defined for a {type(entry).__name__} entry")
@@ -251,6 +254,24 @@ def _select(
     return chosen, omitted
 
 
+def _episode_picks(master: CVMaster, episodes: tuple[int, ...]) -> list[tuple[str, int]]:
+    """Story-bank episodes cleared for *this* letter, by index.
+
+    Never on the CV, and never selected by this module: an episode is something
+    the candidate told the tool about themselves, and the only thing that can
+    put one in front of an employer is a per-use approval recorded by
+    `integral.approval`, which is the caller that passes an index here.
+
+    Deduplicated, because one approval backs one line — a repeated index would
+    otherwise print the episode twice off a single approval.
+    """
+    held = _entries(master, "episodes")
+    for index in episodes:
+        if not 0 <= index < len(held):
+            raise GenerationError(f"no episode {index} in the store — there is nothing to include")
+    return [("episodes", index) for index in dict.fromkeys(episodes)]
+
+
 def _cv_lines(master: CVMaster, chosen: list[tuple[str, int]]) -> tuple[list[str], list[Claim]]:
     lines: list[str] = []
     claims: list[Claim] = []
@@ -309,8 +330,15 @@ def generate(
     offer_id: str,
     advert: str,
     asks: tuple[str, ...] = (),
+    episodes: tuple[int, ...] = (),
 ) -> Manifest:
-    """Write `cv/generated/<offer_id>/v<N>/` — CV, letter, and manifest."""
+    """Write `cv/generated/<offer_id>/v<N>/` — CV, letter, and manifest.
+
+    `episodes` names store episodes already approved for this one letter. It is
+    validated before anything is reserved or written, so a bad index costs no
+    version number.
+    """
+    episode_picks = _episode_picks(master, episodes)
     version = next_version(store, offer_id)
     if version > GENERATION_CAP:
         raise GenerationError(
@@ -335,7 +363,7 @@ def generate(
 
     chosen, omissions = _select(master, advert, asks)
     cv_lines, cv_claims = _cv_lines(master, chosen)
-    letter_lines, letter_claims = _letter_lines(master, chosen)
+    letter_lines, letter_claims = _letter_lines(master, chosen + episode_picks)
     manifest = Manifest(
         offer_id=offer_id,
         version=version,
