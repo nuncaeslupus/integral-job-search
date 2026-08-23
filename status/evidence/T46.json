@@ -7,5 +7,7 @@
   "personal_details_in_master": [],
   "sends_without_confirmation": [],
   "applications_recorded": 5,
-  "adverts_prepared": 100
+  "adverts_prepared": 100,
+  "detection_probes": 13,
+  "detection_probe_failures": []
 }

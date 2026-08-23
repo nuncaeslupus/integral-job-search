@@ -330,15 +330,21 @@ def generate(
     offer_id: str,
     advert: str,
     asks: tuple[str, ...] = (),
-    episodes: tuple[int, ...] = (),
+    _approved_episodes: tuple[int, ...] = (),
 ) -> Manifest:
     """Write `cv/generated/<offer_id>/v<N>/` — CV, letter, and manifest.
 
-    `episodes` names store episodes already approved for this one letter. It is
-    validated before anything is reserved or written, so a bad index costs no
-    version number.
+    `_approved_episodes` names store episodes already approved for this one
+    letter. It is underscored because `integral.approval` is its only supported
+    caller: this module has no idea what an approval is and must not acquire
+    one. A keyword argument inside a package cannot be made unforgeable, so the
+    enforcement is not here — T46 re-reads the finished documents and refuses to
+    make anything sendable that an approval on disk does not back.
+
+    It is validated before anything is reserved or written, so a bad index costs
+    no version number.
     """
-    episode_picks = _episode_picks(master, episodes)
+    episode_picks = _episode_picks(master, _approved_episodes)
     version = next_version(store, offer_id)
     if version > GENERATION_CAP:
         raise GenerationError(

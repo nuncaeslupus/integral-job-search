@@ -8,49 +8,93 @@ telephone, the name to print — none of them improve a *search*, so gathering
 them at Intake is collecting something months before anything needs it. They are
 written into the version directory of the document that required them
 (`cv/generated/<offer_id>/v<N>/personal.json`) and never into `cv/master.json`.
-The measurement reads `master.json` off disk and names anything of this kind
-sitting in it, by key *or* by value: a detail that reached the intake store got
-there speculatively, whichever field it is hiding in.
 
 **A story-bank episode reaches an employer-bound document only with per-use
 approval.** Recounting a failure to the tool was never consent to send it to a
-company. The approval is bound to `(offer_id, version, episode_index, text)`, so
-it is per *use* in the literal sense: a regeneration writes `v<N+1>` and inherits
-nothing, and an approval whose text no longer matches the store entry backs
-nothing. `generate` cannot select an episode on its own — `episodes` is an
-argument, and this module is the only caller that supplies it.
-
-The gate, `unapproved_episode_disclosures == 0`, is measured the way T45's is:
-over the **files on disk**, against the store. Whatever put an episode into a
-finished document — this module, a hand edit, a later feature, a model — the
-measurement sees the text in the file and asks the approval file whether
-anything backs it. Asking the writer whether it behaved is not a check.
+company. An approval names `(offer_id, version, text)` — **the text, never a
+list position**. A store index is a fact about the order of a list the candidate
+edits; inserting an unrelated episode above an approved one used to invalidate
+the approval, and editing one used to leave the old approval sitting there. What
+was approved is a sentence, and the sentence is what goes to the employer.
 
 **No autonomous outward action.** Nothing here sends. `prepare` writes the
-documents, the personal details to paste into the employer's form, and
-`payload.json` — the summary of everything that would go, which documents, which
-claims, which contact details, to whom. `record_sent` records that the candidate
-sent it, and takes the payload's own digest as the confirmation: a standing
-"yes, send whatever you like for this offer" cannot produce one, and neither can
-a confirmation given for a different version. That is the §6.2 rule — approved
-once per application, never as a standing permission — expressed as an equality
-instead of a promise.
+documents, the details to paste into the employer's form, and `payload.json` —
+the summary of everything that would go. `record_sent` records that the
+candidate sent it.
+
+## What the gate measures, and how it can fail
+
+`unapproved_episode_disclosures` counts **anything in a finished document that no
+per-use approval backs**, over the files on disk. Three kinds, because there are
+three ways a story reaches an employer:
+
+1. a line no manifest row backs — unbackable is unapproved, and it is what an
+   episode looks like after the candidate tidies it out of their story bank;
+2. an episode line whose text no approval names;
+3. an episode's **substance** carried by some other entry — a headline or a job
+   description holding the same sentence. Detection is over normalised eight-word
+   shingles, not an exact substring, because one character defeated the substring
+   test while `payload.json` went on telling the candidate the story was
+   withheld. A summary that is false is worse than no summary.
+
+**The measurement cannot construct both sides of its own equality.** `measure()`
+writes approvals and documents in one call from one tuple, so they agree by
+construction: on its own it proves only that `generate` emits the indices it was
+handed, and every check in this module could be deleted with the evidence
+unchanged. `probe_boundary` is the other half — ten scenarios that are defects on
+purpose, each asserting the boundary *catches* it. `_main` fails if any probe
+fails or if fewer than `MINIMUM_PROBES` ran.
+
+## The chokepoint
+
+`generate` renders an episode only when handed one, and `integral.approval` is
+its only supported caller — but a keyword argument inside a package is a
+convention, not a lock. What is enforced is the thing that matters: **nothing
+becomes sendable while an unapproved disclosure is in the document.** `prepare`
+re-reads what it just wrote and refuses to write a payload over a finding, and
+`record_sent` re-runs the whole measurement against the files as they stand at
+send time — so a document edited after drafting is caught at the boundary, not
+trusted because it was clean an hour ago.
+
+**What the confirmation proves, and what it does not.** `record_sent` requires
+the payload's own digest, which pins *which* payload was named — a standing "send
+whatever you like" and a yes given to a different draft both fail it. It says
+nothing about *who* named it: anyone holding the payload can compute the digest,
+and `measure()` does exactly that. Consent by a human is outside what this file
+can check; what it can check is that consent was given to a specific, complete,
+unchanged payload, and that is what it checks.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 import tempfile
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from integral.cv_store import CVMaster, Episode, _atomic_write_json, write_master
-from integral.generate import DEFAULT_FIXTURE_MASTER, generate
+from integral.cv_store import (
+    CVMaster,
+    Episode,
+    Skill,
+    SourcedText,
+    _atomic_write_json,
+    write_master,
+)
+from integral.generate import (
+    DEFAULT_FIXTURE_MASTER,
+    _claim_lines,
+    _entries,
+    generate,
+    read_manifest,
+    render_entry,
+)
 from integral.identity import ProfileStore, create_profile
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -58,9 +102,9 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T46.json"
 
 SCHEMA_VERSION: Literal[1] = 1
 
-# What "a personal detail" means here, and the closed list the measurement looks
-# for in the intake store. Spec step 1 forbids every one of them at Intake by
-# name; step 11 is where they are asked for, for the document being produced.
+# What "a personal detail" means here. Spec step 1 forbids every one of them at
+# Intake by name; step 11 is where they are asked for, for the document being
+# produced.
 PERSONAL_FIELDS: tuple[str, ...] = (
     "full_name",
     "email",
@@ -68,6 +112,11 @@ PERSONAL_FIELDS: tuple[str, ...] = (
     "postal_address",
     "date_of_birth",
 )
+
+# How many consecutive normalised words make a match. Long enough that no two
+# unrelated sentences share one by accident; short enough to survive the edits
+# that defeated a plain substring test.
+_SHINGLE = 8
 
 
 class ApprovalError(Exception):
@@ -98,16 +147,14 @@ class PersonalDetails(Strict):
 
 
 class EpisodeApproval(Strict):
-    """One episode, cleared for one document.
+    """One episode's text, cleared for one document.
 
-    `text` pins *what* was approved. An approval that named only an index would
-    survive the store entry being edited underneath it, which would let a
-    changed episode ride out on last week's consent.
+    No index. See the module docstring: a position in a list the candidate edits
+    is not a stable name for a sentence, and the sentence is what goes out.
     """
 
     offer_id: str = Field(min_length=1)
     version: int = Field(ge=1)
-    episode_index: int = Field(ge=0)
     text: str = Field(min_length=1)
 
 
@@ -125,7 +172,8 @@ class Payload(Strict):
 
     Not "shall I apply?" but the actual contents: the files, every claim in
     them, the episodes cleared for this one letter, the contact details, and to
-    whom. It is written; it is never sent.
+    whom. It is written; it is never sent. It is also never written over a
+    finding, so what it says about what is being sent is true.
     """
 
     schema_version: Literal[1] = SCHEMA_VERSION
@@ -148,6 +196,46 @@ def _version_parts(offer_id: str, version: int) -> tuple[str, ...]:
     return ("cv", "generated", offer_id, f"v{version}")
 
 
+# ---------------------------------------------------------------------------
+# detection — normalised, because one character defeated the exact match
+
+_NOT_WORD = re.compile(r"\W+", re.UNICODE)
+
+
+def _words(text: str) -> list[str]:
+    return _NOT_WORD.sub(" ", text.casefold()).split()
+
+
+def _carries(document: str, episode: str) -> bool:
+    """Does `document` carry this episode's substance?
+
+    ponytail: normalised eight-word shingles. Beats punctuation, spacing, case,
+    truncation and extension — the edits that walked past a plain substring
+    test. It does not beat a genuine paraphrase, and nothing cheap does; the
+    upgrade path is an embedding comparison, at a model call per episode per
+    document.
+    """
+    words = _words(episode)
+    if not words:
+        return False
+    body = " ".join(_words(document))
+    if len(words) <= _SHINGLE:
+        return " ".join(words) in body
+    return any(
+        " ".join(words[start : start + _SHINGLE]) in body
+        for start in range(len(words) - _SHINGLE + 1)
+    )
+
+
+def _squash(text: str) -> str:
+    """Letters and digits only — a detail written a slightly different way."""
+    return re.sub(r"[^0-9a-z]+", "", text.casefold())
+
+
+# ---------------------------------------------------------------------------
+# preparing one application, and stopping short of sending it
+
+
 def prepare(
     store: ProfileStore,
     master: CVMaster,
@@ -161,30 +249,41 @@ def prepare(
 ) -> Payload:
     """Draft the application for one advert and stop one step short of sending.
 
-    `approved_episodes` is the candidate's per-use approval for this document,
-    given now, for this draft. It is recorded next to the draft it authorised so
-    the measurement can check the document against it, and it authorises nothing
-    else: the next regeneration is a new version and asks again.
+    `approved_episodes` indexes the store *now*, at the moment of drafting, and
+    is resolved to text immediately — the recorded approval names the sentence.
+    It authorises this draft and nothing else: the next regeneration is a new
+    version and asks again.
+
+    Raises `ApprovalError` — after the drafts are written, before any payload is
+    — if the finished documents disclose anything no approval backs. There is
+    then no payload, so there is nothing `record_sent` can act on.
     """
     manifest = generate(
-        store, master, offer_id=offer_id, advert=advert, asks=asks, episodes=approved_episodes
+        store,
+        master,
+        offer_id=offer_id,
+        advert=advert,
+        asks=asks,
+        _approved_episodes=approved_episodes,
     )
     where = _version_parts(offer_id, manifest.version)
     approvals = Approvals(
         offer_id=offer_id,
         version=manifest.version,
         episodes=tuple(
-            EpisodeApproval(
-                offer_id=offer_id,
-                version=manifest.version,
-                episode_index=index,
-                text=master.episodes[index].text,
-            )
-            for index in dict.fromkeys(approved_episodes)
+            EpisodeApproval(offer_id=offer_id, version=manifest.version, text=text)
+            for text in dict.fromkeys(master.episodes[index].text for index in approved_episodes)
         ),
     )
     _atomic_write_json(store, approvals.model_dump(mode="json"), *where, "approvals.json")
     _atomic_write_json(store, details.model_dump(mode="json"), *where, "personal.json")
+
+    measured = measure_prepared(store, master, offer_id, manifest.version)
+    if measured["unapproved_episode_disclosures"]:
+        raise ApprovalError(
+            "this draft discloses something no per-use approval backs, so no payload was "
+            "written: " + "; ".join(measured["unapproved_episodes"])
+        )
 
     payload = Payload(
         offer_id=offer_id,
@@ -204,8 +303,17 @@ def read_payload(store: ProfileStore, offer_id: str, version: int) -> Payload:
     return Payload.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def read_approvals(store: ProfileStore, offer_id: str, version: int) -> Approvals | None:
+    """The approval file for one version, or `None` if nothing approved anything."""
+    path = store.path(*_version_parts(offer_id, version), "approvals.json")
+    if not path.exists():
+        return None
+    return Approvals.model_validate_json(path.read_text(encoding="utf-8"))
+
+
 def record_sent(
     store: ProfileStore,
+    master: CVMaster,
     offer_id: str,
     version: int,
     *,
@@ -214,11 +322,17 @@ def record_sent(
 ) -> Path:
     """Record that the candidate sent this application. Nothing here sends it.
 
-    `confirms` must be `payload_digest` of the payload on disk. A standing
-    permission cannot produce that string, and neither can a yes given to a
-    different draft, so the last decision stays with the person whose name is on
-    the application.
+    The documents are re-measured against the approvals **as they stand now**,
+    because a file can change between drafting and sending, and then the digest
+    must name the payload on disk. See the module docstring for what that digest
+    does and does not prove.
     """
+    measured = measure_prepared(store, master, offer_id, version)
+    if measured["unapproved_episode_disclosures"]:
+        raise ApprovalError(
+            "these documents disclose something no per-use approval backs, so nothing here "
+            "is sendable: " + "; ".join(measured["unapproved_episodes"])
+        )
     payload = read_payload(store, offer_id, version)
     digest = payload_digest(payload)
     if confirms != digest:
@@ -247,76 +361,134 @@ def record_sent(
 # the measurement — reads the files, never the objects that wrote them
 
 
-def _backed(master: CVMaster, approvals: Approvals | None, offer_id: str, version: int) -> set[str]:
-    """The episode texts an approval on disk genuinely backs for this version."""
+def _approved_texts(store: ProfileStore, offer_id: str, version: int) -> set[str]:
+    """The episode texts an approval on disk backs for *this* document."""
+    approvals = read_approvals(store, offer_id, version)
     if approvals is None or approvals.offer_id != offer_id or approvals.version != version:
         return set()
     return {
         approval.text
         for approval in approvals.episodes
-        if approval.offer_id == offer_id
-        and approval.version == version
-        and approval.episode_index < len(master.episodes)
-        and master.episodes[approval.episode_index].text == approval.text
+        if approval.offer_id == offer_id and approval.version == version
     }
-
-
-def read_approvals(store: ProfileStore, offer_id: str, version: int) -> Approvals | None:
-    """The approval file for one version, or `None` if nothing approved anything."""
-    path = store.path(*_version_parts(offer_id, version), "approvals.json")
-    if not path.exists():
-        return None
-    return Approvals.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def measure_prepared(
     store: ProfileStore, master: CVMaster, offer_id: str, version: int
 ) -> dict[str, Any]:
-    """The gate for one prepared document: is every episode in it approved?
+    """The gate for one prepared document. Enumerates the **documents**, not the store.
 
-    The documents are read from disk and the store episodes are looked for in
-    them. Detection is by presence of the episode's text anywhere in a document,
-    not by matching a line the manifest already agrees about — the failure this
-    guards against is an episode arriving by a route nobody registered.
+    Enumerating the store was the hole: an episode deleted from the story bank
+    after the draft was written stopped being looked for, and a document
+    demonstrably carrying it measured clean.
     """
     where = store.path(*_version_parts(offer_id, version))
-    backed = _backed(master, read_approvals(store, offer_id, version), offer_id, version)
-    written = "\n".join(path.read_text(encoding="utf-8") for path in sorted(where.glob("*.md")))
+    if not where.is_dir():
+        raise ApprovalError(
+            f"{offer_id} v{version} was never written — there is no document to measure, "
+            "and a version that does not exist is not a version that passed"
+        )
+    approved = _approved_texts(store, offer_id, version)
+    claims = read_manifest(store, offer_id, version).claims
 
-    disclosed: list[str] = []
-    unapproved: list[str] = []
-    for index, episode in enumerate(master.episodes):
-        if episode.text not in written:
+    # What backs a line, by kind. A CV entry is backed by the store re-rendering
+    # to it — T45's rule. An **episode line is backed by the approval file and
+    # nothing else**: the store is a thing the candidate edits, and routing an
+    # episode's authority through a list position was how reordering a story
+    # bank turned into a gate failure. A Counter, not a set, because one backing
+    # backs one line (T45's duplicated-line finding).
+    backed: Counter[tuple[str, str]] = Counter()
+    for claim in claims:
+        if claim.section == "episodes":
+            if claim.text in approved:
+                backed[(claim.document, claim.text)] += 1
             continue
-        disclosed.append(f"{offer_id}/v{version}: episode {index} — {episode.text}")
-        if episode.text not in backed:
-            unapproved.append(f"{offer_id}/v{version}: episode {index} — {episode.text}")
+        entries = _entries(master, claim.section)
+        if claim.entry_index < len(entries) and (
+            render_entry(claim.section, entries[claim.entry_index]) == claim.text
+        ):
+            backed[(claim.document, claim.text)] += 1
 
+    documents = {path.name: path.read_text(encoding="utf-8") for path in sorted(where.glob("*.md"))}
+    findings: list[str] = []
+    surviving: list[str] = []
+    for name, body in documents.items():
+        for line in _claim_lines(body):
+            key = (name, line)
+            if backed[key] > 0:
+                backed[key] -= 1
+                # Lines an approval explicitly names are excluded from the
+                # substance sweep below: they are approved content, and an
+                # episode the candidate later rewrote shares most of its
+                # wording with the sentence they approved. Sweeping them would
+                # report their own approved line back as a leak.
+                if line not in approved:
+                    surviving.append(line)
+            else:
+                # Unbackable is unapproved. A line nothing backs is exactly what
+                # an episode looks like after the candidate tidies it out of
+                # their story bank, and it used to measure clean.
+                findings.append(
+                    f"{offer_id}/v{version} {name}: {line} — no per-use approval backs this line"
+                )
+
+    # Substance carried by something that is not an episode line: a headline or a
+    # job description holding the same sentence reaches the employer just the
+    # same, and used to leave `payload.json` reporting the story as withheld.
+    # Checked over the backed lines only, so a line already reported above is not
+    # counted a second time.
+    episode_claims = [claim for claim in claims if claim.section == "episodes"]
+    disclosed = {claim.text for claim in episode_claims}
+    carried = 0
+    intact = "\n".join(surviving)
+    for episode in master.episodes:
+        if episode.text in disclosed or episode.text in approved:
+            continue
+        if _carries(intact, episode.text):
+            carried += 1
+            findings.append(
+                f"{offer_id}/v{version}: {episode.text} — the substance of a story-bank "
+                "episode, carried by an entry no per-use approval names"
+            )
+
+    checked = len(episode_claims) + len(findings)
     return {
-        "episode_disclosures": len(disclosed),
-        "episodes_withheld": len(master.episodes) - len(disclosed),
-        "unapproved_episode_disclosures": len(unapproved),
-        "unapproved_episodes": unapproved,
+        # A fraction over nothing checked is the third D-2 outcome, not a
+        # passing 1.0 — `_main` fails on it.
+        "episode_approval_coverage": None if checked == 0 else (checked - len(findings)) / checked,
+        "unapproved_episode_disclosures": len(findings),
+        "unapproved_episodes": sorted(findings),
+        "episode_disclosures": len(episode_claims) + carried,
+        "episodes_withheld": sum(
+            1
+            for episode in master.episodes
+            if episode.text not in disclosed and not _carries(intact, episode.text)
+        ),
     }
 
 
 def personal_details_in_master(store: ProfileStore, details: PersonalDetails) -> list[str]:
     """Personal details that reached `cv/master.json` — read from the file.
 
-    By key and by value: `master.json` refuses an unknown key at load time, so a
-    detail that got in did it by wearing another field's name, and the value is
-    what finds it there.
+    ponytail: matched on letters and digits only, so a comma, a space or a `+`
+    does not hide one. It does not catch a *reformatted* value — `10/12/1815`
+    against a stored `1815-12-10` — and the upgrade path is a per-field parser
+    rather than a string compare. The by-key branch below is cheap insurance
+    only: `CVMaster` forbids unknown keys, so a loadable master cannot carry
+    one, and it is a `master.json` written by something other than this codebase
+    that the branch exists for.
     """
     path = store.path("cv", "master.json")
     if not path.exists():
         return []
     raw = path.read_text(encoding="utf-8")
     loaded = json.loads(raw)
+    squashed = _squash(raw)
     found = [f"cv/master.json: {field}" for field in PERSONAL_FIELDS if field in loaded]
     found += [
         f"cv/master.json: the {field} given at step 11 is in the intake store"
         for field, value in details.stated().items()
-        if value in raw
+        if (needle := _squash(value)) and needle in squashed
     ]
     return sorted(set(found))
 
@@ -327,26 +499,29 @@ def sends_without_confirmation(store: ProfileStore) -> list[str]:
     if not root.is_dir():
         return []
     broken: list[str] = []
-    for record in sorted(root.glob("*/v*.json")):
-        data = json.loads(record.read_text(encoding="utf-8"))
+    for record in sorted(root.rglob("*.json")):
+        # Identity comes from the path, so a record too malformed to name itself
+        # is still reportable. Everything that reads the file is inside the try:
+        # a hand-written record is precisely what this looks for, and taking
+        # `make evidence` down over one hides every other record behind it.
+        where = record.relative_to(store.path())
         try:
-            digest = payload_digest(read_payload(store, data["offer_id"], data["version"]))
-        except (OSError, ValueError):
-            broken.append(f"{data['offer_id']}/v{data['version']}: no payload on disk to confirm")
+            data = json.loads(record.read_text(encoding="utf-8"))
+            offer_id, version = data["offer_id"], data["version"]
+            digest = payload_digest(read_payload(store, offer_id, version))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            broken.append(f"{where}: unreadable application record ({type(exc).__name__})")
             continue
         if data.get("confirmed_digest") != digest:
-            broken.append(f"{data['offer_id']}/v{data['version']}: confirms a different payload")
+            broken.append(f"{offer_id}/v{version}: confirms a different payload")
     return broken
 
 
 # ---------------------------------------------------------------------------
-# the gate — measured over the real corpus, against a stated fixture candidate
+# the probes — the half of the gate that is allowed to find something
 
 # The fixture candidate's story bank. Two episodes, and the measurement approves
-# exactly one of them per advert, so every run exercises both branches: the
-# episode that was cleared and the one that was not. A run that approved
-# everything would report zero unapproved disclosures for a tool with no
-# approval check in it at all.
+# exactly one of them per advert.
 _FIXTURE_EPISODES: tuple[Episode, ...] = (
     Episode(
         kind="achievement",
@@ -370,9 +545,204 @@ _FIXTURE_DETAILS = PersonalDetails(
 
 _FIXTURE_ASKS: tuple[str, ...] = ("PostgreSQL", "Python", "Kubernetes", "Salesforce")
 
+_PROBE_ADVERT = "We need a data engineer with PostgreSQL and a migration behind them."
+_PROBE_OFFER = "probe-1"
+
+# Every scenario `measure()` structurally cannot contain, because each one is a
+# defect on purpose and the gate is `== 0`.
+MINIMUM_PROBES = 10
+
+
+def _probe_master(headline: str = "Backend engineer — data platforms") -> CVMaster:
+    return CVMaster(
+        headline=SourcedText(text=headline),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=_FIXTURE_EPISODES,
+    )
+
+
+def _probe_prepare(
+    store: ProfileStore, master: CVMaster, approved: tuple[int, ...] = ()
+) -> Payload:
+    return prepare(
+        store,
+        master,
+        offer_id=_PROBE_OFFER,
+        advert=_PROBE_ADVERT,
+        recipient="hiring team, probe",
+        details=_FIXTURE_DETAILS,
+        asks=("PostgreSQL",),
+        approved_episodes=approved,
+    )
+
+
+def probe_boundary(root: Path) -> dict[str, Any]:
+    """Drive the boundary against cases it must **catch**, in fresh trees under `root`.
+
+    See the module docstring: without these the gate is unfalsifiable, because
+    `measure()` writes both sides of its own equality in one call.
+    """
+    failures: list[str] = []
+    checks = 0
+
+    def check(condition: bool, message: str) -> None:
+        nonlocal checks
+        checks += 1
+        if not condition:
+            failures.append(message)
+
+    def fresh(handle: str, master: CVMaster) -> ProfileStore:
+        identity = create_profile(root, "Probe", handle=handle, language="en")
+        store = ProfileStore(root, identity.handle)
+        write_master(store, master)
+        return store
+
+    win, failure = (episode.text for episode in _FIXTURE_EPISODES)
+    plain = _probe_master()
+
+    def letter_of(store: ProfileStore) -> Path:
+        return store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+
+    # 1 — a line planted in a finished document that nothing approved.
+    store = fresh("planted", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    letter = letter_of(store)
+    letter.write_text(letter.read_text(encoding="utf-8") + failure + "\n", encoding="utf-8")
+    measured = measure_prepared(store, plain, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 1
+        and any(failure in item for item in measured["unapproved_episodes"]),
+        "a planted unapproved episode was not caught and named",
+    )
+
+    # 2 — the same story deleted from the store afterwards. Enumerating the
+    # store rather than the documents made this measure clean.
+    tidied = plain.model_copy(update={"episodes": (_FIXTURE_EPISODES[0],)})
+    measured = measure_prepared(store, tidied, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] >= 1,
+        "deleting the episode from the store erased the finding",
+    )
+
+    # 3 — an episode's substance carried by a claimable free-text field. It
+    # reaches both documents, and an exact-substring check missed it entirely.
+    smuggled = _probe_master(headline=failure.rstrip("."))
+    store = fresh("smuggled", smuggled)
+    try:
+        _probe_prepare(store, smuggled)
+        caught = False
+    except ApprovalError:
+        caught = True
+    check(caught, "an episode's substance smuggled through the headline was not caught")
+    check(
+        not store.path(*_version_parts(_PROBE_OFFER, 1), "payload.json").exists(),
+        "a payload was written over a draft that discloses an unapproved episode",
+    )
+
+    # 4 — the story bank reordered after approval. No document changed and no
+    # approved text changed, so this must stay clean: an approval bound to a
+    # list position turned ordinary editing into a gate failure.
+    store = fresh("reordered", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    reordered = plain.model_copy(
+        update={"episodes": (Episode(kind="context", text="Unrelated."), *_FIXTURE_EPISODES)}
+    )
+    check(
+        measure_prepared(store, reordered, _PROBE_OFFER, 1)["unapproved_episode_disclosures"] == 0,
+        "reordering the story bank broke an approval that named a sentence",
+    )
+
+    # 5 — an approval written for a different offer, dropped into this version's
+    # file. Per-use means per *this* use.
+    approvals = store.path(*_version_parts(_PROBE_OFFER, 1), "approvals.json")
+    approvals.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "offer_id": _PROBE_OFFER,
+                "version": 1,
+                "episodes": [{"offer_id": "some-other-offer", "version": 1, "text": win}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    check(
+        measure_prepared(store, plain, _PROBE_OFFER, 1)["unapproved_episode_disclosures"] >= 1,
+        "an approval given for another offer backed this one",
+    )
+
+    # 6 — the approval file removed: zero approvals, never a permissive default.
+    store.path(*_version_parts(_PROBE_OFFER, 1), "approvals.json").unlink()
+    check(
+        measure_prepared(store, plain, _PROBE_OFFER, 1)["unapproved_episode_disclosures"] >= 1,
+        "a missing approvals file read as permission",
+    )
+
+    # 7 — a standing permission is not a confirmation.
+    store = fresh("sending", plain)
+    payload = _probe_prepare(store, plain, approved=(0,))
+    try:
+        record_sent(store, plain, _PROBE_OFFER, 1, confirms="yes, send anything for this offer")
+        refused = False
+    except ApprovalError:
+        refused = True
+    check(refused, "a standing permission was accepted as a confirmation")
+
+    # 8 — the document tampered with after drafting. The digest still names the
+    # payload, so only re-measuring at the boundary catches this.
+    letter = letter_of(store)
+    intact = letter.read_text(encoding="utf-8")
+    letter.write_text(intact + failure + "\n", encoding="utf-8")
+    try:
+        record_sent(store, plain, _PROBE_OFFER, 1, confirms=payload_digest(payload))
+        refused = False
+    except ApprovalError:
+        refused = True
+    check(refused, "a document edited after drafting was still sendable")
+    letter.write_text(intact, encoding="utf-8")
+
+    # 9 — a hand-written send record naming a payload that is not there.
+    record_sent(store, plain, _PROBE_OFFER, 1, confirms=payload_digest(payload))
+    forged = store.path("applications", _PROBE_OFFER, "v2.json")
+    forged.write_text(
+        json.dumps({"offer_id": _PROBE_OFFER, "version": 1, "confirmed_digest": "0" * 64}),
+        encoding="utf-8",
+    )
+    check(
+        sends_without_confirmation(store) == [f"{_PROBE_OFFER}/v1: confirms a different payload"],
+        "a send record that confirms a different payload was not named",
+    )
+    forged.unlink()
+    check(sends_without_confirmation(store) == [], "a genuine send record was reported as broken")
+
+    # 10 — a personal detail sitting in the intake store, written a slightly
+    # different way. Without this the gate's `[]` is a pass over nothing.
+    leaked = plain.model_copy(
+        update={"headline": SourcedText(text="Backend engineer +34600000000")}
+    )
+    store = fresh("leaked", leaked)
+    check(
+        personal_details_in_master(store, _FIXTURE_DETAILS)
+        == ["cv/master.json: the phone given at step 11 is in the intake store"],
+        "a personal detail in the intake store was not named",
+    )
+
+    # 11 — a version nobody wrote is not a version that passed.
+    try:
+        measure_prepared(store, plain, _PROBE_OFFER, 99)
+        refused = False
+    except ApprovalError:
+        refused = True
+    check(refused, "a version that was never written measured clean")
+
+    return {"detection_probes": checks, "detection_probe_failures": failures}
+
+
+# ---------------------------------------------------------------------------
+# the gate — measured over the real corpus, against a stated fixture candidate
+
 # How many prepared applications the measurement also carries through the send
-# boundary. A handful, not all of them: the property being measured is that a
-# recorded send names its payload, and that is not more true at a hundred.
+# boundary. A handful, not all of them.
 _RECORDED_SENDS = 5
 
 
@@ -386,6 +756,9 @@ def measure(
     repository and there must not be one. The episodes are added to the fixture
     here rather than committed into it, so T45's fixture keeps measuring exactly
     what T45 wrote it to measure.
+
+    This half proves the boundary holds on adverts it did not choose;
+    `probe_boundary`, folded in below, proves it can find something.
     """
     from integral.harness import DEFAULT_STORE_PATH, load_store
 
@@ -418,15 +791,16 @@ def measure(
             withheld += measured["episodes_withheld"]
             unapproved.extend(measured["unapproved_episodes"])
             if position < _RECORDED_SENDS:
-                record_sent(store, ad.id, payload.version, confirms=payload_digest(payload))
+                record_sent(store, master, ad.id, payload.version, confirms=payload_digest(payload))
                 recorded += 1
 
         leaked = personal_details_in_master(store, _FIXTURE_DETAILS)
         unconfirmed = sends_without_confirmation(store)
 
+    with tempfile.TemporaryDirectory() as scratch:
+        probed = probe_boundary(Path(scratch) / "profiles")
+
     return {
-        # A fraction over no disclosures at all is the third D-2 outcome, not a
-        # passing 1.0: nothing was measured, and `_main` says so and fails.
         "episode_approval_coverage": (
             None if disclosures == 0 else (disclosures - len(unapproved)) / disclosures
         ),
@@ -438,6 +812,7 @@ def measure(
         "sends_without_confirmation": unconfirmed,
         "applications_recorded": recorded,
         "adverts_prepared": len(ads),
+        **probed,
     }
 
 
@@ -458,23 +833,32 @@ def _main(argv: list[str] | None = None) -> int:
     measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
     failures = 0
     for key, label in (
-        ("unapproved_episodes", "episode disclosed with no per-use approval"),
+        ("unapproved_episodes", "disclosed with no per-use approval"),
         ("personal_details_in_master", "personal detail in the intake store"),
         ("sends_without_confirmation", "send recorded without confirming its payload"),
+        ("detection_probe_failures", "the boundary failed to catch a planted defect"),
     ):
         for name in measured[key]:
             print(f"✗ {label}: {name}", file=sys.stderr)
             failures += 1
     print(json.dumps(measured, ensure_ascii=False))
+
+    # Three empty denominators, each of which would otherwise be a gate that
+    # passed because nothing happened.
+    for key, floor in (
+        ("episode_disclosures", 1),
+        ("applications_recorded", 1),
+        ("detection_probes", MINIMUM_PROBES),
+    ):
+        if measured[key] < floor:
+            print(f"{key} is {measured[key]}, below the floor of {floor}", file=sys.stderr)
+            failures += 1
     if measured["episode_approval_coverage"] != 1.0:
-        # Including `None`. A run that disclosed no episode never exercised the
-        # approval path, and reporting a met gate off it would be a gate that
-        # passes because nothing happened.
         print(
             f"episode_approval_coverage is {measured['episode_approval_coverage']!r}, not 1.0",
             file=sys.stderr,
         )
-        return 1
+        failures += 1
     return 1 if failures else 0
 
 
