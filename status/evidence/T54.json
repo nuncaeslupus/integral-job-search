@@ -1,0 +1,18 @@
+{
+  "unconsented_contributions": 0,
+  "contribution_attempts": 4,
+  "contributions_recorded": 1,
+  "contributions_refused": 3,
+  "contributions_declined": 1,
+  "installs_recorded": 2,
+  "connectors_rejected_unverified": 1,
+  "foreign_path_reads": 0,
+  "candidate_data_in_output": 0,
+  "unverified_connectors_offered": 0,
+  "unconsented": [],
+  "foreign_reads": [],
+  "leaks": [],
+  "unverified_offered": [],
+  "defects": [],
+  "unmeasured_reason": null
+}

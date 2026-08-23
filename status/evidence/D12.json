@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 77,
+  "evidence_gates_read": 78,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -288,6 +288,14 @@
       "task": "lo-80ba",
       "key": "question_dimension_coverage",
       "evidence": "status/evidence/T7.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-892b",
+      "key": "unconsented_contributions",
+      "evidence": "status/evidence/T54.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
