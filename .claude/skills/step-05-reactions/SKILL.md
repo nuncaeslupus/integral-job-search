@@ -97,8 +97,11 @@ blocked on a missing input). Exit 2 means the candidate or step could not be rea
 means coverage is met but the gate is not built, so the step cannot be certified — a
 covered step is not a passed one (D-21).
 
-**`elicitation_eval_overlap` is not built, so this checkpoint exits 3 at best.** Say so when presenting this
-step's output: the artefacts are there, and nothing has measured whether they are any good.
+**`elicitation_eval_overlap` is built** (T9, `integral.reaction_elicit`), so exit 0 is now reachable:
+coverage met plus a gate that measured something. What it measures is the split — no advert used to
+elicit preferences is one the ranking is later scored against — read from the reaction rows this step
+records, never from the selector that chose the stimuli. It says nothing about whether the reactions
+themselves were any good, and this skill's prose still never asserts the gate passed.
 
 The script writes its result to the candidate's own tree at `session/checkpoint-reactions.json`, never to a shared or
 global path.

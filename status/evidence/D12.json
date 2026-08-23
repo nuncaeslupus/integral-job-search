@@ -389,6 +389,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "lo-b422",
+      "key": "elicitation_eval_overlap",
+      "evidence": "status/evidence/T9.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "lo-b876",
       "key": "unsatisfiable_hard_constraint_leaks",
       "evidence": "status/evidence/T24.json",

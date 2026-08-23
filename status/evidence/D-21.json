@@ -53,11 +53,11 @@
     {
       "step": "reactions",
       "n": 5,
-      "gate_state": "not_implemented",
+      "gate_state": "implemented",
       "gate_metric": "elicitation_eval_overlap == 0.0",
       "gate_owner": "T9",
-      "certifiable": false,
-      "expected_exit": 3
+      "certifiable": true,
+      "expected_exit": 0
     },
     {
       "step": "preferences",

@@ -1,0 +1,25 @@
+{
+  "elicitation_eval_overlap": 0,
+  "overlap_detected_when_planted": 1,
+  "reactions_examined": 1,
+  "refusals": [
+    "blocked_board",
+    "evaluation_split_ad",
+    "no_fetched_at",
+    "no_url",
+    "rewritten_text",
+    "unchecked_board"
+  ],
+  "scenarios": 8,
+  "permitted_live_sources": [
+    "eures",
+    "feinaactiva",
+    "manfred",
+    "remotive",
+    "weworkremotely"
+  ],
+  "blocked_sources": [
+    "remoteok",
+    "tecnoempleo"
+  ]
+}
