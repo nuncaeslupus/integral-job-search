@@ -1,0 +1,14 @@
+{
+  "corpus_job_family_count": 7,
+  "min_ads_per_family": 15,
+  "job_family_counts": {
+    "administrative": 18,
+    "healthcare": 18,
+    "hospitality": 18,
+    "programming": 100,
+    "retail": 18,
+    "teaching": 18,
+    "trades": 18
+  },
+  "families_below_floor": {}
+}

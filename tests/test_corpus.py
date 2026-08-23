@@ -81,11 +81,19 @@ def test_corpus_roundtrip_preserves_text_and_offsets(tmp_path: Path) -> None:
 
 
 def test_committed_store_roundtrips_without_loss() -> None:
-    """The real store, and every ad in it carrying a probe label, survives intact."""
+    """The real store, and every ad in it carrying a probe label, survives intact.
+
+    The count is checked against the programming slice, not the whole raw corpus:
+    T25 broadened `corpus/raw/` to six further job families, and labelling those is
+    T5-scale human work that T26 sequences, not something this task did. Equality
+    against the slice the store was actually built from still catches an ad the
+    harness drops, which is the loss this test exists to see.
+    """
     measured = measure(DEFAULT_STORE_PATH)
+    labelled_slice = [ad for ad in load_ads() if ad["job_family"] == "programming"]
 
     assert measured["corpus_harness_roundtrip_loss"] == 0, measured["roundtrip_losses"]
-    assert measured["ad_count"] == len(load_ads())
+    assert measured["ad_count"] == len(labelled_slice)
 
 
 def test_probe_labels_take_their_offsets_from_real_ad_text() -> None:
@@ -157,7 +165,13 @@ def test_an_existing_split_assignment_is_never_reassigned() -> None:
     before = {a["id"]: assign_splits(ads)[a["id"]] for a in ads}
 
     newcomers = [
-        {"id": f"newcomer-{i}", "language": "ca", "text": "…", "source_url": "https://x.invalid"}
+        {
+            "id": f"newcomer-{i}",
+            "language": "ca",
+            "text": "…",
+            "source_url": "https://x.invalid",
+            "job_family": "programming",
+        }
         for i in range(10)
     ]
     after = assign_splits([*ads, *newcomers], existing=before)
@@ -185,6 +199,7 @@ def test_init_preserves_existing_splits_when_the_corpus_grows(tmp_path: Path) ->
             "language": language,
             "text": f"ad body {index}",
             "source_url": f"https://example.invalid/{language}/{index}",
+            "job_family": "programming",
         }
 
     first_batch = [raw_ad(i, "ca") for i in range(6)]
