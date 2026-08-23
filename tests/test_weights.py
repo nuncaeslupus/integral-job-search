@@ -13,14 +13,18 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 import random
 from pathlib import Path
 
 import pytest
 
 from integral.weights import (
+    DEFAULT_EVIDENCE_PATH,
     NEGLIGIBLE_PER_MONTH,
+    RIDGE,
     ROUNDTRIP_THRESHOLD,
+    SALARY_SCALE,
     Choice,
     ChoiceSet,
     Package,
@@ -56,7 +60,7 @@ def _synthetic(count: int, *, seed: int = 7) -> ChoiceSet:
     not the answers.
     """
     rng = random.Random(seed)
-    choices = []
+    choices: list[Choice] = []
     for _ in range(count):
         pair = []
         for _ in range(2):
@@ -73,6 +77,29 @@ def _synthetic(count: int, *, seed: int = 7) -> ChoiceSet:
         probability = 1.0 / (1.0 + pow(2.718281828459045, -delta))
         choices.append(Choice(a=a, b=b, chosen="a" if rng.random() < probability else "b"))
     return ChoiceSet(currency="EUR", choices=tuple(choices))
+
+
+def _rational(count: int, *, seed: int = 11) -> ChoiceSet:
+    """The same design, answered without a single mistake."""
+    noisy = _synthetic(count, seed=seed)
+    return ChoiceSet(
+        currency="EUR",
+        choices=tuple(
+            Choice(
+                a=choice.a,
+                b=choice.b,
+                chosen="a"
+                if TRUE_SALARY * (choice.a.salary_per_month - choice.b.salary_per_month)
+                + sum(
+                    TRUE[name] * (choice.a.dimensions[name] - choice.b.dimensions[name])
+                    for name in TRUE
+                )
+                > 0
+                else "b",
+            )
+            for choice in noisy.choices
+        ),
+    )
 
 
 def test_partworth_to_salary_equivalent_roundtrips() -> None:
@@ -106,16 +133,46 @@ def test_the_roundtrip_error_rises_when_the_shown_number_is_coarsened() -> None:
     assert roundtrip_error(fitted, coarse) > ROUNDTRIP_THRESHOLD
 
 
+def _replicated(points: int, repeats: int, *, seed: int = 7) -> ChoiceSet:
+    """The same design, answered `repeats` times in the true proportion.
+
+    A single stochastic sample measures sampling noise as much as the
+    estimator: a coefficient of 0.15 carries a standard error near 30% at
+    four hundred choices, so a tolerance loose enough to pass would also pass
+    a fit that was wrong. Replicating each design point in the model's own
+    proportion drives that noise out and leaves the estimator itself as the
+    only thing the tolerance is about.
+    """
+    rng = random.Random(seed)
+    choices: list[Choice] = []
+    for _ in range(points):
+        a, b = (
+            _package(
+                round(rng.uniform(2000, 4000), 2),
+                **{name: round(rng.uniform(-1, 1), 3) for name in TRUE},
+            )
+            for _ in range(2)
+        )
+        delta = TRUE_SALARY * (a.salary_per_month - b.salary_per_month) + sum(
+            TRUE[name] * (a.dimensions[name] - b.dimensions[name]) for name in TRUE
+        )
+        wins = round(repeats / (1.0 + math.exp(-delta)))
+        choices.extend(
+            Choice(a=a, b=b, chosen="a" if index < wins else "b") for index in range(repeats)
+        )
+    return ChoiceSet(currency="EUR", choices=tuple(choices))
+
+
 def test_the_fit_recovers_a_known_preference() -> None:
     """Without this, a fit returning all zeros would roundtrip perfectly."""
-    fitted = fit(_synthetic(400))
+    fitted = fit(_replicated(150, 40))
     equivalents = {
         name: part["salary_equivalent_per_month"]
         for name, part in as_payload(fitted)["part_worths"].items()
     }
     for name, utility in TRUE.items():
         truth = utility / TRUE_SALARY
-        assert abs(equivalents[name] - truth) <= 0.35 * truth, (name, equivalents[name], truth)
+        assert abs(equivalents[name] - truth) <= 0.05 * truth, (name, equivalents[name], truth)
     assert equivalents["remote"] > equivalents["commute"] > equivalents["mentoring"]
 
 
@@ -143,7 +200,7 @@ def test_a_fit_that_prefers_less_money_is_refused() -> None:
         )
         for index in range(8)
     )
-    with pytest.raises(WeightsError, match="more money"):
+    with pytest.raises(WeightsError, match="less money"):
         fit(ChoiceSet(currency="EUR", choices=pairs))
 
 
@@ -181,6 +238,72 @@ def test_a_dimension_worth_less_than_a_euro_is_negligible_not_a_part_worth() -> 
     assert NEGLIGIBLE_PER_MONTH == 1.0
 
 
+def test_the_fit_is_a_stationary_point_of_the_penalised_likelihood() -> None:
+    """The coefficients returned actually maximise the objective claimed.
+
+    The gradient is recomputed here from the definition in the module
+    docstring — the difference between the two packages, money in thousands,
+    the ridge — and checked against what Newton returned. Two different
+    computations agreeing is worth something; the solver checking its own
+    convergence flag would not be.
+    """
+    choices = _synthetic(14)
+    fitted = fit(choices)
+    beta = [
+        fitted.salary_utility_per_month * SALARY_SCALE,
+        *(fitted.utility_per_unit[name] for name in sorted(fitted.utility_per_unit)),
+    ]
+    gradient = [-2.0 * RIDGE * value for value in beta]
+    for choice in choices.choices:
+        row = [
+            (choice.a.salary_per_month - choice.b.salary_per_month) / SALARY_SCALE,
+            *(
+                choice.a.dimensions[name] - choice.b.dimensions[name]
+                for name in sorted(fitted.utility_per_unit)
+            ),
+        ]
+        eta = sum(b * x for b, x in zip(beta, row, strict=True))
+        residual = (1.0 if choice.chosen == "a" else 0.0) - 1.0 / (1.0 + math.exp(-eta))
+        gradient = [g + residual * x for g, x in zip(gradient, row, strict=True)]
+    assert max(abs(value) for value in gradient) < 1e-8, gradient
+
+
+def test_a_separated_answer_sheet_is_finite_and_says_so() -> None:
+    """A candidate who never contradicts themselves has no finite MLE.
+
+    Perfect consistency separates the data: every coefficient can grow without
+    bound and the likelihood keeps rising, so an unpenalised fit is decided by
+    where the optimiser stopped rather than by the answers. The ridge makes
+    the optimum exist — and the fit says `separated`, because what it exists
+    at is a magnitude the penalty chose. The euro figures here really are
+    wrong: `commute` comes back near €566 against a truth of €200. Nothing
+    downstream can be careful about that unless the file admits it.
+    """
+    fitted = fit(_rational(30))
+    equivalents = {name: fitted.salary_equivalent(name) for name in TRUE}
+    assert all(math.isfinite(value) for value in equivalents.values()), equivalents
+    assert max(abs(value) for value in equivalents.values()) < 10_000
+    assert fitted.salary_utility_per_month > 0
+    assert fitted.separated is True
+    assert as_payload(fitted)["separated"] is True
+
+    assert fit(_synthetic(14)).separated is False
+
+
+def test_as_many_choices_as_coefficients_is_not_enough_to_identify_them() -> None:
+    """The boundary itself, so a rule loosened by one is caught here.
+
+    Asserted on the message rather than on the mere fact of a refusal: with
+    four answers and four coefficients the fit can also fall over for its own
+    reasons, and a test that accepted any `WeightsError` would pass while the
+    identifiability rule was gone.
+    """
+    choices = _synthetic(14).choices
+    with pytest.raises(WeightsError, match="cannot identify"):
+        fit(ChoiceSet(currency="EUR", choices=choices[:4]))
+    fit(ChoiceSet(currency="EUR", choices=choices[:5]))
+
+
 def test_a_fit_with_nothing_left_to_measure_raises_rather_than_reporting_zero() -> None:
     """An unmeasurable roundtrip must not read as a clean pass."""
     fitted = fit(_synthetic(14))
@@ -195,7 +318,15 @@ def test_weights_are_built_from_the_log_and_a_stray_row_is_skipped() -> None:
     over, not crash the rebuild: "cannot interpret it, cannot replay it".
     """
     encoded = [encode_choice(choice, currency="EUR") for choice in _synthetic(14).choices]
-    payload = build_weights_payload([*encoded, "loved the tone of this ad", "{}", "[1, 2]"])
+    payload = build_weights_payload(
+        [
+            *encoded,
+            "loved the tone of this ad",  # step 5's own rows: a sentence
+            "{}",  # an object, but not a choice
+            "[1, 2]",  # JSON, but not an object
+            '{"currency": "EUR", "chosen": "c"}',  # a choice shape it cannot validate
+        ]
+    )
     assert payload["choices"] == 14
     assert payload["part_worths"]
 
@@ -213,11 +344,11 @@ def test_choices_in_two_currencies_are_not_one_fit() -> None:
 
 def test_main_writes_the_evidence_and_the_probe_plants_its_own_failure(tmp_path: Path) -> None:
     evidence = tmp_path / "T10.json"
-    assert main(["weights", str(evidence)]) == 0
+    assert main([str(evidence)]) == 0
     written = json.loads(evidence.read_text(encoding="utf-8"))
     assert written == measure()
     assert written["weight_salary_equivalent_roundtrip_error"] <= ROUNDTRIP_THRESHOLD
     assert written["roundtrip_error_detected_when_coarsened"] == 1
-    assert main([]) == 2
+    assert DEFAULT_EVIDENCE_PATH.name == "T10.json"
 
     assert write_evidence(tmp_path / "nested" / "T10.json") == written

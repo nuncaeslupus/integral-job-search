@@ -99,6 +99,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from integral.candidate import FIELD_MODELS, ConstraintState
 from integral.decline import DeclineLedger
 from integral.identity import ProfileStore
+from integral.weights import WeightsError, build_weights_payload
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T6.json"
@@ -587,17 +588,38 @@ def _build_traits(log: EvidenceLog, rows: Sequence[EvidenceRow]) -> dict[str, An
 
 
 def _build_weights(log: EvidenceLog, rows: Sequence[EvidenceRow]) -> dict[str, Any]:
-    """The salary-equivalent weights file — shaped now, computed by T10.
+    """The salary-equivalent weights file — T10's fit over step 6's choices.
 
     It is written even while empty so that "no weights yet" is a file saying so
     at a known revision, rather than a missing file every later reader has to
     guess about. That distinction is what lets T34 call a ranking L1.
+
+    Step 6 records each forced pairwise choice as a `reaction` row whose text
+    is the JSON `integral.weights.encode_choice` writes — T41's encoding for a
+    structured capture, which is why no new field on `EvidenceRow` was needed.
+    Every reaction row is offered to the decoder, not only the ones from
+    `preferences`: a step name is a label the writer chose, and a rebuild that
+    trusted it would drop a choice recorded under any other name. The decoder
+    refuses anything that is not a choice, so step 5's sentences pass through
+    untouched.
+
+    A fit that cannot be trusted raises rather than writing a number — no
+    salary in the trade-offs, two currencies, a candidate the fit reads as
+    preferring less money. `rebuild` is the only caller and must not fail on a
+    log that merely has odd rows in it, so the refusal is caught and recorded
+    as `unfitted`: the file then says why there are no weights, which is what
+    T34 needs to explain an L1 ranking rather than imply a broken one.
     """
-    reactions = [row.id for row in rows if row.kind == "reaction"]
+    reactions = [row for row in rows if row.kind == "reaction"]
+    try:
+        fitted = build_weights_payload([row.text for row in reactions])
+    except WeightsError as exc:
+        fitted = {"unfitted": str(exc)}
     return {
         **_header(log, rows),
         "part_worths": {},
-        "reaction_evidence": reactions,
+        **fitted,
+        "reaction_evidence": [row.id for row in reactions],
     }
 
 
