@@ -1,0 +1,133 @@
+"""The fetch rule the collector is bound by, checked without a network.
+
+The interesting cases are the ones where a wrong answer is silent. A client
+that names itself honestly is governed by a site's `User-agent: *` block; a
+client that calls itself Claude is governed by the `Disallow: /` block both of
+these boards keep for AI crawlers. Same file, same path, opposite answers — so
+the identity is not a detail of the request, it is the input to the decision.
+"""
+
+from __future__ import annotations
+
+import urllib.error
+
+import pytest
+
+from integral.robots import USER_AGENT, Robots, RobotsError
+
+# Trimmed from the live files on 2026-08-24, keeping the groups that decide the
+# cases below. Frozen on purpose: a test that re-fetches measures the boards'
+# mood today, not this code.
+TECNOEMPLEO = """
+User-agent: *
+Disallow: /profesionales/
+Disallow: /_ajax/select_ajax.php
+Disallow: /accesoempresa.php
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Bingbot
+Crawl-delay: 5
+"""
+
+REMOTEOK = """
+User-agent: *
+Crawl-delay: 1
+Allow: /
+Disallow: /track-ad
+"""
+
+
+def _robots(files: dict[str, str], user_agent: str = USER_AGENT) -> Robots:
+    def fetch(url: str) -> str:
+        if url not in files:
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)  # type: ignore[arg-type]
+        return files[url]
+
+    return Robots(user_agent=user_agent, fetch=fetch)
+
+
+TECNO_ROBOTS = "https://www.tecnoempleo.com/robots.txt"
+TECNO_LISTING = "https://www.tecnoempleo.com/ofertas-trabajo/?te=teletrabajo"
+
+
+def test_an_honestly_named_client_may_read_the_listings() -> None:
+    """The `*` block does not disallow them, and `*` is the block that applies."""
+    assert _robots({TECNO_ROBOTS: TECNOEMPLEO}).allows(TECNO_LISTING)
+
+
+def test_the_same_path_is_refused_to_a_client_calling_itself_claude() -> None:
+    """The identity decides it. This is why the user agent may not be invented."""
+    assert not _robots({TECNO_ROBOTS: TECNOEMPLEO}, "ClaudeBot").allows(TECNO_LISTING)
+    assert not _robots({TECNO_ROBOTS: TECNOEMPLEO}, "anthropic-ai").allows(TECNO_LISTING)
+
+
+def test_a_disallowed_path_is_refused_to_everyone() -> None:
+    robots = _robots({TECNO_ROBOTS: TECNOEMPLEO})
+    assert not robots.allows("https://www.tecnoempleo.com/profesionales/alguien")
+    assert not robots.allows("https://www.tecnoempleo.com/accesoempresa.php")
+
+
+def test_a_missing_robots_txt_permits_everything() -> None:
+    """404 is the site saying it has no rules — the one absence that is a yes."""
+    assert _robots({}).allows("https://nowhere.example/ofertas")
+
+
+@pytest.mark.parametrize("failure", [500, 403, 503])
+def test_an_unreadable_robots_txt_refuses_rather_than_assumes(failure: int) -> None:
+    """An unanswered question is not a yes. Absent rules are not permissive rules."""
+
+    def fetch(url: str) -> str:
+        raise urllib.error.HTTPError(url, failure, "nope", {}, None)  # type: ignore[arg-type]
+
+    with pytest.raises(RobotsError):
+        Robots(fetch=fetch).allows("https://example.test/ofertas")
+
+
+def test_a_network_failure_refuses_too() -> None:
+    def fetch(url: str) -> str:
+        raise OSError("connection reset")
+
+    with pytest.raises(RobotsError):
+        Robots(fetch=fetch).allows("https://example.test/ofertas")
+
+
+def test_the_sites_crawl_delay_wins_when_it_is_slower_than_ours() -> None:
+    robots = _robots({"https://remoteok.com/robots.txt": REMOTEOK})
+    assert robots.delay("https://remoteok.com/remote-jobs", floor=0.4) == 1.0
+
+
+def test_our_floor_wins_when_the_site_asks_for_nothing() -> None:
+    robots = _robots({TECNO_ROBOTS: TECNOEMPLEO})
+    assert robots.delay(TECNO_LISTING, floor=0.4) == 0.4
+
+
+def test_robots_txt_is_read_once_per_host() -> None:
+    """A fetch per advert would be its own politeness problem."""
+    reads: list[str] = []
+
+    def fetch(url: str) -> str:
+        reads.append(url)
+        return TECNOEMPLEO
+
+    robots = Robots(fetch=fetch)
+    for path in ("uno", "dos", "tres"):
+        robots.allows(f"https://www.tecnoempleo.com/{path}")
+    assert reads == [TECNO_ROBOTS]
+
+
+def test_each_host_is_asked_separately() -> None:
+    robots = _robots({TECNO_ROBOTS: TECNOEMPLEO, "https://remoteok.com/robots.txt": REMOTEOK})
+    assert not robots.allows("https://www.tecnoempleo.com/profesionales/x")
+    assert robots.allows("https://remoteok.com/profesionales/x")
+
+
+def test_the_declared_user_agent_names_the_tool_and_carries_a_contact() -> None:
+    """Not a browser string. A board that wants this to stop needs somewhere to say so."""
+    assert "Mozilla" not in USER_AGENT
+    assert "integral-job-search" in USER_AGENT
+    assert "https://" in USER_AGENT

@@ -70,6 +70,26 @@ Every ad was fetched from a live board. Nothing is synthetic, translated or
 paraphrased (`status/specification.md` risk register: a corpus of invented ads
 makes every numeric gate pass while measuring nothing).
 
+### How it was fetched, including the part that was wrong
+
+Every ad here sits on a path its board's `robots.txt` permits — checked, not
+assumed, and now checked *by the collector on every fetch* through
+`integral.robots`, which refuses a disallowed URL rather than trusting this
+paragraph to stay true.
+
+**The user agent was not honest when these were collected.** Until 2026-08-24
+`tools/collect_ads.py` sent a Chrome string. That is worth stating plainly
+rather than quietly fixing, because robots.txt is addressed to whoever the
+client says it is: a browser string is not compliance with the file, it is
+evasion of it. It also bought nothing. Both boards that carry AI-crawler
+exclusions — `tecnoempleo.com` names nine, `remoteok.com` a similar list —
+allow `User-agent: *` on the listing paths these ads came from, so an honest
+name was permitted the whole time. The collector now sends one, with a contact
+URL, and waits at least a second between fetches.
+
+No ad here was collected from a path any of those files disallow. What changed
+is the honesty of the request, not the permission behind it.
+
 ## Known divergence — the Catalan slice is Catalan IT ads, not remote programming
 
 *This section is about the **`programming`** slice's Catalan 15 and nothing else.*

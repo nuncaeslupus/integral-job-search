@@ -42,11 +42,26 @@ from integral.corpus import (
     write_evidence,
     write_family_evidence,
 )
+from integral.robots import USER_AGENT, Robots
 
-UA = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120 Safari/537.36"
-)
+# ponytail: no rate-limit machinery — a floor, and whatever the site asks for,
+# whichever is slower.
+#
+# 1.0, not 0.4, and the reason is a parser limitation worth knowing about.
+# `remoteok.com` carries *two* `User-agent: *` groups — a Cloudflare-managed one
+# and its own, and only the second states `Crawl-delay: 1`. `RobotFileParser`
+# keeps the first group it matches, so `ROBOTS.delay()` reports nothing there.
+# Rather than hand-roll a merging parser to read one number, the floor is set to
+# the slowest thing any board we read asks for. Raise it, never lower it.
+POLITENESS_FLOOR = 1.0
+
+# One robots.txt per host, read once, and the identity it is answered for.
+# This used to send a Chrome string. A board's robots.txt is addressed to
+# whoever the client says it is, so a browser string is not compliance with the
+# file, it is evasion of it — and it bought nothing: both boards allow
+# `User-agent: *` on their listings. Being nameable is also the only way a board
+# can ask this to stop.
+ROBOTS = Robots()
 
 # ponytail: title regex, not an LLM classifier. Recall over precision — a wrong-role ad
 # is dropped by hand at labelling (T5), a missed one is invisible.
@@ -91,9 +106,17 @@ def detect_language(text: str) -> str:
 
 
 def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
-    r = session.get(url, timeout=30, headers={"User-Agent": UA}, **kw)
+    """Fetch `url`, or refuse because the site's robots.txt says not to.
+
+    The check is here rather than in each board adapter because every fetch
+    goes through here: a rule that has to be remembered at each call site is a
+    rule that is one new adapter away from not applying.
+    """
+    if not ROBOTS.allows(url):
+        raise PermissionError(f"robots.txt disallows {USER_AGENT} on {url}")
+    r = session.get(url, timeout=30, headers={"User-Agent": USER_AGENT}, **kw)
     r.raise_for_status()
-    time.sleep(0.4)  # ponytail: fixed politeness delay, no rate-limit machinery
+    time.sleep(ROBOTS.delay(url, POLITENESS_FLOOR))
     return r
 
 
