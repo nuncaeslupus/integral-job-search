@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 75,
+  "evidence_gates_read": 76,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -48,6 +48,14 @@
       "task": "lo-27bb",
       "key": "constraint_states_survive_rebuild",
       "evidence": "status/evidence/D6.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-2a7e",
+      "key": "cv_generation_traceability",
+      "evidence": "status/evidence/T45.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

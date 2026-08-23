@@ -4,6 +4,8 @@ title: "T45: Per-advert generation — CV and letter from store entries only, ve
 priority: 1
 deps: [lo-25b1]
 tags: [m4]
+status: merged
+issue: 67
 ---
 
 ## Acceptance gate
@@ -15,8 +17,20 @@ key: cv_generation_traceability
 ```
 
 ```bash
-echo "no gate command defined for T45 — replace this line with the command that writes status/evidence/T45.json" >&2; exit 1
+uv run --extra dev pytest tests/test_generate.py -q
+uv run --extra dev python -m integral.generate
 ```
+
+The `bash` block regenerates `status/evidence/T45.json`; the `gate` block
+asserts the number in it. The measurement runs the generator over **every
+advert in the labelled corpus** — real prose, real vocabulary — against a stated
+fixture candidate in `tests/fixtures/generation/master.json`, because there is
+no person in this repository and there must not be.
+
+`test_the_traceability_check_would_notice_an_invented_claim` is what stops the
+number being decoration: it appends one sentence to a finished CV that no
+manifest row backs, and requires the fraction to drop and name that line. A gate
+that cannot fail is not a gate.
 
 ## What this is
 

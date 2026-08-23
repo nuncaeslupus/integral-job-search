@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "headline": {
+    "text": "Backend engineer — data platforms and migrations",
+    "provenance": []
+  },
+  "residence_claim": {
+    "text": "Girona, Catalonia",
+    "provenance": []
+  },
+  "experience": [
+    {
+      "title": "Data migration lead",
+      "organisation": "Cintra Logistics",
+      "start": "2021",
+      "end": "2025",
+      "description": "Moved the billing system off the mainframe onto PostgreSQL.",
+      "provenance": []
+    },
+    {
+      "title": "Backend developer",
+      "organisation": "Ajuntament de Girona",
+      "start": "2017",
+      "end": "2021",
+      "description": "Built and ran the municipal permits API in Python.",
+      "provenance": []
+    }
+  ],
+  "education": [
+    {
+      "qualification": "Enginyeria Informàtica",
+      "institution": "Universitat de Girona",
+      "completed": "2017",
+      "provenance": []
+    }
+  ],
+  "skills": [
+    {"name": "PostgreSQL", "level": "strong", "provenance": []},
+    {"name": "Python", "level": "expert", "provenance": []},
+    {"name": "Docker", "level": "working", "provenance": []},
+    {"name": "Catalan payroll law", "level": "basic", "provenance": []}
+  ],
+  "certifications": [],
+  "languages": [
+    {"language": "ca", "level": "native", "provenance": []},
+    {"language": "es", "level": "native", "provenance": []},
+    {"language": "en", "level": "professional", "provenance": []}
+  ],
+  "episodes": [],
+  "raw_blocks": []
+}
