@@ -20,6 +20,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from integral.explain import explain
 from integral.offers import Location, Offer, Salary, compute_offer_id
 from integral.presentation import (
@@ -247,3 +249,22 @@ def test_a_missing_offer_beyond_the_page_limit_is_still_refused() -> None:
         assert beyond in str(exc)
         return
     raise AssertionError("a frontier offer nobody supplied should not vanish behind the limit")
+
+
+def test_the_cli_fails_when_the_fixture_stops_showing_both_kinds_of_bullet(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A recorded number nothing asserts is a gate that measures nothing. The
+    property — a filled bullet beside an `unknown` one — is what the CLI checks,
+    because an exact count of unknown cells is not something it could interpret."""
+    from integral import presentation
+
+    measured = presentation.measure()
+    assert measured["both_known_and_unknown_bullets_rendered"] == 1
+
+    monkeypatch.setattr(
+        presentation,
+        "measure",
+        lambda: {**measured, "both_known_and_unknown_bullets_rendered": 0},
+    )
+    assert presentation._main([str(tmp_path / "T44.json")]) == 1

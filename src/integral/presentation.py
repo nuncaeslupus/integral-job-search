@@ -304,7 +304,15 @@ def measure() -> dict[str, Any]:
         "rankings_rendered": 2,
         "provisional_rankings": 1,
         "renders_are_deterministic": int(_page(None)[1] == provisional_page),
-        "unknown_bullets_per_card": provisional_page.count(UNKNOWN) // 2,
+        # Not a count of unknown cells — a number like that is one the CLI
+        # cannot interpret, so recording it and asserting nothing is the shape
+        # of a gate that measures nothing. What is checkable is the property the
+        # fixture exists to exercise: one advert states its pay and location and
+        # the other states neither, so a correct page shows a filled bullet and
+        # an `unknown` one. `_main` fails when it does not.
+        "both_known_and_unknown_bullets_rendered": int(
+            UNKNOWN in weighted_page and "42,000" in weighted_page
+        ),
     }
 
 
@@ -329,6 +337,14 @@ def _main(argv: list[str]) -> int:
         return 1
     if not measured["renders_are_deterministic"]:
         print("rendering the same ranking twice produced different bytes", file=sys.stderr)
+        return 1
+    if not measured["both_known_and_unknown_bullets_rendered"]:
+        print(
+            "the page no longer shows both a stated bullet and an `unknown` one — "
+            "'unknown is shown as unknown' is being measured on a page where "
+            "everything is one or the other",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
