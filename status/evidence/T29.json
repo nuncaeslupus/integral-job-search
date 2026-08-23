@@ -11,12 +11,12 @@
     "history",
     "traits",
     "reactions",
+    "preferences",
     "sourcing",
     "application",
     "interview_log"
   ],
   "steps_not_implemented": [
-    "preferences",
     "understanding",
     "ranking",
     "feedback"

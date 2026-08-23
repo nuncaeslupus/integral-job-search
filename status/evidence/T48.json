@@ -8,13 +8,13 @@
     "identify",
     "intake",
     "interview_log",
+    "preferences",
     "reactions",
     "sourcing",
     "traits"
   ],
   "not_implemented": [
     "feedback",
-    "preferences",
     "ranking",
     "understanding"
   ],

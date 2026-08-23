@@ -98,8 +98,12 @@ blocked on a missing input). Exit 2 means the candidate or step could not be rea
 means coverage is met but the gate is not built, so the step cannot be certified — a
 covered step is not a passed one (D-21).
 
-**`weight_salary_equivalent_roundtrip_error` is not built, so this checkpoint exits 3 at best.** Say so when presenting this
-step's output: the artefacts are there, and nothing has measured whether they are any good.
+**`weight_salary_equivalent_roundtrip_error` is built** (T10, `integral.weights`), so exit 0 is now reachable:
+coverage met plus a gate that measured something. What it measures is the trip between the two scales — the
+euro figure written into `weights.json` at the precision the candidate is shown, multiplied back by the fitted
+salary utility, has to land on the part-worth the ranking uses. Coarsen what is shown and the number rises,
+which is the point: it is a check on a design decision, not on division. It says nothing about whether the
+choices themselves were good ones, and this skill's prose still never asserts the gate passed.
 
 The script writes its result to the candidate's own tree at `session/checkpoint-preferences.json`, never to a shared or
 global path.
