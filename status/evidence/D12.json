@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 80,
+  "evidence_gates_read": 81,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -48,6 +48,14 @@
       "task": "lo-2774",
       "key": "dimension_extractor_coverage",
       "evidence": "status/evidence/T3.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-277b",
+      "key": "connector_fixture_parse_f1",
+      "evidence": "status/evidence/T12.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

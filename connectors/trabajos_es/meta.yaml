@@ -1,0 +1,28 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: trabajos.com
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-23"
+
+# Checked, not assumed, on the day above. https://www.trabajos.com/robots.txt
+# carries `User-Agent: *` with four specific disallowed paths — a company page,
+# an ajax banner endpoint, and `/buscar-avanzado/` — none of which this
+# connector reads, and no rule naming any AI agent. Two boards that the corpus
+# collector already reads *do* carry such a rule (`tecnoempleo.com` and
+# `remoteok.com` both `Disallow: /` for `ClaudeBot`); this field is the reason
+# neither of them could be the connector's target.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — a category listing and one offer from it, taken on
+# the date below. Never an advert a candidate was reading: the set of ads a
+# person opens carries their field, level, city and the fact that they are
+# looking, and a fixture in a public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-23"

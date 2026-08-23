@@ -1,0 +1,12 @@
+{
+  "connector_fixture_parse_f1": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "cells_expected": 190,
+  "cells_parsed": 190,
+  "cells_agreeing": 190,
+  "mismatches": [],
+  "package": "trabajos_es",
+  "items_expected": 40,
+  "items_parsed": 40
+}
