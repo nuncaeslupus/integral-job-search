@@ -1,0 +1,13 @@
+{
+  "episode_approval_coverage": 1.0,
+  "unapproved_episode_disclosures": 0,
+  "unapproved_episodes": [],
+  "episode_disclosures": 100,
+  "episodes_withheld": 100,
+  "personal_details_in_master": [],
+  "sends_without_confirmation": [],
+  "applications_recorded": 5,
+  "adverts_prepared": 100,
+  "detection_probes": 13,
+  "detection_probe_failures": []
+}

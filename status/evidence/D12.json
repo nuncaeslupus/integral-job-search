@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 79,
+  "evidence_gates_read": 80,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -432,6 +432,14 @@
       "task": "lo-d2b2",
       "key": "corpus_size",
       "evidence": "status/evidence/T5.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-d838",
+      "key": "unapproved_episode_disclosures",
+      "evidence": "status/evidence/T46.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
