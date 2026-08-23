@@ -98,8 +98,10 @@ blocked on a missing input). Exit 2 means the candidate or step could not be rea
 means coverage is met but the gate is not built, so the step cannot be certified — a
 covered step is not a passed one (D-21).
 
-**`explained_fraction` is not built, so this checkpoint exits 3 at best.** Say so when presenting this
-step's output: the artefacts are there, and nothing has measured whether they are any good.
+**`explained_fraction` is built (T19), so exit 0 is reachable here.** What it measures is
+that every ranked offer cites the advert's own words for each dimension that moved its
+position — not that the order is right. `rank_spearman` is the gate for that, and it is
+T20's, still open: a step that explains itself well has not thereby been shown to rank well.
 
 The script writes its result to the candidate's own tree at `session/checkpoint-ranking.json`, never to a shared or
 global path.

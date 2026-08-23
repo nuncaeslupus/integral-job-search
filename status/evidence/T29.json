@@ -13,12 +13,12 @@
     "reactions",
     "preferences",
     "sourcing",
+    "ranking",
     "application",
     "interview_log"
   ],
   "steps_not_implemented": [
     "understanding",
-    "ranking",
     "feedback"
   ],
   "questions_declared": 5,

@@ -405,6 +405,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "lo-b313",
+      "key": "explained_fraction",
+      "evidence": "status/evidence/T19.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "lo-b422",
       "key": "elicitation_eval_overlap",
       "evidence": "status/evidence/T9.json",
