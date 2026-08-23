@@ -463,14 +463,20 @@ def feinaactiva_detail(session: requests.Session, ref: str) -> tuple[str, str, s
 
 
 def from_feinaactiva_family(
-    session: requests.Session, family: str, limit: int, known: set[str] | None = None
+    session: requests.Session,
+    family: str,
+    limit: int,
+    known: set[str] | None = None,
+    known_texts: set[str] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Ads for one non-programming family, found by keyword and confirmed by title.
 
-    `known` is the ids already in the corpus. Skipping them here rather than letting the
-    caller drop them as duplicates is what makes a top-up run add anything: `limit` counts
-    records yielded, so without this the second sitting re-walks the same refs and the
-    caller discards every one of them.
+    `known` is the ids already in the corpus and `known_texts` the texts. Skipping both
+    here rather than letting the caller drop them as duplicates is what makes a top-up run
+    add anything: `limit` counts records **yielded**, so a record the caller will refuse
+    still consumes the budget. `known` alone was not enough — `absorb` rejects on equal
+    text as well as equal id (a cross-source repost keeps the board's own new reference),
+    so a family could stop at its limit having added nothing.
     """
     base = "https://feinaactiva.gencat.cat/api/offers"
     refs: list[str] = []
@@ -506,7 +512,7 @@ def from_feinaactiva_family(
             text,
             family,
         )
-        if rec:
+        if rec and (known_texts is None or rec["text"] not in known_texts):
             count += 1
             yield rec
 
@@ -580,7 +586,9 @@ def main() -> int:
         if have < args.target_family:
             absorb(
                 family,
-                from_feinaactiva_family(session, family, args.target_family - have, set(ads)),
+                from_feinaactiva_family(
+                    session, family, args.target_family - have, set(ads), texts
+                ),
             )
 
     if args.ca_urls and args.ca_urls.exists():
