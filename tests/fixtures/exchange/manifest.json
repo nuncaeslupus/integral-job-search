@@ -1,0 +1,20 @@
+{
+  "manifest_version": 1,
+  "comment": "The sources repository's published index, served offline from this directory by connector_exchange.directory_fetcher. The file list is the one the committed connectors/examplejobs_es/ package really has, so a package that grows a file while the manifest does not fails the install instead of drifting quietly.",
+  "connectors": [
+    {
+      "package": "examplejobs_es",
+      "site": "examplejobs.test",
+      "country": "ES",
+      "language": "es",
+      "contributor": "@nuncaeslupus",
+      "last_verified": "2026-08-01",
+      "files": [
+        "connector.yaml",
+        "meta.yaml",
+        "fixture/list.html",
+        "fixture/detail.html"
+      ]
+    }
+  ]
+}
