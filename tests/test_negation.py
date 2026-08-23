@@ -15,6 +15,7 @@ from integral.extraction import (
     NormalisedAd,
     _is_negated,
     cue_findings,
+    evaluation_labels,
     negation_audit,
 )
 from integral.harness import DEFAULT_STORE_PATH as STORE
@@ -89,7 +90,15 @@ def test_recall_is_refused_while_the_corpus_cannot_carry_it(
     the corpus grows past the floor, `negation_audit` raises instead of quietly
     keeping this shape, and this test is what fails to say so.
     """
-    audit = negation_audit(load_store(STORE), list(dimensions.values()))
+    store = load_store(STORE)
+    audit = negation_audit(store, list(dimensions.values()))
     assert audit["extraction_negation_recall"] is None
     assert audit["negation_status"] == "unmeasured"
     assert audit["negated_label_count"] < audit["negation_label_floor"]
+
+    # The denominator is the **evaluation** split, because this is a score and D-2
+    # binds scores to held-out data. Counting every label in the store would let
+    # the labels that shaped the model unblock a measurement of the model against
+    # itself, and would trip the placeholder raise on the wrong population.
+    expected = [label for _, label in evaluation_labels(store) if label.negated]
+    assert audit["negated_label_count"] == len(expected)

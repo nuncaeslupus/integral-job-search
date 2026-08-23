@@ -561,12 +561,18 @@ def negation_audit(
                     elif _has_negator(window, language):
                         window_only.append(where)
 
+    # `evaluation_labels`, not every label in the store: this is the denominator of
+    # a **score**, and D-2 binds those to the evaluation split. Counting the
+    # elicitation split here would let ten labels that shaped the model unblock a
+    # measurement of the model against itself. The firing audit above is the other
+    # kind of number — a property of the cue set, not a score against held-out
+    # data — so it reads both splits, for the reason `prefilter_suppression` gives.
     negated_labels = [
-        f"{ad.id}/{label.dimension}" for ad in store for label in ad.labels if label.negated
+        f"{ad.id}/{label.dimension}" for ad, label in evaluation_labels(store) if label.negated
     ]
     if len(negated_labels) >= MIN_EVALUATION_LABELS_PER_DIMENSION:  # pragma: no cover
         raise ExtractionError(
-            f"the corpus now carries {len(negated_labels)} negated labels, so "
+            f"the corpus now carries {len(negated_labels)} negated evaluation labels, so "
             "extraction_negation_recall is measurable — this branch is a placeholder "
             "and scoring must be implemented before it can report a number (T59)"
         )
