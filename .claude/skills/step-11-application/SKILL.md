@@ -98,8 +98,12 @@ blocked on a missing input). Exit 2 means the candidate or step could not be rea
 means coverage is met but the gate is not built, so the step cannot be certified — a
 covered step is not a passed one (D-21).
 
-**`cv_generation_traceability` is not built, so this checkpoint exits 3 at best.** Say so when presenting this
-step's output: the artefacts are there, and nothing has measured whether they are any good.
+**`cv_generation_traceability` is built (T45), so this checkpoint can reach 0.** The gate is a
+build-time measurement over `manifest.json` against the store, not something this skill computes
+or asserts in prose — what it means for the conversation is that every claim in a generated
+document names the store entry it came from, and a line that names none is a failure the gate
+sees. An omission is a decision too: say what was left out, and let the candidate say it was
+wrong.
 
 The script writes its result to the candidate's own tree at `session/checkpoint-application.json`, never to a shared or
 global path.

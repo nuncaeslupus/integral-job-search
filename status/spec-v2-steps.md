@@ -942,7 +942,7 @@ or sit on it?"* Writes `last_activity`.
 **Gate.** `cv_generation_traceability == 1.0` — the fraction of claims in a
 generated document tracing to a specific store entry. Anything less is the tool
 inventing experience on a candidate's behalf, which is the single worst thing
-this project could ship. Owner: T45. State: `not_implemented`.
+this project could ship. Owner: T45. State: `implemented`.
 
 **Resume.** A draft in progress is saved as an unapproved version, so an
 interrupted session resumes at review rather than regenerating.

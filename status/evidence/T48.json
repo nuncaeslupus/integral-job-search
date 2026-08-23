@@ -2,6 +2,7 @@
   "step_gate_state_drift": 0,
   "steps_read": 13,
   "implemented": [
+    "application",
     "constraints",
     "history",
     "identify",
@@ -10,7 +11,6 @@
     "traits"
   ],
   "not_implemented": [
-    "application",
     "feedback",
     "interview_log",
     "preferences",

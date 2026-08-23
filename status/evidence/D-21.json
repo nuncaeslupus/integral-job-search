@@ -107,11 +107,11 @@
     {
       "step": "application",
       "n": 11,
-      "gate_state": "not_implemented",
+      "gate_state": "implemented",
       "gate_metric": "cv_generation_traceability == 1.0",
       "gate_owner": "T45",
-      "certifiable": false,
-      "expected_exit": 3
+      "certifiable": true,
+      "expected_exit": 0
     },
     {
       "step": "interview_log",

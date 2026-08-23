@@ -388,7 +388,7 @@
         "metric": "cv_generation_traceability",
         "op": "==",
         "threshold": 1.0,
-        "state": "not_implemented",
+        "state": "implemented",
         "task": "T45"
       },
       "reentry_events": [

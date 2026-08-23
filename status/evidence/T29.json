@@ -10,7 +10,8 @@
     "constraints",
     "history",
     "traits",
-    "sourcing"
+    "sourcing",
+    "application"
   ],
   "steps_not_implemented": [
     "reactions",
@@ -18,7 +19,6 @@
     "understanding",
     "ranking",
     "feedback",
-    "application",
     "interview_log"
   ],
   "questions_declared": 5,
