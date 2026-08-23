@@ -4,8 +4,8 @@
 
 | PR | Task | Gate | State |
 |---|---|---|---|
-| [#131](https://github.com/nuncaeslupus/job-search/pull/131) | T25 corpus job families | `corpus_job_family_count == 7` (floor 6) | open, awaiting review |
-| [#133](https://github.com/nuncaeslupus/job-search/pull/133) | T12 live portal connector | `connector_fixture_parse_f1 == 1.0` (floor 0.95) | open, awaiting review |
+| #131 | T25 corpus job families | `corpus_job_family_count == 7` (floor 6) | open, awaiting review |
+| #133 | T12 live portal connector | `connector_fixture_parse_f1 == 1.0` (floor 0.95) | open, awaiting review |
 
 `merge-policy` is `after-review`, so neither was self-merged. Both pass
 `make host-gate` locally; CI is red on both for the known runner-minutes reason

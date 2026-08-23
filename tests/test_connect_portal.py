@@ -26,6 +26,15 @@ EXPECTED = json.loads(DEFAULT_EXPECTED.read_text(encoding="utf-8"))
 
 PARSE_F1_FLOOR = 0.95
 
+# `connectors/` is a public library of crawlers, and an advert body is the board's
+# content, not ours: only the crawler belongs in the repository. A fixture needs
+# enough real markup to prove the connector finds the right fields, which is far
+# less than a whole advert. These ceilings are what stop a re-recording from
+# quietly restoring the full bodies — the excerpting step is easy to forget, and
+# nothing else in the suite would notice.
+TEASER_CEILING = 200
+BODY_CEILING = 800
+
 
 def test_connector_parses_fixture_pages_to_offers() -> None:
     """The acceptance gate: recorded pages parse to the expected offers.
@@ -129,3 +138,24 @@ def test_both_sides_are_normalised_the_same_way(raw: str) -> None:
     """Normalising only one side would measure the two parsers' whitespace
     policies rather than which field each of them found."""
     assert normalise(raw) == "a b"
+
+
+def test_the_committed_fixture_carries_excerpts_not_whole_adverts() -> None:
+    """`tools/excerpt_fixture.py` ran, and a future re-recording has to run it too.
+
+    The excerpting is a byte-level edit: everything outside the truncated bodies
+    is exactly what the server sent, because round-tripping the page through a
+    real parser would repair whatever the server got wrong, and repaired markup
+    is what a fixture must never be.
+    """
+    teasers = [item["text"] for item in parse_list_page(CONNECTOR, LIST_HTML) if "text" in item]
+    body = parse_detail_page(CONNECTOR, DETAIL_HTML)["text"]
+
+    assert teasers, "the listing fixture should still carry previews to parse"
+    assert max(len(t) for t in teasers) <= TEASER_CEILING, (
+        f"longest listing preview is {max(len(t) for t in teasers)} chars — re-run "
+        "tools/excerpt_fixture.py before committing"
+    )
+    assert len(body) <= BODY_CEILING, (
+        f"the detail body is {len(body)} chars — that is an advert, not an excerpt"
+    )

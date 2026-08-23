@@ -26,3 +26,13 @@ policy:
 fixture:
   provenance: sampled
   recorded: "2026-08-23"
+  # Excerpted before committing (`tools/excerpt_fixture.py`). A fixture proves the
+  # connector finds the right fields in real markup; it does not need whole adverts
+  # to do that, and this library is a public collection of crawlers — the adverts
+  # are the board's content, not ours. The advert bodies are cut to a leading
+  # excerpt; everything outside those spans is byte-identical to what the server
+  # sent, because the edit is made in the raw bytes rather than by parsing and
+  # re-serialising, which would repair markup the fixture exists to preserve.
+  # `tests/test_connect_portal.py` holds the ceilings so a re-recording cannot
+  # quietly restore the full bodies.
+  bodies: excerpted
