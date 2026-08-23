@@ -1,110 +1,84 @@
-# Session handover — 2026-08-23 (second session of the day)
+# Session handover — 2026-08-23 (third session of the day)
 
-## What merged
+## What is open
 
-Three tasks, all built in parallel by workers and all merged after review:
-
-| PR | Task | Gate | Merged as |
+| PR | Task | Gate | State |
 |---|---|---|---|
-| #130 | T54 connector exchange | `unconsented_contributions == 0` | `c93f4be` |
-| #128 | T47 mock interview | `mock_interview_character_breaks == 0` | `269501e` |
-| #129 | T46 send boundary | `unapproved_episode_disclosures == 0` | `8057d06` |
+| [#131](https://github.com/nuncaeslupus/job-search/pull/131) | T25 corpus job families | `corpus_job_family_count == 7` (floor 6) | open, awaiting review |
+| [#133](https://github.com/nuncaeslupus/job-search/pull/133) | T12 live portal connector | `connector_fixture_parse_f1 == 1.0` (floor 0.95) | open, awaiting review |
 
-`main` is green: `make host-gate` passes, `evidence: no drift`,
-`verify-gates: 77 terminal task(s); 77 gate(s) asserted, 0 carry no fenced gate block`.
-Issues 68/69/70 closed, task files archived, all claim refs pruned (0 remain).
+`merge-policy` is `after-review`, so neither was self-merged. Both pass
+`make host-gate` locally; CI is red on both for the known runner-minutes reason
+(`runner_id: 0`, 2–4 second jobs). Issues 50 and 51 close on merge via `Closes #`.
 
-Board after: 95 tasks — 3 open, 0 claimed, 1 done, 1 cancelled, 14 blocked, 76 merged.
+Board: 95 tasks — 0 open, 2 claimed (the two above), 1 done, 1 cancelled, 14 blocked,
+77 merged. **The queue has nothing unblocked left**: every remaining task depends on
+T25 or T12 merging, or on T5/T20 which are `[HUMAN]`.
+
+PR #132 ("one priority scale on the board") is not from this session.
 
 ## The thing worth carrying forward
 
-All three PRs passed the full local gate on their first submission and **all three
-were wrong**. 25 confirmed defects were found by an adversarial review pass run
-after the gate was green, plus 6 by CodeRabbit. The repo's gate discipline catches
-a broken implementation; it says nothing about a measurement that was never able
-to fail.
+**Check robots.txt before choosing a board, not after building against it.**
 
-One pattern accounted for a third of the findings, and it will recur:
+T12 was most of the way to a connector on tecnoempleo.com before its robots.txt was
+read. It names `ClaudeBot`, `Claude`, `anthropic-ai`, `Claude-Web`, `Claude-SearchBot`
+and `AnthropicBot`, each with `Disallow: /`. The recordings were deleted and the board
+switched. `remoteok.com` blanket-blocks `ClaudeBot` too.
 
-> **The thing that decides the scope of a check must be inside the check.**
+This is not a T12 detail. **`tools/collect_ads.py` still has `from_tecnoempleo` and
+`from_remoteok` adapters, and 53 of the corpus's committed ads came from tecnoempleo**
+(T4b, long before this session). Nothing was changed about that here — removing 53 ads
+and a source adapter is the repo owner's call, not a worker's. It needs a decision:
 
-Three separate instances, in three unrelated modules:
-- the `closing` turn bounded the transcript scan and was itself unscanned, so one
-  planted `closing` at index 1 blinded the whole file;
-- the `announcement` turn set the scan's start index and was itself unscanned, so
-  a candidate-authored announcement passed and was never held to the in-character
-  rules;
-- the package name anchored the containment check and was itself unvalidated, so
-  an escaped join became its own happy root (arbitrary write outside
-  `$INTEGRAL_HOME` from an unauthenticated manifest).
+1. leave it (the ads are already collected; the block post-dates the collection), or
+2. drop both adapters and re-collect those 53 from permitted boards, or
+3. keep the adapters but stop running them.
 
-A second pattern, equally worth naming: **a check whose evidence the writer
-authors is not a check.** T54's "reads no candidate data" compared the recorded
-path list against the very rule that decided what went into it — always empty,
-whatever the code did. The fix was an independent witness that reads the profile
-directory and searches the output, consulting nothing the writer reported.
+Whichever way, `connectors/trabajos_es/meta.yaml` shows the shape of the check that
+would have caught it: `policy.robots_txt: respected` is a field a package must assert,
+so it forces the question at authoring time.
 
-Third: **a harness that constructs both sides of its own equality certifies
-nothing.** T46's `measure()` derived the documents and the approvals from one
-tuple in one call, so 8 of 9 mutations — including deleting the approval check
-outright — left the committed evidence byte-identical. Fixed with 13 scenarios
-that are defects on purpose, and a floor so they cannot quietly stop running.
+The other reason the board changed is worth knowing before the next connector:
+**weworkremotely, remotive, getmanfred, feinaactiva and EURES all permit us, and all
+serve their listings from JSON APIs or JavaScript applications.** `integral.connectors`
+matches CSS selectors against served markup, so on those boards there is nothing on the
+page to find. Server-rendered HTML is now a scarcer precondition than permission is.
 
-**Recommendation for the next session:** when a task's gate is a `== 0` / `== 1.0`
-structural claim, run a mutation pass before opening the PR. Strip each guard in
-turn and confirm the gate goes red. Every worker here did that *after* review and
-it took one round; doing it first would have saved three.
+## Two patterns that held up again
+
+Both PRs ran a **mutation pass before opening**, per the last session's recommendation.
+It paid for itself twice, and one round found what review would have:
+
+- T25's gate looked green while `retail` had 11 ads against a floor of 15, because
+  Catalan titles are written `Venedor/a` and a pattern needing a following word never
+  fired on the gender suffix.
+- T12's first precision test could not distinguish `false_positive = 0` from the real
+  thing, because it only tested a case where hits were already zero. Rewritten with one
+  right cell and one wrong one.
+
+**The independent-witness pattern generalises.** T12's expected offers are written by a
+different parser (lxml + full CSS) from the one under test (hand-rolled, no
+combinators), and are committed as frozen data the gate never regenerates. If the gate
+re-ran the annotator, both sides would be recomputed from the fixture in one breath and
+agree with themselves whatever either did — the same failure T46's harness had.
 
 ## Stated ceilings, deliberately not built
 
-- T47: a maintainer editing one of the seven probe strings into coaching cannot be
-  caught by any measurement (writer and reader then agree). Defence is a pinned
-  finite vocabulary + a test, so it is a deliberate act, not a slip. Said plainly
-  in the module docstring and PR body.
-- T46: shingle matching beats punctuation/spacing/case/truncation, not a genuine
-  paraphrase. Upgrade path noted: embedding comparison. Reformatted dates still
-  slip past the personal-detail scan; upgrade path is a per-field parser.
-- T46: `confirms` proves *which* payload was named, never *who* named it. Said in
-  the docstring rather than hidden behind the word "approval".
-- T54: `candidate_data_in_output` is substring matching, so a leak that
-  *transforms* text escapes it. It is the independent witness, not the guarantee;
-  the guarantee remains `_read_bundle`'s single root.
-- T54: the sources repository (`nuncaeslupus/integral-connectors`) **does not
-  exist**. Everything runs against `tests/fixtures/exchange/manifest.json`; the
-  fork/branch/PR is assembled into an outbox command and never executed.
-- T47: no production caller. Nothing in `.claude/skills/step-12-interview-log/` or
-  `step_runtime` reaches `Rehearsal`; the 96 transcripts are a fixture measuring a
-  fixture. Wiring it is unowned work.
+- **T12 reads one listing page.** trabajos.com pages by offset (`&DESDE=41`, 40 at a
+  time) and `Pagination` only emits consecutive integers, so a stride of 40 is not
+  expressible in the schema. Declared `mode: none` rather than encoding a lie. A `step:`
+  field on `Pagination` is the upgrade path — **worth a task, not seeded**.
+- **T25's six new families are ca/es only.** "The same three languages" was read as a
+  whitelist on what may enter the corpus, not a per-family quota: they are on-site roles
+  in Catalonia and no English-language board advertises Catalan hospitality work.
+- **T25's new families are unlabelled.** The labelled store is still T5's 100
+  programming ads; T26 sequences widening it. `test_corpus_raw.py`'s language mix and
+  `test_corpus.py`'s roundtrip count were scoped to the `programming` slice for that
+  reason — scoped, not weakened, and D-1's anchors are untouched.
 
-## Environment notes
+## Board hygiene, unactioned on purpose
 
-- **`gh` works on this surface.** `github_channel.sh --detect` prints `gh` and auth
-  is live. `CLAUDE.md`'s "This surface has no scriptable GitHub channel" section is
-  stale for a local session and should be scoped to the cloud surface or removed —
-  three independent workers hit it and worked around it. **Unowned.**
-- GitHub Actions still out of runner minutes; `MERGEABLE/UNSTABLE` on every PR is
-  that, not the diff.
-- Parallel branches all touch `status/evidence/T55.json` (`files_scanned`) and
-  `D12.json` (`evidence_gates_read`), so every branch after the first merge needs a
-  rebase + `make evidence` + amend. Budget for it when fanning out.
-
-## Open, and what is actually next
-
-3 open tasks; **all three need live egress to job boards** and cannot be done by a
-cloud or sandboxed session:
-- T25 (`lo-1af2`) — broaden the corpus to ≥6 job families, ≥15 ads each
-- T12 (`lo-277b`) — one live portal connector against recorded fixtures
-- T9 (`lo-b422`) — reaction elicitation from live stimuli
-
-**T25 is the bottleneck for the whole board.** The extractor score (T56), the
-negation score (T59), the ontology hit rate (T57) and the dimension model (T26)
-are all blocked behind it, and two step gates are sitting at `unmeasured` because
-of it. It is a human afternoon with a browser, not an engineering task.
-
-## Standing warning nobody owns
-
-`query_status` reports `mixed-priority-convention` every session: 16 tasks use the
-size scale (10/5/1/0), 2 use 70/60. Every value above 10 outranks every sized task
-regardless of intent — and one of the two is T25, which is genuinely the most
-important thing left. Flagged to the user twice now; changing selection order is
-the user's call, not an agent's.
+`query_status.py` still flags `mixed-priority-convention`: 2 tasks carry priority 70/60
+on a board whose size scale is 10/5/1. Changing them changes what runs next, which is
+the owner's call. PR #132 may already address it.
