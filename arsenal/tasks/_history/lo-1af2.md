@@ -6,6 +6,7 @@ workspace: ONTOLOGY
 tags: [laptop, m4]
 requires: [surface:egress]
 status: merged
+pr: https://github.com/nuncaeslupus/job-search/pull/131
 ---
 
 ## Acceptance gate
