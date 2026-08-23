@@ -127,6 +127,14 @@ class ConstraintField(Strict):
     """
 
     state: ConstraintState
+    # The evidence rows that stated this field (T21). Provenance, not a value,
+    # which is why `_shape_matches_state` below skips it: a `stated` field
+    # still has to say something other than who said it, and a `declined` one
+    # still carries no answer even though a decline of its own is on record.
+    # Empty is the honest default — a field resolved from a decline or never
+    # touched has no row behind it, and step 10's `feedback_traceability`
+    # measures how often a *stated* one does not.
+    evidence: tuple[str, ...] = ()
     # Field names (on the subclass) that must be non-default when `state` is
     # `stated`. Empty by default; a subclass with no sub-fields at all (none
     # exist here, but the base stays honest) would otherwise accept a
@@ -139,7 +147,9 @@ class ConstraintField(Strict):
 
     @model_validator(mode="after")
     def _shape_matches_state(self) -> ConstraintField:
-        names = [name for name in type(self).model_fields if name != "state"]
+        names = [
+            name for name in type(self).model_fields if name not in ("state", "evidence")
+        ]
         set_names = [name for name in names if not self._is_default(name)]
         if self.state == "stated":
             missing = [name for name in self._required_when_stated if self._is_default(name)]

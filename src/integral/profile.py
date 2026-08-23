@@ -473,8 +473,12 @@ def _last_pinned_value(
 
 def _resolve_pinned_field(
     rows: Sequence[EvidenceRow], declines: Sequence[Any], field: str
-) -> tuple[ConstraintState, dict[str, Any] | None, bool]:
-    """One pinned field's `(state, value, touched)`.
+) -> tuple[ConstraintState, dict[str, Any] | None, bool, tuple[str, ...]]:
+    """One pinned field's `(state, value, touched, evidence)`.
+
+    `evidence` is the row that stated it, and is empty for every other state —
+    T21's `feedback_traceability` reads it, and a `declined` or `unknown` field
+    is not derived from a row so it is not asked for one.
 
     The same reconciliation T41 applies when a call offers it no new turn for
     a field (`constraints_step._resolve_without_turn`): whichever of a prior
@@ -489,10 +493,10 @@ def _resolve_pinned_field(
         row, value = stated
         last_decline_at = declines[-1].at if declines else None
         if last_decline_at is None or row.recorded_at >= last_decline_at:
-            return "stated", value, touched
+            return "stated", value, touched, (row.id,)
     if declines:
-        return "declined", None, touched
-    return "unknown", None, touched
+        return "declined", None, touched, ()
+    return "unknown", None, touched, ()
 
 
 def _resolve_pinned_fields(
@@ -515,11 +519,11 @@ def _resolve_pinned_fields(
     any_touched = False
     for field, model in FIELD_MODELS.items():
         declines = ledger.declines(field)
-        state, value, touched = _resolve_pinned_field(rows, declines, field)
+        state, value, touched, evidence = _resolve_pinned_field(rows, declines, field)
         any_touched = any_touched or touched
         try:
             instance = (
-                model(state="stated", **value)
+                model(state="stated", evidence=evidence, **value)
                 if state == "stated" and value is not None
                 else model(state=state)
             )

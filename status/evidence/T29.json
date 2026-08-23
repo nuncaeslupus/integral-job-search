@@ -14,12 +14,12 @@
     "preferences",
     "sourcing",
     "ranking",
+    "feedback",
     "application",
     "interview_log"
   ],
   "steps_not_implemented": [
-    "understanding",
-    "feedback"
+    "understanding"
   ],
   "questions_declared": 5,
   "shape_questions": [

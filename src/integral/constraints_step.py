@@ -337,7 +337,9 @@ def resolve(
                 source="conversation",
                 text=_encode_stated(matched.text, matched.value),
             )
-            fields[field] = FIELD_MODELS[field](state="stated", **matched.value)
+            fields[field] = FIELD_MODELS[field](
+                state="stated", evidence=(row.id,), **matched.value
+            )
             resolutions.append(FieldResolution(field, "stated", row.id))
             continue
 
@@ -348,7 +350,9 @@ def resolve(
             # runtime check of something that could actually be missing.
             if evidence_row is None or value is None:  # pragma: no cover - contract, not a path
                 raise ConstraintsStepError(f"{field}: a stated resolution carried no evidence")
-            fields[field] = FIELD_MODELS[field](state="stated", **value)
+            fields[field] = FIELD_MODELS[field](
+                state="stated", evidence=(evidence_row.id,), **value
+            )
             resolutions.append(FieldResolution(field, "stated", evidence_row.id))
         else:
             fields[field] = FIELD_MODELS[field](state=state)

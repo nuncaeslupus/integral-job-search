@@ -229,6 +229,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "lo-60b5",
+      "key": "feedback_traceability",
+      "evidence": "status/evidence/T21.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "lo-62f9",
       "key": "profile_capture_coverage",
       "evidence": "status/evidence/T28.json",
