@@ -1,121 +1,160 @@
-# Session handover — 2026-08-22 (D-12 and T15 both merged; T56 seeded)
+# Session handover — 2026-08-23 (T16 and T45 merged; T59 seeded)
 
 ## Board
 
-- **D-12 (`t-e1ca8374`, #83) merged** as PR #116 → `bcaf87c`. Issue closed, task
-  archived. This is the one that had been held for an owner decision.
-- **T15 (`lo-25b1`, #52) merged** as PR #118. Issue closed, task archived,
-  claim released. It needed no new code — the extractor had been complete since
-  2026-08-20 and only its gate held it open.
-- **T56 (`lo-6f53`) is new**, with issue **#117** created by hand — Actions has
-  no runner minutes, so `arsenal-queue.yml` cannot open handles. Check for
-  missing handles with `handle_sync.py` after every session that adds a task.
-- Board after both: 92 tasks, 67 merged, 8 open, 15 blocked (was 19).
-- One pre-existing flag, unchanged: mixed-priority-convention — 23 tasks on the
+- **T16 (`lo-bd02`, #56) merged** as PR #125 → `76f2768`. Issue closed, task archived.
+- **T45 (`lo-2a7e`, #67) merged** as PR #126 → `9165c4e`. Issue closed, task archived.
+- **T59 (`lo-4b17`) is new**, issue **#124** created by hand. Blocked on T25
+  (`lo-1af2`) + T26 (`lo-9e41`) — the same two corpus tasks T56 waits on.
+- Board after both: 95 tasks, 72 merged, 6 open, 15 blocked (was 17).
+- **All claim refs pruned — 0 remain.** Four were stale (two from this session,
+  `lo-0300` and `lo-5db0` from earlier ones). They accumulate one per task ever
+  claimed; prune at the end of a session that merges anything.
+- One pre-existing flag, unchanged: mixed-priority-convention — 20 tasks on the
   size scale [10, 5, 1, 0] and 2 on other values [70, 60].
 
-## THIS SURFACE HAS `gh` — the CLAUDE.md note is stale
+## `merge-policy: after-review` means *bots*, not the owner
 
-`github_channel.sh --detect` prints **`gh`**, and `gh` works: issue list, issue
-create, PR create, PR merge, `git push` to any branch. The "no scriptable GitHub
-channel / MCP tools only / manual POST" section in `CLAUDE.md` describes the web
-surface, not this one. **Detect before believing it.** Everything this session
-did went through `gh` and ordinary `git push`, including `claim_task.sh`, which
-returns `won`/`lost` here rather than `manual POST`.
+The owner corrected this mid-session. `after-review` is satisfied when the
+review bots have run **and their findings are addressed** — then the agent
+merges. It does not mean waiting for a human.
 
-`open_task_pr.sh` still was not used — archiving by hand and opening with
-`gh pr create` is two commands and needs no `ARSENAL_*` overrides.
+**CodeRabbit is the only bot on this repo**, confirmed against PRs #120, #121
+and #123. So "after review" here is CodeRabbit, and the loop is: open, wait for
+its pass, fix or push back on every finding with a reply on the thread, merge.
 
-## What D-12 was
+`gh` works on this surface — issue list/create, PR create/merge, `git push` to
+any branch, `claim_task.sh` returning `won`/`lost`. The "MCP tools only /
+manual POST" section in `CLAUDE.md` describes the web surface. Detect first.
 
-D-2 binds an extraction score to three outcomes — a number, a failure, or
-**unmeasured** — and the gate layer had two. `extraction_macro_f1: null` beside
-`extraction_status: "unmeasured"` landed in `gate_evidence`'s "not numeric"
-branch and read as a hard failure, so T15 could not reach terminal and fifteen
-tasks sat behind it.
+## What T16 was, and why its gate changed
 
-**Resolution A + B, on the owner's decision.**
+Negation scope. `_is_negated` searched a flat 40-character window back from a
+cue with no notion of where the negator's clause ends, and two committed adverts
+were being read backwards:
 
-- **B's upstream half had already landed.** `claude-arsenal#168` shipped in the
-  vendored bundle before the task was picked up: `gate_evidence.py` takes a
-  `status-key:` line and exits 3 for a metric the evidence file *positively
-  asserts* is unmeasured; `gate_run.sh` prints `gate: unmeasured`. Nothing
-  vendored was edited. **Read the vendored script before designing around its
-  absence** — the payload's "What the code does" section was two weeks stale.
-- **B alone would have unblocked nothing.** Exit 3 is still a hard stop in
-  `open_task_pr.sh:116` and in `tools/verify_gates.py:127` (`returncode == 0`),
-  both deliberately. The third outcome makes a state *recordable*, never
-  *terminal*. That distinction is the whole finding.
-- **So the split is the half that moved the queue.** T15's gate became
-  `prefilter_suppressed_positives == 0` (already 0 over 36 positives);
-  `extraction_macro_f1 >= 0.75` became T56, blocked on T25 + T26, with
-  `status-key: extraction_status` so waiting for labels records as unmeasured.
+- `manfred-8392` — `…sin ambigüedades. **El inglés fluido` read as a *negated*
+  English requirement, across a full stop.
+- `remotive-2091075` — a `not` in one bullet inverted the next, across a blank line.
 
-`src/integral/task_gate.py` measures the **disease**: `unrecordable_task_gates`
-counts any task gate whose evidence holds a non-numeric value at its key with no
-`status-key` to say why. **1 of 67 before the split, 0 of 68 after.** Only a
-positively asserted status counts — a `status-key` naming a key the evidence file
-does not carry is a typo, not a third outcome.
+`_negation_scope` now cuts the window at the last `.!?;` or newline. **A comma is
+deliberately not a boundary** — `manfred-8389`'s "no harás guardias" must still
+negate, and `test_negator_still_reaches_across_a_comma` stops the fix passing by
+negating nothing. 4 true negations kept, both false positives gone.
 
-Splitting T15's gate moved step 8's gate owner, which D-7's ownership check
-enforces across **four** places: `status/spec-v2-steps.json`,
-`status/spec-v2-steps.md`, `docs/spec-v2-steps/spec-annotated.md` (regenerate
-with `make reader-steps`, do not hand-edit), and `status/evidence/D-21.json`.
+**The filed gate was unmeasurable and was split, on the owner's decision.**
+`extraction_negation_recall >= 0.80` is defined over the corpus subset labelled
+as negated. That subset is **2 labels, both on `tecnoempleo-98201f7d…`**, against
+a floor of 10. T16 closed on `negation_scope_leaks == 0`; the number is T59.
 
-## What T15 was
+Two things worth carrying forward from it:
 
-**No new code.** The extractor has been complete since 2026-08-20; only the gate
-held it open. The work was correcting the payload's `## Tests` section — it still
-named macro-F1 as T15's test, which is now T56's — and flipping the plan
-checkbox to ☑, which merging does not do by itself.
+- **T16 could not borrow T15's trick.** T15 split cleanly because
+  `prefilter_suppressed_positives` was a real second property over 36 positives.
+  That counter **skips every negated label** — a denial on a unipolar scale is
+  class 0, and it only checks positives. Do not assume a split always has a
+  measurable half; T16's gate is openly a *regression* gate and the task file
+  says so.
+- **`negation_window_only_count` is the number that shows the fix did something**
+  (2 matches the raw window negates and the clause rule does not). The gate
+  metric itself is 0 by construction.
 
-`test_extraction_matches_corpus_labels` stays in T15 and asserts the **refusal**
-(null, unmeasured, dimensions named). When the corpus grows past the floor that
-test is what should start failing, and that is T56's signal to implement scoring.
+## What T45 was
 
-## Claim refs had accumulated — 14 of them, 13 for merged tasks
+Per-advert CV and letter generation, gate `cv_generation_traceability == 1.0`.
 
-`claim_task.sh lo-25b1` returned **`lost`** and it was a **stale lock**: issue #52
-was open, unassigned and carried no `arsenal:claimed` label, and the ref pointed
-at a commit merged two days earlier. `claiming-internals.md` says claim refs
-accumulate roughly one per task ever claimed and should be pruned from a CLI
-session occasionally — nothing had ever pruned them here.
+**The design decision is the whole task**: documents are assembled *from* store
+entries, so a claim cannot exist without one. `render_entry` is the single source
+of a claim's wording, and `traceability` re-renders each entry from the store and
+reads the **files on disk**, so it sees a line however it got there. A generator
+that free-writes and traces afterwards can always invent a plausible citation.
 
-**Diagnose a `lost` before obeying it, and never route around it.** The check is
-the issue, not the ref: assignee + `arsenal:claimed` label is the system's own
-visible record of who holds a task. All 14 refs are now pruned; a fresh claim
-won cleanly.
+Measured over all 100 labelled corpus adverts against a fixture candidate in
+`tests/fixtures/generation/master.json`: **1800 claim lines, 0 untraced, 0
+unused, 200 gaps named.**
 
-## Lessons worth keeping
+Deliberately not built, and named in the PR rather than guessed at:
+
+- `asks` comes from the caller that read the advert. No requirement-extraction
+  NLP here — a guess between the advert and the gap list is the wrong place.
+- Episodes are modelled but not drafted into the letter: the spec requires
+  **per-use approval** per episode, and this module has no channel for it.
+
+## CodeRabbit found eight things on #126, and six were real
+
+All of one species — **a line the gate structurally could not see**:
+
+1. `backed` was a `set`, so one manifest row backed any number of identical
+   lines. A duplicated true sentence was free. Now a `Counter`, consumed per line.
+2. The headline was written as `# …` and `_claim_lines` exempted every `#` line.
+   Candidate prose escaped measurement, and anything typed after a `#` inherited
+   it. **This is the 1600 → 1800 claim count: 200 lines previously invisible.**
+   Exemption is now a closed set — four `_SCAFFOLD` sentences plus fixed `##`
+   headings.
+3. `"Java"` matched `"JavaScript"` — a store holding JavaScript answered an
+   advert asking for Java, so the gap went unnamed. The module's own stated
+   failure mode via a cheap substring test. `_mentions` requires a whole term,
+   and `_select` had the same bug (its "also applies to" was right).
+4. Two writers could take the same version. Exclusive `mkdir` makes allocation a
+   compare-and-swap.
+5. A document with no claims exited 0 — null traceability with an empty untraced
+   list read as a met gate. Now requires exactly 1.0.
+6. Deleting a claim line kept the metric at 1.0 — correctly, since survivors
+   still trace. Gave the divergence its own number, `claims_unused`, rather than
+   distorting the fraction. Took the cheap half of the suggestion: byte-for-byte
+   re-rendering would make every formatting change a gate failure.
+
+**Declined one**, with reasons on the thread: "run `make lint`/`test`/`evidence`/
+`verify-subtree`/`verify-gates` in every task's gate block". `verify-subtree` is
+not a target in this Makefile, `make gate` here means something else (T1's lint
+exit code), and the repo convention is that a task's block regenerates *that
+task's* evidence while `make host-gate` is the separate repo gate — which
+`integral.repo_gate` already enforces reaches all four targets.
+
+The eighth was the S4/T45 owner inconsistency, below.
+
+## Traps this session hit — read before touching a gate
+
+**A gate's evidence must be written by the argument-free entry point.**
+`make evidence` discovers modules by `def _main` and runs each with **no
+arguments**. `write_negation_evidence` was reachable only behind `--negation`, so
+`T16.json` was a committed number the drift check never regenerated. If you add a
+second evidence file to a module, write it from `_main` unconditionally.
+
+**A step's gate state lives in five places, not four.** The previous handover
+said four. Moving step 11 to `implemented` also required
+`.claude/skills/step-11-application/SKILL.md`. `test_step_certification` and
+`test_step_gates` name each one — trust them over any list, including this one.
+
+**Editing any `SKILL.md` is blocked until `skill-workshop` is loaded**, and the
+hook keys on *what a command writes*, not what it names — `sed -i`, heredocs and
+`python3 -c` all trip it. `validate.py` flags `description.trigger` on
+step-11-application, but **every `step-*` skill fails it identically**; it is
+pre-existing and not yours to fix in an unrelated task.
+
+**Task numbers are not the same as task ids.** `T57` was already taken (the T17
+ontology split) when I filed the negation-recall task as T57. Check
+`grep -o "^| T[0-9]\+" status/plan.md` before choosing; it became T59.
 
 **`make evidence` compares against *committed* evidence**, so a legitimate new
-measurement reads as drift until it is committed. Commit, then re-run
-`host-gate`. Two rounds of this per session is normal, not a bug.
+measurement reads as drift until committed. Two rounds per session is normal.
+`T55.json`'s `files_scanned` moves with every added or archived file (445 → 448
+for T45's three).
 
-**`T55.json`'s `files_scanned` moves with every added or archived file** — the
-naming scan reads `arsenal/tasks/*.md` and not `_history/`. Adding three files
-took it 468 → 471; archiving one payload took it 471 → 470. Expect to commit it.
+**Rebase conflicts in `status/evidence/` are resolved by regenerating, never by
+hand-merging.** #126 conflicted with #125 on `D12.json` and `T55.json`; take
+either side, then `make evidence` and commit what it writes.
 
-**`ruff` is not on PATH** — `uv run --extra dev ruff format <paths>`. Format only
-the files you touched; `make lint` still does not check formatting.
+**`ruff` is not on PATH** — `uv run --extra dev ruff …`. Strict mypy rejects
+re-exported names: import `DEFAULT_STORE_PATH` from `integral.harness`, not from
+`integral.extraction`.
 
-**`test_naming` also fails on an untracked directory, not only on a reference.**
-A stale `__pycache__/` sat under a `src/` directory named for the pre-T55 package;
-it was never committed, so CI never saw it and only the local gate went red. The
-check asserts that directory does not exist, so removing it is the whole fix.
+## Environment
 
-**And it scans this file.** Writing the old package name here — even to describe
-that bug — trips the same check. Name the rename, not the path.
+**GitHub Actions is still out of runner minutes.** Every job fails in 2–5s with
+`runner_id: 0` and an empty `runner_name`. Both PRs merged red on that basis
+after `make host-gate` passed locally, which is what CI would run. Diagnose once:
+`runner_id: 0` plus a sub-5-second duration means this, not the diff.
 
-## Left open (carried forward)
-
-- **T15's merge freed the queue.** It has **15** live transitive dependents,
-  four of them ready now — **T16** (negation), **T17** (`ontology_hit_rate`),
-  **T42** (local annotation), **T45** (CV/letter generation) — and eleven still
-  behind other deps: T18, T19, T20, T21, T22, T43, T44, T46, T47, S6, D-17.
-  The selector returns T17. (D-12's payload said "fifteen" but listed fourteen;
-  the missing one is D-17.)
-- **Nothing fetches the advert page yet** — D-18 built the liveness verdict, not
-  the request. Needs T12's egress. Not seeded.
-- **The worker half of D-22 is upstream's and still open** (`claude-arsenal#175`):
-  `open_task_pr.sh` re-runs the payload gate and never the repo gate.
+`main` at `9165c4e`: `make host-gate` exits 0 — 1235 passed, 1 skipped,
+`evidence: no drift`, `verify-gates: 73 terminal task(s); 73 gate(s) asserted`.
