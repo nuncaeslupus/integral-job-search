@@ -1,6 +1,6 @@
 {
   "manifest_version": 1,
-  "comment": "The sources repository's published index, served offline from this directory by connector_exchange.directory_fetcher. The file list is the one the committed connectors/examplejobs_es/ package really has, so a package that grows a file while the manifest does not fails the install instead of drifting quietly.",
+  "comment": "The sources repository's published index, served offline from this directory by connector_exchange.directory_fetcher. `files` is the fetch list, not a description: install fetches exactly these names and nothing else, so a package file missing from this list is silently omitted from the installed copy and the fixture check then fails on it. Keep it in step with connectors/examplejobs_es/.",
   "connectors": [
     {
       "package": "examplejobs_es",

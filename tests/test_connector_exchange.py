@@ -8,6 +8,11 @@ account, or a sources repository that exists yet.
 The candidate is invented and lives in a `tmp_path` home: T54's central claim is
 that the contribution path never reads anything of theirs, and a claim like that
 is only worth testing when there is something there to read.
+
+The block marked *adversarial review* is the one that matters. Each test there
+fails against the code as it stood before the review — a manifest escaping the
+home, a yes replayed against a look-alike disclosure, a hand-built refusal, and
+one approval spent twice.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from pathlib import Path
 import pytest
 
 from integral.connector_exchange import (
+    DEFAULT_EVIDENCE_PATH,
     DEFAULT_MANIFEST_FIXTURE,
     DEFAULT_PACKAGES_DIR,
     EXCHANGE_DIRNAME,
@@ -29,10 +35,12 @@ from integral.connector_exchange import (
     Disclosure,
     ExchangeError,
     Fetch,
+    ManifestEntry,
     _main,
     approve,
     audit,
     bundle_files,
+    candidate_data_in_output,
     contribute,
     decline,
     directory_fetcher,
@@ -44,6 +52,9 @@ from integral.connector_exchange import (
     measure,
     read_manifest,
     records,
+    unverified_connectors_offered,
+    usable_connectors,
+    verdict,
     write_evidence,
 )
 
@@ -53,7 +64,7 @@ _USER = "@fixture-user"
 
 # Invented, and obviously so. Nothing about a real person goes anywhere near a
 # test that exists to prove nothing about a person goes anywhere.
-_CANDIDATE_SECRET = "Fixture Candidate, looking for work in Madrid"
+_CANDIDATE_SECRET = "Fixture Candidate, looking for work in an invented city"
 
 
 @pytest.fixture
@@ -97,6 +108,12 @@ def _sources(tmp_path: Path, mutate: Callable[[str], str] | None = None) -> Fetc
         path = package / "connector.yaml"
         path.write_text(mutate(path.read_text(encoding="utf-8")), encoding="utf-8")
     return directory_fetcher(root / "manifest.json", root)
+
+
+def _yes(offer: Disclosure) -> Approval:
+    approval = approve(offer, "yes")
+    assert approval is not None
+    return approval
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +166,18 @@ def test_an_installed_connector_runs_its_fixture_before_first_use(
     recorded = records(stale / EXCHANGE_DIRNAME / "installs.jsonl")
     assert [r["package"] for r in recorded] == ["examplejobs_es"]
     assert recorded[0]["violations"] == list(broken.violations)
+
+
+def test_the_bulk_loader_rejects_what_failed_its_fixture(tmp_path: Path) -> None:
+    """F7: the invariant lives in the loader, not in one function's return type."""
+    home = tmp_path / "home"
+    stale = _sources(tmp_path, lambda text: text.replace('item: ".job-card"', 'item: ".gone"'))
+    install(read_manifest(stale)[0], stale, home=home)
+    usable, rejected = usable_connectors(home)
+    assert usable == {}
+    assert rejected == ["examplejobs_es"]
+    # And nothing the loader did return fails a check run fresh from disk.
+    assert unverified_connectors_offered(home) == []
 
 
 def test_installing_never_writes_into_the_clone(home: Path, installed: Path) -> None:
@@ -231,10 +260,10 @@ def test_no_profile_path_is_read_by_the_contribution_path(home: Path, installed:
     offer = disclose(installed, github_username=_USER)
     record = contribute(offer, _yes(offer), home=home)
 
-    package = Path(record["source_package"])
+    library = (home / "connectors").resolve()
     assert record["paths_read"]
     for raw in record["paths_read"]:
-        assert Path(raw).is_relative_to(package)
+        assert Path(raw).is_relative_to(library)
         assert not Path(raw).is_relative_to(home / "profiles")
 
     bundle = home / "outbox" / installed.name
@@ -242,9 +271,13 @@ def test_no_profile_path_is_read_by_the_contribution_path(home: Path, installed:
         if path.is_file():
             assert _CANDIDATE_SECRET not in path.read_text(encoding="utf-8")
 
-    # And the same conclusion reached the way the gate reaches it: from disk.
+    # And the same conclusion reached the way the gate reaches it: from disk,
+    # and — for the leak check — without consulting anything the writer said.
     assert foreign_reads(home) == []
-    assert measure(home)["foreign_path_reads"] == 0
+    assert candidate_data_in_output(home) == []
+    measured = measure(home)
+    assert measured["foreign_path_reads"] == 0
+    assert measured["candidate_data_in_output"] == 0
 
 
 def test_the_submission_is_prepared_and_not_sent(home: Path, installed: Path) -> None:
@@ -253,6 +286,154 @@ def test_the_submission_is_prepared_and_not_sent(home: Path, installed: Path) ->
     assert record["submission"][:3] == ["gh", "pr", "create"]
     note = (home / "outbox" / installed.name / SUBMISSION_NOTE).read_text(encoding="utf-8")
     assert "has not been sent" in note
+
+
+# ---------------------------------------------------------------------------
+# adversarial review — each of these fails against the code before the review
+
+
+def test_f5_a_manifest_cannot_name_a_package_outside_the_home(
+    home: Path, tmp_path: Path, fetch: Fetch
+) -> None:
+    """The manifest is unauthenticated, so every name in it is untrusted input."""
+    entry = read_manifest(fetch)[0]
+    victim = tmp_path / "victim"
+    victim.mkdir()
+
+    for hostile in ("../../victim/pwned", "..", "/etc/pwned", "a/b", "Escaped"):
+        with pytest.raises(ExchangeError):
+            install(
+                ManifestEntry(
+                    package=hostile,
+                    site=entry.site,
+                    country=entry.country,
+                    language=entry.language,
+                    contributor=entry.contributor,
+                    last_verified=entry.last_verified,
+                    files=entry.files,
+                ),
+                fetch,
+                home=home,
+            )
+    assert list(victim.iterdir()) == []
+    assert not (home / "connectors").exists() or list((home / "connectors").iterdir()) == []
+
+
+def test_f5_a_bundle_cannot_be_written_outside_the_outbox(home: Path, installed: Path) -> None:
+    """The same escape by the other door: a `Disclosure` naming its own package."""
+    offer = disclose(installed, github_username=_USER)
+    with pytest.raises(ExchangeError):
+        Disclosure(
+            package=offer.package,
+            package_name="../../escaped",
+            site=offer.site,
+            github_username=offer.github_username,
+            files=offer.files,
+            content_digest=offer.content_digest,
+        )
+
+
+def test_f1_a_yes_cannot_be_replayed_against_a_look_alike_directory(
+    home: Path, installed: Path, tmp_path: Path
+) -> None:
+    """A digest over file *names* makes any directory with those names the same offer."""
+    impostor = tmp_path / "impostor"
+    shutil.copytree(installed, impostor)
+    # Same package name, same site, same file names — different bytes, and above
+    # all a different directory. It must not be the same contribution.
+    (impostor / "meta.yaml").write_text(
+        (impostor / "meta.yaml").read_text(encoding="utf-8") + f"\n# {_CANDIDATE_SECRET}\n",
+        encoding="utf-8",
+    )
+
+    real = disclose(installed, github_username=_USER)
+    fake = Disclosure(
+        package=impostor,
+        package_name=real.package_name,
+        site=real.site,
+        github_username=real.github_username,
+        files=real.files,
+        content_digest=real.content_digest,
+    )
+    assert fake.digest != real.digest
+
+    with pytest.raises(ExchangeError):
+        contribute(fake, _yes(real), home=home)
+    assert records(home / EXCHANGE_DIRNAME / "contributions.jsonl") == []
+    assert candidate_data_in_output(home) == []
+
+
+def test_f1_files_edited_after_the_yes_are_refused(home: Path, installed: Path) -> None:
+    offer = disclose(installed, github_username=_USER)
+    consent = _yes(offer)
+    (installed / "meta.yaml").write_text(
+        (installed / "meta.yaml").read_text(encoding="utf-8") + "\n# edited after the yes\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ExchangeError, match="changed after"):
+        contribute(offer, consent, home=home)
+    assert records(home / EXCHANGE_DIRNAME / "contributions.jsonl") == []
+
+
+def test_f3_no_approval_object_can_say_anything_but_yes(home: Path, installed: Path) -> None:
+    """`approve` being the only constructor was a docstring; now it is enforced."""
+    offer = disclose(installed, github_username=_USER)
+    for answer in ("no", "", "maybe", "NOPE"):
+        with pytest.raises(ExchangeError):
+            Approval(disclosure_digest=offer.digest, answer=answer, at="2026-01-01T00:00:00+00:00")
+    assert records(home / EXCHANGE_DIRNAME / "contributions.jsonl") == []
+    assert not (home / "outbox").exists()
+
+
+def test_f4_one_yes_buys_exactly_one_contribution(home: Path, installed: Path) -> None:
+    offer = disclose(installed, github_username=_USER)
+    consent = _yes(offer)
+    contribute(offer, consent, home=home)
+    for _ in range(4):
+        with pytest.raises(ExchangeError, match="already been used"):
+            contribute(offer, consent, home=home)
+    assert len(records(home / EXCHANGE_DIRNAME / "contributions.jsonl")) == 1
+    # And a ledger carrying the replay anyway is named by the audit.
+    assert measure(home)["unconsented_contributions"] == 0
+
+
+def test_f1b_the_leak_check_does_not_consult_what_the_writer_reported(
+    home: Path, installed: Path
+) -> None:
+    """F1b/F2: the checks are anchored on the home, not on the record's own fields.
+
+    A record that lies about where it read — the shape a mutant would write —
+    is caught because `foreign_reads` measures against
+    `$INTEGRAL_HOME/connectors/`, and a bundle carrying the candidate's text is
+    caught without reading `paths_read` at all.
+    """
+    offer = disclose(installed, github_username=_USER)
+    contribute(offer, _yes(offer), home=home)
+    ledger = home / EXCHANGE_DIRNAME / "contributions.jsonl"
+    record = records(ledger)[0]
+
+    smuggled = str(home / "profiles" / "fixture-candidate" / "master.json")
+    record["paths_read"] = [*record["paths_read"], smuggled]
+    # A record that also rewrites `source_package` to cover its tracks: the old
+    # check compared the paths against exactly this field and saw nothing.
+    record["source_package"] = str(home)
+    ledger.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    assert foreign_reads(home) == [
+        f"{installed.name}: read {smuggled} outside the installed library"
+    ]
+    assert measure(home)["foreign_path_reads"] == 1
+
+    # And the independent witness: profile text in a bundle, with nothing in the
+    # record admitting to it.
+    (home / "outbox" / installed.name / "meta.yaml").write_text(
+        f"site: examplejobs.test\n# {_CANDIDATE_SECRET}\n", encoding="utf-8"
+    )
+    leaks = candidate_data_in_output(home)
+    assert leaks == [f"candidate text appears in outbox/{installed.name}/meta.yaml"]
+    # The finding names where, never what.
+    assert _CANDIDATE_SECRET not in " ".join(leaks)
+    assert measure(home)["candidate_data_in_output"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -275,41 +456,45 @@ def test_a_contribution_no_approval_backs_is_counted_and_named(home: Path, insta
             "package": "answered_no_es",
             "approval": {**honest["approval"], "answer": "no"},
         },
+        # A byte-identical duplicate: the shape a replayed yes actually leaves.
+        dict(honest),
     ]
     with ledger.open("a", encoding="utf-8") as handle:
         for record in planted:
             handle.write(json.dumps(record) + "\n")
 
     named = audit(home)
-    assert len(named) == 3
+    assert len(named) == 4
     assert "smuggled_es: recorded with no approval" in named
     assert "stale_approval_es: the approval answers a different disclosure" in named
     assert "answered_no_es: the approval records no explicit yes" in named
+    assert f"{installed.name}: the approval was already spent on an earlier contribution" in named
 
     measured = measure(home)
-    assert measured["unconsented_contributions"] == 3
+    assert measured["unconsented_contributions"] == 4
     assert measured["unconsented"] == named
 
 
-def test_a_read_outside_the_package_is_counted_and_named(home: Path, installed: Path) -> None:
+def test_every_refusal_enters_the_denominator(home: Path, installed: Path) -> None:
+    """A refusal that left no trace would make a run that never tried look clean."""
     offer = disclose(installed, github_username=_USER)
-    contribute(offer, _yes(offer), home=home)
-    ledger = home / EXCHANGE_DIRNAME / "contributions.jsonl"
-    record = records(ledger)[0]
-    smuggled = str(home / "profiles" / "fixture-candidate" / "master.json")
-    record["paths_read"] = [*record["paths_read"], smuggled]
-    ledger.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    decline(offer, home=home)
+    with pytest.raises(ExchangeError):
+        contribute(offer, _yes(offer), home=home)
 
-    assert foreign_reads(home) == [
-        f"{installed.name}: read {smuggled} outside its connector package"
-    ]
-    assert measure(home)["foreign_path_reads"] == 1
-
-
-def test_nothing_contributed_is_unmeasured_not_a_passing_zero(home: Path) -> None:
-    """D-2: a score is a number, a failure, or `None` — never 0 over 0 attempts."""
     measured = measure(home)
     assert measured["contributions_recorded"] == 0
+    assert measured["contributions_refused"] == 1
+    assert measured["contribution_attempts"] == 1
+    # Attempted and stopped is a measurement; it is not "nothing happened".
+    assert measured["unconsented_contributions"] == 0
+    assert measured["unmeasured_reason"] is None
+
+
+def test_nothing_attempted_is_unmeasured_not_a_passing_zero(home: Path) -> None:
+    """D-2: a score is a number, a failure, or `None` — never 0 over 0 attempts."""
+    measured = measure(home)
+    assert measured["contribution_attempts"] == 0
     assert measured["unconsented_contributions"] is None
     assert measured["unmeasured_reason"]
 
@@ -319,21 +504,55 @@ def test_the_evidence_the_gate_reads_is_what_the_probe_wrote(tmp_path: Path) -> 
     measured = write_evidence(evidence)
     assert json.loads(evidence.read_text(encoding="utf-8")) == measured
     assert measured["unconsented_contributions"] == 0
+    # The probe drives the paths that must fail as well as the one that must
+    # work, so the denominator is a measurement rather than a constant.
     assert measured["contributions_recorded"] == 1
+    assert measured["contributions_refused"] == 3
+    assert measured["contribution_attempts"] == 4
     assert measured["contributions_declined"] == 1
-    assert measured["installs_checked_before_use"] == 1
+    assert measured["installs_recorded"] == 2
+    assert measured["connectors_rejected_unverified"] == 1
     assert measured["foreign_path_reads"] == 0
+    assert measured["candidate_data_in_output"] == 0
+    assert measured["unverified_connectors_offered"] == 0
     assert _main(["connector_exchange", str(evidence)]) == 0
 
 
-def test_the_committed_evidence_is_current() -> None:
-    from integral.connector_exchange import DEFAULT_EVIDENCE_PATH
+def test_every_defect_the_run_prints_is_one_it_fails_on(home: Path, installed: Path) -> None:
+    """F6: a gate that prints a finding and exits 0 is not a gate.
 
+    `_main` prints `defects` and `verdict` reads `defects`, so there is one
+    list and no room for a fourth category to be reported and ignored.
+    """
+    offer = disclose(installed, github_username=_USER)
+    contribute(offer, _yes(offer), home=home)
+    clean = measure(home)
+    assert clean["defects"] == []
+    assert verdict(clean) == 0
+
+    for key in ("unconsented", "foreign_reads", "leaks", "unverified_offered"):
+        poisoned = {**clean, key: ["a planted finding"]}
+        poisoned["defects"] = [
+            *poisoned["unconsented"],
+            *poisoned["foreign_reads"],
+            *poisoned["leaks"],
+            *poisoned["unverified_offered"],
+        ]
+        assert verdict(poisoned) == 1, key
+
+    # And the concatenation itself is what `measure` publishes, not a rule the
+    # test restates: plant a real leak and read it back off the same key.
+    (home / "outbox" / installed.name / "meta.yaml").write_text(
+        f"site: examplejobs.test\n# {_CANDIDATE_SECRET}\n", encoding="utf-8"
+    )
+    live = measure(home)
+    assert live["defects"] == live["leaks"] != []
+    assert verdict(live) == 1
+
+    assert verdict({**clean, "unconsented_contributions": None}) == 3
+
+
+def test_the_committed_evidence_is_current() -> None:
     committed = json.loads(DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8"))
     assert committed["unconsented_contributions"] == 0
-
-
-def _yes(offer: Disclosure) -> Approval:
-    approval = approve(offer, "yes")
-    assert approval is not None
-    return approval
+    assert committed["contribution_attempts"] > 1
