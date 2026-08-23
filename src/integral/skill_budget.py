@@ -397,6 +397,15 @@ def measure(
         "headroom_chars": declaration.headroom_chars,
         "upstream_default_budget_chars": UPSTREAM_DEFAULT_BUDGET_CHARS,
         "overage_against_upstream_default": max(0, total - UPSTREAM_DEFAULT_BUDGET_CHARS),
+        # `description_chars_total` is the **listing** total, not the sum of the
+        # `per_skill.description_chars` column: a listing entry costs its
+        # description plus the skill's name and separators, so the two differ by
+        # a few hundred chars (9,231 against 8,719 today). The listing total is
+        # the right number — it is what a turn actually pays, and it is what
+        # `audit_library.py` reports, which is why the cross-check against
+        # upstream agrees. The name is upstream's and predates this module.
+        # Written down because a reviewer summed the column, got the other
+        # figure, and filed it as drift.
         "budget_declaration_reasons": list(declaration.reasons),
         "steps_with_a_skill_fraction": steps["steps_with_a_skill_fraction"],
         "per_skill": [cost.model_dump(mode="json") for cost in costs],

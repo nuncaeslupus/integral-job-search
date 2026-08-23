@@ -67,8 +67,8 @@ the document you did not touch.
 
 ## The skill listing budget lives in `arsenal/config.toml`
 
-`listing-budget = 13000` (S10). `integral.skill_budget` and `skill-creator`'s
-`audit_library.py` both read that key since v0.33.0 (`claude-arsenal#143`).
+`integral.skill_budget` and `skill-workshop`'s `audit_library.py` both read that
+key since v0.33.0 (`claude-arsenal#143`).
 
 `listing-budget = 11000` since T58 — down from 13,000, because v2.0.0 trimmed
 seven oversized descriptions and dropped `lsp-setup` and the old `skill-creator`.

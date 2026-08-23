@@ -53,25 +53,27 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = REPO_ROOT / "status" / "evidence" / "S10.json"
 
 
-# `skill-workshop` is a separate plugin and `/init` vendors only `core`'s
-# skills, so upstream's auditor is not in this working tree. It is resolved from
-# the marketplace clone, which every machine that ran `/init` has — and the
-# cross-check skips rather than fails where it is absent, because the check is
-# that our formula still agrees with upstream's and there is nothing to disagree
-# with when upstream is not there at all.
-AUDIT = (
-    Path.home()
-    / ".claude"
-    / "plugins"
-    / "marketplaces"
-    / "claude-arsenal"
-    / "plugins"
-    / "skill-workshop"
-    / "skills"
-    / "skill-workshop"
-    / "scripts"
-    / "audit_library.py"
-)
+# `skill-workshop` is a separate plugin and `/init` vendors only `core`'s skills,
+# so upstream's auditor is not in this working tree.
+#
+# Resolved from `installed_plugins.json` rather than from the marketplace clone
+# under `~/.claude/plugins/marketplaces/`. The clone is refreshed by
+# `/plugin marketplace update` and the install by `/plugin update`, and they go
+# out of step routinely: on 2026-08-22 the clone sat at the pre-fix v1.0.0 commit
+# while 1.1.0 was registered. Comparing our formula against a *stale* auditor
+# would pass or fail for reasons that have nothing to do with either.
+_REGISTRY = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+_AUDIT_REL = Path("skills/skill-workshop/scripts/audit_library.py")
+
+
+def _audit_script() -> Path | None:
+    """Upstream's auditor at the version actually installed, or None."""
+    try:
+        installs = json.loads(_REGISTRY.read_text(encoding="utf-8"))["plugins"]
+        path = Path(installs["skill-workshop@claude-arsenal"][-1]["installPath"]) / _AUDIT_REL
+    except (OSError, json.JSONDecodeError, KeyError, IndexError):
+        return None
+    return path if path.is_file() else None
 
 
 def write_skill(root: Path, name: str, description: str) -> None:
@@ -204,10 +206,11 @@ def test_an_unusable_budget_is_refused_rather_than_guessed_at() -> None:
 def test_the_measurement_agrees_with_the_upstream_audit() -> None:
     """The per-skill formula is upstream's, mirrored. If it changes there, this
     fails here — rather than leaving two numbers nobody compares."""
-    if not AUDIT.is_file():
-        pytest.skip(f"upstream's auditor is not on this machine: {AUDIT}")
+    audit = _audit_script()
+    if audit is None:
+        pytest.skip("skill-workshop@claude-arsenal is not installed on this machine")
     result = subprocess.run(
-        [sys.executable, str(AUDIT), str(DEFAULT_SKILLS_DIR)],
+        [sys.executable, str(audit), str(DEFAULT_SKILLS_DIR)],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
