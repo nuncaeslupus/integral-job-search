@@ -109,7 +109,14 @@ def excerpt_package(package: Path) -> dict[str, int]:
         if not classes:
             raise SystemExit(f"{filename}: {field.css!r} names no class to locate in the raw bytes")
         css_class = classes[0]
-        raw = path.read_text(encoding="utf-8")
+        # newline="" — not read_text(). Universal-newline translation turns a
+        # server's CRLF into LF on the way in, so a round-trip through
+        # read_text/write_text silently rewrites every line ending in the file.
+        # This tool's whole claim is that everything outside an excerpted span
+        # is the bytes the server sent; a normalised line ending is exactly the
+        # kind of quiet repair the raw-bytes approach exists to avoid.
+        with path.open(encoding="utf-8", newline="") as handle:
+            raw = handle.read()
         count = 0
         # Right to left, so each replacement leaves earlier offsets valid.
         for start, end, inner in reversed(_spans(raw, css_class)):
@@ -118,7 +125,8 @@ def excerpt_package(package: Path) -> dict[str, int]:
                 continue
             raw = raw[:start] + replacement + raw[end:]
             count += 1
-        path.write_text(raw, encoding="utf-8")
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(raw)
         changed[f"{label}_excerpted"] = count
 
     return changed
