@@ -46,6 +46,7 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
+from integral.enrichment import NOT_FROM_THE_ADVERT, OutsideFinding
 from integral.explain import explain
 from integral.offers import Location, Offer, Salary
 from integral.pay import NetEstimate
@@ -80,7 +81,7 @@ _CARD = Template(
   link:      $link
 
   $matters
-"""
+$outside"""
 )
 
 
@@ -134,8 +135,18 @@ def card(
     offer: Offer,
     explanation: Mapping[str, Any] | None = None,
     net: NetEstimate | None = None,
+    outside: Sequence[OutsideFinding] = (),
 ) -> str:
-    """One offer, as the candidate sees it. Pure: same input, same bytes."""
+    """One offer, as the candidate sees it. Pure: same input, same bytes.
+
+    `outside` (T43) is what was learned about the employer that the advert does
+    not say. It is a separate block under its own heading, never mixed into the
+    bullets or the one line: a fact the employer stated and a fact a review site
+    stated are different kinds of claim, and the whole of T43 is that the
+    candidate can tell which is which. With nothing found the heading is absent
+    rather than empty — "the lookup found nothing" and "no lookup ran" are
+    different answers, and an empty heading asserts the first.
+    """
     pay = _salary(offer)
     if net is not None:
         pay = f"{pay}\n             {net.label()}"
@@ -155,7 +166,17 @@ def card(
         # field at all.
         link=offer.url or UNKNOWN,
         matters=_matters(explanation),
+        outside=_outside_block(outside),
     )
+
+
+def _outside_block(findings: Sequence[OutsideFinding]) -> str:
+    if not findings:
+        return ""
+    lines = "\n".join(f"    - {finding.cite()}" for finding in findings)
+    # The heading carries the marker once; `cite()` leaves it off each line and
+    # keeps the source. `label()` is for anywhere a finding appears alone.
+    return f"\n  {NOT_FROM_THE_ADVERT.capitalize()}:\n{lines}\n"
 
 
 def render(
