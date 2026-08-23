@@ -373,6 +373,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "lo-a22a",
+      "key": "provisional_rankings_unlabelled",
+      "evidence": "status/evidence/T44.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "lo-a4bf",
       "key": "cross_user_leaks",
       "evidence": "status/evidence/S3.json",
