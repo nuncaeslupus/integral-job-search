@@ -343,11 +343,30 @@ def lesson_linkage(store: ProfileStore, log: EvidenceLog) -> dict[str, Any]:
         reached.setdefault(row.about.id, set()).update(row.dimensions)
 
     logged = logged_interviews(store)
-    unlinked = sorted(
-        f"{offer_id}/{interview_id}"
+    keys = {f"{offer_id}/{interview_id}" for offer_id, interview_id in logged}
+    unlinked = sorted(key for key in keys if not reached.get(key))
+
+    # Rows about an interview with no record on disk. `interview_lesson_linkage`
+    # cannot see this and should not — every record that exists still traces, so
+    # the fraction is honestly what it says. It is a different property: the log
+    # and the records have to agree about which interviews happened. A row
+    # claiming a lesson from an interview nobody logged would feed a weight
+    # (step 10) from an event with no record behind it.
+    orphans = sorted(key for key in reached if key not in keys)
+
+    # And the reverse: a record naming rows that are not in the log, or are not
+    # about it. `evidence_ids` is the convenience copy, and a convenience that
+    # can disagree with the thing it copies is worse than not having it.
+    by_id = {row.id: row for row in log.effective_rows()}
+    mismatched = sorted(
+        f"{offer_id}/{interview_id}: {row_id}"
         for offer_id, interview_id in logged
-        if not reached.get(f"{offer_id}/{interview_id}")
+        for row_id in read_held(store, offer_id, interview_id).evidence_ids
+        if (named := by_id.get(row_id)) is None
+        or named.about is None
+        or named.about.id != f"{offer_id}/{interview_id}"
     )
+
     return {
         # `None`, never 1.0, over zero interviews: a profile that logged nothing
         # has not met a gate about what logging teaches (D-2's third outcome).
@@ -356,6 +375,8 @@ def lesson_linkage(store: ProfileStore, log: EvidenceLog) -> dict[str, Any]:
         ),
         "interviews_logged": len(logged),
         "interviews_unlinked": unlinked,
+        "rows_about_an_interview_with_no_record": orphans,
+        "records_naming_a_row_that_is_not_theirs": mismatched,
     }
 
 
@@ -561,8 +582,16 @@ def _main(argv: list[str]) -> int:
         print(f"✗ logged interview with no linked evidence row: {line}", file=sys.stderr)
     for line in measured["rehearsal_lines_not_in_the_story_bank"]:
         print(f"✗ rehearsal line the story bank does not hold: {line}", file=sys.stderr)
+    for line in measured["rows_about_an_interview_with_no_record"]:
+        print(f"✗ evidence row about an interview nobody logged: {line}", file=sys.stderr)
+    for line in measured["records_naming_a_row_that_is_not_theirs"]:
+        print(f"✗ record names a row that is not about it: {line}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
-    if measured["rehearsal_lines_not_in_the_story_bank"]:
+    if (
+        measured["rehearsal_lines_not_in_the_story_bank"]
+        or measured["rows_about_an_interview_with_no_record"]
+        or measured["records_naming_a_row_that_is_not_theirs"]
+    ):
         return 1
     # `== 1.0`, not "nothing unlinked". A run that logged no interview at all
     # scores `None` with an empty unlinked list, and exiting 0 on that would

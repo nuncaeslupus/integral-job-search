@@ -30,6 +30,7 @@ from integral.interview_log import (
     record_outcome,
     rehearsal_lines,
     render_story,
+    subject,
 )
 from integral.lifecycle import (
     PURGE_HORIZON_DAYS,
@@ -321,3 +322,44 @@ def test_earlier_questions_reach_the_next_preparation(
     )
     assert "How often were you paged?" in text
     assert rehearsal_lines(text) == [render_story(bank[0])]
+
+
+def test_a_row_about_an_interview_nobody_logged_is_named(
+    store: ProfileStore, log: EvidenceLog
+) -> None:
+    """The mirror of the planted record: a lesson with no interview behind it.
+
+    `interview_lesson_linkage` cannot see this and should not — every record
+    that exists still traces. It is a different property, and it matters because
+    a row like this would feed step 10's weights from an event with no record.
+    """
+    log_interview(store, log, offer_id="girona-1", held_on="2026-02-10", lessons=(LESSON,))
+    log.append(
+        recorded_at="2026-02-11",
+        step="interview_log",
+        kind="outcome",
+        dimensions=("on_call_load",),
+        text="something I learned at an interview I never wrote down",
+        source="interview",
+        about=subject("girona-9", "iv-001"),
+    )
+
+    measured = lesson_linkage(store, log)
+    assert measured["interview_lesson_linkage"] == 1.0
+    assert measured["rows_about_an_interview_with_no_record"] == ["girona-9/iv-001"]
+
+
+def test_a_record_naming_a_row_that_is_not_its_own_is_named(
+    store: ProfileStore, log: EvidenceLog
+) -> None:
+    """`evidence_ids` is a convenience copy, and it must not be able to lie."""
+    held = log_interview(store, log, offer_id="girona-1", held_on="2026-02-10", lessons=(LESSON,))
+    held_path = store.path("interviews", "girona-1", held.interview_id, "held.json")
+    held_path.write_text(
+        held.model_copy(update={"evidence_ids": ("ev-999999",)}).model_dump_json(), encoding="utf-8"
+    )
+
+    measured = lesson_linkage(store, log)
+    assert measured["records_naming_a_row_that_is_not_theirs"] == [
+        f"girona-1/{held.interview_id}: ev-999999"
+    ]
