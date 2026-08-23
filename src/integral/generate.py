@@ -40,6 +40,7 @@ import json
 import re
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Any, Literal
 
@@ -53,6 +54,7 @@ from integral.cv_store import (
     LanguageEntry,
     Skill,
     SourcedEntry,
+    SourcedText,
     _atomic_write_json,
     _atomic_write_text,
     write_master,
@@ -86,10 +88,15 @@ _SCAFFOLD: frozenset[str] = frozenset(
 # Sections that go on a CV regardless of the advert. You do not omit your own
 # job history to suit a posting; what selection decides is which *skills* to
 # lead with, which is where the omissions below are recorded.
-_ALWAYS: tuple[str, ...] = ("experience", "education", "languages")
+_ALWAYS: tuple[str, ...] = ("headline", "experience", "education", "languages")
 _SELECTED: tuple[str, ...] = ("skills", "certifications")
+# Every section a claim can be rendered from. `headline` is in it deliberately:
+# it is candidate-written prose about the candidate, which is a claim whatever
+# it is typeset as.
+_CLAIMABLE: tuple[str, ...] = (*_ALWAYS, *_SELECTED)
 
 _HEADINGS: dict[str, str] = {
+    "headline": "Summary",
     "experience": "Experience",
     "education": "Education",
     "skills": "Skills",
@@ -171,25 +178,44 @@ def render_entry(section: str, entry: SourcedEntry) -> str:
         return f"{entry.name}{issued}{when}"
     if isinstance(entry, LanguageEntry):
         return f"{entry.language} ({entry.level})"
+    if isinstance(entry, SourcedText):
+        return entry.text
     raise GenerationError(f"no rendering is defined for a {type(entry).__name__} entry")
 
 
 def _entries(master: CVMaster, section: str) -> tuple[SourcedEntry, ...]:
-    return tuple(getattr(master, section))
+    """A section's entries, with the scalar fields presented as sections of one.
+
+    `headline` is a `SourcedText | None` rather than a tuple, but it is a claim
+    like any other and must be addressable by `(section, index)` so a manifest
+    row can name it.
+    """
+    value = getattr(master, section)
+    if isinstance(value, tuple):
+        return value
+    return () if value is None else (value,)
+
+
+def _mentions(haystack: str, needle: str) -> bool:
+    """Is `needle` present in `haystack` as a whole term?
+
+    Whole-term, never a bare substring: `"Java" in "JavaScript"` is true and
+    means the opposite of what it would be used for here — it would let a store
+    holding JavaScript answer an advert asking for Java, so the gap goes
+    unnamed and the candidate is never told. That is the failure this module
+    exists to prevent, arriving through the back door of a cheap test.
+
+    Still an exact term match rather than a similarity score. Nothing here is
+    entitled to decide that "Kubernetes" is close enough to "Docker".
+    """
+    return re.search(rf"(?<!\w){re.escape(needle)}(?!\w)", haystack, re.IGNORECASE) is not None
 
 
 def _holds(master: CVMaster, ask: str) -> bool:
-    """Does any entry in the store hold what `ask` names?
-
-    Deliberately a substring test over the entry's own rendering, not a
-    similarity score. A fuzzy match here would be the tool deciding on the
-    candidate's behalf that "Kubernetes" is close enough to "Docker", which is
-    the failure this whole module is shaped to make impossible.
-    """
-    needle = ask.casefold()
+    """Does any entry in the store hold what `ask` names?"""
     return any(
-        needle in render_entry(section, entry).casefold()
-        for section in (*_ALWAYS, *_SELECTED)
+        _mentions(render_entry(section, entry), ask)
+        for section in _CLAIMABLE
         for entry in _entries(master, section)
     )
 
@@ -200,8 +226,6 @@ def _select(
     """Which entries this advert earns, and what that leaves out."""
     chosen: list[tuple[str, int]] = []
     omitted: list[Omission] = []
-    haystack = advert.casefold()
-    wanted = tuple(ask.casefold() for ask in asks)
 
     for section in _ALWAYS:
         chosen.extend((section, index) for index, _ in enumerate(_entries(master, section)))
@@ -209,8 +233,11 @@ def _select(
     for section in _SELECTED:
         for index, entry in enumerate(_entries(master, section)):
             rendered = render_entry(section, entry)
-            folded = rendered.casefold()
-            if folded in haystack or any(ask in folded for ask in wanted):
+            # `_mentions` here too, not a substring test: selection and gap
+            # naming have to agree about what "the store holds this" means, or
+            # an ask can be answered by an entry that is simultaneously
+            # reported as a gap — or, worse, not reported at all.
+            if _mentions(advert, rendered) or any(_mentions(rendered, ask) for ask in asks):
                 chosen.append((section, index))
             else:
                 omitted.append(
@@ -227,10 +254,7 @@ def _select(
 def _cv_lines(master: CVMaster, chosen: list[tuple[str, int]]) -> tuple[list[str], list[Claim]]:
     lines: list[str] = []
     claims: list[Claim] = []
-    if master.headline is not None:
-        lines.append(f"# {master.headline.text}")
-        lines.append("")
-    for section in (*_ALWAYS, *_SELECTED):
+    for section in _CLAIMABLE:
         picked = [index for name, index in chosen if name == section]
         if not picked:
             continue
@@ -295,6 +319,20 @@ def generate(
             "with the draft rather than generate another one"
         )
 
+    # Reserve `v<N>` before rendering anything. `next_version` reads the
+    # directory and two callers can read the same answer; an exclusive mkdir is
+    # what makes the allocation a compare-and-swap rather than a hope, so the
+    # loser is refused instead of quietly interleaving its files with the
+    # winner's. "Never overwrites" has to hold against a second process too.
+    where = ("cv", "generated", offer_id, f"v{version}")
+    try:
+        store.path(*where).mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
+        raise GenerationError(
+            f"{offer_id} v{version} already exists — another generation took this "
+            "version; nothing was written, and a fresh call will take the next one"
+        ) from exc
+
     chosen, omissions = _select(master, advert, asks)
     cv_lines, cv_claims = _cv_lines(master, chosen)
     letter_lines, letter_claims = _letter_lines(master, chosen)
@@ -306,7 +344,6 @@ def generate(
         gaps=tuple(sorted({ask for ask in asks if not _holds(master, ask)})),
     )
 
-    where = ("cv", "generated", offer_id, f"v{version}")
     _atomic_write_text(store, "\n".join(cv_lines).rstrip("\n") + "\n", *where, "cv.md")
     _atomic_write_text(store, "\n".join(letter_lines).rstrip("\n") + "\n", *where, "letter.md")
     _atomic_write_json(store, manifest.model_dump(mode="json"), *where, "manifest.json")
@@ -318,13 +355,22 @@ def read_manifest(store: ProfileStore, offer_id: str, version: int) -> Manifest:
     return Manifest.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def _exempt() -> frozenset[str]:
+    """The closed set of lines that are not claims.
+
+    `startswith("#")` was the wrong rule and is the reason this is a set: it
+    exempted *any* heading, so a headline — candidate-written prose about the
+    candidate — was invisible to the measurement, and anything typed after a
+    `#` inherited that invisibility. Exemption is now membership in a fixed
+    vocabulary, so a new exempt line costs a diff a reviewer sees.
+    """
+    return frozenset(_SCAFFOLD | {f"## {heading}" for heading in _HEADINGS.values()})
+
+
 def _claim_lines(text: str) -> list[str]:
     """Every line of a document that asserts something about the candidate."""
-    return [
-        line
-        for raw in text.splitlines()
-        if (line := raw.strip()) and not line.startswith("#") and line not in _SCAFFOLD
-    ]
+    exempt = _exempt()
+    return [line for raw in text.splitlines() if (line := raw.strip()) and line not in exempt]
 
 
 def traceability(
@@ -337,20 +383,27 @@ def traceability(
     entry and that entry still renders to the line it claims.
     """
     where = store.path("cv", "generated", offer_id, f"v{version}")
-    backed: set[tuple[str, str]] = set()
+    # A Counter, not a set: one manifest row backs **one** line. With a set, a
+    # duplicated claim line kept passing — `claims_total` rose while membership
+    # still succeeded — so an extra copy of a true sentence was a free line the
+    # gate could not see. Each on-disk line consumes one row's worth of backing.
+    backed: Counter[tuple[str, str]] = Counter()
     for claim in read_manifest(store, offer_id, version).claims:
         entries = _entries(master, claim.section)
         if claim.entry_index < len(entries) and (
             render_entry(claim.section, entries[claim.entry_index]) == claim.text
         ):
-            backed.add((claim.document, claim.text))
+            backed[(claim.document, claim.text)] += 1
 
     total = 0
     untraced: list[str] = []
     for document in sorted(where.glob("*.md")):
         for line in _claim_lines(document.read_text(encoding="utf-8")):
             total += 1
-            if (document.name, line) not in backed:
+            key = (document.name, line)
+            if backed[key] > 0:
+                backed[key] -= 1
+            else:
                 untraced.append(f"{document.name}: {line}")
 
     return {
@@ -433,7 +486,16 @@ def _main(argv: list[str]) -> int:
     for line in measured["claims_untraced"]:
         print(f"✗ untraced claim: {line}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
-    return 1 if measured["claims_untraced"] else 0
+    # `== 1.0`, not "no untraced lines". A run that generated nothing at all
+    # scores `None` with an empty untraced list, and exiting 0 on that would
+    # report a gate met by a generator that produced no document.
+    if measured["cv_generation_traceability"] != 1.0:
+        print(
+            f"cv_generation_traceability is {measured['cv_generation_traceability']!r}, not 1.0",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

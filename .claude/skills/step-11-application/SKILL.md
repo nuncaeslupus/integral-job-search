@@ -81,7 +81,7 @@ Writes `last_activity`.
 ## Checkpoint — the number, not the prose
 
 The step's acceptance gate is **`cv_generation_traceability == 1.0`**,
-owned by **S4**. That gate is a build-time measurement over evidence this step's
+owned by **T45**. That gate is a build-time measurement over evidence this step's
 conversation produces; it is not computed here, and this skill's prose never asserts it passed.
 
 What this skill checks, mechanically, before ending the step: run

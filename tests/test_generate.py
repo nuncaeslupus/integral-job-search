@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from integral.cv_store import CVMaster, Experience, Skill, write_master
+from integral.cv_store import CVMaster, Experience, Skill, SourcedText, write_master
 from integral.generate import (
     GENERATION_CAP,
     GenerationError,
@@ -125,3 +125,86 @@ def test_an_unheld_ask_is_never_smuggled_into_the_manifest(
     generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("Kubernetes",))
     manifest = read_manifest(store, "girona-1", version=1)
     assert all("Kubernetes" not in claim.text for claim in manifest.claims)
+
+
+def test_a_duplicated_claim_line_is_not_free(store: ProfileStore, master: CVMaster) -> None:
+    """One manifest row backs one line — CodeRabbit on #126.
+
+    A set-membership check passed a second copy of a true sentence: the total
+    rose and membership still succeeded, so an extra line was invisible. An
+    extra line is exactly what an over-eager draft produces.
+    """
+    generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
+    cv = store.path("cv", "generated", "girona-1", "v1", "cv.md")
+    duplicated = next(
+        line for line in cv.read_text(encoding="utf-8").splitlines() if "Cintra" in line
+    )
+    cv.write_text(cv.read_text(encoding="utf-8") + duplicated + "\n", encoding="utf-8")
+
+    measured = traceability(store, master, "girona-1", version=1)
+    assert measured["cv_generation_traceability"] < 1.0
+    assert measured["claims_untraced"] == [f"cv.md: {duplicated}"]
+
+
+def test_a_headline_is_a_claim_and_not_a_heading(store: ProfileStore) -> None:
+    """Candidate-written prose is a claim whatever it is typeset as.
+
+    Excluding every `#` line exempted the headline from measurement, so anything
+    typed after a `#` inherited that invisibility.
+    """
+    built = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+    )
+    write_master(store, built)
+    generate(store, built, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
+    assert traceability(store, built, "girona-1", version=1)["cv_generation_traceability"] == 1.0
+
+    cv = store.path("cv", "generated", "girona-1", "v1", "cv.md")
+    cv.write_text(
+        cv.read_text(encoding="utf-8") + "# Ten years of Kubernetes in production.\n",
+        encoding="utf-8",
+    )
+    measured = traceability(store, built, "girona-1", version=1)
+    assert measured["claims_untraced"] == ["cv.md: # Ten years of Kubernetes in production."]
+
+
+def test_an_ask_is_held_only_as_a_whole_term(store: ProfileStore) -> None:
+    """`"Java" in "JavaScript"` is true and means the opposite of what it is for.
+
+    A substring test let a store holding JavaScript answer an advert asking for
+    Java, so the gap went unnamed and the candidate was never told.
+    """
+    built = CVMaster(skills=(Skill(name="JavaScript", level="strong"),))
+    write_master(store, built)
+    generate(store, built, offer_id="girona-1", advert="We need Java.", asks=("Java",))
+
+    manifest = read_manifest(store, "girona-1", version=1)
+    assert "Java" in manifest.gaps, "a gap the store cannot hold must be named"
+    assert all("JavaScript" not in claim.text for claim in manifest.claims)
+
+
+def test_a_version_directory_is_reserved_before_anything_is_written(
+    store: ProfileStore, master: CVMaster, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Allocation is a compare-and-swap, so a second writer is refused, not merged."""
+    generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
+    first = store.path("cv", "generated", "girona-1", "v1", "cv.md").read_bytes()
+
+    # The real race: a second caller that read the directory before the first
+    # wrote, so it still believes v1 is free. Pinning `next_version` is how that
+    # window is reproduced without two processes.
+    monkeypatch.setattr("integral.generate.next_version", lambda store, offer_id: 1)
+    with pytest.raises(GenerationError, match="already exists"):
+        generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("Python",))
+    assert store.path("cv", "generated", "girona-1", "v1", "cv.md").read_bytes() == first
+
+
+def test_a_document_with_no_claims_does_not_score_one(store: ProfileStore) -> None:
+    """An empty store generates nothing, and nothing is not a gate that passed."""
+    built = CVMaster()
+    write_master(store, built)
+    generate(store, built, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
+    measured = traceability(store, built, "girona-1", version=1)
+    assert measured["claims_total"] == 0
+    assert measured["cv_generation_traceability"] is None, "null, never a passing 1.0"
