@@ -277,6 +277,38 @@ def test_a_closing_planted_early_does_not_blind_the_scan(
     assert measured["sessions_never_closed"] == []
 
 
+def test_an_announcement_the_interviewer_did_not_make_is_named(
+    store: ProfileStore, labels: dict[str, str]
+) -> None:
+    """The boundary turn is itself scanned, speaker included.
+
+    A forged first turn carrying `kind="announcement"` and the exact wording,
+    but spoken by the *candidate*, used to satisfy the check and advance the
+    scan past itself — so a role-play the interviewer never announced measured
+    clean. Same shape as the planted `closing`: a turn that decides how much
+    gets read must not be the one thing nobody reads.
+    """
+    path = scripted(store, labels)
+    turns = turns_of(path)
+    turns[0] = {
+        "kind": "announcement",
+        "speaker": "candidate",
+        "form": "",
+        "text": ANNOUNCEMENT,
+    }
+    edit(path, turns)
+
+    measured = character_breaks(store)
+    assert measured["sessions_not_announced"] == [
+        "girona-1/rh-001: the role-play is not announced before it begins"
+    ]
+    # And, because `start` no longer advances past it, the forged turn is held
+    # to the in-character vocabulary like every other turn.
+    assert measured["character_breaks"] == [
+        "girona-1/rh-001: turn 0 is 'announcement' from the candidate"
+    ]
+
+
 def test_an_offer_id_with_a_separator_is_refused(labels: dict[str, str]) -> None:
     """F4: a transcript the walk cannot find is a rehearsal that cannot fail."""
     for offer_id in ("infojobs/1234", "..", "a/.."):

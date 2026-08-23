@@ -374,12 +374,20 @@ def _scan(path: Path, labels: Mapping[str, str], found: _Defects) -> None:
         return f"{name}: turn {index} is {turn.get('kind')!r} from the {turn.get('speaker')}"
 
     start = 1
-    if not turns or turns[0].get("kind") != "announcement":
+    opening = turns[0] if turns else {}
+    # The speaker is checked, not just the kind. This turn decides how much of
+    # the transcript is scanned, and a boundary turn that is itself unscanned is
+    # exactly the hole a planted `closing` opened: a forged first turn reading
+    # `announcement` from the *candidate* would advance `start` past itself and
+    # never be held to `IN_CHARACTER`, so a role-play the interviewer never
+    # announced would measure clean. Treated as no announcement at all, which
+    # leaves `start` at 0 and puts the forged turn back inside the scan.
+    if opening.get("kind") != "announcement" or opening.get("speaker") != "interviewer":
         found.add(
             "sessions_not_announced", f"{name}: the role-play is not announced before it begins"
         )
         start = 0
-    elif turns[0].get("text") != ANNOUNCEMENT:
+    elif opening.get("text") != ANNOUNCEMENT:
         # The announcement is the promise the whole role-play is held to — that
         # there will be no coaching, and that dictation is on offer. A rewritten
         # one is not an announcement, so it is reported the same way a missing
