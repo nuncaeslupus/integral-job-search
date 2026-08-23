@@ -51,7 +51,29 @@ from integral.skill_budget import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = REPO_ROOT / "status" / "evidence" / "S10.json"
-AUDIT = REPO_ROOT / ".claude" / "skills" / "skill-creator" / "scripts" / "audit_library.py"
+
+
+# `skill-workshop` is a separate plugin and `/init` vendors only `core`'s skills,
+# so upstream's auditor is not in this working tree.
+#
+# Resolved from `installed_plugins.json` rather than from the marketplace clone
+# under `~/.claude/plugins/marketplaces/`. The clone is refreshed by
+# `/plugin marketplace update` and the install by `/plugin update`, and they go
+# out of step routinely: on 2026-08-22 the clone sat at the pre-fix v1.0.0 commit
+# while 1.1.0 was registered. Comparing our formula against a *stale* auditor
+# would pass or fail for reasons that have nothing to do with either.
+_REGISTRY = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+_AUDIT_REL = Path("skills/skill-workshop/scripts/audit_library.py")
+
+
+def _audit_script() -> Path | None:
+    """Upstream's auditor at the version actually installed, or None."""
+    try:
+        installs = json.loads(_REGISTRY.read_text(encoding="utf-8"))["plugins"]
+        path = Path(installs["skill-workshop@claude-arsenal"][-1]["installPath"]) / _AUDIT_REL
+    except (OSError, json.JSONDecodeError, KeyError, IndexError):
+        return None
+    return path if path.is_file() else None
 
 
 def write_skill(root: Path, name: str, description: str) -> None:
@@ -113,6 +135,7 @@ def test_the_declared_budget_is_a_number_somebody_chose() -> None:
     assert source == "config"
     assert declared % BUDGET_GRANULARITY == 0
     assert declared > UPSTREAM_DEFAULT_BUDGET_CHARS
+    assert declared > measure()["description_chars_total"]
 
 
 def test_the_budget_lives_in_the_arsenal_settings_file() -> None:
@@ -183,8 +206,11 @@ def test_an_unusable_budget_is_refused_rather_than_guessed_at() -> None:
 def test_the_measurement_agrees_with_the_upstream_audit() -> None:
     """The per-skill formula is upstream's, mirrored. If it changes there, this
     fails here — rather than leaving two numbers nobody compares."""
+    audit = _audit_script()
+    if audit is None:
+        pytest.skip("skill-workshop@claude-arsenal is not installed on this machine")
     result = subprocess.run(
-        [sys.executable, str(AUDIT), str(DEFAULT_SKILLS_DIR)],
+        [sys.executable, str(audit), str(DEFAULT_SKILLS_DIR)],
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
@@ -298,20 +324,24 @@ def test_the_cli_prints_the_budget_in_force_and_its_source() -> None:
     assert f"above upstream's {UPSTREAM_DEFAULT_BUDGET_CHARS}-char default" in result.stderr
 
 
-def test_nothing_under_vendor_was_patched_to_achieve_this() -> None:
-    """The sequence S10's payload forbids short-cutting: a subtree edit works
-    perfectly until the next `git subtree pull` reverts it, silently."""
-    upstream = (
-        REPO_ROOT
-        / "vendor"
-        / "claude-arsenal"
-        / "plugins"
-        / "skill-creator"
-        / "skills"
-        / "skill-creator"
-        / "scripts"
-        / "audit_library.py"
-    )
-    assert f"LISTING_BUDGET_CHARS = {UPSTREAM_DEFAULT_BUDGET_CHARS}" in upstream.read_text(
-        encoding="utf-8"
-    )
+def test_nothing_upstream_was_patched_to_achieve_this() -> None:
+    """S10's payload forbids short-cutting the budget by editing upstream.
+
+    It used to read the vendored *subtree*'s auditor and assert its constant was
+    untouched — a copy that a `git subtree pull` would silently revert. T58
+    removed the subtree, so that copy is gone and `arsenal_source`'s
+    `upstream_subtree_files == 0` is what asserts it stays gone.
+
+    The vendored **skills** under `.claude/skills/` are a different thing and are
+    supposed to be here, but the same rule applies to them: `/init` overwrites
+    any folder carrying `.arsenal-vendored`, so a budget won by editing one would
+    last exactly until the next refresh. What this asserts is the half that is
+    ours to hold — the budget in force is declared in `arsenal/config.toml`, not
+    fitted to whatever the library happens to measure.
+    """
+    from integral.arsenal_source import measure as arsenal_measure
+
+    assert arsenal_measure()["upstream_subtree_files"] == 0
+    reading = measure()
+    assert reading["budget_source"] == "config"
+    assert reading["listing_budget_chars"] % 1000 == 0

@@ -1,6 +1,6 @@
 ---
 name: github
-description: Use whenever the user is creating commits, opening pull requests, or waiting on PR review/CI feedback — applies Conventional Commits + branch naming, then polls the open PR for review-bot reactions and CI status, addresses each comment inline or replies, and reports when the PR is ready to merge. Triggers — "open a PR", "address review comments", "wait for Gemini / CodeRabbit", "is CI done?". Owns scripts — query_pr_state.py, query_project_type.py. Do NOT use for engineering review of a diff (see review), generic git mechanics like branching/worktrees (see execution), or hardcoding a Co-Authored-By model name (refused — the harness supplies model identity).
+description: Use whenever the user is creating commits, opening pull requests, or waiting on PR review/CI feedback — applies Conventional Commits + branch naming, then polls the PR for review-bot comments and CI status until it is ready to merge. Triggers — "open a PR", "address review comments". Do NOT use for engineering review of a diff (see review) or generic git mechanics (see execution).
 metadata:
   type: workflow
 ---
@@ -71,7 +71,7 @@ Handle each state per the rubric in [pr-review-loop](references/pr-review-loop.m
 - `bot_commented` → for each comment in `bot_line_comments`, judge: **already addressed** (reply "addressed in <sha>"), **agree** (fix + push + **reply** "addressed in <sha>" — the reply is what `--unresolved-only` anchors on), **disagree** (reply with rationale via `gh api .../pulls/<N>/comments/<id>/replies`), or **ambiguous** (reply asking for clarification + ping the user). Loop continues after action. **Every fix or dismissal MUST be paired with a reply on the thread.**
 - `conflicts` → the PR branch conflicts with its base. Rebase onto (or merge) the base branch, resolve the conflicts, and push. Loop continues. A conflicted PR cannot merge regardless of CI/review state, so this is surfaced first.
 - `ci_failed` → fetch the failed log via `gh run view --log-failed <run-id>`, fix, push. Reply on any comments the fix relates to. Loop continues.
-- `ready_to_merge` → exit the loop, tell the user "PR #N ready to merge".
+- `ready_to_merge` → exit the loop, tell the user "PR #N ready to merge". In a repo carrying `arsenal/config.toml`, handing back is not automatically the right ending: `merge-policy` there is the host's standing answer to whether an agent may merge it, and the vendored protocol's completion step gives the rule for each value. Read it before asking a question the host already answered.
 - `merged` / `closed` → exit the loop immediately. PR is no longer open; nothing to do.
 
 ## Multi-PR stacking — autonomous sequential work

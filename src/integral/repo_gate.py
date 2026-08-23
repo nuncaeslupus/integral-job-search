@@ -1,11 +1,11 @@
 """D-22 — the gate the docs require must have something that runs it.
 
-`CLAUDE.md` says all five must pass before a merge — lint, test, evidence,
-verify-subtree, verify-gates. Nothing ran them. PR #89 fell through three holes
+`CLAUDE.md` says all four must pass before a merge — lint, test, evidence and
+verify-gates. Nothing ran them. PR #89 fell through three holes
 at once: GitHub Actions has had no runner minutes since 2026-08-19 (so `ci.yml`
 enforces nothing today), `open_task_pr.sh` re-runs the *payload* gate and never
 asks whether the repo gate passed, and `keyword-guard` only fires on
-`arsenal/**` branches. The five ran on #89 because a person asked, and `make
+`arsenal/**` branches. They ran on #89 because a person asked, and `make
 test` then failed on nine violations that would otherwise have merged.
 
 Prose is not an enforcement point. This module measures whether each gate the
@@ -57,7 +57,12 @@ PAYLOAD_TARGET = "gate"
 # suggestion. Measured, so that deleting the requirement records `-1` instead
 # of a clean `0` — a check that outlives its rule enforces a policy the project
 # has dropped while looking like a pass.
-_REQUIREMENT_RE = re.compile(r"all\s+five\s+must\s*\n?\s*pass\s+before\s+a\s+merge", re.I)
+# The count word is not pinned. It used to read "all five", which meant every
+# change to the list had to edit this regex as well — and the count carries no
+# weight here anyway: what a target is checked against is the fenced block below
+# the sentence, target by target, and an unwired one is caught there. This
+# sentence only answers "is the requirement still declared at all".
+_REQUIREMENT_RE = re.compile(r"all\s+\w+\s+must\s*\n?\s*pass\s+before\s+a\s+merge", re.I)
 
 # `make <target>` lines inside a fenced block — how CLAUDE.md states the list.
 _MAKE_COMMAND_RE = re.compile(r"^\s*make\s+([a-z][a-z0-9-]*)\s*(?:#.*)?$", re.M)

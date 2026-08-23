@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 72,
+  "evidence_gates_read": 73,
   "gates_declaring_status_key": 2,
   "unrecordable": [],
   "readings": [
@@ -56,6 +56,14 @@
       "task": "lo-3265",
       "key": "generated_tax_rules_marked_unverified",
       "evidence": "status/evidence/T33.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-3e91",
+      "key": "upstream_subtree_files",
+      "evidence": "status/evidence/T58.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

@@ -1,12 +1,12 @@
 {
   "skill_listing_budget_overage_chars": 0,
-  "listing_budget_chars": 13000,
+  "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 11241,
-  "skills_counted": 33,
-  "headroom_chars": 1759,
+  "description_chars_total": 9231,
+  "skills_counted": 31,
+  "headroom_chars": 1769,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 3241,
+  "overage_against_upstream_default": 1231,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
@@ -17,13 +17,13 @@
     },
     {
       "skill": "coverage-gaps",
-      "description_chars": 536,
-      "listing_chars": 553
+      "description_chars": 436,
+      "listing_chars": 453
     },
     {
       "skill": "dep-upgrade",
-      "description_chars": 545,
-      "listing_chars": 560
+      "description_chars": 399,
+      "listing_chars": 414
     },
     {
       "skill": "design",
@@ -37,13 +37,13 @@
     },
     {
       "skill": "gate-check",
-      "description_chars": 523,
-      "listing_chars": 537
+      "description_chars": 384,
+      "listing_chars": 398
     },
     {
       "skill": "github",
-      "description_chars": 665,
-      "listing_chars": 675
+      "description_chars": 383,
+      "listing_chars": 393
     },
     {
       "skill": "init",
@@ -51,24 +51,19 @@
       "listing_chars": 254
     },
     {
-      "skill": "lsp-setup",
-      "description_chars": 580,
-      "listing_chars": 593
-    },
-    {
       "skill": "mutmut-report",
-      "description_chars": 522,
-      "listing_chars": 539
+      "description_chars": 379,
+      "listing_chars": 396
     },
     {
       "skill": "pypi-release",
-      "description_chars": 513,
-      "listing_chars": 529
+      "description_chars": 341,
+      "listing_chars": 357
     },
     {
       "skill": "python-bootstrap",
-      "description_chars": 508,
-      "listing_chars": 528
+      "description_chars": 357,
+      "listing_chars": 377
     },
     {
       "skill": "queue-add",
@@ -94,11 +89,6 @@
       "skill": "ship",
       "description_chars": 195,
       "listing_chars": 203
-    },
-    {
-      "skill": "skill-creator",
-      "description_chars": 267,
-      "listing_chars": 284
     },
     {
       "skill": "specify",

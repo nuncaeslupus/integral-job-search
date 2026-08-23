@@ -289,6 +289,164 @@ def _register_statusline(repo_path: Path) -> None:
     print("  settings.json: registered statusLine (statusline_capture.sh)")
 
 
+# --- vendoring --------------------------------------------------------------
+# Vendoring is the only mechanism that reaches every surface. A cloud session
+# runs on a fresh clone and never sees ~/.claude/, and — verified against a live
+# session, not inferred from docs — it does not act on a repo's
+# `extraKnownMarketplaces` / `enabledPlugins` either: skills there arrive by
+# account-level sync, and the web runtime never fetches a git marketplace at
+# session start. What it does read is `.claude/skills/` and the hooks in
+# `.claude/settings.json`, both of which are part of the clone.
+#
+# So the skills are copied in, and the gate that plugin hooks would otherwise
+# provide is written into settings.json alongside them.
+_MARKETPLACE = "claude-arsenal"
+_VENDOR_MARKER = ".arsenal-vendored"
+_GATE_HOOK = "claude-arsenal/bin/check_skill_workshop_loaded.sh"
+_MARK_HOOK = "claude-arsenal/bin/mark_skill_workshop_loaded.sh"
+_MARK_PROMPT_HOOK = "claude-arsenal/bin/mark_skill_workshop_loaded_from_prompt.sh"
+
+
+def _read_settings(settings_path: Path) -> dict | None:
+    """Parse .claude/settings.json, or None when it exists and is unparseable."""
+    if not settings_path.exists():
+        return {}
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return settings if isinstance(settings, dict) else {}
+
+
+def _source_skills_dir() -> Path:
+    """The skills/ directory this script's own skill lives in.
+
+    Works from the plugin cache and from a vendored copy alike: init is always
+    `<skills>/init/scripts/init.py`, so its grandparent is the library to copy.
+    """
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def _vendor_skills(repo_path: Path, silent: bool = False) -> None:
+    """Copy the sibling skills into .claude/skills/ so every surface can load them.
+
+    Only folders carrying the marker are ever replaced or removed — a skill the
+    consumer authored is not ours to touch. Vendoring into itself (running from
+    an already-vendored copy) is a no-op refresh.
+    """
+    source = _source_skills_dir()
+    dest = repo_path / ".claude" / "skills"
+    if source.resolve() == dest.resolve():
+        return  # running from the vendored copy; nothing to copy in
+
+    available = {d.name for d in source.iterdir() if (d / "SKILL.md").is_file()}
+    dest.mkdir(parents=True, exist_ok=True)
+
+    for name in sorted(available):
+        target = dest / name
+        if target.exists() and not (target / _VENDOR_MARKER).is_file():
+            print(f"  skills: {name} exists and is not arsenal-vendored — left alone")
+            continue
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(source / name, target)
+        (target / _VENDOR_MARKER).write_text("", encoding="utf-8")
+
+    # Prune skills a previous version vendored that this one no longer ships.
+    removed = []
+    # Materialised first: iterdir() walks a live scandir, and rmtree inside the
+    # loop can make it skip the entry that follows a deleted one.
+    for d in sorted(dest.iterdir()):
+        if d.is_dir() and (d / _VENDOR_MARKER).is_file() and d.name not in available:
+            shutil.rmtree(d)
+            removed.append(d.name)
+
+    if not silent or removed:
+        print(f"  skills: vendored {len(available)} into .claude/skills/")
+    for name in removed:
+        print(f"  skills: pruned {name} (no longer shipped)")
+
+
+def _register_gate_hook(repo_path: Path) -> None:
+    """Wire the skill-edit gate into .claude/settings.json.
+
+    A plugin ships this as a plugin hook, but plugin hooks do not travel with
+    vendored skills — which is why vendored skill authoring was ungated for as
+    long as vendoring has existed. Settings hooks are part of the clone, so they
+    reach a cloud session too.
+    """
+    settings_path = repo_path / ".claude" / "settings.json"
+    settings = _read_settings(settings_path)
+    if settings is None:
+        print("  settings.json: unparseable — skipping gate-hook registration")
+        return
+
+    hooks = settings.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        print("  settings.json: unexpected 'hooks' value — skipping gate-hook registration")
+        return
+
+    wanted = {
+        "PreToolUse": ("Edit|Write|MultiEdit|Bash", _GATE_HOOK),
+        "PostToolUse": ("Skill", _MARK_HOOK),
+        "UserPromptSubmit": (None, _MARK_PROMPT_HOOK),
+    }
+    changed = False
+    for event, (matcher, command) in wanted.items():
+        entries = hooks.setdefault(event, [])
+        if not isinstance(entries, list):
+            continue
+        if any(command in json.dumps(e) for e in entries):
+            continue
+        entry: dict = {"hooks": [{"type": "command", "command": f"bash {command}"}]}
+        if matcher:
+            entry["matcher"] = matcher
+        entries.append(entry)
+        changed = True
+
+    if changed:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+        print("  settings.json: registered the skill-edit gate")
+
+
+def _retire_plugin_declaration(repo_path: Path) -> None:
+    """Remove a marketplace declaration written by v1.0.0 through v1.1.0.
+
+    Those versions declared the plugins in the host repo's settings, on the
+    belief that a cloud session would install them. It does not. Left in place
+    beside the vendored copies it does nothing in the cloud and produces
+    duplicate skills on the CLI — `specify` and `core:specify` both live, both
+    answering.
+    """
+    settings_path = repo_path / ".claude" / "settings.json"
+    settings = _read_settings(settings_path)
+    if not settings:
+        return
+
+    changed = False
+    markets = settings.get("extraKnownMarketplaces")
+    if isinstance(markets, dict) and _MARKETPLACE in markets:
+        markets.pop(_MARKETPLACE)
+        if not markets:
+            settings.pop("extraKnownMarketplaces")
+        changed = True
+
+    enabled = settings.get("enabledPlugins")
+    if isinstance(enabled, dict):
+        stale = [k for k in enabled if k.endswith(f"@{_MARKETPLACE}")]
+        for key in stale:
+            enabled.pop(key)
+        if stale:
+            changed = True
+        if not enabled:
+            settings.pop("enabledPlugins")
+
+    if changed:
+        settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+        print("  settings.json: retired the plugin declaration (vendored copies supersede it)")
+
+
 def _add_gitignore_entry(repo_path: Path, entry: str) -> None:
     gitignore = repo_path / ".gitignore"
     if gitignore.exists():
@@ -413,14 +571,14 @@ def _queue_automation_setting(config: Path) -> str | None:
     return None
 
 
-def _record_queue_automation(config: Path, value: str) -> None:
-    """Upsert `queue-automation = <value>` in arsenal/config.toml."""
+def _upsert_bare_key(config: Path, key: str, value: str) -> None:
+    """Upsert `<key> = <value>` in arsenal/config.toml, above the first table."""
     if config.is_file():
         text = config.read_text(encoding="utf-8")
-        if re.search(r"^\s*queue-automation\s*=", text, re.MULTILINE):
+        if re.search(rf"^\s*{re.escape(key)}\s*=", text, re.MULTILINE):
             text = re.sub(
-                r"^\s*queue-automation\s*=.*$",
-                f"queue-automation = {value}",
+                rf"^\s*{re.escape(key)}\s*=.*$",
+                f"{key} = {value}",
                 text,
                 count=1,
                 flags=re.MULTILINE,
@@ -428,22 +586,27 @@ def _record_queue_automation(config: Path, value: str) -> None:
         else:
             # A bare key has to go above the first [table] header — appended at
             # the end of a file that ends in `[models]` it would be read as
-            # `models.queue-automation`, an unknown key the loader ignores, so
-            # opting out of the workflow would silently stop working.
+            # `models.<key>`, an unknown key the loader ignores, so opting out
+            # of the workflow would silently stop working.
             lines = text.rstrip("\n").split("\n")
             table_at = next(
                 (i for i, line in enumerate(lines) if line.lstrip().startswith("[")), None
             )
-            entry = f"queue-automation = {value}"
+            entry = f"{key} = {value}"
             if table_at is None:
                 lines.append(entry)
             else:
                 lines[table_at:table_at] = [entry, ""]
             text = "\n".join(lines) + "\n"
     else:
-        text = f"queue-automation = {value}\n"
+        text = f"{key} = {value}\n"
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text(text, encoding="utf-8")
+
+
+def _record_queue_automation(config: Path, value: str) -> None:
+    """Upsert `queue-automation = <value>` in arsenal/config.toml."""
+    _upsert_bare_key(config, "queue-automation", value)
 
 
 def _install_queue_workflow(repo_path: Path, arsenal: Path, silent: bool = False) -> None:
@@ -599,6 +762,12 @@ def init_base(
 
     # statusLine command feeding budget_check.sh (token-budget stop)
     _register_statusline(repo_path)
+
+    # Vendor the skills and wire the gate — the only path that reaches a cloud
+    # session — then retire a plugin declaration an older init may have written.
+    _vendor_skills(repo_path, silent=silent)
+    _register_gate_hook(repo_path)
+    _retire_plugin_declaration(repo_path)
 
     # CLAUDE.md
     _inject_claude_md(repo_path)

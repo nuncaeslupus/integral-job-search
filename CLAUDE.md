@@ -45,9 +45,17 @@ over `handle_sync.py`'s proposals — only one of the two is wired to an action.
 
 ## Spending the context window deliberately
 
-`.rgignore` excludes the vendored and generated trees from every ripgrep-backed
-search, for the same reason `pyproject.toml` excludes them from ruff and mypy: they
-are not ours to change. Search one deliberately with `rg -u --no-ignore-vcs`.
+`.rgignore` excludes the generated trees from every ripgrep-backed search, for the
+same reason `pyproject.toml` excludes them from ruff and mypy: they are not ours to
+change. Search one deliberately with `rg -u --no-ignore-vcs`.
+
+**The arsenal skills are committed here, and that is deliberate.** `/init`
+vendors them into `.claude/skills/` and marks each with `.arsenal-vendored`;
+your own skills are left alone. Do not replace them with a plugin declaration:
+a cloud session runs on a fresh clone, never sees `~/.claude/`, and **installs
+no plugins the repo asks for** — upstream verified that against a live session
+(`claude-arsenal#200`). What a cloud session loads is what was committed. Refresh
+them by re-running `/init`, never by hand-editing a vendored file.
 
 **The corpus is not excluded, and it is the expensive one.** A line of
 `corpus/{raw,labelled}/ads.jsonl` is a whole advert — the longest is 15,640
@@ -75,26 +83,25 @@ is not caused by any diff. Do not treat a red CI here as a signal about the code
 and do not push speculative fixes for it. Diagnose once: `runner_id: 0` plus a
 sub-5-second duration means this. Remove this section once runs show real durations.
 
-**Run the gate locally instead.** These are what CI would run, and all five must
+**Run the gate locally instead.** These are what CI would run, and all four must
 pass before a merge:
 
 ```bash
-make host-gate      # all five, one command — run this
+make host-gate      # all four, one command — run this
 make lint           # ruff + strict mypy
 make test           # pytest
 make evidence       # regenerate every measurement, fail on drift
-make verify-subtree # the arsenal bundle matches its subtree
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
-reached by it — so a sixth line added above cannot quietly go unrun (D-22).
+reached by it — so a fifth line added above cannot quietly go unrun (D-22).
 Note `make gate` is a different thing: it records T1's lint exit code, one
 check, and is not the repo gate.
 
 ## Read on demand — `docs/repo-playbook.md`
 
-Upgrading the vendored bundle, the skill-listing budget, parking a task, and the
-board's title-matching history live there. Each is needed at one moment in a
+Installing and updating the arsenal plugins, the skill-listing budget, parking a
+task, and the board's title-matching history live there. Each is needed at one moment in a
 session, not on every turn, so it is a path to open — not an import.
