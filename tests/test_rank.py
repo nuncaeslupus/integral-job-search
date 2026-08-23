@@ -250,6 +250,95 @@ def test_the_audit_reads_the_published_lists_not_the_pass_that_built_them() -> N
     assert dominance_violations(misattributed, candidates) == 1
 
 
+def test_a_dimension_named_in_neither_field_is_refused() -> None:
+    """`unknown` defaults empty, so silence about a dimension has to be caught.
+
+    Absent from `scores` and absent from `unknown` is a third state this
+    module exists to abolish, and it fails quietly: the total would sum a
+    shorter list and `dominates` would raise `KeyError`. Checked where the
+    dimension set is known.
+    """
+    partial = Candidate(offer_id="sha256:aa", salary_per_month=3000.0, scores={"remote": 1.0})
+    assert partial.unknown == frozenset()
+    with pytest.raises(RankingError, match="neither a score nor an unknown"):
+        frontier([partial], DIMENSIONS)
+    assert salary_equivalent_total(partial, WEIGHTS) is None
+
+
+def test_l1_orders_by_salary_because_that_is_what_l1_is() -> None:
+    """Without weights there is no total, and falling back to id order is not an order.
+
+    The salaries here run opposite to the offer ids, so a sort that quietly
+    kept its tie-breaker would come out backwards.
+    """
+    poorer = _candidate("sha256:aa", 3000.0, remote=1.0, commute=0.0, mentoring=0.0)
+    richer = _candidate("sha256:bb", 4000.0, remote=-1.0, commute=0.0, mentoring=0.0)
+    ranking = rank(
+        [poorer, richer],
+        dimensions=DIMENSIONS,
+        revision=REVISION,
+        weights=None,
+        at="2026-08-24T09:00:00Z",
+    )
+    assert ranking["level"] == "L1"
+    assert ranking["pareto"] == ["sha256:bb", "sha256:aa"]
+
+
+def test_the_audit_checks_the_frontier_against_every_candidate_not_only_its_peers() -> None:
+    """Dropping the dominator from both lists must not make the claim audit clean."""
+    best = _candidate("sha256:aa", 3500.0, remote=1.0, commute=0.5, mentoring=0.5)
+    worse = _candidate("sha256:bb", 3000.0, remote=0.2, commute=-0.5, mentoring=0.0)
+    candidates = [best, worse]
+    honest = rank(
+        candidates,
+        dimensions=DIMENSIONS,
+        revision=REVISION,
+        weights=WEIGHTS,
+        at="2026-08-24T09:00:00Z",
+    )
+
+    # `bb` alone on the frontier, `aa` nowhere: no published peer contradicts
+    # it, and only the candidates can.
+    vanished = {**honest, "pareto": ["sha256:bb"], "dominated": {}}
+    assert dominance_violations(vanished, candidates) >= 1
+
+    # The case the partition check cannot also catch. `aa` is filed as
+    # collapsed — so the partition is complete — by a `cc` that does not in
+    # fact dominate it. `aa` is therefore not a published peer of `bb`, yet it
+    # dominates it. Peers-only sees one violation here; the candidates see two.
+    other = _candidate("sha256:cc", 2500.0, remote=-1.0, commute=1.0, mentoring=0.8)
+    three = [best, worse, other]
+    misfiled = {
+        **honest,
+        "pareto": ["sha256:cc", "sha256:bb"],
+        "dominated": {"sha256:aa": "dominated_by:sha256:cc"},
+    }
+    assert dominance_violations(misfiled, three) == 2
+
+
+def test_the_published_lists_must_partition_the_candidates() -> None:
+    """Every offer that went in comes out somewhere, once."""
+    best = _candidate("sha256:aa", 3500.0, remote=1.0, commute=0.5, mentoring=0.5)
+    worse = _candidate("sha256:bb", 3000.0, remote=0.2, commute=-0.5, mentoring=0.0)
+    candidates = [best, worse]
+    honest = rank(
+        candidates,
+        dimensions=DIMENSIONS,
+        revision=REVISION,
+        weights=WEIGHTS,
+        at="2026-08-24T09:00:00Z",
+    )
+    assert dominance_violations(honest, candidates) == 0
+
+    both = {**honest, "pareto": ["sha256:aa", "sha256:bb"], "dominated": honest["dominated"]}
+    # `bb` is published as kept *and* as collapsed: one dominance violation
+    # for keeping it, one for the overlap.
+    assert dominance_violations(both, candidates) == 2
+
+    neither = {**honest, "dominated": {}}
+    assert dominance_violations(neither, candidates) == 1
+
+
 def test_a_ranking_is_written_under_the_candidates_own_tree(tmp_path: Path) -> None:
     store = ProfileStore(tmp_path, "perico")
     ranking = rank(

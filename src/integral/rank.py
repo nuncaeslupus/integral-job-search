@@ -137,6 +137,30 @@ def dominates(a: Candidate, b: Candidate, dimensions: Sequence[str]) -> bool:
     )
 
 
+def require_coverage(candidates: Sequence[Candidate], dimensions: Sequence[str]) -> None:
+    """Every candidate must account for every dimension the ranking considers.
+
+    `unknown` defaults to empty, so a dimension can otherwise be absent from
+    both fields — neither a score nor an admission that the advert was silent.
+    That is the third state this module exists to abolish, and it fails
+    quietly: `salary_equivalent_total` would sum the shorter list, and
+    `dominates` would raise `KeyError` on the missing key. Checked once here,
+    where the dimension set is known, rather than at each use.
+    """
+    for candidate in candidates:
+        missing = [
+            name
+            for name in dimensions
+            if name not in candidate.scores and name not in candidate.unknown
+        ]
+        if missing:
+            raise RankingError(
+                f"{candidate.offer_id} accounts for neither a score nor an unknown on "
+                f"{missing} — a dimension nobody looked at is still an unknown, and "
+                "has to be named as one"
+            )
+
+
 def frontier(
     candidates: Sequence[Candidate], dimensions: Sequence[str]
 ) -> tuple[list[str], dict[str, str]]:
@@ -146,6 +170,7 @@ def frontier(
     answer a candidate can argue with, and T19's explanation needs somewhere
     to start.
     """
+    require_coverage(candidates, dimensions)
     kept: list[str] = []
     dominated: dict[str, str] = {}
     for mine in candidates:
@@ -190,10 +215,13 @@ def salary_equivalent_total(
     priced = priced_dimensions(weights)
     if not priced or candidate.salary_per_month is None:
         return None
-    if any(name in candidate.unknown for name in priced):
+    # `not in scores` rather than `in unknown`: a dimension declared unknown and
+    # one simply absent are the same absence here, and only the first would be
+    # caught by asking about `unknown`.
+    if any(name not in candidate.scores for name in priced):
         return None
     return candidate.salary_per_month + sum(
-        euros * candidate.scores[name] for name, euros in priced.items() if name in candidate.scores
+        euros * candidate.scores[name] for name, euros in priced.items()
     )
 
 
@@ -230,10 +258,14 @@ def rank(
         for offer_id in kept
         if (total := salary_equivalent_total(by_id[offer_id], weights)) is not None
     }
-    # Offers with no total sort last, in id order: a missing total is not a low
-    # one, and the alternative — dropping them — is the collapse this module
-    # refuses everywhere else.
-    ordered = sorted(kept, key=lambda offer_id: (-totals.get(offer_id, float("-inf")), offer_id))
+    # At L2 the order is the salary-equivalent total; at L1 there is no such
+    # quantity, so it is the salary itself — which is what "hard filters plus
+    # salary" means and what the level was documented to be. Offers with
+    # neither sort last, in id order: a missing number is not a low one, and
+    # the alternative — dropping them — is the collapse this module refuses
+    # everywhere else.
+    ordering = totals if level == "L2" else _salaries(kept, by_id)
+    ordered = sorted(kept, key=lambda offer_id: (-ordering.get(offer_id, float("-inf")), offer_id))
 
     return {
         "run_id": at,
@@ -250,6 +282,14 @@ def rank(
             for offer_id in ordered
             if by_id[offer_id].unknown & set(dimensions)
         },
+    }
+
+
+def _salaries(kept: Sequence[str], by_id: Mapping[str, Candidate]) -> dict[str, float]:
+    return {
+        offer_id: salary
+        for offer_id in kept
+        if (salary := by_id[offer_id].salary_per_month) is not None
     }
 
 
@@ -294,13 +334,26 @@ def dominance_violations(ranking: Mapping[str, Any], candidates: Sequence[Candid
     `test_the_audit_reads_the_published_lists_not_the_pass_that_built_them`
     shows it doing so.
 
-    Two things count as a violation: an offer on the frontier that another
-    frontier member dominates, and a collapsed offer whose named collapser
-    does not in fact dominate it.
+    Three things count as a violation:
+
+    1. An offer on the frontier that **any candidate** dominates — not merely
+       any other published one. Dominance is transitive, so on a *well-formed*
+       ranking the two scans agree: every dominator chain bottoms out at a
+       frontier member. They part company exactly where it matters, on a
+       ranking that is not well-formed — a dominator filed as collapsed under
+       a collapser that does not dominate it is no longer a published peer,
+       and only the candidates still contradict it. The candidates are the
+       ground truth; the published lists are the claim being checked.
+    2. A collapsed offer whose named collapser does not in fact dominate it.
+    3. A published set that is not a partition of the candidates — an offer in
+       both lists, or in neither. Every offer that went in has to come out
+       somewhere, or the frontier is a claim about a different market than the
+       one it was given.
     """
     by_id = {candidate.offer_id: candidate for candidate in candidates}
     dimensions = tuple(ranking["dimensions"])
     published = list(ranking["pareto"])
+    collapsed = dict(ranking["dominated"])
     violations = 0
 
     for offer_id in published:
@@ -309,15 +362,18 @@ def dominance_violations(ranking: Mapping[str, Any], candidates: Sequence[Candid
             violations += 1
             continue
         violations += any(
-            other != offer_id and other in by_id and dominates(by_id[other], mine, dimensions)
-            for other in published
+            candidate.offer_id != offer_id and dominates(candidate, mine, dimensions)
+            for candidate in candidates
         )
 
-    for offer_id, note in ranking["dominated"].items():
+    for offer_id, note in collapsed.items():
         mine = by_id.get(offer_id)
         collapser = by_id.get(str(note).removeprefix(DOMINATED_BY))
         if mine is None or collapser is None or not dominates(collapser, mine, dimensions):
             violations += 1
+
+    violations += len(set(published) & set(collapsed))
+    violations += len(set(by_id) - set(published) - set(collapsed))
 
     return violations
 
