@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from integral.identity import ProfileStore
+from integral.profile import ProfileRevision
 from integral.rank import (
     Candidate,
     RankingError,
@@ -30,8 +32,6 @@ from integral.rank import (
 from integral.rank import (
     _main as main,
 )
-from integral.identity import ProfileStore
-from integral.profile import ProfileRevision
 
 DIMENSIONS = ("remote", "commute", "mentoring")
 WEIGHTS = {
@@ -168,6 +168,37 @@ def test_an_offer_missing_a_priced_dimension_has_no_total_rather_than_a_short_on
     assert ranking["unknown_dimensions"]["sha256:bb"] == ["commute", "mentoring"]
 
 
+def test_an_offer_with_no_total_sorts_after_the_ones_that_have_one() -> None:
+    """A missing total is not a high one, and never a low one either.
+
+    It sorts last because there is nothing to compare it on, and it is kept
+    because dropping it would be the collapse this module refuses everywhere
+    else. The candidate sees it below the comparable offers, labelled with
+    what the advert did not say.
+    """
+    quiet = _candidate("sha256:aa", 9000.0, remote=1.0)
+    modest = _candidate("sha256:bb", 3000.0, remote=0.0, commute=0.0, mentoring=0.0)
+    ranking = rank(
+        [quiet, modest],
+        dimensions=DIMENSIONS,
+        revision=REVISION,
+        weights=WEIGHTS,
+        at="2026-08-24T09:00:00Z",
+    )
+    assert ranking["pareto"] == ["sha256:bb", "sha256:aa"]
+
+
+def test_a_dimension_cannot_be_both_scored_and_unknown() -> None:
+    """The two fields answer one question, so they must not answer it twice."""
+    with pytest.raises(RankingError, match="both scored and unknown"):
+        Candidate(
+            offer_id="sha256:aa",
+            salary_per_month=3000.0,
+            scores={"remote": 1.0},
+            unknown=frozenset({"remote"}),
+        )
+
+
 def test_the_frontier_is_ordered_by_the_total_and_the_facets_name_the_best() -> None:
     rich = _candidate("sha256:aa", 4000.0, remote=-1.0, commute=0.0, mentoring=0.0)
     remote = _candidate("sha256:bb", 3000.0, remote=1.0, commute=0.0, mentoring=0.0)
@@ -184,9 +215,9 @@ def test_the_frontier_is_ordered_by_the_total_and_the_facets_name_the_best() -> 
     assert ranking["facets"]["commute"] == ["sha256:aa", "sha256:bb"]  # tied, both named
 
 
-def test_a_level_that_the_inputs_do_not_support_is_refused() -> None:
-    """The label is computed from what is there, never asserted by a caller."""
-    with pytest.raises(RankingError, match="currency"):
+def test_weights_in_another_currency_are_not_silently_converted() -> None:
+    """No rate source exists here, so the only honest answer is to refuse."""
+    with pytest.raises(RankingError, match="not this module's guess"):
         rank(
             [_candidate("sha256:aa", 3000.0, remote=1.0, commute=0.0, mentoring=0.0)],
             dimensions=DIMENSIONS,
