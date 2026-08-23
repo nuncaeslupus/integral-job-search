@@ -60,6 +60,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+# §4.2's site: part-worths from forced choices, rescaled by the money coefficient.
+METHODS_REF = "METHODS.md#42-preference-weights--part-worth-utilities"
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T10.json"
 

@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 85,
+  "evidence_gates_read": 86,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -88,6 +88,14 @@
       "task": "lo-3265",
       "key": "generated_tax_rules_marked_unverified",
       "evidence": "status/evidence/T33.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-364b",
+      "key": "undocumented_methods",
+      "evidence": "status/evidence/T22.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

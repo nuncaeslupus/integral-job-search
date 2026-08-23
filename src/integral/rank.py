@@ -58,6 +58,9 @@ from integral.identity import ProfileStore
 from integral.profile import ProfileRevision
 from integral.session import Sufficiency
 
+# §4.3's site: the dominance test, the frontier, and the salary-equivalent order.
+METHODS_REF = "METHODS.md#43-offer-comparison--pareto-dominance-then-salary-equivalent-total"
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T18.json"
 
