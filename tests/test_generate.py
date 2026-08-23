@@ -208,3 +208,27 @@ def test_a_document_with_no_claims_does_not_score_one(store: ProfileStore) -> No
     measured = traceability(store, built, "girona-1", version=1)
     assert measured["claims_total"] == 0
     assert measured["cv_generation_traceability"] is None, "null, never a passing 1.0"
+
+
+def test_a_deleted_claim_line_is_caught_even_though_the_fraction_stays_one(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """The manifest and the document have to agree about what was sent.
+
+    Deleting a line leaves every remaining line traced, so
+    `cv_generation_traceability` is honestly 1.0 — this is a different property,
+    and it needs its own number. Step 12 reads these documents to prepare for
+    the interview; a manifest claiming what the CV does not say would walk a
+    candidate into a question about a sentence nobody sent.
+    """
+    generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
+    cv = store.path("cv", "generated", "girona-1", "v1", "cv.md")
+    kept = [line for line in cv.read_text(encoding="utf-8").splitlines() if "Cintra" not in line]
+    dropped = next(
+        line for line in cv.read_text(encoding="utf-8").splitlines() if "Cintra" in line
+    )
+    cv.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    measured = traceability(store, master, "girona-1", version=1)
+    assert measured["cv_generation_traceability"] == 1.0, "every surviving line still traces"
+    assert measured["claims_unused"] == [f"cv.md: {dropped}"]

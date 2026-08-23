@@ -406,6 +406,15 @@ def traceability(
             else:
                 untraced.append(f"{document.name}: {line}")
 
+    # Backing nothing consumed: a manifest row describing a line the document
+    # does not have. `cv_generation_traceability` cannot see this and should not
+    # — every line still present still traces, so the fraction is honestly 1.0.
+    # It is a different property: the manifest and the document have to agree
+    # about what was sent. Step 12 reads these documents to prepare for the
+    # interview, and a manifest claiming what the CV does not say would walk a
+    # candidate into a question about a sentence nobody sent.
+    unused = sorted(f"{document}: {text}" for (document, text), left in backed.items() if left > 0)
+
     return {
         # 1.0 over zero claims would be a document that says nothing passing the
         # gate that exists to keep documents honest. Null is the same third
@@ -413,6 +422,7 @@ def traceability(
         "cv_generation_traceability": None if total == 0 else (total - len(untraced)) / total,
         "claims_total": total,
         "claims_untraced": sorted(untraced),
+        "claims_unused": unused,
     }
 
 
@@ -446,6 +456,7 @@ def measure(
 
     total = 0
     untraced: list[str] = []
+    unused: list[str] = []
     gaps_named = 0
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch) / "profiles"
@@ -458,11 +469,13 @@ def measure(
             measured = traceability(store, master, ad.id, manifest.version)
             total += measured["claims_total"]
             untraced.extend(f"{ad.id}/{line}" for line in measured["claims_untraced"])
+            unused.extend(f"{ad.id}/{line}" for line in measured["claims_unused"])
 
     return {
         "cv_generation_traceability": None if total == 0 else (total - len(untraced)) / total,
         "claims_total": total,
         "claims_untraced": sorted(untraced),
+        "claims_unused": sorted(unused),
         "adverts_generated": len(ads),
         "gaps_named": gaps_named,
     }
@@ -485,7 +498,11 @@ def _main(argv: list[str]) -> int:
     measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
     for line in measured["claims_untraced"]:
         print(f"✗ untraced claim: {line}", file=sys.stderr)
+    for line in measured["claims_unused"]:
+        print(f"✗ manifest row backs no line in the document: {line}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
+    if measured["claims_unused"]:
+        return 1
     # `== 1.0`, not "no untraced lines". A run that generated nothing at all
     # scores `None` with an empty untraced list, and exiting 0 on that would
     # report a gate met by a generator that produced no document.
