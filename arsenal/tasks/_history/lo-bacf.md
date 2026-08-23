@@ -5,6 +5,7 @@ priority: 5
 deps: [lo-b422]
 workspace: PROFILE
 tags: [m3]
+status: merged
 ---
 
 ## Acceptance gate
