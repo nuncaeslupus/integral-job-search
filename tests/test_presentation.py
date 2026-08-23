@@ -229,3 +229,21 @@ def test_write_evidence_records_the_gate_key(tmp_path: Path) -> None:
 
 def _card(offer: Offer) -> str:
     return card(offer, explanation=None, net=None)
+
+
+def test_a_missing_offer_beyond_the_page_limit_is_still_refused() -> None:
+    """Validating only the slice would make the check depend on `limit`: an
+    offer missing at position six of five renders "(1 more not shown.)" and the
+    page reads as complete."""
+    offers = [_offer(f"Oferta {n}, remoto.") for n in range(8)]
+    candidates = [_candidate(offer, 3000.0 + n, {"remote": 1.0}) for n, offer in enumerate(offers)]
+    ranking, explanations = _ranked(candidates, None)
+
+    beyond = ranking["pareto"][-1]
+    supplied = [offer for offer in offers if offer.id != beyond]
+    try:
+        render(ranking, supplied, explanations=explanations, limit=3)
+    except KeyError as exc:
+        assert beyond in str(exc)
+        return
+    raise AssertionError("a frontier offer nobody supplied should not vanish behind the limit")

@@ -166,8 +166,16 @@ def render(
     failure a page of offers must not be able to have quietly.
     """
     by_id = {offer.id: offer for offer in offers}
-    shown = list(ranking["pareto"])[:limit]
-    remaining = len(ranking["pareto"]) - len(shown)
+    frontier = list(ranking["pareto"])
+    # Checked over the whole frontier, not over the page. Validating only the
+    # slice makes the check depend on `limit`: a missing offer at position six
+    # of five renders "(1 more not shown.)" and nobody ever finds out. The page
+    # is a claim about the ranking, so what has to be complete is the ranking.
+    missing = [offer_id for offer_id in frontier if offer_id not in by_id]
+    if missing:
+        raise KeyError(f"{len(missing)} ranked offer(s) were not supplied: {', '.join(missing)}")
+    shown = frontier[:limit]
+    remaining = len(frontier) - len(shown)
 
     lines: list[str] = []
     if ranking["level"] == "L1":
