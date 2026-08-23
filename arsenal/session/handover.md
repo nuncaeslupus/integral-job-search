@@ -1,5 +1,71 @@
 # Session handover — 2026-08-23/24 (fourth session)
 
+## Read this first — one PR is open and it is waiting on a review, not on work
+
+**#135** (`connectors-sources-repo`) — the sources-repository publisher. MERGEABLE, rebased
+onto main, `make host-gate` green. It has **no review at all**, and `after-review` says a PR
+with no reviews does not satisfy the policy. So: check whether CodeRabbit has reviewed it,
+work the findings, merge. Do not merge it unreviewed, and do not sit on it if a review is
+there.
+
+Everything else this session opened is merged: **#133** (T12 connector), **#138** (honest
+user agent + robots enforcement), **#139** (arsenal bundle v2.2.1).
+
+## `after-review` means you merge — this is now written down in two places
+
+`claude-arsenal` v2.2.1 added **"Who fixes, and who merges"** to
+`references/github-automation.md`: read every finding, verify it against the code, fix the
+real ones, answer the rest, **then merge, with no further sign-off**. Stopping to ask
+permission once the policy is met is the same failure as merging early. It also warns that
+a bot's green summary line is not its finding list — read the line comments.
+
+`arsenal/config.toml` says the same and deliberately **names no bot**: which one reviews has
+changed four times here, and a policy naming its reviewer blocks forever the day it changes.
+
+Applied here to eight findings across three PRs: six fixed, two answered and declined.
+
+## The sources repository exists
+
+**`nuncaeslupus/integral-connectors`** — public, MIT, publishing `trabajos_es`. Verified
+end-to-end once by hand: `https_fetcher` reads `manifest.json` unauthenticated, `install`
+fetches the four files, `check_package` passes.
+
+That check stays **out of the gate** on purpose — a quiet Saturday at GitHub must not become
+a failing build, and the gate has to run where there is no egress. `tools/publish_connectors.py`
+generates the tree and `tests/test_publish_connectors.py` installs from it offline. Republish
+with `uv run python tools/publish_connectors.py --out <clone>` — never edit `manifest.json` by
+hand, since `install` fetches exactly the names it lists.
+
+## Two mistakes worth not repeating
+
+**Read the whole robots.txt, not the block that confirms your first reading.** I told the
+owner tecnoempleo and remoteok "block Anthropic by name" and treated that as a refusal. Their
+`User-agent: *` blocks allow the job listings; the `Disallow: /` entries name AI crawlers, and
+remoteok says outright those crawlers may "crawl and cite public job listings". The rule is
+about **who is asking**. That is why the collector's Chrome user-agent string had to go: it
+was evasion, not compliance, and it bought nothing.
+
+**A fixture can publish the recording machine's own IP.** `trabajos.com` stamps the *client's*
+address into every response. CodeRabbit caught it after the file was already public in
+`integral-connectors`. Redacted, that repo's single commit rewritten and force-pushed, and
+`tests/test_connector_contract.py` now refuses an IPv4 literal in **any** fixture.
+
+## Still the owner's call
+
+`from_tecnoempleo` / `from_remoteok` and the 53 committed tecnoempleo ads all sit on permitted
+paths, so there is no compliance reason to remove them — only a preference, if there is one.
+
+The **corpus text-eviction** (drop `text` from the committed corpus, keep ids/labels/counts,
+`unmeasured` via D-12's `status-key` for gates that need the words) is agreed in principle and
+not started. It touches 12 `src` modules and 4 gates — a task file, not a drive-by.
+
+## Two sessions collided in this repo tonight
+
+Both of us worked in the other's worktree and lost edits; one of my bundle refreshes was wiped
+mid-run. Work in your own worktree, and re-check `origin/main` before assuming a PR is still
+mergeable — it moved four times in two hours.
+
+
 ## What is open
 
 | PR | Task | Gate | State |
