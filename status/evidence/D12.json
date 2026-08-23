@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 78,
+  "evidence_gates_read": 80,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -293,6 +293,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "lo-892b",
+      "key": "unconsented_contributions",
+      "evidence": "status/evidence/T54.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "lo-9073",
       "key": "connector_executes_no_shared_code",
       "evidence": "status/evidence/T32.json",
@@ -488,6 +496,14 @@
       "task": "lo-e16f",
       "key": "corpus_harness_roundtrip_loss",
       "evidence": "status/evidence/T4.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-e362",
+      "key": "mock_interview_character_breaks",
+      "evidence": "status/evidence/T47.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

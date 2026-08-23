@@ -25,6 +25,7 @@ from integral.approval import (
     MINIMUM_PROBES,
     ApprovalError,
     PersonalDetails,
+    _carries,
     measure_prepared,
     payload_digest,
     personal_details_in_master,
@@ -473,3 +474,48 @@ def test_a_malformed_send_record_is_reported_not_raised(
         "applications/girona-1/nested/v2.json: unreadable application record (JSONDecodeError)",
         "applications/girona-1/v1.json: unreadable application record (KeyError)",
     ]
+
+
+def test_a_short_episode_does_not_match_a_longer_word(store: ProfileStore) -> None:
+    """CodeRabbit — the shingle match must consume whole normalised words.
+
+    Unpadded, a one-word episode matched any longer word containing it. Because
+    `prepare` refuses to write a payload over a finding, that is not a stray
+    number in a report: it is a draft blocked for content that is not the
+    episode.
+    """
+    built = CVMaster(
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="context", text="Python"),),
+    )
+    write_master(store, built)
+    assert not _carries("A Pythonista writing Pythonic code.", "Python")
+    assert _carries("We shipped it in Python, mostly.", "Python")
+
+    offer_id, version = _prepare(store, built)
+    letter = _letter(store, offer_id, version)
+    letter.write_text(
+        letter.read_text(encoding="utf-8") + "Hired a Pythonista in 2024.\n", encoding="utf-8"
+    )
+    measured = measure_prepared(store, built, offer_id, version)
+    assert all("Python —" not in item for item in measured["unapproved_episodes"]), (
+        "the planted line is unbacked, but not as a disclosure of the episode"
+    )
+
+
+def test_a_planted_episode_is_not_counted_as_withheld(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """CodeRabbit — disclosed and withheld in one call is a summary contradicting itself.
+
+    `intact` deliberately excludes lines nothing backs, so measuring withholding
+    over it could not see the very line it had just reported.
+    """
+    offer_id, version = _prepare(store, master, approved=(0,))
+    letter = _letter(store, offer_id, version)
+    letter.write_text(letter.read_text(encoding="utf-8") + FAILURE + "\n", encoding="utf-8")
+
+    measured = measure_prepared(store, master, offer_id, version)
+    assert measured["unapproved_episode_disclosures"] == 1
+    assert FAILURE in measured["unapproved_episodes"][0]
+    assert measured["episodes_withheld"] == 0, "it is in the document; it was not withheld"

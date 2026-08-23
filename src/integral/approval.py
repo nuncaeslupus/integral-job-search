@@ -218,11 +218,15 @@ def _carries(document: str, episode: str) -> bool:
     words = _words(episode)
     if not words:
         return False
-    body = " ".join(_words(document))
+    # Both sides padded, so a match consumes **whole** normalised words. Without
+    # it a one-word episode ("Python") matched any longer word containing it
+    # ("Pythonista"), and since `prepare` refuses to write a payload over a
+    # finding, that is a draft blocked for content that is not the episode.
+    body = f" {' '.join(_words(document))} "
     if len(words) <= _SHINGLE:
-        return " ".join(words) in body
+        return f" {' '.join(words)} " in body
     return any(
-        " ".join(words[start : start + _SHINGLE]) in body
+        f" {' '.join(words[start : start + _SHINGLE])} " in body
         for start in range(len(words) - _SHINGLE + 1)
     )
 
@@ -412,9 +416,11 @@ def measure_prepared(
     documents = {path.name: path.read_text(encoding="utf-8") for path in sorted(where.glob("*.md"))}
     findings: list[str] = []
     surviving: list[str] = []
+    written: list[str] = []
     for name, body in documents.items():
         for line in _claim_lines(body):
             key = (name, line)
+            written.append(line)
             if backed[key] > 0:
                 backed[key] -= 1
                 # Lines an approval explicitly names are excluded from the
@@ -459,10 +465,14 @@ def measure_prepared(
         "unapproved_episode_disclosures": len(findings),
         "unapproved_episodes": sorted(findings),
         "episode_disclosures": len(episode_claims) + carried,
+        # Measured against **every** line on disk, not just the backed ones. A
+        # planted episode is excluded from `surviving`, so counting withholding
+        # over `intact` reported the same sentence as disclosed and withheld in
+        # one call — a summary contradicting itself.
         "episodes_withheld": sum(
             1
             for episode in master.episodes
-            if episode.text not in disclosed and not _carries(intact, episode.text)
+            if episode.text not in disclosed and not _carries("\n".join(written), episode.text)
         ),
     }
 
