@@ -1,0 +1,53 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: trabajos.com
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-23"
+
+# Checked, not assumed, on the day above. https://www.trabajos.com/robots.txt
+# carries `User-Agent: *` with four specific disallowed paths — a company page,
+# an ajax banner endpoint, and `/buscar-avanzado/` — none of which this
+# connector reads, and no rule naming any AI agent.
+#
+# Two boards the corpus collector reads, `tecnoempleo.com` and `remoteok.com`,
+# *do* name AI agents — `Disallow: /` for `ClaudeBot` among others. That is a
+# rule about **who is asking**, not about the paths: both allow `User-agent: *`
+# on their listings, and remoteok's own comment says those crawlers may "crawl
+# and cite public job listings". So it is not the reason this board was chosen
+# over them — the honest reason is that a connector is redistributed and run by
+# strangers, and this one should point at a board with no AI-agent rule to
+# reason about at all. `integral.robots` enforces the same question per fetch
+# for the collector.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — a category listing and one offer from it, taken on
+# the date below. Never an advert a candidate was reading: the set of ads a
+# person opens carries their field, level, city and the fact that they are
+# looking, and a fixture in a public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-23"
+  # Excerpted before committing (`tools/excerpt_fixture.py`). A fixture proves the
+  # connector finds the right fields in real markup; it does not need whole adverts
+  # to do that, and this library is a public collection of crawlers — the adverts
+  # are the board's content, not ours. The advert bodies are cut to a leading
+  # excerpt; everything outside those spans is byte-identical to what the server
+  # sent, because the edit is made in the raw bytes rather than by parsing and
+  # re-serialising, which would repair markup the fixture exists to preserve.
+  # `tests/test_connect_portal.py` holds the ceilings so a re-recording cannot
+  # quietly restore the full bodies.
+  bodies: excerpted
+  # One further edit, and the only one that is not a body: trabajos.com writes
+  # `<!-- IP: … - CODPAIS:100 -->` into every response, and that is the
+  # *client's* address — the home IP of whoever recorded the fixture, published
+  # here and in the sources repository. Replaced with `[redacted]` in both
+  # files. `tests/test_connector_contract.py` now refuses any fixture carrying
+  # an IPv4 literal, for every board rather than this one, because the next
+  # board will write it somewhere else.
+  client_ip: redacted

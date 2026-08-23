@@ -22,26 +22,34 @@ Every session, without waiting to be asked:
 @claude-arsenal/AGENTS.md
 <!-- /claude-arsenal: auto-managed -->
 
-## This surface has no scriptable GitHub channel
+## The GitHub channel depends on the surface — detect it, don't assume
 
-`github_channel.sh --detect` prints `rest`, **and REST does not work here**: the
-proxy answers `403 GitHub access is not enabled for this session`
-(`claude-arsenal#182`). Don't probe it again — the MCP GitHub tools are the only
-channel, so every GitHub step above is performed with them, and the board JSON the
-scripts read is written to disk by hand from the tool result.
+`bash claude-arsenal/bin/github_channel.sh --detect` answers this, and its answer
+differs per surface. Run it; trust it over any memory of what worked last time.
+
+**On this laptop it prints `gh`, and `gh` auth is live.** Use it for every GitHub
+step of the protocol. `claim_task.sh` and `open_task_pr.sh` work as documented —
+no workaround is needed, and reaching for one costs a session real time.
+
+**In a cloud session it prints `rest`, and REST does not work there**: the proxy
+answers `403 GitHub access is not enabled for this session` (`claude-arsenal#182`).
+Don't probe it again — the MCP GitHub tools are the only channel, so every GitHub
+step is performed with them, and the board JSON the scripts read is written to disk
+by hand from the tool result. In that session, and only there:
 
 - `claim_task.sh` returns `manual POST`; `create_branch` on `arsenal/claims/<id>`
   is the compare-and-swap. **201 = won, 422 = lost.**
 - `open_task_pr.sh` cannot be used — it cuts a branch off the default branch, and
-  pushes here are restricted to the session's designated branch. Archive the task
+  pushes there are restricted to the session's designated branch. Archive the task
   file, put `Closes #<issue>` in **both** the commit message and the PR body, and
   open the PR with the MCP tool.
 - Merging works via the MCP `merge_pull_request` tool.
 
-Steps 3 and 4 of the protocol need no workaround — run them as written. Since the
-fetch drops `body`, issues resolve to tasks by **title**; v0.36.1 made that robust
-and `query_status.py` names anything that still fails to resolve. Trust that list
-over `handle_sync.py`'s proposals — only one of the two is wired to an action.
+Steps 3 and 4 of the protocol need no workaround on either surface — run them as
+written. Since the fetch drops `body`, issues resolve to tasks by **title**;
+v0.36.1 made that robust and `query_status.py` names anything that still fails to
+resolve. Trust that list over `handle_sync.py`'s proposals — only one of the two is
+wired to an action.
 
 ## Spending the context window deliberately
 

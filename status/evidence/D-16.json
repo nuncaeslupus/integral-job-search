@@ -1,21 +1,23 @@
 {
   "undisclosed_connectorless_sourcing": 0,
   "situations_probed": 2,
-  "connectors_installed": 1,
-  "connectors_usable": 0,
+  "connectors_installed": 2,
+  "connectors_usable": 1,
   "rule_declared_in_step_spec": true,
   "shortfalls": [],
   "readings": [
     {
       "market": "ES",
-      "connectorless": true,
-      "usable": [],
+      "connectorless": false,
+      "usable": [
+        "trabajos_es"
+      ],
       "example_only": [
         "examplejobs_es"
       ],
       "unreadable": [],
       "disclosed": true,
-      "discloses": "No connector in this tool covers your market for ES, so what follows came from a general web search rather than a search of the boards you would use. I can build a connector for a board you name, or work through your own browser session on a site you are logged into.",
+      "discloses": null,
       "counts": false,
       "reasons": []
     },
