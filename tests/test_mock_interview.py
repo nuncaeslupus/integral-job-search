@@ -29,7 +29,6 @@ from integral.mock_interview import (
     rehearsal_questions,
     transcript_paths,
 )
-from integral.profile import EvidenceLog, EvidenceRow
 
 QUESTIONS = (
     Question(
@@ -46,23 +45,6 @@ def store(tmp_path: Path) -> ProfileStore:
     root = tmp_path / "profiles"
     identity = create_profile(root, "Ada Lovelace", handle="ada", language="en")
     return ProfileStore(root, identity.handle)
-
-
-@pytest.fixture
-def bank(store: ProfileStore) -> list[EvidenceRow]:
-    log = EvidenceLog(store)
-    return [
-        log.append(
-            recorded_at="2026-01-04T09:00:00Z",
-            occurred_at="2025-11",
-            occurred_precision="month",
-            step="history",
-            kind="episode",
-            dimensions=("on_call_load",),
-            text="Rebuilt the on-call rota after a quarter of 2am pages",
-            source="conversation",
-        )
-    ]
 
 
 def scripted(store: ProfileStore, offer_id: str = "girona-1") -> Path:
