@@ -694,6 +694,13 @@ def _main(argv: list[str]) -> int:
     """
     args = [arg for arg in argv[1:] if not arg.startswith("--")]
     measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
+    # T16's evidence is written here too, not only under `--negation`. `make
+    # evidence` discovers modules by `def _main` and runs each with no
+    # arguments, so a file only a flag can regenerate is a file the drift check
+    # never regenerates — which is precisely the silent staleness that target
+    # exists to catch. The flag stays because T16's own gate wants the audit
+    # alone, without T15's exit code riding on it.
+    write_negation_evidence()
 
     if measured["extraction_status"] == "unmeasured":
         print(
