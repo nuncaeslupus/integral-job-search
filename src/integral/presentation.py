@@ -326,11 +326,27 @@ def _bullet(page: str, name: str, card_index: int) -> str:
     return values[card_index]
 
 
-def _urls_dropped() -> int:
-    """Ranked offers whose stored `url` never reached their card (D-17)."""
-    offers, _ = _fixture()
-    _, page = _page(_FIXTURE_WEIGHTS)
-    return sum(1 for offer in offers if offer.url and offer.url not in page)
+def _urls_dropped(limit: int = DEFAULT_LIMIT) -> int:
+    """Rendered offers whose stored `url` never reached their own card (D-17).
+
+    Scoped to the offers that actually got a card, and checked against that
+    card rather than against the whole page. A dominated or truncated offer has
+    no card *by design*, so counting it as a dropped URL would report the
+    frontier working as this bug; and a page-wide substring test passes as soon
+    as some *other* card carries the same or a longer URL, which is the shape a
+    check on a page of near-identical adverts would eventually hit.
+    """
+    offers, candidates = _fixture()
+    ranking, _ = _page(_FIXTURE_WEIGHTS)
+    by_id = {offer.id: offer for offer in offers}
+    explanations = explain(ranking, candidates, _FIXTURE_WEIGHTS)
+
+    dropped = 0
+    for offer_id in ranking["pareto"][:limit]:
+        offer = by_id[offer_id]
+        if offer.url and offer.url not in card(offer, explanations.get(offer_id)):
+            dropped += 1
+    return dropped
 
 
 def measure() -> dict[str, Any]:

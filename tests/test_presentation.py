@@ -339,3 +339,13 @@ def test_a_dropped_url_is_counted_in_the_evidence() -> None:
     it. The number goes in the gate evidence so a regression is visible."""
     assert measure()["ranked_offers_without_a_url"] == 0
     assert measure()["offers_with_no_url_in_the_store"] == 1
+
+
+def test_a_dominated_offer_is_not_counted_as_a_dropped_url() -> None:
+    """It has no card by design. Counting it would report the frontier working
+    as if it were this bug."""
+    from integral.presentation import _fixture, _urls_dropped
+
+    offers, _ = _fixture()
+    assert any(offer.url for offer in offers)
+    assert _urls_dropped(limit=1) == 0
