@@ -10,10 +10,17 @@ last_verified: "2026-08-23"
 # Checked, not assumed, on the day above. https://www.trabajos.com/robots.txt
 # carries `User-Agent: *` with four specific disallowed paths — a company page,
 # an ajax banner endpoint, and `/buscar-avanzado/` — none of which this
-# connector reads, and no rule naming any AI agent. Two boards that the corpus
-# collector already reads *do* carry such a rule (`tecnoempleo.com` and
-# `remoteok.com` both `Disallow: /` for `ClaudeBot`); this field is the reason
-# neither of them could be the connector's target.
+# connector reads, and no rule naming any AI agent.
+#
+# Two boards the corpus collector reads, `tecnoempleo.com` and `remoteok.com`,
+# *do* name AI agents — `Disallow: /` for `ClaudeBot` among others. That is a
+# rule about **who is asking**, not about the paths: both allow `User-agent: *`
+# on their listings, and remoteok's own comment says those crawlers may "crawl
+# and cite public job listings". So it is not the reason this board was chosen
+# over them — the honest reason is that a connector is redistributed and run by
+# strangers, and this one should point at a board with no AI-agent rule to
+# reason about at all. `integral.robots` enforces the same question per fetch
+# for the collector.
 policy:
   listings: public
   robots_txt: respected
