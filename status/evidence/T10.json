@@ -1,0 +1,16 @@
+{
+  "choices_fitted": 14,
+  "dimensions_priced": 3,
+  "fixture_separated": 0,
+  "refusals": [
+    "dimensions_disagree",
+    "dimensions_never_moved_apart",
+    "nothing_left_to_measure",
+    "prefers_less_money",
+    "salary_never_varied",
+    "too_few_choices_for_the_coefficients",
+    "two_currencies_in_one_fit"
+  ],
+  "roundtrip_error_detected_when_coarsened": 1,
+  "weight_salary_equivalent_roundtrip_error": 1.9e-05
+}

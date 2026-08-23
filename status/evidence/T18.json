@@ -1,0 +1,10 @@
+{
+  "collapsed": 1,
+  "frontier_size": 5,
+  "level": "L2",
+  "level_without_weights": "L1",
+  "offers_ranked": 6,
+  "offers_without_a_total": 2,
+  "pareto_dominance_violations": 0,
+  "violation_detected_when_planted": 1
+}

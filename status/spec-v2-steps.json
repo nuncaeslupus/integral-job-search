@@ -215,7 +215,7 @@
         "metric": "weight_salary_equivalent_roundtrip_error",
         "op": "<=",
         "threshold": 0.01,
-        "state": "not_implemented",
+        "state": "implemented",
         "task": "T10"
       },
       "reentry_events": [
