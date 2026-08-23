@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -572,3 +573,25 @@ def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status
     measured = json.loads(evidence.read_text(encoding="utf-8"))
     assert measured["connector_contract_violations"] == 1
     assert "could not be read" in measured["violations"][0]
+
+
+def test_no_committed_fixture_carries_an_ip_address() -> None:
+    """A recorded page can contain the recording machine's own address.
+
+    `trabajos.com` writes one into every response as
+    `<!-- IP: 37.18.134.127 - CODPAIS:100 -->`, which is the *client's* address,
+    not the server's — so a fixture saved verbatim publishes the home IP of
+    whoever recorded it, to this repository and to the sources repository it is
+    copied into. Nothing about the connector needs it, and no later deletion
+    reaches a clone, so the check is here rather than in a reviewer's habits.
+
+    Deliberately every fixture and not the one that had it: the next board will
+    write it somewhere else.
+    """
+    quad = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    offenders = {
+        str(path.relative_to(_LIBRARY)): sorted(set(quad.findall(path.read_text(encoding="utf-8"))))
+        for path in sorted(_LIBRARY.rglob("fixture/*.html"))
+        if quad.search(path.read_text(encoding="utf-8"))
+    }
+    assert not offenders, f"fixtures carry IP addresses: {offenders}"

@@ -5,6 +5,7 @@ priority: 1
 deps: [lo-bacf, lo-25b1]
 workspace: MATCH
 tags: [m2]
+status: merged
 ---
 
 ## Acceptance gate
@@ -16,7 +17,7 @@ key: pareto_dominance_violations
 ```
 
 ```bash
-echo "no gate command defined for T18 — replace this line with the command that writes status/evidence/T18.json" >&2; exit 1
+uv run python -m integral.rank status/evidence/T18.json
 ```
 
 The two blocks do different jobs and both are required. The `bash` block
