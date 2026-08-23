@@ -184,6 +184,26 @@ def fit(choices: ChoiceSet) -> Fit:
             f"{len(rows)} choice(s) cannot identify {len(names) + 1} coefficients — "
             "ask for more before fitting"
         )
+    flat = [
+        name
+        for index, name in enumerate(names, start=1)
+        if all(abs(row[index]) < 1e-9 for row in rows)
+    ]
+    if flat:
+        raise WeightsError(
+            f"{flat} took the same value in every package, so no answer says anything "
+            "about them — offer a pair that moves them"
+        )
+    pivots = _pivot_columns(rows)
+    if len(pivots) < len(rows[0]):
+        features = ("salary", *names)
+        dependent = [features[index] for index in range(len(features)) if index not in pivots]
+        raise WeightsError(
+            f"the choices never separate {dependent} from what they moved with — every "
+            "pair varied them together, so splitting the effect between them would be "
+            "the penalty's guess rather than an answer. Ask a pair that moves one "
+            "without the other"
+        )
 
     beta = _logit(rows, outcomes)
     salary_per_month = beta[0] / SALARY_SCALE
@@ -255,6 +275,38 @@ def _logit(rows: Sequence[Sequence[float]], outcomes: Sequence[float]) -> list[f
     return beta
 
 
+def _pivot_columns(rows: Sequence[Sequence[float]]) -> frozenset[int]:
+    """Which columns of the design matrix are linearly independent.
+
+    The ridge makes the Hessian invertible whatever the answers were, so a
+    rank-deficient design does not fail loudly — it fits, and hands back a
+    split between the dependent columns that the penalty chose. Two
+    dimensions that moved together in every pair then get separate euro
+    figures, each of which is an artefact. This is checked on the design
+    itself, before the penalty is anywhere near it.
+    """
+    matrix = [list(row) for row in rows]
+    width = len(matrix[0])
+    largest = max((abs(value) for row in matrix for value in row), default=0.0)
+    tolerance = 1e-9 * max(largest, 1.0)
+    pivots: list[int] = []
+    row_index = 0
+    for column in range(width):
+        if row_index >= len(matrix):
+            break
+        pivot = max(range(row_index, len(matrix)), key=lambda r: abs(matrix[r][column]))
+        if abs(matrix[pivot][column]) <= tolerance:
+            continue
+        matrix[row_index], matrix[pivot] = matrix[pivot], matrix[row_index]
+        for below in range(row_index + 1, len(matrix)):
+            factor = matrix[below][column] / matrix[row_index][column]
+            for col in range(column, width):
+                matrix[below][col] -= factor * matrix[row_index][col]
+        pivots.append(column)
+        row_index += 1
+    return frozenset(pivots)
+
+
 def _solve(matrix: list[list[float]], vector: list[float]) -> list[float]:
     """`matrix @ x = vector`, by Gaussian elimination with partial pivoting."""
     size = len(vector)
@@ -262,9 +314,13 @@ def _solve(matrix: list[list[float]], vector: list[float]) -> list[float]:
     for column in range(size):
         pivot = max(range(column, size), key=lambda r: abs(augmented[r][column]))
         if abs(augmented[pivot][column]) < 1e-15:
+            # Unreachable while the ridge is positive: `2 * RIDGE * I` alone
+            # makes this matrix positive definite, and `_pivot_columns` has
+            # already refused the design this used to claim to catch. Kept as a
+            # numerical backstop with an honest message rather than one naming
+            # a cause it can no longer be the detector of.
             raise WeightsError(
-                "the choices do not pin down every coefficient — two dimensions moved "
-                "together in every pair, so nothing separates them"
+                "the Newton step is singular — the fit cannot be solved at these coefficients"
             )
         augmented[column], augmented[pivot] = augmented[pivot], augmented[column]
         for row in range(size):
@@ -454,6 +510,7 @@ def measure() -> dict[str, Any]:
         ("prefers_less_money", _prefers_less_money),
         ("dimensions_disagree", _dimensions_disagree),
         ("too_few_choices_for_the_coefficients", _too_few_choices),
+        ("dimensions_never_moved_apart", _collinear_dimensions),
         ("two_currencies_in_one_fit", _two_currencies),
         ("nothing_left_to_measure", _nothing_to_measure),
     ):
@@ -499,8 +556,14 @@ def _prefers_less_money() -> None:
             currency="EUR",
             choices=tuple(
                 Choice(
-                    a=Package(salary_per_month=2000 + index * 10, dimensions={"remote": 0.0}),
-                    b=Package(salary_per_month=4000 + index * 10, dimensions={"remote": 0.0}),
+                    a=Package(
+                        salary_per_month=2000 + index * 10,
+                        dimensions={"remote": 0.5 if index % 2 else -0.5},
+                    ),
+                    b=Package(
+                        salary_per_month=4000 + index * 10,
+                        dimensions={"remote": -0.5 if index % 2 else 0.5},
+                    ),
                     chosen="a",
                 )
                 for index in range(8)
@@ -528,6 +591,34 @@ def _too_few_choices() -> None:
     # Exactly as many choices as coefficients — the boundary, not a number
     # comfortably inside it, so a rule loosened by one is a rule that fails here.
     fit(ChoiceSet(currency="EUR", choices=_fixture_choices().choices[:4]))
+
+
+def _collinear_dimensions() -> None:
+    fit(
+        ChoiceSet(
+            currency="EUR",
+            choices=tuple(
+                Choice(
+                    a=Package(
+                        salary_per_month=choice.a.salary_per_month,
+                        dimensions={
+                            **choice.a.dimensions,
+                            "commute": choice.a.dimensions["remote"],
+                        },
+                    ),
+                    b=Package(
+                        salary_per_month=choice.b.salary_per_month,
+                        dimensions={
+                            **choice.b.dimensions,
+                            "commute": choice.b.dimensions["remote"],
+                        },
+                    ),
+                    chosen=choice.chosen,
+                )
+                for choice in _fixture_choices().choices
+            ),
+        )
+    )
 
 
 def _two_currencies() -> None:

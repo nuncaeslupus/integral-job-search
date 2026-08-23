@@ -4,6 +4,7 @@
   "fixture_separated": 0,
   "refusals": [
     "dimensions_disagree",
+    "dimensions_never_moved_apart",
     "nothing_left_to_measure",
     "prefers_less_money",
     "salary_never_varied",

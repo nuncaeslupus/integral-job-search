@@ -186,7 +186,7 @@ def test_a_choice_set_where_salary_never_varies_has_no_salary_scale() -> None:
         )
         for value in (0.2, 0.4, 0.6, 0.8, 1.0)
     )
-    with pytest.raises(WeightsError, match="salary"):
+    with pytest.raises(WeightsError, match="no salary scale"):
         fit(ChoiceSet(currency="EUR", choices=pairs))
 
 
@@ -194,14 +194,56 @@ def test_a_fit_that_prefers_less_money_is_refused() -> None:
     """A negative salary utility inverts every explanation it is divided into."""
     pairs = tuple(
         Choice(
-            a=_package(2000 + index * 10, remote=0.0),
-            b=_package(4000 + index * 10, remote=0.0),
+            a=_package(2000 + index * 10, remote=0.5 if index % 2 else -0.5),
+            b=_package(4000 + index * 10, remote=-0.5 if index % 2 else 0.5),
             chosen="a",
         )
         for index in range(8)
     )
     with pytest.raises(WeightsError, match="less money"):
         fit(ChoiceSet(currency="EUR", choices=pairs))
+
+
+def test_two_dimensions_that_never_moved_apart_are_refused() -> None:
+    """A ridge makes a rank-deficient design fit; it does not make it mean anything.
+
+    When `commute` copies `remote` in every package, nothing in the answers
+    says how the joint effect divides between them — but the penalty divides
+    it anyway, evenly, and both come back with their own euro figure. That is
+    a number the candidate would be shown and the ranking would use, invented
+    by the regulariser. Refused, and the message names which dimension to ask
+    a separating question about.
+    """
+    twinned = tuple(
+        Choice(
+            a=_package(
+                choice.a.salary_per_month,
+                **{**choice.a.dimensions, "commute": choice.a.dimensions["remote"]},
+            ),
+            b=_package(
+                choice.b.salary_per_month,
+                **{**choice.b.dimensions, "commute": choice.b.dimensions["remote"]},
+            ),
+            chosen=choice.chosen,
+        )
+        for choice in _synthetic(14).choices
+    )
+    with pytest.raises(WeightsError, match="never separate"):
+        fit(ChoiceSet(currency="EUR", choices=twinned))
+
+
+def test_a_dimension_that_never_varied_says_so_rather_than_pricing_it() -> None:
+    """The commonest way a design goes rank-deficient, and its own message."""
+    frozen = tuple(
+        Choice(
+            a=_package(choice.a.salary_per_month, **{**choice.a.dimensions, "mentoring": 0.4}),
+            b=_package(choice.b.salary_per_month, **{**choice.b.dimensions, "mentoring": 0.4}),
+            chosen=choice.chosen,
+        )
+        for choice in _synthetic(14).choices
+    )
+    with pytest.raises(WeightsError, match="same value in every package"):
+        fit(ChoiceSet(currency="EUR", choices=frozen))
 
 
 def test_packages_must_carry_the_same_dimensions() -> None:
