@@ -27,6 +27,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import py3langid
 import requests
@@ -105,19 +106,39 @@ def detect_language(text: str) -> str:
     return str(lang)
 
 
+MAX_REDIRECTS = 5
+
+
 def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
     """Fetch `url`, or refuse because the site's robots.txt says not to.
 
     The check is here rather than in each board adapter because every fetch
     goes through here: a rule that has to be remembered at each call site is a
     rule that is one new adapter away from not applying.
+
+    **Redirects are followed by hand, one hop at a time.** `requests` follows
+    them itself, which would check the first URL and fetch the last — so a
+    board that redirects a permitted path onto a disallowed one, or onto
+    another host entirely, would walk straight through the check. Every hop is
+    a fetch, so every hop asks that origin's own robots.txt and waits for that
+    origin's own crawl delay.
     """
-    if not ROBOTS.allows(url):
-        raise PermissionError(f"robots.txt disallows {USER_AGENT} on {url}")
-    r = session.get(url, timeout=30, headers={"User-Agent": USER_AGENT}, **kw)
-    r.raise_for_status()
-    time.sleep(ROBOTS.delay(url, POLITENESS_FLOOR))
-    return r
+    for _ in range(MAX_REDIRECTS + 1):
+        if urlsplit(url).scheme != "https":
+            raise PermissionError(f"the collector reads https only, not {url!r}")
+        if not ROBOTS.allows(url):
+            raise PermissionError(f"robots.txt disallows {USER_AGENT} on {url}")
+        # Before, not after: a delay that only follows the final response does
+        # not pace the redirect chain that led to it.
+        time.sleep(ROBOTS.delay(url, POLITENESS_FLOOR))
+        r = session.get(
+            url, timeout=30, headers={"User-Agent": USER_AGENT}, allow_redirects=False, **kw
+        )
+        if not r.is_redirect:
+            r.raise_for_status()
+            return r
+        url = urljoin(url, r.headers["Location"])
+    raise RuntimeError(f"more than {MAX_REDIRECTS} redirects fetching {url!r}")
 
 
 def record(
