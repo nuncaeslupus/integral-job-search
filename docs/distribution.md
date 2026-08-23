@@ -267,10 +267,13 @@ building before the volume exists to justify it.
   from `connectors/` by `tools/publish_connectors.py`, which derives each
   `files` list from the package on disk, and the fictitious `examplejobs.test`
   example is filtered out by its own domain rather than by a list of names.
-  **Creating `nuncaeslupus/integral-connectors` is an owner action**, like the
-  rename above: the tree it should contain is generated here and installs
-  offline in `tests/test_publish_connectors.py`, so nothing in this repository
-  waits on it — but `MANIFEST_URL` does not resolve until it is pushed.
+  `nuncaeslupus/integral-connectors` **exists and is public** as of 2026-08-23,
+  publishing `trabajos_es`. Creating it was an owner action, like the rename
+  above, but nothing here ever waited on it: the tree is generated and installs
+  offline in `tests/test_publish_connectors.py`. Confirmed once against the live
+  repository — `https_fetcher` reads the manifest unauthenticated and `install`
+  verifies the package — and that check stays out of the gate on purpose, so a
+  quiet Saturday at GitHub cannot turn into a failing build here.
 - **Whether this repository is public.** Independent of the above, and not
   needed until someone other than the owner installs it.
 
