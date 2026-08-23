@@ -43,6 +43,7 @@ import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from integral.harness import DEFAULT_STORE_PATH, LabelledAd, load_store
 from integral.identity import ProfileStore, create_profile
@@ -57,9 +58,18 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T9.json"
 CORPUS_SOURCE = "corpus"
 
 #: Boards whose robots.txt permits us, checked before building against one.
-PERMITTED_LIVE_SOURCES = frozenset(
-    {"feinaactiva", "manfred", "remotive", "weworkremotely", "eures"}
-)
+SOURCE_HOSTS = {
+    "feinaactiva": "feinaactiva.gencat.cat",
+    "manfred": "www.getmanfred.com",
+    "remotive": "remotive.com",
+    "weworkremotely": "weworkremotely.com",
+}
+
+#: Derived from `SOURCE_HOSTS` rather than listed twice. A board is permitted
+#: exactly when we know which host its ads come from: `eures` was dropped when
+#: this map arrived, because nothing has ever fetched from it and its host would
+#: have been my guess — which is the thing the map exists to refuse.
+PERMITTED_LIVE_SOURCES = frozenset(SOURCE_HOSTS)
 
 #: Boards that name ClaudeBot with `Disallow: /`. Named, not merely omitted, so
 #: that adding one back is a decision someone has to argue with a test about.
@@ -92,22 +102,46 @@ def check_stimulus(offer: Offer) -> None:
         )
     if not offer.fetched_at:
         raise ElicitationError(f"{offer.id}: a live stimulus must carry fetched_at")
+    parsed = urlparse(offer.url)
+    if parsed.scheme != "https":
+        raise ElicitationError(f"{offer.id}: a live stimulus must be fetched over https")
+    if parsed.netloc != SOURCE_HOSTS[offer.source]:
+        raise ElicitationError(
+            f"{offer.id}: source {offer.source!r} names host "
+            f"{SOURCE_HOSTS[offer.source]!r}, but the url was fetched from "
+            f"{parsed.netloc!r} — the source and the url disagree about where this came from"
+        )
 
 
-def stimulus_from_ad(ad: LabelledAd) -> Offer:
+def stimulus_from_ad(ad: LabelledAd, *, evaluation_ids: frozenset[str] | set[str]) -> Offer:
     """A corpus ad as a stimulus — elicitation split only.
 
     Refusing rather than filtering matters: `corpus_stimuli` below asks for a
     count, and a filter that quietly returns fewer looks exactly like a corpus
     that has run out.
+
+    `evaluation_ids` is **required**, with no default. The split field is
+    metadata about a row; the offer id is the ad's *text*. Two corpus rows with
+    different ids and identical text land on the same offer id, so an ad marked
+    `elicitation` can carry an evaluation ad's content — and `measure` would
+    then report the breach only after the candidate had already reacted to it.
+    A default of `frozenset()` would make this check vacuous for every caller
+    that forgot it, which is the failure mode the check is here to prevent.
     """
     if ad.split != "elicitation":
         raise ElicitationError(
             f"{ad.id}: split is {ad.split!r} — an evaluation-split ad is what the ranking "
             "is scored against and can never be a stimulus (elicitation_eval_overlap == 0)"
         )
+    offer_id = compute_offer_id(ad.text)
+    if offer_id in evaluation_ids:
+        raise ElicitationError(
+            f"{ad.id}: marked {ad.split!r}, but its text is byte-identical to an "
+            "evaluation-split ad — the ranking is scored against this content "
+            "whatever this row is labelled"
+        )
     return Offer(
-        id=compute_offer_id(ad.text),
+        id=offer_id,
         source=CORPUS_SOURCE,
         source_ref=ad.id,
         url=ad.source_url,
@@ -153,8 +187,9 @@ def stimulus_from_record(record: dict[str, Any]) -> Offer:
 def corpus_stimuli(count: int, *, corpus: Sequence[LabelledAd] | None = None) -> list[Offer]:
     """The fallback source: the corpus's elicitation half, in store order."""
     ads = list(corpus) if corpus is not None else load_store(DEFAULT_STORE_PATH)
+    evaluation = evaluation_offer_ids(ads)
     eligible = [ad for ad in ads if ad.split == "elicitation"]
-    return [stimulus_from_ad(ad) for ad in eligible[:count]]
+    return [stimulus_from_ad(ad, evaluation_ids=evaluation) for ad in eligible[:count]]
 
 
 def collect_stimuli(store: ProfileStore, offers: Iterable[Offer], *, at: str) -> list[str]:
@@ -248,7 +283,10 @@ def probe_elicitation() -> dict[str, Any]:
         else:  # pragma: no cover - a passing probe never reaches this
             raise AssertionError(f"{label}: expected a refusal, none was raised")
 
-    must_refuse("evaluation_split_ad", lambda: stimulus_from_ad(corpus[1]))
+    evaluation = evaluation_offer_ids(corpus)
+    must_refuse(
+        "evaluation_split_ad", lambda: stimulus_from_ad(corpus[1], evaluation_ids=evaluation)
+    )
     live = Offer(
         id=compute_offer_id(text),
         source="feinaactiva",
@@ -268,6 +306,21 @@ def probe_elicitation() -> dict[str, Any]:
     must_refuse(
         "unchecked_board", lambda: check_stimulus(live.model_copy(update={"source": "nobody"}))
     )
+    must_refuse(
+        "url_host_disagrees_with_source",
+        lambda: check_stimulus(live.model_copy(update={"url": "https://unapproved.example/ad"})),
+    )
+    must_refuse(
+        "plain_http",
+        lambda: check_stimulus(
+            live.model_copy(update={"url": "http://feinaactiva.gencat.cat/ad/1"})
+        ),
+    )
+    twinned = [
+        corpus[0],
+        corpus[1].model_copy(update={"text": text}),
+    ]
+    must_refuse("duplicate_text_across_splits", lambda: corpus_stimuli(1, corpus=twinned))
 
     with tempfile.TemporaryDirectory() as raw:
         root = Path(raw)

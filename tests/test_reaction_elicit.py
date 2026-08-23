@@ -25,9 +25,11 @@ from integral.reaction_elicit import (
     BLOCKED_SOURCES,
     CORPUS_SOURCE,
     PERMITTED_LIVE_SOURCES,
+    SOURCE_HOSTS,
     ElicitationError,
     check_stimulus,
     collect_stimuli,
+    corpus_stimuli,
     evaluation_offer_ids,
     measure,
     stimulus_from_ad,
@@ -73,9 +75,9 @@ def _store(tmp_path: Path) -> ProfileStore:
 def test_elicitation_never_draws_from_evaluation_split() -> None:
     """The named test: an evaluation-split ad is refused, not filtered out."""
     with pytest.raises(ElicitationError, match="evaluation"):
-        stimulus_from_ad(_ad("ad-eval", "evaluation"))
+        stimulus_from_ad(_ad("ad-eval", "evaluation"), evaluation_ids=frozenset())
 
-    stimulus = stimulus_from_ad(_ad("ad-elic", "elicitation"))
+    stimulus = stimulus_from_ad(_ad("ad-elic", "elicitation"), evaluation_ids=frozenset())
     assert stimulus.source == CORPUS_SOURCE
     assert stimulus.text == _TEXT
 
@@ -208,3 +210,36 @@ def test_a_fetched_record_becomes_a_checked_stimulus() -> None:
     # well-formed the rest of it is.
     with pytest.raises(ElicitationError, match="robots"):
         stimulus_from_record({**record, "source": "tecnoempleo"})
+
+
+def test_the_split_is_a_fact_about_the_text_not_about_the_label() -> None:
+    """Two rows, different corpus ids, identical text — one of them evaluation.
+
+    The offer id addresses the *text*, so the `elicitation` row here carries
+    content the ranking is scored against. Catching it at admission matters:
+    `measure` would report the breach, but only after the candidate had already
+    reacted to it.
+    """
+    shared = "Mismo texto exacto en dos filas distintas. " * 20
+    corpus = [_ad("ad-elic", "elicitation", shared), _ad("ad-eval", "evaluation", shared)]
+
+    with pytest.raises(ElicitationError, match="byte-identical"):
+        stimulus_from_ad(corpus[0], evaluation_ids=evaluation_offer_ids(corpus))
+
+    # And the path the candidate actually goes through refuses it too.
+    with pytest.raises(ElicitationError, match="byte-identical"):
+        corpus_stimuli(1, corpus=corpus)
+
+
+def test_a_url_that_disagrees_with_its_source_is_refused() -> None:
+    """`source` is a claim; the host the text came from is the check on it."""
+    with pytest.raises(ElicitationError, match="disagree"):
+        check_stimulus(_live_offer(url="https://unapproved.example/ad"))
+
+    with pytest.raises(ElicitationError, match="https"):
+        check_stimulus(_live_offer(url="http://feinaactiva.gencat.cat/ad/1"))
+
+    # Every permitted source names the host its ads come from — a source with no
+    # known host cannot be permitted, because the check would have nothing to
+    # compare against.
+    assert set(SOURCE_HOSTS) == set(PERMITTED_LIVE_SOURCES)

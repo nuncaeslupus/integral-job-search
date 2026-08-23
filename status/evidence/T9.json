@@ -4,15 +4,17 @@
   "reactions_examined": 1,
   "refusals": [
     "blocked_board",
+    "duplicate_text_across_splits",
     "evaluation_split_ad",
     "no_fetched_at",
     "no_url",
+    "plain_http",
     "rewritten_text",
-    "unchecked_board"
+    "unchecked_board",
+    "url_host_disagrees_with_source"
   ],
-  "scenarios": 8,
+  "scenarios": 11,
   "permitted_live_sources": [
-    "eures",
     "feinaactiva",
     "manfred",
     "remotive",
