@@ -1,0 +1,24 @@
+{
+  "negation_scope_leaks": 0,
+  "negation_leaks": [],
+  "negation_firings_count": 4,
+  "negation_firings": [
+    "manfred-8389/on_call_load: 'guardias'",
+    "tecnoempleo-799b12ca520d03c0e743/on_call_load: 'guardias'",
+    "tecnoempleo-98201f7d82b073d32d45/on_call_load: 'guardias'",
+    "tecnoempleo-b57e13f992dc636ab549/on_call_load: 'guardias'"
+  ],
+  "negation_window_only_count": 2,
+  "negation_window_only": [
+    "manfred-8392/english_demand: 'inglés fluido'",
+    "remotive-2091075/collaboration_mode: 'work autonomously'"
+  ],
+  "extraction_negation_recall": null,
+  "negation_status": "unmeasured",
+  "negated_label_count": 2,
+  "negated_labels": [
+    "tecnoempleo-98201f7d82b073d32d45/on_call_load",
+    "tecnoempleo-98201f7d82b073d32d45/travel_requirement"
+  ],
+  "negation_label_floor": 10
+}
