@@ -5,6 +5,7 @@ priority: 1
 deps: [lo-bacf, lo-25b1]
 workspace: MATCH
 tags: [m2]
+status: merged
 ---
 
 ## Acceptance gate
