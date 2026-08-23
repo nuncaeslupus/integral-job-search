@@ -75,6 +75,7 @@ from integral.offers import Offer
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T15.json"
+DEFAULT_NEGATION_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T16.json"
 
 # Below this many evaluation-split labels, a per-dimension F1 is not a
 # measurement of the extractor — it is a measurement of which two adverts
@@ -85,12 +86,9 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T15.json"
 # passes (D-2).
 MIN_EVALUATION_LABELS_PER_DIMENSION = 10
 
-# Words that flip a `negatable` cue. Deliberately small and per-language: this
-# is the shallow half of negation, enough for "no on-call" / "sense guàrdies"
-# / "sin guardias". **T16 owns negation properly** — scope, distance, and its
-# own `extraction_negation_recall` gate. What is here exists because a
-# `negatable` cue that nothing ever negates is a schema field with no
-# behaviour, which reads as implemented and is not.
+# Words that flip a `negatable` cue. Deliberately small and per-language:
+# enough for "no on-call" / "sense guàrdies" / "sin guardias". Scope, not
+# vocabulary, is what made this wrong in practice — see `_CLAUSE_BOUNDARY`.
 _NEGATORS: dict[Language, tuple[str, ...]] = {
     "en": ("no", "not", "never", "without", "free from"),
     "es": ("no", "sin", "nunca"),
@@ -99,9 +97,18 @@ _NEGATORS: dict[Language, tuple[str, ...]] = {
 
 # How far back from a cue match a negator still governs it. Characters, not
 # tokens, because the cue patterns are regexes over raw text and there is no
-# tokeniser here. Short on purpose — a negator a whole clause away usually
-# governs something else, and T16 is where that gets done properly.
+# tokeniser here. This is now only a backstop: `_CLAUSE_BOUNDARY` is what
+# actually ends a negator's scope, and it ends it sooner in every real case.
 _NEGATION_WINDOW = 40
+
+# Where a negator's scope ends. A negator governs its own clause and nothing
+# past it — the window alone did not know that, and two adverts in the corpus
+# paid for it: `manfred-8392` read "sin ambigüedades. **El inglés fluido" as a
+# negated English requirement, and `remotive-2091075` let a `not` in one bullet
+# invert the next bullet across a blank line. A comma is deliberately *not* a
+# boundary: "Durante tus primeros 6 meses, no harás guardias" is one clause for
+# this purpose and negating it is right.
+_CLAUSE_BOUNDARY = re.compile(r"[.!?;\n]")
 
 # How many cue matches it takes for the rules stage to settle a **bipolar**
 # dimension. On a bipolar scale the same word sits on both sides — "autonomía"
@@ -254,10 +261,25 @@ def _normalise_labelled(ad: LabelledAd) -> NormalisedAd:
     )
 
 
+def _negation_scope(text: str, start: int) -> str:
+    """The text a negator would have to sit in to govern the match at `start`.
+
+    The window back from the cue, cut at the last clause boundary inside it. A
+    negator on the far side of that boundary belongs to a different statement.
+    """
+    window = text[max(0, start - _NEGATION_WINDOW) : start]
+    boundaries = [m.end() for m in _CLAUSE_BOUNDARY.finditer(window)]
+    return window[boundaries[-1] :] if boundaries else window
+
+
+def _has_negator(text: str, language: Language) -> bool:
+    lowered = text.lower()
+    return any(re.search(rf"\b{re.escape(word)}\b", lowered) for word in _NEGATORS[language])
+
+
 def _is_negated(text: str, start: int, language: Language) -> bool:
     """Does a negator govern the match beginning at `start`?"""
-    window = text[max(0, start - _NEGATION_WINDOW) : start].lower()
-    return any(re.search(rf"\b{re.escape(word)}\b", window) for word in _NEGATORS[language])
+    return _has_negator(_negation_scope(text, start), language)
 
 
 def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | None:
@@ -497,6 +519,82 @@ def prefilter_suppression(
     return len(suppressed), checked, sorted(suppressed)
 
 
+def negation_audit(
+    store: list[LabelledAd],
+    dimensions: list[Dimension],
+) -> dict[str, Any]:
+    """T16's gate, and the count that shows the scope rule is doing something.
+
+    Two numbers, and they are not the same kind of number:
+
+    `negation_scope_leaks` is the **invariant**: no firing may have a clause
+    boundary between its negator and its cue. It is 0 by construction of
+    `_negation_scope`, so this is a regression gate — it does not show the
+    negation is *accurate*, it shows the scope rule has not been widened back
+    out. Accuracy is `extraction_negation_recall`, which needs a corpus this one
+    does not have yet; T59 owns it and this file records why.
+
+    `negation_window_only` is the **effect**: matches a negator reaches under
+    the raw character window but not under the clause rule. Every one of those
+    was a wrong negation before T16, so this is the count that would be 0 if the
+    change had done nothing.
+    """
+    firings: list[str] = []
+    leaks: list[str] = []
+    window_only: list[str] = []
+
+    for ad in store:
+        normalised = _normalise_labelled(ad)
+        text, language = normalised.text, normalised.language
+        for dimension in ad_side(dimensions):
+            for cue in dimension.extraction.cues.get(language, []):
+                if not cue.negatable:
+                    continue
+                for match in re.finditer(cue.pattern, text, re.IGNORECASE):
+                    scope = _negation_scope(text, match.start())
+                    window = text[max(0, match.start() - _NEGATION_WINDOW) : match.start()]
+                    where = f"{ad.id}/{dimension.id}: {text[match.start() : match.end()]!r}"
+                    if _has_negator(scope, language):
+                        firings.append(where)
+                        if _CLAUSE_BOUNDARY.search(scope):
+                            leaks.append(where)
+                    elif _has_negator(window, language):
+                        window_only.append(where)
+
+    # `evaluation_labels`, not every label in the store: this is the denominator of
+    # a **score**, and D-2 binds those to the evaluation split. Counting the
+    # elicitation split here would let ten labels that shaped the model unblock a
+    # measurement of the model against itself. The firing audit above is the other
+    # kind of number — a property of the cue set, not a score against held-out
+    # data — so it reads both splits, for the reason `prefilter_suppression` gives.
+    negated_labels = [
+        f"{ad.id}/{label.dimension}" for ad, label in evaluation_labels(store) if label.negated
+    ]
+    if len(negated_labels) >= MIN_EVALUATION_LABELS_PER_DIMENSION:  # pragma: no cover
+        raise ExtractionError(
+            f"the corpus now carries {len(negated_labels)} negated evaluation labels, so "
+            "extraction_negation_recall is measurable — this branch is a placeholder "
+            "and scoring must be implemented before it can report a number (T59)"
+        )
+
+    return {
+        "negation_scope_leaks": len(leaks),
+        "negation_leaks": sorted(leaks),
+        "negation_firings_count": len(firings),
+        "negation_firings": sorted(firings),
+        "negation_window_only_count": len(window_only),
+        "negation_window_only": sorted(window_only),
+        # T59's payload, recorded here because this is where a person looks to
+        # find out why the recall number is absent. Null, not 0.0 — the same
+        # third outcome D-2 requires of `extraction_macro_f1`.
+        "extraction_negation_recall": None,
+        "negation_status": "unmeasured",
+        "negated_label_count": len(negated_labels),
+        "negated_labels": sorted(negated_labels),
+        "negation_label_floor": MIN_EVALUATION_LABELS_PER_DIMENSION,
+    }
+
+
 def measure(
     store_path: Path = DEFAULT_STORE_PATH,
     dimensions_dir: Path = DEFAULT_DIMENSIONS_DIR,
@@ -556,6 +654,34 @@ def write_evidence(
     return measured
 
 
+def write_negation_evidence(
+    evidence: Path = DEFAULT_NEGATION_EVIDENCE_PATH,
+    store_path: Path = DEFAULT_STORE_PATH,
+    dimensions_dir: Path = DEFAULT_DIMENSIONS_DIR,
+) -> dict[str, Any]:
+    """Audit and record `status/evidence/T16.json`."""
+    audited = negation_audit(load_store(store_path), load_dimensions(dimensions_dir))
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(audited, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return audited
+
+
+def _negation_main(argv: list[str]) -> int:
+    """Write T16's gate evidence. Exit 1 on a scope leak, 0 while recall waits."""
+    args = [arg for arg in argv[1:] if not arg.startswith("--")]
+    audited = write_negation_evidence(Path(args[0]) if args else DEFAULT_NEGATION_EVIDENCE_PATH)
+    print(
+        "extraction_negation_recall: UNMEASURED — "
+        f"{audited['negated_label_count']} negated label(s), floor "
+        f"{audited['negation_label_floor']}. Not a pass and not a fail (D-2); T59 owns it.",
+        file=sys.stderr,
+    )
+    for leak in audited["negation_leaks"]:
+        print(f"✗ {leak}", file=sys.stderr)
+    print(json.dumps(audited, ensure_ascii=False))
+    return 1 if audited["negation_scope_leaks"] else 0
+
+
 def _main(argv: list[str]) -> int:
     """Write T15's gate evidence.
 
@@ -568,6 +694,13 @@ def _main(argv: list[str]) -> int:
     """
     args = [arg for arg in argv[1:] if not arg.startswith("--")]
     measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
+    # T16's evidence is written here too, not only under `--negation`. `make
+    # evidence` discovers modules by `def _main` and runs each with no
+    # arguments, so a file only a flag can regenerate is a file the drift check
+    # never regenerates — which is precisely the silent staleness that target
+    # exists to catch. The flag stays because T16's own gate wants the audit
+    # alone, without T15's exit code riding on it.
+    write_negation_evidence()
 
     if measured["extraction_status"] == "unmeasured":
         print(
@@ -585,4 +718,6 @@ def _main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    if "--negation" in sys.argv:
+        raise SystemExit(_negation_main(sys.argv))
     raise SystemExit(_main(sys.argv))

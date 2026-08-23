@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 73,
-  "gates_declaring_status_key": 2,
+  "evidence_gates_read": 75,
+  "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
     {
@@ -107,6 +107,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "lo-4b17",
+      "key": "extraction_negation_recall",
+      "evidence": "status/evidence/T16.json",
+      "value_is_numeric": false,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "lo-4b79",
@@ -360,6 +368,14 @@
       "task": "lo-bc1d",
       "key": "corpus_language_slice_mismatch",
       "evidence": "status/evidence/D1.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-bd02",
+      "key": "negation_scope_leaks",
+      "evidence": "status/evidence/T16.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
