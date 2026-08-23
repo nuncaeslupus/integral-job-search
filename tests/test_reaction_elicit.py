@@ -177,3 +177,34 @@ def test_the_recorded_measurement_reports_no_overlap() -> None:
     # The planted-reaction scenario proves the number above can be non-zero.
     assert probed["overlap_detected_when_planted"] == 1
     assert probed["scenarios"] >= 6
+
+
+# --- the live path -----------------------------------------------------------
+
+
+def test_a_fetched_record_becomes_a_checked_stimulus() -> None:
+    """`tools/collect_ads.py`'s record shape, without importing the scraper."""
+    from integral.reaction_elicit import stimulus_from_record
+
+    record = {
+        "id": "feinaactiva-991",
+        "source": "feinaactiva",
+        "source_url": "https://feinaactiva.gencat.cat/ad/991",
+        "fetched_at": _AT,
+        "language": "ca",
+        "title": "Cuiner/a",
+        "company": "Restaurant Girona",
+        "text": _TEXT,
+    }
+
+    stimulus = stimulus_from_record(record)
+
+    # Addressed by its text, never by the id the board happened to use.
+    assert stimulus.id == compute_offer_id(_TEXT)
+    assert stimulus.source_ref == "feinaactiva-991"
+    assert stimulus.status == "new"
+
+    # A record from a board that blocks us never becomes a stimulus, however
+    # well-formed the rest of it is.
+    with pytest.raises(ElicitationError, match="robots"):
+        stimulus_from_record({**record, "source": "tecnoempleo"})

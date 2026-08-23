@@ -120,6 +120,36 @@ def stimulus_from_ad(ad: LabelledAd) -> Offer:
     )
 
 
+def stimulus_from_record(record: dict[str, Any]) -> Offer:
+    """One live fetch's record as a stimulus — `tools/collect_ads.py`'s shape.
+
+    A plain dict, deliberately: `integral.reaction_elicit` imports no part of the
+    scraping stack, so this gate runs wherever the repo does and not only where
+    the boards are reachable. The same reason `classify_family` lives in
+    `integral.corpus` rather than in the collector (T25).
+
+    The record's own `id` is discarded. A collector is free to key an ad however
+    its board does; a stimulus is addressed by its text, and going through
+    `compute_offer_id` here is what makes `check_stimulus` a real check rather
+    than a comparison of the collector's id against itself.
+    """
+    text = record.get("text") or ""
+    offer = Offer(
+        id=compute_offer_id(text),
+        source=str(record.get("source", "")),
+        source_ref=record.get("id"),
+        url=record.get("source_url"),
+        fetched_at=record.get("fetched_at"),
+        title=record.get("title") or None,
+        company=record.get("company") or None,
+        language=record.get("language"),
+        text=text,
+        status="new",
+    )
+    check_stimulus(offer)
+    return offer
+
+
 def corpus_stimuli(count: int, *, corpus: Sequence[LabelledAd] | None = None) -> list[Offer]:
     """The fallback source: the corpus's elicitation half, in store order."""
     ads = list(corpus) if corpus is not None else load_store(DEFAULT_STORE_PATH)
