@@ -1,0 +1,17 @@
+{
+  "mock_interview_character_breaks": 0,
+  "sessions_rehearsed": 96,
+  "character_breaks": [],
+  "sessions_not_announced": [],
+  "sessions_never_closed": [],
+  "turns_after_the_end_that_are_not_feedback": [],
+  "sessions_over_the_question_cap": [],
+  "adverts_seen": 100,
+  "adverts_with_nothing_to_rehearse": [
+    "feinaactiva-FA20230113O56",
+    "feinaactiva-FA92319975",
+    "tecnoempleo-38021664327933990244",
+    "tecnoempleo-9ae7135032ea738f104e"
+  ],
+  "adverts_at_the_question_cap": 1
+}
