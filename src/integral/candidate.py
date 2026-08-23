@@ -147,9 +147,7 @@ class ConstraintField(Strict):
 
     @model_validator(mode="after")
     def _shape_matches_state(self) -> ConstraintField:
-        names = [
-            name for name in type(self).model_fields if name not in ("state", "evidence")
-        ]
+        names = [name for name in type(self).model_fields if name not in ("state", "evidence")]
         set_names = [name for name in names if not self._is_default(name)]
         if self.state == "stated":
             missing = [name for name in self._required_when_stated if self._is_default(name)]
@@ -167,6 +165,17 @@ class ConstraintField(Strict):
                 f"{type(self).__name__}: state {self.state!r} carries a value in "
                 f"{', '.join(set_names)} — {self.state} means no answer was recorded, "
                 "not a hidden one"
+            )
+        # `evidence` is skipped by the loop above because it is not an answer,
+        # but it is still a claim: a row that stated this field. A `declined`
+        # or `unknown` field was not derived from one, so carrying an id there
+        # asserts a provenance for an answer that does not exist — the same
+        # "hidden opinion under a state that says it has none" this rule
+        # already refuses, one level up.
+        if self.state != "stated" and self.evidence:
+            raise ValueError(
+                f"{type(self).__name__}: state {self.state!r} names evidence "
+                f"{', '.join(self.evidence)} — only a stated field was derived from a row"
             )
         return self
 

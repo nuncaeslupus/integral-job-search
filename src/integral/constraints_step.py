@@ -321,6 +321,15 @@ def resolve(
                 )
             if matched.value is None:
                 raise ConstraintsStepError(f"{field}: {matched.action} needs a value")
+            if "evidence" in matched.value:
+                # Reserved: the field's provenance is set from the row this call
+                # is about to write, not from the payload. Left to collide with
+                # `**value` it is an uncaught `TypeError` at construction, and
+                # were it to win it would be a caller naming its own sources.
+                raise ConstraintsStepError(
+                    f"{field}: 'evidence' is set from the row that states the field, "
+                    "not passed in with its value"
+                )
             try:
                 FIELD_MODELS[field](state="stated", **matched.value)
             except ValidationError as exc:
@@ -337,9 +346,7 @@ def resolve(
                 source="conversation",
                 text=_encode_stated(matched.text, matched.value),
             )
-            fields[field] = FIELD_MODELS[field](
-                state="stated", evidence=(row.id,), **matched.value
-            )
+            fields[field] = FIELD_MODELS[field](state="stated", evidence=(row.id,), **matched.value)
             resolutions.append(FieldResolution(field, "stated", row.id))
             continue
 
@@ -350,6 +357,11 @@ def resolve(
             # runtime check of something that could actually be missing.
             if evidence_row is None or value is None:  # pragma: no cover - contract, not a path
                 raise ConstraintsStepError(f"{field}: a stated resolution carried no evidence")
+            if "evidence" in value:
+                raise ConstraintsStepError(
+                    f"{field}: the stored row carries a reserved 'evidence' key — "
+                    "the field's provenance is the row's own id, not a value in it"
+                )
             fields[field] = FIELD_MODELS[field](
                 state="stated", evidence=(evidence_row.id,), **value
             )

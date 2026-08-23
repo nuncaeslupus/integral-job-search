@@ -24,6 +24,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from integral.decline import DeclineLedger
 from integral.feedback import (
@@ -43,7 +44,7 @@ from integral.lifecycle import (
     transition,
 )
 from integral.offers import connect_manual
-from integral.profile import EvidenceLog, rebuild
+from integral.profile import EvidenceLog, EvidenceSubject, rebuild
 from integral.profile_capture import capture
 
 _AT = "2026-08-24T10:00:00Z"
@@ -126,7 +127,18 @@ def test_a_stated_pinned_constraint_names_the_row_that_stated_it(tmp_path: Path)
     nobody could trace. `unknown` and `declined` are not derived from a row and
     are not asked for one."""
     store = _store(tmp_path)
-    _say(store, "Vivo en Barcelona.", dims=("residence",))
+    _say(
+        store,
+        json.dumps(
+            {
+                "quote": "Vivo en Barcelona.",
+                "value": {"country": "ES", "accepts_onsite_in_country": True},
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        dims=("location",),
+    )
     rebuild(store)
 
     fields = store.read_json("profile", "constraints.json")["fields"]
@@ -221,3 +233,78 @@ def test_write_evidence_records_the_gate_key(tmp_path: Path) -> None:
     evidence = tmp_path / "T21.json"
     write_evidence(evidence)
     assert json.loads(evidence.read_text(encoding="utf-8"))["feedback_traceability"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Matching a reason to a row is a count, not a membership test.
+
+
+def test_the_same_reason_said_twice_needs_two_rows(tmp_path: Path) -> None:
+    """One row cannot discharge two decisions. Set membership let a bypass hide
+    behind an earlier, properly recorded decision that used the same words."""
+    store = _store(tmp_path)
+    first = _offer(store, "Primera oferta, oficina.")
+    second = _offer(store, "Segunda oferta, oficina.")
+    record_decision(store, first, "screened_out", at=_AT, reason="Otra agencia, no.")
+
+    offer, record = load_lifecycle_offer(store, second)
+    save_lifecycle_offer(
+        store, *transition(offer, record, "screened_out", at=_AT, reason="Otra agencia, no.")
+    )
+
+    assert [orphan["offer"] for orphan in orphaned_reasons(store)] == [second]
+
+
+def test_two_decisions_on_one_offer_with_the_same_words_need_two_rows(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _offer(store)
+    record_decision(store, offer_id, "screened_out", at=_AT, reason="No.")
+
+    offer, record = load_lifecycle_offer(store, offer_id)
+    save_lifecycle_offer(store, *transition(offer, record, "expired", at=_AT, reason="No."))
+
+    assert len(orphaned_reasons(store)) == 1
+
+
+def test_a_whitespace_only_reason_is_not_an_orphan(tmp_path: Path) -> None:
+    """The wrapper writes no row for one, because nothing was said."""
+    store = _store(tmp_path)
+    offer_id = _offer(store)
+    offer, record = load_lifecycle_offer(store, offer_id)
+    save_lifecycle_offer(store, *transition(offer, record, "screened_out", at=_AT, reason="   "))
+
+    assert orphaned_reasons(store) == []
+
+
+def test_an_unrelated_row_about_the_offer_does_not_discharge_a_reason(tmp_path: Path) -> None:
+    """Only the wrapper's own `offer_reaction` rows are eligible."""
+    store = _store(tmp_path)
+    offer_id = _offer(store)
+    capture(
+        EvidenceLog(store),
+        DeclineLedger(store),
+        step="feedback",
+        kind="statement",
+        text="Sin remoto.",
+        source="conversation",
+        recorded_at=_AT,
+        about=EvidenceSubject(kind="offer", id=offer_id),
+    )
+    offer, record = load_lifecycle_offer(store, offer_id)
+    save_lifecycle_offer(
+        store, *transition(offer, record, "screened_out", at=_AT, reason="Sin remoto.")
+    )
+
+    assert len(orphaned_reasons(store)) == 1
+
+
+def test_a_non_stated_constraint_field_may_not_name_evidence() -> None:
+    """`unknown` and `declined` were not derived from a row, so naming one
+    asserts a provenance for an answer that does not exist."""
+    from integral.candidate import FIELD_MODELS
+
+    model = FIELD_MODELS["location"]
+    with pytest.raises(ValidationError):
+        model(state="declined", evidence=("ev-0000000000000001",))
+    with pytest.raises(ValidationError):
+        model(state="unknown", evidence=("ev-0000000000000001",))

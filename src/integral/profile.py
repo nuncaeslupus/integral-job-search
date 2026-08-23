@@ -524,7 +524,7 @@ def _resolve_pinned_fields(
         try:
             instance = (
                 model(state="stated", evidence=evidence, **value)
-                if state == "stated" and value is not None
+                if state == "stated" and value is not None and "evidence" not in value
                 else model(state=state)
             )
         except ValidationError:

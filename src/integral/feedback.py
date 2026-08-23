@@ -53,6 +53,7 @@ import argparse
 import json
 import sys
 import tempfile
+from collections import Counter
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -133,25 +134,39 @@ def orphaned_reasons(store: ProfileStore) -> list[dict[str, str]]:
 
     Matched on `(offer, text)` rather than on a row id, because `transition`
     holds no row id to write down — which is the whole shape of the bypass.
+
+    **Counted, not set-membership.** Say the same thing twice about one offer —
+    once through the wrapper, once around it — and a set has one entry that both
+    events match, so the bypass disappears and the gate reads 1.0. Each row is
+    therefore spent on at most one event. Only the wrapper's own rows are
+    eligible (`source="offer_reaction"`): an unrelated row that happens to be
+    about this offer and to repeat the words is not the decision being traced.
     """
-    rows = list(EvidenceLog(store).effective_rows())
-    said = {
+    unspent = Counter(
         (row.about.id, row.text)
-        for row in rows
-        if row.about is not None and row.about.kind == "offer"
-    }
-    return [
-        {"offer": record.offer_id, "reason": event.reason, "at": event.at}
-        for record in _lifecycle_records(store)
-        for event in record.history
-        # `from_status is None` is the initial `collected` event, which
-        # `track_new_offer` writes itself. Its "reason" is the system saying how
-        # the offer got here, not the candidate saying anything — counting it
-        # would make every profile untraceable for a sentence nobody uttered.
-        if event.from_status is not None
-        and event.reason
-        and (record.offer_id, event.reason) not in said
-    ]
+        for row in EvidenceLog(store).effective_rows()
+        if row.about is not None and row.about.kind == "offer" and row.source == "offer_reaction"
+    )
+
+    orphans: list[dict[str, str]] = []
+    for record in _lifecycle_records(store):
+        for event in record.history:
+            # `from_status is None` is the initial `collected` event, which
+            # `track_new_offer` writes itself. Its "reason" is the system saying
+            # how the offer got here, not the candidate saying anything —
+            # counting it would make every profile untraceable for a sentence
+            # nobody uttered. A blank reason is the same: the wrapper writes no
+            # row for one, because nothing was said.
+            reason = event.reason
+            if event.from_status is None or not (reason or "").strip():
+                continue
+            assert reason is not None  # narrowed by the guard above
+            key = (record.offer_id, reason)
+            if unspent[key]:
+                unspent[key] -= 1
+                continue
+            orphans.append({"offer": record.offer_id, "reason": reason, "at": event.at})
+    return orphans
 
 
 def _claims(store: ProfileStore) -> list[tuple[str, Sequence[str]]]:
