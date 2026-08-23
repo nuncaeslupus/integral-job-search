@@ -12,10 +12,20 @@
 # happens — including on the day CI starts meaning something again.
 #
 # This is not a weakened `after-ci-and-review`; it is the other axis. `after-ci`
-# is "the machines agree"; `after-review` is "a reader agrees".
+# is "the machines agree"; `after-review` is "a reader agrees" — and the reader
+# may be a bot. It has already been Qodo, Gemini, Codex and CodeRabbit here, in
+# that order, which is exactly why **no bot is named in this file**: a policy
+# that names its reviewer blocks forever the day the repo swaps one for another.
+# Read the PR's reviews and take whatever GitHub reports there.
 #
-#   review  the Qodo review has landed and every comment it raises is fixed or
-#           answered on the thread. An unread bot review is not a review.
+#   review  a review has landed, every finding it raised is verified against the
+#           code, the real ones are fixed and the rest answered on the thread —
+#           and then **the session merges**, with no further sign-off. Waiting
+#           for a human after that is the same failure as merging early: this
+#           file already answered the question. An unread bot review is not a
+#           review, and a green summary line is not the finding list.
+#           → claude-arsenal/references/github-automation.md, "Who fixes, and
+#             who merges"
 #
 # Independently of this policy, the five gates are still run locally on every PR
 # head — `make ci` — and their results quoted on the PR. That is a pre-merge

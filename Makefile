@@ -80,11 +80,11 @@ READER_NAME ?= Job Search — Specification v2
 reader: reader-process reader-steps  ## regenerate both annotatable spec readers
 
 reader-process:  ## regenerate the process-spec reader only
-	uv run --with markdown python3 .claude/skills/specify/scripts/create_reader.py \
+	uv run --with markdown python3 claude-arsenal/scripts/create_reader.py \
 		--input status/spec-v2-process.md --output-dir docs/spec-v2 --name "$(READER_NAME)"
 
 reader-steps:  ## regenerate the step-spec reader only
-	uv run --with markdown python3 .claude/skills/specify/scripts/create_reader.py \
+	uv run --with markdown python3 claude-arsenal/scripts/create_reader.py \
 		--input status/spec-v2-steps.md --output-dir docs/spec-v2-steps --name "$(READER_NAME)"
 
 clean:  ## remove build and tool caches

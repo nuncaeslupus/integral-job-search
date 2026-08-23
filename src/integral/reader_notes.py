@@ -1,6 +1,6 @@
 """Reviewer notes stay bound to the section they were written on (T31).
 
-`.claude/skills/specify/scripts/create_reader.py` generates an annotatable
+`claude-arsenal/scripts/create_reader.py` generates an annotatable
 reader from a spec document (`status/spec-v2-process.md`,
 `status/spec-v2-steps.md`) and keys each section's note slot by a stable id
 derived from the section's *number* — `s-spec-10` for the section currently
