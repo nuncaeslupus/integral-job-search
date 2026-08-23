@@ -1,7 +1,7 @@
 ---
 id: lo-1af2
 title: "T25: [LAPTOP] Broaden the corpus beyond remote programming — >=6 job families, >=15 ads each"
-priority: 70
+priority: 1
 workspace: ONTOLOGY
 tags: [laptop, m4]
 requires: [surface:egress]
