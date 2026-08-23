@@ -13,10 +13,10 @@
 #
 # This is not a weakened `after-ci-and-review`; it is the other axis. `after-ci`
 # is "the machines agree"; `after-review` is "a reader agrees" — and the reader
-# may be a bot. It has already been Qodo, Gemini, Codex and CodeRabbit here, in
-# that order, which is exactly why **no bot is named in this file**: a policy
-# that names its reviewer blocks forever the day the repo swaps one for another.
-# Read the PR's reviews and take whatever GitHub reports there.
+# may be a bot. Which bot has changed four times here already, which is exactly
+# why **none is named in this file**: a policy that names its reviewer blocks
+# forever the day the repo swaps one for another. Read the PR's reviews and take
+# whatever GitHub reports there.
 #
 #   review  a review has landed, every finding it raised is verified against the
 #           code, the real ones are fixed and the rest answered on the thread —
