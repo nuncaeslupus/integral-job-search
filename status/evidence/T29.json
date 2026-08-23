@@ -11,15 +11,15 @@
     "history",
     "traits",
     "sourcing",
-    "application"
+    "application",
+    "interview_log"
   ],
   "steps_not_implemented": [
     "reactions",
     "preferences",
     "understanding",
     "ranking",
-    "feedback",
-    "interview_log"
+    "feedback"
   ],
   "questions_declared": 5,
   "shape_questions": [

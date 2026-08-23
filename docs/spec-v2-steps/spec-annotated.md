@@ -1060,7 +1060,7 @@ worth building that into a story before the next one. How did it feel?"* Writes
 **Gate.** `interview_lesson_linkage == 1.0` — every logged interview produces at
 least one evidence row linked to a dimension or a story-bank episode. An
 interview that produces only prose is a diary entry; the point is that the next
-one goes better. Owner: S6. State: `not_implemented`.
+one goes better. Owner: S6. State: `implemented`.
 
 **Resume.** Preparation records which questions have been rehearsed. The
 recording half resumes at the first unanswered part — questions, then outcome,
