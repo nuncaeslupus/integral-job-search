@@ -55,9 +55,17 @@ had nothing to do it with. And because `requires: [surface:human]` excludes this
 task from the selector, no agent would ever have written that software either:
 the missing 90% was invisible to both halves of the system.
 
-**T20a replaces the placeholder** with the real command as part of its own work.
-When this task is claimed, the gate below should already name it; if it still
-says "no gate command defined", T20a has not landed and this is not ready.
+**T20a replaces the placeholder** with
+`uv run python -m integral.calibration spearman status/evidence/T20.json` as part
+of its own work. When this task is claimed, the gate below should already say
+that; if it still says "no gate command defined", T20a has not landed and this
+is not ready.
+
+The ordering you give is recorded in the **profile store**, not in this
+repository — it is a statement about you, not about the ads. What gets committed
+is the scalar `rank_spearman`. Until you have ranked, that number is `null` with
+`rank_status: "unmeasured"` everywhere, which is D-2's third outcome and not a
+failure.
 
 ## Human-owned
 

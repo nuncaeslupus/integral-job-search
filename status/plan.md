@@ -287,7 +287,7 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T18 | Pareto frontier + salary-equivalent ordering + facet lists, pinned to a profile revision and a sufficiency level | 9 | L | T10, T15 | `pareto_dominance_violations == 0` | `test_dominated_offer_never_appears_in_frontier` in `tests/test_rank.py`; `test_unknown_dimension_is_not_treated_as_neutral`; `test_ranking_records_its_revision_and_level` | ☐ |
 | T19 | Explanations citing verbatim evidence spans and €/month contributions | 9 | M | T18 | `explained_fraction == 1.0` | `test_every_ranked_offer_cites_evidence` in `tests/test_explain.py` — each ranked offer carries ≥1 verbatim span per contributing dimension | ☐ |
 | T44 | Ranking presentation: the offer card as a template filled from normalised JSON — facts as bullets, one plain line including the bad part, unknown shown as unknown, provisional labelled | 9 | M | T18, T19, T33 | `provisional_rankings_unlabelled == 0` | `test_l1_ranking_is_labelled_provisional` in `tests/test_presentation.py`; `test_unknown_field_renders_as_unknown_not_neutral`; `test_card_is_filled_from_json_not_generated_per_offer` | ☐ |
-| T20a | The calibration harness for T20: draw 20 from the evaluation split, present them blind, record the ordering, compute `rank_spearman`. **Split out of T20 2026-08-24** — T20 is `[HUMAN]` and so excluded from the selector, which left the 90% of it that is software unbuildable by either half of the system | 9 | M | T9, T19 | `blind_ranking_leaks == 0` | `test_the_presentation_order_is_independent_of_the_system_ranking` in `tests/test_calibration.py`; `test_no_score_or_explanation_reaches_the_blind_page`; `test_spearman_matches_a_known_order` | ☐ |
+| T20a | The calibration harness for T20: draw 20 from the evaluation split, present them blind, record the ordering, compute `rank_spearman`. **Split out of T20 2026-08-24** — T20 is `[HUMAN]` and so excluded from the selector, which left the 90% of it that is software unbuildable by either half of the system | 9 | M | T9, T19 | `blind_ranking_leaks == 0` | `test_the_presentation_order_is_independent_of_the_system_ranking` in `tests/test_calibration.py`; `test_no_score_or_explanation_reaches_the_blind_page`; `test_spearman_matches_a_known_order`; `test_rank_spearman_is_unmeasured_until_an_ordering_is_recorded`; `test_the_twenty_are_drawn_from_the_evaluation_split_only` | ☐ |
 | T20 | **[HUMAN]** Calibrate ranking against blind manual ranking of 20 held-out ads | 9 | M | T9, T19, T20a | `rank_spearman >= 0.60` | `test_ranking_correlates_with_manual_order` in `tests/test_calibration.py` — Spearman ρ ≥ 0.60 against the recorded manual order | ☐ |
 
 ### DOCUMENT — the CV store, generated documents, interviews
@@ -485,7 +485,7 @@ gate. The SHA is the commit that carries the artefact, and the value is what
                        ├── T42                      │
                        └── T18 ── T19 ─┬── T44 ◄────┘
                                        ├── T43
-                                       ├── T20*
+                                       ├── T20a ── T20*
                                        └── T21
   T5* ──────────────► T9 ── T10 ──► T18
   T4b ─► T5*          (T5 also gates T15's evaluation split)

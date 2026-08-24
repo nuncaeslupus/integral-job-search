@@ -16,7 +16,7 @@ key: blind_ranking_leaks
 ```
 
 ```bash
-uv run python -m integral.calibration status/evidence/T20a.json
+uv run python -m integral.calibration leaks status/evidence/T20a.json
 ```
 
 The two blocks do different jobs and both are required. The `bash` block
@@ -44,18 +44,36 @@ Build `src/integral/calibration.py`:
    used to elicit preferences and then scored is measuring memorisation. The draw
    is deterministic from the ad id, like `harness.split_rank`, not random per run.
 2. **Present them blind.** See below — this is the gate.
-3. **Record the ordering** the candidate gives, as a list of ad ids, and commit it.
-   The 20 ads are public corpus entries and an ordering of them carries nothing
-   personal; committing it is what makes `rank_spearman` reproducible by
-   `make evidence` on a fresh clone. The alternative — reading it out of the
-   profile store — makes T20's number unrecomputable anywhere the candidate's
-   state home does not exist, which is everywhere except their laptop.
-4. **Compute `rank_spearman`** against the system's own ordering of the same 20,
-   with tie handling stated. Write `status/evidence/T20.json` — this is the
-   command that finally replaces T20's placeholder `bash` block.
-5. Until an ordering is recorded, `rank_spearman` is **`null` with
+3. **Record the ordering** the candidate gives, as a list of ad ids, in the
+   **profile store** — `ProfileStore`, where the rest of their judgement already
+   lives. Not in the repository. A permutation of 20 ads is a statement about the
+   person, not about the ads: it is preference data of the same kind as T10's
+   part-worths and T9's reactions, and neither of those is committed either.
+   `integral.state_home` already owns where that lives and under what rules;
+   this task adds no second answer.
+4. **Validate both orderings before correlating.** Each must be an *exact
+   permutation* of the same 20 ids — no duplicate, no omission, no id outside the
+   drawn set, no id from the elicitation split. Refuse, with the offending ids
+   named; never `zip` two lists of different length or index a rank map with a
+   missing key, both of which compute a confident number over a silently
+   truncated pair. State which id representation is canonical (`Offer.id`, as
+   `compute_offer_id` produces it) so the two sides cannot disagree about what an
+   id *is*.
+5. **Compute `rank_spearman`** against the system's own ordering of the same 20,
+   with tie handling stated. Write `status/evidence/T20.json` with
+   `uv run python -m integral.calibration spearman status/evidence/T20.json` —
+   the command that finally replaces T20's placeholder `bash` block. The
+   evidence carries the scalar and nothing else: rho is a number about the
+   system, the permutation behind it is a fact about the candidate.
+6. Until an ordering is recorded, `rank_spearman` is **`null` with
    `rank_status: "unmeasured"`** — D-2's third outcome, as `extraction.measure`
-   already does for `extraction_macro_f1`. Not a pass and not a fail.
+   already does for `extraction_macro_f1`. Not a pass and not a fail. On a fresh
+   clone with no state home that is what `make evidence` will always write, and
+   it is the honest answer: the measurement has not been taken here.
+
+Two evidence files, two subcommands, one module — the shape `integral.harness`
+already uses for T4 (`gate`) and T5 (`labels`). `leaks` is this task's own gate
+and needs no candidate; `spearman` is T20's and cannot run without one.
 
 ## The gate is about blindness, because that is what can rot silently
 
@@ -87,10 +105,13 @@ never been anything else certifies nothing.
 a person ranked these by hand. A fixture ordering exists to test the arithmetic
 and must be visibly a fixture — never written to `status/evidence/T20.json`.
 
-**Do not draw the 20 from the labelled ads.** Only 4 of 100 are labelled, and
-drawing from them would make the sample the labelling campaign's leftovers
-rather than the evaluation split. The candidate reads the advert text, which
-every corpus entry has.
+**Do not filter the draw by whether an ad carries labels.** Eligibility is
+membership of the evaluation split and nothing else — `harness.evaluation_offer_ids`
+is the whole test. `corpus/labelled/ads.jsonl` is the *store*: all 100 ads are in
+it and all 100 carry a split, but only 4 carry labels today. Confusing the store's
+name for "the ads that have labels" would draw the 20 from the labelling
+campaign's leftovers, a sample of whatever happened to get annotated first. The
+candidate reads the advert text, which every entry has.
 
 ## Tests
 
@@ -101,14 +122,21 @@ Write these RED before any production code:
 `test_no_score_or_explanation_reaches_the_blind_page`;
 `test_spearman_matches_a_known_order` — including ties;
 `test_rank_spearman_is_unmeasured_until_an_ordering_is_recorded`;
-`test_the_twenty_are_drawn_from_the_evaluation_split_only`.
+`test_the_twenty_are_drawn_from_the_evaluation_split_only`;
+`test_a_malformed_ordering_is_refused` — a duplicate, a missing id, an unknown
+id, and a shorter list are four separate cases and each must raise rather than
+correlate.
 
 ## Consequence to expect
 
 T20's `bash` block stops being the failing placeholder and becomes
-`uv run python -m integral.calibration --gate status/evidence/T20.json` (or
-whatever this module settles on). Update T20's file in the same PR that lands
-this, so the two do not disagree about how T20 is measured.
+`uv run python -m integral.calibration spearman status/evidence/T20.json`.
+Update T20's file in the same PR that lands this, so the two do not disagree
+about how T20 is measured.
+
+Expect `status/evidence/T20.json` to read `null` / `"unmeasured"` on every
+machine but the candidate's. `verify-gates` only demands a measurement of a task
+that is *done*, and T20 is not done until they have ranked.
 
 ## Location
 
