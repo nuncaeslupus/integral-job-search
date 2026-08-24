@@ -131,8 +131,14 @@ make verify-gates   # every done/merged task can still show its measurement
 **One drift is not yours: `T55.files_scanned` moves by one on every task PR.**
 `open_task_pr.sh` runs the host gate, *then* archives the task file into the
 allowlisted `arsenal/tasks/_history/`, then commits — so the committed count was
-measured one file before the tree it ships with. Regenerate and commit it; do not
-go looking for a cause in the diff (`claude-arsenal#220`).
+measured one file before the tree it ships with, and the PR it opens carries the
+stale count.
+
+The script has already committed by the time you see it, so this is a **second
+commit on the branch it left you on**, not an amend: `make host-gate` regenerates
+the number, then `git add -A && git commit && git push` before the review lands.
+The squash merge folds it in. Do not go looking for a cause in the diff
+(`claude-arsenal#220`).
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
