@@ -1,9 +1,10 @@
-# Session handover — 2026-08-24, overnight batch
+# Session handover — 2026-08-24, overnight batch (closed out in the morning)
 
-## What merged
+## The queue is clear and nothing is waiting on a review
 
-Six tasks, all under `merge-policy: after-review`, all with `make host-gate` green
-before the merge. Each closed its own issue.
+**Eight tasks merged.** No PR is open. The board reads
+**96 tasks — open 6, claimed 0, done 1, cancelled 2, merged 87**, and **none of
+the six open tasks is blocked**: every dependency they name is merged.
 
 | PR | Task | Gate | Issue |
 |---|---|---|---|
@@ -12,164 +13,150 @@ before the merge. Each closed its own issue.
 | #142 | T44 the offer card as a filled template | `provisional_rankings_unlabelled == 0` | 66 |
 | #144 | D-17 the card renders the stored link | `ranked_offers_without_a_url == 0` | 98 |
 | #143 | T21 the feedback loop | `feedback_traceability == 1.0` | 60 |
-
-Board: 95 tasks — **open 2, claimed 1, blocked 4, merged 86** (was 80).
+| #145 | T43 outside-the-advert enrichment | `outside_source_spans_in_explanations == 0` | 65 |
+| #148 | T26 cancelled, T26b split out | — (T26b carries `trait_dimensions_ready >= 4`) | 53, 147 |
 
 Steps 9 (`ranking`) and 10 (`feedback`) both flipped to `implemented` in
-`spec-v2-steps.json`, and both step skills stopped saying their checkpoint "exits
-3 at best". T48's drift check and `step_certification` each caught that on their
-own — neither needed noticing.
+`spec-v2-steps.json`. T48's drift check and `step_certification` each caught
+that on their own — neither needed noticing.
 
-## The two PRs still open
+## What is open, and what it needs
 
-**#135 — the sources-repository publisher** (`connectors-sources-repo`). Not a queue task;
-it is the follow-up to T54 that `connector_contract.py` calls out ("it does not create the
-sources repository or move connectors into it; that is a follow-up"). CodeRabbit reviewed
-it before the rate limit, both findings are fixed and answered, `make host-gate` green.
+Six tasks, all unblocked. Five an agent can take; one is yours.
 
-`nuncaeslupus/integral-connectors` is live, public, MIT, publishing `trabajos_es`.
-`tools/publish_connectors.py` generates the tree; **never hand-edit `manifest.json`**, since
-`install` fetches exactly the names it lists. The publisher refuses a package containing a
-symlink — these come from strangers and this copies them somewhere public, and a symlink can
-wear a permitted name, so the contract checker cannot catch it.
+| task | id | note |
+|---|---|---|
+| **T20** | `lo-c48f` | **`[HUMAN]` — this one is yours.** A blind manual ranking of 20 held-out ads. Deps satisfied; nothing else waits on it. |
+| T56 | `lo-6f53` | `extraction_macro_f1 >= 0.75` once the label floor is met |
+| T57 | `lo-7c14` | `ontology_hit_rate >= 0.85` — also what makes T26's old gate measurable |
+| T59 | `lo-4b17` | `extraction_negation_recall >= 0.80` — what `task_select` offers next |
+| T26b | `t-1956a8c6` | the four candidate-trait dimensions (new, see below) |
+| D-19 | `t-e6546af7` | the dimension model is software-only — 0 of 25 settled on construction |
 
-T54's probe deliberately stays offline. Pointing it at the live repository would make the
-gate measure whether a server answered today, and it has to run where there is no egress.
+T56, T57 and T59 all wait on **labelled data volume**, not on each other. They
+are the three that will actually pace M4.
 
-**#145 — T43, outside-the-advert enrichment** (`lo-192c`, issue 65). Rebased flat
-onto `main`, `MERGEABLE`, `make host-gate` green.
+## T26 is cancelled; T26b carries the buildable half
 
-**It has never been reviewed.** CodeRabbit ran out of its ten included reviews
-partway through the night and stayed rate-limited through every retry. I did not
-merge it, because `after-review` has not happened for it even once — that is a
-different situation from the five above, each of which was reviewed and then had
-its findings addressed.
+You asked for the split. Job (2) — the four candidate-trait dimensions
+(creativity, ambition, learning orientation, spare-time engagement),
+`side: candidate_trait`, no cues, elicited only — is now **T26b**
+(`t-1956a8c6`, issue #147), gated on `trait_dimensions_ready >= 4`. That number
+counts the dimensions that are *complete* (rungs, three-language labels, an
+elicitation question), not the ones that exist: T26's own scope note says a
+dimension without rungs has no class set for anything to score.
 
-To land it: let the review through (billing → usage-based reviews), or say a
-session may merge it on the gate alone.
+T26 (#53) is closed as not planned, archived with `status: cancelled` and
+`split-into: t-1956a8c6`. Job (1) — widening the matched dimensions by corpus
+sweep — was retired by your 2026-08-19 scope change, and T26's gate
+`ontology_hit_rate >= 0.85` was **T57's own metric**, so the task could never
+have been measured from inside itself.
 
-## The review round found four things worth having
+**Four tasks had to be edited in the same change, and this is the part worth
+checking.** `cancelled` is *not* terminal in `task_select.py`
+(`TERMINAL = {"done", "merged"}`), so T56, T57, T59 and D-19 would have waited
+on T26 forever. Their `deps` drop it, each with a note on why nothing is lost —
+T57's was circular, T56/T59 wait on the label floor rather than on the model's
+breadth, and D-19 arguably replaces T26's retired half by asking whether to
+widen at all. If you disagree with any one of those four, that is the decision
+to revisit; the cancellation itself is cheap to undo, the dependency edits are
+the judgement call.
 
-Fifteen findings across the six PRs. Twelve real and fixed, three declined with
-reasoning posted to the PR. The sharp ones:
+## Two things the reviews caught that were mine
 
-- **#143** — `orphaned_reasons` matched reasons to evidence rows with a **set**, so
-  one row discharged every event repeating those words. Say the same thing twice
-  about one offer, once through the wrapper and once around it, and the bypass
-  vanished while the gate read 1.0. Rows are now spent one per event.
-- **#141** — a frontier offer with no salary-equivalent total was getting a delta
-  anyway. `rank` withholds the total when the salary is missing or a priced
-  dimension is unset; `explain` summed whatever drivers it had and published that
-  partial sum. It contradicted the PR's own text.
-- **#142** — `provisional_rankings_unlabelled` searched the whole page for the
-  label, so an unlabelled provisional page would report as labelled if any card
-  happened to contain the sentence. It is a header; `startswith` now.
-- **#142** — the "unknown is shown as unknown" property was satisfied by `hours`
-  and `contract`, which are *unconditionally* unknown, so it would have kept
-  passing while pay and location stopped rendering. Each bullet is read off its
-  own line now.
+Eighteen findings across seven PRs: fourteen fixed, four declined with reasoning
+posted to the PR. Two are worth your attention because they were errors of
+mine, not of the code under review:
 
-Declined, each with reasons on the PR:
+- **I called `lo-1af2` "T23" in four places.** It is **T25**; T23 is `lo-680d`.
+  Worse, `status/plan.md` already declared T26b's Depends as T23 while the task
+  file declared **no deps at all** — the graph was missing an edge the plan
+  asserts. Fixed in #148.
+- **`render()` could not pass outside findings to `card()`** (#145). The card
+  grew a block for them and the page function never supplied one, so the only
+  way to see a finding was to call `card()` directly, which nothing but the
+  tests does. T43's whole claim is that the candidate can tell an employer's
+  words from a review site's — and on the page, they could not see either.
 
-1. *Regenerate the ranking artifact after `record_decision`* (#143). A ranking
-   needs the live offer set and the dimension list — step 9's inputs, not step
-   10's — and `write_ranking` needs a `run_id` this deliberately clock-free
-   function does not have. The plan's own named test is
-   `test_rejection_moves_offer_status_and_marks_weights_stale`.
-2. *Label L2 pages provisional* (#142). Reads the objective backwards: the task
-   says *"the **L1** ranking says so"*. An L2 ranking has fitted weights and is
-   not provisional; labelling it always would be the same as saying nothing.
-3. *Remove the stale placeholder paragraph from the archived task file* (#141).
-   Arsenal template text, in **15 of 85** files in `_history/`. Editing one copy
-   makes drift. Also already declined once this cycle for the same reason — see
-   the previous handover on `_history/lo-b422.md`.
+The four declines, each answered on its PR: regenerating the ranking artifact
+after `record_decision` (that is step 9's inputs, not step 10's); labelling L2
+pages provisional (reads the objective backwards); removing arsenal template
+text from one archived task file out of the 15 that carry it; and replacing
+T43's structural provenance guarantee with a flag on the shared span contract.
 
-## T26 is now the only thing blocking the queue
+## Filed upstream against claude-arsenal
 
-`task_select` offers **T26** (`lo-9e41`) and it still should not be taken as
-written. Nothing changed; I left it alone. But the situation around it did:
+- **[#210](https://github.com/nuncaeslupus/claude-arsenal/issues/210)** —
+  `bin/rebase_stack.sh` cannot complete on a repo with evidence gates. It runs
+  `git rebase --onto` and force-pushes with nothing in between, so it stops on
+  the evidence conflict every rebase produces here. Arsenal can fix this
+  generically: it knows the evidence paths from each task's `evidence:` gate key
+  and the regenerate command from the `host-gate` config key. It also
+  force-pushes *without* running the gate, so a clean rebase can publish a head
+  that fails the host's own drift check.
+- **[#211](https://github.com/nuncaeslupus/claude-arsenal/issues/211)** —
+  `new_task.py` rejects a dep on merged work: `existing_ids` globs
+  `arsenal/tasks/*.md` non-recursively and never sees `_history/`. This is not
+  hypothetical — it is why T26b shipped without its dep on T23 and needed #148's
+  follow-up commit to get it back. `task_select.py` reads `_history/`
+  deliberately, so the two views of "which tasks exist" disagree.
 
-**Four tasks now wait on T26 and on nothing else** — T56 (`lo-6f53`), T57
-(`lo-7c14`), T59 (`lo-4b17`), D-19 (`t-e6546af7`). The only other open task is
-**T20** (`lo-c48f`), which is `[HUMAN]`: it needs your blind manual ranking of 20
-held-out ads. Its dependencies are now satisfied, so it is unblocked and waiting
-on you.
-
-So after #145 lands, **the board has no unblocked work an agent can take.**
-
-The decision, unchanged in shape:
-
-- Job (1), widening matched dimensions by corpus sweep, was retired by your own
-  2026-08-19 scope change — dimensions are coined when a live session turns one up.
-- Job (2), the four candidate-trait dimensions (`side: candidate_trait`, no cues,
-  elicited only), is buildable today and independent of both problems.
-- T26's gate `ontology_hit_rate >= 0.85` is **`unmeasured`**, and making it
-  measurable is T57 — which T26 does not declare as a dep.
-
-**Recommendation**: split job (2) into its own task with its own gate, then either
-re-scope T26 to job (1) with `deps: [lo-7c14]` added, or cancel it and let T57
-carry the metric. I did not do this: re-scoping a task you already re-scoped once
-is a decision, not a chore.
+I did not adopt `tmp/regate.sh` upstream as written: it hardcodes
+`status/evidence/` and `make host-gate`, so it is ours, not shareable. It stays
+untracked in `tmp/`. It resolves a rebase conflicting **only** on
+`status/evidence/*.json` by regenerating rather than merging — those files are
+build products, so the right answer is whatever the code measures on the
+resulting tree — and refuses if anything else is conflicted. It ran seven times
+across the night, including on #145's final rebase.
 
 ## Environment
 
-- **CI is still out of runner minutes.** Every job fails in ~5s with `runner_id: 0`
-  and an empty `runner_name`. Red CI on any of these PRs said nothing about the
-  code; `make host-gate` locally is the real gate and every branch passed it.
-- **The arsenal bundle is v2.2.1 on `main`** (via the other session's #139), and
-  `check_update.sh --check-only` reports **v2.2.2 available**. Not taken.
-- **`main` was red when the night started**, and not from anything in flight:
-  `handover.md` named a filesystem path that `test_no_document_names_the_old_repository`
-  reads as the old repository name, and `T55.json`/`T58.json` carried stale counts.
-  The other session had the identical fix staged, so I used byte-identical text and
-  the two merged without a conflict. All three came in with #140.
-- **The other session merged #133, #138 and #139 mid-run**, which is why the whole
-  stack was rebased onto a new `main` around 00:15 and again after each merge.
-
-## `tmp/regate.sh` — new, untracked, worth keeping
-
-Resolves a rebase or cherry-pick that conflicts **only** on `status/evidence/*.json`,
-then regenerates every measurement and re-runs the repo gate. Those files are build
-products of `make evidence`; merging two versions of one by hand is meaningless —
-the right answer is whatever the code measures on the resulting tree. It refuses if
-anything outside `status/evidence/` is conflicted, so a real conflict still stops you.
-
-`T55.json` conflicts on *every* rebase (`files_scanned` counts tracked files, so it
-moves whenever the index does). The stack was rebased six times tonight; the script
-paid for itself twice over. Promote it to the Makefile if this shape recurs.
+- **CI is still out of runner minutes.** Every job fails in ~5s with
+  `runner_id: 0` and an empty `runner_name`. Red CI said nothing about any of
+  these branches; `make host-gate` locally is the real gate and every one passed
+  it before merging.
+- **CodeRabbit's included reviews are 10 per hour.** It ran out partway through
+  the night, which is the only reason #145 sat unmerged until morning. The quota
+  recovered at ~08:30 and #145 got its first review then.
+- **The arsenal bundle is v2.2.1**; `check_update.sh --check-only` reports
+  **v2.2.2 available**. Not taken — worth doing deliberately, since #210 and
+  #211 are both filed against it.
+- **The other session merged #133, #138, #139 and #135** mid-run, which is why
+  the stack was rebased after each.
 
 ## Stated ceilings from the merged work
 
-- **`hours` and `contract` can only ever render `unknown`** on the offer card. Step 9
-  lists them among the bullets and §5.2's normalised offer has no field for either,
-  so no connector can supply one. Making the card say more is a change to the offer
-  contract — worth its own task, and the card is honest in the meantime.
-- **§4.1 is implemented as an unweighted mean.** The register writes the dimension
-  score as weighted by extraction confidence; `cue_findings` has no per-item
-  confidence to weight by. Same formula, one input the rules stage cannot supply.
-  The `METHODS_REF` comment in `extraction.py` says so, so the divergence is now
-  readable from the register rather than only from the code.
+- **`hours` and `contract` can only ever render `unknown`** on the offer card.
+  Step 9 lists them among the bullets and §5.2's normalised offer has no field
+  for either, so no connector can supply one. Making the card say more is a
+  change to the offer contract — worth its own task.
+- **§4.1 is implemented as an unweighted mean.** The register weights the
+  dimension score by extraction confidence; `cue_findings` has no per-item
+  confidence to weight by. The `METHODS_REF` comment in `extraction.py` says so.
 - **A part-worth traces to the whole choice set, not to one choice.** T10 fits a
-  joint logit where every choice contributes to every coefficient; per-coefficient
-  row lists would be fabricated attribution.
-- **T43's `outside_lookup` refusal lives in the decline ledger**, not as an eleventh
-  pinned constraint field. The task says `constraints.json`, and declines surface
-  there only for T24's pinned ten; adding one is T24's vocabulary to change.
-- **T43 ships no finder.** What to look up and under whose robots.txt is a connector
-  question (`integral.robots`), and a default finder would be a network call hidden
-  inside a scoring path.
-- **`lifecycle.transition` still accepts a `reason` that never reaches the log.**
-  That was T21's owed decision (T28's review, PR #27) and it is **accepted and
-  counted**, not forbidden: refusing the reason would delete §7.1's own record of
-  why an offer moved, and routing through the wrapper only would import the profile
-  store into `lifecycle`, which is the coupling S5 drew its line to prevent. A
-  bypass is now a number in `feedback_traceability` rather than a silence.
+  joint logit; per-coefficient row lists would be fabricated attribution.
+- **T43 ships no finder.** What to look up, and under whose robots.txt, is a
+  connector question (`integral.robots`); a default finder would be a network
+  call hidden inside a scoring path. So `outside_source_spans` has exactly one
+  producer today — the fixture.
+- **T43's `outside_lookup` refusal lives in the decline ledger**, not as an
+  eleventh pinned constraint field. Adding one is T24's vocabulary to change.
+- **`lifecycle.transition` still accepts a `reason` that never reaches the
+  log.** Accepted and *counted*, not forbidden: refusing it would delete §7.1's
+  record of why an offer moved, and routing through the wrapper only would
+  import the profile store into `lifecycle`, the coupling S5 drew its line to
+  prevent. A bypass is a number in `feedback_traceability` rather than a
+  silence.
+- **Landing T26b will break `test_the_committed_model_is_all_matched_and_unchanged`
+  correctly.** It asserts `{d.side for d in dimensions} == {"matched"}`, a claim
+  about a model that had no trait dimensions yet. The task says to update it to
+  assert the sides present, not to delete it.
 
-## Worktrees to clean up
+## Worktrees
 
-`~/dev/js-t22-wt`, `js-t19-wt`, `js-t44-wt`, `js-t21-wt`, `js-d17-wt` — all merged,
-safe to remove. `js-t43-wt` holds #145, keep until it lands. `js-night-base` is a
-detached checkout of `origin/main` used only to read the board; delete any time.
+All the task worktrees are merged and safe to remove. `js-night-base` is a
+detached checkout of `origin/main` used only to read the board.
 
-**Do not work in the primary checkout** (the clone without a `-wt` suffix). The other session
-lives there and the branch moves under you. Cut a worktree off `origin/main` per task.
+**Do not work in the primary checkout** (the clone without a `-wt` suffix). The
+other session lives there and the branch moves under you. Cut a worktree off
+`origin/main` per task.
