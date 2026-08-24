@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 96,
+  "evidence_gates_read": 97,
   "gates_declaring_status_key": 4,
   "unrecordable": [],
   "readings": [
@@ -728,6 +728,14 @@
       "task": "t-b5cf7968",
       "key": "sourcing_inputs_excluding_learned_evidence",
       "evidence": "status/evidence/T60.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-bbb3d1da",
+      "key": "exhaustion_triggers_without_a_reason",
+      "evidence": "status/evidence/T62.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

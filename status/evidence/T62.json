@@ -1,0 +1,8 @@
+{
+  "exhaustion_triggers_without_a_reason": 0,
+  "cycles_judged": 4,
+  "exhaustion_triggers": 3,
+  "reasonless_construction_rejected": true,
+  "repeat_share_threshold": 0.8,
+  "failures": []
+}
