@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 87,
+  "evidence_gates_read": 88,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -368,6 +368,14 @@
       "task": "lo-9ff0",
       "key": "steps_with_a_skill_fraction",
       "evidence": "status/evidence/S7.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-a22a",
+      "key": "provisional_rankings_unlabelled",
+      "evidence": "status/evidence/T44.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

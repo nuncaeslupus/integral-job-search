@@ -1,0 +1,382 @@
+"""T44 — the offer card: a template filled from the normalised offer JSON.
+
+Step 9: *"Presentation is half the specification, not a rendering detail. An
+ordering nobody can read is not a result."* Three rules from that section are
+what this module is, and each is a distinct way a card can lie.
+
+**A provisional ranking says so, once.** L1 ranks on hard constraints and pay,
+with no preference weights behind it. Shown unlabelled it reads as the tool's
+considered order of the market, which is a claim nothing has earned yet —
+`provisional_rankings_unlabelled` is the count of times that happens. Said once
+per page, not per card: a warning repeated on every offer stops being read.
+
+**Unknown is shown as unknown.** *"An advert silent on hours is not an advert
+promising good ones."* A blank cell, a dash, or a plausible default all read as
+a fact the employer stated. So does an unstated salary shown as a figure: §5.2
+gives `salary.stated` precisely so an estimate cannot be laundered into a claim,
+and this honours it by showing `unknown` even when `min` carries a number.
+
+**The card is filled, not written.** *"Built once, filled fast, never assembled
+a paragraph at a time by a model."* `string.Template` and nothing else, so
+rendering the same offer twice is byte-identical — which is the mechanical form
+of "no model wrote this", and the only form a test can check.
+
+**The one line includes the bad part.** *"full remote, pay is good, but it is a
+gun factory."* It is built from T19's drivers: the dimension that most raised
+this offer's salary-equivalent total, then `but` and the one that most lowered
+it, each quoting the advert's own words and priced in €/month. A line assembled
+from the largest positive driver alone would be the good half of an account the
+tool already has both halves of.
+
+**Stated ceiling — `hours` and `contract` can only ever render `unknown`.**
+Step 9 lists them among the bullets and §5.2's normalised offer has no field for
+either, so no connector can supply one. Rendering them anyway, as `unknown`, is
+the honest reading of both documents at once: the bullet the candidate was
+promised is there, and it says the only true thing available. Making it say more
+is a change to §5.2's offer contract, not to this template.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from string import Template
+from typing import Any
+
+from integral.explain import explain
+from integral.offers import Location, Offer, Salary
+from integral.pay import NetEstimate
+from integral.profile import ProfileRevision
+from integral.rank import Candidate, rank
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T44.json"
+
+#: What an advert did not say. One token, so a reader learns it once and a test
+#: can count it — "not stated", "n/a" and "—" scattered across four bullets are
+#: four things to recognise, and one of them will eventually read as a value.
+UNKNOWN = "unknown"
+
+#: Said once per page when the ranking is L1, and never when it is not — the
+#: label is a claim about *this* ranking, so it is as wrong when untrue as its
+#: absence is when true. Step 9 also asks what would sharpen it, in the same line.
+PROVISIONAL_LABEL = (
+    "Provisional: ranked on your hard constraints and pay only — no preference "
+    "weights yet. Working through step 6's paired choices is what would sharpen it."
+)
+
+#: "Show a handful at a time, not forty."
+DEFAULT_LIMIT = 5
+
+_CARD = Template(
+    """$title — $company
+  pay:       $pay
+  hours:     $hours
+  location:  $location
+  contract:  $contract
+
+  $matters
+"""
+)
+
+
+def _salary(offer: Offer) -> str:
+    """§5.2's salary, or `unknown` — including when a number is present but
+    `stated` is false, which is the distinction that field exists to carry."""
+    salary = offer.salary
+    if salary is None or not salary.stated:
+        return UNKNOWN
+    low, high = salary.min, salary.max
+    if low is None and high is None:
+        return UNKNOWN
+    currency = salary.currency or ""
+    period = f"/{salary.period}" if salary.period else ""
+    figures = " to ".join(f"{value:,.0f}" for value in (low, high) if value is not None)
+    return f"{figures} {currency}{period}".strip()
+
+
+def _location(offer: Offer) -> str:
+    if offer.location is None:
+        return UNKNOWN
+    parts = [part for part in (offer.location.raw, offer.location.remote) if part]
+    return " · ".join(parts) if parts else UNKNOWN
+
+
+def _matters(explanation: Mapping[str, Any] | None) -> str:
+    """The one plain line, with the bad part in it.
+
+    No drivers means nothing priced moved this offer, and saying so is a
+    sentence — inventing a reason from a score would be the model-written
+    paragraph the template exists to prevent.
+    """
+    drivers = list(explanation["drivers"]) if explanation else []
+    if not drivers:
+        return "Nothing the advert says has been priced yet, so there is no reason to give."
+
+    best = max(drivers, key=lambda d: d["contribution_eur_month"])
+    worst = min(drivers, key=lambda d: d["contribution_eur_month"])
+    line = _phrase(best)
+    if worst is not best and worst["contribution_eur_month"] < 0:
+        line += f" — but {_phrase(worst)}"
+    return line + "."
+
+
+def _phrase(driver: Mapping[str, Any]) -> str:
+    span = driver["evidence_span"] or f"{driver['dimension']} (the advert's wording was not kept)"
+    return f'"{span}" ({driver["contribution_eur_month"]:+,.0f} EUR/mo)'
+
+
+def card(
+    offer: Offer,
+    explanation: Mapping[str, Any] | None = None,
+    net: NetEstimate | None = None,
+) -> str:
+    """One offer, as the candidate sees it. Pure: same input, same bytes."""
+    pay = _salary(offer)
+    if net is not None:
+        pay = f"{pay}\n             {net.label()}"
+    return _CARD.substitute(
+        title=offer.title or UNKNOWN,
+        company=offer.company or UNKNOWN,
+        pay=pay,
+        # Step 9 asks for these bullets; §5.2's offer has no field for either.
+        # See the module docstring — the honest cell is the only one available.
+        hours=UNKNOWN,
+        contract=UNKNOWN,
+        location=_location(offer),
+        matters=_matters(explanation),
+    )
+
+
+def render(
+    ranking: Mapping[str, Any],
+    offers: Sequence[Offer],
+    *,
+    explanations: Mapping[str, Mapping[str, Any]],
+    nets: Mapping[str, NetEstimate] | None = None,
+    limit: int = DEFAULT_LIMIT,
+) -> str:
+    """The page: the provisional line when it is true, then a handful of cards.
+
+    Raises `KeyError` on a frontier offer nobody supplied. Skipping it would
+    render a shorter list than the ranking says it ranked, which is the one
+    failure a page of offers must not be able to have quietly.
+    """
+    if limit < 0:
+        # `frontier[:-1]` silently drops the last offer and reports "0 more not
+        # shown", which is a page that lies about its own completeness.
+        raise ValueError(f"limit must not be negative; got {limit}")
+    by_id = {offer.id: offer for offer in offers}
+    frontier = list(ranking["pareto"])
+    # Checked over the whole frontier, not over the page. Validating only the
+    # slice makes the check depend on `limit`: a missing offer at position six
+    # of five renders "(1 more not shown.)" and nobody ever finds out. The page
+    # is a claim about the ranking, so what has to be complete is the ranking.
+    missing = [offer_id for offer_id in frontier if offer_id not in by_id]
+    if missing:
+        raise KeyError(f"{len(missing)} ranked offer(s) were not supplied: {', '.join(missing)}")
+    shown = frontier[:limit]
+    remaining = len(frontier) - len(shown)
+
+    lines: list[str] = []
+    if ranking["level"] == "L1":
+        lines += [PROVISIONAL_LABEL, ""]
+    lines += [
+        card(by_id[offer_id], explanations.get(offer_id), (nets or {}).get(offer_id))
+        for offer_id in shown
+    ]
+    if remaining > 0:
+        lines.append(f"({remaining} more not shown.)")
+    return "\n".join(lines)
+
+
+def provisional_rankings_unlabelled(
+    renderings: Sequence[tuple[Mapping[str, Any], str]],
+) -> int:
+    """How many L1 pages were shown without saying they were provisional.
+
+    `startswith`, not `in`. The label is a header — `render` puts it first and
+    nowhere else — and a substring search over the whole page passes as soon as
+    any card happens to contain the sentence, in a title, an employer name, or
+    an evidence span quoted from an advert. That is not far-fetched for a
+    sentence about ranking on pay alone, and it would report an unlabelled
+    provisional page as labelled, which is the one thing this number is for.
+    """
+    return sum(
+        1
+        for ranking, page in renderings
+        if ranking["level"] == "L1" and not page.startswith(PROVISIONAL_LABEL)
+    )
+
+
+_FIXTURE_DIMENSIONS = ("commute", "remote")
+_FIXTURE_WEIGHTS: dict[str, Any] = {
+    "currency": "EUR",
+    "part_worths": {
+        "commute": {"utility_per_unit": 0.30, "salary_equivalent_per_month": 200.0},
+        "remote": {"utility_per_unit": 0.90, "salary_equivalent_per_month": 600.0},
+    },
+    "negligible": [],
+    "separated": False,
+    "salary_utility_per_month": 0.0015,
+}
+# One advert states its pay and where it is; the other states neither. Both
+# shapes have to be in the fixture or the measurement never sees a filled bullet
+# next to an empty one, and "unknown is shown as unknown" would be measured on a
+# page where everything was unknown anyway.
+_FIXTURE_OFFERS: tuple[
+    tuple[str, str, str, float, Salary | None, Location | None, dict[str, float], dict[str, str]],
+    ...,
+] = (
+    (
+        "Backend engineer",
+        "Remota SL",
+        "Backend en Python, 100% en remoto, sin oficina.",
+        3600.0,
+        Salary(min=42000.0, max=48000.0, currency="EUR", period="year", stated=True),
+        Location(raw="Barcelona", country="ES", remote="full"),
+        {"remote": 1.0, "commute": -0.5},
+        {"remote": "100% en remoto, sin oficina", "commute": "un dia al mes a Madrid"},
+    ),
+    (
+        "Platform engineer",
+        "Presencial SA",
+        "Plataforma, presencial en nuestras oficinas de Barcelona.",
+        4200.0,
+        None,
+        None,
+        {"remote": -1.0, "commute": 0.8},
+        {"remote": "presencial en nuestras oficinas", "commute": "junto a la estación"},
+    ),
+)
+
+
+def _fixture() -> tuple[list[Offer], list[Candidate]]:
+    from integral.offers import compute_offer_id
+
+    offers: list[Offer] = []
+    candidates: list[Candidate] = []
+    for title, company, text, monthly, salary, location, scores, spans in _FIXTURE_OFFERS:
+        offer = Offer(
+            id=compute_offer_id(text),
+            source="fixture",
+            title=title,
+            company=company,
+            text=text,
+            language="es",
+            salary=salary,
+            location=location,
+        )
+        offers.append(offer)
+        candidates.append(
+            Candidate(
+                offer_id=offer.id,
+                salary_per_month=monthly,
+                scores=scores,
+                unknown=frozenset(n for n in _FIXTURE_DIMENSIONS if n not in scores),
+                spans={name: (quote,) for name, quote in spans.items()},
+            )
+        )
+    return offers, candidates
+
+
+def _page(weights: Mapping[str, Any] | None) -> tuple[dict[str, Any], str]:
+    offers, candidates = _fixture()
+    ranking = rank(
+        candidates,
+        dimensions=_FIXTURE_DIMENSIONS,
+        revision=ProfileRevision(rows=len(candidates), sha256="0" * 64),
+        weights=weights,
+        at="2026-08-24T00:00:00Z",
+    )
+    explanations = explain(ranking, candidates, weights)
+    return ranking, render(ranking, offers, explanations=explanations)
+
+
+def _bullet(page: str, name: str, card_index: int) -> str:
+    """The value of one named bullet on the `card_index`-th card of a page."""
+    values = [
+        line.split(":", 1)[1].strip()
+        for line in page.splitlines()
+        if line.strip().startswith(f"{name}:")
+    ]
+    return values[card_index]
+
+
+def measure() -> dict[str, Any]:
+    """The gate's number, and proof it can rise."""
+    provisional, provisional_page = _page(None)
+    weighted, weighted_page = _page(_FIXTURE_WEIGHTS)
+    unlabelled = provisional_rankings_unlabelled(
+        [(provisional, provisional_page), (weighted, weighted_page)]
+    )
+
+    # Strip the label off the L1 page. If the count does not rise, it is not
+    # reading the page at all and a zero certifies the fixture, not the code.
+    planted = provisional_rankings_unlabelled(
+        [(provisional, provisional_page.replace(PROVISIONAL_LABEL, ""))]
+    )
+
+    return {
+        "provisional_rankings_unlabelled": unlabelled,
+        "unlabelled_detected_when_planted": planted,
+        "rankings_rendered": 2,
+        "provisional_rankings": 1,
+        "renders_are_deterministic": int(_page(None)[1] == provisional_page),
+        # Named per field, not `UNKNOWN in page`. `hours` and `contract` are
+        # unconditionally unknown (§5.2 has no field for either), so a page-wide
+        # search for the word is true no matter what the salary and location
+        # cells do — and the property would keep passing while exactly the
+        # fields it is about stopped rendering. So each bullet is read off its
+        # own line, on the advert that states it and the one that does not.
+        "stated_bullets_render_their_value": int(
+            _bullet(weighted_page, "pay", 0) == "42,000 to 48,000 EUR/year"
+            and _bullet(weighted_page, "location", 0) == "Barcelona · full"
+        ),
+        "unstated_bullets_render_unknown": int(
+            _bullet(weighted_page, "pay", 1) == UNKNOWN
+            and _bullet(weighted_page, "location", 1) == UNKNOWN
+        ),
+    }
+
+
+def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
+    measured = measure()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return measured
+
+
+def _main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Measure T44's ranking presentation.")
+    parser.add_argument("evidence", nargs="?", default=str(DEFAULT_EVIDENCE_PATH), type=Path)
+    args = parser.parse_args(argv)
+    measured = write_evidence(args.evidence)
+
+    print(f"provisional_rankings_unlabelled: {measured['provisional_rankings_unlabelled']} (== 0)")
+    if measured["provisional_rankings_unlabelled"] != 0:
+        return 1
+    if not measured["unlabelled_detected_when_planted"]:
+        print("the count did not rise when the label was removed", file=sys.stderr)
+        return 1
+    if not measured["renders_are_deterministic"]:
+        print("rendering the same ranking twice produced different bytes", file=sys.stderr)
+        return 1
+    if not measured["stated_bullets_render_their_value"]:
+        print("a bullet the advert states is no longer showing what it says", file=sys.stderr)
+        return 1
+    if not measured["unstated_bullets_render_unknown"]:
+        print(
+            "a bullet the advert does not state is no longer showing `unknown` — "
+            "an advert silent on it is not an advert promising anything about it",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(_main(sys.argv[1:]))
