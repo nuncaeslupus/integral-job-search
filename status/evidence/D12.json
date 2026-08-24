@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 89,
+  "evidence_gates_read": 90,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -224,6 +224,14 @@
       "task": "lo-609f",
       "key": "interview_profile_coverage",
       "evidence": "status/evidence/T27.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-60b5",
+      "key": "feedback_traceability",
+      "evidence": "status/evidence/T21.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

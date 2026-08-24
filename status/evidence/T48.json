@@ -4,6 +4,7 @@
   "implemented": [
     "application",
     "constraints",
+    "feedback",
     "history",
     "identify",
     "intake",
@@ -15,7 +16,6 @@
     "traits"
   ],
   "not_implemented": [
-    "feedback",
     "understanding"
   ],
   "drift": []

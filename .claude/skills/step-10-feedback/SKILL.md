@@ -98,8 +98,11 @@ blocked on a missing input). Exit 2 means the candidate or step could not be rea
 means coverage is met but the gate is not built, so the step cannot be certified — a
 covered step is not a passed one (D-21).
 
-**`feedback_traceability` is not built, so this checkpoint exits 3 at best.** Say so when presenting this
-step's output: the artefacts are there, and nothing has measured whether they are any good.
+**`feedback_traceability` is built (T21), so exit 0 is reachable here.** What it measures is
+that every derived value names the evidence rows behind it, and that no reason recorded against
+an offer stopped at that offer's own history — so "the list moved because you said X" is
+checkable. It does not measure whether the re-ordering is any good; that is `rank_spearman`,
+which is T20's and still open.
 
 The script writes its result to the candidate's own tree at `session/checkpoint-feedback.json`, never to a shared or
 global path.
