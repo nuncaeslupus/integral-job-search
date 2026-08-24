@@ -4,6 +4,7 @@ title: "T44: Ranking presentation — the offer card as a filled template, unkno
 priority: 5
 deps: [lo-bbc7, lo-b313]
 tags: [m2]
+status: merged
 ---
 
 ## Acceptance gate
@@ -15,7 +16,7 @@ key: provisional_rankings_unlabelled
 ```
 
 ```bash
-echo "no gate command defined for T44 — replace this line with the command that writes status/evidence/T44.json" >&2; exit 1
+uv run python -m integral.presentation
 ```
 
 ## What this is

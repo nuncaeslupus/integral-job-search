@@ -89,20 +89,20 @@
     {
       "step": "ranking",
       "n": 9,
-      "gate_state": "not_implemented",
+      "gate_state": "implemented",
       "gate_metric": "explained_fraction == 1.0",
       "gate_owner": "T19",
-      "certifiable": false,
-      "expected_exit": 3
+      "certifiable": true,
+      "expected_exit": 0
     },
     {
       "step": "feedback",
       "n": 10,
-      "gate_state": "not_implemented",
+      "gate_state": "implemented",
       "gate_metric": "feedback_traceability == 1.0",
       "gate_owner": "T21",
-      "certifiable": false,
-      "expected_exit": 3
+      "certifiable": true,
+      "expected_exit": 0
     },
     {
       "step": "application",

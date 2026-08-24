@@ -77,3 +77,77 @@ def test_the_files_list_is_derived_from_the_package_not_typed(tmp_path: Path) ->
     published = _publish(out, library)
     entry = next(e for e in published if e["package"] == package.name)
     assert "fixture/list2.html" in entry["files"]
+
+
+def _library_with(tmp_path: Path) -> tuple[Path, Path]:
+    """A copy of the real library, plus a place to publish it to."""
+    library = tmp_path / "library"
+    shutil.copytree(LIBRARY, library)
+    out = tmp_path / "sources"
+    out.mkdir()
+    return library, out
+
+
+def test_a_symlinked_file_inside_a_package_is_refused(tmp_path: Path) -> None:
+    """The exchange takes packages from strangers, and this copies them somewhere public.
+
+    `Path.is_file()` follows a symlink and `shutil.copytree` copies what it
+    points at, so a fixture symlinked at a private file would be published
+    under a permitted name. The contract checker cannot catch it: it validates
+    names, and a symlink can wear a permitted one.
+    """
+    library, out = _library_with(tmp_path)
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE KEY", encoding="utf-8")
+    package = library / "trabajos_es"
+    (package / "fixture" / "list.html").unlink()
+    (package / "fixture" / "list.html").symlink_to(secret)
+
+    result = subprocess.run(
+        [sys.executable, str(PUBLISHER), "--out", str(out), "--library", str(library)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "symlink" in (result.stdout + result.stderr)
+    assert not (out / "connectors").exists(), "a package was copied before the refusal"
+    assert "PRIVATE KEY" not in _tree_text(out)
+
+
+def test_a_symlinked_package_directory_is_refused(tmp_path: Path) -> None:
+    library, out = _library_with(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    shutil.copytree(LIBRARY / "trabajos_es", elsewhere)
+    (library / "borrowed_es").symlink_to(elsewhere, target_is_directory=True)
+
+    result = subprocess.run(
+        [sys.executable, str(PUBLISHER), "--out", str(out), "--library", str(library)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "symlink" in (result.stdout + result.stderr)
+
+
+def test_a_symlink_loop_terminates_rather_than_hanging(tmp_path: Path) -> None:
+    """A hostile package must fail as reliably as an honest one."""
+    library, out = _library_with(tmp_path)
+    package = library / "trabajos_es"
+    (package / "fixture" / "up").symlink_to(package, target_is_directory=True)
+
+    result = subprocess.run(
+        [sys.executable, str(PUBLISHER), "--out", str(out), "--library", str(library)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "symlink" in (result.stdout + result.stderr)
+
+
+def _tree_text(root: Path) -> str:
+    return "".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in root.rglob("*")
+        if path.is_file()
+    )

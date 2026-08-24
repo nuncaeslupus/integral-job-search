@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 85,
+  "evidence_gates_read": 90,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -88,6 +88,14 @@
       "task": "lo-3265",
       "key": "generated_tax_rules_marked_unverified",
       "evidence": "status/evidence/T33.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-364b",
+      "key": "undocumented_methods",
+      "evidence": "status/evidence/T22.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
@@ -216,6 +224,14 @@
       "task": "lo-609f",
       "key": "interview_profile_coverage",
       "evidence": "status/evidence/T27.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-60b5",
+      "key": "feedback_traceability",
+      "evidence": "status/evidence/T21.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
@@ -365,6 +381,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "lo-a22a",
+      "key": "provisional_rankings_unlabelled",
+      "evidence": "status/evidence/T44.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "lo-a4bf",
       "key": "cross_user_leaks",
       "evidence": "status/evidence/S3.json",
@@ -392,6 +416,14 @@
       "task": "lo-b2de",
       "key": "unbootstrapped_first_runs",
       "evidence": "status/evidence/T52.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-b313",
+      "key": "explained_fraction",
+      "evidence": "status/evidence/T19.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
@@ -672,6 +704,14 @@
       "task": "t-bd59e70b",
       "key": "step_skills_without_a_progress_disclosure_rule",
       "evidence": "status/evidence/D-13.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-c40f0f88",
+      "key": "ranked_offers_without_a_url",
+      "evidence": "status/evidence/T44.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

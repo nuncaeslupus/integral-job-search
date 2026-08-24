@@ -39,8 +39,9 @@ way). Without them the ranking is L1 and says so, ordered by salary alone.
 shortcut."
 
 Scope: `explanations` — the per-driver €/month contributions and their verbatim
-spans — belong to T19, and the offer card to T44. This module produces the
-`rankings/<run_id>.json` those read.
+spans — belong to T19 (`integral.explain`), and the offer card to T44. This
+module produces the `rankings/<run_id>.json` those read, and carries each
+score's spans on `Candidate` so T19 has the advert's wording to cite.
 """
 
 from __future__ import annotations
@@ -57,6 +58,9 @@ from integral.extraction import OfferExtraction
 from integral.identity import ProfileStore
 from integral.profile import ProfileRevision
 from integral.session import Sufficiency
+
+# §4.3's site: the dominance test, the frontier, and the salary-equivalent order.
+METHODS_REF = "METHODS.md#43-offer-comparison--pareto-dominance-then-salary-equivalent-total"
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T18.json"
@@ -83,6 +87,13 @@ class Candidate:
     salary_per_month: float | None
     scores: Mapping[str, float]
     unknown: frozenset[str] = field(default_factory=frozenset)
+    # The advert's own words for each score, carried here rather than fetched
+    # later because T19's explanation has to cite the text the score was read
+    # from — and after the ranking, the advert is gone. Empty is allowed and is
+    # not silently fine: `explained_fraction` is the measurement of how often it
+    # happens, so a score with no wording behind it shows up as a number instead
+    # of being rejected at a point where nothing could yet be done about it.
+    spans: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         overlap = set(self.scores) & self.unknown
@@ -113,6 +124,11 @@ def from_extraction(
         salary_per_month=salary_per_month,
         scores=scored,
         unknown=frozenset(name for name in dimensions if name not in scored),
+        spans={
+            score.dimension: tuple(span.quote for span in score.spans)
+            for score in extraction.scores
+            if score.dimension in scored
+        },
     )
 
 

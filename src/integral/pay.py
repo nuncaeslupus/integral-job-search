@@ -64,6 +64,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+# §4.5's site: bracket-wise net-from-gross, per country.
+METHODS_REF = "METHODS.md#45-net-from-gross-pay-estimation"
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TAXES_DIR = _REPO_ROOT / "taxes"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T33.json"

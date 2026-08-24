@@ -1,227 +1,175 @@
-# Session handover — 2026-08-23/24 (fourth session)
+# Session handover — 2026-08-24, overnight batch
 
-## Read this first — one PR is open and it is waiting on a review, not on work
+## What merged
 
-**#135** (`connectors-sources-repo`) — the sources-repository publisher. MERGEABLE, rebased
-onto main, `make host-gate` green. It has **no review at all**, and `after-review` says a PR
-with no reviews does not satisfy the policy. So: check whether CodeRabbit has reviewed it,
-work the findings, merge. Do not merge it unreviewed, and do not sit on it if a review is
-there.
+Six tasks, all under `merge-policy: after-review`, all with `make host-gate` green
+before the merge. Each closed its own issue.
 
-Everything else this session opened is merged: **#133** (T12 connector), **#138** (honest
-user agent + robots enforcement), **#139** (arsenal bundle v2.2.1).
-
-## `after-review` means you merge — this is now written down in two places
-
-`claude-arsenal` v2.2.1 added **"Who fixes, and who merges"** to
-`references/github-automation.md`: read every finding, verify it against the code, fix the
-real ones, answer the rest, **then merge, with no further sign-off**. Stopping to ask
-permission once the policy is met is the same failure as merging early. It also warns that
-a bot's green summary line is not its finding list — read the line comments.
-
-`arsenal/config.toml` says the same and deliberately **names no bot**: which one reviews has
-changed four times here, and a policy naming its reviewer blocks forever the day it changes.
-
-Applied here to eight findings across three PRs: six fixed, two answered and declined.
-
-## The sources repository exists
-
-**`nuncaeslupus/integral-connectors`** — public, MIT, publishing `trabajos_es`. Verified
-end-to-end once by hand: `https_fetcher` reads `manifest.json` unauthenticated, `install`
-fetches the four files, `check_package` passes.
-
-That check stays **out of the gate** on purpose — a quiet Saturday at GitHub must not become
-a failing build, and the gate has to run where there is no egress. `tools/publish_connectors.py`
-generates the tree and `tests/test_publish_connectors.py` installs from it offline. Republish
-with `uv run python tools/publish_connectors.py --out <clone>` — never edit `manifest.json` by
-hand, since `install` fetches exactly the names it lists.
-
-## Two mistakes worth not repeating
-
-**Read the whole robots.txt, not the block that confirms your first reading.** I told the
-owner tecnoempleo and remoteok "block Anthropic by name" and treated that as a refusal. Their
-`User-agent: *` blocks allow the job listings; the `Disallow: /` entries name AI crawlers, and
-remoteok says outright those crawlers may "crawl and cite public job listings". The rule is
-about **who is asking**. That is why the collector's Chrome user-agent string had to go: it
-was evasion, not compliance, and it bought nothing.
-
-**A fixture can publish the recording machine's own IP.** `trabajos.com` stamps the *client's*
-address into every response. CodeRabbit caught it after the file was already public in
-`integral-connectors`. Redacted, that repo's single commit rewritten and force-pushed, and
-`tests/test_connector_contract.py` now refuses an IPv4 literal in **any** fixture.
-
-## Still the owner's call
-
-`from_tecnoempleo` / `from_remoteok` and the 53 committed tecnoempleo ads all sit on permitted
-paths, so there is no compliance reason to remove them — only a preference, if there is one.
-
-The **corpus text-eviction** (drop `text` from the committed corpus, keep ids/labels/counts,
-`unmeasured` via D-12's `status-key` for gates that need the words) is agreed in principle and
-not started. It touches 12 `src` modules and 4 gates — a task file, not a drive-by.
-
-## Two sessions collided in this repo tonight
-
-Both of us worked in the other's worktree and lost edits; one of my bundle refreshes was wiped
-mid-run. Work in your own worktree, and re-check `origin/main` before assuming a PR is still
-mergeable — it moved four times in two hours.
-
-
-## What is open
-
-| PR | Task | Gate | State |
+| PR | Task | Gate | Issue |
 |---|---|---|---|
-| #133 | T12 live portal connector | `connector_fixture_parse_f1 == 1.0` | open; another session holds `arsenal/claims/lo-277b` |
+| #140 | T22 `methods_ref` link check, both directions | `undocumented_methods == 0` | 54 |
+| #141 | T19 explanations citing the advert | `explained_fraction == 1.0` | 58 |
+| #142 | T44 the offer card as a filled template | `provisional_rankings_unlabelled == 0` | 66 |
+| #144 | D-17 the card renders the stored link | `ranked_offers_without_a_url == 0` | 98 |
+| #143 | T21 the feedback loop | `feedback_traceability == 1.0` | 60 |
 
-That is the only PR left open, and it is not this session's to touch.
+Board: 95 tasks — **open 2, claimed 1, blocked 4, merged 86** (was 80).
 
-Merged this session: **#131** (T25 corpus), **#132** (one priority scale), **#134** (T9
-reaction elicitation), **#136** (T10 preference weights), **#137** (T18 Pareto frontier).
-Issues 50, 47, 61 and 57 closed by themselves; `lo-1af2`, `lo-b422`, `lo-bacf` and
-`lo-bbc7` were archived by their own PRs.
+Steps 9 (`ranking`) and 10 (`feedback`) both flipped to `implemented` in
+`spec-v2-steps.json`, and both step skills stopped saying their checkpoint "exits
+3 at best". T48's drift check and `step_certification` each caught that on their
+own — neither needed noticing.
 
-Board: 95 tasks — open 3, claimed 1, blocked 9, merged 80. `task_select` offers **T22**
-(`lo-364b`, `methods_ref` link check, priority 10 — S) next, and that one has no
-preconditions.
+## The two PRs still open
 
-## `merge-policy: after-review` now has a definition
+**#135 — the sources-repository publisher** (`connectors-sources-repo`). Not a queue task;
+it is the follow-up to T54 that `connector_contract.py` calls out ("it does not create the
+sources repository or move connectors into it; that is a follow-up"). CodeRabbit reviewed
+it before the rate limit, both findings are fixed and answered, `make host-gate` green.
 
-The owner settled it: **a bot reviews (CodeRabbit today), the session evaluates the
-findings, fixes the real ones, and merges.** It is not "wait for a human". Three PRs were
-merged under it this session.
+`nuncaeslupus/integral-connectors` is live, public, MIT, publishing `trabajos_es`.
+`tools/publish_connectors.py` generates the tree; **never hand-edit `manifest.json`**, since
+`install` fetches exactly the names it lists. The publisher refuses a package containing a
+symlink — these come from strangers and this copies them somewhere public, and a symlink can
+wear a permitted name, so the contract checker cannot catch it.
 
-Evaluating means evaluating. Of nine CodeRabbit findings, seven were real and fixed, two
-were declined with reasons posted to the PR:
+T54's probe deliberately stays offline. Pointing it at the live repository would make the
+gate measure whether a server answered today, and it has to run where there is no egress.
 
-- *"don't mark the task merged while the PR is open"* — that is `open_task_pr.sh` working
-  as designed: the archive is in the same diff so one merge closes the issue and archives
-  the file atomically.
-- *"remove the stale failing-command paragraph"* — arsenal template text, carried into
-  every archive including `_history/lo-b422.md`. Editing one copy makes drift, not less.
+**#145 — T43, outside-the-advert enrichment** (`lo-192c`, issue 65). Rebased flat
+onto `main`, `MERGEABLE`, `make host-gate` green.
 
-## Also carried forward — read the whole robots.txt, not the block that confirms you
+**It has never been reviewed.** CodeRabbit ran out of its ten included reviews
+partway through the night and stayed rate-limited through every retry. I did not
+merge it, because `after-review` has not happened for it even once — that is a
+different situation from the five above, each of which was reviewed and then had
+its findings addressed.
 
-T12 was most of the way to a connector on tecnoempleo.com when its robots.txt was read;
-the recordings were deleted and the board switched. The switch was fine; the **reason
-recorded for it was wrong**, and it stayed wrong in three documents for a day.
+To land it: let the review through (billing → usage-based reviews), or say a
+session may merge it on the gate alone.
 
-tecnoempleo names `ClaudeBot`, `Claude`, `anthropic-ai`, `Claude-Web`, `Claude-SearchBot`
-and `AnthropicBot` with `Disallow: /` — and its `User-agent: *` block disallows four
-specific paths, **none of them the job listings**. Bingbot gets a `Crawl-delay`, not a
-refusal. remoteok is the same shape and says outright that those crawlers may "crawl and
-cite public job listings". The rule is about **who is asking**, not about the paths.
-Reading the named block and stopping turned "AI crawlers excluded" into "the board says
-no", which is not what either file says.
+## The review round found four things worth having
 
-What followed (PR #138):
+Fifteen findings across the six PRs. Twelve real and fixed, three declined with
+reasoning posted to the PR. The sharp ones:
 
-- `tools/collect_ads.py` had sent a **Chrome user-agent string** since T4b. robots.txt is
-  addressed to whoever the client says it is, so that was evasion, not compliance — and it
-  bought nothing, since `*` allowed those paths all along.
-- `src/integral/robots.py` (stdlib-only, like `integral.corpus`) decides every fetch inside
-  `get()`. An unreadable robots.txt refuses; only a 404 permits.
-- CodeRabbit then found the hole in it: `requests` follows redirects itself, so the check
-  saw the first URL and the fetch returned the last. Redirects are now followed by hand,
-  one hop at a time, each asking that origin's own rules.
+- **#143** — `orphaned_reasons` matched reasons to evidence rows with a **set**, so
+  one row discharged every event repeating those words. Say the same thing twice
+  about one offer, once through the wrapper and once around it, and the bypass
+  vanished while the gate read 1.0. Rows are now spent one per event.
+- **#141** — a frontier offer with no salary-equivalent total was getting a delta
+  anyway. `rank` withholds the total when the salary is missing or a priced
+  dimension is unset; `explain` summed whatever drivers it had and published that
+  partial sum. It contradicted the PR's own text.
+- **#142** — `provisional_rankings_unlabelled` searched the whole page for the
+  label, so an unlabelled provisional page would report as labelled if any card
+  happened to contain the sentence. It is a header; `startswith` now.
+- **#142** — the "unknown is shown as unknown" property was satisfied by `hours`
+  and `contract`, which are *unconditionally* unknown, so it would have kept
+  passing while pay and location stopped rendering. Each bullet is read off its
+  own line now.
 
-**Still the owner's call**: `from_tecnoempleo`/`from_remoteok` and the 53 committed
-tecnoempleo ads stay. Both are on permitted paths, so there is no compliance reason to
-remove them — only a preference.
+Declined, each with reasons on the PR:
 
-## A fixture can publish the recording machine's own IP
+1. *Regenerate the ranking artifact after `record_decision`* (#143). A ranking
+   needs the live offer set and the dimension list — step 9's inputs, not step
+   10's — and `write_ranking` needs a `run_id` this deliberately clock-free
+   function does not have. The plan's own named test is
+   `test_rejection_moves_offer_status_and_marks_weights_stale`.
+2. *Label L2 pages provisional* (#142). Reads the objective backwards: the task
+   says *"the **L1** ranking says so"*. An L2 ranking has fitted weights and is
+   not provisional; labelling it always would be the same as saying nothing.
+3. *Remove the stale placeholder paragraph from the archived task file* (#141).
+   Arsenal template text, in **15 of 85** files in `_history/`. Editing one copy
+   makes drift. Also already declined once this cycle for the same reason — see
+   the previous handover on `_history/lo-b422.md`.
 
-`trabajos.com` stamps the *client's* address into every response
-(`<!-- IP: … - CODPAIS:100 -->`). Saved verbatim, the fixture published a home IP — here
-and in the public `integral-connectors` repo it is copied into. Redacted in both, that
-repo's history rewritten, and `tests/test_connector_contract.py` now refuses an IPv4
-literal in **any** fixture, because the next board will write it somewhere else.
+## T26 is now the only thing blocking the queue
 
-## The thing worth carrying forward
+`task_select` offers **T26** (`lo-9e41`) and it still should not be taken as
+written. Nothing changed; I left it alone. But the situation around it did:
 
-**A regulariser will answer a question the data cannot, and say nothing about it.**
+**Four tasks now wait on T26 and on nothing else** — T56 (`lo-6f53`), T57
+(`lo-7c14`), T59 (`lo-4b17`), D-19 (`t-e6546af7`). The only other open task is
+**T20** (`lo-c48f`), which is `[HUMAN]`: it needs your blind manual ranking of 20
+held-out ads. Its dependencies are now satisfied, so it is unblocked and waiting
+on you.
 
-T10 fits a ridge-penalised logit. The ridge is there because a perfectly consistent
-candidate separates the data and a separated logit has no finite maximum. But it also
-makes the Hessian invertible when two dimensions moved together in every pair — so a
-rank-deficient design did not fail, it *fitted*, and split the joint effect evenly. With
-`commute` copying `remote`, both came back at −54.0 €/month: a number the candidate would
-be shown and the ranking would use, invented by the penalty. CodeRabbit caught that one.
+So after #145 lands, **the board has no unblocked work an agent can take.**
 
-The generalisation is that **anything which guarantees an answer exists will produce one
-where none is warranted**, and the check has to sit on the *input* — the rank of the
-design — not on whether the solver converged. `_solve` even carried a message claiming to
-detect exactly this, and could never fire.
+The decision, unchanged in shape:
 
-Two shapes of the same discipline now live in the code and are worth reusing:
+- Job (1), widening matched dimensions by corpus sweep, was retired by your own
+  2026-08-19 scope change — dimensions are coined when a live session turns one up.
+- Job (2), the four candidate-trait dimensions (`side: candidate_trait`, no cues,
+  elicited only), is buildable today and independent of both problems.
+- T26's gate `ontology_hit_rate >= 0.85` is **`unmeasured`**, and making it
+  measurable is T57 — which T26 does not declare as a dep.
 
-- `Fit.separated` — the fit is finite but its magnitudes are the penalty's choice, so it
-  says so instead of quoting €566 for something worth €200.
-- `rank.dominance_violations` — audits the *published* `pareto`/`dominated` lists and
-  re-derives dominance from the candidates. A count the construction hands itself can only
-  ever be zero.
-
-## Mutation passes keep paying, and the useful part is the survivors
-
-T10: 17 mutants, T18: 21. Both reached zero survivors, but only after three rounds each,
-and every survivor was a real gap:
-
-- *ridge dropped from the gradient* survived every value test, because it converges to the
-  unpenalised MLE and only differs where the ridge matters. Killed by recomputing the
-  penalised gradient from its definition and asserting the returned coefficients are a
-  stationary point of it — two independent computations agreeing.
-- *identifiability off by one* survived because the probe used three choices where the
-  boundary is four. **Probes belong on the boundary.**
-- *audit peers only* looked unkillable, and nearly was. Dominance is transitive, so on a
-  well-formed ranking scanning published peers and scanning every candidate always agree.
-  They differ on exactly one shape: a dominator **filed as collapsed under a collapser that
-  does not dominate it**. The partition check stays silent because the partition is
-  complete, and the dominator is no longer a published peer. Finding that case was worth
-  more than the mutant.
-- Two mutants I wrote were no-ops (`# noqa` on a return, `{} or {...}`). A mutation pass
-  reports `killed` for a mutant that changed nothing — check the mutant, not just the tally.
-
-## Stated ceilings, deliberately not built
-
-- **T10's part-worths are linear in a dimension's score, not one per named level.** Seven
-  dimensions × three rungs is fourteen coefficients against a twenty-choice cap. §4.3's
-  ranking total is linear in score already, so this is not a lesser model than the ranker
-  wants.
-- **The twenty-choice cap is not enforced in `fit`.** It is the conversation's stop rule;
-  a rule about talking has no place in an estimator. Nothing checks it yet — step 6's
-  checkpoint script is where it belongs.
-- **T18 produces no `explanations`.** That is T19 (`lo-b313`), and the offer card is T44
-  (`lo-a22a`). Step 9's own gate is `explained_fraction`, owned by T19, so
-  `spec-v2-steps.json` still reads `ranking: not_implemented` and correctly so.
-
-## T26 needs a decision before anyone claims it
-
-`task_select` offers **T26** (`lo-9e41`) next. It should not be taken as written:
-
-1. Its gate is `ontology_hit_rate >= 0.85`, and that metric is **`unmeasured` today** —
-   `tally()` refuses the ratio because the only concept source, `suggestions.json`, has no
-   top-level `unmapped` key and so *cannot contradict itself*. Making it measurable is
-   **T57** (`lo-7c14`), a separate open task that T26 does not declare as a dep.
-2. Its job (1) — widening the matched dimensions — was **already retired by the owner**.
-   The 2026-08-19 scope change inside the task file says dimensions are now coined when a
-   live session turns one up, not by a corpus sweep.
-
-Job (2) — the four candidate-trait dimensions, `side: candidate_trait`, no cues, elicited
-only — is buildable now and independent of both problems. It could be split out.
+**Recommendation**: split job (2) into its own task with its own gate, then either
+re-scope T26 to job (1) with `deps: [lo-7c14]` added, or cancel it and let T57
+carry the metric. I did not do this: re-scoping a task you already re-scoped once
+is a decision, not a chore.
 
 ## Environment
 
-`open_task_pr.sh` **cannot open a PR for a freshly seeded task.** It hardcodes
-`ARSENAL_GATE_FROM_DEFAULT=1`, so the ```bash``` block it runs is the one on `main` — which
-is the placeholder that exits 1 by design and that the task text tells you to replace as
-part of the work. #136 and #137 were opened by hand: verify `gate_run.sh` exits 0 on the
-branch, check the task-file diff against `main` is only that one line, then `git mv` to
-`_history/` with `status: merged`, put `Closes #<n>` in both the commit and the PR body,
-push, and `gh pr create`. Worth an upstream issue.
+- **CI is still out of runner minutes.** Every job fails in ~5s with `runner_id: 0`
+  and an empty `runner_name`. Red CI on any of these PRs said nothing about the
+  code; `make host-gate` locally is the real gate and every branch passed it.
+- **The arsenal bundle is v2.2.1 on `main`** (via the other session's #139), and
+  `check_update.sh --check-only` reports **v2.2.2 available**. Not taken.
+- **`main` was red when the night started**, and not from anything in flight:
+  `handover.md` named a filesystem path that `test_no_document_names_the_old_repository`
+  reads as the old repository name, and `T55.json`/`T58.json` carried stale counts.
+  The other session had the identical fix staged, so I used byte-identical text and
+  the two merged without a conflict. All three came in with #140.
+- **The other session merged #133, #138 and #139 mid-run**, which is why the whole
+  stack was rebased onto a new `main` around 00:15 and again after each merge.
 
-GitHub Actions is still out of runner minutes: `runner_id: 0`, empty `runner_name`, jobs
-ending in 3–6 seconds. Red CI here says nothing about the code. `make host-gate` locally is
-the real gate.
+## `tmp/regate.sh` — new, untracked, worth keeping
 
-**Do not work in the primary checkout itself** (`~/dev/`, the clone without a `-wt` suffix). Another session lives there and the
-branch moves under you — it went `task/lo-1af2` → `task/lo-277b` → `connectors-sources-repo`
-during this session, and an edit of mine was silently overwritten inside forty seconds. Cut
-a `git worktree` off `origin/main` per task and remove it when the PR merges.
+Resolves a rebase or cherry-pick that conflicts **only** on `status/evidence/*.json`,
+then regenerates every measurement and re-runs the repo gate. Those files are build
+products of `make evidence`; merging two versions of one by hand is meaningless —
+the right answer is whatever the code measures on the resulting tree. It refuses if
+anything outside `status/evidence/` is conflicted, so a real conflict still stops you.
+
+`T55.json` conflicts on *every* rebase (`files_scanned` counts tracked files, so it
+moves whenever the index does). The stack was rebased six times tonight; the script
+paid for itself twice over. Promote it to the Makefile if this shape recurs.
+
+## Stated ceilings from the merged work
+
+- **`hours` and `contract` can only ever render `unknown`** on the offer card. Step 9
+  lists them among the bullets and §5.2's normalised offer has no field for either,
+  so no connector can supply one. Making the card say more is a change to the offer
+  contract — worth its own task, and the card is honest in the meantime.
+- **§4.1 is implemented as an unweighted mean.** The register writes the dimension
+  score as weighted by extraction confidence; `cue_findings` has no per-item
+  confidence to weight by. Same formula, one input the rules stage cannot supply.
+  The `METHODS_REF` comment in `extraction.py` says so, so the divergence is now
+  readable from the register rather than only from the code.
+- **A part-worth traces to the whole choice set, not to one choice.** T10 fits a
+  joint logit where every choice contributes to every coefficient; per-coefficient
+  row lists would be fabricated attribution.
+- **T43's `outside_lookup` refusal lives in the decline ledger**, not as an eleventh
+  pinned constraint field. The task says `constraints.json`, and declines surface
+  there only for T24's pinned ten; adding one is T24's vocabulary to change.
+- **T43 ships no finder.** What to look up and under whose robots.txt is a connector
+  question (`integral.robots`), and a default finder would be a network call hidden
+  inside a scoring path.
+- **`lifecycle.transition` still accepts a `reason` that never reaches the log.**
+  That was T21's owed decision (T28's review, PR #27) and it is **accepted and
+  counted**, not forbidden: refusing the reason would delete §7.1's own record of
+  why an offer moved, and routing through the wrapper only would import the profile
+  store into `lifecycle`, which is the coupling S5 drew its line to prevent. A
+  bypass is now a number in `feedback_traceability` rather than a silence.
+
+## Worktrees to clean up
+
+`~/dev/js-t22-wt`, `js-t19-wt`, `js-t44-wt`, `js-t21-wt`, `js-d17-wt` — all merged,
+safe to remove. `js-t43-wt` holds #145, keep until it lands. `js-night-base` is a
+detached checkout of `origin/main` used only to read the board; delete any time.
+
+**Do not work in the primary checkout** (the clone without a `-wt` suffix). The other session
+lives there and the branch moves under you. Cut a worktree off `origin/main` per task.

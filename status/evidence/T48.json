@@ -4,18 +4,18 @@
   "implemented": [
     "application",
     "constraints",
+    "feedback",
     "history",
     "identify",
     "intake",
     "interview_log",
     "preferences",
+    "ranking",
     "reactions",
     "sourcing",
     "traits"
   ],
   "not_implemented": [
-    "feedback",
-    "ranking",
     "understanding"
   ],
   "drift": []
