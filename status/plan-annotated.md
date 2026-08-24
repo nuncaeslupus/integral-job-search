@@ -1,4 +1,12 @@
-# Plan: Candidate-centred integral job search — v2, the thirteen-step process
+# Integral Job Search — Plan (annotated edition)
+
+> Generated 2026-08-24. This is the document with a **note slot** after every section. Read it in any Markdown app. To annotate, replace the `_(your notes…)_` placeholder under any section. When done, send the file back — notes are acted on.
+
+---
+
+# Plan
+
+## Preamble & scope
 
 **Date**: 2026-08-18
 **Specification**: `status/spec-v2-process.md` (v2.1, the process) and
@@ -11,7 +19,8 @@ schema, extraction output, ranking output — unchanged and not restated
 folded into the table below with their current status
 **Author**: nuncaeslupus
 
----
+> **✎ Notes** · `PLAN · intro`
+> _(your notes here — replace this line)_
 
 ## Why there is a v2 plan
 
@@ -36,9 +45,15 @@ per task, and a named owner for every step gate. §"Reconciliation with v1"
 records what changed about the tasks that already existed — the step the brief
 asked for and the spec round did not deliver.
 
----
+> **✎ Notes** · `PLAN › Why there is a v2 plan`
+> _(your notes here — replace this line)_
 
 ## Technical solution
+
+
+
+> **✎ Notes** · `PLAN › Technical solution`
+> _(your notes here — replace this line)_
 
 ### Architecture overview
 
@@ -86,6 +101,9 @@ generated CVs, letters, applications and interview records are *authored* or
 in the historical case. One layer with two rebuild disciplines is how a CV that
 is already with an employer gets overwritten.
 
+> **✎ Notes** · `PLAN › Architecture overview`
+> _(your notes here — replace this line)_
+
 ### Data flow
 
 **First run (steps 0–6).** identify → resolve handle → read `session/state.json`
@@ -114,6 +132,9 @@ Profile data never accompanies it — relating an offer to the candidate happens
 in the local annotation pass. Generated documents are the only artefacts
 intended to leave the machine, and each leaves by the candidate pressing send.
 
+> **✎ Notes** · `PLAN › Data flow`
+> _(your notes here — replace this line)_
+
 ### State changes
 
 Everything below lives under `profiles/<handle>/`, which is gitignored (T1) and
@@ -139,6 +160,9 @@ stays so. The tree is process spec §6.
 | MATCH | `annotations/<offer_id>.json` | CREATE (derived) | the same offer read against *this* candidate; never shared | T42 |
 | MATCH | `rankings/<timestamp>.json` | CREATE | pinned to `profile_revision` and sufficiency level | T18 |
 
+> **✎ Notes** · `PLAN › State changes`
+> _(your notes here — replace this line)_
+
 ### Contracts — where each is pinned
 
 Most contracts are already written down. This table exists so the three that are
@@ -157,6 +181,9 @@ task that needs them.
 | `cv/master.json` | — | **S4 pins it**; step 1 names what it holds, not its shape |
 | `annotations/<offer_id>.json` | — | **T42 pins it**; step 8 names what it records and that it never ships |
 
+> **✎ Notes** · `PLAN › Contracts — where each is pinned`
+> _(your notes here — replace this line)_
+
 ### Technology choices
 
 Only the delta from v1. Everything in `status/plan-v1.md` still holds: Python
@@ -170,6 +197,9 @@ than a database, Pydantic for schemas.
 | Staged extraction — normalise, then rules, then model on the remainder | Step 8: "the model is the last resort rather than the first." The cost of reading every advert with a model is what makes the loop stop being run |
 | The candidate's own browser session for authenticated sources, never stored credentials | Process spec §2.6 / step 7. Nothing to leak and nothing to rotate; the shape of the connector file is T32's problem |
 | Derived state recomputed, never migrated | The profile is a pure function of the evidence log (T6). A schema change to a derived file is a rebuild, so no migration path is owed for `constraints.json`, `traits.json`, `weights.json`, or annotations |
+
+> **✎ Notes** · `PLAN › Technology choices`
+> _(your notes here — replace this line)_
 
 ### Out of scope
 
@@ -189,7 +219,8 @@ than a database, Pydantic for schemas.
 - **Re-litigating specification v2.** A task that finds the spec wrong seeds a
   `D-N` divergence and fixes the spec; it does not quietly diverge.
 
----
+> **✎ Notes** · `PLAN › Out of scope`
+> _(your notes here — replace this line)_
 
 ## Implementation tasks
 
@@ -204,6 +235,9 @@ the objective pass/fail, and a gate that could not run is not a pass.
 claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 (confirmed 2026-08-15, 403 at the proxy for every board tried); they are tagged
 `laptop` and run from a laptop session.
+
+> **✎ Notes** · `PLAN › Implementation tasks`
+> _(your notes here — replace this line)_
 
 ### ONTOLOGY — the shared vocabulary
 
@@ -226,6 +260,9 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T31 | Detect note-key rebinding and a stale spec reader | — | S | — | `reader_note_rebindings == 0` | `test_renumbered_section_does_not_rebind_a_note` in `tests/test_spec_reader.py` — moving a section leaves its note unbound rather than re-bound | ☑ |
 | T48 | Step gate state register: derive each step's `state` in `spec-v2-steps.json` from `status/evidence/*.json` instead of hand-editing it | — | S | T30 | `step_gate_state_drift == 0` | `test_step_state_matches_recorded_evidence` in `tests/test_step_gates.py` — a step whose evidence file records a passing measurement cannot read `not_implemented`; `test_missing_evidence_reads_not_implemented` | ☑ |
 
+> **✎ Notes** · `PLAN › ONTOLOGY — the shared vocabulary`
+> _(your notes here — replace this line)_
+
 ### RUNTIME — the process engine (new in v2)
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
@@ -239,6 +276,9 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T39 | Scoring triggers: recompute at a step boundary, on explicit request, and after N new trait-bearing rows — never per message | 4, 6 | S | T37 | `unscheduled_scoring_runs == 0` | `test_scoring_does_not_run_per_message` in `tests/test_scoring_triggers.py`; `test_deferred_scoring_loses_no_evidence` — the log is never behind | ☑ |
 | T40 | Decline ledger: a subject declined once is not raised again in that step, declined twice is not raised again at all unless the candidate reopens it | — | S | T6 | `repeat_asks_after_decline == 0` | `test_subject_declined_twice_is_never_asked_again` in `tests/test_non_insistence.py`; `test_candidate_reopening_a_subject_clears_the_ledger` | ☑ |
 | S7 | One skill per step, thirteen of them, each carrying its checkpoint as a **script** rather than prose | all | L | S2r, T34, T35 | `steps_with_a_skill_fraction == 1.0` | `test_every_step_has_a_skill`; `test_every_skill_names_its_gate_metric`; `test_every_skill_checkpoint_is_a_script_not_prose`; `test_no_skill_contradicts_its_step_specification` | ☑ |
+
+> **✎ Notes** · `PLAN › RUNTIME — the process engine (new in v2)`
+> _(your notes here — replace this line)_
 
 ### PROFILE — evidence, constraints, stories, traits, weights
 
@@ -257,6 +297,9 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T50 | Wire an intake capture driver: S4 gave intake a real conversational free-text surface, so it should move from `pending_implementation` to a measured surface rather than sitting in the bucket that means "nothing was built" | 1 | S | T28, S4 | `profile_capture_coverage == 1.0` | `test_intake_is_a_measured_surface_not_a_pending_one` in `tests/test_profile_capture.py` — the number alone cannot show this was done, since it already read 1.0 over four surfaces; `test_a_conversational_intake_answer_reaches_the_evidence_log` | ☐ |
 | T51 | Candidate state resolves from `$INTEGRAL_HOME` and is refused anywhere inside a git work tree — the distribution decision made mechanical, so "candidate data never reaches a repository" is a property of the code rather than a `.gitignore` line | — | M | — | `state_paths_inside_a_repo == 0` | `test_a_home_inside_a_git_work_tree_is_refused` in `tests/test_state_home.py`; `test_the_default_home_is_outside_the_clone`; `test_every_store_path_resolves_through_the_resolver` | ☑ |
 | T52 | First-run bootstrap: a `SessionStart` hook and a step-0 re-check install the dependencies a clone does not carry, idempotently, and announce the first install to the candidate | — | M | T51 | `unbootstrapped_first_runs == 0` | `test_a_clone_without_dependencies_installs_them_before_step_zero` in `tests/test_bootstrap.py`; `test_bootstrap_is_silent_when_the_environment_is_current`; `test_a_missing_package_manager_is_reported_not_raised` | ◐ |
+
+> **✎ Notes** · `PLAN › PROFILE — evidence, constraints, stories, traits, weights`
+> _(your notes here — replace this line)_
 
 ### SUPPLY — connectors, offers, lifecycle
 
@@ -291,6 +334,9 @@ traverses is documentation rather than a feature.
 | T68 | The cycle improves or says why: rejection rate strictly decreasing across a candidate's cycles, or a scope change proposed — one measurement read twice | 7 | M | T63, T64 | `cycles_neither_improving_nor_proposing == 0` | `test_a_cycle_that_did_not_improve_proposes_a_scope_change` in `tests/test_sourcing_strategy.py`; `test_an_improving_cycle_is_left_alone` — the tool does not speak when the search is working; `test_the_rate_is_measured_within_subject_only` — no cross-candidate comparison exists to make | ☐ |
 | T69 | **[HUMAN]** **Option 3** — when the search is exhausted *and* the evidence behind the deciding dimensions is thin, offer to go back for more history. **Gated on the exhaustion signal having been observed correct in a real cycle**, not merely built — carries `requires: [surface:human]`, because a dep on T68 resolves when T68 merges rather than when anyone has watched the signal fire | 3, 4, 7 | L | T68 | `unrequested_profile_reentries == 0` | `test_a_profile_reentry_is_offered_never_imposed` in `tests/test_step_runtime.py` — declining leaves the search running; `test_no_reentry_is_offered_while_the_deciding_evidence_is_sufficient`; `test_a_declined_reentry_is_not_reoffered_in_the_same_session` | ☐ |
 
+> **✎ Notes** · `PLAN › SUPPLY — connectors, offers, lifecycle`
+> _(your notes here — replace this line)_
+
 ### MATCH — extraction, annotation, ranking
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
@@ -310,6 +356,9 @@ traverses is documentation rather than a feature.
 | T20a | The calibration harness for T20: draw 20 from the evaluation split, present them blind, record the ordering, compute `rank_spearman`. **Split out of T20 2026-08-24** — T20 is `[HUMAN]` and so excluded from the selector, which left the 90% of it that is software unbuildable by either half of the system | 9 | M | T9, T19 | `blind_ranking_leaks == 0` | `test_the_presentation_order_is_independent_of_the_system_ranking` in `tests/test_calibration.py`; `test_no_score_or_explanation_reaches_the_blind_page`; `test_spearman_matches_a_known_order`; `test_rank_spearman_is_unmeasured_until_an_ordering_is_recorded`; `test_the_twenty_are_drawn_from_the_evaluation_split_only` | ☐ |
 | T20 | **[HUMAN]** Calibrate ranking against blind manual ranking of 20 held-out ads | 9 | M | T9, T19, T20a | `rank_spearman >= 0.60` | `test_ranking_correlates_with_manual_order` in `tests/test_calibration.py` — Spearman ρ ≥ 0.60 against the recorded manual order | ☐ |
 
+> **✎ Notes** · `PLAN › MATCH — extraction, annotation, ranking`
+> _(your notes here — replace this line)_
+
 ### DOCUMENT — the CV store, generated documents, interviews
 
 | T# | Description | Step | Size | Depends | Gate | Tests | St |
@@ -319,6 +368,9 @@ traverses is documentation rather than a feature.
 | T46 | Personal details collected at the point of use, per-use approval for story episodes, and the send boundary: prepared documents, text to paste, an email left in drafts | 11 | M | T45 | `unapproved_episode_disclosures == 0` | `test_episode_without_per_use_approval_never_enters_a_document` in `tests/test_approval.py`; `test_personal_details_are_asked_at_step_eleven_not_at_intake`; `test_nothing_is_sent_without_an_explicit_per_item_approval` | ☐ |
 | S6 | Interview: preparation from the advert, the application and earlier interviews; then the log — questions asked, outcome, lessons — immutable and exempt from purge | 12 | L | S1, T8, T45 | `interview_lesson_linkage == 1.0` | `test_every_logged_interview_produces_a_linked_evidence_row` in `tests/test_interview_log.py`; `test_interview_record_is_immutable`; `test_outcome_arriving_days_later_resumes_the_record` | ☑ |
 | T47 | The mock interview: a strict role-play announced before it starts, no coaching mid-answer, no breaking character, with dictation offered and feedback only at the end | 12 | M | S6 | `mock_interview_character_breaks == 0` | `test_no_coaching_turn_occurs_inside_the_roleplay` in `tests/test_mock_interview.py`; `test_roleplay_is_announced_before_it_begins`; `test_feedback_is_given_only_after_it_ends` | ☐ |
+
+> **✎ Notes** · `PLAN › DOCUMENT — the CV store, generated documents, interviews`
+> _(your notes here — replace this line)_
 
 ### Specification — the documents this plan is built on
 
@@ -338,6 +390,9 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | S11 | Test mode — an orthogonal meta channel (`[[...]]`) for capturing notes about the tool during a live session, without disturbing it; notes are shown at the end and seeded only once confirmed | all | M | S7, S10 | `test_notes_reaching_candidate_evidence == 0` | `test_a_meta_note_never_reaches_the_evidence_log` in `tests/test_test_mode.py`; `test_a_pasted_advert_containing_brackets_is_not_eaten`; `test_the_visible_conversation_is_byte_identical_with_and_without_notes` | ☑ |
 | S12 | Move "does this step take candidate free text" into `spec-v2-steps.json` so `profile_capture`'s denominator is fully machine-derived, instead of a hand-made map T28 guards but cannot derive | all | M | T28 | `unclassified_free_text_steps == 0` | `test_every_step_declares_whether_it_takes_candidate_free_text` in `tests/test_profile_capture.py`; `test_profile_capture_reads_the_declaration_not_a_local_map`; `test_coverage_is_unchanged_by_the_migration` | ☐ |
 | T55 | Rename the project to `integral-job-search`: package path, imports, distribution and entry points, repository name and the documents that spell it out — while `$INTEGRAL_HOME`, the arsenal bundle and the thirteen step-skill directories keep their names | — | M | — | `old_name_references == 0` | `test_no_module_imports_the_old_package_name` in `tests/test_naming.py`; `test_no_document_names_the_old_repository`; `test_the_preserved_names_are_not_swept` | ☐ |
+
+> **✎ Notes** · `PLAN › Specification — the documents this plan is built on`
+> _(your notes here — replace this line)_
 
 ### Divergences
 
@@ -411,6 +466,9 @@ ordered by priority alone and will hand back an M4 task beside an M1 one.
 
 **Branch pattern**: `T<N>-short-description` from the default branch.
 
+> **✎ Notes** · `PLAN › Divergences`
+> _(your notes here — replace this line)_
+
 ### Step gate ownership
 
 Every step of specification v2 names one gate metric. This table mirrors
@@ -442,6 +500,9 @@ and is measured on `trait_evidence_sufficiency` itself, so §9, this table and
 T49's own gate row name one task and mean the same thing. T27 keeps the floor
 as part of the interview and T28 keeps evidence arriving from every surface;
 what T49 adds is the decision to withhold a score, which belonged to neither.
+
+> **✎ Notes** · `PLAN › Step gate ownership`
+> _(your notes here — replace this line)_
 
 ## Evidence log
 
@@ -476,6 +537,9 @@ gate. The SHA is the commit that carries the artefact, and the value is what
 > correction that a row records the gate **as it stood**, measured by the
 > checker that shipped with that commit, not a promise that a later, stricter
 > gate passes on older text.
+
+> **✎ Notes** · `PLAN › Evidence log`
+> _(your notes here — replace this line)_
 
 ### Dependency graph
 
@@ -525,7 +589,8 @@ gate. The SHA is the commit that carries the artefact, and the value is what
     watched on a real cycle — is not something a dep on T68 can express.
 ```
 
----
+> **✎ Notes** · `PLAN › Dependency graph`
+> _(your notes here — replace this line)_
 
 ## Risks
 
@@ -546,7 +611,8 @@ gate. The SHA is the commit that carries the artefact, and the value is what
 | R13 | **Option 3 becomes interrogation** — the candidate is sent back through answered questions because a search failed, which is the experience that makes people close a tool | M | H | T69 is sequenced after T68 and gated on the exhaustion signal being *observed* correct, not merely built; `unrequested_profile_reentries == 0` | T69 is a separate merge; not shipping it leaves the feature whole |
 | R14 | **Consent becomes theatre**: the decision is recorded, never re-surfaced, and the search quietly narrows for a month | M | H | T67 re-surfaces standing scope on return and makes it correctable in place — consent nobody can review is not consent | Scope decisions are evidence rows; suppressing them returns sourcing to constraints-only |
 
----
+> **✎ Notes** · `PLAN › Risks`
+> _(your notes here — replace this line)_
 
 ## Reconciliation with v1
 
@@ -581,7 +647,8 @@ by side with the overlap unresolved. This is that reconciliation.
 **Unchanged**: T1–T5, T7, T8, T10, T11, T12, T14, T16, T17, T19, T20, T22, T23,
 T25, T26, T28, T30, T31, T32, T33, S5, S7, D-1, D-2.
 
----
+> **✎ Notes** · `PLAN › Reconciliation with v1`
+> _(your notes here — replace this line)_
 
 ## Sign-off
 
@@ -589,3 +656,7 @@ T25, T26, T28, T30, T31, T32, T33, S5, S7, D-1, D-2.
 - [ ] Step gate ownership read and the D-4 divergence resolved
 - [ ] Queue reconciled against this table
 - [ ] Ready for execution
+
+> **✎ Notes** · `PLAN › Sign-off`
+> _(your notes here — replace this line)_
+
