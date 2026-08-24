@@ -185,6 +185,7 @@ def render(
     *,
     explanations: Mapping[str, Mapping[str, Any]],
     nets: Mapping[str, NetEstimate] | None = None,
+    outside: Mapping[str, Sequence[OutsideFinding]] | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> str:
     """The page: the provisional line when it is true, then a handful of cards.
@@ -213,7 +214,16 @@ def render(
     if ranking["level"] == "L1":
         lines += [PROVISIONAL_LABEL, ""]
     lines += [
-        card(by_id[offer_id], explanations.get(offer_id), (nets or {}).get(offer_id))
+        card(
+            by_id[offer_id],
+            explanations.get(offer_id),
+            (nets or {}).get(offer_id),
+            # Keyed by offer, because a finding is about one employer. Without
+            # this the block `card` can render is reachable only by calling
+            # `card` directly, and the page — the thing the candidate actually
+            # reads — could never show what the lookup found.
+            (outside or {}).get(offer_id, ()),
+        )
         for offer_id in shown
     ]
     if remaining > 0:

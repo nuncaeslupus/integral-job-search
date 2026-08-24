@@ -38,7 +38,7 @@ from integral.enrichment import (
 from integral.explain import explain
 from integral.identity import ProfileStore, create_profile
 from integral.offers import Offer, compute_offer_id
-from integral.presentation import card
+from integral.presentation import card, render
 from integral.profile import ProfileRevision
 from integral.rank import Candidate, rank
 
@@ -187,6 +187,37 @@ def test_a_finding_with_blank_text_is_refused() -> None:
             source_ref="https://example.invalid/x",
             looked_up_at=_AT,
         )
+
+
+def test_a_finding_with_a_blank_source_is_refused() -> None:
+    """A reference nobody is answerable for. `source_ref` was already refused
+    for the same reason; the source is the other half of the attribution, and
+    without it `cite()` renders "[: https://...]"."""
+    with pytest.raises(EnrichmentError):
+        OutsideFinding(
+            dimension="on_call_load",
+            text="Antiguos empleados mencionan guardias frecuentes.",
+            source="   ",
+            source_ref="https://example.invalid/x",
+            looked_up_at=_AT,
+        )
+
+
+def test_the_page_shows_what_was_learned_outside_the_advert() -> None:
+    """The candidate reads the page, not a bare card. Before this, `card` could
+    render the block and `render` could not pass one, so the only way to see a
+    finding was to call `card` yourself."""
+    offer = _thin_offer()
+    ranking = {"level": "L2", "pareto": [offer.id]}
+
+    page = render(ranking, [offer], explanations={}, outside={offer.id: [_finding()]})
+
+    assert NOT_FROM_THE_ADVERT.capitalize() in page
+    assert "guardias frecuentes" in page
+    # A finding is about one employer: another offer's card must not carry it.
+    assert NOT_FROM_THE_ADVERT.capitalize() not in render(
+        ranking, [offer], explanations={}, outside={"some-other-offer": [_finding()]}
+    )
 
 
 def test_the_card_shows_which_is_which() -> None:

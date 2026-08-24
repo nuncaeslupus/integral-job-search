@@ -98,6 +98,13 @@ class OutsideFinding:
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise EnrichmentError("an outside finding with no text found nothing")
+        if not self.source.strip():
+            # Checked before `source_ref`, whose own refusal is prefixed with the
+            # source: blank, that message opens with ": " and names nothing.
+            raise EnrichmentError(
+                f"a finding with no source cannot be attributed to anyone: {self.text!r} — "
+                f"{NOT_FROM_THE_ADVERT} is only half an answer if the other half is missing"
+            )
         if not self.source_ref.strip():
             raise EnrichmentError(
                 f"{self.source}: a finding with no reference is a rumour that a field "
