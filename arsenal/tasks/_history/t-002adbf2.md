@@ -4,6 +4,7 @@ title: "T63: Step 7 becomes offerable again on exhaustion \u2014 a new trigger k
 priority: 5
 deps: [t-bbb3d1da]
 workspace: RUNTIME
+status: merged
 ---
 
 ## Acceptance gate
@@ -15,8 +16,7 @@ key: stuck_cycles_without_a_proposal
 ```
 
 ```bash
-# e.g. bash tests/surface_probe_test.sh
-false  # fail until a real check replaces this
+uv run python -m integral.sourcing_reentry && uv run pytest tests/test_freshness.py -q
 ```
 
 The `gate` block is settled by the design and is read from the default branch —

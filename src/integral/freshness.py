@@ -15,6 +15,18 @@ Three trigger kinds, evaluated at session start after identification:
 * **a gap** — a constraint still `unknown`, a pending step, a trait below
   sufficiency.
 
+A fourth arrived with iterative sourcing (T63, `iterative-sourcing.md` §5.3):
+
+* **exhaustion** — the sourcing cycle keeps finding the same jobs
+  (`Exhaustion.exhausted`, T62). It is a **kind beside staleness, never a
+  change to it**: staleness fires on elapsed time, exhaustion on a repeat
+  share, and neither reads the other's input. What makes it its own kind rather
+  than another gap is that re-entry has to **carry a proposal** — re-running the
+  same search because it returned the same jobs is the failure the trigger
+  exists to prevent, so an exhausted offer with no proposal cannot be
+  constructed. That is `stuck_cycles_without_a_proposal`, measured in
+  `integral.sourcing_reentry`.
+
 **The process-level rule is that a trigger produces an offer, never an
 action.** So nothing in this module writes to the profile or enters a step:
 `offers` is a pure read, and the only writing function here records a *decline*.
@@ -47,11 +59,12 @@ from integral.process_spec import StepList, load_steps
 from integral.profile import EvidenceLog
 from integral.revision import stale_artefacts
 from integral.session import SessionStore
+from integral.sourcing_strategy import Exhaustion
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T36.json"
 
-Kind = Literal["elapsed", "life_event", "gap"]
+Kind = Literal["elapsed", "life_event", "gap", "exhausted"]
 
 # §5.2 says the thresholds for "elapsed" belong to each step's specification.
 # Until those land this is the process-level default, and it is a parameter
@@ -77,6 +90,23 @@ class Offer:
     step: str
     subject: str
     says: str
+    reason: str = ""
+    # ponytail: a string stands in for T64's `ScopeProposal` (§5.4). What
+    # re-entry needs here is only *that* a proposal accompanies the trigger;
+    # T64 replaces the annotation with the typed, symmetric-by-construction
+    # thing and nothing else in this module changes.
+    proposal: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind != "exhausted":
+            return
+        if not self.reason.strip():
+            raise FreshnessError("an exhaustion with no reason is a violation, not a trigger")
+        if not (self.proposal or "").strip():
+            raise FreshnessError(
+                "an exhausted step re-entered with no proposal — that is re-running "
+                "the same search because it returned the same jobs"
+            )
 
     def sentence(self) -> str:
         return self.says
@@ -212,6 +242,30 @@ def gap_offers(store: ProfileStore, *, steps: StepList | None = None) -> list[Of
     return found
 
 
+def exhaustion_offers(exhaustion: Exhaustion, *, proposal: str | None) -> list[Offer]:
+    """The sourcing cycle keeps finding the same jobs (§5.3, the fourth row).
+
+    Fires on `Exhaustion.exhausted` and on nothing else — no clock is read, so
+    a search that went stale and a search that went round in circles stay two
+    separate observations. T62's `reason` is carried through verbatim rather
+    than restated: it already names the repeat share, the cycle, and what was
+    repeated, and a second wording of the same fact is a second thing to keep
+    true.
+    """
+    if not exhaustion.exhausted:
+        return []
+    return [
+        Offer(
+            kind="exhausted",
+            step="sourcing",
+            subject="exhausted_sourcing",
+            says=f"{exhaustion.reason}. Shall we change where we look?",
+            reason=exhaustion.reason,
+            proposal=proposal,
+        )
+    ]
+
+
 def _read_json(store: ProfileStore, *parts: str) -> Any:
     path = store.path(*parts)
     try:
@@ -228,17 +282,23 @@ def offers(
     said: str | None = None,
     elapsed_days: int = DEFAULT_ELAPSED_DAYS,
     steps: StepList | None = None,
+    exhaustion: Exhaustion | None = None,
+    proposal: str | None = None,
 ) -> list[Offer]:
     """Everything the tool noticed, minus what the candidate has waved away.
 
     A pure read. Nothing here writes to the profile, and the gate proves it by
     comparing the tree before and after.
+
+    `exhaustion` is optional and defaults to absent, so every caller that never
+    sourced anything behaves exactly as it did before this kind existed.
     """
     steps = steps or load_steps()
     raised = [
         *elapsed_offers(store, now=now, elapsed_days=elapsed_days),
         *(life_event_offers(event, steps=steps, said=said) if event else []),
         *gap_offers(store, steps=steps),
+        *(exhaustion_offers(exhaustion, proposal=proposal) if exhaustion else []),
     ]
     ledger = DeclineLedger(store)
     return [offer for offer in raised if ledger.may_ask(offer.subject, step=offer.step).may_ask]

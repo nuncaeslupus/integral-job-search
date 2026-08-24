@@ -1,0 +1,10 @@
+{
+  "stuck_cycles_without_a_proposal": 0,
+  "cycles_judged": 3,
+  "reentry_offers": 2,
+  "trigger_kinds": [
+    "exhausted"
+  ],
+  "proposalless_reentry_rejected": true,
+  "failures": []
+}
