@@ -1,0 +1,9 @@
+{
+  "sourcing_inputs_excluding_learned_evidence": 0,
+  "learned_inputs": [
+    "outcome_evidence",
+    "reaction_evidence",
+    "weights"
+  ],
+  "excluded": []
+}

@@ -260,6 +260,18 @@
         {
           "artefact": "constraints",
           "optional": false
+        },
+        {
+          "artefact": "weights",
+          "optional": true
+        },
+        {
+          "artefact": "reaction_evidence",
+          "optional": true
+        },
+        {
+          "artefact": "outcome_evidence",
+          "optional": true
         }
       ],
       "produces": [

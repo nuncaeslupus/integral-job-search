@@ -279,7 +279,7 @@ graph of those declarations is what decides whether a step can run:
 4  traits        → traits.json                  [reads: trait evidence]
 5  reactions     → reaction evidence            [reads: constraints.json]
 6  preferences   → weights.json                 [reads: reaction evidence]
-7  sourcing      → offers/*.json                [reads: constraints.json]
+7  sourcing      → offers/*.json                [reads: constraints.json, weights.json?, reaction + outcome evidence?]
 8  understanding → extractions                  [reads: offers/*.json, dimension model]
 9  ranking       → rankings/<ts>.json           [reads: extractions, constraints.json, weights.json?]
 10 feedback      → reaction + outcome evidence  [reads: a ranking]
@@ -301,6 +301,10 @@ graph breaks:
   conversation better, and its absence makes it longer, not impossible.
 - **Ranking reads `weights.json?`** — without weights it ranks on hard filters
   and defaults, and says so (L1, §3.1).
+- **Sourcing reads `weights.json?` and `reaction + outcome evidence?`** — what the
+  loop learned is what makes the next search better than the last one, and all
+  three marks are `?` because step 7 must run on a candidate's first afternoon,
+  before any weight is fitted or any reaction recorded.
 
 Trace the required steps alone — 0 → 2 → 7 → 8 → 9 — and every input is either
 external or produced by another required step. That is the property that has to

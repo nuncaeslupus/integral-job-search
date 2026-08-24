@@ -219,6 +219,17 @@ class StepList(BaseModel):
         if duplicates:
             raise ValueError(f"duplicate step ids: {', '.join(duplicates)}")
 
+        for step in self.steps:
+            artefacts = [read.artefact for read in step.reads]
+            repeated = sorted({a for a in artefacts if artefacts.count(a) > 1})
+            if repeated:
+                raise ValueError(
+                    f"step {step.id!r} declares duplicate reads: {', '.join(repeated)}. "
+                    "One artefact read twice can be optional in one declaration and "
+                    "required in the other, which reads as declared to anything asking "
+                    "whether it is optional and as blocking to `missing_inputs`"
+                )
+
         unknown_phases = sorted({step.phase for step in self.steps} - set(self.phases))
         if unknown_phases:
             raise ValueError(f"steps use phases absent from `phases`: {', '.join(unknown_phases)}")
