@@ -1,0 +1,57 @@
+# A `candidate_trait` (T26b): elicited in the interview, never read from an ad.
+id: ambition
+kind: soft
+polarity: bipolar
+side: candidate_trait
+group: growth
+label:
+  en: Ambition
+  es: Ambición
+  ca: Ambició
+definition: >
+  How much they reach for the next step — more scope, more responsibility, a larger
+  say — as against being content with the work they already hold.
+levels:
+  - value: -0.6
+    label:
+      en: "Content with the work they hold"
+      es: "A gusto con el trabajo que tiene"
+      ca: "A gust amb la feina que té"
+    tell: "the episodes show them turning down or not seeking a wider remit"
+  - value: 0.0
+    label:
+      en: "Not yet elicited"
+      es: "Aún no obtenido"
+      ca: "Encara no obtingut"
+    tell: "the story bank holds no episode about wanting more or less scope"
+  - value: 0.7
+    label:
+      en: "Reaches for the next step"
+      es: "Va a por el siguiente paso"
+      ca: "Va a pel següent pas"
+    tell: "the episodes show them asking for scope before it was offered"
+elicitation:
+  questions:
+    - id: am_q1
+      text:
+        en: >
+          Tell me about a responsibility you took on before anyone gave it to you.
+          What made you reach for it, and how did it go?
+        es: >
+          Cuéntame una responsabilidad que asumiste antes de que nadie te la diera.
+          ¿Qué te llevó a cogerla y cómo salió?
+        ca: >
+          Explica'm una responsabilitat que vas assumir abans que ningú te la donés.
+          Què et va portar a agafar-la i com va anar?
+    - id: am_q2
+      text:
+        en: >
+          Describe a step up that was offered to you and that you turned down, or one
+          you decided not to chase. What were you weighing at the time?
+        es: >
+          Describe un ascenso que te ofrecieron y rechazaste, o uno que decidiste no
+          perseguir. ¿Qué estabas sopesando en ese momento?
+        ca: >
+          Descriu un ascens que et van oferir i vas rebutjar, o un que vas decidir no
+          perseguir. Què estaves sospesant en aquell moment?
+methods_ref: METHODS.md#21-structured-behavioural-elicitation

@@ -1,0 +1,60 @@
+# A `candidate_trait` (T26b): elicited in the interview, never read from an ad.
+# A low score is not a deficiency — it records where the person keeps the
+# boundary, which the ranker needs in order to stop treating unpaid evening work
+# as evidence of fit.
+id: spare_time_engagement
+kind: soft
+polarity: bipolar
+side: candidate_trait
+group: growth
+label:
+  en: Spare-time engagement
+  es: Dedicación en el tiempo libre
+  ca: Dedicació en el temps lliure
+definition: >
+  Whether the craft follows them out of working hours — side projects, communities,
+  building for its own sake — or the day ends when the day ends.
+levels:
+  - value: -0.6
+    label:
+      en: "The day ends when it ends"
+      es: "La jornada acaba cuando acaba"
+      ca: "La jornada acaba quan acaba"
+    tell: "the episodes place their work entirely inside paid hours, by choice"
+  - value: 0.0
+    label:
+      en: "Not yet elicited"
+      es: "Aún no obtenido"
+      ca: "Encara no obtingut"
+    tell: "the story bank holds no episode from outside their working hours"
+  - value: 0.7
+    label:
+      en: "The craft follows them home"
+      es: "El oficio se lleva a casa"
+      ca: "L'ofici se'n va a casa"
+    tell: "the episodes include projects or communities they carry on their own time"
+elicitation:
+  questions:
+    - id: st_q1
+      text:
+        en: >
+          Tell me about something connected to your work that you did on your own time
+          in the past year. What was it, and what made you spend the evening on it?
+        es: >
+          Cuéntame algo relacionado con tu trabajo que hicieras en tu tiempo libre el
+          año pasado. ¿Qué era y qué te llevó a dedicarle la tarde?
+        ca: >
+          Explica'm alguna cosa relacionada amb la teva feina que fessis en el teu temps
+          lliure l'any passat. Què era i què et va portar a dedicar-hi la tarda?
+    - id: st_q2
+      text:
+        en: >
+          Describe how a normal evening or weekend of yours goes. Where does the work
+          stop, and what decided where that line sits?
+        es: >
+          Describe cómo transcurre una tarde o un fin de semana normal para ti. ¿Dónde
+          se para el trabajo y qué decidió dónde está esa línea?
+        ca: >
+          Descriu com transcorre una tarda o un cap de setmana normal per a tu. On
+          s'atura la feina i què va decidir on és aquesta línia?
+methods_ref: METHODS.md#21-structured-behavioural-elicitation

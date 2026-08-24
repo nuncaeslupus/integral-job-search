@@ -34,6 +34,7 @@ DEFAULT_METHODS_PATH = _REPO_ROOT / "docs" / "METHODS.md"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T2.json"
 DEFAULT_COVERAGE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T3.json"
 DEFAULT_SIDE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T23.json"
+DEFAULT_TRAIT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T26b.json"
 
 # `LANGUAGES` is imported, not restated: a dimension carries all of them on every
 # human-readable string (a label in one language only produces a question no
@@ -732,6 +733,36 @@ def ad_side(dimensions: list[Dimension]) -> list[Dimension]:
     return [d for d in dimensions if d.side == "matched"]
 
 
+def candidate_traits(dimensions: list[Dimension]) -> list[Dimension]:
+    """The `candidate_trait` dimensions — elicited in the interview, never read from an ad."""
+    return [d for d in dimensions if d.side == "candidate_trait"]
+
+
+def trait_dimensions_ready(dimensions: list[Dimension]) -> list[str]:
+    """Ids of the trait dimensions that are **complete**, not merely present (T26b).
+
+    A dimension named in passing and left without rungs has no class set for
+    anything to score, so it must not count toward the floor. Complete means all
+    four of: `side: candidate_trait`, declared `levels`, three-language labels,
+    and at least one elicitation question.
+
+    Three of those four are enforced by the schema today, so a malformed trait
+    does not reach here — it fails to load at all, which is stricter. They are
+    checked again anyway because this is a gate: if the schema is ever relaxed,
+    the number must start falling rather than quietly stop measuring.
+    """
+    ready = []
+    for dimension in candidate_traits(dimensions):
+        if not dimension.levels:
+            continue
+        if not all(dimension.label.get(language) for language in LANGUAGES):
+            continue
+        if not dimension.elicitation.questions:
+            continue
+        ready.append(dimension.id)
+    return sorted(ready)
+
+
 def side_violations(dimensions: list[Dimension]) -> list[str]:
     """Dimensions whose declared side and actual content disagree.
 
@@ -819,8 +850,13 @@ def write_coverage_evidence(
 ) -> dict[str, Any]:
     """Measure T3's gate from the committed model and record it."""
     dimensions = load_dimensions(directory, methods_path)
+    # Ad-side only, for the reason `extractor_coverage` is: a `candidate_trait`
+    # is refused cues and gold at load, so naming it here would report the thing
+    # the interview exists to elicit as a hole in the extractor.
     uncovered = sorted(
-        d.id for d in dimensions if not any(d.extraction.cues.values()) or not d.extraction.gold
+        d.id
+        for d in ad_side(dimensions)
+        if not any(d.extraction.cues.values()) or not d.extraction.gold
     )
     try:
         ads = load_ads()
@@ -874,6 +910,28 @@ def write_side_evidence(
     return measured
 
 
+def write_trait_evidence(
+    evidence: Path = DEFAULT_TRAIT_EVIDENCE_PATH,
+    directory: Path = DEFAULT_DIMENSIONS_DIR,
+    methods_path: Path = DEFAULT_METHODS_PATH,
+) -> dict[str, Any]:
+    """Measure T26b's gate: the trait dimensions that are complete enough to score."""
+    dimensions = load_dimensions(directory, methods_path)
+    ready = trait_dimensions_ready(dimensions)
+    traits = candidate_traits(dimensions)
+    measured: dict[str, Any] = {
+        "trait_dimensions_ready": len(ready),
+        "ready": ready,
+        # Present-but-incomplete is the state the gate exists to refuse, so the
+        # two counts are recorded apart: equal numbers mean nothing is half-built.
+        "trait_dimension_count": len(traits),
+        "incomplete": sorted(d.id for d in traits if d.id not in set(ready)),
+    }
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     directory: Path = DEFAULT_DIMENSIONS_DIR,
@@ -904,6 +962,7 @@ def _main(argv: list[str]) -> int:
         python -m integral.dimensions <path>              → T2, schema violations
         python -m integral.dimensions --coverage [path]   → T3, extractor coverage
         python -m integral.dimensions --sides [path]      → T23, side agreement
+        python -m integral.dimensions --traits [path]     → T26b, trait readiness
 
     The bare run writes **all three**, because that is the form `make evidence`
     uses: it derives its module list by grepping for `^def _main` and runs each
@@ -916,14 +975,31 @@ def _main(argv: list[str]) -> int:
     """
     coverage = "--coverage" in argv[1:]
     sides = "--sides" in argv[1:]
+    traits = "--traits" in argv[1:]
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
 
-    if not coverage and not sides and not positional:
+    if not coverage and not sides and not traits and not positional:
         return max(
             _main([argv[0], str(DEFAULT_EVIDENCE_PATH)]),
             _main([argv[0], "--coverage"]),
             _main([argv[0], "--sides"]),
+            _main([argv[0], "--traits"]),
         )
+
+    if traits:
+        target = Path(positional[0]) if positional else DEFAULT_TRAIT_EVIDENCE_PATH
+        try:
+            measured = write_trait_evidence(target)
+        except DimensionError as exc:
+            print(f"cannot measure traits: {exc}", file=sys.stderr)
+            return 3
+        print(json.dumps(measured, ensure_ascii=False))
+        for trait_id in measured["incomplete"]:
+            print(
+                f"{trait_id}: a trait without rungs, labels or a question is not ready",
+                file=sys.stderr,
+            )
+        return 1 if measured["incomplete"] else 0
 
     if sides:
         target = Path(positional[0]) if positional else DEFAULT_SIDE_EVIDENCE_PATH

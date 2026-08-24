@@ -230,9 +230,16 @@ def test_extractor_coverage_counts_only_ad_side_dimensions(tmp_path: Path) -> No
     assert ad_side(candidate_side) == []
 
 
-def test_the_committed_model_is_all_matched_and_unchanged() -> None:
-    """`side` is additive: every committed dimension defaults to `matched`."""
+def test_the_committed_model_declares_only_the_sides_it_has_built() -> None:
+    """`side` is additive, and every committed dimension's side agrees with its content.
+
+    This asserted `{"matched"}` until T26b coined the four candidate-trait
+    dimensions, which made it fail correctly — it was a claim about a model that
+    had no traits yet. What is worth keeping is not the single-side model but
+    the two properties that survived it: no dimension declares a side the model
+    has not actually built, and `side_violations` stays empty.
+    """
     dimensions = load_dimensions(DEFAULT_DIMENSIONS_DIR)
 
-    assert {d.side for d in dimensions} == {"matched"}
+    assert {d.side for d in dimensions} == {"matched", "candidate_trait"}
     assert side_violations(dimensions) == []

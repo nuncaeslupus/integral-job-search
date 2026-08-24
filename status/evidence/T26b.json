@@ -1,0 +1,11 @@
+{
+  "trait_dimensions_ready": 4,
+  "ready": [
+    "ambition",
+    "creativity",
+    "learning_orientation",
+    "spare_time_engagement"
+  ],
+  "trait_dimension_count": 4,
+  "incomplete": []
+}
