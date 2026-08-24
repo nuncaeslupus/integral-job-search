@@ -1,4 +1,11 @@
-"""T62 — exhaustion: judging that a sourcing cycle has stopped finding anything new.
+"""Sourcing strategy — when a cycle has stopped finding work, and what may be offered.
+
+T62 is the measurement (`§5.2`); T64 is the shape of what the tool may then say
+(`§5.4`). They share a module because they are the two halves of one moment: a
+cycle judged exhausted is the only thing that licenses a scope proposal.
+
+## T62 — exhaustion: judging that a cycle has stopped finding anything new
+
 
 `status/specs/iterative-sourcing.md` §5.2 settles the form as **dedup**, not
 preference: *"we are finding the same jobs again."* No fitted weights, no
@@ -22,6 +29,27 @@ return and does not mention repetition.
 
 `§5.3`'s trigger kind — `exhausted` beside `stale` in `integral.freshness` — is
 T63's, not this module's. This measures; nothing here re-opens a step.
+
+## T64 — the scope proposal: symmetric by construction
+
+`scope_proposals_offering_only_narrowing == 0` is enforced by the type and not
+by the skill's prose, because prose is what drifts. A `ScopeProposal` cannot be
+built without an alternative pointing the other way, so the tool has no way to
+ask *"shall we focus on US companies?"* without in the same breath offering the
+candidate somewhere wider to go.
+
+**Alternatives are leaves, and that is a deliberate call.** §5.4 writes the
+field as `list[ScopeProposal]`, but a recursive form with a mandatory non-empty
+list has no base case: building one proposal would require building another,
+without end. So the base case is its own type — `ScopeAlternative`, the same
+three fields without the list — and the nesting stops at depth one because
+nothing deeper is expressible, rather than because a validator counted. That
+also matches what the surface actually does: the tool offers one question and
+the ways out of it, not a tree the candidate has to navigate.
+
+The negative control does for this what T62's does for the reason rule: it
+attempts the all-narrowing proposal the type forbids and records that it was
+rejected, so a count of zero cannot mean nothing ever tried.
 """
 
 from __future__ import annotations
@@ -30,12 +58,13 @@ import json
 import math
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T62.json"
+SCOPE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T64.json"
 
 #: A cycle is exhausted when this share of what it returned was already seen. Chosen by
 #: common sense and not by evidence: there is no cycle to tune against yet, and a tuned
@@ -46,6 +75,12 @@ EXHAUSTION_REPEAT_SHARE = 0.8
 #: The probe has to fire the rule, not merely fail to break it — a run that
 #: triggered nothing would report zero reasonless triggers by never having one.
 MINIMUM_TRIGGERS = 2
+
+#: The scope probe has to *offer* something, not merely fail to offer a bad
+#: thing — a run that proposed nothing would report zero one-way proposals by
+#: never having opened its mouth. Two, because one of each direction is the
+#: smallest set that shows the type is not simply refusing everything.
+MINIMUM_PROPOSALS = 2
 
 
 class Strict(BaseModel):
@@ -97,6 +132,136 @@ def judge_cycle(*, cycle: int, offers_returned: int, offers_already_seen: int) -
         exhausted=bool(reason),
         reason=reason,
     )
+
+
+class ScopeAlternative(Strict):
+    """A way the search could change instead — the base case of §5.4's list.
+
+    Deliberately without an `alternatives` field of its own: that is what stops
+    the nesting at depth one and gives the recursive form a base case it could
+    not otherwise have.
+    """
+
+    direction: Literal["widen", "narrow"]
+    facet: str  # what would change: employer, country, stack, seniority, pay floor
+    reason: str  # why, in the candidate's terms, citing what was observed
+
+    @model_validator(mode="after")
+    def _it_says_what_it_is_and_why(self) -> ScopeAlternative:
+        if not self.facet.strip():
+            raise ValueError("a scope change with no facet names nothing to change")
+        if not self.reason.strip():
+            raise ValueError("a scope change with no reason is an instruction, not a proposal")
+        return self
+
+
+class ScopeProposal(Strict):
+    """One scope change offered to the candidate, with the ways out of it."""
+
+    direction: Literal["widen", "narrow"]
+    facet: str
+    reason: str
+    # A tuple, not a list: `Strict` is frozen, but a frozen model still hands out a
+    # mutable list, so `proposal.alternatives.clear()` could strip the opposite
+    # direction back off after validation had passed. The invariant is meant to be
+    # unbreakable in the type rather than merely checked once.
+    alternatives: tuple[ScopeAlternative, ...]  # never empty, never all one direction
+
+    @model_validator(mode="after")
+    def _the_offer_points_both_ways(self) -> ScopeProposal:
+        if not self.facet.strip():
+            raise ValueError("a scope proposal with no facet names nothing to change")
+        if not self.reason.strip():
+            raise ValueError("a scope proposal with no reason is an instruction, not a proposal")
+        if not self.alternatives:
+            raise ValueError("a scope proposal with no alternatives is a decision already taken")
+        if all(alt.direction == self.direction for alt in self.alternatives):
+            raise ValueError(
+                f"every alternative to this {self.direction} also {self.direction}s — "
+                "a proposal the candidate cannot answer in the other direction"
+            )
+        return self
+
+
+def probe_scope_proposals() -> dict[str, Any]:
+    """Offer a spread of proposals and count every one that only ever narrows."""
+    offered = [
+        ScopeProposal(
+            direction="narrow",
+            facet="employer",
+            reason=(
+                "you read both of Acme's adverts end to end and skipped the other six — "
+                "we could look only at employers like them"
+            ),
+            alternatives=(
+                ScopeAlternative(
+                    direction="widen",
+                    facet="country",
+                    reason="or keep the net wide and look outside Spain as well",
+                ),
+                ScopeAlternative(
+                    direction="narrow",
+                    facet="stack",
+                    reason="or narrow on the Rust postings instead of on the employer",
+                ),
+            ),
+        ),
+        ScopeProposal(
+            direction="widen",
+            facet="pay floor",
+            reason=(
+                "cycle 3 returned the same eight adverts you have already seen — "
+                "dropping the floor by five thousand would open about forty more"
+            ),
+            alternatives=(
+                ScopeAlternative(
+                    direction="narrow",
+                    facet="seniority",
+                    reason="or hold the floor and look only at the senior postings that clear it",
+                ),
+            ),
+        ),
+    ]
+    failures = [
+        f"the {p.direction} of {p.facet} offered no way out of narrowing"
+        for p in offered
+        if {p.direction, *(alt.direction for alt in p.alternatives)} == {"narrow"}
+    ]
+    failures += [
+        f"the {p.direction} of {p.facet} stated no reason"
+        for p in offered
+        if not p.reason.strip() or any(not alt.reason.strip() for alt in p.alternatives)
+    ]
+
+    # Negative control: the rule has to bite, or the count above is zero by
+    # nothing ever having tried it.
+    try:
+        ScopeProposal(
+            direction="narrow",
+            facet="employer",
+            reason="you read both of Acme's adverts end to end",
+            alternatives=(
+                ScopeAlternative(
+                    direction="narrow",
+                    facet="stack",
+                    reason="or narrow on the Rust postings instead",
+                ),
+            ),
+        )
+    except ValidationError:
+        rejected = True
+    else:
+        rejected = False
+        failures.append("a proposal whose every alternative narrowed was accepted")
+
+    return {
+        "scope_proposals_offering_only_narrowing": len(failures),
+        "proposals_offered": len(offered),
+        "directions_offered": sorted({p.direction for p in offered}),
+        "alternatives_offered": sum(len(p.alternatives) for p in offered),
+        "one_way_construction_rejected": rejected,
+        "failures": failures,
+    }
 
 
 def probe_exhaustion() -> dict[str, Any]:
@@ -152,12 +317,33 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+def write_scope_evidence(evidence: Path = SCOPE_EVIDENCE_PATH) -> dict[str, Any]:
+    """Write T64's measurement to `evidence`, and return it."""
+    measured = probe_scope_proposals()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
-    """`python -m integral.sourcing_strategy [path]` → T62's gate evidence."""
+    """`python -m integral.sourcing_strategy [path]` → T62's and T64's gate evidence.
+
+    `[path]` overrides where T62's file goes; T64's is always written beside it
+    at `status/evidence/T64.json`, on the same run — one module, one invocation,
+    both of the sourcing-strategy numbers, the way `integral.spec_consistency`
+    writes D-3's and T61's.
+
+    Exit 3 when either probe measured too little to be trusted, 1 on any
+    violation, 0 otherwise.
+    """
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)
+    scope = write_scope_evidence()
+    # Two lines rather than one merged object: both carry a `failures` key, and
+    # merging them would silently drop T62's.
     print(json.dumps(measured, ensure_ascii=False))
+    print(json.dumps(scope, ensure_ascii=False))
     if measured["exhaustion_triggers"] < MINIMUM_TRIGGERS:
         print(
             f"only {measured['exhaustion_triggers']} cycles triggered "
@@ -166,9 +352,18 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 3
-    for failure in measured["failures"]:
+    if scope["proposals_offered"] < MINIMUM_PROPOSALS:
+        print(
+            f"only {scope['proposals_offered']} scope proposal(s) were offered "
+            f"(floor {MINIMUM_PROPOSALS}) — a probe that proposes nothing proposes "
+            "nothing one-way either, and that is not a pass",
+            file=sys.stderr,
+        )
+        return 3
+    failures = [*measured["failures"], *scope["failures"]]
+    for failure in failures:
         print(failure, file=sys.stderr)
-    return 1 if measured["failures"] else 0
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

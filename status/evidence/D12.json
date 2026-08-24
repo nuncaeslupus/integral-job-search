@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 99,
+  "evidence_gates_read": 100,
   "gates_declaring_status_key": 4,
   "unrecordable": [],
   "readings": [
@@ -656,6 +656,14 @@
       "task": "t-05892c87",
       "key": "skills_offering_an_illegal_employment_mode",
       "evidence": "status/evidence/D-14.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-16a59a39",
+      "key": "scope_proposals_offering_only_narrowing",
+      "evidence": "status/evidence/T64.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
