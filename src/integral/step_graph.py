@@ -280,6 +280,7 @@ def measure_sourcing(steps_path: Path = DEFAULT_STEPS_PATH) -> dict[str, Any]:
 def write_sourcing_evidence(
     evidence: Path = SOURCING_EVIDENCE_PATH, steps_path: Path = DEFAULT_STEPS_PATH
 ) -> dict[str, Any]:
+    """Write T60's measurement to `evidence`, and return it."""
     measured = measure_sourcing(steps_path)
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

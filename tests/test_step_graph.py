@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from integral.process_spec import DEFAULT_PROCESS_DOC, StepList, load_steps
 from integral.step_graph import (
@@ -252,3 +253,13 @@ def test_the_t60_gate_records_the_measurement_it_made(tmp_path: Path) -> None:
     measured = write_sourcing_evidence(evidence)
     assert measured["sourcing_inputs_excluding_learned_evidence"] == 0
     assert json.loads(evidence.read_text(encoding="utf-8")) == measured
+
+
+def test_one_artefact_read_twice_is_refused(steps: StepList) -> None:
+    """Optional in one declaration and required in the other reads as both."""
+    payload = json.loads(steps.model_dump_json())
+    for step in payload["steps"]:
+        if step["id"] == "sourcing":
+            step["reads"].append({"artefact": "weights", "optional": False})
+    with pytest.raises(ValidationError, match="duplicate reads"):
+        StepList.model_validate(payload)
