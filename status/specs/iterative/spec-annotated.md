@@ -251,10 +251,18 @@ what the candidate has taught the system.
 4. **What does the tool do with a refused proposal?** *"No, keep it broad"* is itself
    evidence about the candidate and should be recorded — but it must not become a reason to
    ask again next cycle in different words.
-5. **Does an exhausted search ever mean "there is no job for you right now"?** The tool
-   should be able to say so. Every option above assumes a better search exists; sometimes
-   the honest answer is that the market has nothing this month, and a tool that cannot say
-   that will invent a scope change instead.
+5. **Does an exhausted search ever mean "there is no job for you right now"?**
+   **Settled in review: yes, and the tool must be able to say it.** Every option above
+   otherwise assumes a better search exists, and a tool that cannot report an empty market
+   will manufacture a scope change instead — proposing a widening it does not believe in,
+   which is worse than silence because the candidate acts on it. This needs a gate of its
+   own, because "no result" is the outcome a tool is most tempted to dress up:
+   `exhausted_searches_reported_as_a_scope_change == 0`. It also needs a shape — what the
+   tool says, what it offers next (wait and retry on a stated schedule; relax a hard
+   constraint the candidate may not want relaxed; stop), and how it distinguishes "the
+   market has nothing this month" from "we have looked in the wrong place", which are
+   opposite diagnoses with opposite remedies. That distinction is design work, not a
+   threshold.
 
 > **✎ Notes** · `SPEC › Open questions`
 > _(your notes here — replace this line)_
