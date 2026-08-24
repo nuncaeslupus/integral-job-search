@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 91,
-  "gates_declaring_status_key": 3,
+  "evidence_gates_read": 93,
+  "gates_declaring_status_key": 4,
   "unrecordable": [],
   "readings": [
     {
@@ -493,6 +493,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "lo-c48f",
+      "key": "rank_spearman",
+      "evidence": "status/evidence/T20.json",
+      "value_is_numeric": false,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "lo-c5ad",
       "key": "required_subset_closure_violations",
       "evidence": "status/evidence/T30.json",
@@ -712,6 +720,14 @@
       "task": "t-bd59e70b",
       "key": "step_skills_without_a_progress_disclosure_rule",
       "evidence": "status/evidence/D-13.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-c2c4dddb",
+      "key": "blind_ranking_leaks",
+      "evidence": "status/evidence/T20a.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

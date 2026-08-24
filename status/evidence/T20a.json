@@ -1,0 +1,10 @@
+{
+  "blind_ranking_leaks": 0,
+  "leaks_found": [],
+  "plants_detected": [
+    "a_score_or_explanation_reaches_the_page",
+    "presentation_follows_the_system_ranking",
+    "the_recorded_ordering_is_visible"
+  ],
+  "plants_undetected": []
+}

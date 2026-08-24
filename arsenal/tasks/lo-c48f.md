@@ -14,10 +14,11 @@ tags: [human, m3]
 rank_spearman >= 0.60
 evidence: status/evidence/T20.json
 key: rank_spearman
+status-key: rank_status
 ```
 
 ```bash
-echo "no gate command defined for T20 — replace this line with the command that writes status/evidence/T20.json" >&2; exit 1
+uv run python -m integral.calibration spearman status/evidence/T20.json
 ```
 
 The two blocks do different jobs and both are required. The `bash` block
@@ -26,8 +27,10 @@ number in it against the threshold. Without the first, a stale or hand-written
 evidence file passes unchallenged; without the second, a command that exits 0
 counts as a gate whatever it measured.
 
-The default command fails on purpose. A task whose measurement is undefined has
-not passed its gate — it has not been measured. Replace it as part of the work.
+T20a (`t-c2c4dddb`) built that command. It writes `null` with
+`rank_status: "unmeasured"` on every machine but the candidate's — D-2's third
+outcome, and the honest one: the ordering lives in the candidate's own profile
+store and is never committed here.
 
 ## Tests
 

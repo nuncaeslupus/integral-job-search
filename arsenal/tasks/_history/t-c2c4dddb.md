@@ -5,6 +5,7 @@ priority: 5
 deps: [lo-b422, lo-b313]
 tags: [m3]
 workspace: MATCH
+status: merged
 ---
 
 ## Acceptance gate
