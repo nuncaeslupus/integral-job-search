@@ -1,0 +1,7 @@
+{
+  "findings_checked": 1,
+  "leak_detected_when_planted": 1,
+  "outside_source_spans_in_explanations": 0,
+  "spans_checked": 2,
+  "violations": []
+}
