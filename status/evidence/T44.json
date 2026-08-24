@@ -1,8 +1,9 @@
 {
-  "both_known_and_unknown_bullets_rendered": 1,
   "provisional_rankings": 1,
   "provisional_rankings_unlabelled": 0,
   "rankings_rendered": 2,
   "renders_are_deterministic": 1,
-  "unlabelled_detected_when_planted": 1
+  "stated_bullets_render_their_value": 1,
+  "unlabelled_detected_when_planted": 1,
+  "unstated_bullets_render_unknown": 1
 }

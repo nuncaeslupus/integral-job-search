@@ -24,6 +24,7 @@ import pytest
 
 from integral.explain import explain
 from integral.offers import Location, Offer, Salary, compute_offer_id
+from integral.presentation import _FIXTURE_WEIGHTS as _FIXTURE_WEIGHTS_FOR_TEST
 from integral.presentation import (
     PROVISIONAL_LABEL,
     UNKNOWN,
@@ -251,20 +252,46 @@ def test_a_missing_offer_beyond_the_page_limit_is_still_refused() -> None:
     raise AssertionError("a frontier offer nobody supplied should not vanish behind the limit")
 
 
-def test_the_cli_fails_when_the_fixture_stops_showing_both_kinds_of_bullet(
+def test_the_cli_fails_when_a_stated_bullet_stops_showing_its_value(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A recorded number nothing asserts is a gate that measures nothing. The
-    property — a filled bullet beside an `unknown` one — is what the CLI checks,
-    because an exact count of unknown cells is not something it could interpret."""
+    """A recorded number nothing asserts is a gate that measures nothing."""
     from integral import presentation
 
     measured = presentation.measure()
-    assert measured["both_known_and_unknown_bullets_rendered"] == 1
+    assert measured["stated_bullets_render_their_value"] == 1
+    assert measured["unstated_bullets_render_unknown"] == 1
 
     monkeypatch.setattr(
-        presentation,
-        "measure",
-        lambda: {**measured, "both_known_and_unknown_bullets_rendered": 0},
+        presentation, "measure", lambda: {**measured, "unstated_bullets_render_unknown": 0}
     )
     assert presentation._main([str(tmp_path / "T44.json")]) == 1
+
+
+def test_the_unknown_property_is_read_per_field_not_page_wide() -> None:
+    """`hours` and `contract` are unconditionally unknown, so a page-wide search
+    for the word is true whatever the salary and location cells do."""
+    from integral.presentation import _bullet, _page
+
+    _, page = _page(_FIXTURE_WEIGHTS_FOR_TEST)
+    assert _bullet(page, "hours", 0) == UNKNOWN
+    assert _bullet(page, "pay", 0) != UNKNOWN
+    assert _bullet(page, "pay", 1) == UNKNOWN
+
+
+def test_a_label_appearing_inside_a_card_does_not_count_as_the_header() -> None:
+    """A page whose header is missing but whose card text happens to contain the
+    sentence would otherwise report as labelled."""
+    offer = _offer()
+    ranking, _ = _ranked([_candidate(offer, 3600.0, {"remote": 1.0})], None)
+    smuggled = f"Backend engineer — ACME\n  note: {PROVISIONAL_LABEL}\n"
+
+    assert provisional_rankings_unlabelled([(ranking, smuggled)]) == 1
+
+
+def test_a_negative_limit_is_refused() -> None:
+    """`frontier[:-1]` drops the last offer and reports "0 more not shown"."""
+    offer = _offer()
+    ranking, explanations = _ranked([_candidate(offer, 3600.0, {"remote": 1.0})], None)
+    with pytest.raises(ValueError):
+        render(ranking, [offer], explanations=explanations, limit=-1)

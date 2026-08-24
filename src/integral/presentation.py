@@ -165,6 +165,10 @@ def render(
     render a shorter list than the ranking says it ranked, which is the one
     failure a page of offers must not be able to have quietly.
     """
+    if limit < 0:
+        # `frontier[:-1]` silently drops the last offer and reports "0 more not
+        # shown", which is a page that lies about its own completeness.
+        raise ValueError(f"limit must not be negative; got {limit}")
     by_id = {offer.id: offer for offer in offers}
     frontier = list(ranking["pareto"])
     # Checked over the whole frontier, not over the page. Validating only the
@@ -192,11 +196,19 @@ def render(
 def provisional_rankings_unlabelled(
     renderings: Sequence[tuple[Mapping[str, Any], str]],
 ) -> int:
-    """How many L1 pages were shown without saying they were provisional."""
+    """How many L1 pages were shown without saying they were provisional.
+
+    `startswith`, not `in`. The label is a header — `render` puts it first and
+    nowhere else — and a substring search over the whole page passes as soon as
+    any card happens to contain the sentence, in a title, an employer name, or
+    an evidence span quoted from an advert. That is not far-fetched for a
+    sentence about ranking on pay alone, and it would report an unlabelled
+    provisional page as labelled, which is the one thing this number is for.
+    """
     return sum(
         1
         for ranking, page in renderings
-        if ranking["level"] == "L1" and PROVISIONAL_LABEL not in page
+        if ranking["level"] == "L1" and not page.startswith(PROVISIONAL_LABEL)
     )
 
 
@@ -284,6 +296,16 @@ def _page(weights: Mapping[str, Any] | None) -> tuple[dict[str, Any], str]:
     return ranking, render(ranking, offers, explanations=explanations)
 
 
+def _bullet(page: str, name: str, card_index: int) -> str:
+    """The value of one named bullet on the `card_index`-th card of a page."""
+    values = [
+        line.split(":", 1)[1].strip()
+        for line in page.splitlines()
+        if line.strip().startswith(f"{name}:")
+    ]
+    return values[card_index]
+
+
 def measure() -> dict[str, Any]:
     """The gate's number, and proof it can rise."""
     provisional, provisional_page = _page(None)
@@ -304,14 +326,19 @@ def measure() -> dict[str, Any]:
         "rankings_rendered": 2,
         "provisional_rankings": 1,
         "renders_are_deterministic": int(_page(None)[1] == provisional_page),
-        # Not a count of unknown cells — a number like that is one the CLI
-        # cannot interpret, so recording it and asserting nothing is the shape
-        # of a gate that measures nothing. What is checkable is the property the
-        # fixture exists to exercise: one advert states its pay and location and
-        # the other states neither, so a correct page shows a filled bullet and
-        # an `unknown` one. `_main` fails when it does not.
-        "both_known_and_unknown_bullets_rendered": int(
-            UNKNOWN in weighted_page and "42,000" in weighted_page
+        # Named per field, not `UNKNOWN in page`. `hours` and `contract` are
+        # unconditionally unknown (§5.2 has no field for either), so a page-wide
+        # search for the word is true no matter what the salary and location
+        # cells do — and the property would keep passing while exactly the
+        # fields it is about stopped rendering. So each bullet is read off its
+        # own line, on the advert that states it and the one that does not.
+        "stated_bullets_render_their_value": int(
+            _bullet(weighted_page, "pay", 0) == "42,000 to 48,000 EUR/year"
+            and _bullet(weighted_page, "location", 0) == "Barcelona · full"
+        ),
+        "unstated_bullets_render_unknown": int(
+            _bullet(weighted_page, "pay", 1) == UNKNOWN
+            and _bullet(weighted_page, "location", 1) == UNKNOWN
         ),
     }
 
@@ -338,11 +365,13 @@ def _main(argv: list[str]) -> int:
     if not measured["renders_are_deterministic"]:
         print("rendering the same ranking twice produced different bytes", file=sys.stderr)
         return 1
-    if not measured["both_known_and_unknown_bullets_rendered"]:
+    if not measured["stated_bullets_render_their_value"]:
+        print("a bullet the advert states is no longer showing what it says", file=sys.stderr)
+        return 1
+    if not measured["unstated_bullets_render_unknown"]:
         print(
-            "the page no longer shows both a stated bullet and an `unknown` one — "
-            "'unknown is shown as unknown' is being measured on a page where "
-            "everything is one or the other",
+            "a bullet the advert does not state is no longer showing `unknown` — "
+            "an advert silent on it is not an advert promising anything about it",
             file=sys.stderr,
         )
         return 1
