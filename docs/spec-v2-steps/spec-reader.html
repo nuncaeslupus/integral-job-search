@@ -71,7 +71,7 @@ pre code{background:none;padding:0}
   padding-bottom:8px;margin:18px 0 8px;position:sticky;top:54px;background:var(--bg);z-index:10}
 .badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
   vertical-align:middle;padding:3px 7px;border-radius:6px;margin-right:8px}
-.badge.spec{background:var(--chip);color:var(--accent)}
+.badge.spec,.badge.plan{background:var(--chip);color:var(--accent)}
 .badge.workspace{background:var(--chip);color:var(--accent2)}
 .sec{padding:6px 0 2px;border-bottom:1px solid var(--line);scroll-margin-top:100px}
 .sec:last-child{border-bottom:none}
@@ -122,7 +122,7 @@ h4.sec-h{font-size:16.5px;color:var(--fg)}
 <body>
 <div class="topbar">
   <div class="wrap">
-    <div class="brand">Job Search — Specification v2 — Specification<small>annotatable reader · 2026-08-23</small></div>
+    <div class="brand">Job Search — Specification v2 — Specification<small>annotatable reader · 2026-08-24</small></div>
     <span class="savestate ok" id="savestate">✓ Auto-saving</span>
     <button class="btn primary" id="btn-export">Save / Export</button>
   </div>
@@ -180,7 +180,16 @@ in <code>integral.profile_capture</code> and had to be kept in sync by hand.</p>
 <p>Thirteen steps, each filling the template in <code>status/spec-v2-brief.md</code> §4 plus the
 two fields <code>spec-v2-process.md</code> §10 requires every step to carry. Nothing here
 re-decides the process: the step boundaries, the required/offered split, the
-inputs and outputs, the artefact classes and the manner rules are all inherited.</p></div>
+inputs and outputs, the artefact classes and the manner rules are all inherited.</p>
+<p><strong>Why the steps share one vocabulary</strong>, in the same words <code>status/specification.md</code>
+§1 uses: existing tools treat profiling, search, ranking and preparation as
+separate concerns with separate vocabularies, so the candidate's non-skill
+dimensions never survive the trip from questionnaire to ranked list; here a
+<strong>single dimension model is the shared vocabulary</strong> across every stage. And the
+dimensions are what make an iterative search steerable at all: knowing that this
+candidate weights remote arrangement above pay is what turns "search again" from a
+coin toss into a direction — search is the point of application, the dimension
+model is the mechanism.</p></div>
 <div class="note" data-for="s-spec-intro"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC · intro</span></div><textarea class="note-ta" data-key="s-spec-intro" data-label="Preamble &amp; scope" data-part="Spec V2 Steps" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
 <article class="sec" id="s-spec-how-to-read-a-step">
@@ -1193,7 +1202,7 @@ employer.</p></div>
   document.getElementById('btn-export').addEventListener('click',function(){
     var r=buildExport();
     if(r.n===0){toast('No notes yet — add some first.');return;}
-    var name='spec-notes-'+today()+'.md';
+    var name='job-search-specification-v2-spec-notes-'+today()+'.md';
     download(name,r.text);openModal(r.text);
     if(navigator.clipboard){navigator.clipboard.writeText(r.text).then(function(){},function(){});}
     dirty=false;setState('✓ Backup saved '+nowStamp(),'ok');
@@ -1206,7 +1215,7 @@ employer.</p></div>
     if(navigator.clipboard){navigator.clipboard.writeText(modalTa.value).then(function(){},function(){});ok=true;}
     toast(ok?'Copied to clipboard':'Select the text and copy');
   });
-  document.getElementById('modal-dl').addEventListener('click',function(){download('spec-notes-'+today()+'.md',modalTa.value);toast('Download started');});
+  document.getElementById('modal-dl').addEventListener('click',function(){download('job-search-specification-v2-spec-notes-'+today()+'.md',modalTa.value);toast('Download started');});
   document.getElementById('modal-close').addEventListener('click',closeModal);
   modal.addEventListener('click',function(e){if(e.target===modal)closeModal();});
 

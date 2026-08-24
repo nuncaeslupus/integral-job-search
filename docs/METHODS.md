@@ -48,6 +48,16 @@ the tool optimises for the thing fit actually predicts. It is not trying to find
 would be best at. It is trying to find the job you would still want in two years. Those are
 different objectives and conflating them is the failure mode this section exists to prevent.
 
+**The differentiator, in the same words `status/specification.md` §1 uses.** Existing tools
+treat profiling, search, ranking and preparation as separate concerns with separate
+vocabularies, so the candidate's non-skill dimensions never survive the trip from
+questionnaire to ranked list; here a **single dimension model is the shared vocabulary**
+across every stage. And the dimensions are what make an iterative search steerable at all:
+knowing that this candidate weights remote arrangement above pay is what turns "search
+again" from a coin toss into a direction — search is the point of application, the
+dimension model is the mechanism. `integral.spec_consistency` measures that this paragraph
+and its two siblings still say the same thing.
+
 ---
 
 ## 2. Techniques used

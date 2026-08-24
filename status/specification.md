@@ -21,7 +21,10 @@ candidate-side system in which a **single dimension model is the shared vocabula
 every stage — the questions asked, the evidence extracted from an ad, the ranking, the CV
 emphasis, the interview prep and the outcome analysis — so that adding a dimension once
 propagates everywhere, and so that "everything works toward the same goal" is enforced by
-construction rather than by discipline.
+construction rather than by discipline. And the dimensions are what make an iterative
+search steerable at all: knowing that this candidate weights remote arrangement above pay
+is what turns "search again" from a coin toss into a direction — search is the point of
+application, the dimension model is the mechanism.
 
 Scope for v1 is a **thin vertical slice** that touches every layer for one candidate, one
 market and one source. Later phases (application, outcome learning, recommendations,

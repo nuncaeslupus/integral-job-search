@@ -14,6 +14,16 @@ two fields `spec-v2-process.md` §10 requires every step to carry. Nothing here
 re-decides the process: the step boundaries, the required/offered split, the
 inputs and outputs, the artefact classes and the manner rules are all inherited.
 
+**Why the steps share one vocabulary**, in the same words `status/specification.md`
+§1 uses: existing tools treat profiling, search, ranking and preparation as
+separate concerns with separate vocabularies, so the candidate's non-skill
+dimensions never survive the trip from questionnaire to ranked list; here a
+**single dimension model is the shared vocabulary** across every stage. And the
+dimensions are what make an iterative search steerable at all: knowing that this
+candidate weights remote arrangement above pay is what turns "search again" from a
+coin toss into a direction — search is the point of application, the dimension
+model is the mechanism.
+
 ## How to read a step
 
 Twelve fields, in this order, every time:
