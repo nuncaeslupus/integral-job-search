@@ -295,3 +295,43 @@ def test_a_model_score_lands_in_the_extraction_marked_as_the_models() -> None:
     claimed = [s.provenance for s in result.scores]
     assert claimed == ["model"], "provenance is set here, not claimed by the model"
     assert result.unsettled == []
+
+
+# --- D-19: a vocabulary that reached nothing is not understanding -----------
+
+
+def test_an_extraction_that_settled_nothing_is_not_reported_as_read() -> None:
+    """The failure D-19 was filed for: 0 of 25 settled, and step 8 said coverage met.
+
+    The artefact is present — the step ran and wrote a file per offer — so
+    coverage counts it. What must not follow is the step being read as having
+    understood anything, and that refusal holds whether or not T56 has built the
+    acceptance gate.
+    """
+    from integral.step_gates import VOCABULARY_SILENT, checkpoint_exit
+
+    settled_nothing = {
+        "runnable": True,
+        "coverage_met": True,
+        "certifiable": True,
+        "vocabulary_settled": False,
+    }
+
+    assert checkpoint_exit(settled_nothing) == VOCABULARY_SILENT
+
+
+def test_every_supported_market_has_applicable_dimensions() -> None:
+    """Every `job_family` the corpus covers has at least one dimension that applies.
+
+    The market, not the advert, is the unit: 33 of 208 individual ads settle
+    nothing at the rules stage and that is ordinary — stage 3 asks a model for
+    the rest. A whole *family* with no applicable dimension is the D-19 defect,
+    and is what this refuses. `trades` is the family that case came from.
+    """
+    from integral.vocabulary_reach import market_reach
+
+    reach = market_reach()
+
+    assert reach, "the corpus reported no job families at all"
+    unreached = {family: row for family, row in reach.items() if row["applicable_dimensions"] == 0}
+    assert not unreached, f"markets with no applicable dimension: {unreached}"

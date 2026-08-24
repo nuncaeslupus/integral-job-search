@@ -204,6 +204,16 @@ def apply_states(
 #: nothing the checkpoint reported may be read as "this step passed".
 UNCERTIFIABLE = 3
 
+#: Exit code: coverage is met and the gate may even be built, but this candidate's
+#: extractions settled **no dimension at all**, so the vocabulary does not reach
+#: their market and nothing the step produced may be read as understanding (D-19).
+#:
+#: Its own code, for the reason `UNCERTIFIABLE` has one: reusing 3 would make "the
+#: gate nobody built" indistinguishable from "the gate is fine and the words do not
+#: fit this trade", and those need opposite fixes — one is owed by a task, the other
+#: by the dimension model.
+VOCABULARY_SILENT = 4
+
 
 def certifiable(step: Step) -> bool:
     """Whether a met checkpoint for `step` may be read as the step having passed.
@@ -239,6 +249,14 @@ def checkpoint_exit(result: Mapping[str, Any]) -> int:
     """
     if not result.get("runnable") or not result.get("coverage_met"):
         return 1
+    # Checked before certifiability, and only when the step computed it. A step
+    # that produces no extractions never sets the key and is unaffected; a step
+    # that does sets it to a real boolean, and `False` is a refusal that holds
+    # whether or not the acceptance gate exists. That independence is the point:
+    # step 8's gate is `not_implemented` today, so D-21 already keeps it off 0 —
+    # by accident. The day T56 builds that gate, this is what still refuses.
+    if result.get("vocabulary_settled") is False:
+        return VOCABULARY_SILENT
     return 0 if result.get("certifiable") else UNCERTIFIABLE
 
 

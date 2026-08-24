@@ -156,6 +156,40 @@ DETECTORS: dict[str, Detector] = {
 }
 
 
+def settled_extractions(view: ProfileView) -> tuple[int, int]:
+    """`(extractions that settled a dimension, extractions read)` for this candidate — D-19.
+
+    The `extractions` detector answers "is the artefact present", and a file
+    whose `scores` are empty is present. That is the seam D-19 found: for a
+    Barcelona construction worker the extractor settled **0 of 25** dimensions
+    on all seven adverts, wrote a file per offer, and step 8 reported coverage
+    met over a vocabulary that had matched nothing.
+
+    Presence and reach are kept apart rather than folded together, for D-21's
+    reason: an extraction that settled nothing is not a missing artefact — the
+    step ran and produced exactly what it had to say — so reporting it as absent
+    would read as "still working" instead of "this vocabulary does not cover
+    this market".
+
+    A payload that is not an object, or carries no `scores` key, is read but not
+    counted as settled. That is the honest reading of a file this step did not
+    write in its own shape.
+    """
+    directory = view.store.path("extractions")
+    if not directory.is_dir():
+        return (0, 0)
+    read = 0
+    settled = 0
+    for path in sorted(directory.glob("*.json")):
+        payload = view.json_at("extractions", path.name)
+        if not isinstance(payload, dict):
+            continue
+        read += 1
+        if payload.get("scores"):
+            settled += 1
+    return (settled, read)
+
+
 def present_artefacts(view: ProfileView, steps: StepList) -> set[str]:
     """Which artefacts this candidate has, external ones included.
 
