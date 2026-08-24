@@ -797,6 +797,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-c4b681d4",
+      "key": "cycles_neither_improving_nor_proposing",
+      "evidence": "status/evidence/T68.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "t-e1ca8374",
       "key": "unrecordable_task_gates",
       "evidence": "status/evidence/D12.json",

@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from integral.freshness import FreshnessError, Offer, exhaustion_offers
-from integral.sourcing_strategy import judge_cycle
+from integral.sourcing_strategy import ScopeAlternative, ScopeProposal, judge_cycle
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T63.json"
@@ -34,10 +34,21 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T63.json"
 #: never having fired — a pass over an empty probe rather than over a rule.
 MINIMUM_TRIGGERS = 2
 
-#: What a re-entry proposes, in the candidate's terms. A string here on purpose:
-#: T64 owns `ScopeProposal` and its symmetry rule, and this gate is about
-#: whether *a* proposal accompanies the trigger, not about its shape.
-_PROPOSAL = "widen: drop the country filter, or narrow to the two employers you read"
+#: What a re-entry proposes, in the candidate's terms. T64's type, wired in by
+#: T68 now that it exists — this gate is still only about whether *a* proposal
+#: accompanies the trigger, and T64's own gate owns its shape.
+_PROPOSAL = ScopeProposal(
+    direction="widen",
+    facet="country",
+    reason="the same eight adverts keep coming back — we could drop the country filter",
+    alternatives=(
+        ScopeAlternative(
+            direction="narrow",
+            facet="employer",
+            reason="or stay put and read only the two employers you opened in full",
+        ),
+    ),
+)
 
 
 def probe_reentry() -> dict[str, Any]:
@@ -61,7 +72,7 @@ def probe_reentry() -> dict[str, Any]:
         if not made:
             stuck.append(f"cycle {cycle.cycle} was exhausted and offered no re-entry at all")
         for offer in made:
-            if not (offer.proposal or "").strip():
+            if offer.proposal is None:
                 stuck.append(f"cycle {cycle.cycle} re-entered with no proposal")
             if offer.step != "sourcing":
                 other.append(f"cycle {cycle.cycle} re-entered {offer.step} rather than sourcing")

@@ -59,7 +59,7 @@ from integral.process_spec import StepList, load_steps
 from integral.profile import EvidenceLog
 from integral.revision import stale_artefacts
 from integral.session import SessionStore
-from integral.sourcing_strategy import Exhaustion
+from integral.sourcing_strategy import Exhaustion, ScopeProposal
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T36.json"
@@ -91,18 +91,17 @@ class Offer:
     subject: str
     says: str
     reason: str = ""
-    # ponytail: a string stands in for T64's `ScopeProposal` (§5.4). What
-    # re-entry needs here is only *that* a proposal accompanies the trigger;
-    # T64 replaces the annotation with the typed, symmetric-by-construction
-    # thing and nothing else in this module changes.
-    proposal: str | None = None
+    #: T64's `ScopeProposal` (§5.4) — symmetric by construction, so a re-entry
+    #: cannot suggest narrowing without in the same breath offering somewhere
+    #: wider to go. T63 held a string here because the type did not exist yet.
+    proposal: ScopeProposal | None = None
 
     def __post_init__(self) -> None:
         if self.kind != "exhausted":
             return
         if not self.reason.strip():
             raise FreshnessError("an exhaustion with no reason is a violation, not a trigger")
-        if not (self.proposal or "").strip():
+        if self.proposal is None:
             raise FreshnessError(
                 "an exhausted step re-entered with no proposal — that is re-running "
                 "the same search because it returned the same jobs"
@@ -242,7 +241,7 @@ def gap_offers(store: ProfileStore, *, steps: StepList | None = None) -> list[Of
     return found
 
 
-def exhaustion_offers(exhaustion: Exhaustion, *, proposal: str | None) -> list[Offer]:
+def exhaustion_offers(exhaustion: Exhaustion, *, proposal: ScopeProposal | None) -> list[Offer]:
     """The sourcing cycle keeps finding the same jobs (§5.3, the fourth row).
 
     Fires on `Exhaustion.exhausted` and on nothing else — no clock is read, so
@@ -283,7 +282,7 @@ def offers(
     elapsed_days: int = DEFAULT_ELAPSED_DAYS,
     steps: StepList | None = None,
     exhaustion: Exhaustion | None = None,
-    proposal: str | None = None,
+    proposal: ScopeProposal | None = None,
 ) -> list[Offer]:
     """Everything the tool noticed, minus what the candidate has waved away.
 
