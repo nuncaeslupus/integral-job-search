@@ -167,7 +167,7 @@ candidate's life nobody asked about — and uses what it learns to search differ
 ## 4. Recommendation
 
 **Option 2 now; Option 3 as its own task immediately after, gated on the exhaustion signal
-having been observed to be right.**
+having been observed to be right.** *Confirmed in review (2026-08-24): 2, then 3.*
 
 Option 1 alone is not worth shipping by itself: a graph edge nobody traverses is
 documentation, not a feature. Option 2 is the thing the candidate described — the tool
@@ -191,20 +191,33 @@ what the candidate has taught the system.
 
 ### Open questions
 
-1. **What exactly is exhaustion?** Candidates: a cycle whose rejection rate failed to
-   improve on the previous one; a cycle where one rejection reason accounts for most
-   rejections; a cycle returning offers largely deduped against ones already seen. The
-   third is the cheapest and the most robust — "we are finding the same jobs again" needs
-   no preference model at all — and may be the right first version.
-2. **How often may the tool speak?** Unbounded proposals are nagging; too few and it never
-   steers. A proposal is licensed by a trigger, so the real question is the trigger's
-   sensitivity, and it cannot be set without a real cycle to observe.
-3. **Does a scope decision expire?** A candidate who agreed to focus on US employers in
-   March has not agreed to that in September. §5.2's freshness triggers are the natural
-   mechanism, but a decision's staleness is not obviously the same clock as a fact's.
-4. **What does the tool do with a refused proposal?** *"No, keep it broad"* is itself
-   evidence about the candidate and should be recorded — but it must not become a reason to
-   ask again next cycle in different words.
+1. **What exactly is exhaustion?** **Settled in review: the third — "we are finding the
+   same jobs again".** A cycle whose offers largely dedupe against ones already seen, or
+   that returns nothing of interest. It needs no preference model, no fitted weights and no
+   rejection history, so it works on a candidate's first afternoon as well as their tenth,
+   and `integral.dedup` already computes the hard part. The rejection-rate and
+   single-reason variants remain available as refinements once there is a cycle to
+   calibrate them against.
+2. **How often may the tool speak?** **Partly settled: observe it, and start from common
+   sense.** A proposal is licensed by a trigger, so the question is the trigger's
+   sensitivity, and the honest answer is that it cannot be tuned before there is a cycle to
+   watch. The design should make the threshold a named constant carrying its reasoning
+   rather than a tuned number pretending to be evidence — the shape `weights.MAX_CHOICES`
+   and `harness.EVALUATION_SHARE` already use.
+3. **Does a scope decision expire?** **Settled in review: not on a clock — it is
+   re-surfaced.** When the candidate returns they are shown a summary of what the system
+   holds about them, scope decisions included, and can correct it. Better than an expiry,
+   because a decision does not become wrong after N days — it becomes wrong when the
+   candidate's situation changes, and only they know when that was. Step 0 already opens
+   with *"last time we were partway through your work history"*; this extends that opening
+   from position to substance. It also makes the standing scope visible, which the consent
+   gate needs: consent nobody can review is not consent.
+4. **What does the tool do with a refused proposal?** **Settled in review: record it, and
+   re-asking later is allowed.** A refusal is evidence about the candidate and is not
+   permanent — circumstances change and so does the offer pool. What it must not become is
+   the same question next cycle in different words, so the design owes a rule for *when* a
+   refused proposal may return: a changed trigger, new evidence, or a new session, never
+   simply the next cycle.
 5. **Does an exhausted search ever mean "there is no job for you right now"?**
    **Settled in review: yes, and the tool must be able to say it.** Every option above
    otherwise assumes a better search exists, and a tool that cannot report an empty market
@@ -212,8 +225,21 @@ what the candidate has taught the system.
    which is worse than silence because the candidate acts on it. This needs a gate of its
    own, because "no result" is the outcome a tool is most tempted to dress up:
    `exhausted_searches_reported_as_a_scope_change == 0`. It also needs a shape — what the
-   tool says, what it offers next (wait and retry on a stated schedule; relax a hard
-   constraint the candidate may not want relaxed; stop), and how it distinguishes "the
-   market has nothing this month" from "we have looked in the wrong place", which are
-   opposite diagnoses with opposite remedies. That distinction is design work, not a
-   threshold.
+   tool says, what it offers next, and how it distinguishes "the market has nothing this
+   month" from "we have looked in the wrong place" — opposite diagnoses with opposite
+   remedies.
+
+   **Settled in review: the conversation says so, and the signal is exhaustion that
+   survives steering.** One stale cycle means look elsewhere. Repeated cycles returning the
+   same or similar adverts *after the scope has been both broadened and narrowed* mean the
+   market is the problem rather than the search — the distinction above, reached by having
+   tried the remedy for the other diagnosis and watched it fail. The candidate's own words
+   for what the tool should then say:
+
+   > "It looks it's not a good day to find jobs. Do you want to leave it for today and try
+   > again tomorrow or next week?"
+
+   Note what that offers: a **time**, not a compromise. The alternative — proposing to
+   relax a hard constraint because nothing was found — asks the candidate to want a
+   different job than the one they want, and it is the move a tool reaches for when it
+   cannot admit an empty result.
