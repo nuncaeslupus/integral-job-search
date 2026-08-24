@@ -114,6 +114,9 @@ from pydantic import Field
 
 from integral.offers import Offer, Strict
 
+# §4.6's site: the two-pass shingled Jaccard score, and §4.4's `dedup_precision`.
+METHODS_REF = "METHODS.md#46-near-duplicate-detection--shingled-jaccard-similarity"
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T13.json"
 

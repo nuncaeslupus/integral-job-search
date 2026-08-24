@@ -73,6 +73,15 @@ from integral.dimensions import (
 from integral.harness import DEFAULT_STORE_PATH, Label, LabelledAd, load_store
 from integral.offers import Offer
 
+# §4.1's site: `cue_findings` is where an advert's evidence items become one
+# dimension score. The register writes that mean as weighted by extraction
+# confidence; a cue hit carries no per-item confidence, so here the weights are
+# equal and the formula degenerates to the arithmetic mean. Same formula, one
+# input the rules stage cannot supply — stage 3's model scores are where a real
+# confidence would enter, and the ref is declared so that divergence is visible
+# from the register rather than only from this comment.
+METHODS_REF = "METHODS.md#41-dimension-score--weighted-mean"
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T15.json"
 DEFAULT_NEGATION_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T16.json"

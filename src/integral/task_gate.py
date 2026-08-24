@@ -42,6 +42,12 @@ from typing import Any
 
 from integral.taskboard import DEFAULT_HISTORY_DIR, DEFAULT_TASKS_DIR, load_board
 
+# §4.4's site. The register's §4.4 is a table of metrics rather than one formula,
+# and each metric is computed by the module that owns it — but the comparison
+# that turns any of them into a pass, a fail or an `unmeasured` happens here,
+# once, so this is the one place the table as a whole is implemented.
+METHODS_REF = "METHODS.md#44-gate-metrics"
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D12.json"
 
