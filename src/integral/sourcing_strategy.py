@@ -161,7 +161,11 @@ class ScopeProposal(Strict):
     direction: Literal["widen", "narrow"]
     facet: str
     reason: str
-    alternatives: list[ScopeAlternative]  # never empty, and never all one direction
+    # A tuple, not a list: `Strict` is frozen, but a frozen model still hands out a
+    # mutable list, so `proposal.alternatives.clear()` could strip the opposite
+    # direction back off after validation had passed. The invariant is meant to be
+    # unbreakable in the type rather than merely checked once.
+    alternatives: tuple[ScopeAlternative, ...]  # never empty, never all one direction
 
     @model_validator(mode="after")
     def _the_offer_points_both_ways(self) -> ScopeProposal:
@@ -189,7 +193,7 @@ def probe_scope_proposals() -> dict[str, Any]:
                 "you read both of Acme's adverts end to end and skipped the other six — "
                 "we could look only at employers like them"
             ),
-            alternatives=[
+            alternatives=(
                 ScopeAlternative(
                     direction="widen",
                     facet="country",
@@ -200,7 +204,7 @@ def probe_scope_proposals() -> dict[str, Any]:
                     facet="stack",
                     reason="or narrow on the Rust postings instead of on the employer",
                 ),
-            ],
+            ),
         ),
         ScopeProposal(
             direction="widen",
@@ -209,13 +213,13 @@ def probe_scope_proposals() -> dict[str, Any]:
                 "cycle 3 returned the same eight adverts you have already seen — "
                 "dropping the floor by five thousand would open about forty more"
             ),
-            alternatives=[
+            alternatives=(
                 ScopeAlternative(
                     direction="narrow",
                     facet="seniority",
                     reason="or hold the floor and look only at the senior postings that clear it",
                 ),
-            ],
+            ),
         ),
     ]
     failures = [
@@ -236,13 +240,13 @@ def probe_scope_proposals() -> dict[str, Any]:
             direction="narrow",
             facet="employer",
             reason="you read both of Acme's adverts end to end",
-            alternatives=[
+            alternatives=(
                 ScopeAlternative(
                     direction="narrow",
                     facet="stack",
                     reason="or narrow on the Rust postings instead",
                 ),
-            ],
+            ),
         )
     except ValidationError:
         rejected = True

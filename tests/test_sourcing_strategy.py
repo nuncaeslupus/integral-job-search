@@ -106,7 +106,7 @@ def test_the_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
 # --- T64: symmetric scope proposals — §5.4 ---------------------------------
 
 
-def _narrowing_to_one_employer(alternatives: list[ScopeAlternative]) -> ScopeProposal:
+def _narrowing_to_one_employer(alternatives: tuple[ScopeAlternative, ...]) -> ScopeProposal:
     return ScopeProposal(
         direction="narrow",
         facet="employer",
@@ -120,7 +120,7 @@ def test_a_proposal_offering_only_narrowing_is_rejected() -> None:
     # suggestion three times, and the candidate has nothing to say no to.
     with pytest.raises(ValidationError):
         _narrowing_to_one_employer(
-            [
+            (
                 ScopeAlternative(
                     direction="narrow",
                     facet="stack",
@@ -131,11 +131,11 @@ def test_a_proposal_offering_only_narrowing_is_rejected() -> None:
                     facet="seniority",
                     reason="you skipped both junior postings",
                 ),
-            ]
+            )
         )
     # …and offering nothing at all is not an improvement on offering one direction.
     with pytest.raises(ValidationError):
-        _narrowing_to_one_employer([])
+        _narrowing_to_one_employer(())
 
 
 def test_a_widening_is_proposable_when_the_search_is_too_focused() -> None:
@@ -146,13 +146,13 @@ def test_a_widening_is_proposable_when_the_search_is_too_focused() -> None:
             "cycle 3 returned the same eight Madrid adverts you have already seen — "
             "the search has run out of road where it is looking"
         ),
-        alternatives=[
+        alternatives=(
             ScopeAlternative(
                 direction="narrow",
                 facet="employer",
                 reason="or stay here and read only the two employers you opened in full",
-            )
-        ],
+            ),
+        ),
     )
     assert proposal.direction == "widen"
     assert [alt.direction for alt in proposal.alternatives] == ["narrow"]
@@ -175,11 +175,11 @@ def test_every_proposal_states_its_reason_in_candidate_terms() -> None:
             direction="narrow",
             facet="employer",
             reason="  ",
-            alternatives=[
+            alternatives=(
                 ScopeAlternative(
                     direction="widen", facet="country", reason="or look further out"
-                )
-            ],
+                ),
+            ),
         )
 
 
@@ -190,6 +190,31 @@ def test_an_alternative_cannot_carry_alternatives_of_its_own() -> None:
     with pytest.raises(ValidationError):
         ScopeAlternative.model_validate(
             {"direction": "widen", "facet": "country", "reason": "further out", "alternatives": []}
+        )
+
+
+def test_the_alternatives_cannot_be_emptied_after_validation() -> None:
+    # `Strict` is frozen, which stops rebinding the field but not mutating what it
+    # holds. A list would let the opposite direction be stripped back off once the
+    # validator had passed, which is the whole invariant — so it is a tuple.
+    proposal = ScopeProposal(
+        direction="narrow",
+        facet="employer",
+        reason="you read both of their adverts end to end",
+        alternatives=(
+            ScopeAlternative(
+                direction="widen",
+                facet="country",
+                reason="or look outside Spain as well",
+            ),
+        ),
+    )
+    assert isinstance(proposal.alternatives, tuple)
+    with pytest.raises(AttributeError):
+        proposal.alternatives.clear()  # type: ignore[attr-defined]
+    with pytest.raises(ValidationError):
+        ScopeProposal.model_validate(
+            {**proposal.model_dump(), "alternatives": []},
         )
 
 
