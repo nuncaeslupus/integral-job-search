@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Iterative sourcing — Specification (annotatable)</title>
+<style>
+:root{
+  --bg:#fbfaf7;--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;
+  --card:#ffffff;--accent:#0f766e;--accent2:#b45309;--chip:#eef2f1;
+  --note:#fff8ec;--note-line:#f0cf94;--code:#f3f1ec;--link:#0f766e;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#16151a;--fg:#e9e7e2;--muted:#a09c95;--line:#2e2c33;
+    --card:#1e1d23;--accent:#5eead4;--accent2:#fbbf24;--chip:#26313055;
+    --note:#251f10;--note-line:#6b531c;--code:#26242b;--link:#5eead4;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:17px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding-bottom:96px;
+}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+a{color:var(--link)}
+code{background:var(--code);padding:.08em .35em;border-radius:5px;font-size:.86em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+pre{background:var(--code);padding:12px;border-radius:8px;overflow:auto}
+pre code{background:none;padding:0}
+.topbar{position:sticky;top:0;z-index:30;background:var(--bg);
+  border-bottom:1px solid var(--line);backdrop-filter:saturate(120%) blur(6px)}
+.topbar .wrap{display:flex;align-items:center;gap:8px;padding-top:10px;padding-bottom:10px}
+.brand{font-weight:700;font-size:16px;margin-right:auto;letter-spacing:.2px}
+.brand small{font-weight:500;color:var(--muted);display:block;font-size:11px;letter-spacing:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--fg);
+  border-radius:9px;padding:8px 11px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media(prefers-color-scheme:dark){.btn.primary{color:#06201d}}
+.count{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:600}
+.savestate{font-size:12px;font-weight:700;white-space:nowrap;transition:color .2s}
+.savestate.ok{color:var(--accent)}
+.savestate.warn{color:#b45309}
+@media(prefers-color-scheme:dark){.savestate.warn{color:#fbbf24}}
+.statusbar{border-bottom:1px solid var(--line);background:var(--card)}
+.statusbar .wrap{padding:7px 16px;font-size:12px;color:var(--muted)}
+#warnbar{display:none;background:#fff4e5;border-bottom:1px solid var(--note-line);color:#7c2d12}
+#warnbar .wrap{padding:10px 16px;font-size:13px;line-height:1.45}
+@media(prefers-color-scheme:dark){#warnbar{background:#3a2a0e;color:#fde68a;border-color:#6b531c}}
+.hero{padding:22px 0 6px}
+.hero h1{font-size:25px;line-height:1.2;margin:.1em 0 .3em}
+.hero p{color:var(--muted);margin:.3em 0}
+.help{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.help summary{cursor:pointer;font-weight:600;padding:10px 0}
+.help ul{margin:.2em 0 1em;padding-left:1.2em}
+.help li{margin:.3em 0}
+.toc{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.toc>summary{cursor:pointer;font-weight:700;padding:11px 0;font-size:15px}
+.toc-part{margin:2px 0;border-top:1px solid var(--line)}
+.toc-part>summary{cursor:pointer;padding:9px 2px;font-weight:600;font-size:14px}
+.toc-part ul{margin:.1em 0 .7em;padding-left:1.1em}
+.toc-part li{margin:.22em 0;font-size:13.5px;line-height:1.4}
+.toc-part a{text-decoration:none}
+.toc-part a:hover{text-decoration:underline}
+.part{margin:26px 0}
+.part-title{font-size:21px;line-height:1.25;border-bottom:2px solid var(--accent);
+  padding-bottom:8px;margin:18px 0 8px;position:sticky;top:54px;background:var(--bg);z-index:10}
+.badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  vertical-align:middle;padding:3px 7px;border-radius:6px;margin-right:8px}
+.badge.spec,.badge.plan{background:var(--chip);color:var(--accent)}
+.badge.workspace{background:var(--chip);color:var(--accent2)}
+.sec{padding:6px 0 2px;border-bottom:1px solid var(--line);scroll-margin-top:100px}
+.sec:last-child{border-bottom:none}
+.sec-h{margin:10px 0 6px;line-height:1.3;position:sticky;top:94px;background:var(--bg);z-index:5;padding-top:6px}
+h3.sec-h{font-size:18.5px}
+h4.sec-h{font-size:16.5px;color:var(--fg)}
+.chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;
+  color:var(--accent);background:var(--chip);border-radius:6px;padding:2px 7px;margin-right:8px;vertical-align:middle}
+.sec-title{vertical-align:middle}
+.sec-body{margin:.2em 0 .4em}
+.sec-body p{margin:.55em 0}
+.sec-body ul,.sec-body ol{margin:.5em 0;padding-left:1.35em}
+.sec-body li{margin:.3em 0}
+.sec-body blockquote{margin:.7em 0;padding:.5em .9em;border-left:3px solid var(--accent2);
+  background:var(--code);border-radius:0 8px 8px 0;color:var(--fg)}
+.sec-body blockquote p{margin:.3em 0}
+.sec-body table{border-collapse:collapse;width:100%;font-size:13.5px;margin:.6em 0;display:block;overflow-x:auto}
+.sec-body th,.sec-body td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+.sec-body th{background:var(--chip);font-weight:700}
+.sec-body strong{font-weight:700}
+.note{background:var(--note);border:1px solid var(--note-line);border-radius:10px;
+  padding:8px 11px;margin:10px 0 16px}
+.note-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.note-ico{color:var(--accent2);font-weight:800}
+.note-label{font-size:12px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.05em}
+.note-ref{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted)}
+.note-ta{width:100%;border:none;background:transparent;color:var(--fg);font:inherit;font-size:15.5px;
+  resize:none;outline:none;line-height:1.5;padding:2px 0;overflow:hidden;min-height:1.6em}
+.note-ta::placeholder{color:var(--muted);opacity:.8}
+.note.filled{box-shadow:0 0 0 2px var(--note-line) inset}
+.fab{position:fixed;right:14px;bottom:16px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.fab .btn{box-shadow:0 4px 14px #0003}
+.modal{position:fixed;inset:0;z-index:60;background:#0008;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.modal-card{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;
+  max-height:86vh;display:flex;flex-direction:column;padding:16px}
+.modal-card h3{margin:.1em 0 .5em}
+.modal-card p{color:var(--muted);font-size:13.5px;margin:.2em 0 .6em}
+.modal-card textarea{width:100%;flex:1;min-height:220px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,Menlo,monospace;padding:10px;resize:vertical}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hidden-input{display:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:70;background:#111;color:#fff;
+  padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:.96}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">Iterative sourcing — Specification<small>annotatable reader · 2026-08-24</small></div>
+    <span class="savestate ok" id="savestate">✓ Auto-saving</span>
+    <button class="btn primary" id="btn-export">Save / Export</button>
+  </div>
+</div>
+<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 15 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
+<div id="warnbar"><div class="wrap"><strong>Heads up —</strong> this browser isn't storing your notes automatically (private/incognito mode or restricted file view). Tap <strong>Save / Export</strong> regularly.</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Iterative sourcing specification</h1>
+    <p>Read at your own pace and leave a note on any point you want to discuss.</p>
+  </div>
+  <details class="help">
+    <summary>How to annotate (tap)</summary>
+    <ul>
+      <li>Tap the note field under any section and type. Each note is tagged so your feedback maps to an exact point.</li>
+      <li><strong>Notes save automatically</strong> in this browser as you type.</li>
+      <li><strong>Save / Export</strong> downloads a Markdown file of your notes — the copy to send back. Tap whenever you pause, especially on a phone.</li>
+      <li><strong>Import</strong> reloads notes from a file you exported earlier (after clearing the browser or switching devices).</li>
+      <li><strong>Clear</strong> erases every note in this browser. Export first.</li>
+    </ul>
+  </details>
+  <details class="toc" open><summary>Contents</summary>
+<details class="toc-part">
+<summary>Iterative Sourcing</summary><ul>
+<li><a href="#s-spec-intro">Preamble &amp; scope</a></li>
+<li><a href="#s-spec-1">§1 Problem statement</a></li>
+<li><a href="#s-spec-success-criteria-measurable">Success criteria (measurable)</a></li>
+<li><a href="#s-spec-the-amendment-this-implies-to-st">The amendment this implies to status/specification.md §1</a></li>
+<li><a href="#s-spec-2">§2 Systems &amp; Impact</a></li>
+<li><a href="#s-spec-dependency-map">Dependency map</a></li>
+<li><a href="#s-spec-impact-assessment">Impact assessment</a></li>
+<li><a href="#s-spec-3">§3 Options</a></li>
+<li><a href="#s-spec-option-1-widen-step-7-s-inputs-a">Option 1 — Widen step 7's inputs, and nothing else</a></li>
+<li><a href="#s-spec-option-2-the-loop-plus-the-strat">Option 2 — The loop plus the strategy conversation (recommended)</a></li>
+<li><a href="#s-spec-option-3-option-2-plus-re-entry">Option 3 — Option 2, plus re-entry into profile steps</a></li>
+<li><a href="#s-spec-comparison">Comparison</a></li>
+<li><a href="#s-spec-4">§4 Recommendation</a></li>
+<li><a href="#s-spec-immediate-next-action">Immediate next action</a></li>
+<li><a href="#s-spec-open-questions">Open questions</a></li>
+</ul></details>
+</details>
+  <section class="part">
+<h2 class="part-title"><span class="badge spec">Specification</span>Iterative Sourcing</h2>
+<article class="sec" id="s-spec-intro">
+<h3 class="sec-h"><span class="chip">overview</span><span class="sec-title">Preamble &amp; scope</span></h3>
+<div class="sec-body"><p>Feature spec, 2026-08-24. Amends the process spec. Sections 1–4 (<code>specify</code>); 5–6 are
+<code>design</code>'s to append. Companion to <code>preference-directed-sourcing.md</code> (#154), which this
+supersedes in scope: that spec proposes a second directed <em>pass</em>, this one makes the pass
+a <em>cycle</em> and gives the tool a voice in steering it.</p></div>
+<div class="note" data-for="s-spec-intro"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC · intro</span></div><textarea class="note-ta" data-key="s-spec-intro" data-label="Preamble &amp; scope" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-1">
+<h3 class="sec-h"><span class="chip">§1</span><span class="sec-title">Problem statement</span></h3>
+<div class="sec-body"><p>The process graph is already a loop and says so. <code>integral.step_graph</code>: <em>"No acyclicity
+check, deliberately. Feedback (10) produces reaction evidence that Preferences (6) reads,
+whose weights Ranking (9) reads, whose ranking Feedback reads — the loop is the product,
+not a defect in the graph."</em></p>
+<p><strong>Sourcing is outside that loop.</strong> §3.1's graph declares:</p>
+<pre><code>7  sourcing      → offers/*.json                [reads: constraints.json]
+</code></pre>
+<p>Step 7 reads the constraints and nothing else. Constraints are settled at step 2, before
+the candidate has seen a single advert. So the offer set is fixed by the least-informed
+moment in the process, and everything learned afterwards — fitted weights, reactions,
+feedback, outcomes, the whole point of steps 5, 6 and 10 — can re-rank and re-weight that
+fixed set forever without ever being able to go and look somewhere else.</p>
+<p>The first blind sitting measured the cost: of twenty adverts, one was worth applying to.
+The ranking ordered exactly the list it was handed. <strong>No amount of re-ranking reaches
+that</strong>, because the list is the input to ranking, not its output.</p>
+<p>Two mechanisms are missing, not one:</p>
+<ul>
+<li><strong>The tool cannot notice it is stuck.</strong> §5.2's freshness triggers (T36) already license
+  re-entering a finished step, and already require it to <em>say why</em> — but they fire on
+  <strong>staleness</strong>, elapsed time since something was recorded. "This search keeps returning
+  offers you reject for the same reason" is not staleness. Nothing computes it.</li>
+<li><strong>The tool cannot propose a change of scope.</strong> A search that is too narrow and one that
+  is too broad fail differently and are fixed in opposite directions, and choosing between
+  them is a judgement about the candidate's situation — exactly the judgement a
+  conversation is for. Today step 7 has no way to say anything at all.</li>
+</ul>
+<p>This is what a person does when they job-hunt: search, read some, notice the results have
+gone stale or gone wrong, change what they are searching for, go again. The product
+already promises the candidate a conversation. It does not currently have one about the
+only decision that determines what they get to choose between.</p></div>
+<div class="note" data-for="s-spec-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §1</span></div><textarea class="note-ta" data-key="s-spec-1" data-label="§1 Problem statement" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-success-criteria-measurable">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Success criteria (measurable)</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Threshold</th>
+<th>Why this number</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sourcing_inputs_excluding_learned_evidence</code></td>
+<td><code>== 0</code></td>
+<td>Step 7's declared inputs include the weights and the reaction/outcome evidence, in <strong>both</strong> §3.1's prose and <code>spec-v2-steps.json</code>. <code>step_graph.drift_violations</code> already fails when the two disagree, so this cannot be half-done.</td>
+</tr>
+<tr>
+<td><code>narrowings_without_a_recorded_decision</code></td>
+<td><code>== 0</code></td>
+<td>A cycle may narrow onto one employer, one country, one stack — <strong>when the candidate chose it</strong>. The failure is the algorithm quietly shrinking the world while nobody notices. Consent is the discriminator, so consent is what is counted.</td>
+</tr>
+<tr>
+<td><code>scope_proposals_offering_only_narrowing</code></td>
+<td><code>== 0</code></td>
+<td>The guide must be able to say <em>"we are too focused, shall we widen?"</em>. A tool that only ever proposes narrowing is a machine for confirming whatever the candidate said first.</td>
+</tr>
+<tr>
+<td><code>stuck_cycles_without_a_proposal</code></td>
+<td><code>== 0</code></td>
+<td>When a cycle meets the exhaustion condition, the tool proposes a change of scope rather than running the same search again.</td>
+</tr>
+<tr>
+<td><code>exhaustion_triggers_without_a_reason</code></td>
+<td><code>== 0</code></td>
+<td>Mirrors what §5.2 already demands of freshness triggers: a trigger that fires without saying why is indistinguishable from a bug.</td>
+</tr>
+<tr>
+<td><code>cycle_rejection_rate</code></td>
+<td>strictly decreasing across a candidate's cycles, or the cycle proposes a scope change</td>
+<td>Each search must be better than the last. Where it is not, that <em>is</em> the exhaustion condition — so this metric and the trigger are the same measurement read twice.</td>
+</tr>
+</tbody>
+</table>
+<p>All within-subject. There is no central store, no cross-candidate comparison, and neither
+is sought.</p></div>
+<div class="note" data-for="s-spec-success-criteria-measurable"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Success criteria (measurable)</span></div><textarea class="note-ta" data-key="s-spec-success-criteria-measurable" data-label="Success criteria (measurable)" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-the-amendment-this-implies-to-st">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">The amendment this implies to <code>status/specification.md</code> §1</span></h4>
+<div class="sec-body"><p>§1 currently argues the differentiator is that the candidate's non-skill dimensions survive
+the trip from questionnaire to ranked list. That stays true and stays the mechanism. What
+it omits is where the mechanism pays off: <strong>the dimensions are what make an iterative
+search steerable at all.</strong> Knowing that this candidate weights remote arrangement above pay
+is what turns "search again" from a coin toss into a direction.</p>
+<p>So §1 gains a sentence, and does not lose one. Search is the point of application; the
+dimension model is the mechanism. Replacing the model with search would describe a tool
+that already exists and that §1 exists to distinguish this one from.</p></div>
+<div class="note" data-for="s-spec-the-amendment-this-implies-to-st"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › The amendment this implies to status/specification.md §1</span></div><textarea class="note-ta" data-key="s-spec-the-amendment-this-implies-to-st" data-label="The amendment this implies to status/specification.md §1" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2">
+<h3 class="sec-h"><span class="chip">§2</span><span class="sec-title">Systems &amp; Impact</span></h3>
+<div class="note" data-for="s-spec-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2</span></div><textarea class="note-ta" data-key="s-spec-2" data-label="§2 Systems &amp; Impact" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-dependency-map">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Dependency map</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>System</th>
+<th>Role</th>
+<th>Needs change?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>status/spec-v2-process.md</code> §3.1</td>
+<td>The prose step graph; step 7's <code>reads</code> list</td>
+<td><strong>Yes</strong> — the edit at the centre of this spec</td>
+</tr>
+<tr>
+<td><code>status/spec-v2-steps.json</code></td>
+<td>The machine-readable graph</td>
+<td><strong>Yes</strong> — in the same commit, or <code>drift_violations</code> fails</td>
+</tr>
+<tr>
+<td><code>integral.step_graph</code></td>
+<td><code>closure_violations</code>, <code>unproduced_inputs</code>, <code>drift_violations</code></td>
+<td>Validation — the gates that keep the two in step</td>
+</tr>
+<tr>
+<td><code>integral.spec_consistency</code> (D-3)</td>
+<td>Three documents agreeing on what the product is</td>
+<td><strong>Yes</strong> — §1's amendment must reach every document that states it</td>
+</tr>
+<tr>
+<td><code>status/specification.md</code> §1</td>
+<td>The product's argument</td>
+<td><strong>Yes</strong> — one sentence</td>
+</tr>
+<tr>
+<td><code>integral.step_runtime</code></td>
+<td><code>offered</code>, <code>is_finished</code>, <code>decide_resumption</code></td>
+<td><strong>Yes</strong> — a finished step 7 must become offerable again on exhaustion</td>
+</tr>
+<tr>
+<td><code>integral.freshness</code> (T36)</td>
+<td>Re-entry triggers, each carrying its reason</td>
+<td><strong>Yes</strong> — a new trigger kind: exhaustion, not staleness</td>
+</tr>
+<tr>
+<td><code>integral.sourcing_strategy</code> (#154, unbuilt)</td>
+<td>The directed pass</td>
+<td><strong>Yes</strong> — becomes a cycle rather than a second pass</td>
+</tr>
+<tr>
+<td><code>step-07-sourcing</code>, <code>step-10-feedback</code> skills</td>
+<td>What the tool actually says</td>
+<td><strong>Yes</strong> — the strategy conversation lives here</td>
+</tr>
+<tr>
+<td>Profile evidence log</td>
+<td>Where the decision and its reason are recorded</td>
+<td>Read/write — a scope decision is candidate evidence like any other</td>
+</tr>
+<tr>
+<td><code>integral.dedup</code>, <code>robots</code>, <code>lifecycle</code></td>
+<td>Repeat cycles re-fetch</td>
+<td>Validation only</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-dependency-map"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Dependency map</span></div><textarea class="note-ta" data-key="s-spec-dependency-map" data-label="Dependency map" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-impact-assessment">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Impact assessment</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Severity</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data</td>
+<td><strong>Medium</strong></td>
+<td>Scope decisions and exhaustion triggers are new evidence rows. Nothing is schema-breaking; the log already carries <code>about</code> and a reason.</td>
+</tr>
+<tr>
+<td>API</td>
+<td><strong>Medium</strong></td>
+<td>Step 7's declared inputs change, which is a graph change two gates check. No runtime contract breaks.</td>
+</tr>
+<tr>
+<td>Performance</td>
+<td><strong>Medium</strong></td>
+<td>Cycles multiply fetches. <code>robots</code> and rate limits are unchanged, so the ceiling is courtesy.</td>
+</tr>
+<tr>
+<td>User</td>
+<td><strong>High</strong> — intended</td>
+<td>The candidate is asked to steer. Done well this is the product; done badly it is an interrogation, and the difference is how often the tool speaks and how good its proposals are.</td>
+</tr>
+<tr>
+<td>Operational</td>
+<td>Low</td>
+<td>Runs in the candidate's own session.</td>
+</tr>
+<tr>
+<td><strong>Anchoring</strong></td>
+<td><strong>High</strong></td>
+<td>New, and specific to this change. A conversational guide is the most anchoring surface this product has — more than a ranking, far more than a card. <code>blind_ranking_leaks</code>, D-2 and the elicitation/evaluation split all exist because anchoring is this system's characteristic failure, and every one of them guards a weaker surface than a question like <em>"shall we focus on US companies?"</em>. The symmetry gate (<code>scope_proposals_offering_only_narrowing == 0</code>) is the countermeasure, and it is not optional.</td>
+</tr>
+<tr>
+<td>Risk if nothing changes</td>
+<td><strong>High</strong></td>
+<td>The measured result stands: one in twenty. Every downstream improvement polishes the ordering of a list that does not contain the job.</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-impact-assessment"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Impact assessment</span></div><textarea class="note-ta" data-key="s-spec-impact-assessment" data-label="Impact assessment" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3">
+<h3 class="sec-h"><span class="chip">§3</span><span class="sec-title">Options</span></h3>
+<div class="note" data-for="s-spec-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3</span></div><textarea class="note-ta" data-key="s-spec-3" data-label="§3 Options" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-1-widen-step-7-s-inputs-a">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option 1 — Widen step 7's inputs, and nothing else</span></h4>
+<div class="sec-body"><p>Add the fitted weights and the reaction/outcome evidence to step 7's <code>reads</code> in both the
+prose graph and the JSON. The loop closes; nothing else changes.</p>
+<ul>
+<li><strong>Scope</strong>: two documents, both gates.</li>
+<li><strong>Effort</strong>: Small.</li>
+<li><strong>Trade-offs</strong>: Honest and tiny, and it makes every later option legal. But it only makes
+  re-sourcing <em>expressible</em> — nothing decides when to re-source or how to change the scope,
+  so in practice step 7 runs once anyway and the graph merely stops lying about why.</li>
+<li><strong>Compatibility</strong>: Backwards compatible.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-1-widen-step-7-s-inputs-a"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option 1 — Widen step 7's inputs, and nothing else</span></div><textarea class="note-ta" data-key="s-spec-option-1-widen-step-7-s-inputs-a" data-label="Option 1 — Widen step 7's inputs, and nothing else" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-2-the-loop-plus-the-strat">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option 2 — The loop plus the strategy conversation <em>(recommended)</em></span></h4>
+<div class="sec-body"><p>Option 1, plus the machinery that uses it: an <strong>exhaustion measurement</strong> (a cycle whose
+rejection rate did not improve, or whose rejections concentrate on one reason), a <strong>scope
+proposal</strong> the tool makes in conversation — symmetric, able to widen or narrow, with the
+reason stated — and a <strong>recorded decision</strong> that licenses the narrowing.</p>
+<ul>
+<li><strong>Scope</strong>: Option 1, plus <code>integral.freshness</code> (new trigger kind), <code>step_runtime</code>,
+  <code>integral.sourcing_strategy</code>, the two step skills, evidence rows for decisions.</li>
+<li><strong>Effort</strong>: Medium.</li>
+<li><strong>Trade-offs</strong>: This is the feature as described. It stops short of one thing the
+  candidate asked for — re-entering steps 3 and 4 to gather more about them — see Option 3
+  for why that is sequenced rather than dropped.</li>
+<li><strong>Compatibility</strong>: Backwards compatible; a candidate who never hits exhaustion sees no
+  change at all.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-2-the-loop-plus-the-strat"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option 2 — The loop plus the strategy conversation (recommended)</span></div><textarea class="note-ta" data-key="s-spec-option-2-the-loop-plus-the-strat" data-label="Option 2 — The loop plus the strategy conversation (recommended)" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-3-option-2-plus-re-entry">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option 3 — Option 2, plus re-entry into profile steps</span></h4>
+<div class="sec-body"><p>When the search is exhausted <em>and</em> the profile evidence behind the deciding dimensions is
+thin, the tool offers to go back — more history, an unexpected skill, an aspect of the
+candidate's life nobody asked about — and uses what it learns to search differently.</p>
+<ul>
+<li><strong>Scope</strong>: Option 2, plus <code>offered()</code>/<code>decide_resumption</code> and the profile-step skills.</li>
+<li><strong>Effort</strong>: Large.</li>
+<li><strong>Trade-offs</strong>: The most powerful version and the most annoying failure mode in the whole
+  product. Being sent back through questions you already answered, because a search did not
+  work, is the experience that makes people close a tool. It needs the exhaustion signal to
+  exist and to be <em>trusted</em> first — otherwise the tool interrogates the candidate every
+  time a search is merely unlucky.</li>
+<li><strong>Compatibility</strong>: Backwards compatible.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-3-option-2-plus-re-entry"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option 3 — Option 2, plus re-entry into profile steps</span></div><textarea class="note-ta" data-key="s-spec-option-3-option-2-plus-re-entry" data-label="Option 3 — Option 2, plus re-entry into profile steps" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-comparison">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Comparison</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th></th>
+<th>Option 1</th>
+<th>Option 2</th>
+<th>Option 3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Effort</td>
+<td>Small</td>
+<td>Medium</td>
+<td>Large</td>
+</tr>
+<tr>
+<td>Closes the graph loop</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Decides when to re-search</td>
+<td>No</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Tool can propose scope changes</td>
+<td>No</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Can gather new profile evidence</td>
+<td>No</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Worst failure mode</td>
+<td>Graph says a thing nobody does</td>
+<td>A badly-timed question</td>
+<td>Interrogation</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-comparison"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Comparison</span></div><textarea class="note-ta" data-key="s-spec-comparison" data-label="Comparison" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-4">
+<h3 class="sec-h"><span class="chip">§4</span><span class="sec-title">Recommendation</span></h3>
+<div class="sec-body"><p><strong>Option 2 now; Option 3 as its own task immediately after, gated on the exhaustion signal
+having been observed to be right.</strong></p>
+<p>Option 1 alone is not worth shipping by itself: a graph edge nobody traverses is
+documentation, not a feature. Option 2 is the thing the candidate described — the tool
+noticing, proposing, and the candidate deciding — and its consent rule resolves what would
+otherwise be a contradiction in the design. An earlier review note said a cycle must never
+collapse onto one employer; a later one said collapsing onto one employer is <em>good</em> when
+the conversation went there. Both are right, and the difference between them is entirely
+whether the candidate chose it. So the gate counts recorded decisions, not employer share.</p>
+<p>Option 3 is sequenced rather than dropped because its failure mode is asymmetric: a missed
+opportunity to ask costs one cycle, and an unwanted interrogation costs the candidate's
+willingness to keep using the tool. The exhaustion measurement has to earn trust before it
+is allowed to send someone back through step 3.</p></div>
+<div class="note" data-for="s-spec-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4</span></div><textarea class="note-ta" data-key="s-spec-4" data-label="§4 Recommendation" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-immediate-next-action">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Immediate next action</span></h4>
+<div class="sec-body"><p>Run <code>design</code> over this spec to produce sections 5–6 and the task split. The first task is
+the graph amendment (Option 1's content) — it is small, it is gated twice over by
+<code>drift_violations</code> and D-3, and every other task depends on step 7 being allowed to read
+what the candidate has taught the system.</p></div>
+<div class="note" data-for="s-spec-immediate-next-action"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Immediate next action</span></div><textarea class="note-ta" data-key="s-spec-immediate-next-action" data-label="Immediate next action" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-open-questions">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Open questions</span></h4>
+<div class="sec-body"><ol>
+<li><strong>What exactly is exhaustion?</strong> Candidates: a cycle whose rejection rate failed to
+   improve on the previous one; a cycle where one rejection reason accounts for most
+   rejections; a cycle returning offers largely deduped against ones already seen. The
+   third is the cheapest and the most robust — "we are finding the same jobs again" needs
+   no preference model at all — and may be the right first version.</li>
+<li><strong>How often may the tool speak?</strong> Unbounded proposals are nagging; too few and it never
+   steers. A proposal is licensed by a trigger, so the real question is the trigger's
+   sensitivity, and it cannot be set without a real cycle to observe.</li>
+<li><strong>Does a scope decision expire?</strong> A candidate who agreed to focus on US employers in
+   March has not agreed to that in September. §5.2's freshness triggers are the natural
+   mechanism, but a decision's staleness is not obviously the same clock as a fact's.</li>
+<li><strong>What does the tool do with a refused proposal?</strong> <em>"No, keep it broad"</em> is itself
+   evidence about the candidate and should be recorded — but it must not become a reason to
+   ask again next cycle in different words.</li>
+<li><strong>Does an exhausted search ever mean "there is no job for you right now"?</strong> The tool
+   should be able to say so. Every option above assumes a better search exists; sometimes
+   the honest answer is that the market has nothing this month, and a tool that cannot say
+   that will invent a scope change instead.</li>
+</ol></div>
+<div class="note" data-for="s-spec-open-questions"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Open questions</span></div><textarea class="note-ta" data-key="s-spec-open-questions" data-label="Open questions" data-part="Iterative Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+</section>
+</div>
+
+<div class="fab">
+  <button class="btn" id="btn-top" title="Back to top">↑ Top</button>
+  <button class="btn" id="btn-import">Import</button>
+  <button class="btn" id="btn-clear">Clear</button>
+  <button class="btn primary" id="btn-export2">💾 Save / Export</button>
+</div>
+<input type="file" id="file-import" class="hidden-input" accept=".md,.markdown,.json,text/markdown,application/json">
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <h3>Your notes</h3>
+    <p>Downloaded as a Markdown file. You can also copy the text below and paste it back.</p>
+    <textarea id="modal-ta" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn primary" id="modal-copy">Copy</button>
+      <button class="btn" id="modal-dl">Download again</button>
+      <button class="btn" id="modal-close">Close</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>var SPEC_SEED_NOTES={};</script>
+<script>
+(function(){
+  var NS = 'iterative-sourcing-spec-v1:';
+  var tas = Array.prototype.slice.call(document.querySelectorAll('.note-ta'));
+
+  function autoGrow(t){t.style.height='auto';t.style.height=(t.scrollHeight)+'px';}
+  function setFilled(t){var box=t.closest('.note');if(box){box.classList.toggle('filled',t.value.trim()!=='');}}
+  function updateCount(){
+    var n=0;tas.forEach(function(t){if(t.value.trim()!=='')n++;});
+    var el=document.getElementById('count');if(el){el.textContent=n+' / '+tas.length+' notes';}
+    return n;
+  }
+  var lsOK=true,dirty=false;
+  try{localStorage.setItem('__vs__','1');localStorage.removeItem('__vs__');}catch(e){lsOK=false;}
+  var WARN='⚠ Not saving — tap Save / Export';
+  function nowStamp(){var d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+  function setState(txt,cls){var el=document.getElementById('savestate');if(el){el.textContent=txt;el.className='savestate '+(cls||'');}}
+  window.addEventListener('beforeunload',function(e){if(!lsOK&&dirty){e.preventDefault();e.returnValue='';}});
+
+  var saveTimers={};
+  function save(t){
+    if(!lsOK){dirty=true;setState(WARN,'warn');return;}
+    var k=NS+t.dataset.key;
+    try{
+      if(t.value.trim()===''){localStorage.removeItem(k);}else{localStorage.setItem(k,t.value);}
+      dirty=true;setState('✓ Saved '+nowStamp(),'ok');
+    }catch(e){lsOK=false;document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+  }
+  var SEED=(typeof SPEC_SEED_NOTES!=='undefined')?SPEC_SEED_NOTES:{};
+  tas.forEach(function(t){
+    try{var v=localStorage.getItem(NS+t.dataset.key);
+        if(v!=null){t.value=v;}
+        else if(Object.prototype.hasOwnProperty.call(SEED,t.dataset.key)){
+          var sv=SEED[t.dataset.key];if(typeof sv==='string'){t.value=sv;}}}catch(e){}
+    autoGrow(t);setFilled(t);
+    t.addEventListener('input',function(){
+      autoGrow(t);setFilled(t);updateCount();
+      clearTimeout(saveTimers[t.dataset.key]);
+      saveTimers[t.dataset.key]=setTimeout(function(){save(t);},350);
+    });
+    t.addEventListener('blur',function(){save(t);});
+  });
+  updateCount();
+  if(lsOK){setState('✓ Auto-saving','ok');}else{document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+
+  function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},1900);}
+  function pad(n){return n<10?'0'+n:''+n;}
+  function today(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+
+  function buildExport(){
+    var byPart={},order=[],data={},n=0;
+    tas.forEach(function(t){
+      var v=t.value.trim();if(v==='')return;n++;
+      data[t.dataset.key]=t.value;
+      var part=t.dataset.part||'Other';
+      if(!byPart[part]){byPart[part]=[];order.push(part);}
+      byPart[part].push({label:t.dataset.label,ref:keyFromDom(t.dataset.key,t),note:t.value});
+    });
+    var lines=['# Specification notes','','_Exported '+today()+' · '+n+' note'+(n===1?'':'s')+'._','',
+      '> Send this file back to continue the review. Notes are embedded as data at the bottom','> so importing this file restores them in the reader.',''];
+    order.forEach(function(part){
+      lines.push('## '+part,'');
+      byPart[part].forEach(function(it){
+        lines.push('**'+it.label+'**  `'+it.ref+'`');
+        it.note.split('\n').forEach(function(ln){lines.push('> '+ln);});
+        lines.push('');
+      });
+    });
+    lines.push('<!-- SPEC-NOTES-DATA');
+    lines.push(JSON.stringify(data));
+    lines.push('-->');
+    return{text:lines.join('\n'),n:n};
+  }
+  function keyFromDom(domkey,t){var box=t.closest('.note');var r=box?box.querySelector('.note-ref'):null;return r?r.textContent:domkey;}
+
+  function download(name,text){
+    try{var blob=new Blob([text],{type:'text/markdown'});var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');a.href=url;a.download=name;
+        document.body.appendChild(a);a.click();
+        setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);return true;}catch(e){return false;}
+  }
+
+  var modal=document.getElementById('modal');
+  var modalTa=document.getElementById('modal-ta');
+  function openModal(text){modalTa.value=text;modal.classList.add('open');}
+  function closeModal(){modal.classList.remove('open');}
+
+  document.getElementById('btn-export').addEventListener('click',function(){
+    var r=buildExport();
+    if(r.n===0){toast('No notes yet — add some first.');return;}
+    var name='spec-notes-'+today()+'.md';
+    download(name,r.text);openModal(r.text);
+    if(navigator.clipboard){navigator.clipboard.writeText(r.text).then(function(){},function(){});}
+    dirty=false;setState('✓ Backup saved '+nowStamp(),'ok');
+    toast('Exported '+r.n+' note'+(r.n===1?'':'s'));
+  });
+  document.getElementById('btn-export2').addEventListener('click',function(){document.getElementById('btn-export').click();});
+
+  document.getElementById('modal-copy').addEventListener('click',function(){
+    modalTa.select();var ok=false;try{ok=document.execCommand('copy');}catch(e){}
+    if(navigator.clipboard){navigator.clipboard.writeText(modalTa.value).then(function(){},function(){});ok=true;}
+    toast(ok?'Copied to clipboard':'Select the text and copy');
+  });
+  document.getElementById('modal-dl').addEventListener('click',function(){download('spec-notes-'+today()+'.md',modalTa.value);toast('Download started');});
+  document.getElementById('modal-close').addEventListener('click',closeModal);
+  modal.addEventListener('click',function(e){if(e.target===modal)closeModal();});
+
+  // buildExport only ever writes strings, but an import takes whatever the file
+  // holds: an object arrives as "[object Object]", an array joins on commas,
+  // null becomes "null" — each then persisted over notes the reviewer wrote.
+  // The realistic trigger is a hand-edited or truncated export, not an attack;
+  // it just fails in the least useful way, silently and destructively. Skip
+  // anything that is not a string and say how many were skipped.
+  function applyData(obj){
+    var applied=0,skipped=0;
+    tas.forEach(function(t){
+      if(!Object.prototype.hasOwnProperty.call(obj,t.dataset.key))return;
+      var v=obj[t.dataset.key];
+      if(typeof v!=='string'){skipped++;return;}
+      t.value=v;save(t);autoGrow(t);setFilled(t);applied++;
+    });
+    updateCount();return{applied:applied,skipped:skipped};
+  }
+  document.getElementById('file-import').addEventListener('change',function(e){
+    var f=e.target.files[0];if(!f)return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      var txt=String(rd.result||'');var obj=null;
+      var m=txt.lastIndexOf('SPEC-NOTES-DATA');
+      try{
+        if(m>=0){var after=txt.slice(m+15);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
+                  if(jstart>=0&&jend>jstart){obj=JSON.parse(after.slice(jstart,jend+1));}}
+        else{obj=JSON.parse(txt);}
+      }catch(err){obj=null;}
+      if(!obj){toast('Could not read notes from that file');return;}
+      var r=applyData(obj);
+      toast('Imported '+r.applied+' note'+(r.applied===1?'':'s')+
+            (r.skipped?' ('+r.skipped+' skipped — not text)':''));
+    };
+    rd.readAsText(f);e.target.value='';
+  });
+  document.getElementById('btn-import').addEventListener('click',function(){document.getElementById('file-import').click();});
+
+  document.getElementById('btn-clear').addEventListener('click',function(){
+    if(!confirm('Clear ALL notes from this browser? Export first if you want to keep them.'))return;
+    tas.forEach(function(t){t.value='';save(t);autoGrow(t);setFilled(t);});
+    updateCount();toast('All notes cleared');
+  });
+
+  document.getElementById('btn-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+})();
+</script>
+</body>
+</html>
