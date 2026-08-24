@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 97,
+  "evidence_gates_read": 99,
   "gates_declaring_status_key": 4,
   "unrecordable": [],
   "readings": [
@@ -640,6 +640,14 @@
       "task": "lo-fbb4",
       "key": "captures_without_a_subject",
       "evidence": "status/evidence/D8.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-002adbf2",
+      "key": "stuck_cycles_without_a_proposal",
+      "evidence": "status/evidence/T63.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

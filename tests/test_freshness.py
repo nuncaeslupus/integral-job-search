@@ -22,8 +22,10 @@ from integral.decline import DeclineLedger
 from integral.freshness import (
     DEFAULT_ELAPSED_DAYS,
     FreshnessError,
+    Offer,
     decline,
     elapsed_offers,
+    exhaustion_offers,
     gap_offers,
     life_event_offers,
     offers,
@@ -35,6 +37,9 @@ from integral.freshness import (
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog, rebuild
 from integral.session import SessionStore
+from integral.sourcing_reentry import MINIMUM_TRIGGERS
+from integral.sourcing_reentry import write_evidence as write_reentry_evidence
+from integral.sourcing_strategy import judge_cycle
 
 NOW = datetime.fromisoformat("2026-08-18T09:00:00+00:00")
 
@@ -224,3 +229,55 @@ def test_the_probe_fires_all_three_kinds(tmp_path: Path) -> None:
     result = probe_freshness(tmp_path / "profiles")
     assert result["failures"] == []
     assert set(result["trigger_kinds"]) == {"elapsed", "life_event", "gap"}
+
+
+# --- T63: exhaustion, a kind beside staleness ------------------------------
+
+
+STUCK = judge_cycle(cycle=3, offers_returned=10, offers_already_seen=9)
+HEALTHY = judge_cycle(cycle=1, offers_returned=10, offers_already_seen=1)
+PROPOSAL = "widen: drop the country filter, or narrow to the two employers you read"
+
+
+def test_an_exhausted_step_seven_is_offered_again(store: ProfileStore) -> None:
+    """§5.3 — a finished sourcing step re-enters on an `exhausted` trigger."""
+    SessionStore(store).record(at="2026-08-17T10:00:00Z", current_step="ranking")
+    raised = offers(store, now=NOW, exhaustion=STUCK, proposal=PROPOSAL)
+    entered = [offer for offer in raised if offer.kind == "exhausted"]
+    assert [offer.step for offer in entered] == ["sourcing"]
+    # the reason names the repeat share, the cycle number, and what was repeated
+    assert "90%" in entered[0].reason
+    assert "cycle 3" in entered[0].reason
+    assert "already seen" in entered[0].reason
+
+
+def test_staleness_behaviour_is_unchanged_by_the_new_kind(store: ProfileStore) -> None:
+    """The new kind is added beside the old one, never a change to it."""
+    stale = offers(store, now=NOW)
+    assert {offer.kind for offer in stale} == {"elapsed", "gap"}
+    with_new = offers(store, now=NOW, exhaustion=STUCK, proposal=PROPOSAL)
+    assert [offer for offer in with_new if offer.kind != "exhausted"] == stale
+    # and a cycle that is not exhausted raises nothing new at all
+    assert offers(store, now=NOW, exhaustion=HEALTHY) == stale
+
+
+def test_an_exhausted_cycle_never_reruns_the_same_search_silently(
+    store: ProfileStore,
+) -> None:
+    """Re-entry carries a proposal — that is `stuck_cycles_without_a_proposal`."""
+    with pytest.raises(FreshnessError, match="proposal"):
+        exhaustion_offers(STUCK, proposal=None)
+    with pytest.raises(FreshnessError, match="proposal"):
+        offers(store, now=NOW, exhaustion=STUCK, proposal="   ")
+    with pytest.raises(FreshnessError, match="reason"):
+        Offer(kind="exhausted", step="sourcing", subject="s", says="?", proposal=PROPOSAL)
+    assert exhaustion_offers(STUCK, proposal=PROPOSAL)[0].proposal == PROPOSAL
+
+
+def test_the_reentry_gate_records_the_measurement_it_made(tmp_path: Path) -> None:
+    evidence = tmp_path / "T63.json"
+    measured = write_reentry_evidence(evidence)
+    assert measured["stuck_cycles_without_a_proposal"] == 0
+    assert measured["reentry_offers"] >= MINIMUM_TRIGGERS
+    assert measured["proposalless_reentry_rejected"] is True
+    assert json.loads(evidence.read_text(encoding="utf-8")) == measured
