@@ -258,8 +258,22 @@ building before the volume exists to justify it.
   an owner action, and the clone URL in `README.md` names the new one. GitHub
   redirects the old path once the rename happens; until it does, that URL is the
   one thing here that does not yet resolve.
-- **Whether the sources repository is public from the start.** Public is the
-  obvious end state; starting private costs nothing and is reversible.
+- ~~**Whether the sources repository is public from the start.**~~ **Settled:
+  public** (2026-08-23). Private was never actually reversible at no cost:
+  §6's incoming half reads `manifest.json` over plain HTTPS with **no account**,
+  and a private repository has no unauthenticated raw URL, so starting private
+  would have meant either shipping a token or having no incoming half at all.
+  What goes in it is connectors and nothing else — the packages are generated
+  from `connectors/` by `tools/publish_connectors.py`, which derives each
+  `files` list from the package on disk, and the fictitious `examplejobs.test`
+  example is filtered out by its own domain rather than by a list of names.
+  `nuncaeslupus/integral-connectors` **exists and is public** as of 2026-08-23,
+  publishing `trabajos_es`. Creating it was an owner action, like the rename
+  above, but nothing here ever waited on it: the tree is generated and installs
+  offline in `tests/test_publish_connectors.py`. Confirmed once against the live
+  repository — `https_fetcher` reads the manifest unauthenticated and `install`
+  verifies the package — and that check stays out of the gate on purpose, so a
+  quiet Saturday at GitHub cannot turn into a failing build here.
 - **Whether this repository is public.** Independent of the above, and not
   needed until someone other than the owner installs it.
 

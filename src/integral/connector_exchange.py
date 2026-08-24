@@ -103,10 +103,14 @@ _RAW = f"https://raw.githubusercontent.com/{SOURCES_REPO}/main"
 MANIFEST_URL = f"{_RAW}/manifest.json"
 PACKAGE_BASE_URL = f"{_RAW}/connectors/"
 
-# The fixture manifest this module's own gate is measured against. There is no
-# published sources repository yet; pointing the probe at a committed manifest
-# is what makes the measurement about *this code* rather than about whether
-# somebody's server answered today.
+# The fixture manifest this module's own gate is measured against. The sources
+# repository now exists, and the probe still does not read it: pointing the gate
+# at a committed manifest is what makes the measurement about *this code* rather
+# than about whether somebody's server answered today — and the gate has to run
+# where there is no egress at all. `tools/publish_connectors.py` builds the
+# published tree from `connectors/`, and `tests/test_publish_connectors.py`
+# installs from it offline, so what is published is checked without the network
+# becoming a dependency of the gate.
 DEFAULT_MANIFEST_FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "exchange" / "manifest.json"
 DEFAULT_PACKAGES_DIR = _REPO_ROOT / "connectors"
 

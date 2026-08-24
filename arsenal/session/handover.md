@@ -20,7 +20,21 @@ Steps 9 (`ranking`) and 10 (`feedback`) both flipped to `implemented` in
 3 at best". T48's drift check and `step_certification` each caught that on their
 own — neither needed noticing.
 
-## The one PR still open
+## The two PRs still open
+
+**#135 — the sources-repository publisher** (`connectors-sources-repo`). Not a queue task;
+it is the follow-up to T54 that `connector_contract.py` calls out ("it does not create the
+sources repository or move connectors into it; that is a follow-up"). CodeRabbit reviewed
+it before the rate limit, both findings are fixed and answered, `make host-gate` green.
+
+`nuncaeslupus/integral-connectors` is live, public, MIT, publishing `trabajos_es`.
+`tools/publish_connectors.py` generates the tree; **never hand-edit `manifest.json`**, since
+`install` fetches exactly the names it lists. The publisher refuses a package containing a
+symlink — these come from strangers and this copies them somewhere public, and a symlink can
+wear a permitted name, so the contract checker cannot catch it.
+
+T54's probe deliberately stays offline. Pointing it at the live repository would make the
+gate measure whether a server answered today, and it has to run where there is no egress.
 
 **#145 — T43, outside-the-advert enrichment** (`lo-192c`, issue 65). Rebased flat
 onto `main`, `MERGEABLE`, `make host-gate` green.
