@@ -37,6 +37,24 @@
 # When runners return, set `after-ci-and-review`.
 merge-policy = "after-review"
 
+# The repo's own aggregate gate, as a command. Declared for v2.4.0, which reads
+# this key in two places that were previously guesswork:
+#
+#   * `bin/rebase_stack.sh` regenerates an evidence-only rebase conflict by
+#     running it, instead of stopping (`claude-arsenal#210`). Evidence files are
+#     build products — `status/evidence/T55.json` counts tracked files, so it
+#     conflicts on *every* rebase here — and the right content is neither side,
+#     it is what the code measures on the resulting tree.
+#   * `bin/open_task_pr.sh` runs it as a hard precondition, which is the
+#     enforcement point D-22 found missing: the five-command gate `CLAUDE.md`
+#     requires before a merge was enforced by nothing, since Actions is out of
+#     runner minutes and the helper only ran the task's own payload gate.
+#
+# `make host-gate` and not `make ci`: `integral.repo_gate` asserts that every
+# target `CLAUDE.md` lists is real and is reached by this one (D-22), so a fifth
+# line added there cannot quietly go unrun.
+host-gate = "make host-gate"
+
 # test-first writes a failing test before the change; test-after writes tests
 # alongside it.
 test-discipline = "test-first"
