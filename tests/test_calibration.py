@@ -200,6 +200,41 @@ def test_an_invented_candidate_never_certifies_the_gate(tmp_path: Path) -> None:
     assert calibration.is_fiction(ProfileStore(root, "nobody"))
 
 
+def test_an_unusable_recorded_file_is_refused_not_crashed(tmp_path: Path) -> None:
+    store = ProfileStore(tmp_path, create_profile(tmp_path, "Perico", language="en").handle)
+    drawn = _drawn_ids()
+
+    # `measure_spearman` reads `drawn`; a file carrying only `ordering` would
+    # raise KeyError out of `make evidence` rather than reporting `unmeasured`.
+    store.write_json({"ordering": drawn}, *calibration.ORDERING_PARTS)
+    with pytest.raises(calibration.CalibrationError):
+        calibration.recorded(store)
+
+    calibration.record(store, drawn)
+    # A stray file in the rankings directory is passed over, not fatal.
+    store.write_text("not json at all", calibration.RANKINGS_DIR, "zzz.json")
+    store.write_json(["a list, not a ranking"], calibration.RANKINGS_DIR, "yyy.json")
+    assert calibration.measure_spearman(store)["rank_status"] == "unmeasured"
+    write_ranking(store, {"run_id": "r-0001", "pareto": drawn})
+    assert calibration.measure_spearman(store)["rank_status"] == "measured"
+
+
+def test_blocks_must_partition_the_drawn_set(tmp_path: Path) -> None:
+    store = ProfileStore(tmp_path, create_profile(tmp_path, "Perico", language="en").handle)
+    drawn = _drawn_ids()
+
+    # Two blocks sharing a name collapse into one in any object keyed by name,
+    # and the ids in the overwritten block vanish while `ordering` still
+    # validates. The count of placed ids is what catches it.
+    with pytest.raises(calibration.CalibrationError, match="omit"):
+        calibration.record(store, drawn, blocks={"Would apply": drawn[:5]})
+    with pytest.raises(calibration.CalibrationError, match="more than one block"):
+        calibration.record(
+            store, drawn, blocks={"a": drawn, "b": drawn[:1]}
+        )
+    calibration.record(store, drawn, blocks={"a": drawn[:7], "b": drawn[7:]})
+
+
 def test_the_leak_gate_counts_zero_and_every_plant_is_detected() -> None:
     measured = calibration.measure_leaks()
     assert measured["blind_ranking_leaks"] == 0

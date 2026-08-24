@@ -276,9 +276,22 @@ def record(
     payload: dict[str, Any] = {"drawn": drawn, "ordering": list(ordering)}
     if blocks is not None:
         grouped = {str(name): [str(x) for x in members] for name, members in blocks.items()}
-        stray = sorted({x for members in grouped.values() for x in members} - set(drawn))
+        placed = [x for members in grouped.values() for x in members]
+        stray = sorted(set(placed) - set(drawn))
         if stray:
             raise CalibrationError(f"the blocks name {len(stray)} id(s) not drawn: {stray}")
+        # An exact partition, because the ordering *is* the blocks read in turn.
+        # Two blocks sharing a name collapse into one in any object keyed by
+        # name, and the loss is silent: the ids simply stop being there while
+        # `ordering` still validates. Counting the placed ids catches it.
+        if len(placed) != len(set(placed)):
+            raise CalibrationError("an offer appears in more than one block")
+        missing = sorted(set(drawn) - set(placed))
+        if missing:
+            raise CalibrationError(
+                f"the blocks omit {len(missing)} drawn id(s) — the ordering is the "
+                f"blocks read in turn, so they must cover it: {missing}"
+            )
         payload["blocks"] = grouped
     if notes is not None:
         # An untouched box is dropped rather than stored as an empty string:
@@ -304,7 +317,10 @@ def recorded(store: ProfileStore) -> dict[str, Any] | None:
     if not store.exists(*ORDERING_PARTS):
         return None
     payload = store.read_json(*ORDERING_PARTS)
-    if not isinstance(payload, Mapping) or "ordering" not in payload:
+    # Both keys, not just `ordering`: `measure_spearman` reads `drawn` too, and a
+    # file missing it would raise `KeyError` out of `make evidence` rather than
+    # reporting the `unmeasured` this module promises for anything unusable.
+    if not isinstance(payload, Mapping) or not {"drawn", "ordering"} <= set(payload):
         raise CalibrationError(f"{'/'.join(ORDERING_PARTS)} is not a recorded ordering")
     return dict(payload)
 
@@ -366,7 +382,16 @@ def system_order(store: ProfileStore, drawn: Sequence[str]) -> list[Group] | Non
     if not directory.is_dir():
         return None
     for path in sorted(directory.glob("*.json"), reverse=True):
-        ranking = json.loads(path.read_text(encoding="utf-8"))
+        # A directory the candidate owns can hold anything. A file that does not
+        # parse, or that is not an object, is not a ranking of the twenty — it is
+        # passed over, the same as a ranking of a different offer set. Raising
+        # here would stop `make evidence` over a stray file.
+        try:
+            ranking = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(ranking, Mapping):
+            continue
         pareto = [str(identifier) for identifier in ranking.get("pareto", [])]
         collapsed = sorted(str(identifier) for identifier in ranking.get("dominated", {}))
         if set(pareto) | set(collapsed) != set(drawn):
@@ -447,6 +472,15 @@ def measure_leaks(store_path: Path = DEFAULT_STORE_PATH) -> dict[str, Any]:
     plants[RECORDED_LEAK] = shown
 
     plants[RANKING_LEAK] = presentation(ads)
+
+    # The fourth leak needs planting like the other three. Without it a
+    # regression in the `unexpected` computation would leave `blind_ranking_leaks`
+    # at zero — an uncertified zero, which is the one thing this gate exists to
+    # refuse. The key is deliberately not in FORBIDDEN_KEYS: this plant is about
+    # a field nobody anticipated, which is what that branch is for.
+    unexpected = presentation(ads)
+    unexpected["pages"][0]["recruiter_note"] = "call Dave first"
+    plants[UNEXPECTED_LEAK] = unexpected
 
     undetected = sorted(
         name
