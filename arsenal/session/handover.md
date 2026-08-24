@@ -1,8 +1,25 @@
-# Session handover — 2026-08-24, the rename tidied and three PRs landed
+# Session handover — 2026-08-24, the rename tidied and iterative sourcing designed
 
 A worker session on the laptop, following the human sitting recorded in the
-previous handover. Three PRs merged; the queue is now empty of anything a worker
-can take.
+previous handover. Six PRs merged. The queue was empty of worker-takeable work for
+most of it; the design pass at the end refilled it.
+
+## Start here — the queue has ten new tasks and T60 is first
+
+`design` ran over `status/specs/iterative-sourcing.md` (#164), producing its
+sections 5–6 and the split **T60–T69**. The selector offers **T60** — small, no
+deps, `gate: true`. Every other sourcing row depends on it, because a graph edge
+nobody traverses is documentation rather than a feature.
+
+Read `status/specs/iterative-sourcing.md` §5 before starting: the contracts are
+settled there and several are load-bearing in ways the task titles do not carry
+(step 7's new inputs must be `optional: true`; proposal symmetry is enforced in
+the type, not in prose).
+
+**T69 is `[HUMAN]`** and carries `requires: [surface:human]`. Its prerequisite is
+the exhaustion signal having been *watched on a real cycle*, which a dep on T68
+cannot express — a dep resolves when T68 merges. Do not remove `requires` to
+unblock the queue.
 
 ## What merged
 
@@ -11,8 +28,30 @@ can take.
 | #159 | `make test` runs the `collect` extra | — (7 tests stopped skipping) |
 | #158 | T26b — the four candidate-trait dimensions | `trait_dimensions_ready = 4 >= 4` |
 | #160 | D-19 — a silent vocabulary is refused, not reported as understanding | `markets_with_no_applicable_dimension_reported_as_extracted == 0` |
+| #161 | this handover | — |
+| #162 | claude-arsenal **v2.4.2** — the placeholder-gate fix this repo filed | — (91 gates still assert) |
+| #163 | what the labelling round actually costs | — (docs) |
+| #164 | `design` over iterative sourcing: contracts, risks, T60–T69 | — (design) |
 
-Board: 97 tasks — **open 4, claimed 0, merged 90**. `make host-gate` green on `main`.
+Board: 107 tasks — **open 5, claimed 0, blocked 9, merged 90**. `make host-gate`
+green on `main`.
+
+## The by-hand PR workaround is over
+
+`open_task_pr.sh` refused any task shipped with the fail-on-purpose placeholder
+gate: it reads the gate from the default branch, and only the refused PR could
+replace the placeholder. Filed as `claude-arsenal#217`; upstream shipped
+`#218` the same day and this repo picked it up in #162.
+
+The assertion still resolves from the default branch — that is what
+self-certification would target. Only the ```bash command defers, and only when
+the default branch's is the shipped placeholder. **T60–T69 all carry that
+placeholder deliberately**, so each implementing PR defines its own measurement
+and opens normally.
+
+One gap, reported upstream: detection covers `# arsenal:gate-placeholder` and a
+command reducing to bare `false`, but **not** the older
+`echo "no gate command defined…" >&2; exit 1` form. No live task carries it.
 
 ## The rename, finished
 
@@ -29,9 +68,9 @@ The owner moved the clone to `~/dev/integral-job-search`. Three things it left:
   **If a future session sees a mass ImportError, run `head -1 .venv/bin/pytest`
   and check it points inside this checkout, before believing the diff.**
 
-## The queue is blocked on people and data, not code
+## The four older open tasks are still blocked on people and data
 
-All four open tasks. None is workable by a worker today:
+Unchanged by this session, and still true. None is workable by a worker:
 
 | Task | Blocker, measured 2026-08-24 |
 |---|---|
@@ -40,11 +79,29 @@ All four open tasks. None is workable by a worker today:
 | T57 (`lo-7c14`) | 828 concepts read, none from a source that can report an *unmapped* one |
 | T20 (`lo-c48f`) | `requires: [surface:human]` — the candidate personally |
 
-**T59, T56 and T57 unblock on one labelling round.** That round is the highest-value
-thing anyone can do for this repo right now: it is the single input three gates wait on.
+**T59, T56 and T57 unblock on one labelling round**, and `corpus/labelled/README.md`
+now costs it (#163): **236 labels short**, floor is 10 *per dimension*, eleven
+dimensions at zero.
 
-The selector still offers T59 first. It is not workable — its dep resolves, but its
-*data* does not. Do not claim it expecting to finish it.
+The finding that changes the plan: **`suggestions.json` predates T25's broadening**.
+Pre-marking covers programming only — 84 of 100 — and **zero** of the 108 ads across
+trades, healthcare, administrative, hospitality, teaching and retail. Those would be
+labelled blind, and they are the ads the broadening existed to add.
+
+**One action serves both T56 and T57**: regenerate that read over all 208 ads with the
+reader allowed to name what it cannot map. It restores confirm-and-move for T56 *and*
+produces the top-level `unmapped` key T57 waits on. The new pass must **not** be
+briefed with the dimension list — the 2026-08-19 one was, which is exactly why its
+828-mapped/0-unmapped is a property of the briefing rather than of the ads.
+
+T59 is no longer what the selector offers; T60 is. Do not claim T59 expecting to
+finish it — its dep resolves, but its *data* does not.
+
+**T20 was attempted.** The owner did sort the twenty adverts, and confirms they were
+only loosely targeted. No ordering reached the profile store — `ivan` has no
+`calibration/` directory and `rank_spearman` is still `null` — because T20a's harness
+merged after the sitting. Re-running it is worth doing *after* iterative sourcing can
+draw a better-targeted twenty, which is the whole reason T60–T69 exist.
 
 ## D-21 is masking D-19, and that ends when T56 lands
 
@@ -121,6 +178,12 @@ nothing. Landing the gate command in a prerequisite PR is not either, while
 
 - **The arsenal bundle is v2.4.0; v2.4.1 is out.** `check_update.sh --check-only`
   reports it. Not urgent, not done here.
+- **The queue workflow could not open the ten new handles** — same runner-minutes
+  exhaustion, `runner_id: 0` and a 3-second failure. They were created by hand from
+  `handle_sync.py`'s output (#165–#174), and `query_status.py` now reports the board
+  clean. **Expect this for every future task file**: the workflow that opens handles
+  cannot run, so `handle_sync.py` + `gh issue create` is the path until runners return.
+
 - **CI remains out of runner minutes.** Every job still fails in 3–5s with
   `runner_id: 0` and an empty `runner_name`, on `main` as much as any branch. The
   local `make host-gate` is the real gate. Diagnose once with the `runner_id` check
