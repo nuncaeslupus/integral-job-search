@@ -34,8 +34,12 @@
 # which put load-bearing policy in prose that nothing validates, and a local run
 # is not the same assertion as a green CI however identical the commands.
 #
-# When runners return, set `after-ci-and-review`.
-merge-policy = "after-review"
+# Set to `after-ci-and-review` by the owner on 2026-08-24. Note that runners had
+# not yet returned at that moment: every job still died in 4-5s with no runner
+# assigned, and an unreported check is not a green one, so no task PR can be
+# merged by an agent until they do. That is the intended reading of this line,
+# not a bug to route around at merge time.
+merge-policy = "after-ci-and-review"
 
 # The repo's own aggregate gate, as a command. Declared for v2.4.0, which reads
 # this key in two places that were previously guesswork:
