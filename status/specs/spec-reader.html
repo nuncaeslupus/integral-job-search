@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Preference-directed sourcing — Specification (annotatable)</title>
+<style>
+:root{
+  --bg:#fbfaf7;--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;
+  --card:#ffffff;--accent:#0f766e;--accent2:#b45309;--chip:#eef2f1;
+  --note:#fff8ec;--note-line:#f0cf94;--code:#f3f1ec;--link:#0f766e;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#16151a;--fg:#e9e7e2;--muted:#a09c95;--line:#2e2c33;
+    --card:#1e1d23;--accent:#5eead4;--accent2:#fbbf24;--chip:#26313055;
+    --note:#251f10;--note-line:#6b531c;--code:#26242b;--link:#5eead4;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:17px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding-bottom:96px;
+}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+a{color:var(--link)}
+code{background:var(--code);padding:.08em .35em;border-radius:5px;font-size:.86em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+pre{background:var(--code);padding:12px;border-radius:8px;overflow:auto}
+pre code{background:none;padding:0}
+.topbar{position:sticky;top:0;z-index:30;background:var(--bg);
+  border-bottom:1px solid var(--line);backdrop-filter:saturate(120%) blur(6px)}
+.topbar .wrap{display:flex;align-items:center;gap:8px;padding-top:10px;padding-bottom:10px}
+.brand{font-weight:700;font-size:16px;margin-right:auto;letter-spacing:.2px}
+.brand small{font-weight:500;color:var(--muted);display:block;font-size:11px;letter-spacing:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--fg);
+  border-radius:9px;padding:8px 11px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media(prefers-color-scheme:dark){.btn.primary{color:#06201d}}
+.count{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:600}
+.savestate{font-size:12px;font-weight:700;white-space:nowrap;transition:color .2s}
+.savestate.ok{color:var(--accent)}
+.savestate.warn{color:#b45309}
+@media(prefers-color-scheme:dark){.savestate.warn{color:#fbbf24}}
+.statusbar{border-bottom:1px solid var(--line);background:var(--card)}
+.statusbar .wrap{padding:7px 16px;font-size:12px;color:var(--muted)}
+#warnbar{display:none;background:#fff4e5;border-bottom:1px solid var(--note-line);color:#7c2d12}
+#warnbar .wrap{padding:10px 16px;font-size:13px;line-height:1.45}
+@media(prefers-color-scheme:dark){#warnbar{background:#3a2a0e;color:#fde68a;border-color:#6b531c}}
+.hero{padding:22px 0 6px}
+.hero h1{font-size:25px;line-height:1.2;margin:.1em 0 .3em}
+.hero p{color:var(--muted);margin:.3em 0}
+.help{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.help summary{cursor:pointer;font-weight:600;padding:10px 0}
+.help ul{margin:.2em 0 1em;padding-left:1.2em}
+.help li{margin:.3em 0}
+.toc{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.toc>summary{cursor:pointer;font-weight:700;padding:11px 0;font-size:15px}
+.toc-part{margin:2px 0;border-top:1px solid var(--line)}
+.toc-part>summary{cursor:pointer;padding:9px 2px;font-weight:600;font-size:14px}
+.toc-part ul{margin:.1em 0 .7em;padding-left:1.1em}
+.toc-part li{margin:.22em 0;font-size:13.5px;line-height:1.4}
+.toc-part a{text-decoration:none}
+.toc-part a:hover{text-decoration:underline}
+.part{margin:26px 0}
+.part-title{font-size:21px;line-height:1.25;border-bottom:2px solid var(--accent);
+  padding-bottom:8px;margin:18px 0 8px;position:sticky;top:54px;background:var(--bg);z-index:10}
+.badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  vertical-align:middle;padding:3px 7px;border-radius:6px;margin-right:8px}
+.badge.spec,.badge.plan{background:var(--chip);color:var(--accent)}
+.badge.workspace{background:var(--chip);color:var(--accent2)}
+.sec{padding:6px 0 2px;border-bottom:1px solid var(--line);scroll-margin-top:100px}
+.sec:last-child{border-bottom:none}
+.sec-h{margin:10px 0 6px;line-height:1.3;position:sticky;top:94px;background:var(--bg);z-index:5;padding-top:6px}
+h3.sec-h{font-size:18.5px}
+h4.sec-h{font-size:16.5px;color:var(--fg)}
+.chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;
+  color:var(--accent);background:var(--chip);border-radius:6px;padding:2px 7px;margin-right:8px;vertical-align:middle}
+.sec-title{vertical-align:middle}
+.sec-body{margin:.2em 0 .4em}
+.sec-body p{margin:.55em 0}
+.sec-body ul,.sec-body ol{margin:.5em 0;padding-left:1.35em}
+.sec-body li{margin:.3em 0}
+.sec-body blockquote{margin:.7em 0;padding:.5em .9em;border-left:3px solid var(--accent2);
+  background:var(--code);border-radius:0 8px 8px 0;color:var(--fg)}
+.sec-body blockquote p{margin:.3em 0}
+.sec-body table{border-collapse:collapse;width:100%;font-size:13.5px;margin:.6em 0;display:block;overflow-x:auto}
+.sec-body th,.sec-body td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+.sec-body th{background:var(--chip);font-weight:700}
+.sec-body strong{font-weight:700}
+.note{background:var(--note);border:1px solid var(--note-line);border-radius:10px;
+  padding:8px 11px;margin:10px 0 16px}
+.note-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.note-ico{color:var(--accent2);font-weight:800}
+.note-label{font-size:12px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.05em}
+.note-ref{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted)}
+.note-ta{width:100%;border:none;background:transparent;color:var(--fg);font:inherit;font-size:15.5px;
+  resize:none;outline:none;line-height:1.5;padding:2px 0;overflow:hidden;min-height:1.6em}
+.note-ta::placeholder{color:var(--muted);opacity:.8}
+.note.filled{box-shadow:0 0 0 2px var(--note-line) inset}
+.fab{position:fixed;right:14px;bottom:16px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.fab .btn{box-shadow:0 4px 14px #0003}
+.modal{position:fixed;inset:0;z-index:60;background:#0008;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.modal-card{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;
+  max-height:86vh;display:flex;flex-direction:column;padding:16px}
+.modal-card h3{margin:.1em 0 .5em}
+.modal-card p{color:var(--muted);font-size:13.5px;margin:.2em 0 .6em}
+.modal-card textarea{width:100%;flex:1;min-height:220px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,Menlo,monospace;padding:10px;resize:vertical}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hidden-input{display:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:70;background:#111;color:#fff;
+  padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:.96}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">Preference-directed sourcing — Specification<small>annotatable reader · 2026-08-24</small></div>
+    <span class="savestate ok" id="savestate">✓ Auto-saving</span>
+    <button class="btn primary" id="btn-export">Save / Export</button>
+  </div>
+</div>
+<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 15 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
+<div id="warnbar"><div class="wrap"><strong>Heads up —</strong> this browser isn't storing your notes automatically (private/incognito mode or restricted file view). Tap <strong>Save / Export</strong> regularly.</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Preference-directed sourcing specification</h1>
+    <p>Read at your own pace and leave a note on any point you want to discuss.</p>
+  </div>
+  <details class="help">
+    <summary>How to annotate (tap)</summary>
+    <ul>
+      <li>Tap the note field under any section and type. Each note is tagged so your feedback maps to an exact point.</li>
+      <li><strong>Notes save automatically</strong> in this browser as you type.</li>
+      <li><strong>Save / Export</strong> downloads a Markdown file of your notes — the copy to send back. Tap whenever you pause, especially on a phone.</li>
+      <li><strong>Import</strong> reloads notes from a file you exported earlier (after clearing the browser or switching devices).</li>
+      <li><strong>Clear</strong> erases every note in this browser. Export first.</li>
+    </ul>
+  </details>
+  <details class="toc" open><summary>Contents</summary>
+<details class="toc-part">
+<summary>Preference Directed Sourcing</summary><ul>
+<li><a href="#s-spec-intro">Preamble &amp; scope</a></li>
+<li><a href="#s-spec-1">§1 Problem statement</a></li>
+<li><a href="#s-spec-success-criteria-measurable">Success criteria (measurable)</a></li>
+<li><a href="#s-spec-2">§2 Systems &amp; Impact</a></li>
+<li><a href="#s-spec-dependency-map">Dependency map</a></li>
+<li><a href="#s-spec-two-facts-that-shape-every-optio">Two facts that shape every option</a></li>
+<li><a href="#s-spec-impact-assessment">Impact assessment</a></li>
+<li><a href="#s-spec-3">§3 Options</a></li>
+<li><a href="#s-spec-option-1-employer-re-query-from">Option 1 — Employer re-query from offers already seen</a></li>
+<li><a href="#s-spec-option-2-attribute-directed-sear">Option 2 — Attribute-directed search</a></li>
+<li><a href="#s-spec-option-3-model-proposed-employer">Option 3 — Model-proposed employers, verified before display</a></li>
+<li><a href="#s-spec-comparison">Comparison</a></li>
+<li><a href="#s-spec-4">§4 Recommendation</a></li>
+<li><a href="#s-spec-immediate-next-action">Immediate next action</a></li>
+<li><a href="#s-spec-open-questions">Open questions</a></li>
+</ul></details>
+</details>
+  <section class="part">
+<h2 class="part-title"><span class="badge spec">Specification</span>Preference Directed Sourcing</h2>
+<article class="sec" id="s-spec-intro">
+<h3 class="sec-h"><span class="chip">overview</span><span class="sec-title">Preamble &amp; scope</span></h3>
+<div class="sec-body"><p>Feature spec, 2026-08-24. Issue #154. Sections 1–4 (<code>specify</code>); 5–6 are <code>design</code>'s to append.</p>
+<p>This is a <strong>feature spec</strong>, kept beside the project spec rather than inside it:
+<code>status/specification.md</code> §1–4 state the problem the <em>product</em> solves, and
+overwriting them with one feature's problem statement would delete that argument.</p></div>
+<div class="note" data-for="s-spec-intro"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC · intro</span></div><textarea class="note-ta" data-key="s-spec-intro" data-label="Preamble &amp; scope" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-1">
+<h3 class="sec-h"><span class="chip">§1</span><span class="sec-title">Problem statement</span></h3>
+<div class="sec-body"><p>Sourcing decides <strong>where to look</strong> from the candidate's constraints — country, field,
+reach — and then queries with skills keywords. Everything after that filters and ranks
+what came back. Nothing in the system ever revises where it looked based on what the
+candidate turned out to value.</p>
+<p>The first blind sitting made the cost visible. Presented with twenty held-out adverts from
+the corpus, the candidate placed <strong>one</strong> in "would apply", one in "maybe", and eighteen in
+"not for me" — nine of those rejected for a technology they have never written. The
+ranking did not misbehave; it ordered exactly the list it was handed, and the list was
+mostly not this candidate's job. <strong>This is a supply failure presenting as a ranking
+result</strong>, and no improvement to the dimension model, the extractor or the ranker can
+reach it: all three operate downstream of the decision that produced the list.</p>
+<p>The signal to fix it already exists and is discarded. An advert rejected for a reason
+<em>orthogonal</em> to what made it attractive — right remote policy, wrong stack — is evidence
+about its <strong>employer</strong>, not a dead end. Today that advert is scored, ranked last, and
+forgotten.</p></div>
+<div class="note" data-for="s-spec-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §1</span></div><textarea class="note-ta" data-key="s-spec-1" data-label="§1 Problem statement" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-success-criteria-measurable">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Success criteria (measurable)</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Threshold</th>
+<th>Why this number</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>directed_rejection_rate</code></td>
+<td><code>&lt; first_pass_rejection_rate</code> for the same candidate</td>
+<td>The strategy must beat the baseline it supplements. A directed search returning more of what the candidate rejects is worse than not running it.</td>
+</tr>
+<tr>
+<td><code>directed_offers_without_an_attractor</code></td>
+<td><code>== 0</code></td>
+<td>Every offer a directed search returns names the attractor that caused the search. An offer nobody can trace back to a stated preference is an unexplained recommendation.</td>
+</tr>
+<tr>
+<td><code>directed_offers_without_a_shown_reason</code></td>
+<td><code>== 0</code></td>
+<td>The attractor is <strong>shown</strong>, not merely stored: <em>"good remote policy · pay above your floor · a stack you know"</em>. T19 already requires an explanation to cite the advert; this extends it to why the offer was <em>sought</em>.</td>
+</tr>
+<tr>
+<td><code>shown_reasons_omitting_what_is_missing</code></td>
+<td><code>== 0</code></td>
+<td>The same card states what the offer <strong>lacks</strong> — <em>"no health cover · no half-day Fridays"</em>. A card that lists only the good is an advertisement, not an explanation, and the candidate cannot weigh what they are not shown.</td>
+</tr>
+<tr>
+<td><code>strategy_fires_without_attractors</code></td>
+<td><code>== 0</code></td>
+<td>The fire rule must decline when nothing is worth steering toward — the bakery case below. Firing on an empty attractor set spends requests to reproduce the generic search.</td>
+</tr>
+<tr>
+<td><code>unverified_company_claims</code></td>
+<td><code>== 0</code></td>
+<td>An employer proposed from model knowledge is never shown until a real page has been fetched and found to carry a matching opening.</td>
+</tr>
+<tr>
+<td><code>undisclosed_directed_sourcing</code></td>
+<td><code>== 0</code></td>
+<td>Extends D-16's rule: the candidate is told <em>why</em> these offers are in front of them, as they are already told when a result came from web search rather than a board.</td>
+</tr>
+<tr>
+<td><code>robots_violations</code></td>
+<td><code>== 0</code></td>
+<td>Existing gate (<code>integral.robots</code>). Directed search multiplies requests; it may not multiply violations.</td>
+</tr>
+</tbody>
+</table>
+<p><code>first_pass_rejection_rate</code> is measured on the same candidate in the same cycle, so the
+comparison is within-subject. Cross-candidate comparison is not available and is not
+sought — there is no central store and there should not be one.</p></div>
+<div class="note" data-for="s-spec-success-criteria-measurable"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Success criteria (measurable)</span></div><textarea class="note-ta" data-key="s-spec-success-criteria-measurable" data-label="Success criteria (measurable)" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2">
+<h3 class="sec-h"><span class="chip">§2</span><span class="sec-title">Systems &amp; Impact</span></h3>
+<div class="note" data-for="s-spec-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2</span></div><textarea class="note-ta" data-key="s-spec-2" data-label="§2 Systems &amp; Impact" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-dependency-map">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Dependency map</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>System</th>
+<th>Role</th>
+<th>Needs change?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Step 7 <code>sourcing</code></td>
+<td>Where the strategy runs</td>
+<td><strong>Yes</strong> — a second, directed pass after the generic one</td>
+</tr>
+<tr>
+<td><code>integral.connectors</code></td>
+<td>Board contract: <code>site + locale + list + detail</code></td>
+<td><strong>No</strong> — see below</td>
+</tr>
+<tr>
+<td><code>SEARCH_SOURCE</code> (<code>connectors.py:134</code>)</td>
+<td>Reserved <code>"web_search"</code> source for offers no connector produced</td>
+<td><strong>No</strong> — reused as-is</td>
+</tr>
+<tr>
+<td><code>integral.weights</code></td>
+<td>Fitted part-worths; which dimensions the candidate values</td>
+<td>Read only</td>
+</tr>
+<tr>
+<td><code>integral.calibration</code></td>
+<td>Signed notes (<code>liked</code> / <code>disliked</code>) from the blind sitting</td>
+<td>Read only</td>
+</tr>
+<tr>
+<td>Step 5 <code>reactions</code>, step 10 <code>feedback</code></td>
+<td>The live-session equivalents of signed notes</td>
+<td>Read only</td>
+</tr>
+<tr>
+<td><code>integral.rank</code>, <code>integral.explain</code></td>
+<td>Per-dimension contributions — how an attractor is derived</td>
+<td>Read only</td>
+</tr>
+<tr>
+<td><code>integral.dedup</code></td>
+<td>Second-pass offers must dedupe against the first pass</td>
+<td>Validation only</td>
+</tr>
+<tr>
+<td><code>integral.robots</code>, <code>freshness</code>, <code>lifecycle</code></td>
+<td>Courtesy, staleness, offer states</td>
+<td>Validation only</td>
+</tr>
+<tr>
+<td><code>Offer.company</code></td>
+<td>Employer identity, <code>str | None</code></td>
+<td>Validation only — nullable, so the company axis is unavailable on offers that lack it</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-dependency-map"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Dependency map</span></div><textarea class="note-ta" data-key="s-spec-dependency-map" data-label="Dependency map" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-two-facts-that-shape-every-optio">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Two facts that shape every option</span></h4>
+<div class="sec-body"><p><strong>Connectors cannot be parameterised.</strong> A <code>Connector</code> names a site, a locale, a <code>ListPage</code>
+and an optional <code>DetailPage</code>. <code>Pagination.mode</code> (<code>query_param</code> / <code>path_segment</code>) describes
+<strong>how a listing continues past its first page</strong> — not how to search it. There is no
+query-axis mechanism to extend, so any option that says "search board X by company" is
+proposing a change to the connector contract, and that is a larger piece of work than the
+strategy itself.</p>
+<p><strong>Web search is already a disclosed offer source.</strong> <code>SEARCH_SOURCE = "web_search"</code> is
+reserved, and a connector is <em>refused</em> if it tries to claim that name — so <code>Offer.source</code>
+can never be ambiguous about whether a board was actually searched. D-16 (merged,
+<code>undisclosed_connectorless_sourcing == 0</code>) established that step 7 already presents
+web-search results and must say so. Directed search therefore has a home that exists,
+is honest by construction, and needs no connector work.</p></div>
+<div class="note" data-for="s-spec-two-facts-that-shape-every-optio"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Two facts that shape every option</span></div><textarea class="note-ta" data-key="s-spec-two-facts-that-shape-every-optio" data-label="Two facts that shape every option" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-impact-assessment">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Impact assessment</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Severity</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data</td>
+<td><strong>Medium</strong></td>
+<td>New offers through the existing <code>Offer</code> contract; no schema change. But everything this feature learns about the candidate — which attractors fired, which reasons they gave, which directed results they then rejected — is <strong>written to the profile as evidence</strong>, the same as every other step's output. A preference discovered by a search strategy and kept only inside that strategy is a preference the next step cannot use, and the whole premise of the product is one shared vocabulary across stages.</td>
+</tr>
+<tr>
+<td>API</td>
+<td>Low</td>
+<td>No public contract changes. Step 7's outputs gain a provenance field.</td>
+</tr>
+<tr>
+<td>Performance</td>
+<td><strong>Medium</strong></td>
+<td>A second pass multiplies requests per cycle. Rate limits and <code>robots</code> apply unchanged, so the cap is courtesy, not latency.</td>
+</tr>
+<tr>
+<td>User</td>
+<td><strong>High</strong> — intended</td>
+<td>The candidate sees a different list. That is the point, and it is also the risk: a bad strategy degrades the product's core output.</td>
+</tr>
+<tr>
+<td>Operational</td>
+<td>Low</td>
+<td>No deployment coordination; this runs in the candidate's own session.</td>
+</tr>
+<tr>
+<td>Risk if nothing changes</td>
+<td><strong>High</strong></td>
+<td>The observed result stands: a candidate is shown a list that is mostly not their job, and every downstream improvement polishes the ordering of the wrong set.</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-impact-assessment"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Impact assessment</span></div><textarea class="note-ta" data-key="s-spec-impact-assessment" data-label="Impact assessment" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3">
+<h3 class="sec-h"><span class="chip">§3</span><span class="sec-title">Options</span></h3>
+<div class="note" data-for="s-spec-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3</span></div><textarea class="note-ta" data-key="s-spec-3" data-label="§3 Options" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-1-employer-re-query-from">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option 1 — Employer re-query from offers already seen</span></h4>
+<div class="sec-body"><p>Take the employers of offers that scored well on high-weight dimensions but were rejected
+for an orthogonal reason, and look for their <strong>other</strong> openings. The candidate set is
+entirely derived from adverts the candidate has already been shown and reacted to.</p>
+<ul>
+<li><strong>Scope</strong>: step 7, a new <code>integral.sourcing_strategy</code>, reads <code>weights.json</code> and the
+  signed notes; emits queries through the existing web-search path.</li>
+<li><strong>Effort</strong>: Small.</li>
+<li><strong>Trade-offs</strong>: Invents nothing — every employer is one the candidate saw. Cannot reach
+  an employer that never appeared in a first pass, so it deepens rather than widens.</li>
+<li><strong>Compatibility</strong>: Fully backwards compatible.</li>
+<li><strong>Dependencies</strong>: Fitted weights; at least one completed reaction or feedback round.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-1-employer-re-query-from"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option 1 — Employer re-query from offers already seen</span></div><textarea class="note-ta" data-key="s-spec-option-1-employer-re-query-from" data-label="Option 1 — Employer re-query from offers already seen" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-2-attribute-directed-sear">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option 2 — Attribute-directed search</span></h4>
+<div class="sec-body"><p>Derive search <em>attributes</em> from the high-weight dimensions and query on those instead of
+on employers: if remote policy dominates, search remote-first job boards, remote-friendly
+countries, company sizes and stages that correlate with the dimension.</p>
+<ul>
+<li><strong>Scope</strong>: as Option 1, plus a mapping from dimension to searchable attribute, plus a
+  per-source statement of which attributes it can express.</li>
+<li><strong>Effort</strong>: Medium.</li>
+<li><strong>Trade-offs</strong>: Widens the pool rather than deepening it, so it can reach employers the
+  candidate has never seen — the actual complaint. But the dimension→attribute mapping is
+  editorial: "remote policy correlates with company stage" is a claim, and a wrong one
+  sends every subsequent search in a wrong direction. It also cannot be verified per
+  candidate without more data than one person generates.</li>
+<li><strong>Compatibility</strong>: Backwards compatible.</li>
+<li><strong>Dependencies</strong>: Option 1's machinery.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-2-attribute-directed-sear"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option 2 — Attribute-directed search</span></div><textarea class="note-ta" data-key="s-spec-option-2-attribute-directed-sear" data-label="Option 2 — Attribute-directed search" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-3-model-proposed-employer">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option 3 — Model-proposed employers, verified before display</span></h4>
+<div class="sec-body"><p>Use the assistant's own knowledge of employers to propose candidates for a valued
+dimension — "these companies are known for four-day weeks" — then <strong>fetch and confirm</strong>
+before anything reaches the candidate.</p>
+<ul>
+<li><strong>Scope</strong>: Option 1, plus a proposal step and a mandatory verification step.</li>
+<li><strong>Effort</strong>: Medium.</li>
+<li><strong>Trade-offs</strong>: The only option that can reach an employer neither the candidate nor any
+  board surfaced, and the candidate reports this working in practice (PostHog, Canonical,
+  via <code>ai-job-search</code>) — though <strong>how that list was arrived at was never recorded</strong>, which
+  is most of what makes it hard. Against it: model knowledge is unverifiable, has a
+  training cut-off, and fabricates confidently. A hallucinated employer with a plausible
+  name is indistinguishable from a real one until fetched. Verification is therefore not a
+  safeguard bolted on, it is the feature: <code>unverified_company_claims == 0</code> means nothing
+  is shown that a fetch did not confirm.</li>
+<li><strong>Compatibility</strong>: Backwards compatible.</li>
+<li><strong>Dependencies</strong>: Option 1; <code>robots</code> compliance on employer career pages.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-3-model-proposed-employer"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option 3 — Model-proposed employers, verified before display</span></div><textarea class="note-ta" data-key="s-spec-option-3-model-proposed-employer" data-label="Option 3 — Model-proposed employers, verified before display" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-comparison">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Comparison</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th></th>
+<th>Option 1</th>
+<th>Option 2</th>
+<th>Option 3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Effort</td>
+<td>Small</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Reaches unseen employers</td>
+<td>No</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Can fabricate</td>
+<td>No</td>
+<td>No</td>
+<td><strong>Yes, without verification</strong></td>
+</tr>
+<tr>
+<td>Editorial judgement required</td>
+<td>None</td>
+<td>Dimension→attribute mapping</td>
+<td>Which employers, from memory</td>
+</tr>
+<tr>
+<td>Fires on the bakery case</td>
+<td>No (correctly)</td>
+<td>Possibly, wrongly</td>
+<td>Possibly, wrongly</td>
+</tr>
+<tr>
+<td>Needs connector changes</td>
+<td>No</td>
+<td>No</td>
+<td>No</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-comparison"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Comparison</span></div><textarea class="note-ta" data-key="s-spec-comparison" data-label="Comparison" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-4">
+<h3 class="sec-h"><span class="chip">§4</span><span class="sec-title">Recommendation</span></h3>
+<div class="sec-body"><p><strong>Option 1 first, then Option 3 behind its verification gate. Option 2 last, or never.</strong>
+<em>Confirmed in review (2026-08-24): options 1 and 3, not 2.</em></p>
+<p>Option 1 is the whole idea in its cheapest honest form. Its candidate set is derived
+entirely from what the candidate has already seen and judged, so it cannot invent an
+employer, cannot import an editorial claim, and needs no new source of truth. It is also
+the version that answers the bakery case <em>by construction</em> rather than by detection: if a
+first pass over local bakery adverts turns up no employer scoring well on anything the
+candidate values, the attractor set is empty and the strategy declines to fire. The tool
+never has to know it is looking at bakeries — it has to notice it has nothing to chase,
+and that is a measurement, not an inference.</p>
+<p>Option 3 second, because it is the one that reaches genuinely new employers and the
+candidate has seen it work. It ships only with <code>unverified_company_claims == 0</code> enforced,
+and that gate must be built with the feature rather than after it.</p>
+<p>Option 2 last. Its dimension→attribute mapping is a set of claims about the labour market
+that this system has no way to verify from one candidate's data, and a wrong mapping is
+invisible: it produces a plausible list that is systematically off, which is worse than
+producing nothing.</p></div>
+<div class="note" data-for="s-spec-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4</span></div><textarea class="note-ta" data-key="s-spec-4" data-label="§4 Recommendation" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-immediate-next-action">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Immediate next action</span></h4>
+<div class="sec-body"><p>Run <code>design</code> over this spec to produce sections 5–6 and the task split. The first task is
+<code>integral.sourcing_strategy</code> with the attractor definition and the fire rule, gated on
+<code>strategy_fires_without_attractors == 0</code> — the property that makes every later option safe.</p></div>
+<div class="note" data-for="s-spec-immediate-next-action"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Immediate next action</span></div><textarea class="note-ta" data-key="s-spec-immediate-next-action" data-label="Immediate next action" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-open-questions">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Open questions</span></h4>
+<div class="sec-body"><ol>
+<li><strong>Where do signed notes come from in a live run?</strong> <strong>Settled in review: the candidate
+   is shown adverts and judges them as a normal step, and that judgement drives the next
+   search.</strong> The loop is the feature, not a preliminary to it. Step 5 (<code>reactions</code>) and
+   step 10 (<code>feedback</code>) are where it happens; the open work is checking whether their
+   evidence carries the <em>sign</em> that <code>liked</code> / <code>disliked</code> carries, and adding it if not.
+   That check is a prerequisite task, not part of this one.</li>
+<li><strong>What is an attractor, formally?</strong> <strong>Settled in review: the signal is symmetric.</strong>
+   A <em>good thing in a rejected advert</em> says where to search next; a <em>bad thing in an
+   accepted advert</em> says what to stop returning, and is equally informative. So the unit
+   is not "attractor" but a <strong>signed observation</strong>: <code>(dimension, sign, offer, employer)</code>,
+   harvested from every judged advert regardless of whether the advert was accepted.
+   Restricting it to rejections would discard half the signal — an offer the candidate
+   took <em>despite</em> a hybrid arrangement states the price of hybrid better than any offer
+   they refused. Remaining question is the threshold: how far above the candidate's rung,
+   and how high in the weight ranking, before an observation is worth acting on.</li>
+<li><strong>How many directed queries per cycle?</strong> <strong>Settled in review: a directed pass focuses
+   the search, it never replaces it.</strong> The output of a cycle is a blend — generic results
+   plus emphasis on the employers and attributes the candidate's judgements favour — not a
+   list drawn from one employer. Two properties follow and both need gates: each cycle
+   must be <em>better than the previous one</em> by the same within-subject measure
+   (<code>directed_rejection_rate</code>), and no single employer may dominate a cycle's results.
+   The cap is therefore a share of the cycle, not a count of queries.</li>
+<li><strong>Does a directed offer re-enter ranking normally, or is it flagged?</strong> <strong>Settled in
+   review: flag it, even where the flag is not used.</strong> The anchoring worry does not apply
+   here — <code>blind_ranking_leaks</code> governs T20's <em>blind</em> sitting, where the whole point is
+   that the candidate sees no system opinion. The live ranking is the opposite case: T19
+   already requires every position to be explained from the advert, so saying <em>why this
+   offer was sought</em> is continuous with what the product already promises, not a leak.
+   The flag is carried whether or not a given surface renders it.</li>
+</ol></div>
+<div class="note" data-for="s-spec-open-questions"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Open questions</span></div><textarea class="note-ta" data-key="s-spec-open-questions" data-label="Open questions" data-part="Preference Directed Sourcing" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+</section>
+</div>
+
+<div class="fab">
+  <button class="btn" id="btn-top" title="Back to top">↑ Top</button>
+  <button class="btn" id="btn-import">Import</button>
+  <button class="btn" id="btn-clear">Clear</button>
+  <button class="btn primary" id="btn-export2">💾 Save / Export</button>
+</div>
+<input type="file" id="file-import" class="hidden-input" accept=".md,.markdown,.json,text/markdown,application/json">
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <h3>Your notes</h3>
+    <p>Downloaded as a Markdown file. You can also copy the text below and paste it back.</p>
+    <textarea id="modal-ta" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn primary" id="modal-copy">Copy</button>
+      <button class="btn" id="modal-dl">Download again</button>
+      <button class="btn" id="modal-close">Close</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>var SPEC_SEED_NOTES={};</script>
+<script>
+(function(){
+  var NS = 'preference-directed-sourcing-spec-v1:';
+  var tas = Array.prototype.slice.call(document.querySelectorAll('.note-ta'));
+
+  function autoGrow(t){t.style.height='auto';t.style.height=(t.scrollHeight)+'px';}
+  function setFilled(t){var box=t.closest('.note');if(box){box.classList.toggle('filled',t.value.trim()!=='');}}
+  function updateCount(){
+    var n=0;tas.forEach(function(t){if(t.value.trim()!=='')n++;});
+    var el=document.getElementById('count');if(el){el.textContent=n+' / '+tas.length+' notes';}
+    return n;
+  }
+  var lsOK=true,dirty=false;
+  try{localStorage.setItem('__vs__','1');localStorage.removeItem('__vs__');}catch(e){lsOK=false;}
+  var WARN='⚠ Not saving — tap Save / Export';
+  function nowStamp(){var d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+  function setState(txt,cls){var el=document.getElementById('savestate');if(el){el.textContent=txt;el.className='savestate '+(cls||'');}}
+  window.addEventListener('beforeunload',function(e){if(!lsOK&&dirty){e.preventDefault();e.returnValue='';}});
+
+  var saveTimers={};
+  function save(t){
+    if(!lsOK){dirty=true;setState(WARN,'warn');return;}
+    var k=NS+t.dataset.key;
+    try{
+      if(t.value.trim()===''){localStorage.removeItem(k);}else{localStorage.setItem(k,t.value);}
+      dirty=true;setState('✓ Saved '+nowStamp(),'ok');
+    }catch(e){lsOK=false;document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+  }
+  var SEED=(typeof SPEC_SEED_NOTES!=='undefined')?SPEC_SEED_NOTES:{};
+  tas.forEach(function(t){
+    try{var v=localStorage.getItem(NS+t.dataset.key);
+        if(v!=null){t.value=v;}
+        else if(Object.prototype.hasOwnProperty.call(SEED,t.dataset.key)){
+          var sv=SEED[t.dataset.key];if(typeof sv==='string'){t.value=sv;}}}catch(e){}
+    autoGrow(t);setFilled(t);
+    t.addEventListener('input',function(){
+      autoGrow(t);setFilled(t);updateCount();
+      clearTimeout(saveTimers[t.dataset.key]);
+      saveTimers[t.dataset.key]=setTimeout(function(){save(t);},350);
+    });
+    t.addEventListener('blur',function(){save(t);});
+  });
+  updateCount();
+  if(lsOK){setState('✓ Auto-saving','ok');}else{document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+
+  function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},1900);}
+  function pad(n){return n<10?'0'+n:''+n;}
+  function today(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+
+  function buildExport(){
+    var byPart={},order=[],data={},n=0;
+    tas.forEach(function(t){
+      var v=t.value.trim();if(v==='')return;n++;
+      data[t.dataset.key]=t.value;
+      var part=t.dataset.part||'Other';
+      if(!byPart[part]){byPart[part]=[];order.push(part);}
+      byPart[part].push({label:t.dataset.label,ref:keyFromDom(t.dataset.key,t),note:t.value});
+    });
+    var lines=['# Specification notes','','_Exported '+today()+' · '+n+' note'+(n===1?'':'s')+'._','',
+      '> Send this file back to continue the review. Notes are embedded as data at the bottom','> so importing this file restores them in the reader.',''];
+    order.forEach(function(part){
+      lines.push('## '+part,'');
+      byPart[part].forEach(function(it){
+        lines.push('**'+it.label+'**  `'+it.ref+'`');
+        it.note.split('\n').forEach(function(ln){lines.push('> '+ln);});
+        lines.push('');
+      });
+    });
+    lines.push('<!-- SPEC-NOTES-DATA');
+    lines.push(JSON.stringify(data));
+    lines.push('-->');
+    return{text:lines.join('\n'),n:n};
+  }
+  function keyFromDom(domkey,t){var box=t.closest('.note');var r=box?box.querySelector('.note-ref'):null;return r?r.textContent:domkey;}
+
+  function download(name,text){
+    try{var blob=new Blob([text],{type:'text/markdown'});var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');a.href=url;a.download=name;
+        document.body.appendChild(a);a.click();
+        setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);return true;}catch(e){return false;}
+  }
+
+  var modal=document.getElementById('modal');
+  var modalTa=document.getElementById('modal-ta');
+  function openModal(text){modalTa.value=text;modal.classList.add('open');}
+  function closeModal(){modal.classList.remove('open');}
+
+  document.getElementById('btn-export').addEventListener('click',function(){
+    var r=buildExport();
+    if(r.n===0){toast('No notes yet — add some first.');return;}
+    var name='spec-notes-'+today()+'.md';
+    download(name,r.text);openModal(r.text);
+    if(navigator.clipboard){navigator.clipboard.writeText(r.text).then(function(){},function(){});}
+    dirty=false;setState('✓ Backup saved '+nowStamp(),'ok');
+    toast('Exported '+r.n+' note'+(r.n===1?'':'s'));
+  });
+  document.getElementById('btn-export2').addEventListener('click',function(){document.getElementById('btn-export').click();});
+
+  document.getElementById('modal-copy').addEventListener('click',function(){
+    modalTa.select();var ok=false;try{ok=document.execCommand('copy');}catch(e){}
+    if(navigator.clipboard){navigator.clipboard.writeText(modalTa.value).then(function(){},function(){});ok=true;}
+    toast(ok?'Copied to clipboard':'Select the text and copy');
+  });
+  document.getElementById('modal-dl').addEventListener('click',function(){download('spec-notes-'+today()+'.md',modalTa.value);toast('Download started');});
+  document.getElementById('modal-close').addEventListener('click',closeModal);
+  modal.addEventListener('click',function(e){if(e.target===modal)closeModal();});
+
+  // buildExport only ever writes strings, but an import takes whatever the file
+  // holds: an object arrives as "[object Object]", an array joins on commas,
+  // null becomes "null" — each then persisted over notes the reviewer wrote.
+  // The realistic trigger is a hand-edited or truncated export, not an attack;
+  // it just fails in the least useful way, silently and destructively. Skip
+  // anything that is not a string and say how many were skipped.
+  function applyData(obj){
+    var applied=0,skipped=0;
+    tas.forEach(function(t){
+      if(!Object.prototype.hasOwnProperty.call(obj,t.dataset.key))return;
+      var v=obj[t.dataset.key];
+      if(typeof v!=='string'){skipped++;return;}
+      t.value=v;save(t);autoGrow(t);setFilled(t);applied++;
+    });
+    updateCount();return{applied:applied,skipped:skipped};
+  }
+  document.getElementById('file-import').addEventListener('change',function(e){
+    var f=e.target.files[0];if(!f)return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      var txt=String(rd.result||'');var obj=null;
+      var m=txt.lastIndexOf('SPEC-NOTES-DATA');
+      try{
+        if(m>=0){var after=txt.slice(m+15);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
+                  if(jstart>=0&&jend>jstart){obj=JSON.parse(after.slice(jstart,jend+1));}}
+        else{obj=JSON.parse(txt);}
+      }catch(err){obj=null;}
+      if(!obj){toast('Could not read notes from that file');return;}
+      var r=applyData(obj);
+      toast('Imported '+r.applied+' note'+(r.applied===1?'':'s')+
+            (r.skipped?' ('+r.skipped+' skipped — not text)':''));
+    };
+    rd.readAsText(f);e.target.value='';
+  });
+  document.getElementById('btn-import').addEventListener('click',function(){document.getElementById('file-import').click();});
+
+  document.getElementById('btn-clear').addEventListener('click',function(){
+    if(!confirm('Clear ALL notes from this browser? Export first if you want to keep them.'))return;
+    tas.forEach(function(t){t.value='';save(t);autoGrow(t);setFilled(t);});
+    updateCount();toast('All notes cleared');
+  });
+
+  document.getElementById('btn-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+})();
+</script>
+</body>
+</html>
