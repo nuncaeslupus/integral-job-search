@@ -206,3 +206,62 @@ owner in front of real adverts in the normal course of using the tool, and both
 already append to `evidence.jsonl`. Labels harvested there cost no separate
 session. None of this is scheduled work; it is where to look when the gate needs
 a denominator.
+
+### What the round actually costs — measured 2026-08-24
+
+`extraction_macro_f1`'s floor is **10 evaluation labels per dimension**, not ten
+overall. There are **14**, spread one each across fourteen dimensions, so T56
+(`lo-6f53`) is **236 labels short** of a denominator. Eleven ad-side dimensions
+have none at all.
+
+The live numbers are in `status/evidence/T15.json` —
+`evaluation_labels_by_dimension`, `dimensions_below_floor`, `label_floor` — and
+`make evidence` regenerates them. What follows is the part that is not in any
+evidence file, and it is the part that decides how long the round takes.
+
+**The pre-marking does not cover the corpus any more.** `suggestions.json` was
+generated on 2026-08-19, over the 84 ads that were not in the blind-control
+cohort. T25 then broadened the corpus to 208 ads across seven job families —
+*after* that read. So:
+
+| family | ads | pre-marked |
+|---|---|---|
+| programming | 100 | 84 |
+| trades | 18 | **0** |
+| healthcare | 18 | **0** |
+| administrative | 18 | **0** |
+| hospitality | 18 | **0** |
+| teaching | 18 | **0** |
+| retail | 18 | **0** |
+
+Confirm-and-move is only available on programming. **The 108 ads in the six
+broadened families would be labelled blind**, which is the slow path this
+pre-marking exists to avoid — and they are the ads that matter most for the
+question the corpus was broadened to answer.
+
+`collaboration_mode` is the one dimension with no pre-mark even inside the 84.
+That is not a broken cue set: its cues fire on 7 of the 208 ads, so it is simply
+rare, and the 2026-08-19 reader never chose it. It will need labelling by hand
+whatever else happens.
+
+### One action serves both T56 and T57
+
+**Regenerate `suggestions.json` over all 208 ads, with the reader allowed to name
+what it cannot map.** That single pass:
+
+- pre-marks the 108 ads that have no marks, turning the T56 round back into
+  confirm-and-move instead of 108 blind reads;
+- produces the top-level `unmapped` key that T57 (`lo-7c14`) is waiting for —
+  `ontology_hit_rate` is `unmeasured` today precisely because no committed source
+  declares it *could* have recorded an unmapped concept.
+
+**The regenerated pass must be briefed differently from the last one.** The
+2026-08-19 read worked "from each dimension's definition and its named rungs
+only" — its own `note` says so. That is what makes its 828 mapped and 0 unmapped
+a property of the briefing rather than of the ads, and it is exactly what T57
+refuses to accept as a source. The new pass reads for meaning first and names
+concepts freely; mapping to dimensions happens afterwards, and whatever fails to
+map is the number T57 exists to report.
+
+A pre-mark still is not a label. This shortens the round; it does not stand in
+for the person at the end of it.
