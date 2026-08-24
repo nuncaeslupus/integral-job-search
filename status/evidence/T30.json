@@ -8,7 +8,7 @@
     "understanding",
     "ranking"
   ],
-  "declared_reads": 17,
+  "declared_reads": 20,
   "closure_violations": [],
   "unproduced_inputs": [],
   "drift": []

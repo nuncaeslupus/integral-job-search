@@ -48,6 +48,12 @@ from integral.process_spec import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T30.json"
+SOURCING_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T60.json"
+
+#: What the loop learns and step 7 must read, or the offer set is fixed by the
+#: least-informed moment in the process. Every one of them is optional: a first
+#: cycle runs before any of them exists.
+LEARNED_SOURCING_INPUTS = frozenset({"weights", "reaction_evidence", "outcome_evidence"})
 
 # One line of §3.1's graph block:
 #   `9  ranking       → rankings/<ts>.json  [reads: extractions, weights.json?]`
@@ -212,6 +218,20 @@ def drift_violations(steps: StepList, spec_path: Path = DEFAULT_PROCESS_DOC) -> 
     return violations
 
 
+def sourcing_inputs_excluded(steps: StepList) -> list[str]:
+    """Learned inputs step 7 does not read — or reads in a way that blocks it.
+
+    A required learned input is excluded too, and not on a technicality: step 7
+    that cannot run until a weight is fitted makes the loop a precondition for
+    entering the loop, which is the same offer set as not reading it at all.
+    """
+    sourcing = next((step for step in steps.steps if step.id == "sourcing"), None)
+    if sourcing is None:
+        return sorted(LEARNED_SOURCING_INPUTS)
+    optional = {read.artefact for read in sourcing.reads if read.optional}
+    return sorted(LEARNED_SOURCING_INPUTS - optional)
+
+
 # ---------------------------------------------------------------------------
 # the gate
 
@@ -247,18 +267,42 @@ def write_evidence(
     return measured
 
 
+def measure_sourcing(steps_path: Path = DEFAULT_STEPS_PATH) -> dict[str, Any]:
+    """T60's gate: the learned inputs step 7 still leaves out."""
+    excluded = sourcing_inputs_excluded(load_steps(steps_path))
+    return {
+        "sourcing_inputs_excluding_learned_evidence": len(excluded),
+        "learned_inputs": sorted(LEARNED_SOURCING_INPUTS),
+        "excluded": excluded,
+    }
+
+
+def write_sourcing_evidence(
+    evidence: Path = SOURCING_EVIDENCE_PATH, steps_path: Path = DEFAULT_STEPS_PATH
+) -> dict[str, Any]:
+    measured = measure_sourcing(steps_path)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
-    """`python -m integral.step_graph [path]` → T30's gate evidence."""
+    """`python -m integral.step_graph [path]` → T30's and T60's gate evidence."""
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)
+    sourcing = write_sourcing_evidence()
     print(json.dumps(measured, ensure_ascii=False))
+    print(json.dumps(sourcing, ensure_ascii=False))
+    for artefact in sourcing["excluded"]:
+        print(f"step 'sourcing' does not read {artefact!r} as an optional input", file=sys.stderr)
     if measured["declared_reads"] == 0:
         # Every step declaring nothing satisfies closure trivially, which is a
         # pass over an empty graph rather than over a closed one.
         print("no step declares any input — nothing was checked", file=sys.stderr)
         return 3
     problems = [
+        *sourcing["excluded"],
         *measured["closure_violations"],
         *measured["unproduced_inputs"],
         *measured["drift"],

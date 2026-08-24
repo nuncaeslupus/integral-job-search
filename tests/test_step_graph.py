@@ -21,14 +21,19 @@ import pytest
 
 from integral.process_spec import DEFAULT_PROCESS_DOC, StepList, load_steps
 from integral.step_graph import (
+    LEARNED_SOURCING_INPUTS,
     StepGraphError,
     closure_violations,
     drift_violations,
     measure,
+    measure_sourcing,
     parse_prose_graph,
+    sourcing_inputs_excluded,
     unproduced_inputs,
     write_evidence,
+    write_sourcing_evidence,
 )
+from integral.step_runtime import missing_inputs
 
 
 @pytest.fixture
@@ -201,3 +206,49 @@ def test_the_measurement_counts_both_kinds_of_closure_failure(tmp_path: Path) ->
     assert measured["required_subset_closure_violations"] == len(
         measured["closure_violations"]
     ) + len(measured["unproduced_inputs"])
+
+
+# --- T60: step 7 reads what the loop learned -------------------------------
+
+
+def test_step_seven_reads_the_learned_evidence(steps: StepList) -> None:
+    """Sourcing sits outside the 6 → 9 → 10 loop unless it declares its inputs."""
+    sourcing = next(step for step in steps.steps if step.id == "sourcing")
+    declared = {read.artefact for read in sourcing.reads}
+    assert declared >= LEARNED_SOURCING_INPUTS
+    assert measure_sourcing()["sourcing_inputs_excluding_learned_evidence"] == 0
+
+
+def test_the_prose_graph_and_the_json_agree_on_step_seven(steps: StepList) -> None:
+    assert drift_violations(steps) == []
+    prose = parse_prose_graph(DEFAULT_PROCESS_DOC.read_text(encoding="utf-8"))
+    assert sorted(prose[7][1]) == sorted(
+        [("constraints.json", False), ("weights.json", True), ("reaction + outcome evidence", True)]
+    )
+
+
+def test_sourcing_is_runnable_before_any_weight_is_fitted(steps: StepList) -> None:
+    """The new inputs are optional, or the loop becomes a precondition for it."""
+    sourcing = next(step for step in steps.steps if step.id == "sourcing")
+    assert missing_inputs(sourcing, {"constraints"}) == ()
+
+
+def test_a_required_learned_input_is_counted_as_missing(steps: StepList) -> None:
+    """The metric counts optionality too — a required weight is not the edge."""
+    required = _rewritten(
+        steps,
+        sourcing=[
+            {"artefact": "constraints", "optional": False},
+            {"artefact": "weights", "optional": False},
+            {"artefact": "reaction_evidence", "optional": True},
+            {"artefact": "outcome_evidence", "optional": True},
+        ],
+    )
+    assert sourcing_inputs_excluded(required) == ["weights"]
+
+
+def test_the_t60_gate_records_the_measurement_it_made(tmp_path: Path) -> None:
+    evidence = tmp_path / "T60.json"
+    measured = write_sourcing_evidence(evidence)
+    assert measured["sourcing_inputs_excluding_learned_evidence"] == 0
+    assert json.loads(evidence.read_text(encoding="utf-8")) == measured

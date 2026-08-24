@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 95,
+  "evidence_gates_read": 96,
   "gates_declaring_status_key": 4,
   "unrecordable": [],
   "readings": [
@@ -720,6 +720,14 @@
       "task": "t-b1355b65",
       "key": "offers_presented_without_a_liveness_check",
       "evidence": "status/evidence/D-18.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-b5cf7968",
+      "key": "sourcing_inputs_excluding_learned_evidence",
+      "evidence": "status/evidence/T60.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
