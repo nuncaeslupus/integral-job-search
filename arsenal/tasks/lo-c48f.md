@@ -2,7 +2,7 @@
 id: lo-c48f
 title: "T20: Calibrate ranking against blind manual ranking of 20 held-out ads"
 priority: 5
-deps: [lo-b422, lo-b313]
+deps: [lo-b422, lo-b313, t-c2c4dddb]
 requires: [surface:human]
 workspace: MATCH
 tags: [human, m3]
@@ -40,6 +40,24 @@ Write these RED before any production code:
 Service: **MATCH** · Size: M
 
 Design: `status/plan.md` (T20) · Spec: `status/specification.md` §5 contracts · Methods: `docs/METHODS.md`
+
+## The harness is T20a, and it is not this task
+
+Split out on 2026-08-24. Everything except the act of ranking — drawing the 20
+from the evaluation split, presenting them blind, recording the ordering, and
+computing `rank_spearman` — is **T20a** (`t-c2c4dddb`), which no human needs to
+be present for.
+
+This task was unbuildable as filed. Its `bash` block below is the placeholder
+that fails on purpose, `tests/test_calibration.py` does not exist, and there is
+no Spearman implementation in the tree — so a candidate sitting down to do T20
+had nothing to do it with. And because `requires: [surface:human]` excludes this
+task from the selector, no agent would ever have written that software either:
+the missing 90% was invisible to both halves of the system.
+
+**T20a replaces the placeholder** with the real command as part of its own work.
+When this task is claimed, the gate below should already name it; if it still
+says "no gate command defined", T20a has not landed and this is not ready.
 
 ## Human-owned
 

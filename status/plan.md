@@ -287,7 +287,8 @@ claims them. **[LAPTOP]** tasks need egress the cloud session is denied
 | T18 | Pareto frontier + salary-equivalent ordering + facet lists, pinned to a profile revision and a sufficiency level | 9 | L | T10, T15 | `pareto_dominance_violations == 0` | `test_dominated_offer_never_appears_in_frontier` in `tests/test_rank.py`; `test_unknown_dimension_is_not_treated_as_neutral`; `test_ranking_records_its_revision_and_level` | ☐ |
 | T19 | Explanations citing verbatim evidence spans and €/month contributions | 9 | M | T18 | `explained_fraction == 1.0` | `test_every_ranked_offer_cites_evidence` in `tests/test_explain.py` — each ranked offer carries ≥1 verbatim span per contributing dimension | ☐ |
 | T44 | Ranking presentation: the offer card as a template filled from normalised JSON — facts as bullets, one plain line including the bad part, unknown shown as unknown, provisional labelled | 9 | M | T18, T19, T33 | `provisional_rankings_unlabelled == 0` | `test_l1_ranking_is_labelled_provisional` in `tests/test_presentation.py`; `test_unknown_field_renders_as_unknown_not_neutral`; `test_card_is_filled_from_json_not_generated_per_offer` | ☐ |
-| T20 | **[HUMAN]** Calibrate ranking against blind manual ranking of 20 held-out ads | 9 | M | T9, T19 | `rank_spearman >= 0.60` | `test_ranking_correlates_with_manual_order` in `tests/test_calibration.py` — Spearman ρ ≥ 0.60 against the recorded manual order | ☐ |
+| T20a | The calibration harness for T20: draw 20 from the evaluation split, present them blind, record the ordering, compute `rank_spearman`. **Split out of T20 2026-08-24** — T20 is `[HUMAN]` and so excluded from the selector, which left the 90% of it that is software unbuildable by either half of the system | 9 | M | T9, T19 | `blind_ranking_leaks == 0` | `test_the_presentation_order_is_independent_of_the_system_ranking` in `tests/test_calibration.py`; `test_no_score_or_explanation_reaches_the_blind_page`; `test_spearman_matches_a_known_order` | ☐ |
+| T20 | **[HUMAN]** Calibrate ranking against blind manual ranking of 20 held-out ads | 9 | M | T9, T19, T20a | `rank_spearman >= 0.60` | `test_ranking_correlates_with_manual_order` in `tests/test_calibration.py` — Spearman ρ ≥ 0.60 against the recorded manual order | ☐ |
 
 ### DOCUMENT — the CV store, generated documents, interviews
 
@@ -354,7 +355,7 @@ listed; every open task appears in exactly one milestone.
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
-| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T50, T20, D-1, D-2, D-3, D-4, D-8 |
+| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T50, T20a, T20, D-1, D-2, D-3, D-4, D-8 |
 | **M4 — per opportunity** | documents for one advert, and the interview around it | S4, D-9, T45, T46, S6, T47, T43, T22, T26b, T25, T29, T51, T52, T53, T54, T55, S9, S10, S11, S12 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 
