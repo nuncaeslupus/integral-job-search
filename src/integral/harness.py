@@ -33,7 +33,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from integral.corpus import DEFAULT_PATH as RAW_CORPUS_PATH
 from integral.corpus import LANGUAGES, load_ads
-from integral.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, Language, load_dimensions
+from integral.dimensions import (
+    DEFAULT_DIMENSIONS_DIR,
+    Dimension,
+    Language,
+    ad_side,
+    load_dimensions,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STORE_PATH = _REPO_ROOT / "corpus" / "labelled" / "ads.jsonl"
@@ -538,7 +544,11 @@ def measure_labels(
         "labels_by_source": dict(sorted(by_source.items())),
         "labels_by_split": dict(sorted(by_split.items())),
         "labels_by_dimension": dict(sorted(by_dimension.items())),
-        "dimensions_without_labels": sorted(d.id for d in dimensions if not by_dimension.get(d.id)),
+        # Ad-side only: a `candidate_trait` has no advert to carry a label, so
+        # listing it as unlabelled reads as a gap that no labelling round can close.
+        "dimensions_without_labels": sorted(
+            d.id for d in ad_side(dimensions) if not by_dimension.get(d.id)
+        ),
         "languages": dict(
             sorted(
                 (language, sum(1 for ad in store if ad.language == language))

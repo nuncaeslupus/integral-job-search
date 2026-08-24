@@ -1,0 +1,59 @@
+# A `candidate_trait` (T26b): elicited in the interview, never read from an ad.
+# It carries no cues and no gold on purpose — the loader refuses both — because
+# an ad's wording evidences the employer's prose, not this candidate's mind.
+id: creativity
+kind: soft
+polarity: bipolar
+side: candidate_trait
+group: the_work
+label:
+  en: Creativity
+  es: Creatividad
+  ca: Creativitat
+definition: >
+  Given a problem that an established approach would solve, whether they reach for
+  that approach or build one the situation had no template for.
+levels:
+  - value: -0.6
+    label:
+      en: "Works from the proven pattern"
+      es: "Parte del patrón probado"
+      ca: "Parteix del patró provat"
+    tell: "the episodes show them choosing an established approach and staying with it"
+  - value: 0.0
+    label:
+      en: "Not yet elicited"
+      es: "Aún no obtenido"
+      ca: "Encara no obtingut"
+    tell: "the story bank holds no episode that shows which way they lean"
+  - value: 0.7
+    label:
+      en: "Invents an approach"
+      es: "Inventa un enfoque"
+      ca: "Inventa un enfocament"
+    tell: "the episodes show them building something the situation had no template for"
+elicitation:
+  questions:
+    - id: cr_q1
+      text:
+        en: >
+          Tell me about something you built where the obvious way of doing it did not
+          work. What did you try instead, and how did you land on it?
+        es: >
+          Cuéntame algo que construiste donde la manera obvia de hacerlo no funcionaba.
+          ¿Qué probaste en su lugar y cómo llegaste a esa idea?
+        ca: >
+          Explica'm alguna cosa que vas construir on la manera òbvia de fer-ho no
+          funcionava. Què vas provar en lloc seu i com hi vas arribar?
+    - id: cr_q2
+      text:
+        en: >
+          Describe a time you were handed a working solution and changed it anyway.
+          What made you think it was worth changing, and what happened?
+        es: >
+          Describe una vez en que te dieron una solución que ya funcionaba y aun así la
+          cambiaste. ¿Por qué te pareció que valía la pena y qué pasó?
+        ca: >
+          Descriu una vegada en què et van donar una solució que ja funcionava i tot i
+          així la vas canviar. Per què vas creure que valia la pena i què va passar?
+methods_ref: METHODS.md#21-structured-behavioural-elicitation

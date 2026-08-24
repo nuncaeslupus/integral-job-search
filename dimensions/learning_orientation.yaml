@@ -1,0 +1,59 @@
+# A `candidate_trait` (T26b): elicited in the interview, never read from an ad.
+# Distinct from `learning_support`, which is `matched` and describes what the
+# employer offers. This one is about the person, and no ad evidences it.
+id: learning_orientation
+kind: soft
+polarity: bipolar
+side: candidate_trait
+group: growth
+label:
+  en: Learning orientation
+  es: Orientación al aprendizaje
+  ca: Orientació a l'aprenentatge
+definition: >
+  Whether they study their field beyond what the job in front of them demands, or
+  learn what the work requires when the work requires it.
+levels:
+  - value: -0.6
+    label:
+      en: "Learns what the job requires"
+      es: "Aprende lo que el trabajo pide"
+      ca: "Aprèn el que la feina demana"
+    tell: "the episodes show learning that began because a task needed it"
+  - value: 0.0
+    label:
+      en: "Not yet elicited"
+      es: "Aún no obtenido"
+      ca: "Encara no obtingut"
+    tell: "the story bank holds no episode about how their learning starts"
+  - value: 0.7
+    label:
+      en: "Studies the field unprompted"
+      es: "Estudia el campo por su cuenta"
+      ca: "Estudia el camp pel seu compte"
+    tell: "the episodes show study that no task or employer asked for"
+elicitation:
+  questions:
+    - id: lo_q1
+      text:
+        en: >
+          Tell me about the last thing you learned in your field that nobody asked you
+          to learn. What got you started, and how far did you take it?
+        es: >
+          Cuéntame lo último que aprendiste de tu campo sin que nadie te lo pidiera.
+          ¿Qué te hizo empezar y hasta dónde lo llevaste?
+        ca: >
+          Explica'm l'última cosa que vas aprendre del teu camp sense que ningú t'ho
+          demanés. Què et va fer començar i fins on ho vas portar?
+    - id: lo_q2
+      text:
+        en: >
+          Describe a time the work demanded something you did not know. Walk me through
+          what you actually did between not knowing it and doing the job.
+        es: >
+          Describe una vez en que el trabajo exigió algo que no sabías. Cuéntame qué
+          hiciste realmente entre no saberlo y sacar el trabajo adelante.
+        ca: >
+          Descriu una vegada en què la feina va exigir alguna cosa que no sabies.
+          Explica'm què vas fer realment entre no saber-ho i tirar la feina endavant.
+methods_ref: METHODS.md#21-structured-behavioural-elicitation

@@ -1,6 +1,6 @@
 {
   "dimension_extractor_coverage": 1.0,
-  "dimension_count": 25,
+  "dimension_count": 29,
   "gold_example_count": 69,
   "languages_with_cues": {
     "en": 25,

@@ -18,10 +18,13 @@ from integral.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
     SCHEMA_LANGUAGES,
     Dimension,
+    ad_side,
+    candidate_traits,
     evaluation_gold,
     extractor_coverage,
     gold_provenance,
     load_dimensions,
+    trait_dimensions_ready,
     unmatched_gold,
     verify_gold,
 )
@@ -44,12 +47,15 @@ def test_every_dimension_has_cues_in_all_three_languages(dimensions: list[Dimens
     in one language only would be extracted from a quarter of the market and
     silently score zero on the rest — which reads identically to "the ad does
     not mention it".
+
+    Ad-side only: a `candidate_trait` is refused cues at load (T26b), so asking
+    it for three languages of them would be asking it to be a contradiction.
     """
     missing = {
         dimension.id: [
             language for language in SCHEMA_LANGUAGES if not dimension.extraction.cues.get(language)
         ]
-        for dimension in dimensions
+        for dimension in ad_side(dimensions)
     }
     missing = {dim_id: langs for dim_id, langs in missing.items() if langs}
 
@@ -57,9 +63,16 @@ def test_every_dimension_has_cues_in_all_three_languages(dimensions: list[Dimens
 
 
 def test_model_v0_is_within_the_planned_size(dimensions: list[Dimension]) -> None:
-    """20 to 25 dimensions, per the plan."""
-    assert MIN_DIMENSIONS <= len(dimensions) <= MAX_DIMENSIONS, (
-        f"model v0 has {len(dimensions)} dimensions, outside {MIN_DIMENSIONS}-{MAX_DIMENSIONS}"
+    """20 to 25 dimensions, per the plan.
+
+    Counted over the ad-side model, which is what the plan's range describes.
+    Candidate-side dimensions are elicited rather than designed against the
+    corpus, so counting them here would make coining a trait read as the model
+    outgrowing its plan.
+    """
+    sized = ad_side(dimensions)
+    assert MIN_DIMENSIONS <= len(sized) <= MAX_DIMENSIONS, (
+        f"model v0 has {len(sized)} ad-side dimensions, outside {MIN_DIMENSIONS}-{MAX_DIMENSIONS}"
     )
 
 
@@ -89,7 +102,7 @@ def test_every_dimension_has_a_gold_example_drawn_from_the_corpus(
     never drift into paraphrase — the failure the corpus README refuses for the
     ads themselves.
     """
-    without_gold = [d.id for d in dimensions if not d.extraction.gold]
+    without_gold = [d.id for d in ad_side(dimensions) if not d.extraction.gold]
 
     assert not without_gold, f"dimensions with no gold example: {without_gold}"
     assert verify_gold(dimensions) == []
@@ -112,7 +125,7 @@ def test_every_dimension_has_a_cue_that_fires_on_a_real_ad(dimensions: list[Dime
     assert ads, "corpus is empty — the anchor this test relies on is missing"
 
     dead = []
-    for dimension in dimensions:
+    for dimension in ad_side(dimensions):
         fired = any(
             re.search(cue.pattern, ad["text"], re.I)
             for language, cues in dimension.extraction.cues.items()
@@ -228,7 +241,8 @@ def test_a_human_gold_span_no_cue_matches_is_not_a_violation() -> None:
         "span": "wording that no cue in this dimension describes",
         "value": 1.0,
     }
-    dimension = load_dimensions(DEFAULT_DIMENSIONS_DIR)[0]
+    # Ad-side: a trait carries no gold to copy, and sorts first alphabetically.
+    dimension = ad_side(load_dimensions(DEFAULT_DIMENSIONS_DIR))[0]
     cue_gold = dimension.extraction.gold[0].model_copy(update={**payload, "derived_from": "cue"})
     human_gold = dimension.extraction.gold[0].model_copy(
         update={**payload, "derived_from": "human"}
@@ -243,3 +257,54 @@ def test_a_human_gold_span_no_cue_matches_is_not_a_violation() -> None:
 
     assert unmatched_gold([as_cue]), "an unreachable cue-derived gold must still be reported"
     assert unmatched_gold([as_human]) == [], "a human label is not required to be cue-reachable"
+
+
+# T26b — the candidate-trait dimensions. Traits are elicited in the interview and
+# never read from an ad, so the whole-model checks above (cues, gold, a cue that
+# fires on a real ad) are scoped to `ad_side` and these three stand in their place.
+
+SELF_RATING = re.compile(
+    r"\b(rate|scale of|out of ten|how (creative|ambitious) are you"
+    r"|pun[tú]a|del 1 al|escala de|c[oó]mo de (creativo|ambicioso)"
+    r"|puntua|de l'1 al|escala d)",
+    re.IGNORECASE,
+)
+
+
+def test_trait_dimensions_carry_no_cues(dimensions: list[Dimension]) -> None:
+    """A cue on a trait asserts an ad's wording evidences the *candidate*.
+
+    It evidences the employer's prose. The loader refuses it outright, so this
+    asserts the committed model never tries — and that traits bring no gold
+    either, since gold is an ad span and a trait has no ad to draw one from.
+    """
+    for trait in candidate_traits(dimensions):
+        assert not any(trait.extraction.cues.values()), f"{trait.id} carries ad cues"
+        assert not trait.extraction.gold, f"{trait.id} carries ad gold"
+
+
+def test_every_trait_dimension_declares_its_rungs(dimensions: list[Dimension]) -> None:
+    """A coined dimension without `levels` has no class set for anything to score."""
+    traits = candidate_traits(dimensions)
+
+    assert traits, "the model declares no candidate_trait dimensions"
+    for trait in traits:
+        assert len(trait.levels) >= 2, f"{trait.id} declares fewer than two rungs"
+        for level in trait.levels:
+            assert level.tell.strip(), f"{trait.id} has a rung with no tell"
+    assert trait_dimensions_ready(dimensions) == sorted(t.id for t in traits)
+
+
+def test_a_trait_question_is_behavioural_not_a_self_rating(dimensions: list[Dimension]) -> None:
+    """METHODS §2.1: "tell me about a time…", never "rate your ambition out of ten".
+
+    A self-rating measures what someone believes about themselves, which is the
+    one thing the story bank exists to avoid asking for.
+    """
+    for trait in candidate_traits(dimensions):
+        for question in trait.elicitation.questions:
+            for language in LANGUAGES:
+                text = question.text.get(language)
+                assert not SELF_RATING.search(text), (
+                    f"{trait.id}.{question.id}[{language}] asks for a self-rating: {text!r}"
+                )
