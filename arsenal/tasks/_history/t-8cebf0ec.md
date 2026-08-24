@@ -4,6 +4,7 @@ title: "T65: Consent: a narrowing is licensed by a recorded decision, and a refu
 priority: 5
 deps: [t-16a59a39]
 workspace: SUPPLY
+status: merged
 ---
 
 ## Acceptance gate
@@ -15,8 +16,7 @@ key: narrowings_without_a_recorded_decision
 ```
 
 ```bash
-# e.g. bash tests/surface_probe_test.sh
-false  # fail until a real check replaces this
+uv run python -m integral.sourcing_strategy && uv run pytest tests/test_sourcing_strategy.py -q
 ```
 
 The `gate` block is settled by the design and is read from the default branch —

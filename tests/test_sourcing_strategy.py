@@ -18,12 +18,20 @@ from pydantic import ValidationError
 from integral.sourcing_strategy import (
     EXHAUSTION_REPEAT_SHARE,
     MINIMUM_PROPOSALS,
+    MINIMUM_SCOPE_CHANGES,
+    ConsentError,
+    EvidenceRow,
     Exhaustion,
     ScopeAlternative,
+    ScopeDecision,
     ScopeProposal,
+    apply_scope_change,
     judge_cycle,
+    probe_consent,
     probe_exhaustion,
     probe_scope_proposals,
+    refusal_forbidding,
+    write_consent_evidence,
     write_evidence,
     write_scope_evidence,
 )
@@ -223,3 +231,157 @@ def test_the_scope_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
     measured = write_scope_evidence(target)
     assert json.loads(target.read_text(encoding="utf-8")) == measured
     assert measured["scope_proposals_offering_only_narrowing"] == 0
+
+
+# --- T65: consent — a narrowing is licensed by a recorded decision (§5.5) --
+
+
+_SESSION = "cse_5b1e"
+_TRIGGER = judge_cycle(cycle=3, offers_returned=10, offers_already_seen=9).reason
+_NARROW_TO_ACME = ScopeProposal(
+    direction="narrow",
+    facet="employer",
+    reason="you read both of Acme's adverts end to end and skipped the other six",
+    alternatives=(
+        ScopeAlternative(
+            direction="widen",
+            facet="country",
+            reason="or keep the net wide and look outside Spain as well",
+        ),
+    ),
+)
+_WIDEN_COUNTRY = ScopeProposal(
+    direction="widen",
+    facet="country",
+    reason="cycle 3 returned the same eight Madrid adverts you have already seen",
+    alternatives=(
+        ScopeAlternative(
+            direction="narrow",
+            facet="employer",
+            reason="or stay here and read only the two employers you opened in full",
+        ),
+    ),
+)
+
+
+def _decision(**overrides: object) -> ScopeDecision:
+    """A recorded decision, with only what a test is about spelled out."""
+    fields: dict[str, object] = {
+        "session": _SESSION,
+        "about": "employer:acme",
+        "decision": "narrow",
+        "accepted": True,
+        "cycle": 3,
+        "reason": "what the candidate said when they were asked",
+        "proposed_alternatives": ("widen:country", "narrow:stack"),
+        "trigger": _TRIGGER,
+    }
+    fields.update(overrides)
+    return ScopeDecision.model_validate(fields)
+
+
+def test_a_narrowing_without_a_recorded_decision_is_refused() -> None:
+    # An empty log licenses nothing: the scope change cannot apply without the row.
+    with pytest.raises(ConsentError):
+        apply_scope_change(_NARROW_TO_ACME, log=())
+    # Nor does a decision about another facet, or one pointing the other way.
+    elsewhere = _decision(about="stack:rust")
+    other_way = _decision(decision="widen")
+    with pytest.raises(ConsentError):
+        apply_scope_change(_NARROW_TO_ACME, log=(elsewhere, other_way))
+    # The recorded decision is what licenses it, and it is what comes back.
+    said_yes = _decision()
+    assert apply_scope_change(_NARROW_TO_ACME, log=(elsewhere, said_yes)) is said_yes
+
+
+def test_a_refusal_is_recorded_as_evidence_not_as_a_veto() -> None:
+    refusal = _decision(about="country:spain", decision="widen", accepted=False)
+    # Evidence: it is a row of `evidence.jsonl` like any other, and says so.
+    assert isinstance(refusal, EvidenceRow)
+    assert refusal.kind == "scope_decision"
+    assert refusal.step == "sourcing"
+    assert refusal.facet == "country"
+    # Not a licence: a refusal never licenses the change it refused.
+    with pytest.raises(ConsentError):
+        apply_scope_change(_WIDEN_COUNTRY, log=(refusal,))
+    # Not a veto either, and not permanent. A new session may ask again…
+    assert (
+        refusal_forbidding(
+            _WIDEN_COUNTRY, session="cse_later", trigger=_TRIGGER, log=(refusal,)
+        )
+        is None
+    )
+    # …so may a changed trigger…
+    assert (
+        refusal_forbidding(
+            _WIDEN_COUNTRY, session=_SESSION, trigger="the market went quiet", log=(refusal,)
+        )
+        is None
+    )
+    # …and so does new evidence about the candidate arriving in between.
+    reaction = EvidenceRow(kind="reaction", step="reactions", session=_SESSION)
+    assert (
+        refusal_forbidding(
+            _WIDEN_COUNTRY, session=_SESSION, trigger=_TRIGGER, log=(refusal, reaction)
+        )
+        is None
+    )
+    # And when they change their mind, the later row licenses the same change.
+    said_yes = _decision(about="country:spain", decision="widen", cycle=5)
+    assert apply_scope_change(_WIDEN_COUNTRY, log=(refusal, said_yes)) is said_yes
+
+
+def test_a_refused_proposal_is_not_reasked_on_the_next_cycle() -> None:
+    refusal = _decision(about="country:spain", decision="widen", accepted=False)
+    # Same facet, same direction, same session, same trigger, nothing learned in
+    # between — asking again next cycle in different words is the violation.
+    assert (
+        refusal_forbidding(_WIDEN_COUNTRY, session=_SESSION, trigger=_TRIGGER, log=(refusal,))
+        is refusal
+    )
+    # Another scope question asked in between is not news about the candidate:
+    # the tool cannot license its own re-ask by asking something else first.
+    asked_elsewhere = _decision(cycle=4)
+    assert (
+        refusal_forbidding(
+            _WIDEN_COUNTRY, session=_SESSION, trigger=_TRIGGER, log=(refusal, asked_elsewhere)
+        )
+        is refusal
+    )
+    # A question that was never refused is not forbidden by someone else's refusal.
+    assert (
+        refusal_forbidding(_NARROW_TO_ACME, session=_SESSION, trigger=_TRIGGER, log=(refusal,))
+        is None
+    )
+
+
+def test_a_decision_nobody_could_review_is_rejected() -> None:
+    # IS-4: consent nobody can review is not consent. A row naming no facet, no
+    # reason, or nothing that was on the table cannot be reviewed on return (§5.7).
+    with pytest.raises(ValidationError):
+        _decision(about="acme")
+    with pytest.raises(ValidationError):
+        _decision(reason="  ")
+    with pytest.raises(ValidationError):
+        _decision(proposed_alternatives=())
+    # The alternatives are a tuple, so they cannot be emptied after validation.
+    assert isinstance(_decision().proposed_alternatives, tuple)
+
+
+def test_the_consent_probe_finds_no_unlicensed_narrowing_and_is_not_vacuous() -> None:
+    measured = probe_consent()
+    assert measured["narrowings_without_a_recorded_decision"] == 0
+    assert measured["failures"] == []
+    # A probe that applied nothing would pass by never having narrowed.
+    assert measured["scope_changes_applied"] >= MINIMUM_SCOPE_CHANGES
+    assert measured["refusals_recorded"] >= 1
+    assert measured["unconsented_narrowing_rejected"] is True
+    assert measured["reask_after_refusal_rejected"] is True
+    assert measured["reask_licensed_by"] == ["changed trigger", "new evidence", "new session"]
+
+
+def test_the_consent_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
+    target = tmp_path / "T65.json"
+    measured = write_consent_evidence(target)
+    assert json.loads(target.read_text(encoding="utf-8")) == measured
+    assert measured["narrowings_without_a_recorded_decision"] == 0
