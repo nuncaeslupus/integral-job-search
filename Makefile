@@ -23,7 +23,11 @@ format:  ## ruff format + autofix
 	uv run --extra dev ruff check --fix .
 
 test:  ## run the test suite
-	uv run --extra dev pytest
+	# `collect` too, not just `dev`: tests/test_collect_ads_fetch.py loads
+	# tools/collect_ads.py, which imports py3langid from the collect extra.
+	# Without it the module fails to import and pytest aborts on collection —
+	# which passed unnoticed for as long as the venv happened to still carry it.
+	uv run --extra dev --extra collect pytest
 
 gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 	@mkdir -p status/evidence
