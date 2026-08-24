@@ -1,6 +1,8 @@
 {
+  "offers_with_no_url_in_the_store": 1,
   "provisional_rankings": 1,
   "provisional_rankings_unlabelled": 0,
+  "ranked_offers_without_a_url": 0,
   "rankings_rendered": 2,
   "renders_are_deterministic": 1,
   "stated_bullets_render_their_value": 1,

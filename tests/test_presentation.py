@@ -295,3 +295,57 @@ def test_a_negative_limit_is_refused() -> None:
     ranking, explanations = _ranked([_candidate(offer, 3600.0, {"remote": 1.0})], None)
     with pytest.raises(ValueError):
         render(ranking, [offer], explanations=explanations, limit=-1)
+
+
+# ---------------------------------------------------------------------------
+# D-17 — a ranked offer carries its link
+#
+# Captured at step `ranking` in test session `test-2026-08-20-a`: *"you didn't
+# give links to real offers, so it is not clear what to do with that info."*
+# Seven offers were shown with title, employer, pay and a verbatim citation and
+# no link, while every stored record already carried `url` and `source_ref`.
+# The card dropped a field the store had — so the rule is the same one the other
+# bullets follow: render it, and when it is absent say so.
+
+
+def test_every_ranked_offer_renders_its_url() -> None:
+    offer = _offer(url="https://example.invalid/offers/1")
+    assert "https://example.invalid/offers/1" in _card(offer)
+
+
+def test_an_offer_with_no_url_shows_the_absence() -> None:
+    """A missing row reads as "there was nothing to show"; the candidate cannot
+    tell it apart from a card that has no link field at all."""
+    text = _card(Offer(id=compute_offer_id("sin enlace"), source="fixture", text="sin enlace"))
+    assert "link:" in text
+    assert UNKNOWN in text.split("link:")[1].split("\n")[0]
+
+
+def test_the_url_row_is_present_on_every_card_in_a_page() -> None:
+    offers = [_offer("Uno, remoto.", url="https://example.invalid/1"), _offer("Dos, presencial.")]
+    candidates = [
+        _candidate(offers[0], 3600.0, {"remote": 1.0}),
+        _candidate(offers[1], 3100.0, {"remote": -1.0}),
+    ]
+    ranking, explanations = _ranked(candidates, None)
+    page = render(ranking, offers, explanations=explanations)
+
+    assert page.count("link:") == 2
+    assert "https://example.invalid/1" in page
+
+
+def test_a_dropped_url_is_counted_in_the_evidence() -> None:
+    """D-17 is a presentation defect that was invisible because nothing counted
+    it. The number goes in the gate evidence so a regression is visible."""
+    assert measure()["ranked_offers_without_a_url"] == 0
+    assert measure()["offers_with_no_url_in_the_store"] == 1
+
+
+def test_a_dominated_offer_is_not_counted_as_a_dropped_url() -> None:
+    """It has no card by design. Counting it would report the frontier working
+    as if it were this bug."""
+    from integral.presentation import _fixture, _urls_dropped
+
+    offers, _ = _fixture()
+    assert any(offer.url for offer in offers)
+    assert _urls_dropped(limit=1) == 0

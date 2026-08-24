@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 88,
+  "evidence_gates_read": 89,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -696,6 +696,14 @@
       "task": "t-bd59e70b",
       "key": "step_skills_without_a_progress_disclosure_rule",
       "evidence": "status/evidence/D-13.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-c40f0f88",
+      "key": "ranked_offers_without_a_url",
+      "evidence": "status/evidence/T44.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

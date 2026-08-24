@@ -77,6 +77,7 @@ _CARD = Template(
   hours:     $hours
   location:  $location
   contract:  $contract
+  link:      $link
 
   $matters
 """
@@ -147,6 +148,12 @@ def card(
         hours=UNKNOWN,
         contract=UNKNOWN,
         location=_location(offer),
+        # D-17: the store had `url` all along and the card dropped it, so seven
+        # offers were shown with nothing to click. Absent renders as `unknown`
+        # like every other bullet — a row left out reads as "there was nothing
+        # to show", which the candidate cannot tell from a card with no link
+        # field at all.
+        link=offer.url or UNKNOWN,
         matters=_matters(explanation),
     )
 
@@ -228,13 +235,24 @@ _FIXTURE_WEIGHTS: dict[str, Any] = {
 # next to an empty one, and "unknown is shown as unknown" would be measured on a
 # page where everything was unknown anyway.
 _FIXTURE_OFFERS: tuple[
-    tuple[str, str, str, float, Salary | None, Location | None, dict[str, float], dict[str, str]],
+    tuple[
+        str,
+        str,
+        str,
+        str | None,
+        float,
+        Salary | None,
+        Location | None,
+        dict[str, float],
+        dict[str, str],
+    ],
     ...,
 ] = (
     (
         "Backend engineer",
         "Remota SL",
         "Backend en Python, 100% en remoto, sin oficina.",
+        "https://example.invalid/offers/backend",
         3600.0,
         Salary(min=42000.0, max=48000.0, currency="EUR", period="year", stated=True),
         Location(raw="Barcelona", country="ES", remote="full"),
@@ -245,6 +263,7 @@ _FIXTURE_OFFERS: tuple[
         "Platform engineer",
         "Presencial SA",
         "Plataforma, presencial en nuestras oficinas de Barcelona.",
+        None,
         4200.0,
         None,
         None,
@@ -259,7 +278,7 @@ def _fixture() -> tuple[list[Offer], list[Candidate]]:
 
     offers: list[Offer] = []
     candidates: list[Candidate] = []
-    for title, company, text, monthly, salary, location, scores, spans in _FIXTURE_OFFERS:
+    for title, company, text, url, monthly, salary, location, scores, spans in _FIXTURE_OFFERS:
         offer = Offer(
             id=compute_offer_id(text),
             source="fixture",
@@ -267,6 +286,7 @@ def _fixture() -> tuple[list[Offer], list[Candidate]]:
             company=company,
             text=text,
             language="es",
+            url=url,
             salary=salary,
             location=location,
         )
@@ -306,6 +326,29 @@ def _bullet(page: str, name: str, card_index: int) -> str:
     return values[card_index]
 
 
+def _urls_dropped(limit: int = DEFAULT_LIMIT) -> int:
+    """Rendered offers whose stored `url` never reached their own card (D-17).
+
+    Scoped to the offers that actually got a card, and checked against that
+    card rather than against the whole page. A dominated or truncated offer has
+    no card *by design*, so counting it as a dropped URL would report the
+    frontier working as this bug; and a page-wide substring test passes as soon
+    as some *other* card carries the same or a longer URL, which is the shape a
+    check on a page of near-identical adverts would eventually hit.
+    """
+    offers, candidates = _fixture()
+    ranking, _ = _page(_FIXTURE_WEIGHTS)
+    by_id = {offer.id: offer for offer in offers}
+    explanations = explain(ranking, candidates, _FIXTURE_WEIGHTS)
+
+    dropped = 0
+    for offer_id in ranking["pareto"][:limit]:
+        offer = by_id[offer_id]
+        if offer.url and offer.url not in card(offer, explanations.get(offer_id)):
+            dropped += 1
+    return dropped
+
+
 def measure() -> dict[str, Any]:
     """The gate's number, and proof it can rise."""
     provisional, provisional_page = _page(None)
@@ -340,6 +383,13 @@ def measure() -> dict[str, Any]:
             _bullet(weighted_page, "pay", 1) == UNKNOWN
             and _bullet(weighted_page, "location", 1) == UNKNOWN
         ),
+        # D-17 was invisible because nothing counted it. What is counted is the
+        # defect itself — a record that *has* a URL whose card does not show it —
+        # not the offers that genuinely have none. An advert with no link is a
+        # gap in the source; a link the store held and the card dropped is this
+        # bug, and only the second is something this module can commit.
+        "ranked_offers_without_a_url": _urls_dropped(),
+        "offers_with_no_url_in_the_store": sum(1 for offer in _fixture()[0] if not offer.url),
     }
 
 
