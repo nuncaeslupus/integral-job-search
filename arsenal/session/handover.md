@@ -2,7 +2,8 @@
 
 ## The queue is clear and nothing is waiting on a review
 
-**Eight tasks merged.** No PR is open. The board reads
+**Eight tasks merged.** The only PR open is the one carrying this handover.
+The board reads
 **96 tasks — open 6, claimed 0, done 1, cancelled 2, merged 87**, and **none of
 the six open tasks is blocked**: every dependency they name is merged.
 
@@ -14,7 +15,7 @@ the six open tasks is blocked**: every dependency they name is merged.
 | #144 | D-17 the card renders the stored link | `ranked_offers_without_a_url == 0` | 98 |
 | #143 | T21 the feedback loop | `feedback_traceability == 1.0` | 60 |
 | #145 | T43 outside-the-advert enrichment | `outside_source_spans_in_explanations == 0` | 65 |
-| #148 | T26 cancelled, T26b split out | — (T26b carries `trait_dimensions_ready >= 4`) | 53, 147 |
+| #148 | T26 cancelled, T26b split out | — (T26b carries `trait_dimensions_ready >= 4`) | closed 53 |
 
 Steps 9 (`ranking`) and 10 (`feedback`) both flipped to `implemented` in
 `spec-v2-steps.json`. T48's drift check and `step_certification` each caught
@@ -30,7 +31,7 @@ Six tasks, all unblocked. Five an agent can take; one is yours.
 | T56 | `lo-6f53` | `extraction_macro_f1 >= 0.75` once the label floor is met |
 | T57 | `lo-7c14` | `ontology_hit_rate >= 0.85` — also what makes T26's old gate measurable |
 | T59 | `lo-4b17` | `extraction_negation_recall >= 0.80` — what `task_select` offers next |
-| T26b | `t-1956a8c6` | the four candidate-trait dimensions (new, see below) |
+| T26b | `t-1956a8c6` | the four candidate-trait dimensions (new, see below) — issue **#147**, open because the task is |
 | D-19 | `t-e6546af7` | the dimension model is software-only — 0 of 25 settled on construction |
 
 T56, T57 and T59 all wait on **labelled data volume**, not on each other. They
@@ -154,8 +155,16 @@ across the night, including on #145's final rebase.
 
 ## Worktrees
 
-All the task worktrees are merged and safe to remove. `js-night-base` is a
-detached checkout of `origin/main` used only to read the board.
+Every branch below is merged, so all three are safe to remove:
+
+- `~/dev/js-t26-wt` — #148, and the branch this handover was written on
+- `~/dev/js-t43-wt` — #145
+- `~/dev/js-night-base` — never held a branch; a detached checkout of
+  `origin/main` used only to read the board, so it is stale the moment
+  anything merges. Re-cut it rather than pulling it.
+
+`~/dev/job-search-t25-wt` and `~/dev/job-search-arsenal-queue-wt` are **not
+mine** — leave them to the other session.
 
 **Do not work in the primary checkout** (the clone without a `-wt` suffix). The
 other session lives there and the branch moves under you. Cut a worktree off
