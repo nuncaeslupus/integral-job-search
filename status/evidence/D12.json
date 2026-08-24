@@ -661,6 +661,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-16a59a39",
+      "key": "scope_proposals_offering_only_narrowing",
+      "evidence": "status/evidence/T64.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "t-1956a8c6",
       "key": "trait_dimensions_ready",
       "evidence": "status/evidence/T26b.json",

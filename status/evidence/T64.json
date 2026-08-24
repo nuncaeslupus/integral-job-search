@@ -1,0 +1,11 @@
+{
+  "scope_proposals_offering_only_narrowing": 0,
+  "proposals_offered": 2,
+  "directions_offered": [
+    "narrow",
+    "widen"
+  ],
+  "alternatives_offered": 3,
+  "one_way_construction_rejected": true,
+  "failures": []
+}

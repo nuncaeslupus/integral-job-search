@@ -17,10 +17,15 @@ from pydantic import ValidationError
 
 from integral.sourcing_strategy import (
     EXHAUSTION_REPEAT_SHARE,
+    MINIMUM_PROPOSALS,
     Exhaustion,
+    ScopeAlternative,
+    ScopeProposal,
     judge_cycle,
     probe_exhaustion,
+    probe_scope_proposals,
     write_evidence,
+    write_scope_evidence,
 )
 
 
@@ -96,3 +101,100 @@ def test_the_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
     measured = write_evidence(target)
     assert json.loads(target.read_text(encoding="utf-8")) == measured
     assert measured["exhaustion_triggers_without_a_reason"] == 0
+
+
+# --- T64: symmetric scope proposals — §5.4 ---------------------------------
+
+
+def _narrowing_to_one_employer(alternatives: list[ScopeAlternative]) -> ScopeProposal:
+    return ScopeProposal(
+        direction="narrow",
+        facet="employer",
+        reason="you read two of Acme's adverts end to end and skipped the rest",
+        alternatives=alternatives,
+    )
+
+
+def test_a_proposal_offering_only_narrowing_is_rejected() -> None:
+    # Alternatives that all narrow are not alternatives: they are the same
+    # suggestion three times, and the candidate has nothing to say no to.
+    with pytest.raises(ValidationError):
+        _narrowing_to_one_employer(
+            [
+                ScopeAlternative(
+                    direction="narrow",
+                    facet="stack",
+                    reason="every advert you lingered on mentioned Rust",
+                ),
+                ScopeAlternative(
+                    direction="narrow",
+                    facet="seniority",
+                    reason="you skipped both junior postings",
+                ),
+            ]
+        )
+    # …and offering nothing at all is not an improvement on offering one direction.
+    with pytest.raises(ValidationError):
+        _narrowing_to_one_employer([])
+
+
+def test_a_widening_is_proposable_when_the_search_is_too_focused() -> None:
+    proposal = ScopeProposal(
+        direction="widen",
+        facet="country",
+        reason=(
+            "cycle 3 returned the same eight Madrid adverts you have already seen — "
+            "the search has run out of road where it is looking"
+        ),
+        alternatives=[
+            ScopeAlternative(
+                direction="narrow",
+                facet="employer",
+                reason="or stay here and read only the two employers you opened in full",
+            )
+        ],
+    )
+    assert proposal.direction == "widen"
+    assert [alt.direction for alt in proposal.alternatives] == ["narrow"]
+
+
+def test_every_proposal_states_its_reason_in_candidate_terms() -> None:
+    measured = probe_scope_proposals()
+    assert measured["scope_proposals_offering_only_narrowing"] == 0
+    assert measured["failures"] == []
+    # A probe that offered nothing would pass by never having proposed.
+    assert measured["proposals_offered"] >= MINIMUM_PROPOSALS
+    assert measured["directions_offered"] == ["narrow", "widen"]
+    assert measured["one_way_construction_rejected"] is True
+    # The reason is the proposal's whole justification to the candidate, so a
+    # blank one is a violation on both halves of the pair, not a missing field.
+    with pytest.raises(ValidationError):
+        ScopeAlternative(direction="widen", facet="country", reason="   ")
+    with pytest.raises(ValidationError):
+        ScopeProposal(
+            direction="narrow",
+            facet="employer",
+            reason="  ",
+            alternatives=[
+                ScopeAlternative(
+                    direction="widen", facet="country", reason="or look further out"
+                )
+            ],
+        )
+
+
+def test_an_alternative_cannot_carry_alternatives_of_its_own() -> None:
+    # The base case is a distinct type, so the nesting stops at depth one by
+    # construction — no depth counter, and no proposal that can never be built.
+    assert "alternatives" not in ScopeAlternative.model_fields
+    with pytest.raises(ValidationError):
+        ScopeAlternative.model_validate(
+            {"direction": "widen", "facet": "country", "reason": "further out", "alternatives": []}
+        )
+
+
+def test_the_scope_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
+    target = tmp_path / "T64.json"
+    measured = write_scope_evidence(target)
+    assert json.loads(target.read_text(encoding="utf-8")) == measured
+    assert measured["scope_proposals_offering_only_narrowing"] == 0
