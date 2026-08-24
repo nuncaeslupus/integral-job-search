@@ -51,6 +51,32 @@ v0.36.1 made that robust and `query_status.py` names anything that still fails t
 resolve. Trust that list over `handle_sync.py`'s proposals — only one of the two is
 wired to an action.
 
+## Work each task in a linked worktree — that is the whole branch protocol
+
+`open_task_pr.sh` cuts the branch off `origin/main` itself, commits, pushes and opens
+the PR. **Leave the edits uncommitted and let it do that.** A branch made and committed
+by hand first has to be unwound (`git reset --mixed HEAD~1`, back to `main`) before the
+script will run, which is a confusing five minutes for no gain.
+
+It also refuses `git add -A` outside a **linked** git worktree, because on a shared
+checkout that sweeps whatever else happens to be in the tree. One command satisfies it,
+and the same one works whether this session is alone or one of several:
+
+```bash
+git worktree add --detach ../ijs-<task-id> origin/main   # work here
+# …edit, run `make host-gate`, then open_task_pr.sh from inside it…
+git worktree remove ../ijs-<task-id>
+```
+
+Parallel workers get this from `isolation: worktree`; a single interactive session has to
+ask for it, and asking costs one line.
+
+**Neither escape hatch is the answer on this laptop.** `ARSENAL_ALLOW_SHARED_ADD=1` is for
+a bespoke setup, and writing `arsenal/session/worktree_isolation` by hand records that
+worktrees are *unavailable* — `worktree_probe.sh` prints `available` here, so that file
+would be a false record, and `task_select.py` reads it to clamp every future round to one
+task. The probe writes it itself when it is true; nothing else should.
+
 ## Spending the context window deliberately
 
 `.rgignore` excludes the generated trees from every ripgrep-backed search, for the
@@ -101,6 +127,18 @@ make test           # pytest
 make evidence       # regenerate every measurement, fail on drift
 make verify-gates   # every done/merged task can still show its measurement
 ```
+
+**One drift is not yours: `T55.files_scanned` moves by one on every task PR.**
+`open_task_pr.sh` runs the host gate, *then* archives the task file into the
+allowlisted `arsenal/tasks/_history/`, then commits — so the committed count was
+measured one file before the tree it ships with, and the PR it opens carries the
+stale count.
+
+The script has already committed by the time you see it, so this is a **second
+commit on the branch it left you on**, not an amend: `make host-gate` regenerates
+the number, then `git add -A && git commit && git push` before the review lands.
+The squash merge folds it in. Do not go looking for a cause in the diff
+(`claude-arsenal#220`).
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
