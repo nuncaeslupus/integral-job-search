@@ -741,6 +741,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-bbb3d1da",
+      "key": "exhaustion_triggers_without_a_reason",
+      "evidence": "status/evidence/T62.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "t-bd59e70b",
       "key": "step_skills_without_a_progress_disclosure_rule",
       "evidence": "status/evidence/D-13.json",

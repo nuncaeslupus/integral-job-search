@@ -4,6 +4,7 @@ title: "T62: Exhaustion as a measurement: a cycle that keeps finding the same jo
 priority: 5
 deps: [t-b5cf7968]
 workspace: SUPPLY
+status: merged
 ---
 
 ## Acceptance gate
@@ -15,8 +16,7 @@ key: exhaustion_triggers_without_a_reason
 ```
 
 ```bash
-# e.g. bash tests/surface_probe_test.sh
-false  # fail until a real check replaces this
+uv run python -m integral.sourcing_strategy && uv run pytest tests/test_sourcing_strategy.py -q
 ```
 
 The `gate` block is settled by the design and is read from the default branch —
