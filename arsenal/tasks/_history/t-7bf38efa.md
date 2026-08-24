@@ -4,6 +4,7 @@ title: "T61: The \u00a71 amendment: the dimensions are what make an iterative se
 priority: 10
 deps: [t-b5cf7968]
 workspace: ONTOLOGY
+status: merged
 ---
 
 ## Acceptance gate
@@ -15,8 +16,7 @@ key: spec_consistency_violations
 ```
 
 ```bash
-# e.g. bash tests/surface_probe_test.sh
-false  # fail until a real check replaces this
+uv run python -m integral.spec_consistency && uv run pytest tests/test_spec_consistency.py -q
 ```
 
 The `gate` block is settled by the design and is read from the default branch —

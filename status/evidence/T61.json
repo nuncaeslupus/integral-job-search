@@ -1,0 +1,13 @@
+{
+  "spec_consistency_violations": 0,
+  "claims": [
+    "single dimension model is the shared vocabulary",
+    "make an iterative search steerable"
+  ],
+  "documents": [
+    "status/spec-v2-steps.md",
+    "status/specification.md",
+    "docs/METHODS.md"
+  ],
+  "missing": []
+}

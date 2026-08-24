@@ -77,6 +77,28 @@ TARGET_DOCS: tuple[Path, ...] = (
 
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D3.json"
 
+# T61. D-3's three documents must also agree on the *positive* claim, not only
+# on which gates are dead: the product's differentiator, stated the same way
+# wherever it is stated. Two halves, because §1's amendment gains one and keeps
+# the other — the mechanism (one shared dimension model, so the non-skill
+# dimensions survive the trip to the ranked list) and where it pays off (those
+# dimensions are what make an iterative search steerable at all). A reader who
+# starts in `docs/METHODS.md` must come away with the same argument as one who
+# starts in `status/specification.md`.
+#
+# Unlike the supersession scan these are literals, and deliberately: here the
+# claim itself is the thing being checked, so there is nothing to discover it
+# from. Keep them short and unbolded — an asterisk inside the phrase would make
+# the check depend on where the emphasis falls.
+DIFFERENTIATOR_CLAIMS: tuple[str, ...] = (
+    "single dimension model is the shared vocabulary",
+    "make an iterative search steerable",
+)
+
+DIFFERENTIATOR_DOCS: tuple[Path, ...] = SOURCE_DOCS + TARGET_DOCS
+
+DIFFERENTIATOR_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T61.json"
+
 # A superseded declaration found is what makes a "0 contradictions" reading
 # mean something. If the sentence shape ever stops matching — a rewording in
 # `spec-v2-steps.md`, a moved file — the scan would find no declarations, find
@@ -193,6 +215,42 @@ def find_contradictions(
     return contradictions
 
 
+def measure_differentiator(
+    docs: tuple[Path, ...] = DIFFERENTIATOR_DOCS,
+) -> dict[str, Any]:
+    """T61's gate: every (document, claim) pair the documents fail to state.
+
+    Whitespace is normalised before the search, so a claim wrapped across two
+    lines still counts — the documents are hand-wrapped prose and a rewrap is
+    not a change of argument. A missing file raises rather than being skipped:
+    a document that moved has stopped stating the differentiator, and a silent
+    skip would read as agreement.
+    """
+    missing = [
+        {"document": _relative(doc), "claim": claim}
+        for doc in docs
+        for claim in DIFFERENTIATOR_CLAIMS
+        if claim not in " ".join(doc.read_text(encoding="utf-8").split())
+    ]
+    return {
+        "spec_consistency_violations": len(missing),
+        "claims": list(DIFFERENTIATOR_CLAIMS),
+        "documents": [_relative(d) for d in docs],
+        "missing": missing,
+    }
+
+
+def write_differentiator_evidence(
+    evidence: Path = DIFFERENTIATOR_EVIDENCE_PATH,
+    docs: tuple[Path, ...] = DIFFERENTIATOR_DOCS,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T61.json`."""
+    measured = measure_differentiator(docs)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def measure(
     source_docs: tuple[Path, ...] = SOURCE_DOCS,
     target_docs: tuple[Path, ...] = TARGET_DOCS,
@@ -230,9 +288,13 @@ def _main(argv: list[str]) -> int:
     written — `[PATH]` defaults to `status/evidence/D3.json` when the flag
     carries no value, matching every other gate module in this package.
 
+    `status/evidence/T61.json` (the differentiator reading) is written
+    alongside it, on the same run — one module, one invocation, both of D-3's
+    numbers, the way `integral.step_graph` writes T30's and T60's.
+
     Exit 3 when fewer than `MINIMUM_DECLARATIONS_FOUND` supersession
     declarations were found (nothing trustworthy was measured), 1 when any
-    contradiction was found, 0 otherwise.
+    contradiction or unstated differentiator was found, 0 otherwise.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -267,12 +329,15 @@ def _main(argv: list[str]) -> int:
     source_docs = tuple(Path(p) for p in args.source_doc) if args.source_doc else SOURCE_DOCS
     target_docs = tuple(Path(p) for p in args.target_doc) if args.target_doc else TARGET_DOCS
 
+    docs = source_docs + target_docs
     if args.check:
         measured = measure(source_docs, target_docs)
+        differentiator = measure_differentiator(docs)
     else:
         measured = write_evidence(Path(args.write_evidence), source_docs, target_docs)
+        differentiator = write_differentiator_evidence(docs=docs)
 
-    print(json.dumps(measured, ensure_ascii=False))
+    print(json.dumps({**measured, **differentiator}, ensure_ascii=False))
 
     found = measured["superseded_declarations_found"]
     assert isinstance(found, int)
@@ -295,7 +360,16 @@ def _main(argv: list[str]) -> int:
             f"— {contradiction['text']}",
             file=sys.stderr,
         )
-    return 1 if contradictions else 0
+
+    missing = differentiator["missing"]
+    assert isinstance(missing, list)
+    for gap in missing:
+        print(
+            f"{gap['document']} does not state the differentiator: `{gap['claim']}`",
+            file=sys.stderr,
+        )
+
+    return 1 if contradictions or missing else 0
 
 
 if __name__ == "__main__":

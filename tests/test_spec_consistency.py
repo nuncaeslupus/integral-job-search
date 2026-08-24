@@ -32,12 +32,15 @@ import pytest
 from pydantic import ValidationError
 
 from integral.spec_consistency import (
+    DIFFERENTIATOR_CLAIMS,
     MINIMUM_DECLARATIONS_FOUND,
     Contradiction,
     Declaration,
     find_contradictions,
     find_declarations,
     measure,
+    measure_differentiator,
+    write_differentiator_evidence,
     write_evidence,
 )
 
@@ -217,3 +220,49 @@ def test_declaration_and_contradiction_are_frozen_strict_models() -> None:
         Declaration(expr="x >= 1", document="d.md", line=1, text="t", extra="nope")  # type: ignore[call-arg]
     with pytest.raises(ValidationError):
         contradiction.line = 3
+
+
+def test_every_document_states_the_same_differentiator() -> None:
+    """D-3's three documents — the step spec and the two it reconciles — must
+    each state the product's differentiator, both halves of it. A reader who
+    starts in `docs/METHODS.md` rather than `status/specification.md` must not
+    come away with a different argument about what this tool is."""
+    measured = measure_differentiator()
+    assert len(measured["documents"]) == 3, measured["documents"]
+    assert measured["spec_consistency_violations"] == 0, measured["missing"]
+
+
+def test_the_amendment_adds_a_sentence_without_removing_the_mechanism() -> None:
+    """§1 *gains* the search sentence; it loses nothing. The mechanism claim —
+    the dimensions surviving the trip from questionnaire to ranked list, carried
+    by one shared vocabulary — must still be there word for word."""
+    spec = " ".join(
+        (_REPO_ROOT / "status" / "specification.md").read_text(encoding="utf-8").split()
+    )
+    assert (
+        "so the candidate's non-skill dimensions never survive the trip from "
+        "questionnaire to ranked list" in spec
+    )
+    assert "a **single dimension model is the shared vocabulary** across every stage" in spec
+    assert "the dimensions are what make an iterative search steerable at all" in spec
+
+
+def test_a_document_missing_the_differentiator_is_a_violation(tmp_path: Path) -> None:
+    """Zero violations must mean the claims were found, not that nothing was
+    looked for — the same vacuity trap `MINIMUM_DECLARATIONS_FOUND` guards."""
+    silent = tmp_path / "silent.md"
+    silent.write_text("Says nothing about what the product is.\n", encoding="utf-8")
+
+    measured = measure_differentiator(docs=(silent,))
+
+    assert measured["spec_consistency_violations"] == len(DIFFERENTIATOR_CLAIMS)
+
+
+def test_write_differentiator_evidence_records_the_key_the_gate_reads(tmp_path: Path) -> None:
+    """T61's gate reads `status/evidence/T61.json` key `spec_consistency_violations`."""
+    evidence = tmp_path / "T61.json"
+    measured = write_differentiator_evidence(evidence=evidence)
+
+    recorded = json.loads(evidence.read_text(encoding="utf-8"))
+    assert recorded == measured
+    assert isinstance(recorded["spec_consistency_violations"], int)
