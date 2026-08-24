@@ -1,0 +1,45 @@
+{
+  "markets_with_no_applicable_dimension_reported_as_extracted": 0,
+  "markets_measured": 7,
+  "markets_with_no_applicable_dimension": [],
+  "market_reach": {
+    "administrative": {
+      "ads": 18,
+      "ads_reached": 14,
+      "applicable_dimensions": 9
+    },
+    "healthcare": {
+      "ads": 18,
+      "ads_reached": 14,
+      "applicable_dimensions": 10
+    },
+    "hospitality": {
+      "ads": 18,
+      "ads_reached": 10,
+      "applicable_dimensions": 6
+    },
+    "programming": {
+      "ads": 100,
+      "ads_reached": 96,
+      "applicable_dimensions": 23
+    },
+    "retail": {
+      "ads": 18,
+      "ads_reached": 17,
+      "applicable_dimensions": 8
+    },
+    "teaching": {
+      "ads": 18,
+      "ads_reached": 13,
+      "applicable_dimensions": 9
+    },
+    "trades": {
+      "ads": 18,
+      "ads_reached": 11,
+      "applicable_dimensions": 5
+    }
+  },
+  "claims_checked": 6,
+  "vocabulary_silent_exit_code": 4,
+  "shortfalls": []
+}

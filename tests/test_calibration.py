@@ -101,9 +101,7 @@ def test_spearman_matches_a_known_order() -> None:
 
 def test_a_malformed_ordering_is_refused() -> None:
     drawn = _drawn_ids()
-    outsider = next(
-        calibration.offer_id(ad) for ad in load_store() if ad.split == "elicitation"
-    )
+    outsider = next(calibration.offer_id(ad) for ad in load_store() if ad.split == "elicitation")
 
     duplicate = [drawn[0], *drawn[1:-1], drawn[0]]
     short_and_missing_one = drawn[:-1]
@@ -229,9 +227,7 @@ def test_blocks_must_partition_the_drawn_set(tmp_path: Path) -> None:
     with pytest.raises(calibration.CalibrationError, match="omit"):
         calibration.record(store, drawn, blocks={"Would apply": drawn[:5]})
     with pytest.raises(calibration.CalibrationError, match="more than one block"):
-        calibration.record(
-            store, drawn, blocks={"a": drawn, "b": drawn[:1]}
-        )
+        calibration.record(store, drawn, blocks={"a": drawn, "b": drawn[:1]})
     calibration.record(store, drawn, blocks={"a": drawn[:7], "b": drawn[7:]})
 
 

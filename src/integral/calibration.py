@@ -355,8 +355,7 @@ def spearman(a: Mapping[str, float], b: Mapping[str, float]) -> float:
     """Spearman's rho — Pearson over the two rank maps, ties already averaged."""
     if set(a) != set(b):
         raise CalibrationError(
-            "the two orderings do not cover the same ids: "
-            f"{sorted(set(a) ^ set(b))[:5]} differ"
+            f"the two orderings do not cover the same ids: {sorted(set(a) ^ set(b))[:5]} differ"
         )
     if len(a) < 2:
         raise CalibrationError("two ids at least are needed for a correlation")
@@ -485,8 +484,7 @@ def measure_leaks(store_path: Path = DEFAULT_STORE_PATH) -> dict[str, Any]:
     undetected = sorted(
         name
         for name, payload in plants.items()
-        if name
-        not in leaks(payload, system_order=page_order if name == RANKING_LEAK else agreeing)
+        if name not in leaks(payload, system_order=page_order if name == RANKING_LEAK else agreeing)
     )
     found = leaks(presentation(ads), system_order=agreeing)
     return {
@@ -521,8 +519,7 @@ def _leaks(evidence: Path) -> int:
     print(f"blind_ranking_leaks: {measured['blind_ranking_leaks']} (== 0)")
     if measured["plants_undetected"]:
         print(
-            "the count did not rise for a planted leak: "
-            f"{measured['plants_undetected']}",
+            f"the count did not rise for a planted leak: {measured['plants_undetected']}",
             file=sys.stderr,
         )
         return 1

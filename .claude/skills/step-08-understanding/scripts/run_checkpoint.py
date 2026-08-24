@@ -26,8 +26,11 @@ state never lives in the clone (T51, `docs/distribution.md` §2).
 Exit codes: 0 coverage is met *and* the step's acceptance gate is built, so a caller
 may read this as the step having passed; 1 coverage is not met (still open, or blocked on
 a missing input); 2 the candidate or step could not be read at all; 3 coverage is met but
-the gate is not built, so the step cannot be certified (D-21). Nothing but 0 may be read
-as "this step passed" — a gate that does not exist certifies nothing.
+the gate is not built, so the step cannot be certified (D-21); 4 the extractions settled
+no dimension at all, so the vocabulary does not reach this candidate's market and nothing
+produced here may be read as understanding (D-19). Nothing but 0 may be read as "this step
+passed" — a gate that does not exist certifies nothing, and neither does a file full of
+`unsettled`.
 """
 
 from __future__ import annotations
@@ -59,6 +62,7 @@ from integral.step_runtime import (  # noqa: E402
     is_finished,
     missing_inputs,
     present_artefacts,
+    settled_extractions,
     sufficiency,
 )
 
@@ -91,6 +95,7 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
     missing = missing_inputs(step, present)
     finished = is_finished(step, present)
 
+    settled, extractions_read = settled_extractions(view)
     session = SessionStore(store).read()
     on_this_step = bool(session and session.current_step == STEP_ID)
     outstanding = list(session.position.outstanding) if on_this_step else []
@@ -115,6 +120,15 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         # not implied by `coverage_met`: coverage counts artefacts, and the gate
         # measures whether they are any good (D-21).
         "certifiable": certifiable(step),
+        # D-19. `None` while there is nothing to judge — a step that has not run
+        # has not failed to reach anything. Once extractions exist the question
+        # is answerable, and `False` refuses independently of `certifiable`:
+        # coverage counts files, certification asks whether the gate is built,
+        # and this asks whether the words in the model touched these adverts at
+        # all. On the seven construction adverts that found it, none did.
+        "vocabulary_settled": (None if extractions_read == 0 else settled > 0),
+        "extractions_read": extractions_read,
+        "extractions_that_settled_a_dimension": settled,
         "sufficiency": sufficiency(view, steps),
         "gate_metric": f"{step.gate.metric} {step.gate.op} {step.gate.threshold}",
         "gate_owner": step.gate.task,
@@ -126,6 +140,16 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
             "measures separately."
         ),
         "certification_note": (None if certifiable(step) else certification_note(step)),
+        "vocabulary_note": (
+            None
+            if extractions_read == 0 or settled > 0
+            else (
+                f"{STEP_ID}: {extractions_read} extraction(s) present and not one settled a "
+                "dimension — the dimension model does not reach this candidate's market, so "
+                "there is nothing here to rank on. This is not a failed step: it is the "
+                "vocabulary being wrong for the trade (D-19)."
+            )
+        ),
     }
     store.write_json(result, "session", f"checkpoint-{STEP_ID}.json")
     return result
@@ -175,6 +199,11 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(result, ensure_ascii=False))
     if not result["runnable"]:
         print(f"{STEP_ID} is not runnable: missing {result['missing_inputs']}", file=sys.stderr)
+    # `.get`, not `[...]`: `checkpoint_exit` already reads a missing key as the
+    # answer that refuses, and a payload without this one is a caller that predates
+    # D-19 rather than a crash worth raising here.
+    if result.get("vocabulary_note") and result["runnable"] and result["coverage_met"]:
+        print(result["vocabulary_note"], file=sys.stderr)
     if result["certification_note"] and result["runnable"] and result["coverage_met"]:
         print(result["certification_note"], file=sys.stderr)
     # One shared decision, never re-spelled here — not even for the codes this
