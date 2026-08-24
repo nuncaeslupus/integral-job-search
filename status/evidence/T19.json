@@ -1,0 +1,10 @@
+{
+  "drivers": 9,
+  "explained_fraction": 1.0,
+  "explanation_status": "measured",
+  "fraction_falls_when_a_span_is_removed": 1,
+  "offers_ranked": 3,
+  "offers_with_drivers": 3,
+  "offers_without_drivers": 0,
+  "unexplained": []
+}

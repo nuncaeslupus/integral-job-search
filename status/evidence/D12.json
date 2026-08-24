@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 86,
+  "evidence_gates_read": 87,
   "gates_declaring_status_key": 3,
   "unrecordable": [],
   "readings": [
@@ -400,6 +400,14 @@
       "task": "lo-b2de",
       "key": "unbootstrapped_first_runs",
       "evidence": "status/evidence/T52.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "lo-b313",
+      "key": "explained_fraction",
+      "evidence": "status/evidence/T19.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
