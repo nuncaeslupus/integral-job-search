@@ -1,0 +1,2557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Integral Job Search — Plan (annotatable)</title>
+<style>
+:root{
+  --bg:#fbfaf7;--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;
+  --card:#ffffff;--accent:#0f766e;--accent2:#b45309;--chip:#eef2f1;
+  --note:#fff8ec;--note-line:#f0cf94;--code:#f3f1ec;--link:#0f766e;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#16151a;--fg:#e9e7e2;--muted:#a09c95;--line:#2e2c33;
+    --card:#1e1d23;--accent:#5eead4;--accent2:#fbbf24;--chip:#26313055;
+    --note:#251f10;--note-line:#6b531c;--code:#26242b;--link:#5eead4;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:17px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding-bottom:96px;
+}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+a{color:var(--link)}
+code{background:var(--code);padding:.08em .35em;border-radius:5px;font-size:.86em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+pre{background:var(--code);padding:12px;border-radius:8px;overflow:auto}
+pre code{background:none;padding:0}
+.topbar{position:sticky;top:0;z-index:30;background:var(--bg);
+  border-bottom:1px solid var(--line);backdrop-filter:saturate(120%) blur(6px)}
+.topbar .wrap{display:flex;align-items:center;gap:8px;padding-top:10px;padding-bottom:10px}
+.brand{font-weight:700;font-size:16px;margin-right:auto;letter-spacing:.2px}
+.brand small{font-weight:500;color:var(--muted);display:block;font-size:11px;letter-spacing:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--fg);
+  border-radius:9px;padding:8px 11px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media(prefers-color-scheme:dark){.btn.primary{color:#06201d}}
+.count{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:600}
+.savestate{font-size:12px;font-weight:700;white-space:nowrap;transition:color .2s}
+.savestate.ok{color:var(--accent)}
+.savestate.warn{color:#b45309}
+@media(prefers-color-scheme:dark){.savestate.warn{color:#fbbf24}}
+.statusbar{border-bottom:1px solid var(--line);background:var(--card)}
+.statusbar .wrap{padding:7px 16px;font-size:12px;color:var(--muted)}
+#warnbar{display:none;background:#fff4e5;border-bottom:1px solid var(--note-line);color:#7c2d12}
+#warnbar .wrap{padding:10px 16px;font-size:13px;line-height:1.45}
+@media(prefers-color-scheme:dark){#warnbar{background:#3a2a0e;color:#fde68a;border-color:#6b531c}}
+.hero{padding:22px 0 6px}
+.hero h1{font-size:25px;line-height:1.2;margin:.1em 0 .3em}
+.hero p{color:var(--muted);margin:.3em 0}
+.help{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.help summary{cursor:pointer;font-weight:600;padding:10px 0}
+.help ul{margin:.2em 0 1em;padding-left:1.2em}
+.help li{margin:.3em 0}
+.toc{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.toc>summary{cursor:pointer;font-weight:700;padding:11px 0;font-size:15px}
+.toc-part{margin:2px 0;border-top:1px solid var(--line)}
+.toc-part>summary{cursor:pointer;padding:9px 2px;font-weight:600;font-size:14px}
+.toc-part ul{margin:.1em 0 .7em;padding-left:1.1em}
+.toc-part li{margin:.22em 0;font-size:13.5px;line-height:1.4}
+.toc-part a{text-decoration:none}
+.toc-part a:hover{text-decoration:underline}
+.part{margin:26px 0}
+.part-title{font-size:21px;line-height:1.25;border-bottom:2px solid var(--accent);
+  padding-bottom:8px;margin:18px 0 8px;position:sticky;top:54px;background:var(--bg);z-index:10}
+.badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  vertical-align:middle;padding:3px 7px;border-radius:6px;margin-right:8px}
+.badge.spec,.badge.plan{background:var(--chip);color:var(--accent)}
+.badge.workspace{background:var(--chip);color:var(--accent2)}
+.sec{padding:6px 0 2px;border-bottom:1px solid var(--line);scroll-margin-top:100px}
+.sec:last-child{border-bottom:none}
+.sec-h{margin:10px 0 6px;line-height:1.3;position:sticky;top:94px;background:var(--bg);z-index:5;padding-top:6px}
+h3.sec-h{font-size:18.5px}
+h4.sec-h{font-size:16.5px;color:var(--fg)}
+.chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;
+  color:var(--accent);background:var(--chip);border-radius:6px;padding:2px 7px;margin-right:8px;vertical-align:middle}
+.sec-title{vertical-align:middle}
+.sec-body{margin:.2em 0 .4em}
+.sec-body p{margin:.55em 0}
+.sec-body ul,.sec-body ol{margin:.5em 0;padding-left:1.35em}
+.sec-body li{margin:.3em 0}
+.sec-body blockquote{margin:.7em 0;padding:.5em .9em;border-left:3px solid var(--accent2);
+  background:var(--code);border-radius:0 8px 8px 0;color:var(--fg)}
+.sec-body blockquote p{margin:.3em 0}
+.sec-body table{border-collapse:collapse;width:100%;font-size:13.5px;margin:.6em 0;display:block;overflow-x:auto}
+.sec-body th,.sec-body td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+.sec-body th{background:var(--chip);font-weight:700}
+.sec-body strong{font-weight:700}
+.note{background:var(--note);border:1px solid var(--note-line);border-radius:10px;
+  padding:8px 11px;margin:10px 0 16px}
+.note-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.note-ico{color:var(--accent2);font-weight:800}
+.note-label{font-size:12px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.05em}
+.note-ref{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted)}
+.note-ta{width:100%;border:none;background:transparent;color:var(--fg);font:inherit;font-size:15.5px;
+  resize:none;outline:none;line-height:1.5;padding:2px 0;overflow:hidden;min-height:1.6em}
+.note-ta::placeholder{color:var(--muted);opacity:.8}
+.note.filled{box-shadow:0 0 0 2px var(--note-line) inset}
+.fab{position:fixed;right:14px;bottom:16px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.fab .btn{box-shadow:0 4px 14px #0003}
+.modal{position:fixed;inset:0;z-index:60;background:#0008;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.modal-card{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;
+  max-height:86vh;display:flex;flex-direction:column;padding:16px}
+.modal-card h3{margin:.1em 0 .5em}
+.modal-card p{color:var(--muted);font-size:13.5px;margin:.2em 0 .6em}
+.modal-card textarea{width:100%;flex:1;min-height:220px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,Menlo,monospace;padding:10px;resize:vertical}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hidden-input{display:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:70;background:#111;color:#fff;
+  padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:.96}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">Integral Job Search — Plan<small>annotatable reader · 2026-08-24</small></div>
+    <span class="savestate ok" id="savestate">✓ Auto-saving</span>
+    <button class="btn primary" id="btn-export">Save / Export</button>
+  </div>
+</div>
+<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 24 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
+<div id="warnbar"><div class="wrap"><strong>Heads up —</strong> this browser isn't storing your notes automatically (private/incognito mode or restricted file view). Tap <strong>Save / Export</strong> regularly.</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Integral Job Search specification</h1>
+    <p>Read at your own pace and leave a note on any point you want to discuss.</p>
+  </div>
+  <details class="help">
+    <summary>How to annotate (tap)</summary>
+    <ul>
+      <li>Tap the note field under any section and type. Each note is tagged so your feedback maps to an exact point.</li>
+      <li><strong>Notes save automatically</strong> in this browser as you type.</li>
+      <li><strong>Save / Export</strong> downloads a Markdown file of your notes — the copy to send back. Tap whenever you pause, especially on a phone.</li>
+      <li><strong>Import</strong> reloads notes from a file you exported earlier (after clearing the browser or switching devices).</li>
+      <li><strong>Clear</strong> erases every note in this browser. Export first.</li>
+    </ul>
+  </details>
+  <details class="toc" open><summary>Contents</summary>
+<details class="toc-part">
+<summary>Plan</summary><ul>
+<li><a href="#s-plan-intro">Preamble &amp; scope</a></li>
+<li><a href="#s-plan-why-there-is-a-v2-plan">Why there is a v2 plan</a></li>
+<li><a href="#s-plan-technical-solution">Technical solution</a></li>
+<li><a href="#s-plan-architecture-overview">Architecture overview</a></li>
+<li><a href="#s-plan-data-flow">Data flow</a></li>
+<li><a href="#s-plan-state-changes">State changes</a></li>
+<li><a href="#s-plan-contracts-where-each-is-pinned">Contracts — where each is pinned</a></li>
+<li><a href="#s-plan-technology-choices">Technology choices</a></li>
+<li><a href="#s-plan-out-of-scope">Out of scope</a></li>
+<li><a href="#s-plan-implementation-tasks">Implementation tasks</a></li>
+<li><a href="#s-plan-ontology-the-shared-vocabulary">ONTOLOGY — the shared vocabulary</a></li>
+<li><a href="#s-plan-runtime-the-process-engine-new-i">RUNTIME — the process engine (new in v2)</a></li>
+<li><a href="#s-plan-profile-evidence-constraints-sto">PROFILE — evidence, constraints, stories, traits, weights</a></li>
+<li><a href="#s-plan-supply-connectors-offers-lifecyc">SUPPLY — connectors, offers, lifecycle</a></li>
+<li><a href="#s-plan-match-extraction-annotation-rank">MATCH — extraction, annotation, ranking</a></li>
+<li><a href="#s-plan-document-the-cv-store-generated">DOCUMENT — the CV store, generated documents, interviews</a></li>
+<li><a href="#s-plan-specification-the-documents-this">Specification — the documents this plan is built on</a></li>
+<li><a href="#s-plan-divergences">Divergences</a></li>
+<li><a href="#s-plan-step-gate-ownership">Step gate ownership</a></li>
+<li><a href="#s-plan-evidence-log">Evidence log</a></li>
+<li><a href="#s-plan-dependency-graph">Dependency graph</a></li>
+<li><a href="#s-plan-risks">Risks</a></li>
+<li><a href="#s-plan-reconciliation-with-v1">Reconciliation with v1</a></li>
+<li><a href="#s-plan-sign-off">Sign-off</a></li>
+</ul></details>
+</details>
+  <section class="part">
+<h2 class="part-title"><span class="badge plan">Plan</span>Plan</h2>
+<article class="sec" id="s-plan-intro">
+<h3 class="sec-h"><span class="chip">overview</span><span class="sec-title">Preamble &amp; scope</span></h3>
+<div class="sec-body"><p><strong>Date</strong>: 2026-08-18
+<strong>Specification</strong>: <code>status/spec-v2-process.md</code> (v2.1, the process) and
+<code>status/spec-v2-steps.md</code> (v1.1, one spec per step), with
+<code>status/spec-v2-steps.json</code> as the machine-readable step list
+<strong>Inherited contracts</strong>: <code>status/specification.md</code> §5 — dimension model, offer
+schema, extraction output, ranking output — unchanged and not restated
+<strong>Methods register</strong>: <code>docs/METHODS.md</code>
+<strong>Supersedes</strong>: <code>status/plan-v1.md</code> (the v1 thin vertical), whose tasks are
+folded into the table below with their current status
+<strong>Author</strong>: nuncaeslupus</p></div>
+<div class="note" data-for="s-plan-intro"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN · intro</span></div><textarea class="note-ta" data-key="s-plan-intro" data-label="Preamble &amp; scope" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-why-there-is-a-v2-plan">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Why there is a v2 plan</span></h3>
+<div class="sec-body"><p>Specification v2 settled <em>what the tool does</em> — thirteen steps, five of them
+required, each with a goal, a visible output and one named gate metric. It
+deliberately did not settle <em>what gets built in what order</em>:
+<code>status/spec-v2-process.md</code> §2 says the steps are numbered as the candidate's
+journey and "deliberately not aligned with the delivery phases in
+<code>status/plan.md</code>, which are about build order."</p>
+<p>That build order did not exist for v2. <code>status/plan-v1.md</code> was written against
+<code>status/specification.md</code> and organised by subsystem; it has no row for session
+state, resumption, freshness triggers, the annotation pass, document generation
+or the interview. Meanwhile every one of the thirteen step gates reads
+<code>not_implemented</code>, and four of them (<code>intake_field_provenance</code>,
+<code>constraint_field_resolution</code>, <code>trait_evidence_sufficiency</code>,
+<code>interview_lesson_linkage</code>) were attributed to a task in prose only — and one of
+those attributions turns out to contradict where the work actually sits (D-4).</p>
+<p>This plan closes that: one task table covering both generations of work, a gate
+per task, and a named owner for every step gate. §"Reconciliation with v1"
+records what changed about the tasks that already existed — the step the brief
+asked for and the spec round did not deliver.</p></div>
+<div class="note" data-for="s-plan-why-there-is-a-v2-plan"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Why there is a v2 plan</span></div><textarea class="note-ta" data-key="s-plan-why-there-is-a-v2-plan" data-label="Why there is a v2 plan" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-technical-solution">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Technical solution</span></h3>
+<div class="note" data-for="s-plan-technical-solution"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Technical solution</span></div><textarea class="note-ta" data-key="s-plan-technical-solution" data-label="Technical solution" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-architecture-overview">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Architecture overview</span></h4>
+<div class="sec-body"><p>Six layers. v1 had four; <strong>RUNTIME</strong> and <strong>DOCUMENT</strong> are new, and they are new
+because specification v2 is a process specification rather than a matching one.
+The old four are unchanged in shape and partly built.</p>
+<pre><code>                ┌────────────────────────────────────────────────────┐
+    RUNTIME     │ identify → resume → step graph → freshness triggers │ step 0 +
+    (new)       │ profile revision · staleness · scoring triggers     │ everything
+                │ decline ledger · one skill + checkpoint per step    │ cross-cutting
+                └──────────────────────┬─────────────────────────────┘
+                                       │ decides which step may run, and says why
+   ┌───────────────┬───────────────────┼──────────────────┬────────────────────┐
+   │ DOCUMENT (new)│ PROFILE           │ SUPPLY           │ MATCH              │
+   │ cv/source     │ evidence.jsonl    │ connectors       │ prefilter          │
+   │ cv/master.json│ constraints.json  │ offer store      │ extraction         │
+   │ generation    │ stories.jsonl     │ dedup            │ annotation (local) │
+   │ applications/ │ traits.json       │ lifecycle        │ ranking            │
+   │ interviews/   │ weights.json      │ tombstones       │ presentation       │
+   │ steps 1,11,12 │ steps 2,3,4,5,6,10│ step 7           │ steps 8,9          │
+   └───────────────┴───────────────────┴──────────────────┴────────────────────┘
+                                       │ all four read
+                             ┌─────────┴──────────┐
+                    ONTOLOGY │ dimensions/*.yaml  │  ← the spine (data)
+                             │ corpus/            │  ← ground truth + stimuli
+                             │ docs/METHODS.md    │  ← every method, link-checked
+                             └────────────────────┘
+</code></pre>
+<p><strong>RUNTIME is the layer this plan exists to add.</strong> The v1 architecture assumed a
+command run against a store. Specification v2 assumes a conversation that is
+interrupted, resumed, revised and re-entered, across more than one person on one
+machine — and almost everything in §3–§6 of the process spec is a RUNTIME
+concern that no v1 task owns: the dependency graph that decides whether a step
+may run (§3.1), sufficiency levels (§3.1), staleness propagation (§3.4),
+resumption (§5.3), proactive re-entry (§5.2), and the handle resolution that
+must happen before any path under <code>profiles/</code> is touched (§6.1).</p>
+<p><strong>DOCUMENT is separated from PROFILE</strong> because its artefacts belong to a
+different class. The profile is <em>derived</em> and rebuilt from an append-only log;
+generated CVs, letters, applications and interview records are <em>authored</em> or
+<em>historical</em> (process §3.4) — never regenerated silently, never revised at all
+in the historical case. One layer with two rebuild disciplines is how a CV that
+is already with an employer gets overwritten.</p></div>
+<div class="note" data-for="s-plan-architecture-overview"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Architecture overview</span></div><textarea class="note-ta" data-key="s-plan-architecture-overview" data-label="Architecture overview" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-data-flow">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Data flow</span></h4>
+<div class="sec-body"><p><strong>First run (steps 0–6).</strong> identify → resolve handle → read <code>session/state.json</code>
+→ announce where we are → run the next step the graph permits. Every step
+appends to <code>profile/evidence.jsonl</code> and rewrites <code>session/state.json</code> at its
+boundary. Derived files (<code>constraints.json</code>, <code>traits.json</code>, <code>weights.json</code>) are
+recomputed at step boundaries, on request, or after N new trait-bearing rows —
+never per message.</p>
+<p><strong>Loop (steps 7–10).</strong> constraints → connectors → normalised offers → dedup
+against the offer store <em>and</em> tombstones → prefilter → staged extraction (rules
+first, model last) → <strong>local annotation pass</strong> reading the profile on this
+machine → ranking pinned to a profile revision and a sufficiency level →
+presentation → feedback, which appends evidence and moves offer status, which
+marks weights and rankings stale.</p>
+<p><strong>Per opportunity (steps 11–12).</strong> shortlisted offer + <code>cv/master.json</code> +
+selected story episodes → generated CV and letter under
+<code>cv/generated/&lt;offer_id&gt;/v&lt;N&gt;/</code> with a claim→store manifest → per-item approval
+→ <code>applications/&lt;offer_id&gt;/</code> (immutable) → interview preparation, mock, and
+afterwards <code>interviews/&lt;offer_id&gt;/</code> (immutable) plus evidence rows carrying the
+lessons back into PROFILE.</p>
+<p><strong>Egress is one-directional and narrow.</strong> Advert text may go to a model.
+Profile data never accompanies it — relating an offer to the candidate happens
+in the local annotation pass. Generated documents are the only artefacts
+intended to leave the machine, and each leaves by the candidate pressing send.</p></div>
+<div class="note" data-for="s-plan-data-flow"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Data flow</span></div><textarea class="note-ta" data-key="s-plan-data-flow" data-label="Data flow" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-state-changes">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">State changes</span></h4>
+<div class="sec-body"><p>Everything below lives under <code>profiles/&lt;handle&gt;/</code>, which is gitignored (T1) and
+stays so. The tree is process spec §6.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Store</th>
+<th>Change</th>
+<th>Description</th>
+<th>Owner task</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RUNTIME</td>
+<td><code>identity.json</code></td>
+<td>CREATE</td>
+<td>handle, display name, language, locale, created_at</td>
+<td>S3</td>
+</tr>
+<tr>
+<td>RUNTIME</td>
+<td><code>session/state.json</code></td>
+<td>UPDATE</td>
+<td>current step, position, pending steps, open questions, sufficiency</td>
+<td>T35</td>
+</tr>
+<tr>
+<td>DOCUMENT</td>
+<td><code>cv/source/*</code></td>
+<td>CREATE</td>
+<td>originals as supplied; never modified, never sent</td>
+<td>S4</td>
+</tr>
+<tr>
+<td>DOCUMENT</td>
+<td><code>cv/master.json</code></td>
+<td>CREATE/UPDATE</td>
+<td>the CV store, every field carrying provenance</td>
+<td>S4</td>
+</tr>
+<tr>
+<td>DOCUMENT</td>
+<td><code>cv/generated/&lt;offer_id&gt;/v&lt;N&gt;/</code></td>
+<td>CREATE</td>
+<td>CV + letter + claim manifest; never overwritten</td>
+<td>T45</td>
+</tr>
+<tr>
+<td>DOCUMENT</td>
+<td><code>applications/&lt;offer_id&gt;/</code></td>
+<td>CREATE</td>
+<td>what was sent and when — immutable</td>
+<td>T46</td>
+</tr>
+<tr>
+<td>DOCUMENT</td>
+<td><code>interviews/&lt;offer_id&gt;/</code></td>
+<td>CREATE/APPEND</td>
+<td>preparation, questions, outcome, lessons — immutable</td>
+<td>S6</td>
+</tr>
+<tr>
+<td>PROFILE</td>
+<td><code>profile/evidence.jsonl</code></td>
+<td>APPEND</td>
+<td>source of truth; retractions are rows, not deletions</td>
+<td>T6, T38</td>
+</tr>
+<tr>
+<td>PROFILE</td>
+<td><code>profile/constraints.json</code></td>
+<td>CREATE/UPDATE (derived)</td>
+<td>every field <code>stated</code>, <code>declined</code> or <code>unknown</code></td>
+<td>T41</td>
+</tr>
+<tr>
+<td>PROFILE</td>
+<td><code>profile/stories.jsonl</code></td>
+<td>CREATE/UPDATE (derived)</td>
+<td>episodes linked to dimensions</td>
+<td>T8</td>
+</tr>
+<tr>
+<td>PROFILE</td>
+<td><code>profile/traits.json</code></td>
+<td>CREATE/UPDATE (derived)</td>
+<td>score with evidence rows, or <code>insufficient</code></td>
+<td>T27, T39</td>
+</tr>
+<tr>
+<td>PROFILE</td>
+<td><code>profile/weights.json</code></td>
+<td>CREATE/UPDATE (derived)</td>
+<td>part-worths in salary-equivalent terms</td>
+<td>T10</td>
+</tr>
+<tr>
+<td>SUPPLY</td>
+<td><code>offers/&lt;offer_id&gt;.json</code></td>
+<td>CREATE/UPDATE</td>
+<td>normalised offer + lifecycle status + history</td>
+<td>T11, S5</td>
+</tr>
+<tr>
+<td>SUPPLY</td>
+<td><code>offers/tombstones.jsonl</code></td>
+<td>APPEND</td>
+<td>purged ids, urls, hashes; no ad body</td>
+<td>S5</td>
+</tr>
+<tr>
+<td>MATCH</td>
+<td><code>extractions/&lt;offer_id&gt;.json</code></td>
+<td>CREATE</td>
+<td>candidate-independent; cacheable, shareable</td>
+<td>T15</td>
+</tr>
+<tr>
+<td>MATCH</td>
+<td><code>annotations/&lt;offer_id&gt;.json</code></td>
+<td>CREATE (derived)</td>
+<td>the same offer read against <em>this</em> candidate; never shared</td>
+<td>T42</td>
+</tr>
+<tr>
+<td>MATCH</td>
+<td><code>rankings/&lt;timestamp&gt;.json</code></td>
+<td>CREATE</td>
+<td>pinned to <code>profile_revision</code> and sufficiency level</td>
+<td>T18</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-state-changes"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › State changes</span></div><textarea class="note-ta" data-key="s-plan-state-changes" data-label="State changes" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-contracts-where-each-is-pinned">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Contracts — where each is pinned</span></h4>
+<div class="sec-body"><p>Most contracts are already written down. This table exists so the three that are
+not can be seen to have an owner, rather than being discovered missing by the
+task that needs them.</p>
+<table>
+<thead>
+<tr>
+<th>Contract</th>
+<th>Pinned in</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dimension model, offer schema, extraction output, ranking output</td>
+<td><code>status/specification.md</code> §5</td>
+<td>settled (v1)</td>
+</tr>
+<tr>
+<td>Evidence row</td>
+<td>process spec §4.1</td>
+<td>settled</td>
+</tr>
+<tr>
+<td>Session state</td>
+<td>process spec §5.1</td>
+<td>settled</td>
+</tr>
+<tr>
+<td>Profile revision</td>
+<td>process spec §3.4</td>
+<td>settled</td>
+</tr>
+<tr>
+<td>Tombstone, and the text normalisation behind <code>text_sha256</code></td>
+<td>process spec §7.4</td>
+<td>settled, versioned</td>
+</tr>
+<tr>
+<td>Offer status and allowed transitions</td>
+<td>process spec §7.1</td>
+<td>settled</td>
+</tr>
+<tr>
+<td><code>constraints.json</code> field set and resolution states</td>
+<td>—</td>
+<td><strong>T24 pins it</strong>; the step spec names the states, not the fields</td>
+</tr>
+<tr>
+<td><code>cv/master.json</code></td>
+<td>—</td>
+<td><strong>S4 pins it</strong>; step 1 names what it holds, not its shape</td>
+</tr>
+<tr>
+<td><code>annotations/&lt;offer_id&gt;.json</code></td>
+<td>—</td>
+<td><strong>T42 pins it</strong>; step 8 names what it records and that it never ships</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-contracts-where-each-is-pinned"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Contracts — where each is pinned</span></div><textarea class="note-ta" data-key="s-plan-contracts-where-each-is-pinned" data-label="Contracts — where each is pinned" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-technology-choices">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Technology choices</span></h4>
+<div class="sec-body"><p>Only the delta from v1. Everything in <code>status/plan-v1.md</code> still holds: Python
+3.12+, uv, ruff, strict mypy, pytest, YAML dimensions, JSONL logs, files rather
+than a database, Pydantic for schemas.</p>
+<table>
+<thead>
+<tr>
+<th>Choice</th>
+<th>Justification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Document parsing: <code>pypdf</code> + <code>python-docx</code> for <code>cv/source/*</code></td>
+<td>Step 1 imports what the candidate already has. Both are pure-Python and read-only, which suits a file that must never be modified</td>
+</tr>
+<tr>
+<td>A template engine for the ranking card, filled from normalised offer JSON</td>
+<td>Step 9 requires it explicitly: "built once, filled fast, never assembled a paragraph at a time by a model." A model rendering the same card fifty times is both the expensive and the unreliable way</td>
+</tr>
+<tr>
+<td>Staged extraction — normalise, then rules, then model on the remainder</td>
+<td>Step 8: "the model is the last resort rather than the first." The cost of reading every advert with a model is what makes the loop stop being run</td>
+</tr>
+<tr>
+<td>The candidate's own browser session for authenticated sources, never stored credentials</td>
+<td>Process spec §2.6 / step 7. Nothing to leak and nothing to rotate; the shape of the connector file is T32's problem</td>
+</tr>
+<tr>
+<td>Derived state recomputed, never migrated</td>
+<td>The profile is a pure function of the evidence log (T6). A schema change to a derived file is a rebuild, so no migration path is owed for <code>constraints.json</code>, <code>traits.json</code>, <code>weights.json</code>, or annotations</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-technology-choices"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Technology choices</span></div><textarea class="note-ta" data-key="s-plan-technology-choices" data-label="Technology choices" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-out-of-scope">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Out of scope</span></h4>
+<div class="sec-body"><ul>
+<li><strong>Any autonomous outward action.</strong> The tool prepares and stops one step short
+  of sending, per process spec §6.2. This is a permanent boundary, not a phase.</li>
+<li><strong>Multi-tenant service.</strong> Multi-user means several people on one machine with
+  one directory each — not accounts, not a server.</li>
+<li><strong>An interactive UI.</strong> Step 9's card is a filled template rendered to text or
+  a page. Anything with state of its own waits.</li>
+<li><strong>A plugin, a published package, or a UI.</strong> The distribution question
+  (process spec §11.5) is <strong>settled</strong>: installed by cloning, candidate state
+  outside the clone (<code>docs/distribution.md</code>, T29). A Claude Code plugin remains
+  a delivery change that can be made whenever the friction justifies it, and is
+  not v2 work.</li>
+<li><strong>CV templates and layouts</strong> (brief §2.7). The store feeds templates; choosing
+  layouts is not v2.</li>
+<li><strong>Re-litigating specification v2.</strong> A task that finds the spec wrong seeds a
+  <code>D-N</code> divergence and fixes the spec; it does not quietly diverge.</li>
+</ul></div>
+<div class="note" data-for="s-plan-out-of-scope"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Out of scope</span></div><textarea class="note-ta" data-key="s-plan-out-of-scope" data-label="Out of scope" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-implementation-tasks">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Implementation tasks</span></h3>
+<div class="sec-body"><p>Two columns beyond the v1 table: <strong>Step</strong> maps a task to the step(s) of
+specification v2 it serves (<code>—</code> for infrastructure that serves all of them), and
+<strong>St</strong> is status — ☑ merged · ◐ in progress · ☐ open · ☒ cancelled (absorbed or abandoned; never done). Rows T1–T33 are carried
+forward from <code>status/plan-v1.md</code>; T34–T48 are new here. The <strong>Gate</strong> column is
+the objective pass/fail, and a gate that could not run is not a pass.</p>
+<p><strong>[HUMAN]</strong> tasks require the candidate personally and carry
+<code>requires: ["surface:human"]</code>, which <code>queue_batch.sh</code> enforces so no worker
+claims them. <strong>[LAPTOP]</strong> tasks need egress the cloud session is denied
+(confirmed 2026-08-15, 403 at the proxy for every board tried); they are tagged
+<code>laptop</code> and run from a laptop session.</p></div>
+<div class="note" data-for="s-plan-implementation-tasks"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Implementation tasks</span></div><textarea class="note-ta" data-key="s-plan-implementation-tasks" data-label="Implementation tasks" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-ontology-the-shared-vocabulary">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">ONTOLOGY — the shared vocabulary</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T1</td>
+<td>Scaffold package: uv, ruff, strict mypy, pytest, Makefile, <code>profiles/</code> gitignored</td>
+<td>—</td>
+<td>S</td>
+<td>—</td>
+<td><code>lint_typecheck_exit_code == 0</code></td>
+<td><code>test_package_imports_cleanly_exposes_version</code> in <code>tests/test_scaffold.py</code> — importing <code>integral</code> yields a semver <code>__version__</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>Dimension schema (Pydantic) + loader + validator, incl. <code>methods_ref</code> anchor resolution</td>
+<td>—</td>
+<td>M</td>
+<td>T1</td>
+<td><code>dimension_schema_violations == 0</code></td>
+<td><code>test_dimension_missing_methods_ref_is_rejected</code> in <code>tests/test_dimension_model.py</code> — a dimension without <code>methods_ref</code> fails validation</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T3</td>
+<td>Dimension model v0: 20–25 dimensions with ES/EN/CA cues and elicitation questions</td>
+<td>8</td>
+<td>L</td>
+<td>T2</td>
+<td><code>dimension_extractor_coverage &gt;= 0.90</code></td>
+<td><code>test_every_dimension_has_cues_in_all_three_languages</code> in <code>tests/test_dimension_content.py</code> — each dimension carries ≥1 cue per language</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T4</td>
+<td>Corpus harness: ad store, labelling CLI, split assignment, self-agreement report</td>
+<td>5, 8</td>
+<td>M</td>
+<td>T2</td>
+<td><code>corpus_harness_roundtrip_loss == 0</code></td>
+<td><code>test_corpus_roundtrip_preserves_text_and_offsets</code> in <code>tests/test_corpus.py</code> — writing then reading an ad preserves text byte-for-byte and label offsets</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T4b</td>
+<td><strong>[LAPTOP]</strong> Collect ≥100 raw ads: ≈60 ES + 25 EN remote programming roles, plus ≈15 CA Catalan IT ads at large — the remote dimension mixed in, not filtered for (D-1)</td>
+<td>5, 8</td>
+<td>M</td>
+<td>—</td>
+<td><code>raw_ad_count &gt;= 100</code></td>
+<td><code>test_raw_corpus_meets_size_and_language_mix</code> in <code>tests/test_corpus_raw.py</code> — ≥100 raw ads, mix within ±10%</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>Corpus assembled and pre-marked; splits assigned. The hand-labelling campaign was <strong>retired 2026-08-19</strong> — the model reads each advert itself, and human labels accrue from use</td>
+<td>5, 8</td>
+<td>L</td>
+<td>T3, T4, T4b</td>
+<td><code>corpus_size &gt;= 100</code></td>
+<td><code>test_raw_corpus_meets_size_and_language_mix</code> in <code>tests/test_corpus_raw.py</code> — ≥100 ads, language mix within ±10%</td>
+<td>◐</td>
+</tr>
+<tr>
+<td>T22</td>
+<td><code>methods_ref</code> link check across dimensions and computation sites</td>
+<td>—</td>
+<td>S</td>
+<td>T2, T18</td>
+<td><code>undocumented_methods == 0</code></td>
+<td><code>test_every_methods_ref_resolves_to_an_anchor</code> in <code>tests/test_methods_links.py</code> — every <code>methods_ref</code> resolves to a heading in <code>docs/METHODS.md</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T23</td>
+<td>Dimension <code>side</code>: matched / candidate-fact / candidate-trait, and a coverage metric that stops asking ad-side questions of candidate-side entries</td>
+<td>4, 8</td>
+<td>M</td>
+<td>T2</td>
+<td><code>side_coverage_violations == 0</code></td>
+<td><code>test_a_trait_dimension_without_cues_is_valid</code> in <code>tests/test_dimension_side.py</code>; <code>test_extractor_coverage_counts_only_ad_side_dimensions</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T24</td>
+<td>Candidate attribute schema — languages, location, relocation, salary floor/target, availability, work authorisation, <strong>and the reach and legality fields step 7 needs</strong>: employed or contracting, paid where, taxed where. Pins the <code>constraints.json</code> field set and its <code>stated</code>/<code>declined</code>/<code>unknown</code> states</td>
+<td>2, 7</td>
+<td>M</td>
+<td>T23</td>
+<td><code>unsatisfiable_hard_constraint_leaks == 0</code></td>
+<td><code>test_offer_failing_a_hard_constraint_never_ranks</code> in <code>tests/test_candidate_attributes.py</code>; <code>test_missing_attribute_is_unknown_not_satisfied</code> — an unstated constraint does not silently pass</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T25</td>
+<td><strong>[LAPTOP]</strong> Broaden the corpus beyond remote programming: ≥6 job families, ≥15 ads each, same three languages</td>
+<td>5, 8</td>
+<td>L</td>
+<td>—</td>
+<td><code>corpus_job_family_count &gt;= 6</code></td>
+<td><code>test_corpus_covers_at_least_six_job_families</code> in <code>tests/test_corpus_families.py</code> — no family below 15 ads</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T26</td>
+<td>Dimension model v1: widen to the broadened corpus; add candidate-trait dimensions. <strong>Split and cancelled 2026-08-24</strong> — job (1), widening by a corpus sweep, was already retired by the 2026-08-19 scope change (a dimension is coined when a live session turns one up, not by a batch exercise); job (2) is now <strong>T26b</strong>. Its gate was T57's own metric, <code>unmeasured</code> until T57 lands, so this task could never have been measured from inside itself</td>
+<td>4, 8</td>
+<td>L</td>
+<td>T23, T25</td>
+<td><code>ontology_hit_rate &gt;= 0.85</code></td>
+<td>— carried to T26b as <code>trait_dimensions_ready &gt;= 4</code></td>
+<td>☒</td>
+</tr>
+<tr>
+<td>T26b</td>
+<td>The four candidate-trait dimensions — creativity, ambition, learning orientation, spare-time engagement — <code>side: candidate_trait</code>, no cues, elicited only, rungs declared</td>
+<td>4, 8</td>
+<td>M</td>
+<td>T23</td>
+<td><code>trait_dimensions_ready &gt;= 4</code></td>
+<td><code>test_trait_dimensions_carry_no_cues</code> in <code>tests/test_dimension_content.py</code>; <code>test_every_trait_dimension_declares_its_rungs</code>; <code>test_a_trait_question_is_behavioural_not_a_self_rating</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T29</td>
+<td>Record the product shape — packaging, phase skills, checkpoint scripts, and the distribution decision left open at process spec §11.5. <strong>Decided</strong>: cloned, with candidate state outside the clone (<code>docs/distribution.md</code>); implementation is T51–T54</td>
+<td>—</td>
+<td>S</td>
+<td>—</td>
+<td><code>phase_checkpoints_defined == 1</code></td>
+<td><code>test_every_open_shape_question_has_a_recorded_answer</code> in <code>tests/test_product_shape.py</code> — each question in the shape doc carries a decision or a named blocker</td>
+<td>◐</td>
+</tr>
+<tr>
+<td>T30</td>
+<td>Encode step inputs/outputs in <code>spec-v2-steps.json</code> and gate on required-subset closure</td>
+<td>—</td>
+<td>M</td>
+<td>—</td>
+<td><code>required_subset_closure_violations == 0</code></td>
+<td><code>test_required_step_reads_only_required_or_optional_inputs</code> in <code>tests/test_step_graph.py</code> — a required step reading a required-absent input fails the check</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T31</td>
+<td>Detect note-key rebinding and a stale spec reader</td>
+<td>—</td>
+<td>S</td>
+<td>—</td>
+<td><code>reader_note_rebindings == 0</code></td>
+<td><code>test_renumbered_section_does_not_rebind_a_note</code> in <code>tests/test_spec_reader.py</code> — moving a section leaves its note unbound rather than re-bound</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T48</td>
+<td>Step gate state register: derive each step's <code>state</code> in <code>spec-v2-steps.json</code> from <code>status/evidence/*.json</code> instead of hand-editing it</td>
+<td>—</td>
+<td>S</td>
+<td>T30</td>
+<td><code>step_gate_state_drift == 0</code></td>
+<td><code>test_step_state_matches_recorded_evidence</code> in <code>tests/test_step_gates.py</code> — a step whose evidence file records a passing measurement cannot read <code>not_implemented</code>; <code>test_missing_evidence_reads_not_implemented</code></td>
+<td>☑</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-ontology-the-shared-vocabulary"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › ONTOLOGY — the shared vocabulary</span></div><textarea class="note-ta" data-key="s-plan-ontology-the-shared-vocabulary" data-label="ONTOLOGY — the shared vocabulary" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-runtime-the-process-engine-new-i">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">RUNTIME — the process engine (new in v2)</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S3</td>
+<td>Multi-user profile tree, identify-at-session-start, and handle resolution, with a <code>PreToolUse</code> hook refusing reads and writes under another handle's tree. <strong>Session state is T35</strong></td>
+<td>0</td>
+<td>L</td>
+<td>S1, T1</td>
+<td><code>cross_user_leaks == 0</code></td>
+<td><code>test_store_operation_under_another_handle_is_refused</code> in <code>tests/test_identity.py</code>; <code>test_single_existing_profile_is_confirmed_not_assumed</code> — one profile is offered for confirmation, never selected silently; <code>test_correct_operation_never_trips_the_hook</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T35</td>
+<td>Session state and resumption: <code>session/state.json</code> written whenever something new is known, and the five-rule resumption order that announces which step it resumes and why</td>
+<td>0</td>
+<td>M</td>
+<td>S3, T6</td>
+<td><code>resumption_position_loss == 0</code></td>
+<td><code>test_interrupted_step_resumes_at_recorded_position</code> in <code>tests/test_session_state.py</code>; <code>test_state_survives_a_session_that_never_reaches_a_boundary</code>; <code>test_resumption_names_the_step_and_the_reason</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T34</td>
+<td>Step graph runtime: read declared inputs/outputs, answer <em>which steps may run</em> and <em>what is still owed</em>, and compute the sufficiency level L0/L1/L2</td>
+<td>—</td>
+<td>M</td>
+<td>T30, T35</td>
+<td><code>unrunnable_step_dispatches == 0</code></td>
+<td><code>test_step_without_its_required_inputs_is_never_offered</code> in <code>tests/test_step_graph_runtime.py</code>; <code>test_declining_every_offered_step_still_reaches_a_ranking</code>; <code>test_ranking_without_weights_is_l1</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T37</td>
+<td>Profile revision and staleness: everything derived records the revision it was computed from; derived is recomputed, authored is marked stale with the reason, historical is never touched</td>
+<td>—</td>
+<td>M</td>
+<td>T6</td>
+<td><code>stale_artefact_detection_recall == 1.0</code></td>
+<td><code>test_artefact_behind_current_revision_reads_stale</code> in <code>tests/test_revision.py</code>; <code>test_authored_artefact_is_marked_not_regenerated</code>; <code>test_historical_artefact_is_never_revised</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T36</td>
+<td>Freshness triggers and proactive re-entry: elapsed time, life event in the conversation, and gap — each producing an <strong>offer</strong>, with declines recorded so they are not repeated</td>
+<td>—</td>
+<td>M</td>
+<td>T35, T37</td>
+<td><code>unoffered_reentries == 0</code></td>
+<td><code>test_trigger_produces_an_offer_not_an_action</code> in <code>tests/test_freshness.py</code>; <code>test_declined_trigger_is_not_raised_again</code>; <code>test_life_event_reenters_the_step_the_spec_names</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T38</td>
+<td>Retraction rows, and deletion of a person: "forget that" suppresses everywhere derived while the row survives; "delete everything about me" removes the tree, named once and irreversible, including another profile after confirming it by name</td>
+<td>—</td>
+<td>M</td>
+<td>T6</td>
+<td><code>retracted_rows_surviving_rebuild == 0</code></td>
+<td><code>test_retracted_row_is_absent_from_every_derived_file</code> in <code>tests/test_retraction.py</code>; <code>test_retraction_is_itself_reversible</code>; <code>test_deletion_without_a_named_target_deletes_nothing</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T39</td>
+<td>Scoring triggers: recompute at a step boundary, on explicit request, and after N new trait-bearing rows — never per message</td>
+<td>4, 6</td>
+<td>S</td>
+<td>T37</td>
+<td><code>unscheduled_scoring_runs == 0</code></td>
+<td><code>test_scoring_does_not_run_per_message</code> in <code>tests/test_scoring_triggers.py</code>; <code>test_deferred_scoring_loses_no_evidence</code> — the log is never behind</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T40</td>
+<td>Decline ledger: a subject declined once is not raised again in that step, declined twice is not raised again at all unless the candidate reopens it</td>
+<td>—</td>
+<td>S</td>
+<td>T6</td>
+<td><code>repeat_asks_after_decline == 0</code></td>
+<td><code>test_subject_declined_twice_is_never_asked_again</code> in <code>tests/test_non_insistence.py</code>; <code>test_candidate_reopening_a_subject_clears_the_ledger</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S7</td>
+<td>One skill per step, thirteen of them, each carrying its checkpoint as a <strong>script</strong> rather than prose</td>
+<td>all</td>
+<td>L</td>
+<td>S2r, T34, T35</td>
+<td><code>steps_with_a_skill_fraction == 1.0</code></td>
+<td><code>test_every_step_has_a_skill</code>; <code>test_every_skill_names_its_gate_metric</code>; <code>test_every_skill_checkpoint_is_a_script_not_prose</code>; <code>test_no_skill_contradicts_its_step_specification</code></td>
+<td>☑</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-runtime-the-process-engine-new-i"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › RUNTIME — the process engine (new in v2)</span></div><textarea class="note-ta" data-key="s-plan-runtime-the-process-engine-new-i" data-label="RUNTIME — the process engine (new in v2)" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-profile-evidence-constraints-sto">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">PROFILE — evidence, constraints, stories, traits, weights</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T6</td>
+<td>Profile store: append-only <code>evidence.jsonl</code> + <code>rebuild</code> to byte-identical derived files; two-profile fixture</td>
+<td>—</td>
+<td>M</td>
+<td>S3, T2</td>
+<td><code>profile_rebuild_deterministic == 1</code></td>
+<td><code>test_rebuild_twice_produces_identical_bytes</code> in <code>tests/test_profile_store.py</code>; <code>test_second_profile_does_not_leak_into_first</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T41</td>
+<td>Constraints step engine: confirm-and-fill from Intake's claims when they exist, ask from scratch when they do not, and never promote an unconfirmed claim</td>
+<td>2</td>
+<td>M</td>
+<td>T6, T24</td>
+<td><code>constraint_field_resolution == 1.0</code></td>
+<td><code>test_every_constraint_field_resolves_to_one_of_three_states</code> in <code>tests/test_constraints_step.py</code>; <code>test_unconfirmed_claim_stays_unknown</code>; <code>test_step_runs_with_no_claims_present</code> — the required-only path</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T7</td>
+<td>Question bank generation from the dimension model</td>
+<td>3, 4</td>
+<td>M</td>
+<td>T3, T6</td>
+<td><code>question_dimension_coverage == 1.0</code></td>
+<td><code>test_every_generated_question_maps_to_a_dimension</code> in <code>tests/test_question_bank.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T8</td>
+<td>Free-text answer extraction → dimension values + story-bank episodes</td>
+<td>1, 3</td>
+<td>L</td>
+<td>T7</td>
+<td><code>story_dimension_linkage == 1.0</code></td>
+<td><code>test_every_episode_links_to_a_dimension</code> in <code>tests/test_elicit_extract.py</code>; <code>test_episode_defaults_to_private_disclosure</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T27</td>
+<td>Onboarding interview protocol: sequencing, answer-dependent follow-ups, coverage tracking, the first-job branch, empathic framing, and the two-episode/two-occasion trait floor reading <code>insufficient</code> rather than refusing</td>
+<td>3, 4</td>
+<td>L</td>
+<td>T7, T8, T24</td>
+<td><code>interview_profile_coverage &gt;= 0.90</code></td>
+<td><code>test_every_trait_is_scored_or_explicitly_insufficient</code> in <code>tests/test_interview.py</code>; <code>test_scripted_respondent_yields_full_profile_coverage</code>; <code>test_every_negative_episode_gets_a_lesson_followup</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T9</td>
+<td>Reaction elicitation: live multi-source stimuli by preference, corpus elicitation split as fallback, disjoint-split enforcement</td>
+<td>5</td>
+<td>M</td>
+<td>T5, T8, T11</td>
+<td><code>elicitation_eval_overlap == 0</code></td>
+<td><code>test_elicitation_never_draws_from_evaluation_split</code> in <code>tests/test_reaction_elicit.py</code>; <code>test_live_stimuli_enter_the_offer_store_as_new</code>; <code>test_no_stimulus_is_invented</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T10</td>
+<td>Preference weights: forced pairwise choices → part-worths → salary-equivalent scale</td>
+<td>6</td>
+<td>M</td>
+<td>T9</td>
+<td><code>weight_salary_equivalent_roundtrip_error &lt;= 0.01</code></td>
+<td><code>test_partworth_to_salary_equivalent_roundtrips</code> in <code>tests/test_weights.py</code> — converting a dimension to €/month and back recovers the part-worth within 1%</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T21</td>
+<td>Feedback loop: rejection reason → <code>evidence.jsonl</code> → rebuild → changed ranking, and the offer's lifecycle status moves with it</td>
+<td>10</td>
+<td>M</td>
+<td>S5, T6, T19</td>
+<td><code>feedback_traceability == 1.0</code></td>
+<td><code>test_every_profile_value_traces_to_evidence_rows</code> in <code>tests/test_feedback.py</code>; <code>test_rejection_moves_offer_status_and_marks_weights_stale</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T28</td>
+<td>Continuous profile capture: every candidate-facing surface appends evidence, not just onboarding</td>
+<td>—</td>
+<td>M</td>
+<td>T6, T27</td>
+<td><code>profile_capture_coverage == 1.0</code></td>
+<td><code>test_every_candidate_facing_surface_writes_evidence</code> in <code>tests/test_profile_capture.py</code> — a surface that accepts free text and writes no evidence row fails</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T49</td>
+<td>Trait evidence sufficiency: score a trait only when its evidence floor is met, report <code>insufficient</code> otherwise — never refuse, never voice the floor to the candidate</td>
+<td>4</td>
+<td>M</td>
+<td>T6, T27</td>
+<td><code>trait_evidence_sufficiency == 1.0</code></td>
+<td><code>test_a_trait_below_the_floor_is_insufficient_not_scored</code> in <code>tests/test_trait_sufficiency.py</code>; <code>test_insufficient_does_not_stop_the_step</code>; <code>test_the_floor_counts_occasions_not_repetitions</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T50</td>
+<td>Wire an intake capture driver: S4 gave intake a real conversational free-text surface, so it should move from <code>pending_implementation</code> to a measured surface rather than sitting in the bucket that means "nothing was built"</td>
+<td>1</td>
+<td>S</td>
+<td>T28, S4</td>
+<td><code>profile_capture_coverage == 1.0</code></td>
+<td><code>test_intake_is_a_measured_surface_not_a_pending_one</code> in <code>tests/test_profile_capture.py</code> — the number alone cannot show this was done, since it already read 1.0 over four surfaces; <code>test_a_conversational_intake_answer_reaches_the_evidence_log</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T51</td>
+<td>Candidate state resolves from <code>$INTEGRAL_HOME</code> and is refused anywhere inside a git work tree — the distribution decision made mechanical, so "candidate data never reaches a repository" is a property of the code rather than a <code>.gitignore</code> line</td>
+<td>—</td>
+<td>M</td>
+<td>—</td>
+<td><code>state_paths_inside_a_repo == 0</code></td>
+<td><code>test_a_home_inside_a_git_work_tree_is_refused</code> in <code>tests/test_state_home.py</code>; <code>test_the_default_home_is_outside_the_clone</code>; <code>test_every_store_path_resolves_through_the_resolver</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T52</td>
+<td>First-run bootstrap: a <code>SessionStart</code> hook and a step-0 re-check install the dependencies a clone does not carry, idempotently, and announce the first install to the candidate</td>
+<td>—</td>
+<td>M</td>
+<td>T51</td>
+<td><code>unbootstrapped_first_runs == 0</code></td>
+<td><code>test_a_clone_without_dependencies_installs_them_before_step_zero</code> in <code>tests/test_bootstrap.py</code>; <code>test_bootstrap_is_silent_when_the_environment_is_current</code>; <code>test_a_missing_package_manager_is_reported_not_raised</code></td>
+<td>◐</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-profile-evidence-constraints-sto"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › PROFILE — evidence, constraints, stories, traits, weights</span></div><textarea class="note-ta" data-key="s-plan-profile-evidence-constraints-sto" data-label="PROFILE — evidence, constraints, stories, traits, weights" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-supply-connectors-offers-lifecyc">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">SUPPLY — connectors, offers, lifecycle</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T11</td>
+<td>Normalised offer schema + manual-paste connector</td>
+<td>7</td>
+<td>M</td>
+<td>T1</td>
+<td><code>offer_schema_violations == 0</code></td>
+<td><code>test_pasted_text_produces_valid_offer</code> in <code>tests/test_connect_manual.py</code> — a pasted ad yields a schema-valid offer with verbatim <code>text</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T32</td>
+<td>Declarative connector format and a shared connector library — data, never code, never a credential; authenticated sources drive the candidate's own browser session</td>
+<td>7</td>
+<td>M</td>
+<td>T11</td>
+<td><code>connector_executes_no_shared_code == 1</code></td>
+<td><code>test_connector_file_is_data_only</code> in <code>tests/test_connectors.py</code>; <code>test_no_connector_stores_a_credential</code>; <code>test_authenticated_source_uses_the_candidate_session</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T12</td>
+<td><strong>[LAPTOP]</strong> One live portal connector against recorded fixtures</td>
+<td>7</td>
+<td>L</td>
+<td>T11, T32</td>
+<td><code>connector_fixture_parse_f1 &gt;= 0.95</code></td>
+<td><code>test_connector_parses_fixture_pages_to_offers</code> in <code>tests/test_connect_portal.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T13</td>
+<td>Cross-source dedup by similarity over normalised text + expiry detection</td>
+<td>7</td>
+<td>M</td>
+<td>T11</td>
+<td><code>dedup_precision &gt;= 0.95</code></td>
+<td><code>test_crossposted_duplicates_are_collapsed</code> in <code>tests/test_dedup.py</code>; <code>test_distinct_roles_at_same_company_are_not_merged</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S5</td>
+<td>Offer lifecycle: seven statuses and their allowed transitions, retention, the 60-day purge, and tombstones dedup cannot resurrect</td>
+<td>7</td>
+<td>L</td>
+<td>S1, T11, T13</td>
+<td><code>resurrected_purged_offers == 0</code></td>
+<td><code>test_purged_offer_is_not_re_added_as_new</code> in <code>tests/test_offer_lifecycle.py</code>; <code>test_shortlisted_offer_is_never_purge_eligible</code>; <code>test_applied_cannot_return_to_new</code>; <code>test_explicit_revival_restores_and_keeps_the_tombstone</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T33</td>
+<td>Net-from-gross pay estimation per country, generated when the advert states only gross</td>
+<td>9</td>
+<td>M</td>
+<td>T24</td>
+<td><code>generated_tax_rules_marked_unverified == 1.0</code></td>
+<td><code>test_net_estimate_within_ten_percent_of_reference</code> in <code>tests/test_pay.py</code>; <code>test_absent_country_rules_yield_unknown_not_a_guess</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T53</td>
+<td>Connector contract pack for the sources repository: one directory shape, one conformance command a contributor's agent and CI both run, and a fixture that is a sampled listing rather than an advert the candidate was reading</td>
+<td>7</td>
+<td>M</td>
+<td>T32</td>
+<td><code>connector_contract_violations == 0</code></td>
+<td><code>test_a_connector_without_a_fixture_is_rejected</code> in <code>tests/test_connector_contract.py</code>; <code>test_a_connector_that_opens_its_own_socket_is_rejected</code>; <code>test_a_fixture_carrying_candidate_provenance_is_rejected</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T54</td>
+<td>Connector exchange: discover an existing connector for a site, install it into <code>$INTEGRAL_HOME</code> and run its fixture before first use; then offer to contribute a new or repaired one, disclosing every file that would be sent — and treat declining as a complete outcome</td>
+<td>7</td>
+<td>L</td>
+<td>T53</td>
+<td><code>unconsented_contributions == 0</code></td>
+<td><code>test_nothing_leaves_the_machine_without_an_explicit_yes</code> in <code>tests/test_connector_exchange.py</code>; <code>test_the_disclosure_lists_every_file_that_would_be_sent</code>; <code>test_declining_leaves_the_connector_installed_and_is_not_asked_again</code></td>
+<td>☐</td>
+</tr>
+</tbody>
+</table>
+<h4>Iterative sourcing — the search is the conversation</h4>
+<p>From <code>status/specs/iterative-sourcing.md</code> (Option 2, then Option 3). <strong>T60 is
+deliberately first and deliberately small</strong>: every other row depends on step 7 being
+allowed to read what the candidate has taught the system, and a graph edge nobody
+traverses is documentation rather than a feature.</p>
+<table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T60</td>
+<td>Close the sourcing loop: step 7 reads the fitted weights and the reaction/outcome evidence, in the prose graph and the JSON, all three <code>optional: true</code> so a first cycle still runs</td>
+<td>7</td>
+<td>S</td>
+<td>—</td>
+<td><code>sourcing_inputs_excluding_learned_evidence == 0</code></td>
+<td><code>test_step_seven_reads_the_learned_evidence</code> in <code>tests/test_step_graph.py</code> — step <code>sourcing</code> declares weights and reaction/outcome evidence among its inputs; <code>test_the_prose_graph_and_the_json_agree_on_step_seven</code> — <code>drift_violations == 0</code> across the edit; <code>test_sourcing_is_runnable_before_any_weight_is_fitted</code> — the new inputs are optional, so <code>missing_inputs</code> is empty on a first cycle</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T61</td>
+<td>§1 amendment: the dimensions are what make an iterative search steerable — one sentence gained, none lost, in every document that states the product's argument</td>
+<td>—</td>
+<td>S</td>
+<td>T60</td>
+<td><code>spec_consistency_violations == 0</code></td>
+<td><code>test_every_document_states_the_same_differentiator</code> in <code>tests/test_spec_consistency.py</code> — D-3's three documents agree after the amendment; <code>test_the_amendment_adds_a_sentence_without_removing_the_mechanism</code> — the dimension-model claim survives verbatim</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T62</td>
+<td>Exhaustion as a measurement: a cycle whose offers dedupe against ones already seen, tombstones included, with the repeat share and the reason carried</td>
+<td>7</td>
+<td>M</td>
+<td>T60</td>
+<td><code>exhaustion_triggers_without_a_reason == 0</code></td>
+<td><code>test_a_cycle_repeating_known_offers_is_exhausted</code> in <code>tests/test_sourcing_strategy.py</code> — repeat share above <code>EXHAUSTION_REPEAT_SHARE</code> sets <code>exhausted</code>; <code>test_a_cycle_that_returned_nothing_is_exhausted_for_its_own_reason</code> — zero offers does not read as zero repeats; <code>test_no_exhaustion_is_recorded_without_a_reason</code> — an empty reason is a violation, not a trigger</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T63</td>
+<td>Step 7 becomes offerable again on exhaustion — a new trigger kind beside staleness, never a change to it</td>
+<td>7</td>
+<td>M</td>
+<td>T62</td>
+<td><code>stuck_cycles_without_a_proposal == 0</code></td>
+<td><code>test_an_exhausted_step_seven_is_offered_again</code> in <code>tests/test_freshness.py</code> — a finished sourcing step re-enters on an <code>exhausted</code> trigger; <code>test_staleness_behaviour_is_unchanged_by_the_new_kind</code> — the existing trigger fires exactly as before; <code>test_an_exhausted_cycle_never_reruns_the_same_search_silently</code> — re-entry carries a proposal</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T64</td>
+<td>Symmetric scope proposals: <code>alternatives</code> typed to require the opposite direction, so a one-way proposal cannot be constructed</td>
+<td>7</td>
+<td>M</td>
+<td>T62</td>
+<td><code>scope_proposals_offering_only_narrowing == 0</code></td>
+<td><code>test_a_proposal_offering_only_narrowing_is_rejected</code> in <code>tests/test_sourcing_strategy.py</code> — construction fails without an opposite-direction alternative; <code>test_a_widening_is_proposable_when_the_search_is_too_focused</code>; <code>test_every_proposal_states_its_reason_in_candidate_terms</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T65</td>
+<td>Consent: a narrowing is licensed by a recorded decision, a refusal is recorded too, and a refused proposal may return only on a changed trigger, new evidence, or a new session</td>
+<td>7, 10</td>
+<td>M</td>
+<td>T64</td>
+<td><code>narrowings_without_a_recorded_decision == 0</code></td>
+<td><code>test_a_narrowing_without_a_recorded_decision_is_refused</code> in <code>tests/test_sourcing_strategy.py</code> — the scope change cannot apply without the evidence row; <code>test_a_refusal_is_recorded_as_evidence_not_as_a_veto</code>; <code>test_a_refused_proposal_is_not_reasked_on_the_next_cycle</code> — same facet and direction, same trigger, no intervening evidence</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T66</td>
+<td>The empty market: exhaustion that survived both a broadening and a narrowing is reported as <strong>a time</strong>, never as a relaxed constraint</td>
+<td>7</td>
+<td>M</td>
+<td>T64, T65</td>
+<td><code>exhausted_searches_reported_as_a_scope_change == 0</code></td>
+<td><code>test_an_empty_market_is_reported_as_a_time_not_a_compromise</code> in <code>tests/test_sourcing_strategy.py</code> — the offer is to come back later, and names no constraint; <code>test_the_empty_market_needs_exhaustion_in_both_directions</code> — one stale cycle does not reach it; <code>test_no_hard_constraint_is_proposed_for_relaxation_on_an_empty_result</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T67</td>
+<td>Standing scope re-surfaced on return: step 0's opening extends from position to substance, and every scope decision is correctable there</td>
+<td>0</td>
+<td>S</td>
+<td>T65</td>
+<td><code>standing_scope_decisions_not_resurfaced == 0</code></td>
+<td><code>test_returning_shows_every_standing_scope_decision</code> in <code>tests/test_step_skills.py</code> — each recorded decision appears in the opening summary; <code>test_a_resurfaced_decision_can_be_corrected_in_place</code> — consent nobody can review is not consent</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T68</td>
+<td>The cycle improves or says why: rejection rate strictly decreasing across a candidate's cycles, or a scope change proposed — one measurement read twice</td>
+<td>7</td>
+<td>M</td>
+<td>T63, T64</td>
+<td><code>cycles_neither_improving_nor_proposing == 0</code></td>
+<td><code>test_a_cycle_that_did_not_improve_proposes_a_scope_change</code> in <code>tests/test_sourcing_strategy.py</code>; <code>test_an_improving_cycle_is_left_alone</code> — the tool does not speak when the search is working; <code>test_the_rate_is_measured_within_subject_only</code> — no cross-candidate comparison exists to make</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T69</td>
+<td><strong>[HUMAN]</strong> <strong>Option 3</strong> — when the search is exhausted <em>and</em> the evidence behind the deciding dimensions is thin, offer to go back for more history. <strong>Gated on the exhaustion signal having been observed correct in a real cycle</strong>, not merely built — carries <code>requires: [surface:human]</code>, because a dep on T68 resolves when T68 merges rather than when anyone has watched the signal fire</td>
+<td>3, 4, 7</td>
+<td>L</td>
+<td>T68</td>
+<td><code>unrequested_profile_reentries == 0</code></td>
+<td><code>test_a_profile_reentry_is_offered_never_imposed</code> in <code>tests/test_step_runtime.py</code> — declining leaves the search running; <code>test_no_reentry_is_offered_while_the_deciding_evidence_is_sufficient</code>; <code>test_a_declined_reentry_is_not_reoffered_in_the_same_session</code></td>
+<td>☐</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-supply-connectors-offers-lifecyc"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › SUPPLY — connectors, offers, lifecycle</span></div><textarea class="note-ta" data-key="s-plan-supply-connectors-offers-lifecyc" data-label="SUPPLY — connectors, offers, lifecycle" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-match-extraction-annotation-rank">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">MATCH — extraction, annotation, ranking</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T14</td>
+<td>Lexical prefilter (recall-oriented) ahead of LLM extraction. <strong>Absorbed into T15 2026-08-20 and cancelled</strong> — its gate was measured against corpus positives T5 never supplied (14 evaluation labels, four dimensions with none), so kept separate it blocked T15, and through it fifteen live tasks, on a number nobody could honestly take</td>
+<td>8</td>
+<td>M</td>
+<td>T3, T5, T11</td>
+<td><code>prefilter_recall &gt;= 0.98</code></td>
+<td><code>test_prefilter_retains_all_corpus_positives</code> in <code>tests/test_prefilter.py</code> — carried into T15 unchanged</td>
+<td>☒</td>
+</tr>
+<tr>
+<td>T15</td>
+<td>Staged extraction — normalise, then rules, then a model only on what they could not settle: dimension scores, evidence spans, <code>unmapped_concepts</code>. <strong>T14's prefilter is the rules stage, folded in 2026-08-20.</strong> <strong>Acceptance split by D-12 2026-08-22</strong> — the scoring half is T56, because scoring needs labels the corpus does not yet carry</td>
+<td>8</td>
+<td>L</td>
+<td>T5, D-12</td>
+<td><code>prefilter_suppressed_positives == 0</code></td>
+<td><code>test_prefilter_retains_all_corpus_positives</code> in <code>tests/test_prefilter.py</code> and <code>test_the_suppression_check_would_notice_a_bad_cue</code>, which inverts a committed cue so the gate metric cannot pass by having no teeth; <code>test_score_without_evidence_span_is_rejected</code> and <code>test_model_is_not_called_for_a_dimension_rules_settled</code> in <code>tests/test_extract.py</code>; <code>test_extraction_matches_corpus_labels</code>, which stays here asserting the <em>refusal</em> — null, unmeasured, dimensions named — while the score it is named for is T56's</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T56</td>
+<td>Score the extractor: <code>extraction_macro_f1</code> over human-decided labels only, refused below the label floor, <code>n</code> beside every score. <strong>Split out of T15 by D-12 2026-08-22</strong> — its gate declares <code>status-key: extraction_status</code>, so "not yet scorable" records as unmeasured rather than as a hard failure</td>
+<td>8</td>
+<td>M</td>
+<td>T25</td>
+<td><code>extraction_macro_f1 &gt;= 0.75</code></td>
+<td><code>test_extraction_matches_corpus_labels</code> in <code>tests/test_extract.py</code> — macro-F1 ≥ 0.75 on the evaluation split, once the split can carry one</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T16</td>
+<td>Negation handling in extraction: a negator governs its own clause and nothing past it. <strong>Acceptance split 2026-08-23 on D-12's precedent</strong> — the recall half is T59, because the corpus carries 2 negated labels against a floor of 10</td>
+<td>8</td>
+<td>M</td>
+<td>T15</td>
+<td><code>negation_scope_leaks == 0</code></td>
+<td><code>test_negated_cue_inverts_not_drops_score</code> in <code>tests/test_negation.py</code> — "no on-call" yields a negative score, not a missing one; <code>test_negator_does_not_reach_past_a_full_stop</code> and <code>test_negator_does_not_reach_past_a_line_break</code>, the two real corpus adverts where a negator inverted the next clause; <code>test_negator_still_reaches_across_a_comma</code>, so the fix cannot pass by negating nothing; <code>test_no_negation_leaks_across_a_boundary_in_the_corpus</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T59</td>
+<td><code>extraction_negation_recall &gt;= 0.80</code> over the corpus subset labelled as negated, once that subset can carry a number. <strong>Split out of T16 2026-08-23</strong> — its gate declares <code>status-key: negation_status</code>, so "2 negated labels against a floor of 10" records as unmeasured rather than as a hard failure</td>
+<td>8</td>
+<td>M</td>
+<td>T25</td>
+<td><code>extraction_negation_recall &gt;= 0.80</code></td>
+<td><code>test_negated_labels_are_recovered</code> in <code>tests/test_negation.py</code> — recall ≥ 0.80 over the negated subset, once the subset can carry one</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T17</td>
+<td><code>ontology_hit_rate</code> reporting and staleness signal: every stated concept counted into mapped or unmapped, never dropped. <strong>Acceptance split 2026-08-22 on D-12's precedent</strong> — the threshold half is T57, because the only committed concept source was read by a pass handed the dimension list and so cannot report an unmapped concept</td>
+<td>8</td>
+<td>S</td>
+<td>T15</td>
+<td><code>discarded_concepts == 0</code></td>
+<td><code>test_unmapped_concepts_are_counted_not_discarded</code> in <code>tests/test_ontology_health.py</code>, and <code>test_a_source_that_cannot_report_unmapped_concepts_leaves_the_rate_unmeasured</code>, which asserts the refusal rather than describing it</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T57</td>
+<td><code>ontology_hit_rate &gt;= 0.85</code> once a read pass over a corpus wide enough to fall outside the model is allowed to name what it cannot map. <strong>Split out of T17 2026-08-22</strong> — its gate declares <code>status-key: ontology_status</code>, so "no source can yet contradict a 1.0" records as unmeasured rather than as a hard failure</td>
+<td>8</td>
+<td>M</td>
+<td>T25</td>
+<td><code>ontology_hit_rate &gt;= 0.85</code></td>
+<td><code>test_unmapped_concepts_are_counted_not_discarded</code> in <code>tests/test_ontology_health.py</code>, extended to the widened model</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T42</td>
+<td>Local annotation pass: <code>annotations/&lt;offer_id&gt;.json</code>, the offer read against <em>this</em> candidate's constraints and weights, computed on this machine and never sent with the advert</td>
+<td>8</td>
+<td>M</td>
+<td>T15, T24</td>
+<td><code>annotation_profile_egress == 0</code></td>
+<td><code>test_no_profile_bytes_appear_in_an_extraction_payload</code> in <code>tests/test_annotation.py</code> — 2 planted strings scanned against ~28 kB of what <code>model_request</code> would really send for 12 corpus adverts; <code>test_the_egress_check_would_notice_a_planted_leak</code>, so the metric cannot pass by having no teeth; <code>test_annotation_is_recomputed_when_constraints_change</code>; <code>test_extraction_schema_stays_candidate_independent</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T43</td>
+<td>Outside-the-advert enrichment for adverts that say almost nothing, marked as not from the ad and excluded from verbatim spans</td>
+<td>8</td>
+<td>M</td>
+<td>T15, T19</td>
+<td><code>outside_source_spans_in_explanations == 0</code></td>
+<td><code>test_outside_information_is_marked_not_from_the_advert</code> in <code>tests/test_enrichment.py</code>; <code>test_an_explanation_never_cites_an_outside_source_as_the_employer</code>; <code>test_lookup_is_skipped_when_the_candidate_declined_it</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T18</td>
+<td>Pareto frontier + salary-equivalent ordering + facet lists, pinned to a profile revision and a sufficiency level</td>
+<td>9</td>
+<td>L</td>
+<td>T10, T15</td>
+<td><code>pareto_dominance_violations == 0</code></td>
+<td><code>test_dominated_offer_never_appears_in_frontier</code> in <code>tests/test_rank.py</code>; <code>test_unknown_dimension_is_not_treated_as_neutral</code>; <code>test_ranking_records_its_revision_and_level</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T19</td>
+<td>Explanations citing verbatim evidence spans and €/month contributions</td>
+<td>9</td>
+<td>M</td>
+<td>T18</td>
+<td><code>explained_fraction == 1.0</code></td>
+<td><code>test_every_ranked_offer_cites_evidence</code> in <code>tests/test_explain.py</code> — each ranked offer carries ≥1 verbatim span per contributing dimension</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T44</td>
+<td>Ranking presentation: the offer card as a template filled from normalised JSON — facts as bullets, one plain line including the bad part, unknown shown as unknown, provisional labelled</td>
+<td>9</td>
+<td>M</td>
+<td>T18, T19, T33</td>
+<td><code>provisional_rankings_unlabelled == 0</code></td>
+<td><code>test_l1_ranking_is_labelled_provisional</code> in <code>tests/test_presentation.py</code>; <code>test_unknown_field_renders_as_unknown_not_neutral</code>; <code>test_card_is_filled_from_json_not_generated_per_offer</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T20a</td>
+<td>The calibration harness for T20: draw 20 from the evaluation split, present them blind, record the ordering, compute <code>rank_spearman</code>. <strong>Split out of T20 2026-08-24</strong> — T20 is <code>[HUMAN]</code> and so excluded from the selector, which left the 90% of it that is software unbuildable by either half of the system</td>
+<td>9</td>
+<td>M</td>
+<td>T9, T19</td>
+<td><code>blind_ranking_leaks == 0</code></td>
+<td><code>test_the_presentation_order_is_independent_of_the_system_ranking</code> in <code>tests/test_calibration.py</code>; <code>test_no_score_or_explanation_reaches_the_blind_page</code>; <code>test_spearman_matches_a_known_order</code>; <code>test_rank_spearman_is_unmeasured_until_an_ordering_is_recorded</code>; <code>test_the_twenty_are_drawn_from_the_evaluation_split_only</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T20</td>
+<td><strong>[HUMAN]</strong> Calibrate ranking against blind manual ranking of 20 held-out ads</td>
+<td>9</td>
+<td>M</td>
+<td>T9, T19, T20a</td>
+<td><code>rank_spearman &gt;= 0.60</code></td>
+<td><code>test_ranking_correlates_with_manual_order</code> in <code>tests/test_calibration.py</code> — Spearman ρ ≥ 0.60 against the recorded manual order</td>
+<td>☐</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-match-extraction-annotation-rank"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › MATCH — extraction, annotation, ranking</span></div><textarea class="note-ta" data-key="s-plan-match-extraction-annotation-rank" data-label="MATCH — extraction, annotation, ranking" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-document-the-cv-store-generated">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">DOCUMENT — the CV store, generated documents, interviews</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S4</td>
+<td>CV store: import pdf/docx into <code>cv/master.json</code>, or build the same store by conversation with someone who has no CV. Pins the <code>master.json</code> contract</td>
+<td>1</td>
+<td>L</td>
+<td>S1, T6, T8</td>
+<td><code>intake_field_provenance == 1.0</code></td>
+<td><code>test_every_master_field_names_its_source</code> in <code>tests/test_cv_store.py</code> — every field traces to a document span or a conversation turn; <code>test_candidate_with_no_cv_reaches_the_same_store</code>; <code>test_source_document_is_never_modified</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T45</td>
+<td>Per-advert generation: CV and letter drawn only from store entries, versioned <code>v&lt;N&gt;</code> and never overwritten, with a claim→store manifest</td>
+<td>11</td>
+<td>L</td>
+<td>S4, S5, T15</td>
+<td><code>cv_generation_traceability == 1.0</code></td>
+<td><code>test_every_claim_traces_to_a_store_entry</code> in <code>tests/test_generate.py</code>; <code>test_regeneration_writes_a_new_version</code>; <code>test_advert_wording_is_mirrored_only_over_held_ground</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T46</td>
+<td>Personal details collected at the point of use, per-use approval for story episodes, and the send boundary: prepared documents, text to paste, an email left in drafts</td>
+<td>11</td>
+<td>M</td>
+<td>T45</td>
+<td><code>unapproved_episode_disclosures == 0</code></td>
+<td><code>test_episode_without_per_use_approval_never_enters_a_document</code> in <code>tests/test_approval.py</code>; <code>test_personal_details_are_asked_at_step_eleven_not_at_intake</code>; <code>test_nothing_is_sent_without_an_explicit_per_item_approval</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>S6</td>
+<td>Interview: preparation from the advert, the application and earlier interviews; then the log — questions asked, outcome, lessons — immutable and exempt from purge</td>
+<td>12</td>
+<td>L</td>
+<td>S1, T8, T45</td>
+<td><code>interview_lesson_linkage == 1.0</code></td>
+<td><code>test_every_logged_interview_produces_a_linked_evidence_row</code> in <code>tests/test_interview_log.py</code>; <code>test_interview_record_is_immutable</code>; <code>test_outcome_arriving_days_later_resumes_the_record</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T47</td>
+<td>The mock interview: a strict role-play announced before it starts, no coaching mid-answer, no breaking character, with dictation offered and feedback only at the end</td>
+<td>12</td>
+<td>M</td>
+<td>S6</td>
+<td><code>mock_interview_character_breaks == 0</code></td>
+<td><code>test_no_coaching_turn_occurs_inside_the_roleplay</code> in <code>tests/test_mock_interview.py</code>; <code>test_roleplay_is_announced_before_it_begins</code>; <code>test_feedback_is_given_only_after_it_ends</code></td>
+<td>☐</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-document-the-cv-store-generated"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › DOCUMENT — the CV store, generated documents, interviews</span></div><textarea class="note-ta" data-key="s-plan-document-the-cv-store-generated" data-label="DOCUMENT — the CV store, generated documents, interviews" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-specification-the-documents-this">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Specification — the documents this plan is built on</span></h4>
+<div class="sec-body"><p>These produced no code beyond their own checkers, and they are listed so the
+plan is a complete ledger of the queue rather than of the implementation only.</p>
+<table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1</td>
+<td>Specification v2 — the whole process: steps, connections, artefact tree, lifecycle, resumption</td>
+<td>all</td>
+<td>L</td>
+<td>—</td>
+<td><code>process_spec_complete == 1</code></td>
+<td><code>test_every_required_item_is_present</code> in <code>tests/test_process_spec.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S1r</td>
+<td>Specification v2.1 — the owner's sixteen review annotations folded in</td>
+<td>all</td>
+<td>M</td>
+<td>S1</td>
+<td><code>process_spec_complete == 1</code></td>
+<td><code>test_required_subset_closure_is_stated</code> in <code>tests/test_process_spec.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S2</td>
+<td>One specification per step, twelve fields each</td>
+<td>all</td>
+<td>L</td>
+<td>S1, S1r</td>
+<td><code>step_specs_complete_fraction == 1.0</code></td>
+<td><code>test_every_step_carries_every_field</code> in <code>tests/test_step_specs.py</code>; <code>test_divisor_is_the_settled_step_count</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S2r</td>
+<td>The owner's twelve step-spec annotations folded in</td>
+<td>all</td>
+<td>M</td>
+<td>S2</td>
+<td><code>step_specs_complete_fraction == 1.0</code></td>
+<td><code>test_duplicate_step_heading_does_not_collapse</code> in <code>tests/test_step_specs.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S8</td>
+<td>This plan — the build order for the thirteen-step process, and the queue reconciled against it</td>
+<td>all</td>
+<td>M</td>
+<td>S2r</td>
+<td><code>plan_queue_task_drift == 0</code></td>
+<td><code>test_task_in_the_queue_without_a_plan_row_is_drift</code> in <code>tests/test_plan_v2.py</code>; <code>test_a_payload_gate_differing_from_the_plan_is_drift</code>; <code>test_a_plan_dependency_missing_from_the_queue_is_drift</code>; <code>test_evidence_log_is_not_read_as_a_task_table</code></td>
+<td>◐</td>
+</tr>
+<tr>
+<td>S9</td>
+<td>Convert <code>claude-arsenal</code> from a vendored copy to a git subtree at a separate prefix, so upgrades are <code>git subtree pull</code> and the <code>ARSENAL_SHA</code> pin can go</td>
+<td>all</td>
+<td>M</td>
+<td>—</td>
+<td><code>vendored_files_diverging_from_subtree == 0</code></td>
+<td><code>test_every_bundle_file_matches_the_subtree_source</code> in <code>tests/test_arsenal_subtree.py</code>; <code>test_no_host_owned_path_is_inside_a_subtree_prefix</code>; <code>test_the_makefile_no_longer_pins_a_bare_sha</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S10</td>
+<td>The skill listing budget (8,000 chars, a per-turn context cost) is exceeded at 11,140 once the thirteen step skills land. <strong>Decided: raise it — to 13,000, set in <code>arsenal/config.toml</code>'s <code>listing-budget</code></strong> and measured by <code>integral.skill_budget</code>, since upstream's auditor does not yet read that key and <code>vendor/</code> must not be patched. The declared number must be round and leave headroom, and the reading records its source, so a cap fitted to the measurement fails instead of passing after</td>
+<td>all</td>
+<td>M</td>
+<td>S7</td>
+<td><code>skill_listing_budget_overage_chars == 0</code></td>
+<td><code>test_the_library_is_within_its_listing_budget</code> in <code>tests/test_step_skills.py</code>; <code>test_every_step_is_still_reachable_after_the_change</code> — the saving may not come from dropping a step</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>T58</td>
+<td>Drop the <code>claude-arsenal</code> subtree: <code>/init</code> writes the skills, the runtime tree and the skill-edit gate, so there is nothing to pull or reconcile. <code>vendor/</code>, <code>verify-subtree</code>, <code>arsenal-upgrade</code>, <code>update-skills</code> and <code>assemble-bundle</code> all retire and <code>host-gate</code> drops to four targets. <strong>This supersedes S9.</strong> The skills stay <strong>committed</strong>: a cloud session runs on a fresh clone and installs no plugins the repo asks for, verified live upstream (<code>claude-arsenal#200</code>), so the gate asserts two opposite counts — no subtree, and skills present</td>
+<td>all</td>
+<td>M</td>
+<td>S9</td>
+<td><code>upstream_subtree_files == 0</code></td>
+<td><code>test_no_upstream_subtree_is_maintained</code> and <code>test_the_skills_are_committed_not_installed</code> in <code>tests/test_arsenal_source.py</code>; <code>test_re_adding_a_subtree_is_counted</code> and <code>test_an_unmarked_skill_directory_is_not_counted_as_vendored</code>, so neither number can pass by having no teeth</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S11</td>
+<td>Test mode — an orthogonal meta channel (<code>[[...]]</code>) for capturing notes about the tool during a live session, without disturbing it; notes are shown at the end and seeded only once confirmed</td>
+<td>all</td>
+<td>M</td>
+<td>S7, S10</td>
+<td><code>test_notes_reaching_candidate_evidence == 0</code></td>
+<td><code>test_a_meta_note_never_reaches_the_evidence_log</code> in <code>tests/test_test_mode.py</code>; <code>test_a_pasted_advert_containing_brackets_is_not_eaten</code>; <code>test_the_visible_conversation_is_byte_identical_with_and_without_notes</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>S12</td>
+<td>Move "does this step take candidate free text" into <code>spec-v2-steps.json</code> so <code>profile_capture</code>'s denominator is fully machine-derived, instead of a hand-made map T28 guards but cannot derive</td>
+<td>all</td>
+<td>M</td>
+<td>T28</td>
+<td><code>unclassified_free_text_steps == 0</code></td>
+<td><code>test_every_step_declares_whether_it_takes_candidate_free_text</code> in <code>tests/test_profile_capture.py</code>; <code>test_profile_capture_reads_the_declaration_not_a_local_map</code>; <code>test_coverage_is_unchanged_by_the_migration</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T55</td>
+<td>Rename the project to <code>integral-job-search</code>: package path, imports, distribution and entry points, repository name and the documents that spell it out — while <code>$INTEGRAL_HOME</code>, the arsenal bundle and the thirteen step-skill directories keep their names</td>
+<td>—</td>
+<td>M</td>
+<td>—</td>
+<td><code>old_name_references == 0</code></td>
+<td><code>test_no_module_imports_the_old_package_name</code> in <code>tests/test_naming.py</code>; <code>test_no_document_names_the_old_repository</code>; <code>test_the_preserved_names_are_not_swept</code></td>
+<td>☐</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-specification-the-documents-this"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Specification — the documents this plan is built on</span></div><textarea class="note-ta" data-key="s-plan-specification-the-documents-this" data-label="Specification — the documents this plan is built on" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-divergences">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Divergences</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Description</th>
+<th>Step</th>
+<th>Size</th>
+<th>Depends</th>
+<th>Gate</th>
+<th>Tests</th>
+<th>St</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-1</td>
+<td>Catalan corpus slice covers IT roles at large, not remote programming as T4b specifies</td>
+<td>8</td>
+<td>S</td>
+<td>—</td>
+<td><code>corpus_language_slice_mismatch == 0</code></td>
+<td><code>test_every_language_slice_matches_its_declared_scope</code> in <code>tests/test_corpus_raw.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-2</td>
+<td>v0 gold examples are cue-derived, not independent — T15 must measure <code>extraction_macro_f1</code> against independent labels</td>
+<td>8</td>
+<td>S</td>
+<td>T5</td>
+<td><code>cue_derived_gold_in_evaluation_split == 0</code></td>
+<td><code>test_no_evaluation_example_is_derived_from_a_cue</code> in <code>tests/test_dimension_content.py</code> — the file this row named (<code>tests/test_corpus_content.py</code>) was never created, and the subject is the dimension model's gold set rather than the corpus</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-3</td>
+<td><code>story_failure_fraction</code> floor contradicts the revised History protocol; reconcile <code>status/specification.md</code> and <code>docs/METHODS.md</code></td>
+<td>3</td>
+<td>S</td>
+<td>—</td>
+<td><code>spec_gate_contradictions == 0</code></td>
+<td><code>test_no_document_states_a_superseded_gate</code> in <code>tests/test_spec_consistency.py</code> — the floor appears nowhere as a gate, and the fraction is reported</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-4</td>
+<td>The Traits gate is assigned to T28 by the specification and to T27 by the work; neither task's own gate is the step metric</td>
+<td>4</td>
+<td>S</td>
+<td>—</td>
+<td><code>trait_gate_owner_contradictions == 0</code></td>
+<td><code>test_step_gate_metric_is_some_task_gate</code> in <code>tests/test_step_gates.py</code> — every step gate metric is some task's acceptance gate; <code>test_no_two_documents_name_different_owners_for_one_step_gate</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-6</td>
+<td><code>rebuild()</code> writes only <code>stated</code> rows to <code>constraints.json</code>, so a refresh after the constraints step drops every <code>declined</code> and <code>unknown</code> field — the refusal T40 depends on reverts to never-asked</td>
+<td>2</td>
+<td>S</td>
+<td>T41</td>
+<td><code>constraint_states_survive_rebuild == 1.0</code></td>
+<td><code>test_a_declined_field_survives_a_rebuild</code> in <code>tests/test_revision.py</code>; <code>test_an_unknown_field_survives_a_rebuild</code> — both must fail before the fix</td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-7</td>
+<td><code>spec-v2-steps.md</code> names two owners for the Ranking gate (T18, T19) while the JSON names one (T19); same class as D-4</td>
+<td>9</td>
+<td>S</td>
+<td>—</td>
+<td><code>step_gate_owner_contradictions == 0</code></td>
+<td><code>test_every_step_gate_names_exactly_one_owner</code> in <code>tests/test_step_specs.py</code>; <code>test_the_gate_task_is_the_task_that_writes_the_metric</code>; <code>test_no_prose_document_names_a_different_owner_than_the_json</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-8</td>
+<td>Captured evidence cannot say which offer a reason was about — <code>EvidenceRow</code> carries <code>step</code>, <code>source</code> and <code>recorded_at</code>, so T28's required provenance "in response to what" is unmet and two rejections of two different jobs are indistinguishable in the log</td>
+<td>4</td>
+<td>M</td>
+<td>T28, T6</td>
+<td><code>captures_without_a_subject == 0</code></td>
+<td><code>test_two_rejections_of_different_offers_are_distinguishable_in_the_log</code> in <code>tests/test_profile_capture.py</code>; <code>test_a_captured_reason_survives_rebuild_with_its_subject</code>; <code>test_an_answer_to_a_question_needs_no_subject_field</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-9</td>
+<td>Non-insistence is not honoured on intake's conversational write path — <code>cv_store.py</code> is the only free-text writer with no <code>DeclineLedger</code> reference, so <code>add_conversation_entry</code> records an answer on a subject the candidate declined and has not reopened, the outcome T40 exists to prevent</td>
+<td>1</td>
+<td>M</td>
+<td>S4, T40</td>
+<td><code>intake_declined_subjects_written == 0</code></td>
+<td><code>test_a_declined_subject_is_not_written_by_the_conversational_path</code> in <code>tests/test_cv_store.py</code>; <code>test_a_reopened_decline_lets_the_subject_be_recorded_again</code> — the second so the fix cannot be “never write anything”</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>D-10</td>
+<td><code>connectors/&lt;site-id&gt;/parse.py</code> is in the shared connector shape (<code>docs/distribution.md</code> §5) but nothing executes it — a connector for a site the declarative form cannot express passes the whole conformance check and cannot work. <strong>Resolved 2026-08-20 by withdrawing <code>parse.py</code> from the shape</strong> rather than sandboxing it: real isolation is a milestone, the hatch had no user, and T54 was already written assuming it was gone</td>
+<td>7</td>
+<td>M</td>
+<td>T53</td>
+<td><code>advertised_connector_mechanisms_without_a_runtime == 0</code></td>
+<td><code>test_every_file_named_in_the_shared_shape_has_a_runtime_or_is_not_advertised</code> in <code>tests/test_connector_contract.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-11</td>
+<td>The conformance command §5 hands a contributor — <code>--connectors &lt;their dir&gt;</code> — wrote <em>this</em> repository's <code>status/evidence/T53.json</code>, so a check over somebody else's library replaced the number T53's gate is asserted against. Found by running the documented command once while investigating D-10</td>
+<td>7</td>
+<td>S</td>
+<td>T53</td>
+<td><code>evidence_writes_for_a_foreign_library == 0</code></td>
+<td><code>test_the_contributors_command_leaves_our_committed_evidence_alone</code> in <code>tests/test_connector_contract.py</code>; <code>test_the_gate_still_records_when_the_caller_names_a_destination</code>; <code>test_the_foreign_write_metric_is_measured_over_the_real_decision</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-12</td>
+<td>D-2 binds T15 to three outcomes — a score, a failure, or <strong>unmeasured</strong> — and the gate layer had only two: it read the null that <code>extraction_macro_f1</code> honestly is as a <code>non-numeric value</code> and hard-failed, so T15 could never reach terminal and the fifteen tasks behind it stayed blocked. <strong>Resolved 2026-08-22</strong>: upstream's <code>status-key</code> third outcome (claude-arsenal#168) landed and is now used, and T15's acceptance is split so the scoring half (T56) waits behind the corpus instead of holding the queue</td>
+<td>8</td>
+<td>M</td>
+<td>—</td>
+<td><code>unrecordable_task_gates == 0</code></td>
+<td><code>test_a_task_whose_metric_is_unmeasured_is_not_reported_as_failing</code> in <code>tests/test_task_gate.py</code> — the state "not broken, not yet measurable" must be distinguishable from "scored 0"</td>
+<td>☐</td>
+</tr>
+<tr>
+<td>D-13</td>
+<td>Every step skill opens work before acknowledging the person: profile creation, script runs and file writes happen in silence while the candidate waits, and no skill's protocol requires saying what is being done</td>
+<td>0</td>
+<td>S</td>
+<td>—</td>
+<td><code>step_skills_without_a_progress_disclosure_rule == 0</code></td>
+<td><code>test_every_step_skill_requires_acknowledging_before_a_silent_setup</code> in <code>tests/test_step_skills.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-14</td>
+<td>The employment-mode question offers <code>autónomo</code>/<code>falso autónomo</code> as a mode the candidate might want; falso autónomo is an illegal arrangement, so it may be asked about as a status but never offered as an option</td>
+<td>2</td>
+<td>S</td>
+<td>—</td>
+<td><code>skills_offering_an_illegal_employment_mode == 0</code></td>
+<td><code>test_no_skill_offers_falso_autonomo_as_a_choice</code> in <code>tests/test_step_skills.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-15</td>
+<td>Every step skill's Boundary example closes by offering to end the session, so a candidate who answers four steps is asked four times whether they want to stop — §2.5's right to decline becomes a prompt to leave</td>
+<td>—</td>
+<td>S</td>
+<td>—</td>
+<td><code>step_boundaries_offering_an_exit == 0</code></td>
+<td><code>test_a_step_boundary_does_not_offer_to_end_the_session</code> in <code>tests/test_step_skills.py</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-16</td>
+<td>Sourcing has no connector for any real board — <code>connectors/</code> holds only <code>examplejobs_es</code>, whose own header says the site is fictitious — and step 7 presents web-search results without saying so or offering to build one</td>
+<td>7</td>
+<td>M</td>
+<td>T32, T53</td>
+<td><code>undisclosed_connectorless_sourcing == 0</code></td>
+<td><code>test_sourcing_without_a_connector_says_so</code> in <code>tests/test_connectors.py</code>; <code>test_a_search_result_is_not_presented_as_a_connector_result</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-17</td>
+<td>The ranking card drops <code>offer.url</code> although every stored record carries it, so a candidate is shown seven offers with no way to reach any of them — the model assembled prose where T44 requires a filled template</td>
+<td>9</td>
+<td>S</td>
+<td>T44</td>
+<td><code>ranked_offers_without_a_url == 0</code></td>
+<td><code>test_every_ranked_offer_renders_its_url</code> in <code>tests/test_ranking.py</code>; <code>test_an_offer_with_no_url_shows_the_absence</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>D-18</td>
+<td>Offers are collected from a search index and never checked at source: all seven sourced on 2026-08-20 were dead (403, or "puesto ocupado") while <code>offer_schema_violations</code> passed — schema validity is not liveness, and <code>integral.freshness</code> is not wired into the sourcing path</td>
+<td>7</td>
+<td>M</td>
+<td>T11, T13</td>
+<td><code>offers_presented_without_a_liveness_check == 0</code></td>
+<td><code>test_a_dead_advert_is_marked_expired_not_offered</code> in <code>tests/test_dedup.py</code>; <code>test_a_search_index_hit_is_verified_at_source_before_it_becomes_an_offer</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-19</td>
+<td>The dimension model is entirely software-sector, so <code>extract()</code> settled 0 of 25 dimensions on all seven construction adverts and step 8 reported success over a vocabulary that matched nothing</td>
+<td>8</td>
+<td>L</td>
+<td>—</td>
+<td><code>markets_with_no_applicable_dimension_reported_as_extracted == 0</code></td>
+<td><code>test_an_extraction_that_settled_nothing_is_not_reported_as_read</code> in <code>tests/test_extract.py</code>; <code>test_every_supported_market_has_applicable_dimensions</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>D-20</td>
+<td>No pinned constraint field can hold a commutable radius: <code>location</code> takes a country, <code>reach</code> takes modes, and <code>relocation</code> refuses destinations when willingness is <code>no</code> — so "Barcelona province, at most Girona or Tarragona" survives only as quote text and nothing downstream can filter on it</td>
+<td>2</td>
+<td>M</td>
+<td>T24, T41</td>
+<td><code>unfilterable_stated_constraints == 0</code></td>
+<td><code>test_a_stated_commute_radius_reaches_the_hard_constraint_filter</code> in <code>tests/test_candidate_attributes.py</code>; <code>test_no_stated_constraint_is_recorded_only_as_prose</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-21</td>
+<td><code>run_checkpoint.py</code> reports <code>coverage_met: true</code> and exits 0 for a step whose gate is <code>not_implemented</code>, so steps 8 and 9 certified clean over an unbuilt gate — the inert-gate problem one level up, where artefact presence stands in for a check nobody ran</td>
+<td>—</td>
+<td>M</td>
+<td>—</td>
+<td><code>steps_certified_on_an_unimplemented_gate == 0</code></td>
+<td><code>test_a_step_with_an_unimplemented_gate_is_not_reported_as_met</code> in <code>tests/test_step_gates.py</code>; <code>test_an_implemented_gate_still_certifies</code></td>
+<td>☑</td>
+</tr>
+<tr>
+<td>D-22</td>
+<td>The five-command repo gate <code>CLAUDE.md</code> requires before a merge is enforced by nothing: Actions is out of runner minutes so <code>ci.yml</code> and <code>arsenal-queue.yml</code> never run, <code>open_task_pr.sh</code> re-runs only the task's own payload gate, and <code>keyword-guard</code> fires only on <code>arsenal/**</code> branches — PR #89 fell through all three and <code>make test</code> failed on nine violations that would otherwise have merged. <strong>Split:</strong> the bundle half (worker.md asks for a host gate no script enforces) is upstream at <code>claude-arsenal#175</code>; this row is the host half — a <code>make host-gate</code> target for upstream's <code>host-gate</code> key to point at</td>
+<td>—</td>
+<td>M</td>
+<td>—</td>
+<td><code>required_gates_with_no_enforcement_point == 0</code></td>
+<td><code>test_every_gate_the_docs_require_has_a_runnable_enforcement_point</code> in <code>tests/test_plan_v2.py</code>; <code>test_a_task_pr_runs_the_repo_gate_not_only_its_payload_gate</code></td>
+<td>☑</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Status legend</strong>: ☐ open · ◐ in progress · ☑ merged · ☒ cancelled (absorbed or abandoned; never done)</p>
+<p><strong>Merge order</strong> — four milestones. Within a milestone, order is the dependency
+graph below; across milestones it is strict. Merged tasks (T1–T4b, T23) are not
+listed; every open task appears in exactly one milestone.</p>
+<table>
+<thead>
+<tr>
+<th>milestone</th>
+<th>delivers</th>
+<th>tasks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>M1 — the spine</strong></td>
+<td>a candidate is identified, resumed and never mixed up with another; the graph can say what is owed</td>
+<td>S3, T6, T35, T30, T34, T37, T36, T38, T40, T48</td>
+</tr>
+<tr>
+<td><strong>M2 — L1, a rough list end to end</strong></td>
+<td>constraints → offers → extraction → annotation → a provisional, labelled ranking</td>
+<td>T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7</td>
+</tr>
+<tr>
+<td><strong>M3 — L2, the full first run</strong></td>
+<td>history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes</td>
+<td>T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T50, T20a, T20, D-1, D-2, D-3, D-4, D-8</td>
+</tr>
+<tr>
+<td><strong>M4 — per opportunity</strong></td>
+<td>documents for one advert, and the interview around it</td>
+<td>S4, D-9, T45, T46, S6, T47, T43, T22, T26b, T25, T29, T51, T52, T53, T54, T55, S9, S10, S11, S12</td>
+</tr>
+<tr>
+<td><strong>cross-cutting</strong></td>
+<td>S7 lands once M1 exists — a checkpoint script needs state to read</td>
+<td>S7, T31, S8</td>
+</tr>
+</tbody>
+</table>
+<p><strong>S7 is deliberately not first.</strong> The handover recommended it as the next task,
+and it is the task that turns the specification into something that runs — but
+each of the thirteen skills carries a checkpoint script that reads session
+state, decides whether coverage is met, and writes gate evidence. None of that
+exists until T35 and T34 land. Written before them, the scripts have nothing to
+read and the skills become the prose transcription S7's own payload warns
+against.</p>
+<p><strong>T5 no longer paces anything.</strong> It was the choke point — T9, T14, D-2 and,
+through T14, the whole of T15's chain blocked on a hand-labelling campaign. That
+campaign was retired on 2026-08-19: the owner read four pre-marked ads, judged
+the read good enough, and decided the model should find the dimensions in each
+advert on its own. T5 closed against PR #42 on <code>corpus_size &gt;= 100</code>, the
+threshold it always carried, and the three tasks behind it are unblocked.</p>
+<p>What did <em>not</em> go away is the measurement. <code>extraction_macro_f1</code> and
+<code>prefilter_recall</code> were both specified against the hand-labelled corpus, and the
+corpus holds <strong>39 human labels over 4 ads — 14 of them in the evaluation half</strong>,
+no dimension above 4, four dimensions with none. <code>status/evidence/T5.json</code>
+carries those counts per dimension so the gap is visible before a number is
+computed rather than after. D-2 (<code>lo-77a6</code>) settles what to do about it: score
+only what a person decided, report <code>n</code>, and refuse the score outright below a
+floor — unmeasured being a third outcome, distinct from pass and from fail.</p>
+<p><strong>Milestones are queue tags.</strong> Every task carries <code>m1</code>, <code>m2</code>, <code>m3</code>, <code>m4</code> or
+<code>cross</code>, so a worker session scopes to the milestone rather than to raw
+priority: <code>/continue m1</code>, which sets <code>LOOP_TAGS</code> and makes <code>queue_batch.sh</code>
+return only that milestone's unblocked tasks. Without the tag the selector is
+ordered by priority alone and will hand back an M4 task beside an M1 one.</p>
+<p><strong>Branch pattern</strong>: <code>T&lt;N&gt;-short-description</code> from the default branch.</p></div>
+<div class="note" data-for="s-plan-divergences"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Divergences</span></div><textarea class="note-ta" data-key="s-plan-divergences" data-label="Divergences" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-step-gate-ownership">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Step gate ownership</span></h4>
+<div class="sec-body"><p>Every step of specification v2 names one gate metric. This table mirrors
+<code>status/spec-v2-process.md</code> §9 <strong>exactly</strong> — the plan does not reassign a metric
+the specification has settled, and where the plan's work disagrees with §9 that
+is a divergence, not an edit.</p>
+<p>A step's gate metric is not the same thing as the owning task's own acceptance
+gate. Ten metrics belong to a task whose gate they already are; four are step
+metrics whose owner must additionally measure and record them.</p>
+<table>
+<thead>
+<tr>
+<th>step metric</th>
+<th>§9 owner</th>
+<th>that task's own gate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>intake_field_provenance</code></td>
+<td>S4</td>
+<td><code>intake_field_provenance == 1.0</code> — the same</td>
+</tr>
+<tr>
+<td><code>constraint_field_resolution</code></td>
+<td>T41</td>
+<td><code>constraint_field_resolution == 1.0</code> — the same</td>
+</tr>
+<tr>
+<td><code>trait_evidence_sufficiency</code></td>
+<td>T49</td>
+<td><code>trait_evidence_sufficiency == 1.0</code> — owner writes the metric (D-4 resolved)</td>
+</tr>
+<tr>
+<td><code>interview_lesson_linkage</code></td>
+<td>S6</td>
+<td><code>interview_lesson_linkage == 1.0</code> — the same</td>
+</tr>
+</tbody>
+</table>
+<p><strong>D-4</strong> was the one contradiction this plan found and could not resolve by
+editing: §9 assigned the Traits metric to T28 (continuous capture), while the
+two-episode floor that produces the measurement is specified in T27 (the
+interview protocol). Neither task's own gate is <code>trait_evidence_sufficiency</code>,
+so reassigning between them would have made the documents agree and the
+register still wrong — the plan recorded §9's answer and pointed at the
+divergence rather than quietly overriding a settled specification.</p>
+<p>It is now <strong>resolved by a task, not an edit</strong>: <strong>T49</strong> scores trait evidence
+and is measured on <code>trait_evidence_sufficiency</code> itself, so §9, this table and
+T49's own gate row name one task and mean the same thing. T27 keeps the floor
+as part of the interview and T28 keeps evidence arriving from every surface;
+what T49 adds is the decision to withhold a score, which belonged to neither.</p></div>
+<div class="note" data-for="s-plan-step-gate-ownership"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Step gate ownership</span></div><textarea class="note-ta" data-key="s-plan-step-gate-ownership" data-label="Step gate ownership" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-evidence-log">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Evidence log</span></h3>
+<div class="sec-body"><p><code>execution</code> appends one row per task as it lands (RED → GREEN → RECORD). A gated
+task is not done until its row is complete and the measured value meets the
+gate. The SHA is the commit that carries the artefact, and the value is what
+<em>that</em> commit's own checker read.</p>
+<table>
+<thead>
+<tr>
+<th>T#</th>
+<th>Gate</th>
+<th>Measured</th>
+<th>Command</th>
+<th>SHA</th>
+<th>Env</th>
+<th>Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T1</td>
+<td><code>lint_typecheck_exit_code == 0</code></td>
+<td>0</td>
+<td><code>make gate</code> (runs <code>ruff check .</code> + <code>mypy .</code>)</td>
+<td><code>9581811</code></td>
+<td>cloud</td>
+<td>2026-08-15</td>
+</tr>
+<tr>
+<td>S1</td>
+<td><code>process_spec_complete == 1</code></td>
+<td>1</td>
+<td><code>uv run python -m integral.process_spec status/evidence/S1.json</code></td>
+<td><code>f282705</code></td>
+<td>cloud</td>
+<td>2026-08-17</td>
+</tr>
+<tr>
+<td>S1r</td>
+<td><code>process_spec_complete == 1</code></td>
+<td>1</td>
+<td><code>uv run python -m integral.process_spec status/evidence/S1.json</code></td>
+<td><code>258b2de</code></td>
+<td>cloud</td>
+<td>2026-08-17</td>
+</tr>
+<tr>
+<td>S2</td>
+<td><code>step_specs_complete_fraction == 1.0</code></td>
+<td>1.0</td>
+<td><code>uv run python -m integral.step_specs status/evidence/S2.json</code></td>
+<td><code>8c59a7f</code></td>
+<td>cloud</td>
+<td>2026-08-17</td>
+</tr>
+<tr>
+<td>S2r</td>
+<td><code>step_specs_complete_fraction == 1.0</code></td>
+<td>1.0</td>
+<td><code>uv run python -m integral.step_specs status/evidence/S2.json</code></td>
+<td><code>83032bb</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>S8</td>
+<td><code>plan_queue_task_drift == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.plan_v2 status/evidence/S8.json</code></td>
+<td><code>1605cdd</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>S3</td>
+<td><code>cross_user_leaks == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.identity status/evidence/S3.json</code></td>
+<td><code>5c0600b</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T6</td>
+<td><code>profile_rebuild_deterministic == 1</code></td>
+<td>1</td>
+<td><code>uv run python -m integral.profile status/evidence/T6.json</code></td>
+<td><code>92f8657</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T35</td>
+<td><code>resumption_position_loss == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.session status/evidence/T35.json</code></td>
+<td><code>4b03625</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T30</td>
+<td><code>required_subset_closure_violations == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.step_graph status/evidence/T30.json</code></td>
+<td><code>0ce3beb</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T34</td>
+<td><code>unrunnable_step_dispatches == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.step_runtime status/evidence/T34.json</code></td>
+<td><code>92274a1</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T37</td>
+<td><code>stale_artefact_detection_recall == 1.0</code></td>
+<td>1.0</td>
+<td><code>uv run python -m integral.revision status/evidence/T37.json</code></td>
+<td><code>bd4984d</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T38</td>
+<td><code>retracted_rows_surviving_rebuild == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.retraction status/evidence/T38.json</code></td>
+<td><code>73ee68a</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T40</td>
+<td><code>repeat_asks_after_decline == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.decline status/evidence/T40.json</code></td>
+<td><code>ac6c873</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T39</td>
+<td><code>unscheduled_scoring_runs == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.scoring status/evidence/T39.json</code></td>
+<td><code>d09e90a</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T36</td>
+<td><code>unoffered_reentries == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.freshness status/evidence/T36.json</code></td>
+<td><code>f233d52</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+<tr>
+<td>T48</td>
+<td><code>step_gate_state_drift == 0</code></td>
+<td>0</td>
+<td><code>uv run python -m integral.step_gates status/evidence/T48.json</code></td>
+<td><code>f3e6a50</code></td>
+<td>cloud</td>
+<td>2026-08-18</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Rows for T2, T3, T4, T4b and T23 are in <code>status/plan-v1.md</code> and in
+<code>status/evidence/</code>; they are not restated here. The five above are restated
+because v2's gate discipline descends directly from them — in particular the
+correction that a row records the gate <strong>as it stood</strong>, measured by the
+checker that shipped with that commit, not a promise that a later, stricter
+gate passes on older text.</p>
+</blockquote></div>
+<div class="note" data-for="s-plan-evidence-log"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Evidence log</span></div><textarea class="note-ta" data-key="s-plan-evidence-log" data-label="Evidence log" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-dependency-graph">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Dependency graph</span></h4>
+<div class="sec-body"><pre><code>                        ┌── T30 ──┬── T34 ──┐
+                        │         │         │
+  S3 ── T6 ─┬── T35 ────┴─────────┘         ├── S7
+            │                               │
+            ├── T37 ──┬── T36 ──────────────┘
+            │         └── T39
+            ├── T38
+            ├── T40
+            │
+            ├── T24 ──┬── T41
+            │         ├── T33 ──────────────────────┐
+            │         │                             │
+            ├── T7 ── T8 ──┬── T27                  │
+            │              ├── S4 ── T45 ─┬── T46   │
+            │              │              └── S6 ── T47
+            │              │                        │
+            └── T28        │                        │
+                           │                        │
+  T11 ─┬── T32 ── T12      │                        │
+       ├── T13 ── S5       │                        │
+       └── T14 ── T15 ─┬── T16                      │
+                       ├── T17                      │
+                       ├── T42                      │
+                       └── T18 ── T19 ─┬── T44 ◄────┘
+                                       ├── T43
+                                       ├── T20a ── T20*
+                                       └── T21
+  T5* ──────────────► T9 ── T10 ──► T18
+  T4b ─► T5*          (T5 also gates T15's evaluation split)
+
+  iterative sourcing — T60 first, and everything hangs off it:
+
+  T60 ─┬── T61
+       └── T62 ─┬── T63 ──────────┬── T68 ── T69*
+                └── T64 ─┬────────┘
+                         ├── T65 ─┬── T66
+                         │        └── T67
+                         └── T66
+
+  * T5, T20 and T69 are [HUMAN]; T12 and T25 are [LAPTOP].
+    T5 paces every gate measured on the evaluation split and nothing in M1.
+    T69 is [HUMAN] because its prerequisite — the exhaustion signal having been
+    watched on a real cycle — is not something a dep on T68 can express.
+</code></pre></div>
+<div class="note" data-for="s-plan-dependency-graph"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Dependency graph</span></div><textarea class="note-ta" data-key="s-plan-dependency-graph" data-label="Dependency graph" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-risks">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Risks</span></h3>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>What could go wrong</th>
+<th>L</th>
+<th>I</th>
+<th>Mitigation</th>
+<th>Rollback</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1</td>
+<td><strong>T5 stays unlabelled</strong> and M2's extraction gates cannot be measured, so extraction ships ungated</td>
+<td>H</td>
+<td>H</td>
+<td>M1 is designed not to touch the corpus, so the spine proceeds regardless; T15 lands RED against the evaluation split and is not released <code>done</code> until the gate runs</td>
+<td>Extraction code stays behind a flag; nothing ranks on unmeasured scores</td>
+</tr>
+<tr>
+<td>R2</td>
+<td><strong>The profile leaks into an extraction payload</strong> — the one privacy failure that cannot be undone once it reaches a model</td>
+<td>L</td>
+<td>H</td>
+<td>T42 separates the candidate-independent extraction from the local annotation pass, and gates on <code>annotation_profile_egress == 0</code> measured over the actual outbound payload, not over intent</td>
+<td>Extraction runs offline on fixtures; no live calls until the gate is green</td>
+</tr>
+<tr>
+<td>R3</td>
+<td><strong>One candidate's evidence lands in another's tree.</strong> The log is append-only, so this is unpickable rather than undoable</td>
+<td>M</td>
+<td>H</td>
+<td>S3 resolves every path beneath a handle <em>and</em> adds a <code>PreToolUse</code> hook below the tool; <code>cross_user_leaks == 0</code>; the hook is tested for false positives so correct operation never trips it</td>
+<td>Restore the tree from git-external backup; the evidence log's row ids make the foreign rows identifiable</td>
+</tr>
+<tr>
+<td>R4</td>
+<td><strong>An authored document is silently regenerated</strong> after it was sent, leaving the candidate unable to answer a question about their own application</td>
+<td>M</td>
+<td>H</td>
+<td>T37's three artefact classes, and T45 writing <code>v&lt;N+1&gt;</code> rather than overwriting</td>
+<td>Earlier versions survive by construction — that is the mitigation</td>
+</tr>
+<tr>
+<td>R5</td>
+<td><strong>Purge deletes something that mattered.</strong> Purge is irreversible by design</td>
+<td>L</td>
+<td>M</td>
+<td>S5's four-part eligibility test, the retention list, the report-before-purge, and explicit revival of a tombstoned ad</td>
+<td>Tombstone + revival restores as <code>new</code>; the ad body is gone, which is the accepted cost</td>
+</tr>
+<tr>
+<td>R6</td>
+<td><strong>Model cost makes the loop too expensive to run</strong>, so it stops being run</td>
+<td>M</td>
+<td>M</td>
+<td>T15's staged extraction with the model last; T14's prefilter; per-run extraction budget; the card is a filled template, not a generated paragraph</td>
+<td>Rules-only extraction still produces a ranking, marked as such</td>
+</tr>
+<tr>
+<td>R7</td>
+<td><strong>The non-insistence rule is unmeasurable</strong> and quietly degrades into a form with a progress bar</td>
+<td>M</td>
+<td>H</td>
+<td>T40 makes the mechanical half measurable (<code>repeat_asks_after_decline == 0</code>); the rest is a review question against the step specs, and §2.5's five required steps are what make obeying it safe</td>
+<td>None needed — a violation is a defect, not a state to roll back</td>
+</tr>
+<tr>
+<td>R8</td>
+<td><strong>Thirteen steps is too much scope</strong> and nothing finishes</td>
+<td>H</td>
+<td>M</td>
+<td>Milestones deliver a working L1 product at M2 with five required steps; the other eight are offered by specification, so an unbuilt step is a declined step rather than a hole</td>
+<td>Ship at M2; M3 and M4 sharpen it</td>
+</tr>
+<tr>
+<td>R9</td>
+<td><strong>A skill and its step specification drift apart</strong> once both exist</td>
+<td>M</td>
+<td>M</td>
+<td>S7 forbids re-deciding a spec in a skill and requires a divergence task instead; <code>test_no_skill_contradicts_its_step_specification</code> checks the stop rule and the required flag, the two that drift first</td>
+<td>Regenerate the skill from the spec; the spec is the source</td>
+</tr>
+<tr>
+<td>R10</td>
+<td><strong>The cloud session cannot do the laptop work</strong> and T12/T25 stall the connector and corpus story</td>
+<td>M</td>
+<td>M</td>
+<td>Both are tagged <code>laptop</code> and refused a <code>done</code> from a cloud session by <code>release.sh</code>; T11's manual-paste connector keeps SUPPLY unblocked without egress</td>
+<td>Manual paste is a complete path for a single candidate</td>
+</tr>
+<tr>
+<td>R11</td>
+<td><strong>The strategy conversation anchors the candidate.</strong> <em>"Shall we focus on US companies?"</em> plants the idea it pretends to ask about, and a conversational guide is the most anchoring surface this product has — more than a ranking, far more than a card</td>
+<td>H</td>
+<td>H</td>
+<td>T64 types <code>alternatives</code> to require the opposite direction, so a one-way proposal cannot be constructed; <code>scope_proposals_offering_only_narrowing == 0</code> measures what was offered, not what was intended</td>
+<td>The whole surface sits behind T63's trigger; disabling it returns step 7 to a single pass with no conversation</td>
+</tr>
+<tr>
+<td>R12</td>
+<td><strong>Exhaustion fires on an unlucky search</strong>, and the candidate re-steers one that would have worked</td>
+<td>M</td>
+<td>M</td>
+<td><code>EXHAUSTION_REPEAT_SHARE</code> is a named constant carrying its reasoning rather than a tuned number pretending to be evidence; it needs two cycles to fire at all</td>
+<td>One constant, whose docstring already says it expects revision once a real candidate has run four or more cycles</td>
+</tr>
+<tr>
+<td>R13</td>
+<td><strong>Option 3 becomes interrogation</strong> — the candidate is sent back through answered questions because a search failed, which is the experience that makes people close a tool</td>
+<td>M</td>
+<td>H</td>
+<td>T69 is sequenced after T68 and gated on the exhaustion signal being <em>observed</em> correct, not merely built; <code>unrequested_profile_reentries == 0</code></td>
+<td>T69 is a separate merge; not shipping it leaves the feature whole</td>
+</tr>
+<tr>
+<td>R14</td>
+<td><strong>Consent becomes theatre</strong>: the decision is recorded, never re-surfaced, and the search quietly narrows for a month</td>
+<td>M</td>
+<td>H</td>
+<td>T67 re-surfaces standing scope on return and makes it correctable in place — consent nobody can review is not consent</td>
+<td>Scope decisions are evidence rows; suppressing them returns sourcing to constraints-only</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-plan-risks"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Risks</span></div><textarea class="note-ta" data-key="s-plan-risks" data-label="Risks" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-reconciliation-with-v1">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Reconciliation with v1</span></h3>
+<div class="sec-body"><p>The brief's §6.3 asked the specification round to produce "queue tasks derived
+from those specifications, replacing or refining T24–T29 where they overlap."
+That did not happen, so the queue carried v1 tasks and ad-hoc spec-v2 tasks side
+by side with the overlap unresolved. This is that reconciliation.</p>
+<p><strong>Refined — the task survives, its scope changed:</strong></p>
+<table>
+<thead>
+<tr>
+<th>task</th>
+<th>change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T24</td>
+<td>Now also pins the <code>constraints.json</code> field set and its three resolution states, and gains step 7's reach and legality fields (employed or contracting, paid where, taxed where). It owns <code>constraint_field_resolution</code> per process spec §9, but the <em>step engine</em> that resolves the fields is T41</td>
+</tr>
+<tr>
+<td>T27</td>
+<td>Carries the two-episode/two-occasion trait floor — reading <code>insufficient</code> rather than refusing to score, and never voiced to the candidate. Its own gate stays <code>interview_profile_coverage &gt;= 0.90</code>; <strong>the step 4 metric is not reassigned here</strong> (see D-4)</td>
+</tr>
+<tr>
+<td>T9</td>
+<td>Stimuli are <strong>fetched live</strong> by preference with the corpus as fallback (process §2.3); live stimuli enter the offer store as ordinary <code>new</code> offers</td>
+</tr>
+<tr>
+<td>T13</td>
+<td>Dedup is a similarity problem over normalised text; <code>text_sha256</code> catches re-collection of one listing and is explicitly the cheap half (process §7.4)</td>
+</tr>
+<tr>
+<td>T15</td>
+<td>Staged — normalise, rules, then a model only on the remainder. Extraction stays candidate-independent; relating an offer to the candidate moves to T42</td>
+</tr>
+<tr>
+<td>T18</td>
+<td>A ranking records the <code>profile_revision</code> and the sufficiency level that produced it</td>
+</tr>
+<tr>
+<td>T21</td>
+<td>Feedback moves offer lifecycle status as well as weights</td>
+</tr>
+<tr>
+<td>T29</td>
+<td>Its step table is superseded by specification v2. What remains is the packaging and distribution decision (process §11.5) — hence ◐, not ☐</td>
+</tr>
+<tr>
+<td>S4</td>
+<td>Narrowed to the CV <strong>store</strong>: import, build-from-nothing, and the <code>master.json</code> contract. Per-advert generation splits out as T45 because its gate (<code>cv_generation_traceability</code>) is a different measurement on a different artefact</td>
+</tr>
+<tr>
+<td>S6</td>
+<td>Narrowed to preparation and the log; the strict mock role-play splits out as T47</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>Keeps identity and the tree; session state and resumption split out as T35, which is where the resumption order and the continuous-write rule live</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Superseded — do not build as written:</strong></p>
+<ul>
+<li>The <code>story_failure_fraction &gt;= 0.33</code> floor, wherever it is still gated. Both
+  kinds of episode present once there are ≥4, fraction reported not floored.
+  D-3 reconciles the v1 documents.</li>
+<li>The step table in <code>docs/product-shape.md</code>, superseded by specification v2.</li>
+</ul>
+<p><strong>Unchanged</strong>: T1–T5, T7, T8, T10, T11, T12, T14, T16, T17, T19, T20, T22, T23,
+T25, T26, T28, T30, T31, T32, T33, S5, S7, D-1, D-2.</p></div>
+<div class="note" data-for="s-plan-reconciliation-with-v1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Reconciliation with v1</span></div><textarea class="note-ta" data-key="s-plan-reconciliation-with-v1" data-label="Reconciliation with v1" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-plan-sign-off">
+<h3 class="sec-h"><span class="chip">▸</span><span class="sec-title">Sign-off</span></h3>
+<div class="sec-body"><ul>
+<li>[ ] Owner has read the task table and the milestones</li>
+<li>[ ] Step gate ownership read and the D-4 divergence resolved</li>
+<li>[ ] Queue reconciled against this table</li>
+<li>[ ] Ready for execution</li>
+</ul></div>
+<div class="note" data-for="s-plan-sign-off"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › Sign-off</span></div><textarea class="note-ta" data-key="s-plan-sign-off" data-label="Sign-off" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+</section>
+</div>
+
+<div class="fab">
+  <button class="btn" id="btn-top" title="Back to top">↑ Top</button>
+  <button class="btn" id="btn-import">Import</button>
+  <button class="btn" id="btn-clear">Clear</button>
+  <button class="btn primary" id="btn-export2">💾 Save / Export</button>
+</div>
+<input type="file" id="file-import" class="hidden-input" accept=".md,.markdown,.json,text/markdown,application/json">
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <h3>Your notes</h3>
+    <p>Downloaded as a Markdown file. You can also copy the text below and paste it back.</p>
+    <textarea id="modal-ta" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn primary" id="modal-copy">Copy</button>
+      <button class="btn" id="modal-dl">Download again</button>
+      <button class="btn" id="modal-close">Close</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>var SPEC_SEED_NOTES={"s-spec-2": "About the user evaluating ads, which I think can be an important step to make the tool know them, maybe you should give the user about 5 or 10 or 20 (until needed) ads that could fit and the user can write you some things that doesn't like. For example, it could be similar to this document: a chunk of text from one or multiple ads and the user evaluates them. Or even: sort these similar texts by more according to you and write anything you think of. For example, the perks part of multiple ads. Or what they need. Or how they ask for things... Sometimes offers say that \"if you don't match in everything, don't worry, send us your CV\". How companies tell you what they want is important, and the user reaction to offers can give you very useful insights about the user.", "s-spec-option-c-full-integral-system-sp": "Are phases what is shown in \"Systems & Impact\"?", "s-spec-comparison": "Option B."};</script>
+<script>
+(function(){
+  var NS = 'integral-job-search-plan-v1:';
+  var tas = Array.prototype.slice.call(document.querySelectorAll('.note-ta'));
+
+  function autoGrow(t){t.style.height='auto';t.style.height=(t.scrollHeight)+'px';}
+  function setFilled(t){var box=t.closest('.note');if(box){box.classList.toggle('filled',t.value.trim()!=='');}}
+  function updateCount(){
+    var n=0;tas.forEach(function(t){if(t.value.trim()!=='')n++;});
+    var el=document.getElementById('count');if(el){el.textContent=n+' / '+tas.length+' notes';}
+    return n;
+  }
+  var lsOK=true,dirty=false;
+  try{localStorage.setItem('__vs__','1');localStorage.removeItem('__vs__');}catch(e){lsOK=false;}
+  var WARN='⚠ Not saving — tap Save / Export';
+  function nowStamp(){var d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+  function setState(txt,cls){var el=document.getElementById('savestate');if(el){el.textContent=txt;el.className='savestate '+(cls||'');}}
+  window.addEventListener('beforeunload',function(e){if(!lsOK&&dirty){e.preventDefault();e.returnValue='';}});
+
+  var saveTimers={};
+  function save(t){
+    if(!lsOK){dirty=true;setState(WARN,'warn');return;}
+    var k=NS+t.dataset.key;
+    try{
+      if(t.value.trim()===''){localStorage.removeItem(k);}else{localStorage.setItem(k,t.value);}
+      dirty=true;setState('✓ Saved '+nowStamp(),'ok');
+    }catch(e){lsOK=false;document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+  }
+  var SEED=(typeof SPEC_SEED_NOTES!=='undefined')?SPEC_SEED_NOTES:{};
+  tas.forEach(function(t){
+    try{var v=localStorage.getItem(NS+t.dataset.key);
+        if(v!=null){t.value=v;}
+        else if(Object.prototype.hasOwnProperty.call(SEED,t.dataset.key)){
+          var sv=SEED[t.dataset.key];if(typeof sv==='string'){t.value=sv;}}}catch(e){}
+    autoGrow(t);setFilled(t);
+    t.addEventListener('input',function(){
+      autoGrow(t);setFilled(t);updateCount();
+      clearTimeout(saveTimers[t.dataset.key]);
+      saveTimers[t.dataset.key]=setTimeout(function(){save(t);},350);
+    });
+    t.addEventListener('blur',function(){save(t);});
+  });
+  updateCount();
+  if(lsOK){setState('✓ Auto-saving','ok');}else{document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+
+  function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},1900);}
+  function pad(n){return n<10?'0'+n:''+n;}
+  function today(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+
+  function buildExport(){
+    var byPart={},order=[],data={},n=0;
+    tas.forEach(function(t){
+      var v=t.value.trim();if(v==='')return;n++;
+      data[t.dataset.key]=t.value;
+      var part=t.dataset.part||'Other';
+      if(!byPart[part]){byPart[part]=[];order.push(part);}
+      byPart[part].push({label:t.dataset.label,ref:keyFromDom(t.dataset.key,t),note:t.value});
+    });
+    var lines=['# Plan notes','','_Exported '+today()+' · '+n+' note'+(n===1?'':'s')+'._','',
+      '> Send this file back to continue the review. Notes are embedded as data at the bottom','> so importing this file restores them in the reader.',''];
+    order.forEach(function(part){
+      lines.push('## '+part,'');
+      byPart[part].forEach(function(it){
+        lines.push('**'+it.label+'**  `'+it.ref+'`');
+        it.note.split('\n').forEach(function(ln){lines.push('> '+ln);});
+        lines.push('');
+      });
+    });
+    lines.push('<!-- SPEC-NOTES-DATA');
+    lines.push(JSON.stringify(data));
+    lines.push('-->');
+    return{text:lines.join('\n'),n:n};
+  }
+  function keyFromDom(domkey,t){var box=t.closest('.note');var r=box?box.querySelector('.note-ref'):null;return r?r.textContent:domkey;}
+
+  function download(name,text){
+    try{var blob=new Blob([text],{type:'text/markdown'});var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');a.href=url;a.download=name;
+        document.body.appendChild(a);a.click();
+        setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);return true;}catch(e){return false;}
+  }
+
+  var modal=document.getElementById('modal');
+  var modalTa=document.getElementById('modal-ta');
+  function openModal(text){modalTa.value=text;modal.classList.add('open');}
+  function closeModal(){modal.classList.remove('open');}
+
+  document.getElementById('btn-export').addEventListener('click',function(){
+    var r=buildExport();
+    if(r.n===0){toast('No notes yet — add some first.');return;}
+    var name='integral-job-search-plan-notes-'+today()+'.md';
+    download(name,r.text);openModal(r.text);
+    if(navigator.clipboard){navigator.clipboard.writeText(r.text).then(function(){},function(){});}
+    dirty=false;setState('✓ Backup saved '+nowStamp(),'ok');
+    toast('Exported '+r.n+' note'+(r.n===1?'':'s'));
+  });
+  document.getElementById('btn-export2').addEventListener('click',function(){document.getElementById('btn-export').click();});
+
+  document.getElementById('modal-copy').addEventListener('click',function(){
+    modalTa.select();var ok=false;try{ok=document.execCommand('copy');}catch(e){}
+    if(navigator.clipboard){navigator.clipboard.writeText(modalTa.value).then(function(){},function(){});ok=true;}
+    toast(ok?'Copied to clipboard':'Select the text and copy');
+  });
+  document.getElementById('modal-dl').addEventListener('click',function(){download('integral-job-search-plan-notes-'+today()+'.md',modalTa.value);toast('Download started');});
+  document.getElementById('modal-close').addEventListener('click',closeModal);
+  modal.addEventListener('click',function(e){if(e.target===modal)closeModal();});
+
+  // buildExport only ever writes strings, but an import takes whatever the file
+  // holds: an object arrives as "[object Object]", an array joins on commas,
+  // null becomes "null" — each then persisted over notes the reviewer wrote.
+  // The realistic trigger is a hand-edited or truncated export, not an attack;
+  // it just fails in the least useful way, silently and destructively. Skip
+  // anything that is not a string and say how many were skipped.
+  function applyData(obj){
+    var applied=0,skipped=0;
+    tas.forEach(function(t){
+      if(!Object.prototype.hasOwnProperty.call(obj,t.dataset.key))return;
+      var v=obj[t.dataset.key];
+      if(typeof v!=='string'){skipped++;return;}
+      t.value=v;save(t);autoGrow(t);setFilled(t);applied++;
+    });
+    updateCount();return{applied:applied,skipped:skipped};
+  }
+  document.getElementById('file-import').addEventListener('change',function(e){
+    var f=e.target.files[0];if(!f)return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      var txt=String(rd.result||'');var obj=null;
+      var m=txt.lastIndexOf('SPEC-NOTES-DATA');
+      try{
+        if(m>=0){var after=txt.slice(m+15);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
+                  if(jstart>=0&&jend>jstart){obj=JSON.parse(after.slice(jstart,jend+1));}}
+        else{obj=JSON.parse(txt);}
+      }catch(err){obj=null;}
+      if(!obj){toast('Could not read notes from that file');return;}
+      var r=applyData(obj);
+      toast('Imported '+r.applied+' note'+(r.applied===1?'':'s')+
+            (r.skipped?' ('+r.skipped+' skipped — not text)':''));
+    };
+    rd.readAsText(f);e.target.value='';
+  });
+  document.getElementById('btn-import').addEventListener('click',function(){document.getElementById('file-import').click();});
+
+  document.getElementById('btn-clear').addEventListener('click',function(){
+    if(!confirm('Clear ALL notes from this browser? Export first if you want to keep them.'))return;
+    tas.forEach(function(t){t.value='';save(t);autoGrow(t);setFilled(t);});
+    updateCount();toast('All notes cleared');
+  });
+
+  document.getElementById('btn-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+})();
+</script>
+</body>
+</html>

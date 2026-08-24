@@ -243,3 +243,189 @@ what the candidate has taught the system.
    relax a hard constraint because nothing was found — asks the candidate to want a
    different job than the one they want, and it is the move a tool reaches for when it
    cannot admit an empty result.
+
+---
+
+## 5. Contracts
+
+Option 2, made concrete. Every shape below is additive: a candidate who never reaches
+exhaustion sees none of it, and no existing row, file or gate changes meaning.
+
+### 5.1 The graph edge — step 7's inputs
+
+The one edit Option 1 contains, in **both** documents or neither. `step_graph.drift_violations`
+fails when the prose and the JSON disagree, so this is a single commit by construction.
+
+`status/spec-v2-process.md` §3.1:
+
+```
+7  sourcing      → offers/*.json   [reads: constraints.json, weights.json,
+                                            evidence.jsonl(reaction, outcome)]
+```
+
+`status/spec-v2-steps.json`, step `sourcing`:
+
+```json
+"reads": [
+  {"artefact": "constraints", "optional": false},
+  {"artefact": "weights", "optional": true},
+  {"artefact": "reaction_evidence", "optional": true},
+  {"artefact": "outcome_evidence", "optional": true}
+]
+```
+
+**All three new inputs are `optional: true`, and that is load-bearing.** Step 7 must stay
+runnable on a candidate's first afternoon, before any weight is fitted or any reaction
+recorded — `missing_inputs` treats a required artefact as blocking, and a first-cycle
+sourcing step that reports itself blocked on evidence that cannot exist yet would make the
+loop a precondition for entering the loop.
+
+### 5.2 Exhaustion — the measurement
+
+Settled in review as the dedup form: *"we are finding the same jobs again."* No preference
+model, no fitted weights, no rejection history, so it works on cycle two.
+
+```python
+class Exhaustion(Strict):
+    """Why a sourcing cycle is judged to have stopped finding anything new."""
+    cycle: int                 # 1-based, within this candidate
+    offers_returned: int
+    offers_already_seen: int   # dedupe against every offer in the candidate's tree,
+                               # including purged tombstones — a purged ad the search
+                               # keeps re-finding is the definition of stuck
+    repeat_share: float        # offers_already_seen / offers_returned, 0.0 when none
+    exhausted: bool
+    reason: str                # never empty when `exhausted` — §5.2's rule, applied here
+```
+
+`repeat_share == 0.0` when `offers_returned == 0`: a cycle that returned nothing is
+exhausted for a different reason, carried in `reason`, and must not read as "nothing was
+repeated, so all is well."
+
+**The threshold is a named constant carrying its reasoning**, per open question 2 — the
+shape `weights.MAX_CHOICES` and `harness.EVALUATION_SHARE` already use:
+
+```python
+#: A cycle is exhausted when this share of what it returned was already seen. Chosen by
+#: common sense and not by evidence: there is no cycle to tune against yet, and a tuned
+#: number pretending to be evidence is worse than an honest guess that says so. Revisit
+#: once a real candidate has run four or more cycles.
+EXHAUSTION_REPEAT_SHARE = 0.8
+```
+
+### 5.3 The trigger — exhaustion is not staleness
+
+`integral.freshness` (T36) already re-opens a finished step and already requires a reason.
+This adds a **kind**, and changes nothing about the existing one.
+
+| kind | fires on | reason names |
+|---|---|---|
+| `stale` (existing) | elapsed time since something was recorded | what went stale, and when |
+| `exhausted` (new) | `Exhaustion.exhausted` | the repeat share, the cycle number, and what was repeated |
+
+A trigger with an empty `reason` is a violation of `exhaustion_triggers_without_a_reason`,
+not a trigger. This mirrors what §5.2 of the process spec already demands of staleness, and
+is the same rule rather than a second one.
+
+### 5.4 The scope proposal — symmetric by construction
+
+```python
+class ScopeProposal(Strict):
+    direction: Literal["widen", "narrow"]
+    facet: str          # what would change: employer, country, stack, seniority, pay floor
+    reason: str         # why, in the candidate's terms, citing what was observed
+    alternatives: list[ScopeProposal]   # never empty, and never all one direction
+```
+
+**`alternatives` must contain at least one proposal of the opposite `direction`.** That is
+the whole of `scope_proposals_offering_only_narrowing == 0`, enforced in the type rather
+than in the skill's prose, because prose is what drifts. A tool that can only ever propose
+narrowing is a machine for confirming whatever the candidate said first — and this is the
+most anchoring surface the product has, more than a ranking and far more than a card.
+
+### 5.5 Consent — a narrowing needs a recorded decision
+
+A scope change is candidate evidence like any other and lands in `evidence.jsonl`:
+
+```json
+{"kind": "scope_decision", "step": "sourcing", "about": "employer:acme",
+ "decision": "narrow", "accepted": true, "cycle": 3,
+ "reason": "the candidate asked to focus here after reading two of their adverts",
+ "proposed_alternatives": ["widen:country", "widen:seniority"]}
+```
+
+`accepted: false` records a **refusal**, which is evidence and is not permanent. The rule
+open question 4 asks for:
+
+> A refused proposal may be made again when the **trigger changed**, when **new evidence**
+> about the candidate arrived, or in a **new session**. Never simply on the next cycle.
+
+Re-asking the same question next cycle in different words is the failure this rule exists
+to name, and it is checkable: a proposal whose `facet` and `direction` match a refusal in
+the same session, with no intervening evidence row and the same trigger, is a violation.
+
+**The gate counts recorded decisions, not employer share.** An earlier review note said a
+cycle must never collapse onto one employer; a later one said collapsing onto one employer
+is good when the conversation went there. Both are right, and the discriminator is entirely
+whether the candidate chose it.
+
+### 5.6 The empty market — a time, not a compromise
+
+The outcome a tool is most tempted to dress up. Reported **only** when exhaustion survives
+steering in **both** directions:
+
+```python
+def market_is_empty(cycles: list[Cycle]) -> bool:
+    """Exhaustion that survived both a broadening and a narrowing.
+
+    One stale cycle means look elsewhere. Repeated cycles returning the same adverts
+    *after the scope was widened and narrowed* mean the market is the problem rather
+    than the search — a diagnosis reached by having tried the remedy for the other one
+    and watched it fail.
+    """
+```
+
+What the tool then offers is **a time**:
+
+> "It looks like it's not a good day to find jobs. Do you want to leave it for today and
+> try again tomorrow or next week?"
+
+What it must never offer is a relaxed hard constraint. That asks the candidate to want a
+different job than the one they want, and it is precisely the move a tool reaches for when
+it cannot admit an empty result — which is why
+`exhausted_searches_reported_as_a_scope_change == 0` is its own gate rather than a note.
+
+### 5.7 Standing scope, re-surfaced
+
+Scope decisions do not expire on a clock. When the candidate returns they are shown what
+the system holds about them, scope decisions included, and can correct any of it. Step 0
+already opens with *"last time we were partway through your work history"*; this extends
+that opening from **position** to **substance**.
+
+This is not a courtesy. **Consent nobody can review is not consent**, so the re-surfacing
+is what makes §5.5's gate mean anything a month later.
+
+### 5.8 What is NOT changing
+
+- **`integral.dedup`, `robots`, `lifecycle`** — repeat cycles re-fetch through the existing
+  paths, at the existing rate limits. The ceiling on cycles is courtesy, and it stays.
+- **The ranking, the extractor, the dimension model.** This spec changes what is *in* the
+  list, never how a list is ordered.
+- **Step 2's constraints.** A scope decision is not a constraint edit. Hard constraints stay
+  where the candidate put them; scope is the search's aim within them.
+- **Cross-candidate anything.** Every metric is within-subject. There is no central store
+  and none is sought.
+
+---
+
+## 6. Risks
+
+| # | What could go wrong | L | I | Mitigation | Rollback |
+|---|---|---|---|---|---|
+| IS-1 | **The tool anchors the candidate.** A question like *"shall we focus on US companies?"* plants the idea it pretends to ask about — and a conversational guide is the most anchoring surface this product has | H | H | `ScopeProposal.alternatives` is typed to require the opposite direction, so a one-way proposal cannot be constructed; `scope_proposals_offering_only_narrowing == 0` measures it over what was actually offered, not over intent | The proposal surface is behind the exhaustion trigger — disabling the trigger returns step 7 to a single pass with no conversation at all |
+| IS-2 | **Exhaustion fires when the search was merely unlucky**, and the candidate is asked to re-steer a search that would have worked | M | M | The threshold is a named constant carrying its reasoning rather than a tuned number; the trigger is licensed by repeat share over the candidate's whole tree, which needs two cycles to fire at all | Raise `EXHAUSTION_REPEAT_SHARE`; it is one constant and its docstring says it expects revision |
+| IS-3 | **Interrogation.** Option 3 sends the candidate back through questions they already answered because a search did not work — the experience that makes people close a tool | M | H | Option 3 is sequenced after Option 2 and gated on the exhaustion signal having been *observed* to be right, not merely built; its own gate counts unrequested re-entries | Option 3 is a separate task and a separate merge; not shipping it leaves Option 2 whole |
+| IS-4 | **Consent becomes theatre** — the decision is recorded, the candidate never sees it again, and the search quietly narrows for a month | M | H | §5.7 re-surfaces standing scope on return, and the gate for it is that a decision the candidate cannot review does not count | Scope decisions are evidence rows; suppressing them returns sourcing to constraints-only |
+| IS-5 | **Cycles multiply fetches** past what a source will tolerate | M | M | `robots` and the rate limits are unchanged and un-bypassed; exhaustion *reduces* fetching by stopping a search that repeats itself | Cap cycles per session; the cap is a constant like IS-2's |
+| IS-6 | **The empty-market answer is used as a euphemism** — the tool says "try tomorrow" when it should say "we looked in the wrong place" | M | M | `market_is_empty` requires exhaustion to have survived steering in *both* directions, so it cannot be reached without having tried the other diagnosis first | The report is a leaf of the proposal path; removing it returns the tool to proposing a scope change, which is the current behaviour |
+| IS-7 | **The graph edit lands without the machinery**, and step 7 declares inputs nobody reads | M | L | T60 is deliberately first and deliberately small, and every later task depends on it; a graph edge nobody traverses is documentation, which the spec says outright is not worth shipping alone | Revert two documents in one commit; `drift_violations` keeps them in step either way |
