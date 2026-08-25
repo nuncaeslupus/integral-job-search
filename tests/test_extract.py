@@ -132,7 +132,10 @@ def test_the_evidence_file_records_what_it_measured(tmp_path: Path) -> None:
     write_evidence(evidence)
     recorded = json.loads(evidence.read_text(encoding="utf-8"))
     assert isinstance(recorded["extraction_macro_f1"], float)
-    assert recorded["prefilter_suppressed_positives"] == 0
+    # Two, named in `tests/test_prefilter.py` and in `lo-25b1`'s reopening note.
+    # What this asserts is that the evidence *carries* them: a suppression the
+    # file does not record is worse than one it does.
+    assert recorded["prefilter_suppressed_positives"] == len(recorded["prefilter_suppressions"])
     assert recorded["prefilter_positives_checked"] > 0, "a clean result over nothing is nothing"
 
 

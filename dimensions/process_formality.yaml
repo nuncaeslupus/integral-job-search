@@ -50,6 +50,9 @@ elicitation:
 extraction:
   cues:
     en:
+      - pattern: "no\\s+bureaucracy|few\\s+meetings|ad-?hoc\\s+coordination|without\\s+ceremony"
+        value: -0.6
+        negatable: false
       - pattern: "scrum|sprint|kanban"
         value: 0.5
         negatable: true
@@ -60,6 +63,9 @@ extraction:
         value: 0.8
         negatable: true
     es:
+      - pattern: "sin\\s+burocracia|pocas\\s+reuniones|coordinaci[óo]n\\s+ad-?hoc|sin\\s+ceremonias"
+        value: -0.6
+        negatable: false
       - pattern: "scrum|sprint|kanban"
         value: 0.5
         negatable: true
@@ -70,6 +76,9 @@ extraction:
         value: 0.8
         negatable: true
     ca:
+      - pattern: "sense\\s+burocr[àa]cia|poques\\s+reunions|coordinaci[óo]\\s+ad-?hoc"
+        value: -0.6
+        negatable: false
       - pattern: "scrum|sprint|kanban"
         value: 0.5
         negatable: true

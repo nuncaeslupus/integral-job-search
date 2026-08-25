@@ -1,8 +1,8 @@
 {
-  "ontology_hit_rate": 0.6168,
+  "ontology_hit_rate": 0.6143,
   "ontology_status": "measured",
-  "concepts_read": 1691,
-  "mapped_concepts": 1043,
+  "concepts_read": 1680,
+  "mapped_concepts": 1032,
   "unmapped_concepts": 648,
   "unmapped_concept_names": [
     "(se debe contar con DNI o permiso de trabajo en España)",
@@ -600,8 +600,8 @@
   "sources": [
     {
       "name": "corpus/labelled/suggestions.json",
-      "concepts_read": 1691,
-      "mapped": 1043,
+      "concepts_read": 1680,
+      "mapped": 1032,
       "unmapped": 648,
       "unmapped_capable": true
     }
