@@ -117,7 +117,7 @@ what this increment touches.
 | Application status vocabulary (new) | Primary | What happened to an application | **Yes** (small) | `applications/{offer_id}/` gains a canonical status set. Unblocks Phase 7 without building it | Low |
 | `.claude/skills/step-07-sourcing`, `step-09-ranking`, `step-11-application` | Dependent | The candidate-facing protocols | **Yes** (prose) | Must state the new refusals and disclosures, or the code refuses and the conversation does not explain | Medium |
 | `docs/METHODS.md`, `README.md` | Shared resource | Method register and attribution | **Yes** | Where the borrowing is recorded. A gate, not an afterthought | Low |
-| `Makefile` (`evidence` target) + `plan_v2.py`, `process_spec.py`, `step_specs.py` | **Infrastructure** | Selects which modules regenerate gate evidence | **Yes** | Selects on `^def _main`, so three modules that write evidence are never run or drift-checked — including the plan↔queue drift guard. Must be fixed **before** the fifteen tasks are seeded, or the guard against mis-seeding them is off while they land | **High** |
+| `Makefile` (`evidence` target) + `plan_v2.py`, `process_spec.py`, `step_specs.py` | **Infrastructure** | Selects which modules regenerate gate evidence | **Yes** | Selects on `^def _main`, so three modules that write evidence are never run or drift-checked — including the plan↔queue drift guard. Must be fixed **before** the increment's sixteen tasks are relied on, or the guard against mis-seeding them is off while they land | **High** |
 | `status/plan.md` divergence register | Shared resource | D-16, D-17, D-18, D-19 | **Yes** (D-23) | Several rows here are the same family; this document must not restate a D-row as new work. Adds D-23 for the unmeasured gate accuracy | Low |
 | `claude-arsenal` | Infrastructure | Queue, gates, workers | No | Consumed as-is | Low |
 | Job portals | External | Supply | No | Politeness posture **tightens**, never loosens — see §3 non-goals | Medium |
@@ -161,9 +161,10 @@ each is cheaper to fix now than to explain to a candidate.
   question with a labelled-corpus dependency. Risk: a gate that is mechanically perfect and
   empirically unvalidated could be trusted more than it deserves — mitigated by the FLAG verdict
   (below) and by saying so in the step-9 protocol.
-- **Compatibility**: One additive change to the stored offer record (a disqualification verdict)
-  and one to the application record (status). Both additive, neither backfilled — absence stays
-  legible as "not recorded then", per the never-backfill rule adopted here.
+- **Compatibility**: Three additive fields — **two on the offer record**
+  (`eligibility` and `language_requirement`, §5.1) and **one on the application record**
+  (`status`, §5.2). All optional, none backfilled — absence stays legible as "not recorded
+  then", per the never-backfill rule adopted here.
 
 ### Option C: Option B plus the accuracy gates and Phase 7 outcome tracking
 
@@ -190,7 +191,7 @@ each is cheaper to fix now than to explain to a candidate.
 | Completeness | The three bugs only | Every borrowed idea that can be honestly gated now | Full, including the loop |
 | Compatibility | No schema change | Two additive fields | Additive + corpus schema |
 | Maintenance | Three modules | Three new, four modified — all fixture-tested | Adds a labelling burden and a mail integration |
-| Autonomous-work fit | ~3 tasks | **~11 tasks, mostly independent** | Blocks on a human within one task |
+| Autonomous-work fit | ~3 tasks | **16 tasks, mostly independent** | Blocks on a human within one task |
 
 ## 4. Recommendation
 
@@ -211,7 +212,7 @@ have foreclosed it is dropping the status vocabulary as "Phase 7, not now" — w
 in scope here despite Phase 7 being deferred.
 
 The decisive structural point is that **Option B is almost entirely parallel and needs no human
-input** — fifteen tasks against fixtures, in separate modules, with mechanical gates. That is the
+input** — sixteen tasks against fixtures, in separate modules, with mechanical gates. That is the
 right shape for the autonomous session this is being specced for.
 
 **A note on the third verdict.** Three separate mechanisms in this document — the connector
@@ -223,9 +224,17 @@ them is how the D-18 family of defects is produced.** `unmeasured` in the gate l
 shape one level up.
 
 **Immediate next action**: run `design` over this document to append sections 5–6 and produce the
-task split, then seed the queue. First task by dependency order is the robots fixture table — it
-is a failing test that can be written before any fix, it is the only item measured as broken
-today, and `meta.yaml`'s compliance assertion rests on it.
+task split, then seed the queue. **The first task is T85** — the evidence run reaching every
+module that writes evidence — because it is what makes `plan_v2`'s drift check live, and the
+selector returns it first (Small, no dependencies). It is deliberately *not* a blocking
+dependency of the other fifteen: `plan_v2` guards plan↔queue membership, which changes only
+when the queue is seeded, and that seeding was verified by hand at seed time
+(`plan_queue_task_drift: 0`, 124 rows ↔ 124 tasks). The other tasks do not reseed, so they are
+correct whether or not T85 has landed — T85 is first because the guard should be live, not
+because anything downstream is unsafe without it.
+
+Second is the robots fixture table (T70): a failing test that can be written before any fix, the
+only item measured as broken today, and what `meta.yaml`'s compliance assertion rests on.
 
 **Open questions**:
 
@@ -372,7 +381,8 @@ None. No new environment variable, no feature flag, no dependency. The ATS check
 | The connector health check fires on a genuinely empty market and a board gets disabled | Medium | Medium | Zero yield is a signal only for a portal that **has produced offers before**; the sentinel probe uses the connector's own recorded example query; disabling always asks first and touches one connector | unit (`tests/test_connector_health.py`) |
 | Two gate fields on the offer record drift into the dimension model over time | Medium | **High** | §5.3's boundary is a test, not a convention, and it fails in both directions | unit (`tests/test_eligibility.py`) |
 | The ATS contract passes trivially because no renderer exists, so it certifies nothing | Medium | Medium | The contract is asserted over the **document text**, which does exist today; the same assertions run over `pdftotext` output when a renderer lands. This is the D-21 shape — presence standing in for a check — and is called out so it cannot recur quietly | unit (`tests/test_ats.py`) |
-| 15 tasks land in one autonomous session and a late one silently contradicts an early one | Medium | Medium | `make host-gate` runs on every task PR as a hard precondition (D-22). The second guard — `plan_v2`'s plan↔queue drift check — **is inert today** and is why the `_main` fix is sequenced first in this increment rather than filed as a separate bug: the mitigation must be true before the fifteen tasks rely on it | `make host-gate` per PR, and `S8.json` regenerating once the evidence run reaches `plan_v2` |
+| 16 tasks land in one autonomous session and a late one silently contradicts an early one | Medium | Medium | `make host-gate` runs on every task PR as a hard precondition (D-22). The second guard — `plan_v2`'s plan↔queue drift check — **is inert today** and is why the `_main` fix is sequenced first in this increment rather than filed as a separate bug: the mitigation must be true before the rest of the increment relies on it | `make host-gate` per PR, and `S8.json` regenerating once the evidence run reaches `plan_v2` |
+| **Every gate here counts violations, so an empty input set scores zero and passes** — the gate certifies that nothing was processed | **High** | **High** | Each evidence record carries a `<metric>_evaluated` denominator and each task asserts it is non-zero. Raised by review on PR #201, and it is this document's own thesis turned on its own gates: a check reporting success over work it did not do. Recorded here rather than only in the task files because the next increment will write gates in the same shape | unit — `test_the_gate_does_not_pass_on_an_empty_input_set`, one per task |
 | The `_main` fix is made by renaming three functions, so the next module to define `main` is silently skipped again | Medium | Medium | Fix the **selection**, not the three modules: the evidence run must discover every module that writes evidence, and a module that writes evidence but is not reached is the failure the gate reports. Renaming `main`→`_main` three times satisfies today's symptom and rebuilds the trap | unit — a test that fails when a module writes evidence and the evidence run does not reach it |
 
 **Rollback.** Every task is a single squash-merged PR closing one issue. Both stored fields are

@@ -4,7 +4,7 @@ title: "T85: The evidence run reaches every module that writes evidence"
 priority: 10
 deps: []
 workspace: SOLO
-tags: [v3]
+tags: [v3, m5]
 ---
 
 # T85: The evidence run reaches every module that writes evidence
@@ -14,6 +14,7 @@ tags: [v3]
 ```gate
 gate_modules_outside_the_evidence_run == 0
 evidence: status/evidence/T85.json
+key: gate_modules_outside_the_evidence_run
 ```
 
 ```bash
@@ -21,8 +22,9 @@ uv run --extra dev pytest tests/test_repo_gate.py -q
 make evidence
 ```
 
-The `bash` block regenerates `status/evidence/T85.json`; the `gate` block asserts the
-number in it.
+`src/integral/repo_gate.py` must write `status/evidence/T85.json`. It already writes `status/evidence/D-22.json` for another task — add this record beside it rather than replacing it, so both gates keep reading. **A gate must never name a file no module produces** — the file not existing yet is the honest state of an unstarted task; the file existing but empty of this metric is not.
+
+The `bash` block regenerates it; the `gate` block asserts the number in it.
 
 ## Why
 
@@ -44,6 +46,12 @@ This is the cleanest instance of the class `status/spec-v3-silent-success.md` is
 
 `integral.repo_gate` already asserts that every target `CLAUDE.md` names is real and is reached (D-22). This is the same assertion one level down, and belongs beside it.
 
+**A zero-violation count over an empty input set is not a pass.** The gate counts
+violations, and nothing counted is also zero — so the evidence record must carry
+`gate_modules_outside_the_evidence_run_evaluated` (modules that write evidence) and the gate is only meaningful while that count is
+non-zero. This is the failure this whole increment is about, turned on its own gates:
+a check that reports success over work it did not do. Assert the denominator.
+
 ## Tests — write these RED first
 
 `test_every_module_writing_evidence_is_reached_by_the_evidence_run` in `tests/test_repo_gate.py`.
@@ -51,6 +59,8 @@ This is the cleanest instance of the class `status/spec-v3-silent-success.md` is
 `test_a_module_that_writes_evidence_and_is_missed_fails_the_check` — the RED test: it must fail today, naming `plan_v2`, `process_spec` and `step_specs`.
 
 `test_the_selection_does_not_depend_on_a_private_name_convention`.
+
+`test_the_gate_does_not_pass_on_an_empty_input_set` — assert `gate_modules_outside_the_evidence_run_evaluated` is written and non-zero.
 
 ## Location
 

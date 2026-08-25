@@ -4,7 +4,7 @@ title: "T84: Step 11's two drafting rules — relevance-weighted cutting and the
 priority: 10
 deps: []
 workspace: PROFILE
-tags: [v3]
+tags: [v3, m5]
 ---
 
 # T84: Step 11's two drafting rules — relevance-weighted cutting and the backtrack test
@@ -14,6 +14,7 @@ tags: [v3]
 ```gate
 step_skills_without_the_drafting_rules == 0
 evidence: status/evidence/T84.json
+key: step_skills_without_the_drafting_rules
 ```
 
 ```bash
@@ -21,8 +22,9 @@ uv run --extra dev pytest tests/test_step_skills.py -q
 uv run --extra dev python -m integral.step_skills
 ```
 
-The `bash` block regenerates `status/evidence/T84.json`; the `gate` block asserts the
-number in it.
+`src/integral/step_skills.py` must write `status/evidence/T84.json`. It already writes `status/evidence/S7.json` for another task — add this record beside it rather than replacing it, so both gates keep reading. **A gate must never name a file no module produces** — the file not existing yet is the honest state of an unstarted task; the file existing but empty of this metric is not.
+
+The `bash` block regenerates it; the `gate` block asserts the number in it.
 
 ## Why
 
@@ -40,6 +42,12 @@ Prose only. No new module, no scoring code — the judgement belongs in the conv
 
 **Do not add an exit offer to the Boundary section** — D-15 removed those deliberately.
 
+**A zero-violation count over an empty input set is not a pass.** The gate counts
+violations, and nothing counted is also zero — so the evidence record must carry
+`step_skills_without_the_drafting_rules_evaluated` (step skills scanned) and the gate is only meaningful while that count is
+non-zero. This is the failure this whole increment is about, turned on its own gates:
+a check that reports success over work it did not do. Assert the denominator.
+
 ## Tests — write these RED first
 
 `test_step_eleven_states_the_relevance_weighted_cut_rule` in `tests/test_step_skills.py`.
@@ -47,6 +55,8 @@ Prose only. No new module, no scoring code — the judgement belongs in the conv
 `test_step_eleven_states_the_interview_backtrack_test`.
 
 `test_the_cut_rule_names_narrative_load` — the third factor is the one most likely to be dropped in a paraphrase.
+
+`test_the_gate_does_not_pass_on_an_empty_input_set` — assert `step_skills_without_the_drafting_rules_evaluated` is written and non-zero.
 
 ## Location
 

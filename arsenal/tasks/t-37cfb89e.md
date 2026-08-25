@@ -4,7 +4,7 @@ title: "T72: Connector health — detect a silently rotted parser"
 priority: 5
 deps: []
 workspace: SUPPLY
-tags: [v3]
+tags: [v3, m5]
 ---
 
 # T72: Connector health — detect a silently rotted parser
@@ -14,6 +14,7 @@ tags: [v3]
 ```gate
 silent_connector_failures == 0
 evidence: status/evidence/T72.json
+key: silent_connector_failures
 ```
 
 ```bash
@@ -21,8 +22,9 @@ uv run --extra dev pytest tests/test_connector_health.py -q
 uv run --extra dev python -m integral.connector_health
 ```
 
-The `bash` block regenerates `status/evidence/T72.json`; the `gate` block asserts the
-number in it.
+`src/integral/connector_health.py` must write `status/evidence/T72.json`. This is a new module, so it owns this record outright. **A gate must never name a file no module produces** — the file not existing yet is the honest state of an unstarted task; the file existing but empty of this metric is not.
+
+The `bash` block regenerates it; the `gate` block asserts the number in it.
 
 ## Why
 
@@ -38,6 +40,12 @@ Adapted from `MadsLorentzen/ai-job-search` (MIT, © 2026 Mads Lorentzen). **T83 
 
 The sentinel probe is capped at one retry. This is a health check, not a crawler.
 
+**A zero-violation count over an empty input set is not a pass.** The gate counts
+violations, and nothing counted is also zero — so the evidence record must carry
+`silent_connector_failures_evaluated` (connectors checked) and the gate is only meaningful while that count is
+non-zero. This is the failure this whole increment is about, turned on its own gates:
+a check that reports success over work it did not do. Assert the denominator.
+
 ## Tests — write these RED first
 
 `test_a_connector_whose_selectors_no_longer_match_is_reported_broken` in `tests/test_connector_health.py` — mutate the recorded fixture's markup, assert `broken`.
@@ -45,6 +53,8 @@ The sentinel probe is capped at one retry. This is a health check, not a crawler
 `test_zero_yield_from_a_portal_that_never_yielded_is_not_breakage` — an empty market is not a rotted parser.
 
 `test_a_healthy_connector_over_its_fixture_reads_ok`.
+
+`test_the_gate_does_not_pass_on_an_empty_input_set` — assert `silent_connector_failures_evaluated` is written and non-zero.
 
 ## Location
 

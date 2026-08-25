@@ -52,6 +52,15 @@ first live candidate session is imminent:
   literal text an applicant-tracking system must find in it.
 - `applications/{offer_id}/` has no status vocabulary, so what happened to an application is
   not a thing the tool can state.
+- **The evidence gate does not run three of its own checks.** `make evidence` builds its module
+  list with `grep -l '^def _main' src/integral/*.py` — 74 modules. `plan_v2.py`,
+  `process_spec.py` and `step_specs.py` define `main`, not `_main`, so they are never
+  regenerated and never drift-checked. Measured 2026-08-25: committed
+  `status/evidence/S8.json` reads `plan_rows: 81` while the module measures **107**, and
+  `make evidence` still exits 0 printing "no drift". `plan_v2` is the check that catches a plan
+  row with no queue task — the guard against exactly the bookkeeping error this increment's own
+  fifteen-task seeding could make. Found while validating this specification, which makes it the
+  cleanest instance of the class: the gate reported success over a check it never ran.
 
 Most of the remedies below are adapted from **[`MadsLorentzen/ai-job-search`](https://github.com/MadsLorentzen/ai-job-search)** (MIT, © 2026 Mads Lorentzen),
 whose matching layer we assessed and rejected in `status/specification.md` §3 Option A and still
@@ -86,6 +95,9 @@ scoring layer.** Attribution is a deliverable, not a courtesy — see the succes
       reported as exactly one of `covered` / `synonym-only` / `missing (have it)` /
       `missing (gap)`.
 - [ ] `applications_with_a_noncanonical_status == 0`
+- [ ] `gate_modules_outside_the_evidence_run == 0` — every module that writes gate evidence is
+      reached by `make evidence`. Selection must not depend on a private-name convention that a
+      module can silently fail to follow.
 - [ ] `borrowed_techniques_without_attribution == 0` — every technique adopted here has an
       entry in `docs/METHODS.md` naming its source, and `README.md` carries an
       Acknowledgements section. METHODS already exists to record where a method came from and
@@ -117,7 +129,8 @@ what this increment touches.
 | Application status vocabulary (new) | Primary | What happened to an application | **Yes** (small) | `applications/{offer_id}/` gains a canonical status set. Unblocks Phase 7 without building it | Low |
 | `.claude/skills/step-07-sourcing`, `step-09-ranking`, `step-11-application` | Dependent | The candidate-facing protocols | **Yes** (prose) | Must state the new refusals and disclosures, or the code refuses and the conversation does not explain | Medium |
 | `docs/METHODS.md`, `README.md` | Shared resource | Method register and attribution | **Yes** | Where the borrowing is recorded. A gate, not an afterthought | Low |
-| `status/plan.md` divergence register | Shared resource | D-16, D-17, D-18, D-19 | Validation only | Several rows here are the same family; this document must not restate a D-row as new work | Low |
+| `Makefile` (`evidence` target) + `plan_v2.py`, `process_spec.py`, `step_specs.py` | **Infrastructure** | Selects which modules regenerate gate evidence | **Yes** | Selects on `^def _main`, so three modules that write evidence are never run or drift-checked — including the plan↔queue drift guard. Must be fixed **before** the increment's sixteen tasks are relied on, or the guard against mis-seeding them is off while they land | **High** |
+| `status/plan.md` divergence register | Shared resource | D-16, D-17, D-18, D-19 | **Yes** (D-23) | Several rows here are the same family; this document must not restate a D-row as new work. Adds D-23 for the unmeasured gate accuracy | Low |
 | `claude-arsenal` | Infrastructure | Queue, gates, workers | No | Consumed as-is | Low |
 | Job portals | External | Supply | No | Politeness posture **tightens**, never loosens — see §3 non-goals | Medium |
 
@@ -171,9 +184,10 @@ each is cheaper to fix now than to explain to a candidate.
   question with a labelled-corpus dependency. Risk: a gate that is mechanically perfect and
   empirically unvalidated could be trusted more than it deserves — mitigated by the FLAG verdict
   (below) and by saying so in the step-9 protocol.
-- **Compatibility**: One additive change to the stored offer record (a disqualification verdict)
-  and one to the application record (status). Both additive, neither backfilled — absence stays
-  legible as "not recorded then", per the never-backfill rule adopted here.
+- **Compatibility**: Three additive fields — **two on the offer record**
+  (`eligibility` and `language_requirement`, §5.1) and **one on the application record**
+  (`status`, §5.2). All optional, none backfilled — absence stays legible as "not recorded
+  then", per the never-backfill rule adopted here.
 
 > **✎ Notes** · `SPEC › Option B: The full borrowed set, mechanism separated from accuracy (Recommended)`
 > _(your notes here — replace this line)_
@@ -206,7 +220,7 @@ each is cheaper to fix now than to explain to a candidate.
 | Completeness | The three bugs only | Every borrowed idea that can be honestly gated now | Full, including the loop |
 | Compatibility | No schema change | Two additive fields | Additive + corpus schema |
 | Maintenance | Three modules | Three new, four modified — all fixture-tested | Adds a labelling burden and a mail integration |
-| Autonomous-work fit | ~3 tasks | **~11 tasks, mostly independent** | Blocks on a human within one task |
+| Autonomous-work fit | ~3 tasks | **16 tasks, mostly independent** | Blocks on a human within one task |
 
 > **✎ Notes** · `SPEC › Comparison`
 > _(your notes here — replace this line)_
@@ -218,11 +232,19 @@ each is cheaper to fix now than to explain to a candidate.
 Option A is tempting because the first live session is close, but it optimises for the wrong
 risk: the three bugs are invisible to the candidate, while the thing they *will* see is a
 ranked list that leads with a job requiring a work permit they do not hold. Option B costs one
-extra day and fixes both. Option C fails on evidence it cannot have yet, and its two blockers
-are the kind no amount of effort removes.
+extra day and fixes both.
+
+**Option C is deferred, not rejected — owner's decision, 2026-08-25 spec review.** Its two
+blockers are timing, not merit: the accuracy gates need a corpus round, and outcome calibration
+needs application volume that only use produces. Both dissolve on their own once the tool has
+run. So C is recorded here as **the next increment**, and this document's job is to leave it
+reachable: D-23 (below) holds the accuracy gap open, the application status vocabulary (§5.2)
+is the schema C's outcome calibration reads, and nothing in Option B forecloses it. What would
+have foreclosed it is dropping the status vocabulary as "Phase 7, not now" — which is why it is
+in scope here despite Phase 7 being deferred.
 
 The decisive structural point is that **Option B is almost entirely parallel and needs no human
-input** — eleven tasks against fixtures, in separate modules, with mechanical gates. That is the
+input** — sixteen tasks against fixtures, in separate modules, with mechanical gates. That is the
 right shape for the autonomous session this is being specced for.
 
 **A note on the third verdict.** Three separate mechanisms in this document — the connector
@@ -234,9 +256,17 @@ them is how the D-18 family of defects is produced.** `unmeasured` in the gate l
 shape one level up.
 
 **Immediate next action**: run `design` over this document to append sections 5–6 and produce the
-task split, then seed the queue. First task by dependency order is the robots fixture table — it
-is a failing test that can be written before any fix, it is the only item measured as broken
-today, and `meta.yaml`'s compliance assertion rests on it.
+task split, then seed the queue. **The first task is T85** — the evidence run reaching every
+module that writes evidence — because it is what makes `plan_v2`'s drift check live, and the
+selector returns it first (Small, no dependencies). It is deliberately *not* a blocking
+dependency of the other fifteen: `plan_v2` guards plan↔queue membership, which changes only
+when the queue is seeded, and that seeding was verified by hand at seed time
+(`plan_queue_task_drift: 0`, 124 rows ↔ 124 tasks). The other tasks do not reseed, so they are
+correct whether or not T85 has landed — T85 is first because the guard should be live, not
+because anything downstream is unsafe without it.
+
+Second is the robots fixture table (T70): a failing test that can be written before any fix, the
+only item measured as broken today, and what `meta.yaml`'s compliance assertion rests on.
 
 **Open questions**:
 
@@ -253,19 +283,24 @@ today, and `meta.yaml`'s compliance assertion rests on it.
       and `test_a_dimension_weight_cannot_change_a_gate_verdict` — because the failure being
       prevented is a preference weight cancelling a legal bar, which would be invisible in any
       output either layer produces.
-- [ ] **3. Is a PDF renderer in scope later, and which?** The ATS contract here is deliberately
-      renderer-independent so the answer can be deferred. The borrowed repository's LaTeX
-      pipeline (moderncv + a custom class + bundled fonts, two CI legs because versions break
-      differently) is explicitly **not** recommended — their own docs treat that fragility as a
-      cost borne by every fork user.
-- [ ] **4. Can `drawspec` carry a 2-D scatter?** A Pareto frontier is two-dimensional and prose
-      cannot show it, which makes it the one visual output that would earn its place here. This
-      repository already renders declarative JSON → SVG through drawspec
-      (`docs/diagrams/critical-path.json`), so the cost is a spec file, not a chart library —
-      **if** the schema has a suitable `kind`. Unverified: the working checkout is not on this
-      machine (`/home/ivant/dev/drawspec` holds only `originals/drawspeccorpus.tar.gz`) and
-      `drawspec.dev` does not resolve from here. **Deferred with this as the named blocker**;
-      out of scope for this increment either way.
+- [x] **3. Is a PDF renderer in scope later, and which?** **Decided 2026-08-25 by the owner: yes,
+      one is needed — deferred until a live session actually needs a CV or letter to leave the
+      machine.** Not in this increment, and the "which" stays open. What exists today is
+      generation, not rendering: T45 (merged) assembles a **Markdown** document from store
+      entries with a claim manifest, and nothing turns it into a file an employer receives. That
+      is precisely why the ATS contract here is asserted over the document *text* — the check is
+      real against what exists now, and the same assertions run over `pdftotext` output the day a
+      renderer lands. The borrowed repository's LaTeX pipeline (moderncv + a custom class +
+      bundled fonts, two CI legs because versions break differently) remains explicitly **not**
+      recommended — their own docs treat that fragility as a cost borne by every fork user.
+- [x] **4. Can `drawspec` carry a 2-D scatter?** **Closed as not blocking, 2026-08-25: drawspec is
+      the owner's own project, and the owner will add the kind if it is missing.** Still out of
+      scope for this increment — a Pareto frontier view is a reporting nicety, and nothing in
+      Option B depends on it. Recorded so the reasoning survives: a frontier is two-dimensional
+      and prose cannot show it, this repository already renders declarative JSON → SVG through
+      drawspec (`docs/diagrams/critical-path.json`), so the cost when it is wanted is a spec file
+      rather than a chart library. The schema was not checkable from here (the working checkout is
+      not on this machine and `drawspec.dev` does not resolve), and it does not need to be.
 
 **Non-goals, stated so they cannot drift in.** The borrowed repository's scoring rubric, its
 retry policy (six retries on a 429, no per-host budget, scrapers that never read `robots.txt`),
@@ -398,7 +433,9 @@ None. No new environment variable, no feature flag, no dependency. The ATS check
 | The connector health check fires on a genuinely empty market and a board gets disabled | Medium | Medium | Zero yield is a signal only for a portal that **has produced offers before**; the sentinel probe uses the connector's own recorded example query; disabling always asks first and touches one connector | unit (`tests/test_connector_health.py`) |
 | Two gate fields on the offer record drift into the dimension model over time | Medium | **High** | §5.3's boundary is a test, not a convention, and it fails in both directions | unit (`tests/test_eligibility.py`) |
 | The ATS contract passes trivially because no renderer exists, so it certifies nothing | Medium | Medium | The contract is asserted over the **document text**, which does exist today; the same assertions run over `pdftotext` output when a renderer lands. This is the D-21 shape — presence standing in for a check — and is called out so it cannot recur quietly | unit (`tests/test_ats.py`) |
-| 15 tasks land in one autonomous session and a late one silently contradicts an early one | Medium | Medium | `make host-gate` runs on every task PR as a hard precondition (D-22), and `plan_v2` measures plan↔queue drift in both directions | `make host-gate` per PR |
+| 16 tasks land in one autonomous session and a late one silently contradicts an early one | Medium | Medium | `make host-gate` runs on every task PR as a hard precondition (D-22). The second guard — `plan_v2`'s plan↔queue drift check — **is inert today** and is why the `_main` fix is sequenced first in this increment rather than filed as a separate bug: the mitigation must be true before the rest of the increment relies on it | `make host-gate` per PR, and `S8.json` regenerating once the evidence run reaches `plan_v2` |
+| **Every gate here counts violations, so an empty input set scores zero and passes** — the gate certifies that nothing was processed | **High** | **High** | Each evidence record carries a `<metric>_evaluated` denominator and each task asserts it is non-zero. Raised by review on PR #201, and it is this document's own thesis turned on its own gates: a check reporting success over work it did not do. Recorded here rather than only in the task files because the next increment will write gates in the same shape | unit — `test_the_gate_does_not_pass_on_an_empty_input_set`, one per task |
+| The `_main` fix is made by renaming three functions, so the next module to define `main` is silently skipped again | Medium | Medium | Fix the **selection**, not the three modules: the evidence run must discover every module that writes evidence, and a module that writes evidence but is not reached is the failure the gate reports. Renaming `main`→`_main` three times satisfies today's symptom and rebuilds the trap | unit — a test that fails when a module writes evidence and the evidence run does not reach it |
 
 **Rollback.** Every task is a single squash-merged PR closing one issue. Both stored fields are
 additive and optional, so reverting a merge leaves earlier records valid and later ones merely

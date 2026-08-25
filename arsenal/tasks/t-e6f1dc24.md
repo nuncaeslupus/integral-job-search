@@ -4,7 +4,7 @@ title: "T76: The eligibility gate — refuse to score an offer the candidate is 
 priority: 1
 deps: []
 workspace: MATCH
-tags: [v3]
+tags: [v3, m5]
 ---
 
 # T76: The eligibility gate — refuse to score an offer the candidate is barred from
@@ -14,6 +14,7 @@ tags: [v3]
 ```gate
 offers_ranked_despite_a_stated_disqualification == 0
 evidence: status/evidence/T76.json
+key: offers_ranked_despite_a_stated_disqualification
 ```
 
 ```bash
@@ -21,8 +22,9 @@ uv run --extra dev pytest tests/test_eligibility.py -q
 uv run --extra dev python -m integral.eligibility
 ```
 
-The `bash` block regenerates `status/evidence/T76.json`; the `gate` block asserts the
-number in it.
+`src/integral/eligibility.py` must write `status/evidence/T76.json`. This is a new module, so it owns this record outright. **A gate must never name a file no module produces** — the file not existing yet is the honest state of an unstarted task; the file existing but empty of this metric is not.
+
+The `bash` block regenerates it; the `gate` block asserts the number in it.
 
 ## Why
 
@@ -46,6 +48,12 @@ Adapted from `MadsLorentzen/ai-job-search` (MIT, © 2026 Mads Lorentzen). **T83 
 
 Never read `weights.json` or any `dimensions/*` score here — see T78.
 
+**A zero-violation count over an empty input set is not a pass.** The gate counts
+violations, and nothing counted is also zero — so the evidence record must carry
+`offers_ranked_despite_a_stated_disqualification_evaluated` (offers passed through the gate) and the gate is only meaningful while that count is
+non-zero. This is the failure this whole increment is about, turned on its own gates:
+a check that reports success over work it did not do. Assert the denominator.
+
 ## Tests — write these RED first
 
 `test_a_stated_citizenship_requirement_excludes_the_offer` in `tests/test_eligibility.py`.
@@ -53,6 +61,8 @@ Never read `weights.json` or any `dimensions/*` score here — see T78.
 `test_silence_about_permits_is_not_a_disqualification` — an advert that says nothing has said nothing.
 
 `test_a_company_wide_statement_is_not_role_level_permission`.
+
+`test_the_gate_does_not_pass_on_an_empty_input_set` — assert `offers_ranked_despite_a_stated_disqualification_evaluated` is written and non-zero.
 
 ## Location
 

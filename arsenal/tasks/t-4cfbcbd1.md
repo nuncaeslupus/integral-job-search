@@ -4,7 +4,7 @@ title: "T77: Every disqualification carries the advert's own sentence"
 priority: 10
 deps: [t-e6f1dc24]
 workspace: MATCH
-tags: [v3]
+tags: [v3, m5]
 ---
 
 # T77: Every disqualification carries the advert's own sentence
@@ -14,6 +14,7 @@ tags: [v3]
 ```gate
 disqualification_verdicts_without_quoted_wording == 0
 evidence: status/evidence/T77.json
+key: disqualification_verdicts_without_quoted_wording
 ```
 
 ```bash
@@ -21,8 +22,9 @@ uv run --extra dev pytest tests/test_eligibility.py -q
 uv run --extra dev python -m integral.eligibility
 ```
 
-The `bash` block regenerates `status/evidence/T77.json`; the `gate` block asserts the
-number in it.
+`src/integral/eligibility.py` must write `status/evidence/T77.json`. This is a new module, so it owns this record outright. **A gate must never name a file no module produces** — the file not existing yet is the honest state of an unstarted task; the file existing but empty of this metric is not.
+
+The `bash` block regenerates it; the `gate` block asserts the number in it.
 
 ## Why
 
@@ -36,6 +38,12 @@ Adapted from `MadsLorentzen/ai-job-search` (MIT, © 2026 Mads Lorentzen). **T83 
 
 **A verdict whose quote is not found in the advert text is a schema violation, not a warning.** Fail loudly — a fabricated justification for excluding someone's job is worse than no gate at all.
 
+**A zero-violation count over an empty input set is not a pass.** The gate counts
+violations, and nothing counted is also zero — so the evidence record must carry
+`disqualification_verdicts_without_quoted_wording_evaluated` (verdicts emitted) and the gate is only meaningful while that count is
+non-zero. This is the failure this whole increment is about, turned on its own gates:
+a check that reports success over work it did not do. Assert the denominator.
+
 ## Tests — write these RED first
 
 `test_every_fail_verdict_carries_the_adverts_own_sentence` in `tests/test_eligibility.py`.
@@ -43,6 +51,8 @@ Adapted from `MadsLorentzen/ai-job-search` (MIT, © 2026 Mads Lorentzen). **T83 
 `test_a_verdict_quote_is_a_span_of_the_advert_text` — the quote is found in the advert, byte for byte.
 
 `test_a_flag_verdict_quotes_too` — FLAG is a claim about the advert as much as FAIL is.
+
+`test_the_gate_does_not_pass_on_an_empty_input_set` — assert `disqualification_verdicts_without_quoted_wording_evaluated` is written and non-zero.
 
 ## Location
 

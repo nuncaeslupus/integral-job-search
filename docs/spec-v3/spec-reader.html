@@ -213,6 +213,15 @@ first live candidate session is imminent:</p>
   literal text an applicant-tracking system must find in it.</li>
 <li><code>applications/{offer_id}/</code> has no status vocabulary, so what happened to an application is
   not a thing the tool can state.</li>
+<li><strong>The evidence gate does not run three of its own checks.</strong> <code>make evidence</code> builds its module
+  list with <code>grep -l '^def _main' src/integral/*.py</code> — 74 modules. <code>plan_v2.py</code>,
+  <code>process_spec.py</code> and <code>step_specs.py</code> define <code>main</code>, not <code>_main</code>, so they are never
+  regenerated and never drift-checked. Measured 2026-08-25: committed
+  <code>status/evidence/S8.json</code> reads <code>plan_rows: 81</code> while the module measures <strong>107</strong>, and
+  <code>make evidence</code> still exits 0 printing "no drift". <code>plan_v2</code> is the check that catches a plan
+  row with no queue task — the guard against exactly the bookkeeping error this increment's own
+  fifteen-task seeding could make. Found while validating this specification, which makes it the
+  cleanest instance of the class: the gate reported success over a check it never ran.</li>
 </ul>
 <p>Most of the remedies below are adapted from <strong><a href="https://github.com/MadsLorentzen/ai-job-search"><code>MadsLorentzen/ai-job-search</code></a></strong> (MIT, © 2026 Mads Lorentzen),
 whose matching layer we assessed and rejected in <code>status/specification.md</code> §3 Option A and still
@@ -246,6 +255,9 @@ scoring layer.</strong> Attribution is a deliverable, not a courtesy — see the
       reported as exactly one of <code>covered</code> / <code>synonym-only</code> / <code>missing (have it)</code> /
       <code>missing (gap)</code>.</li>
 <li>[ ] <code>applications_with_a_noncanonical_status == 0</code></li>
+<li>[ ] <code>gate_modules_outside_the_evidence_run == 0</code> — every module that writes gate evidence is
+      reached by <code>make evidence</code>. Selection must not depend on a private-name convention that a
+      module can silently fail to follow.</li>
 <li>[ ] <code>borrowed_techniques_without_attribution == 0</code> — every technique adopted here has an
       entry in <code>docs/METHODS.md</code> naming its source, and <code>README.md</code> carries an
       Acknowledgements section. METHODS already exists to record where a method came from and
@@ -369,11 +381,19 @@ what this increment touches.</p>
 <td>Low</td>
 </tr>
 <tr>
+<td><code>Makefile</code> (<code>evidence</code> target) + <code>plan_v2.py</code>, <code>process_spec.py</code>, <code>step_specs.py</code></td>
+<td><strong>Infrastructure</strong></td>
+<td>Selects which modules regenerate gate evidence</td>
+<td><strong>Yes</strong></td>
+<td>Selects on <code>^def _main</code>, so three modules that write evidence are never run or drift-checked — including the plan↔queue drift guard. Must be fixed <strong>before</strong> the increment's sixteen tasks are relied on, or the guard against mis-seeding them is off while they land</td>
+<td><strong>High</strong></td>
+</tr>
+<tr>
 <td><code>status/plan.md</code> divergence register</td>
 <td>Shared resource</td>
 <td>D-16, D-17, D-18, D-19</td>
-<td>Validation only</td>
-<td>Several rows here are the same family; this document must not restate a D-row as new work</td>
+<td><strong>Yes</strong> (D-23)</td>
+<td>Several rows here are the same family; this document must not restate a D-row as new work. Adds D-23 for the unmeasured gate accuracy</td>
 <td>Low</td>
 </tr>
 <tr>
@@ -440,9 +460,10 @@ each is cheaper to fix now than to explain to a candidate.</p></div>
   question with a labelled-corpus dependency. Risk: a gate that is mechanically perfect and
   empirically unvalidated could be trusted more than it deserves — mitigated by the FLAG verdict
   (below) and by saying so in the step-9 protocol.</li>
-<li><strong>Compatibility</strong>: One additive change to the stored offer record (a disqualification verdict)
-  and one to the application record (status). Both additive, neither backfilled — absence stays
-  legible as "not recorded then", per the never-backfill rule adopted here.</li>
+<li><strong>Compatibility</strong>: Three additive fields — <strong>two on the offer record</strong>
+  (<code>eligibility</code> and <code>language_requirement</code>, §5.1) and <strong>one on the application record</strong>
+  (<code>status</code>, §5.2). All optional, none backfilled — absence stays legible as "not recorded
+  then", per the never-backfill rule adopted here.</li>
 </ul></div>
 <div class="note" data-for="s-spec-option-b-the-full-borrowed-set-m"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option B: The full borrowed set, mechanism separated from accuracy (Recommended)</span></div><textarea class="note-ta" data-key="s-spec-option-b-the-full-borrowed-set-m" data-label="Option B: The full borrowed set, mechanism separated from accuracy (Recommended)" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
 </article>
@@ -510,7 +531,7 @@ each is cheaper to fix now than to explain to a candidate.</p></div>
 <tr>
 <td>Autonomous-work fit</td>
 <td>~3 tasks</td>
-<td><strong>~11 tasks, mostly independent</strong></td>
+<td><strong>16 tasks, mostly independent</strong></td>
 <td>Blocks on a human within one task</td>
 </tr>
 </tbody>
@@ -523,10 +544,17 @@ each is cheaper to fix now than to explain to a candidate.</p></div>
 <p>Option A is tempting because the first live session is close, but it optimises for the wrong
 risk: the three bugs are invisible to the candidate, while the thing they <em>will</em> see is a
 ranked list that leads with a job requiring a work permit they do not hold. Option B costs one
-extra day and fixes both. Option C fails on evidence it cannot have yet, and its two blockers
-are the kind no amount of effort removes.</p>
+extra day and fixes both.</p>
+<p><strong>Option C is deferred, not rejected — owner's decision, 2026-08-25 spec review.</strong> Its two
+blockers are timing, not merit: the accuracy gates need a corpus round, and outcome calibration
+needs application volume that only use produces. Both dissolve on their own once the tool has
+run. So C is recorded here as <strong>the next increment</strong>, and this document's job is to leave it
+reachable: D-23 (below) holds the accuracy gap open, the application status vocabulary (§5.2)
+is the schema C's outcome calibration reads, and nothing in Option B forecloses it. What would
+have foreclosed it is dropping the status vocabulary as "Phase 7, not now" — which is why it is
+in scope here despite Phase 7 being deferred.</p>
 <p>The decisive structural point is that <strong>Option B is almost entirely parallel and needs no human
-input</strong> — eleven tasks against fixtures, in separate modules, with mechanical gates. That is the
+input</strong> — sixteen tasks against fixtures, in separate modules, with mechanical gates. That is the
 right shape for the autonomous session this is being specced for.</p>
 <p><strong>A note on the third verdict.</strong> Three separate mechanisms in this document — the connector
 health check (<code>ok</code>/<code>broken</code>/<code>inconclusive</code>), the liveness check (<code>live</code>/<code>dead</code>/<code>unverified</code>) and
@@ -536,9 +564,16 @@ judges the outside world, "I could not tell" is a distinct answer from "no", and
 them is how the D-18 family of defects is produced.</strong> <code>unmeasured</code> in the gate layer is the same
 shape one level up.</p>
 <p><strong>Immediate next action</strong>: run <code>design</code> over this document to append sections 5–6 and produce the
-task split, then seed the queue. First task by dependency order is the robots fixture table — it
-is a failing test that can be written before any fix, it is the only item measured as broken
-today, and <code>meta.yaml</code>'s compliance assertion rests on it.</p>
+task split, then seed the queue. <strong>The first task is T85</strong> — the evidence run reaching every
+module that writes evidence — because it is what makes <code>plan_v2</code>'s drift check live, and the
+selector returns it first (Small, no dependencies). It is deliberately <em>not</em> a blocking
+dependency of the other fifteen: <code>plan_v2</code> guards plan↔queue membership, which changes only
+when the queue is seeded, and that seeding was verified by hand at seed time
+(<code>plan_queue_task_drift: 0</code>, 124 rows ↔ 124 tasks). The other tasks do not reseed, so they are
+correct whether or not T85 has landed — T85 is first because the guard should be live, not
+because anything downstream is unsafe without it.</p>
+<p>Second is the robots fixture table (T70): a failing test that can be written before any fix, the
+only item measured as broken today, and what <code>meta.yaml</code>'s compliance assertion rests on.</p>
 <p><strong>Open questions</strong>:</p>
 <ul>
 <li>[x] <strong>1. Where does the eligibility gate's accuracy get measured?</strong> <strong>Decided 2026-08-25 by the
@@ -554,19 +589,24 @@ today, and <code>meta.yaml</code>'s compliance assertion rests on it.</p>
       and <code>test_a_dimension_weight_cannot_change_a_gate_verdict</code> — because the failure being
       prevented is a preference weight cancelling a legal bar, which would be invisible in any
       output either layer produces.</li>
-<li>[ ] <strong>3. Is a PDF renderer in scope later, and which?</strong> The ATS contract here is deliberately
-      renderer-independent so the answer can be deferred. The borrowed repository's LaTeX
-      pipeline (moderncv + a custom class + bundled fonts, two CI legs because versions break
-      differently) is explicitly <strong>not</strong> recommended — their own docs treat that fragility as a
-      cost borne by every fork user.</li>
-<li>[ ] <strong>4. Can <code>drawspec</code> carry a 2-D scatter?</strong> A Pareto frontier is two-dimensional and prose
-      cannot show it, which makes it the one visual output that would earn its place here. This
-      repository already renders declarative JSON → SVG through drawspec
-      (<code>docs/diagrams/critical-path.json</code>), so the cost is a spec file, not a chart library —
-      <strong>if</strong> the schema has a suitable <code>kind</code>. Unverified: the working checkout is not on this
-      machine (<code>/home/ivant/dev/drawspec</code> holds only <code>originals/drawspeccorpus.tar.gz</code>) and
-      <code>drawspec.dev</code> does not resolve from here. <strong>Deferred with this as the named blocker</strong>;
-      out of scope for this increment either way.</li>
+<li>[x] <strong>3. Is a PDF renderer in scope later, and which?</strong> <strong>Decided 2026-08-25 by the owner: yes,
+      one is needed — deferred until a live session actually needs a CV or letter to leave the
+      machine.</strong> Not in this increment, and the "which" stays open. What exists today is
+      generation, not rendering: T45 (merged) assembles a <strong>Markdown</strong> document from store
+      entries with a claim manifest, and nothing turns it into a file an employer receives. That
+      is precisely why the ATS contract here is asserted over the document <em>text</em> — the check is
+      real against what exists now, and the same assertions run over <code>pdftotext</code> output the day a
+      renderer lands. The borrowed repository's LaTeX pipeline (moderncv + a custom class +
+      bundled fonts, two CI legs because versions break differently) remains explicitly <strong>not</strong>
+      recommended — their own docs treat that fragility as a cost borne by every fork user.</li>
+<li>[x] <strong>4. Can <code>drawspec</code> carry a 2-D scatter?</strong> <strong>Closed as not blocking, 2026-08-25: drawspec is
+      the owner's own project, and the owner will add the kind if it is missing.</strong> Still out of
+      scope for this increment — a Pareto frontier view is a reporting nicety, and nothing in
+      Option B depends on it. Recorded so the reasoning survives: a frontier is two-dimensional
+      and prose cannot show it, this repository already renders declarative JSON → SVG through
+      drawspec (<code>docs/diagrams/critical-path.json</code>), so the cost when it is wanted is a spec file
+      rather than a chart library. The schema was not checkable from here (the working checkout is
+      not on this machine and <code>drawspec.dev</code> does not resolve), and it does not need to be.</li>
 </ul>
 <p><strong>Non-goals, stated so they cannot drift in.</strong> The borrowed repository's scoring rubric, its
 retry policy (six retries on a 429, no per-host budget, scrapers that never read <code>robots.txt</code>),
@@ -784,11 +824,25 @@ and still not cost the candidate an opportunity.</p></div>
 <td>unit (<code>tests/test_ats.py</code>)</td>
 </tr>
 <tr>
-<td>15 tasks land in one autonomous session and a late one silently contradicts an early one</td>
+<td>16 tasks land in one autonomous session and a late one silently contradicts an early one</td>
 <td>Medium</td>
 <td>Medium</td>
-<td><code>make host-gate</code> runs on every task PR as a hard precondition (D-22), and <code>plan_v2</code> measures plan↔queue drift in both directions</td>
-<td><code>make host-gate</code> per PR</td>
+<td><code>make host-gate</code> runs on every task PR as a hard precondition (D-22). The second guard — <code>plan_v2</code>'s plan↔queue drift check — <strong>is inert today</strong> and is why the <code>_main</code> fix is sequenced first in this increment rather than filed as a separate bug: the mitigation must be true before the rest of the increment relies on it</td>
+<td><code>make host-gate</code> per PR, and <code>S8.json</code> regenerating once the evidence run reaches <code>plan_v2</code></td>
+</tr>
+<tr>
+<td><strong>Every gate here counts violations, so an empty input set scores zero and passes</strong> — the gate certifies that nothing was processed</td>
+<td><strong>High</strong></td>
+<td><strong>High</strong></td>
+<td>Each evidence record carries a <code>&lt;metric&gt;_evaluated</code> denominator and each task asserts it is non-zero. Raised by review on PR #201, and it is this document's own thesis turned on its own gates: a check reporting success over work it did not do. Recorded here rather than only in the task files because the next increment will write gates in the same shape</td>
+<td>unit — <code>test_the_gate_does_not_pass_on_an_empty_input_set</code>, one per task</td>
+</tr>
+<tr>
+<td>The <code>_main</code> fix is made by renaming three functions, so the next module to define <code>main</code> is silently skipped again</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>Fix the <strong>selection</strong>, not the three modules: the evidence run must discover every module that writes evidence, and a module that writes evidence but is not reached is the failure the gate reports. Renaming <code>main</code>→<code>_main</code> three times satisfies today's symptom and rebuilds the trap</td>
+<td>unit — a test that fails when a module writes evidence and the evidence run does not reach it</td>
 </tr>
 </tbody>
 </table>
@@ -951,9 +1005,13 @@ touched.</p></div>
     var rd=new FileReader();
     rd.onload=function(){
       var txt=String(rd.result||'');var obj=null;
-      var m=txt.lastIndexOf('SPEC-NOTES-DATA');
+      // Last LINE-ANCHORED marker. A plain lastIndexOf lands inside the JSON
+      // string of a note that mentions the marker, and the import then reads as
+      // a corrupt file — the same defect the Python seeder had (#239).
+      var mk=/^[ \t]*<!--[ \t]*SPEC-NOTES-DATA/gm,mm=null,mx;
+      while((mx=mk.exec(txt))!==null){mm=mx;}
       try{
-        if(m>=0){var after=txt.slice(m+15);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
+        if(mm){var after=txt.slice(mm.index+mm[0].length);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
                   if(jstart>=0&&jend>jstart){obj=JSON.parse(after.slice(jstart,jend+1));}}
         else{obj=JSON.parse(txt);}
       }catch(err){obj=null;}
