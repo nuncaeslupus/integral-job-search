@@ -49,8 +49,14 @@ the protocol runs `init.py --repo-path . --silent` and calls it a report — thi
 `task_select.py`. `AGENTS.md` promises the script writes nothing when the installed bundle
 is newer. It wrote anyway. Reverted with `git checkout`; skills refreshed to v2.4.16 here.
 
-**That removes the skew, not the missing guard — and the guard is upstream's.** Worth
-filing against `claude-arsenal`; not filed yet, ask the owner first.
+**That removes the skew, not the missing guard.** Filed upstream as
+[`claude-arsenal#237`](https://github.com/nuncaeslupus/claude-arsenal/issues/237). The
+finding is sharper than "the guard is broken": the #220 guard first shipped in **v2.4.5**,
+and it lives in `init.py` — the very file a pre-2.4.5 host is running a stale copy of. The
+protection is on the wrong side of the version boundary, so every host that needs it is by
+definition too old to have it. The fix has to move to `check_update.sh`, which is
+bundle-side and therefore *newer* in exactly the dangerous case. #237 also carries the
+subtree-advice finding below.
 
 **`check_update.sh`'s suggested `git subtree merge` cannot work in this repo.** The bundle
 ships inside `plugins/core/skills/init/assets/`, not at the tag root, so the subtree was
