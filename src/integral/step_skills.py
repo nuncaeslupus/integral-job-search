@@ -492,10 +492,17 @@ def _main(argv: list[str]) -> int:
         measured = measure(skills_dir=skills_dir)
         drafting = measure_drafting_rules(skills_dir=skills_dir)
     else:
-        measured = write_evidence(Path(args.write_evidence), skills_dir=skills_dir)
+        s7_path = Path(args.write_evidence)
+        measured = write_evidence(s7_path, skills_dir=skills_dir)
         # T84's evidence beside S7's — a second record from the same run,
-        # never a replacement of it, so both gates keep reading.
-        drafting = write_drafting_rules_evidence(skills_dir=skills_dir)
+        # never a replacement of it, so both gates keep reading. "Beside"
+        # has to mean beside *this* run's S7 target, not the repository's:
+        # honouring --write-evidence for one record and not the other meant a
+        # caller redirecting to a temp dir still overwrote the committed
+        # status/evidence/T84.json.
+        drafting = write_drafting_rules_evidence(
+            s7_path.parent / DEFAULT_T84_EVIDENCE_PATH.name, skills_dir=skills_dir
+        )
 
     print(json.dumps(measured, ensure_ascii=False))
     print(json.dumps(drafting, ensure_ascii=False))

@@ -25,7 +25,9 @@ from integral.session import Resumption
 from integral.sourcing_strategy import EvidenceRow, ScopeDecision
 from integral.step_skills import (
     DEFAULT_SKILLS_DIR,
+    DEFAULT_T84_EVIDENCE_PATH,
     DRAFTING_RULES_OWNER,
+    _main,
     SkillCheck,
     check_step_skill,
     measure,
@@ -192,6 +194,25 @@ def test_write_evidence_matches_measure(tmp_path: Path) -> None:
     measured = write_evidence(target)
     assert json.loads(target.read_text(encoding="utf-8")) == measured
     assert measured["steps_with_a_skill_fraction"] == 1.0
+
+
+def test_write_evidence_redirects_both_records_not_just_s7(tmp_path: Path) -> None:
+    """`--write-evidence PATH` must move T84's record too.
+
+    It honoured the flag for S7 and used the repository default for T84, so a
+    caller redirecting to a temp directory still overwrote the committed
+    `status/evidence/T84.json`. A test writing to `tmp_path` is exactly the
+    caller that would have done it.
+    """
+    committed = DEFAULT_T84_EVIDENCE_PATH
+    before = committed.read_text(encoding="utf-8") if committed.exists() else None
+
+    target = tmp_path / "S7.json"
+    _main(["step_skills", "--write-evidence", str(target)])
+
+    assert (tmp_path / DEFAULT_T84_EVIDENCE_PATH.name).exists()
+    after = committed.read_text(encoding="utf-8") if committed.exists() else None
+    assert after == before, "the committed T84 record must not be touched"
 
 
 # --- the gate over a synthetic, incomplete library --------------------------
