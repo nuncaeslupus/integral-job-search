@@ -70,7 +70,9 @@ This governs the **exit** alone. §3.3's *offered skip* — "we can stop here an
 jobs with what I have" — is a move **forward** to a provisional ranking, not a way out, and is
 offered at the end of every first-run step exactly as that section requires.
 
-What the tool says out loud when the step ends, verbatim — the settled example from the spec:
+What the tool says out loud when the step ends, verbatim — the settled example from the spec.
+`resurface()` supplies the **substance** (the position, and one line per standing decision);
+the wording below is the guide's, so the two are not expected to match string for string:
 
 ```text
 "Hello again, Marcos — last time we were partway through your work history, about three weeks ago. The search is still narrowed onto employers like Acme (you accepted that in cycle 3) and still not widened outside Spain (you refused that). Pick up there, change any of it, or something else?"
