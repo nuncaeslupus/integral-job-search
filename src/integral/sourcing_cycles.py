@@ -88,6 +88,11 @@ class Cycle(Strict):
             raise ValueError("more offers were rejected than the cycle returned")
         if self.steered_by is not None and not self.steered_by.accepted:
             raise ValueError("a refused decision steered nothing — §5.5, a refusal licenses none")
+        if self.steered_by is not None and self.steered_by.cycle > self.cycle:
+            raise ValueError(
+                f"cycle {self.cycle} cannot have been steered by a decision taken in "
+                f"cycle {self.steered_by.cycle}"
+            )
         return self
 
     @property

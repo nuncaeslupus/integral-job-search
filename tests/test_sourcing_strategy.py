@@ -469,6 +469,16 @@ def test_a_later_window_of_one_candidates_cycles_is_still_judgeable() -> None:
     assert cycles_neither_improving_nor_proposing([second, third])
 
 
+def test_a_cycle_cannot_be_steered_by_a_decision_from_its_future() -> None:
+    """Whether a decision steers its own cycle or the next is open; from ahead is not."""
+    later = _steered(5, "widen", "country")
+    with pytest.raises(ValidationError):
+        Cycle(cycle=3, offers_returned=20, offers_rejected=4, steered_by=later)
+    # Same cycle and any earlier one both stay legal — the spec settles neither.
+    assert Cycle(cycle=5, offers_returned=20, offers_rejected=4, steered_by=later)
+    assert Cycle(cycle=7, offers_returned=20, offers_rejected=4, steered_by=later)
+
+
 def test_the_rate_is_measured_within_subject_only() -> None:
     """No cross-candidate comparison exists to make."""
     import inspect
@@ -546,6 +556,23 @@ def _both_directions_tried() -> list[Cycle]:
     ]
 
 
+def _both_ways(order: tuple[str, str]) -> list[Cycle]:
+    """The same failed steering, in whichever order it was tried."""
+    facets = {"widen": "country", "narrow": "employer"}
+    return [
+        Cycle(cycle=1, offers_returned=20, offers_rejected=18),
+        *(
+            Cycle(
+                cycle=n,
+                offers_returned=20,
+                offers_rejected=19,
+                steered_by=_steered(n, direction, facets[direction]),
+            )
+            for n, direction in enumerate(order, start=2)
+        ),
+    ]
+
+
 def test_an_empty_market_is_reported_as_a_time_not_a_compromise() -> None:
     report = report_empty_market(_both_directions_tried())
     # What is offered is when to come back, and nothing else.
@@ -609,6 +636,29 @@ def test_no_hard_constraint_is_proposed_for_relaxation_on_an_empty_result() -> N
                 ),
             ),
         )
+
+
+def test_a_retry_option_outside_the_closed_set_is_refused() -> None:
+    """A word list can always be out-phrased; a closed set cannot."""
+    for smuggled in ("drop your pay floor", "in a fortnight", "accept a lower salary"):
+        with pytest.raises(ValidationError):
+            EmptyMarketReport(reason="nothing new came back", retry_options=(smuggled,))
+    assert EmptyMarketReport(reason="nothing new came back", retry_options=RETRY_TIMES)
+
+
+def test_a_constraint_named_in_the_candidates_words_is_refused() -> None:
+    """`employment_mode` is "remote" to the candidate — the net has to catch both."""
+    for said in ("try relaxing your remote requirement", "drop the minimum you asked for"):
+        with pytest.raises(ValidationError):
+            EmptyMarketReport(reason=said, retry_options=("tomorrow",))
+
+
+def test_the_report_names_the_order_the_search_was_actually_steered() -> None:
+    narrow_first = report_empty_market(_both_ways(("narrow", "widen")))
+    widen_first = report_empty_market(_both_ways(("widen", "narrow")))
+    assert narrow_first is not None and widen_first is not None
+    assert "narrowed the search and then widened it" in narrow_first.reason
+    assert "widened the search and then narrowed it" in widen_first.reason
 
 
 def test_the_market_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:

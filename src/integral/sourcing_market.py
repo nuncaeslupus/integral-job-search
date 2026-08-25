@@ -59,9 +59,16 @@ RETRY_TIMES: tuple[str, ...] = ("tomorrow", "next week")
 #: What an empty-market report may never name. Step 2's field names, in the words
 #: the surface uses for them — hard constraints stay where the candidate put them
 #: (§5.8), and scope is the search's aim within them.
+#: The candidate-facing words for the same things: a report saying "relax your remote
+#: requirement" names `employment_mode` without using the field's name. This list is a
+#: net and cannot be complete — free prose always has another phrasing. What is complete
+#: is structural: `EmptyMarketReport` has no field a scope change fits, and
+#: `retry_options` is a closed set, so the only place a relaxation could hide is
+#: `reason`, and this is what watches it.
 HARD_CONSTRAINT_TERMS: frozenset[str] = frozenset(
     {name.replace("_", " ") for name in CONSTRAINT_FIELD_NAMES}
     | {"pay floor", "relocate", "permit", "visa"}
+    | {"remote", "hybrid", "on-site", "onsite", "in the office", "minimum"}
 )
 
 #: The probe has to *reach* an empty market, not merely fail to misreport one — a
@@ -85,6 +92,13 @@ class EmptyMarketReport(Strict):
             raise ValueError("an empty-market report with no reason explains nothing")
         if not self.retry_options:
             raise ValueError("a report offering no time to come back offers nothing at all")
+        unknown = sorted(set(self.retry_options) - set(RETRY_TIMES))
+        if unknown:
+            raise ValueError(
+                f"{', '.join(unknown)} is not a time to come back — retry_options is a "
+                f"closed set ({', '.join(RETRY_TIMES)}), so no phrasing can smuggle a "
+                "relaxed constraint in as one"
+            )
         said = " ".join([self.reason, *self.retry_options]).lower()
         named = sorted(term for term in HARD_CONSTRAINT_TERMS if term in said)
         if named:
@@ -127,6 +141,16 @@ def market_is_empty(cycles: Sequence[Cycle]) -> bool:
     )
 
 
+def _steering_order(cycles: Sequence[Cycle]) -> str:
+    """What was actually tried, in the order it was tried — both orders are legal."""
+    tried = [c.steered_by.decision for c in cycles if c.steered_by is not None]
+    seen: list[str] = []
+    for direction in tried:
+        if direction not in seen:
+            seen.append(direction)
+    return " the search and then ".join(f"{d}ed" for d in seen) + " it"
+
+
 def report_empty_market(cycles: Sequence[Cycle]) -> EmptyMarketReport:
     """The only thing the tool may say when the market is empty — a time.
 
@@ -142,7 +166,7 @@ def report_empty_market(cycles: Sequence[Cycle]) -> EmptyMarketReport:
         reason=(
             "it looks like it is not a good day to find jobs — cycles "
             f"{cycles[0].cycle} to {cycles[-1].cycle} kept returning the same work "
-            "after we widened the search and then narrowed it"
+            f"after we {_steering_order(cycles)}"
         ),
         retry_options=RETRY_TIMES,
     )
