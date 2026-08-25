@@ -110,6 +110,22 @@ def test_a_relative_detail_url_is_not_off_host() -> None:
     assert on_portal_host("https://tracker.example/x", _SITE) is False
 
 
+def test_an_explicit_port_is_the_same_host() -> None:
+    """`netloc` carries the port, so comparing it directly reads
+    `trabajos.com:443` as a different site. `hostname` does not."""
+    assert on_portal_host("https://trabajos.com:443/ofertas/123/", _SITE) is True
+    assert on_portal_host("https://www.trabajos.com:8080/x", _SITE) is True
+    assert on_portal_host("https://tracker.example:443/x", _SITE) is False
+
+
+def test_an_opaque_scheme_is_not_a_relative_url() -> None:
+    """`mailto:` and `javascript:` also parse to an empty `netloc`, so a
+    bare emptiness test waves them through as on-host. They are neither
+    relative nor on the portal."""
+    assert on_portal_host("mailto:jobs@example.com", _SITE) is False
+    assert on_portal_host("javascript:void(0)", _SITE) is False
+
+
 def test_probe_retries_once_before_giving_up(tmp_path: Path) -> None:
     calls: list[int] = []
 

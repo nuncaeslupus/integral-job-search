@@ -91,16 +91,25 @@ def undecoded_entities(values: Iterable[str]) -> list[str]:
 def on_portal_host(url: str, site: str) -> bool:
     """Does `url` point at the portal `site` names, e.g. `trabajos.com`?
 
-    A relative URL (`netloc` empty — `.oferta`'s own listing rows never
-    carry a scheme) is implicitly on the portal's own host; that is what
-    "relative" means, and flagging it as off-host would fail every
-    connector that links this way, `trabajos_es` included.
+    A relative URL (no scheme and no `netloc` — `.oferta`'s own listing
+    rows never carry a scheme) is implicitly on the portal's own host;
+    that is what "relative" means, and flagging it as off-host would fail
+    every connector that links this way, `trabajos_es` included.
+
+    An *opaque* scheme is not a relative URL and is never on the portal's
+    host: `mailto:` and `javascript:` also parse to an empty `netloc`, so
+    testing emptiness alone silently waves them through. Host comparison
+    uses `hostname` rather than `netloc` because `netloc` carries the
+    port, and `trabajos.com:443` is the same host as `trabajos.com`.
     """
-    netloc = urlsplit(url).netloc.lower()
-    if not netloc:
-        return True
+    parsed = urlsplit(url)
+    if not parsed.netloc:
+        return not parsed.scheme
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
     bare = site.lower()
-    return netloc == bare or netloc.endswith("." + bare)
+    return host == bare or host.endswith("." + bare)
 
 
 def free_signals(items: list[dict[str, str]], site: str) -> list[str]:
