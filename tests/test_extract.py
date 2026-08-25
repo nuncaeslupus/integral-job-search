@@ -569,3 +569,23 @@ def test_a_negated_single_match_settles_a_bipolar_dimension() -> None:
     assert found is not None, "one denial is enough; one keyword is not"
     assert found.negated is True
     assert found.value == -0.5
+
+
+def test_a_contained_cue_match_does_not_dilute_the_cue_that_contains_it() -> None:
+    """Both orders of the hybrid phrasing, and neither averages down to a non-rung.
+
+    A guard on the narrower pattern can only look one way: a lookahead on
+    `presencial` catches "presencial con teletrabajo" and misses "teletrabajo y
+    presencial", where the on-site word comes last. Dropping a match that lies
+    wholly inside a longer one is symmetric by construction and needs no guard.
+    """
+    dimension = _dimension("remote_arrangement")
+
+    for text in (
+        "Modelo presencial con 1 día de teletrabajo semanal.",
+        "Teletrabajo y 2 presencial.",
+    ):
+        found = cue_findings(normalise(_offer(text)), dimension)
+        assert found is not None, text
+        assert found.value == 0.5, f"{text} -> {found.value}, which is not a rung"
+        assert len(found.spans) == 1, "the contained match is dropped, not averaged"

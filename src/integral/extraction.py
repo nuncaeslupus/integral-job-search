@@ -354,6 +354,26 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
     if not spans:
         return None
 
+    # A cue whose match lies wholly inside another cue's match is the less
+    # specific reading of the same words, and must not be averaged in beside it.
+    # "Modelo presencial con 1 día de teletrabajo" matches both the hybrid cue
+    # and the bare `presencial` inside it; averaging 0.5 with 0.0 records 0.25,
+    # which is not a rung this dimension has. Dropping the contained match is
+    # what a guard on the narrower pattern was reaching for, except that a guard
+    # can only look one way — a lookahead misses `teletrabajo … presencial` — and
+    # this is symmetric by construction.
+    kept = [
+        i
+        for i, span in enumerate(spans)
+        if not any(
+            j != i and other.start <= span.start and span.end <= other.end
+            and (other.end - other.start) > (span.end - span.start)
+            for j, other in enumerate(spans)
+        )
+    ]
+    spans = [spans[i] for i in kept]
+    values = [values[i] for i in kept]
+
     # A bipolar dimension needs corroboration, and needs the matches to agree.
     # Disagreeing cues on a bipolar scale are the clearest possible signal that
     # the advert is saying something the cue list cannot read — exactly the case
