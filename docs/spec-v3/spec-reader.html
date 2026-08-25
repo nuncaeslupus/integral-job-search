@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Silent success — borrowed hardening — Specification (annotatable)</title>
+<style>
+:root{
+  --bg:#fbfaf7;--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;
+  --card:#ffffff;--accent:#0f766e;--accent2:#b45309;--chip:#eef2f1;
+  --note:#fff8ec;--note-line:#f0cf94;--code:#f3f1ec;--link:#0f766e;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#16151a;--fg:#e9e7e2;--muted:#a09c95;--line:#2e2c33;
+    --card:#1e1d23;--accent:#5eead4;--accent2:#fbbf24;--chip:#26313055;
+    --note:#251f10;--note-line:#6b531c;--code:#26242b;--link:#5eead4;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font:17px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding-bottom:96px;
+}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+a{color:var(--link)}
+code{background:var(--code);padding:.08em .35em;border-radius:5px;font-size:.86em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-word}
+pre{background:var(--code);padding:12px;border-radius:8px;overflow:auto}
+pre code{background:none;padding:0}
+.topbar{position:sticky;top:0;z-index:30;background:var(--bg);
+  border-bottom:1px solid var(--line);backdrop-filter:saturate(120%) blur(6px)}
+.topbar .wrap{display:flex;align-items:center;gap:8px;padding-top:10px;padding-bottom:10px}
+.brand{font-weight:700;font-size:16px;margin-right:auto;letter-spacing:.2px}
+.brand small{font-weight:500;color:var(--muted);display:block;font-size:11px;letter-spacing:0}
+.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--fg);
+  border-radius:9px;padding:8px 11px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media(prefers-color-scheme:dark){.btn.primary{color:#06201d}}
+.count{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:600}
+.savestate{font-size:12px;font-weight:700;white-space:nowrap;transition:color .2s}
+.savestate.ok{color:var(--accent)}
+.savestate.warn{color:#b45309}
+@media(prefers-color-scheme:dark){.savestate.warn{color:#fbbf24}}
+.statusbar{border-bottom:1px solid var(--line);background:var(--card)}
+.statusbar .wrap{padding:7px 16px;font-size:12px;color:var(--muted)}
+#warnbar{display:none;background:#fff4e5;border-bottom:1px solid var(--note-line);color:#7c2d12}
+#warnbar .wrap{padding:10px 16px;font-size:13px;line-height:1.45}
+@media(prefers-color-scheme:dark){#warnbar{background:#3a2a0e;color:#fde68a;border-color:#6b531c}}
+.hero{padding:22px 0 6px}
+.hero h1{font-size:25px;line-height:1.2;margin:.1em 0 .3em}
+.hero p{color:var(--muted);margin:.3em 0}
+.help{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.help summary{cursor:pointer;font-weight:600;padding:10px 0}
+.help ul{margin:.2em 0 1em;padding-left:1.2em}
+.help li{margin:.3em 0}
+.toc{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:4px 14px;margin:14px 0}
+.toc>summary{cursor:pointer;font-weight:700;padding:11px 0;font-size:15px}
+.toc-part{margin:2px 0;border-top:1px solid var(--line)}
+.toc-part>summary{cursor:pointer;padding:9px 2px;font-weight:600;font-size:14px}
+.toc-part ul{margin:.1em 0 .7em;padding-left:1.1em}
+.toc-part li{margin:.22em 0;font-size:13.5px;line-height:1.4}
+.toc-part a{text-decoration:none}
+.toc-part a:hover{text-decoration:underline}
+.part{margin:26px 0}
+.part-title{font-size:21px;line-height:1.25;border-bottom:2px solid var(--accent);
+  padding-bottom:8px;margin:18px 0 8px;position:sticky;top:54px;background:var(--bg);z-index:10}
+.badge{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  vertical-align:middle;padding:3px 7px;border-radius:6px;margin-right:8px}
+.badge.spec,.badge.plan{background:var(--chip);color:var(--accent)}
+.badge.workspace{background:var(--chip);color:var(--accent2)}
+.sec{padding:6px 0 2px;border-bottom:1px solid var(--line);scroll-margin-top:100px}
+.sec:last-child{border-bottom:none}
+.sec-h{margin:10px 0 6px;line-height:1.3;position:sticky;top:94px;background:var(--bg);z-index:5;padding-top:6px}
+h3.sec-h{font-size:18.5px}
+h4.sec-h{font-size:16.5px;color:var(--fg)}
+.chip{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;
+  color:var(--accent);background:var(--chip);border-radius:6px;padding:2px 7px;margin-right:8px;vertical-align:middle}
+.sec-title{vertical-align:middle}
+.sec-body{margin:.2em 0 .4em}
+.sec-body p{margin:.55em 0}
+.sec-body ul,.sec-body ol{margin:.5em 0;padding-left:1.35em}
+.sec-body li{margin:.3em 0}
+.sec-body blockquote{margin:.7em 0;padding:.5em .9em;border-left:3px solid var(--accent2);
+  background:var(--code);border-radius:0 8px 8px 0;color:var(--fg)}
+.sec-body blockquote p{margin:.3em 0}
+.sec-body table{border-collapse:collapse;width:100%;font-size:13.5px;margin:.6em 0;display:block;overflow-x:auto}
+.sec-body th,.sec-body td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+.sec-body th{background:var(--chip);font-weight:700}
+.sec-body strong{font-weight:700}
+.note{background:var(--note);border:1px solid var(--note-line);border-radius:10px;
+  padding:8px 11px;margin:10px 0 16px}
+.note-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.note-ico{color:var(--accent2);font-weight:800}
+.note-label{font-size:12px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.05em}
+.note-ref{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted)}
+.note-ta{width:100%;border:none;background:transparent;color:var(--fg);font:inherit;font-size:15.5px;
+  resize:none;outline:none;line-height:1.5;padding:2px 0;overflow:hidden;min-height:1.6em}
+.note-ta::placeholder{color:var(--muted);opacity:.8}
+.note.filled{box-shadow:0 0 0 2px var(--note-line) inset}
+.fab{position:fixed;right:14px;bottom:16px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.fab .btn{box-shadow:0 4px 14px #0003}
+.modal{position:fixed;inset:0;z-index:60;background:#0008;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.modal-card{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;
+  max-height:86vh;display:flex;flex-direction:column;padding:16px}
+.modal-card h3{margin:.1em 0 .5em}
+.modal-card p{color:var(--muted);font-size:13.5px;margin:.2em 0 .6em}
+.modal-card textarea{width:100%;flex:1;min-height:220px;border:1px solid var(--line);border-radius:8px;
+  background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,Menlo,monospace;padding:10px;resize:vertical}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hidden-input{display:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:70;background:#111;color:#fff;
+  padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.show{opacity:.96}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">Silent success — borrowed hardening — Specification<small>annotatable reader · 2026-08-25</small></div>
+    <span class="savestate ok" id="savestate">✓ Auto-saving</span>
+    <button class="btn primary" id="btn-export">Save / Export</button>
+  </div>
+</div>
+<div class="statusbar"><div class="wrap"><span class="count" id="count">0 / 16 notes</span><span class="hint"> · notes save automatically; <strong>Save / Export</strong> keeps a file you can send back</span></div></div>
+<div id="warnbar"><div class="wrap"><strong>Heads up —</strong> this browser isn't storing your notes automatically (private/incognito mode or restricted file view). Tap <strong>Save / Export</strong> regularly.</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>Silent success — borrowed hardening specification</h1>
+    <p>Read at your own pace and leave a note on any point you want to discuss.</p>
+  </div>
+  <details class="help">
+    <summary>How to annotate (tap)</summary>
+    <ul>
+      <li>Tap the note field under any section and type. Each note is tagged so your feedback maps to an exact point.</li>
+      <li><strong>Notes save automatically</strong> in this browser as you type.</li>
+      <li><strong>Save / Export</strong> downloads a Markdown file of your notes — the copy to send back. Tap whenever you pause, especially on a phone.</li>
+      <li><strong>Import</strong> reloads notes from a file you exported earlier (after clearing the browser or switching devices).</li>
+      <li><strong>Clear</strong> erases every note in this browser. Export first.</li>
+    </ul>
+  </details>
+  <details class="toc" open><summary>Contents</summary>
+<details class="toc-part">
+<summary>Spec V3 Silent Success</summary><ul>
+<li><a href="#s-spec-intro">Preamble &amp; scope</a></li>
+<li><a href="#s-spec-1">§1 Problem statement</a></li>
+<li><a href="#s-spec-2">§2 Systems &amp; Impact</a></li>
+<li><a href="#s-spec-3">§3 Options</a></li>
+<li><a href="#s-spec-option-a-fix-the-three-that-are">Option A: Fix the three that are bugs (Conservative)</a></li>
+<li><a href="#s-spec-option-b-the-full-borrowed-set-m">Option B: The full borrowed set, mechanism separated from accuracy (Recommended)</a></li>
+<li><a href="#s-spec-option-c-option-b-plus-the-accur">Option C: Option B plus the accuracy gates and Phase 7 outcome tracking</a></li>
+<li><a href="#s-spec-comparison">Comparison</a></li>
+<li><a href="#s-spec-4">§4 Recommendation</a></li>
+<li><a href="#s-spec-5">§5 Contracts</a></li>
+<li><a href="#s-spec-5-1">§5.1 Stored record — offer (offers/*.json), additive</a></li>
+<li><a href="#s-spec-5-2">§5.2 Stored record — application (applications/{offer_id}/), additive</a></li>
+<li><a href="#s-spec-5-3">§5.3 Module boundary — hard gate vs soft dimension</a></li>
+<li><a href="#s-spec-5-4">§5.4 Verdict vocabularies — three-valued, all of them</a></li>
+<li><a href="#s-spec-5-5">§5.5 Configuration</a></li>
+<li><a href="#s-spec-6">§6 Risks &amp; Validation</a></li>
+</ul></details>
+</details>
+  <section class="part">
+<h2 class="part-title"><span class="badge spec">Specification</span>Spec V3 Silent Success</h2>
+<article class="sec" id="s-spec-intro">
+<h3 class="sec-h"><span class="chip">overview</span><span class="sec-title">Preamble &amp; scope</span></h3>
+<div class="sec-body"><blockquote>
+<p><code>specify</code> owns sections 1–4. <code>design</code> appends 5–6.
+A peer of <code>status/specification.md</code>, not a replacement: that document specifies the
+product, this one specifies a hardening increment against a failure class the
+divergence register has now named three times. Where the two touch — the Systems
+table, the phase boundaries — this document defers to it and says so.</p>
+</blockquote>
+<p><strong>Date</strong>: 2026-08-25
+<strong>Ticket / PR</strong>: —
+<strong>Author</strong>: nuncaeslupus (with Claude)</p></div>
+<div class="note" data-for="s-spec-intro"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC · intro</span></div><textarea class="note-ta" data-key="s-spec-intro" data-label="Preamble &amp; scope" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-1">
+<h3 class="sec-h"><span class="chip">§1</span><span class="sec-title">Problem statement</span></h3>
+<div class="sec-body"><p>This repository has a recurring failure mode, and the divergence register has now named it
+three times without naming the <em>class</em>: <strong>D-18</strong> (seven adverts passed <code>offer_schema_violations</code>
+and every one was dead — "schema validity is not liveness"), <strong>D-19</strong> (<code>extract()</code> settled 0 of
+25 dimensions on seven construction adverts and step 8 reported success), and <strong>D-21</strong>
+(<code>run_checkpoint.py</code> exited 0 for steps whose gate was <code>not_implemented</code>). In each case a layer
+<strong>reported success over work it did not actually perform</strong>, the gate above it agreed, and the
+defect was found by a human running the tool rather than by any check. The remaining instances
+are concentrated in exactly the layers that touch the world outside this repository, and the
+first live candidate session is imminent:</p>
+<ul>
+<li><code>robots.py</code> delegates matching to <code>urllib.robotparser</code>, which <strong>fails open</strong> on a blank line
+  inside a record — so <code>meta.yaml</code>'s <code>robots_txt: respected</code> is an assertion the code cannot
+  currently support (measured, below).</li>
+<li>No check exists that a connector still <em>works</em>. <code>connector_coverage.py</code> asks whether a
+  connector exists for a market; <code>liveness.py</code> asks whether one offer is alive. A restyled
+  portal returns zero rows and is indistinguishable from a market with no vacancies.</li>
+<li><code>liveness.read_response</code> compares <code>advert_url</code> to <code>final_url</code> (<code>liveness.py:120,148</code>) — URL
+  identity, not page identity. A fragment-anchor URL fetches 200, renders an unrelated listing
+  page, and is read as the advert.</li>
+<li><code>dedup.py</code> picks a survivor among duplicates with no preference for the employer's own
+  posting, and aggregators routinely strip the grade — the input to <code>seniority_expectation</code>.</li>
+<li>Nothing can refuse to rank an offer the candidate is <strong>barred from taking</strong>. Every hard
+  constraint we hold (<code>stated_constraints.py</code>, <code>constraints_step.py</code>) filters on what the
+  candidate declared; none filters on what the advert <em>demands</em> — work permit, citizenship,
+  clearance, or a language level the candidate does not hold.</li>
+<li>The one artefact that reaches a stranger — the generated CV — is never checked for the
+  literal text an applicant-tracking system must find in it.</li>
+<li><code>applications/{offer_id}/</code> has no status vocabulary, so what happened to an application is
+  not a thing the tool can state.</li>
+</ul>
+<p>Most of the remedies below are adapted from <strong><a href="https://github.com/MadsLorentzen/ai-job-search"><code>MadsLorentzen/ai-job-search</code></a></strong> (MIT, © 2026 Mads Lorentzen),
+whose matching layer we assessed and rejected in <code>status/specification.md</code> §3 Option A and still
+reject — it scores on an unvalidated 30/25/15/30 rubric with no evidence spans, no confidence and
+no corpus. Its <em>failure-handling</em> layer is the opposite: five weeks of one person hitting real
+portals and writing down what broke. <strong>This specification takes that layer and none of the
+scoring layer.</strong> Attribution is a deliverable, not a courtesy — see the success criteria.</p>
+<p><strong>Success criteria (measurable)</strong> — each seeds a task Gate in the plan:</p>
+<ul>
+<li>[ ] <code>robots_verdicts_misread == 0</code> — over a fixture table of <code>robots.txt</code> documents paired
+      with their RFC 9309 verdict per (agent, path), every verdict matches. The table must
+      include a blank line inside a record and an <code>Allow</code>/<code>Disallow</code> longest-match conflict,
+      the two cases measured as failing today.</li>
+<li>[ ] <code>silent_connector_failures == 0</code> — a connector whose selectors no longer match its own
+      recorded fixture is reported <code>broken</code> or <code>inconclusive</code>, never as a successful run that
+      found nothing.</li>
+<li>[ ] <code>rate_limited_runs_reported_as_broken == 0</code> — a 429 or block page yields
+      <code>inconclusive (rate-limited)</code>, never <code>broken</code>. (The converse of the line above; both
+      directions must hold or the check becomes noise and gets ignored.)</li>
+<li>[ ] <code>offers_presented_from_a_page_that_is_not_the_advert == 0</code></li>
+<li>[ ] <code>duplicate_groups_resolved_away_from_the_canonical_source == 0</code></li>
+<li>[ ] <code>offers_ranked_despite_a_stated_disqualification == 0</code> — measured over hand-built
+      fixtures, not the corpus. See §4 open question 1 and the D-12 precedent for why the
+      accuracy half is a separate, blocked task.</li>
+<li>[ ] <code>disqualification_verdicts_without_quoted_wording == 0</code> — a refusal to rank always
+      carries the advert's own sentence. A veto with no quote is unfalsifiable, which is the
+      same objection §"Explanation layer" makes to an unexplained rank.</li>
+<li>[ ] <code>documents_missing_a_required_text_layer_field == 0</code> — every generated CV carries
+      contact e-mail, telephone and every employment date as <strong>literal text</strong>, renderer-independent.</li>
+<li>[ ] <code>posting_keywords_left_unclassified == 0</code> — every keyword drawn from the posting is
+      reported as exactly one of <code>covered</code> / <code>synonym-only</code> / <code>missing (have it)</code> /
+      <code>missing (gap)</code>.</li>
+<li>[ ] <code>applications_with_a_noncanonical_status == 0</code></li>
+<li>[ ] <code>borrowed_techniques_without_attribution == 0</code> — every technique adopted here has an
+      entry in <code>docs/METHODS.md</code> naming its source, and <code>README.md</code> carries an
+      Acknowledgements section. METHODS already exists to record where a method came from and
+      what its limits are; this is that register doing its job.</li>
+</ul>
+<p><strong>Explicitly not a success criterion.</strong> No metric here asserts that the eligibility or language
+gate is <em>accurate on real adverts</em> — that needs corpus labels this repository does not yet hold,
+and asserting it would be the same false success this document exists to remove.</p></div>
+<div class="note" data-for="s-spec-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §1</span></div><textarea class="note-ta" data-key="s-spec-1" data-label="§1 Problem statement" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-2">
+<h3 class="sec-h"><span class="chip">§2</span><span class="sec-title">Systems &amp; Impact</span></h3>
+<div class="sec-body"><p>Phases and the product-level system list are <code>status/specification.md</code>'s; this table covers only
+what this increment touches.</p>
+<table>
+<thead>
+<tr>
+<th>System</th>
+<th>Type</th>
+<th>Role</th>
+<th>Needs changes?</th>
+<th>Impact</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/integral/robots.py</code></td>
+<td>Primary</td>
+<td>Decides whether a source may be read at all</td>
+<td><strong>Yes</strong></td>
+<td>Fails open today on a record containing a blank line, so a board that has disallowed us reads as permitted. <code>connectors/*/meta.yaml</code> asserts <code>robots_txt: respected</code> on top of it — the assertion is currently unbacked, and it ships to contributors</td>
+<td><strong>High</strong></td>
+</tr>
+<tr>
+<td><code>connectors/*/connector.yaml</code> + a new health check</td>
+<td>Primary</td>
+<td>Declarative CSS-selector fetch per board</td>
+<td><strong>Yes</strong> (new module)</td>
+<td>Scrapers rot silently; one real board (<code>trabajos_es</code>) means one restyle takes sourcing to zero with no signal. Fixtures to compare against already exist</td>
+<td><strong>High</strong></td>
+</tr>
+<tr>
+<td><code>src/integral/liveness.py</code></td>
+<td>Primary</td>
+<td>The three-verdict live/dead/unverified check</td>
+<td><strong>Yes</strong></td>
+<td>Verifies URL identity, not page identity. Extends a module that already has the right shape — a fourth reason for <code>unverified</code>, not a new concept</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><code>src/integral/dedup.py</code></td>
+<td>Primary</td>
+<td>Cross-source identity resolution</td>
+<td><strong>Yes</strong></td>
+<td>Survivor selection gains a source-rank preference. Silently costs a scored dimension today when the aggregator copy wins</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Eligibility + language gate (new)</td>
+<td>Primary</td>
+<td>Refuses to rank an advert the candidate is barred from</td>
+<td><strong>Yes</strong> (new module)</td>
+<td>Runs <strong>before</strong> the Pareto frontier as a hard filter. Highest candidate-visible value in this document: it is what stops a well-ranked list being useless in the first reply</td>
+<td><strong>High</strong></td>
+</tr>
+<tr>
+<td><code>src/integral/rank.py</code></td>
+<td>Dependent</td>
+<td>Frontier + salary-equivalent order</td>
+<td><strong>Yes</strong> (small)</td>
+<td>Gains an Excluded section carrying the quoted wording. Frontier maths untouched</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><code>dimensions/english_demand.yaml</code></td>
+<td>Shared resource</td>
+<td>The language dimension</td>
+<td>Validation only</td>
+<td>The language <em>gate</em> is a hard filter and must not be confused with the soft dimension. Boundary stated, not merged</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><code>src/integral/cv_store.py</code> + step 11 outputs</td>
+<td>Primary</td>
+<td>Generated CV and letter</td>
+<td><strong>Yes</strong></td>
+<td>Gains a text-layer contract. <strong>No renderer is added</strong> — see §3</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>ATS text-layer check (new)</td>
+<td>Primary</td>
+<td>Machine-readability of the generated document</td>
+<td><strong>Yes</strong> (new module)</td>
+<td>Asserts a contract over the document text so a future PDF renderer inherits it via <code>pdftotext</code></td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Application status vocabulary (new)</td>
+<td>Primary</td>
+<td>What happened to an application</td>
+<td><strong>Yes</strong> (small)</td>
+<td><code>applications/{offer_id}/</code> gains a canonical status set. Unblocks Phase 7 without building it</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><code>.claude/skills/step-07-sourcing</code>, <code>step-09-ranking</code>, <code>step-11-application</code></td>
+<td>Dependent</td>
+<td>The candidate-facing protocols</td>
+<td><strong>Yes</strong> (prose)</td>
+<td>Must state the new refusals and disclosures, or the code refuses and the conversation does not explain</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><code>docs/METHODS.md</code>, <code>README.md</code></td>
+<td>Shared resource</td>
+<td>Method register and attribution</td>
+<td><strong>Yes</strong></td>
+<td>Where the borrowing is recorded. A gate, not an afterthought</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><code>status/plan.md</code> divergence register</td>
+<td>Shared resource</td>
+<td>D-16, D-17, D-18, D-19</td>
+<td>Validation only</td>
+<td>Several rows here are the same family; this document must not restate a D-row as new work</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><code>claude-arsenal</code></td>
+<td>Infrastructure</td>
+<td>Queue, gates, workers</td>
+<td>No</td>
+<td>Consumed as-is</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>Job portals</td>
+<td>External</td>
+<td>Supply</td>
+<td>No</td>
+<td>Politeness posture <strong>tightens</strong>, never loosens — see §3 non-goals</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Impact of inaction</strong>: the first live session runs against a robots checker that can say
+"permitted" about a board that disallowed us, a connector that cannot report its own breakage,
+and a ranked list that may lead with a job requiring a permit the candidate does not have. Each
+is the D-18 experience again — a number passing while the thing it stands for is false — and
+each is cheaper to fix now than to explain to a candidate.</p></div>
+<div class="note" data-for="s-spec-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §2</span></div><textarea class="note-ta" data-key="s-spec-2" data-label="§2 Systems &amp; Impact" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-3">
+<h3 class="sec-h"><span class="chip">§3</span><span class="sec-title">Options</span></h3>
+<div class="note" data-for="s-spec-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §3</span></div><textarea class="note-ta" data-key="s-spec-3" data-label="§3 Options" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-a-fix-the-three-that-are">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option A: Fix the three that are bugs (Conservative)</span></h4>
+<div class="sec-body"><ul>
+<li><strong>Description</strong>: <code>robots.py</code> fail-open, <code>liveness</code> page identity, connector health check.
+  Leave the eligibility gate, the ATS contract, dedup preference and the status vocabulary for
+  after the first live session.</li>
+<li><strong>Scope</strong>: <code>robots.py</code>, <code>liveness.py</code>, one new health-check module, their tests.</li>
+<li><strong>Effort</strong>: Small</li>
+<li><strong>Tradeoffs</strong>: Ships the safety-critical subset fastest and touches nothing candidate-facing,
+  so it cannot destabilise a session that is days away. But it leaves the highest-value item —
+  a list that never leads with an unobtainable job — on the shelf precisely when the first real
+  candidate meets it, and the eligibility gate is the one thing here a candidate would actually
+  notice. Also leaves the attribution undone, which is a promise already made.</li>
+<li><strong>Compatibility</strong>: Fully backwards compatible; no stored-schema change.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-a-fix-the-three-that-are"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option A: Fix the three that are bugs (Conservative)</span></div><textarea class="note-ta" data-key="s-spec-option-a-fix-the-three-that-are" data-label="Option A: Fix the three that are bugs (Conservative)" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-b-the-full-borrowed-set-m">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option B: The full borrowed set, mechanism separated from accuracy (Recommended)</span></h4>
+<div class="sec-body"><ul>
+<li><strong>Description</strong>: Everything in A, plus the eligibility and language gates, the canonical-source
+  dedup preference, the ATS text-layer contract with the four-status keyword table, the
+  application status vocabulary, the two step-11 drafting rules (relevance-weighted cutting, the
+  interview backtrack test), and the attribution. Every gate measures a <strong>mechanism</strong> over
+  fixtures; no gate here asserts accuracy over the corpus.</li>
+<li><strong>Scope</strong>: The §2 table in full — three new modules, four modified, three skill files, METHODS
+  and README.</li>
+<li><strong>Effort</strong>: Medium</li>
+<li><strong>Tradeoffs</strong>: The split is what makes this affordable, and it is not a new idea here: D-12 set
+  the precedent when T15 was divided into a mechanism half and a scoring half (T56/T57/T59) that
+  waits behind the corpus. Applying it again means the eligibility gate can be <em>built, tested and
+  shipped</em> tomorrow while "does it fire correctly on real Spanish adverts" stays an honest open
+  question with a labelled-corpus dependency. Risk: a gate that is mechanically perfect and
+  empirically unvalidated could be trusted more than it deserves — mitigated by the FLAG verdict
+  (below) and by saying so in the step-9 protocol.</li>
+<li><strong>Compatibility</strong>: One additive change to the stored offer record (a disqualification verdict)
+  and one to the application record (status). Both additive, neither backfilled — absence stays
+  legible as "not recorded then", per the never-backfill rule adopted here.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-b-the-full-borrowed-set-m"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option B: The full borrowed set, mechanism separated from accuracy (Recommended)</span></div><textarea class="note-ta" data-key="s-spec-option-b-the-full-borrowed-set-m" data-label="Option B: The full borrowed set, mechanism separated from accuracy (Recommended)" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-option-c-option-b-plus-the-accur">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Option C: Option B plus the accuracy gates and Phase 7 outcome tracking</span></h4>
+<div class="sec-body"><ul>
+<li><strong>Description</strong>: B, plus labelling the corpus for eligibility and language requirements to gate
+  the filters empirically, plus the application status machine wired to outcome-driven
+  recalibration of <code>weights.py</code>, plus the read-only mail sensor.</li>
+<li><strong>Scope</strong>: B, plus corpus labelling, <code>weights.py</code>, a mail connector.</li>
+<li><strong>Effort</strong>: Large</li>
+<li><strong>Tradeoffs</strong>: The only option that closes the feedback loop, and the loop is genuinely where
+  the borrowed repository fails worst — it collects interview and rejection outcomes and computes
+  <em>nothing</em> from them. That is our opening, and taking it would be a real differentiator. But it
+  is blocked twice over: the corpus labelling needs the candidate personally (<code>surface:human</code>),
+  and outcome calibration needs application <em>volume</em> that will not exist until the tool has been
+  used for weeks. Speccing it now is <code>status/specification.md</code> §3 Option C's mistake repeated —
+  committing to decisions that need evidence phases 1–5 have not yet produced.</li>
+<li><strong>Compatibility</strong>: Same as B, plus a corpus schema change.</li>
+</ul></div>
+<div class="note" data-for="s-spec-option-c-option-b-plus-the-accur"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Option C: Option B plus the accuracy gates and Phase 7 outcome tracking</span></div><textarea class="note-ta" data-key="s-spec-option-c-option-b-plus-the-accur" data-label="Option C: Option B plus the accuracy gates and Phase 7 outcome tracking" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-comparison">
+<h4 class="sec-h"><span class="chip">▸</span><span class="sec-title">Comparison</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th></th>
+<th>Option A</th>
+<th>Option B</th>
+<th>Option C</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Effort</td>
+<td>Small</td>
+<td>Medium</td>
+<td>Large</td>
+</tr>
+<tr>
+<td>Risk</td>
+<td>Low build risk; leaves the candidate-visible defect in place for the first session</td>
+<td>Medium — mechanism gates could be over-trusted, mitigated by FLAG</td>
+<td>High — two hard blockers, neither removable by working harder</td>
+</tr>
+<tr>
+<td>Completeness</td>
+<td>The three bugs only</td>
+<td>Every borrowed idea that can be honestly gated now</td>
+<td>Full, including the loop</td>
+</tr>
+<tr>
+<td>Compatibility</td>
+<td>No schema change</td>
+<td>Two additive fields</td>
+<td>Additive + corpus schema</td>
+</tr>
+<tr>
+<td>Maintenance</td>
+<td>Three modules</td>
+<td>Three new, four modified — all fixture-tested</td>
+<td>Adds a labelling burden and a mail integration</td>
+</tr>
+<tr>
+<td>Autonomous-work fit</td>
+<td>~3 tasks</td>
+<td><strong>~11 tasks, mostly independent</strong></td>
+<td>Blocks on a human within one task</td>
+</tr>
+</tbody>
+</table></div>
+<div class="note" data-for="s-spec-comparison"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC › Comparison</span></div><textarea class="note-ta" data-key="s-spec-comparison" data-label="Comparison" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-4">
+<h3 class="sec-h"><span class="chip">§4</span><span class="sec-title">Recommendation</span></h3>
+<div class="sec-body"><p><strong>Recommended option</strong>: <strong>Option B</strong> — the full borrowed set, mechanism separated from accuracy.</p>
+<p>Option A is tempting because the first live session is close, but it optimises for the wrong
+risk: the three bugs are invisible to the candidate, while the thing they <em>will</em> see is a
+ranked list that leads with a job requiring a work permit they do not hold. Option B costs one
+extra day and fixes both. Option C fails on evidence it cannot have yet, and its two blockers
+are the kind no amount of effort removes.</p>
+<p>The decisive structural point is that <strong>Option B is almost entirely parallel and needs no human
+input</strong> — eleven tasks against fixtures, in separate modules, with mechanical gates. That is the
+right shape for the autonomous session this is being specced for.</p>
+<p><strong>A note on the third verdict.</strong> Three separate mechanisms in this document — the connector
+health check (<code>ok</code>/<code>broken</code>/<code>inconclusive</code>), the liveness check (<code>live</code>/<code>dead</code>/<code>unverified</code>) and
+the eligibility gate (<code>PASS</code>/<code>FLAG</code>/<code>FAIL</code>) — all refuse a binary. That is not a coincidence and
+should be stated as a principle rather than rediscovered a fourth time: <strong>wherever this tool
+judges the outside world, "I could not tell" is a distinct answer from "no", and collapsing
+them is how the D-18 family of defects is produced.</strong> <code>unmeasured</code> in the gate layer is the same
+shape one level up.</p>
+<p><strong>Immediate next action</strong>: run <code>design</code> over this document to append sections 5–6 and produce the
+task split, then seed the queue. First task by dependency order is the robots fixture table — it
+is a failing test that can be written before any fix, it is the only item measured as broken
+today, and <code>meta.yaml</code>'s compliance assertion rests on it.</p>
+<p><strong>Open questions</strong>:</p>
+<ul>
+<li>[x] <strong>1. Where does the eligibility gate's accuracy get measured?</strong> <strong>Decided 2026-08-25 by the
+      owner: a <code>D</code>-row, filed now, blocked on a corpus round — the current round does not grow.</strong>
+      The mechanism is gated over fixtures in this increment; the accuracy half is tracked as a
+      named, unmeasured gap rather than silently absent. This is the D-12 precedent applied a
+      second time (T15 split into a mechanism half and a scoring half that waits behind the
+      corpus), and it is the reason nothing in this increment blocks on <code>surface:human</code>.</li>
+<li>[x] <strong>2. Does the language gate read <code>english_demand</code>, or its own field?</strong> <strong>Decided 2026-08-25
+      by the owner: its own hard field.</strong> The offer record gains <code>language_requirement</code>, read only
+      by the gate; <code>dimensions/english_demand.yaml</code> stays a soft, scored preference read only by
+      the ranker. Two tests assert the boundary — <code>test_a_hard_gate_field_is_never_read_by_the_ranker</code>
+      and <code>test_a_dimension_weight_cannot_change_a_gate_verdict</code> — because the failure being
+      prevented is a preference weight cancelling a legal bar, which would be invisible in any
+      output either layer produces.</li>
+<li>[ ] <strong>3. Is a PDF renderer in scope later, and which?</strong> The ATS contract here is deliberately
+      renderer-independent so the answer can be deferred. The borrowed repository's LaTeX
+      pipeline (moderncv + a custom class + bundled fonts, two CI legs because versions break
+      differently) is explicitly <strong>not</strong> recommended — their own docs treat that fragility as a
+      cost borne by every fork user.</li>
+<li>[ ] <strong>4. Can <code>drawspec</code> carry a 2-D scatter?</strong> A Pareto frontier is two-dimensional and prose
+      cannot show it, which makes it the one visual output that would earn its place here. This
+      repository already renders declarative JSON → SVG through drawspec
+      (<code>docs/diagrams/critical-path.json</code>), so the cost is a spec file, not a chart library —
+      <strong>if</strong> the schema has a suitable <code>kind</code>. Unverified: the working checkout is not on this
+      machine (<code>/home/ivant/dev/drawspec</code> holds only <code>originals/drawspeccorpus.tar.gz</code>) and
+      <code>drawspec.dev</code> does not resolve from here. <strong>Deferred with this as the named blocker</strong>;
+      out of scope for this increment either way.</li>
+</ul>
+<p><strong>Non-goals, stated so they cannot drift in.</strong> The borrowed repository's scoring rubric, its
+retry policy (six retries on a 429, no per-host budget, scrapers that never read <code>robots.txt</code>),
+its LinkedIn <code>jobs-guest</code> access (acknowledged by its own README as against LinkedIn's terms),
+its exact-match dedup, and its unbounded read-whole state file. Our politeness posture only
+tightens: <code>connectors/trabajos_es/connector.yaml</code> records boards already ruled out on
+<code>robots.txt</code> grounds, and nothing in this increment may reverse one of those decisions.</p>
+<blockquote>
+<p>Sections 5–6 (contracts, risks) are appended by <code>design</code>.</p>
+</blockquote></div>
+<div class="note" data-for="s-spec-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §4</span></div><textarea class="note-ta" data-key="s-spec-4" data-label="§4 Recommendation" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5">
+<h3 class="sec-h"><span class="chip">§5</span><span class="sec-title">Contracts</span></h3>
+<div class="sec-body"><p>This increment adds no HTTP surface and no service boundary — the tool is a conversation over
+local files. "Contract" here means the four things a later change could break silently: two
+stored-record fields, one module boundary the owner ruled on, and the verdict vocabularies.</p></div>
+<div class="note" data-for="s-spec-5"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5</span></div><textarea class="note-ta" data-key="s-spec-5" data-label="§5 Contracts" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-1">
+<h4 class="sec-h"><span class="chip">§5.1</span><span class="sec-title">Stored record — offer (<code>offers/*.json</code>), additive</span></h4>
+<div class="sec-body"><p>Two fields, both <strong>optional and never backfilled</strong>. Absence stays legible as "not recorded
+then", which is the rule adopted from the borrowed repository and the reason no migration is
+needed:</p>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;off-000123&quot;,
+  &quot;source&quot;: &quot;trabajos&quot;,
+  &quot;url&quot;: &quot;https://www.trabajos.com/ofertas/...&quot;,
+
+  &quot;language_requirement&quot;: {
+    &quot;language&quot;: &quot;de&quot;,
+    &quot;level_stated&quot;: &quot;fluent&quot;,
+    &quot;quote&quot;: &quot;Verhandlungssicheres Deutsch ist Voraussetzung&quot;,
+    &quot;applies_to&quot;: &quot;role&quot;
+  },
+
+  &quot;eligibility&quot;: {
+    &quot;verdict&quot;: &quot;FAIL&quot;,
+    &quot;reason&quot;: &quot;citizenship&quot;,
+    &quot;quote&quot;: &quot;Applicants must hold EU citizenship at the time of application&quot;
+  }
+}
+</code></pre>
+<ul>
+<li><code>applies_to</code> is <code>"role"</code> or <code>"company"</code>. It exists because a company-wide "we welcome
+  international applicants" is <strong>not</strong> role-level permission, and collapsing the two is the
+  named failure this field prevents.</li>
+<li><code>quote</code> is a verbatim span of the advert text, on the same terms as <code>Candidate.spans</code>
+  (<code>enrichment.py</code>): <strong>nothing sourced outside the advert may appear here.</strong> A verdict whose
+  quote is not found in the advert text is a schema violation, not a warning.</li>
+<li>Neither field is read by the ranker. See §5.3.</li>
+</ul></div>
+<div class="note" data-for="s-spec-5-1"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.1</span></div><textarea class="note-ta" data-key="s-spec-5-1" data-label="§5.1 Stored record — offer (offers/*.json), additive" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-2">
+<h4 class="sec-h"><span class="chip">§5.2</span><span class="sec-title">Stored record — application (<code>applications/{offer_id}/</code>), additive</span></h4>
+<div class="sec-body"><pre><code class="language-json">{ &quot;status&quot;: &quot;applied&quot;, &quot;recorded_at&quot;: &quot;2026-08-25T19:20:00Z&quot; }
+</code></pre>
+<p>Canonical vocabulary, underscored, adopted verbatim from the borrowed repository because a
+vocabulary's value is entirely in being fixed:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Class</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>drafted</code>, <code>applied</code>, <code>interview</code></td>
+<td>Open</td>
+</tr>
+<tr>
+<td><code>offer</code></td>
+<td>Open</td>
+</tr>
+<tr>
+<td><code>hired</code>, <code>rejected</code>, <code>no_response</code>, <code>offer_declined</code>, <code>withdrawn</code></td>
+<td>Final</td>
+</tr>
+</tbody>
+</table>
+<p>Legacy space-spellings (<code>no response</code>) are <strong>accepted on read, never written</strong> — the migration
+strategy is tolerance at the boundary, not a rewrite of stored records.</p></div>
+<div class="note" data-for="s-spec-5-2"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.2</span></div><textarea class="note-ta" data-key="s-spec-5-2" data-label="§5.2 Stored record — application (applications/{offer_id}/), additive" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-3">
+<h4 class="sec-h"><span class="chip">§5.3</span><span class="sec-title">Module boundary — hard gate vs soft dimension</span></h4>
+<div class="sec-body"><p>Settled by the owner, 2026-08-25 (§4 open question 2), and asserted by tests rather than
+convention:</p>
+<table>
+<thead>
+<tr>
+<th>Reads</th>
+<th>May read</th>
+<th>Must never read</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Eligibility/language gate</td>
+<td><code>offer.eligibility</code>, <code>offer.language_requirement</code></td>
+<td><code>weights.json</code>, any <code>dimensions/*</code> score</td>
+</tr>
+<tr>
+<td>Ranker (<code>rank.py</code>, <code>scoring.py</code>)</td>
+<td><code>dimensions/*</code> scores, <code>weights.json</code></td>
+<td><code>offer.eligibility</code>, <code>offer.language_requirement</code></td>
+</tr>
+</tbody>
+</table>
+<p>The failure being prevented — a preference weight cancelling a legal bar — would be invisible in
+any output either layer produces, which is why it is pinned by a test and not by a comment.</p></div>
+<div class="note" data-for="s-spec-5-3"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.3</span></div><textarea class="note-ta" data-key="s-spec-5-3" data-label="§5.3 Module boundary — hard gate vs soft dimension" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-4">
+<h4 class="sec-h"><span class="chip">§5.4</span><span class="sec-title">Verdict vocabularies — three-valued, all of them</span></h4>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Mechanism</th>
+<th>Verdicts</th>
+<th>"I could not tell"</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connector health (new)</td>
+<td><code>ok</code> / <code>broken</code> / <code>inconclusive</code></td>
+<td><code>inconclusive</code> — a 429 or block page, <strong>never</strong> <code>broken</code></td>
+</tr>
+<tr>
+<td>Liveness (<code>liveness.py</code>, extended)</td>
+<td><code>live</code> / <code>dead</code> / <code>unverified</code></td>
+<td><code>unverified</code> — now also when the page fetched is not the advert</td>
+</tr>
+<tr>
+<td>Eligibility + language gate (new)</td>
+<td><code>PASS</code> / <code>FLAG</code> / <code>FAIL</code></td>
+<td><code>FLAG</code> — ranked, marked, and the human is the tiebreaker</td>
+</tr>
+</tbody>
+</table>
+<p><code>FLAG</code> is load-bearing: it is what makes an empirically unvalidated gate safe to ship. A gate
+that can only pass or fail must be right; a gate that can hesitate may be approximately right
+and still not cost the candidate an opportunity.</p></div>
+<div class="note" data-for="s-spec-5-4"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.4</span></div><textarea class="note-ta" data-key="s-spec-5-4" data-label="§5.4 Verdict vocabularies — three-valued, all of them" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-5-5">
+<h4 class="sec-h"><span class="chip">§5.5</span><span class="sec-title">Configuration</span></h4>
+<div class="sec-body"><p>None. No new environment variable, no feature flag, no dependency. The ATS check shells out to
+<code>pdftotext</code> <strong>only if a PDF exists</strong>, and no code path in this increment creates one.</p></div>
+<div class="note" data-for="s-spec-5-5"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §5.5</span></div><textarea class="note-ta" data-key="s-spec-5-5" data-label="§5.5 Configuration" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+<article class="sec" id="s-spec-6">
+<h3 class="sec-h"><span class="chip">§6</span><span class="sec-title">Risks &amp; Validation</span></h3>
+<div class="sec-body"><table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Likelihood</th>
+<th>Impact</th>
+<th>Mitigation</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The eligibility gate excludes an offer the candidate could actually have taken — a false FAIL is invisible, because an excluded job is one they never see</td>
+<td><strong>High</strong></td>
+<td><strong>High</strong></td>
+<td><code>FLAG</code> is the default for anything short of an explicit, role-level, stated bar; "silence is not permission" governs what counts as stated, and every verdict carries the quote so the exclusion is auditable. The Excluded list is <strong>shown</strong>, never silently dropped — the same rule as D-18's withheld count</td>
+<td>unit (<code>tests/test_eligibility.py</code>), and manual review of the excluded list in the first live session</td>
+</tr>
+<tr>
+<td>The mechanism gates get mistaken for accuracy gates — "it passes" read as "it works on real adverts"</td>
+<td><strong>High</strong></td>
+<td>Medium</td>
+<td>D-23 files the unmeasured accuracy explicitly; the step-9 protocol states the limit aloud to the candidate; no gate in this increment is named in a way that implies corpus validation</td>
+<td><code>tests/test_task_gate.py</code>, and the D-23 row itself</td>
+</tr>
+<tr>
+<td>Rewriting robots matching introduces a <em>stricter</em> error, so we stop reading a board we are allowed to read</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>The fixture table asserts both directions — permitted paths resolve permitted, disallowed resolve disallowed. Failing closed is the safe direction and is accepted where ambiguous</td>
+<td>unit (<code>tests/test_robots.py</code>)</td>
+</tr>
+<tr>
+<td>The browser-UA robots fetch reads as evasion</td>
+<td>Low</td>
+<td><strong>High</strong></td>
+<td>Scope is exactly one resource: <code>/robots.txt</code>, never content. The policy is then <strong>obeyed more strictly</strong>, not less. Recorded in METHODS with the reasoning, so the intent survives the author</td>
+<td>unit, plus the METHODS entry required by T83</td>
+</tr>
+<tr>
+<td>The connector health check fires on a genuinely empty market and a board gets disabled</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>Zero yield is a signal only for a portal that <strong>has produced offers before</strong>; the sentinel probe uses the connector's own recorded example query; disabling always asks first and touches one connector</td>
+<td>unit (<code>tests/test_connector_health.py</code>)</td>
+</tr>
+<tr>
+<td>Two gate fields on the offer record drift into the dimension model over time</td>
+<td>Medium</td>
+<td><strong>High</strong></td>
+<td>§5.3's boundary is a test, not a convention, and it fails in both directions</td>
+<td>unit (<code>tests/test_eligibility.py</code>)</td>
+</tr>
+<tr>
+<td>The ATS contract passes trivially because no renderer exists, so it certifies nothing</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>The contract is asserted over the <strong>document text</strong>, which does exist today; the same assertions run over <code>pdftotext</code> output when a renderer lands. This is the D-21 shape — presence standing in for a check — and is called out so it cannot recur quietly</td>
+<td>unit (<code>tests/test_ats.py</code>)</td>
+</tr>
+<tr>
+<td>15 tasks land in one autonomous session and a late one silently contradicts an early one</td>
+<td>Medium</td>
+<td>Medium</td>
+<td><code>make host-gate</code> runs on every task PR as a hard precondition (D-22), and <code>plan_v2</code> measures plan↔queue drift in both directions</td>
+<td><code>make host-gate</code> per PR</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rollback.</strong> Every task is a single squash-merged PR closing one issue. Both stored fields are
+additive and optional, so reverting a merge leaves earlier records valid and later ones merely
+carrying a field nothing reads. No migration to unwind, and no state outside the repository is
+touched.</p></div>
+<div class="note" data-for="s-spec-6"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">SPEC §6</span></div><textarea class="note-ta" data-key="s-spec-6" data-label="§6 Risks &amp; Validation" data-part="Spec V3 Silent Success" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
+</article>
+</section>
+</div>
+
+<div class="fab">
+  <button class="btn" id="btn-top" title="Back to top">↑ Top</button>
+  <button class="btn" id="btn-import">Import</button>
+  <button class="btn" id="btn-clear">Clear</button>
+  <button class="btn primary" id="btn-export2">💾 Save / Export</button>
+</div>
+<input type="file" id="file-import" class="hidden-input" accept=".md,.markdown,.json,text/markdown,application/json">
+
+<div class="modal" id="modal">
+  <div class="modal-card">
+    <h3>Your notes</h3>
+    <p>Downloaded as a Markdown file. You can also copy the text below and paste it back.</p>
+    <textarea id="modal-ta" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn primary" id="modal-copy">Copy</button>
+      <button class="btn" id="modal-dl">Download again</button>
+      <button class="btn" id="modal-close">Close</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>var SPEC_SEED_NOTES={};</script>
+<script>
+(function(){
+  var NS = 'silent-success-borrowed-hardening-spec-v1:';
+  var tas = Array.prototype.slice.call(document.querySelectorAll('.note-ta'));
+
+  function autoGrow(t){t.style.height='auto';t.style.height=(t.scrollHeight)+'px';}
+  function setFilled(t){var box=t.closest('.note');if(box){box.classList.toggle('filled',t.value.trim()!=='');}}
+  function updateCount(){
+    var n=0;tas.forEach(function(t){if(t.value.trim()!=='')n++;});
+    var el=document.getElementById('count');if(el){el.textContent=n+' / '+tas.length+' notes';}
+    return n;
+  }
+  var lsOK=true,dirty=false;
+  try{localStorage.setItem('__vs__','1');localStorage.removeItem('__vs__');}catch(e){lsOK=false;}
+  var WARN='⚠ Not saving — tap Save / Export';
+  function nowStamp(){var d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
+  function setState(txt,cls){var el=document.getElementById('savestate');if(el){el.textContent=txt;el.className='savestate '+(cls||'');}}
+  window.addEventListener('beforeunload',function(e){if(!lsOK&&dirty){e.preventDefault();e.returnValue='';}});
+
+  var saveTimers={};
+  function save(t){
+    if(!lsOK){dirty=true;setState(WARN,'warn');return;}
+    var k=NS+t.dataset.key;
+    try{
+      if(t.value.trim()===''){localStorage.removeItem(k);}else{localStorage.setItem(k,t.value);}
+      dirty=true;setState('✓ Saved '+nowStamp(),'ok');
+    }catch(e){lsOK=false;document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+  }
+  var SEED=(typeof SPEC_SEED_NOTES!=='undefined')?SPEC_SEED_NOTES:{};
+  tas.forEach(function(t){
+    try{var v=localStorage.getItem(NS+t.dataset.key);
+        if(v!=null){t.value=v;}
+        else if(Object.prototype.hasOwnProperty.call(SEED,t.dataset.key)){
+          var sv=SEED[t.dataset.key];if(typeof sv==='string'){t.value=sv;}}}catch(e){}
+    autoGrow(t);setFilled(t);
+    t.addEventListener('input',function(){
+      autoGrow(t);setFilled(t);updateCount();
+      clearTimeout(saveTimers[t.dataset.key]);
+      saveTimers[t.dataset.key]=setTimeout(function(){save(t);},350);
+    });
+    t.addEventListener('blur',function(){save(t);});
+  });
+  updateCount();
+  if(lsOK){setState('✓ Auto-saving','ok');}else{document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+
+  function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},1900);}
+  function pad(n){return n<10?'0'+n:''+n;}
+  function today(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+
+  function buildExport(){
+    var byPart={},order=[],data={},n=0;
+    tas.forEach(function(t){
+      var v=t.value.trim();if(v==='')return;n++;
+      data[t.dataset.key]=t.value;
+      var part=t.dataset.part||'Other';
+      if(!byPart[part]){byPart[part]=[];order.push(part);}
+      byPart[part].push({label:t.dataset.label,ref:keyFromDom(t.dataset.key,t),note:t.value});
+    });
+    var lines=['# Specification notes','','_Exported '+today()+' · '+n+' note'+(n===1?'':'s')+'._','',
+      '> Send this file back to continue the review. Notes are embedded as data at the bottom','> so importing this file restores them in the reader.',''];
+    order.forEach(function(part){
+      lines.push('## '+part,'');
+      byPart[part].forEach(function(it){
+        lines.push('**'+it.label+'**  `'+it.ref+'`');
+        it.note.split('\n').forEach(function(ln){lines.push('> '+ln);});
+        lines.push('');
+      });
+    });
+    lines.push('<!-- SPEC-NOTES-DATA');
+    lines.push(JSON.stringify(data));
+    lines.push('-->');
+    return{text:lines.join('\n'),n:n};
+  }
+  function keyFromDom(domkey,t){var box=t.closest('.note');var r=box?box.querySelector('.note-ref'):null;return r?r.textContent:domkey;}
+
+  function download(name,text){
+    try{var blob=new Blob([text],{type:'text/markdown'});var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');a.href=url;a.download=name;
+        document.body.appendChild(a);a.click();
+        setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);return true;}catch(e){return false;}
+  }
+
+  var modal=document.getElementById('modal');
+  var modalTa=document.getElementById('modal-ta');
+  function openModal(text){modalTa.value=text;modal.classList.add('open');}
+  function closeModal(){modal.classList.remove('open');}
+
+  document.getElementById('btn-export').addEventListener('click',function(){
+    var r=buildExport();
+    if(r.n===0){toast('No notes yet — add some first.');return;}
+    var name='silent-success-borrowed-hardening-spec-notes-'+today()+'.md';
+    download(name,r.text);openModal(r.text);
+    if(navigator.clipboard){navigator.clipboard.writeText(r.text).then(function(){},function(){});}
+    dirty=false;setState('✓ Backup saved '+nowStamp(),'ok');
+    toast('Exported '+r.n+' note'+(r.n===1?'':'s'));
+  });
+  document.getElementById('btn-export2').addEventListener('click',function(){document.getElementById('btn-export').click();});
+
+  document.getElementById('modal-copy').addEventListener('click',function(){
+    modalTa.select();var ok=false;try{ok=document.execCommand('copy');}catch(e){}
+    if(navigator.clipboard){navigator.clipboard.writeText(modalTa.value).then(function(){},function(){});ok=true;}
+    toast(ok?'Copied to clipboard':'Select the text and copy');
+  });
+  document.getElementById('modal-dl').addEventListener('click',function(){download('silent-success-borrowed-hardening-spec-notes-'+today()+'.md',modalTa.value);toast('Download started');});
+  document.getElementById('modal-close').addEventListener('click',closeModal);
+  modal.addEventListener('click',function(e){if(e.target===modal)closeModal();});
+
+  // buildExport only ever writes strings, but an import takes whatever the file
+  // holds: an object arrives as "[object Object]", an array joins on commas,
+  // null becomes "null" — each then persisted over notes the reviewer wrote.
+  // The realistic trigger is a hand-edited or truncated export, not an attack;
+  // it just fails in the least useful way, silently and destructively. Skip
+  // anything that is not a string and say how many were skipped.
+  function applyData(obj){
+    var applied=0,skipped=0;
+    tas.forEach(function(t){
+      if(!Object.prototype.hasOwnProperty.call(obj,t.dataset.key))return;
+      var v=obj[t.dataset.key];
+      if(typeof v!=='string'){skipped++;return;}
+      t.value=v;save(t);autoGrow(t);setFilled(t);applied++;
+    });
+    updateCount();return{applied:applied,skipped:skipped};
+  }
+  document.getElementById('file-import').addEventListener('change',function(e){
+    var f=e.target.files[0];if(!f)return;
+    var rd=new FileReader();
+    rd.onload=function(){
+      var txt=String(rd.result||'');var obj=null;
+      var m=txt.lastIndexOf('SPEC-NOTES-DATA');
+      try{
+        if(m>=0){var after=txt.slice(m+15);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
+                  if(jstart>=0&&jend>jstart){obj=JSON.parse(after.slice(jstart,jend+1));}}
+        else{obj=JSON.parse(txt);}
+      }catch(err){obj=null;}
+      if(!obj){toast('Could not read notes from that file');return;}
+      var r=applyData(obj);
+      toast('Imported '+r.applied+' note'+(r.applied===1?'':'s')+
+            (r.skipped?' ('+r.skipped+' skipped — not text)':''));
+    };
+    rd.readAsText(f);e.target.value='';
+  });
+  document.getElementById('btn-import').addEventListener('click',function(){document.getElementById('file-import').click();});
+
+  document.getElementById('btn-clear').addEventListener('click',function(){
+    if(!confirm('Clear ALL notes from this browser? Export first if you want to keep them.'))return;
+    tas.forEach(function(t){t.value='';save(t);autoGrow(t);setFilled(t);});
+    updateCount();toast('All notes cleared');
+  });
+
+  document.getElementById('btn-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+})();
+</script>
+</body>
+</html>
