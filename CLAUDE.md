@@ -22,6 +22,18 @@ Every session, without waiting to be asked:
 @claude-arsenal/AGENTS.md
 <!-- /claude-arsenal: auto-managed -->
 
+> **That protocol is the ORCHESTRATOR's, not every session's.** It is injected by
+> `/init` and says "every session", which was true when every session was
+> interactive. It is not true now: a **spawned child reads this same file** and
+> cannot perform steps 2, 4 or 5 — it has no GitHub API at all (see "No session this
+> one spawns can reach the GitHub API" below). A child that tries them blocks, which
+> is exactly what happened to three workers on 2026-08-25.
+>
+> So a child runs **only** step 1 (read handover, optional) and the work itself. Its
+> orchestrator hands it the task id, issue number and title, and it stops after
+> pushing. Do not edit the block above to say so — it is auto-managed and `/init`
+> will overwrite it; this note is the host-owned place to record it.
+
 ## The GitHub channel depends on the surface — detect it, don't assume
 
 `bash claude-arsenal/bin/github_channel.sh --detect` answers this, and its answer
@@ -33,20 +45,62 @@ no workaround is needed, and reaching for one costs a session real time.
 
 **In a cloud session it prints `rest`, and REST does not work there**: the proxy
 answers `403 GitHub access is not enabled for this session` (`claude-arsenal#182`).
-Don't probe it again — the MCP GitHub tools are the only channel, so every GitHub
-step is performed with them, and the board JSON the scripts read is written to disk
-by hand from the tool result. In that session, and only there:
+Don't probe it again — the MCP GitHub tools are the *API* channel, so every GitHub
+API step is performed with them, and the board JSON the scripts read is written to
+disk by hand from the tool result. In that session, and only there:
 
 - `claim_task.sh` returns `manual POST`; `create_branch` on `arsenal/claims/<id>`
   is the compare-and-swap. **201 = won, 422 = lost.**
-- `open_task_pr.sh` cannot be used — it cuts a branch off the default branch, and
-  pushes there are restricted to the session's designated branch. Archive the task
-  file, put `Closes #<issue>` in **both** the commit message and the PR body, and
-  open the PR with the MCP tool.
+- **`open_task_pr.sh` works — `git push` is not restricted.** This file used to say
+  pushes were confined to the session's designated branch, and that was simply wrong:
+  a real push of a fresh branch returns exit 0 (measured 2026-08-25, not a `--dry-run`
+  — dry runs skip the receive hooks and prove nothing here). So the script cuts its
+  branch off `origin/main`, runs the gate, commits and pushes exactly as it does on
+  the laptop. Only its **last** step fails, because that step alone uses REST. Pass
+  `ARSENAL_TASK_ISSUE=<n>` — a 403 channel cannot resolve the issue number either —
+  let it push, then open the PR with the MCP tool. `Closes #<issue>` goes in **both**
+  the commit message and the PR body.
+- **Remote ref deletion is blocked.** `git push --delete` reports
+  `send-pack: unexpected disconnect` and then `Everything up-to-date`, and the ref is
+  still there. Never script a branch cleanup here: it looks like a failure and is
+  actually a no-op.
 - Merging works via the MCP `merge_pull_request` tool.
 
-Steps 3 and 4 of the protocol need no workaround on either surface — run them as
-written. Since the fetch drops `body`, issues resolve to tasks by **title**;
+## No session this one spawns can reach the GitHub API — the fleet is shaped by this
+
+**A spawned session has no `mcp__*` tools.** This holds for both ways of making one,
+and it is the single most expensive thing to rediscover:
+
+- A Routine with `create_new_session_on_fire` says so at creation: *"this trigger
+  stores no MCP connectors, so the sessions it fires will run without connector
+  tools"*, and the fired session's `allowed_tools` carry no `mcp__*` entry.
+- A `create_session` child carries no such warning but behaves identically — measured
+  2026-08-25, two children reported *"GitHub access denied (403); no MCP tools
+  available to fetch task board"* and blocked. **Do not assume a child inherits the
+  parent's connectors.** It does not.
+
+With REST already 403, a spawned session's only channel to GitHub is plain `git`.
+That is enough to fetch, to read claim refs
+(`git ls-remote origin 'refs/heads/arsenal/claims/*'`), to derive terminal state from
+`arsenal/tasks/_history/*.md` (each archived file carries `status: merged`, and
+`effective_state` reads it), and to **push a branch**. It is not enough to read
+issues, label or assign one, open a PR, or merge.
+
+So the split is forced, and it is the one `worker-loop.md` already specifies —
+*"workers never claim or release: the orchestrator owns the claim"*:
+
+| | holds the GitHub API | does the work |
+|---|---|---|
+| **Orchestrator** — an interactive session, woken by a **self-bound** routine (omit `create_new_session_on_fire`) | yes | fetch the board, claim with `create_branch` (201 won / 422 lost), dispatch children, open each PR, merge after review |
+| **Child** — one per task, via `create_session` | no | worktree, implement, `make host-gate`, `ARSENAL_TASK_ISSUE=<n> open_task_pr.sh` up to and including the push, then stop |
+
+A child is told its task id, issue number and branch name by the orchestrator, so it
+never needs to resolve any of them. It ends when its task does, which is what keeps an
+unattended run from ever needing to compact: the only long-lived context is the
+orchestrator's, and everything it must remember is in GitHub, not in the window.
+
+Steps 3 and 4 of the protocol need no workaround on either surface — **in an
+orchestrator session**, run them as written; a child runs neither. Since the fetch drops `body`, issues resolve to tasks by **title**;
 v0.36.1 made that robust and `query_status.py` names anything that still fails to
 resolve. Trust that list over `handle_sync.py`'s proposals — only one of the two is
 wired to an action.
