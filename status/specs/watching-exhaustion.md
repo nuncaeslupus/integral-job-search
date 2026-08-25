@@ -34,7 +34,7 @@ mechanism was designed around. It exercises T62, T63, T64, T65 and T69 in one si
 survived steering in **both** directions, and steering means an *accepted* decision —
 verified:
 
-```
+```text
 Cycle(..., steered_by=<a refusal>)
   -> refusal cannot steer: a refused decision steered nothing — §5.5, a refusal licenses none
 ```

@@ -27,10 +27,13 @@ if scorable:  # pragma: no cover - unreachable until the corpus grows
 `scorable` is every ad-side dimension with **≥10** evaluation labels. Today every
 dimension has exactly **1**, so the set is empty and the branch never runs.
 
-**The tenth label on any single dimension makes `make evidence` raise** — not fail a
-gate, *raise* — and `make evidence` is one of the four host-gate targets, so every
-task PR in the repo stops being openable until scoring exists. A round that starts
-by labelling would discover this at label ten, with nine already spent.
+**The tenth label on any single dimension stops every task PR in the repo being
+openable.** The chain is worth stating exactly, because the failure is an unhandled
+exception rather than a measured shortfall: `measure()` raises, so
+`python -m integral.extraction` exits non-zero, so `make evidence` prints
+`GATE FAILED` and exits 1, so `make host-gate` fails — and `open_task_pr.sh` runs
+`make host-gate` as a hard precondition, so no task PR opens at all. A round that
+starts by labelling would discover this at label ten, with nine already spent.
 
 **So the scoring lands first, and it is code, not labels.** It can be written and
 tested against fixtures today, with no corpus work at all: the floor is a constant
@@ -63,8 +66,10 @@ document. It also pre-marks the 108 ads that carry no marks (see §3).
 
 ## 3. T56: the subset is where the direction lives
 
-236 labels short of full coverage. That is the number that makes the round feel
-pointless, and it is avoidable, because the gate does not require full coverage.
+236 labels short of full coverage — **14 dimensions hold one label each and eleven
+hold none**, so it is `14 × 9 + 11 × 10`, not `25 × 9`. That is the number that
+makes the round feel pointless, and it is avoidable, because the gate does not require
+full coverage.
 
 `extraction_macro_f1` is a **macro average over the scorable dimensions** — those at
 or above the floor. Floor five dimensions and the score is the mean over those five.
@@ -96,9 +101,13 @@ tiebreak, never the criterion:
 `remote_arrangement`, `compensation_transparency`, `contract_stability`,
 `schedule_flexibility`, `seniority_expectation`.
 
-**`collaboration_mode` should not be in any subset.** Its cues fire on 7 of 208 ads,
-so ten labels may not exist to find; it is rare rather than broken, and it is the one
-dimension with no pre-mark even inside the 84.
+**`collaboration_mode` is the expensive one, for a reason worth stating carefully.**
+It is the only dimension with no pre-mark even inside the 84, so every label for it is
+a blind read rather than a confirmation. What is *not* established is that ten
+positives are unfindable: its cues fire on 7 of 208 ads, but inferring gold scarcity
+from cue firings is the cue-derived reasoning D-2 exists to refuse — the cues are what
+the labels are meant to judge. Treat it as costly, not as impossible, and if it is
+wanted in the subset, establish its prevalence first.
 
 ---
 
