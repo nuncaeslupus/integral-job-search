@@ -645,6 +645,47 @@ def negation_audit(
     }
 
 
+def _dimension_f1(
+    pairs: list[tuple[LabelledAd, Label]],
+    dimension: Dimension,
+) -> dict[str, Any]:
+    """One dimension's F1 = 2PR/(P+R), scored against the **rules stage**.
+
+    Stage 3 asks a model, and an evidence file cannot make that call — so the
+    prediction here is `cue_findings` alone, exactly as in `negation_recall`,
+    and a dimension no cue settles predicts class 0. That is a *miss* against a
+    positive label rather than an exclusion: excluding it would score the cue
+    set against precisely the adverts the cue set already reaches.
+
+    Binary, over "the advert asserts this dimension" — class 0 is the negative
+    on both polarities, so a bipolar -1 read as +1 is one false positive and one
+    false negative, which is what a sign error deserves.
+
+    `f1` is **None**, not 0.0, when nothing was asserted and nothing predicted:
+    with no positives on either side there is no ratio, and 1.0 would let a
+    dimension nobody could get wrong lift the macro mean. `measure` drops those
+    from the average and names them.
+    """
+    tp = fp = fn = 0
+    for ad, label in pairs:
+        truth = _class_of(_sign(label.value, label.negated), dimension)
+        found = cue_findings(_normalise_labelled(ad), dimension)
+        predicted = 0 if found is None else _class_of(_sign(found.value, found.negated), dimension)
+        if truth == predicted:
+            tp += truth != 0
+            continue
+        fp += predicted != 0
+        fn += truth != 0
+    denominator = 2 * tp + fp + fn
+    return {
+        "f1": round(2 * tp / denominator, 4) if denominator else None,
+        "n": len(pairs),
+        "true_positives": tp,
+        "false_positives": fp,
+        "false_negatives": fn,
+    }
+
+
 def measure(
     store_path: Path = DEFAULT_STORE_PATH,
     dimensions_dir: Path = DEFAULT_DIMENSIONS_DIR,
@@ -684,12 +725,23 @@ def measure(
         "prefilter_positives_checked": positives_checked,
         "prefilter_suppressions": suppressed,
     }
-    if scorable:  # pragma: no cover - unreachable until the corpus grows
-        raise ExtractionError(
-            "dimensions are now above the label floor, so extraction_macro_f1 is "
-            f"measurable for {scorable} — this branch is a placeholder and scoring "
-            "must be implemented before it can report a number (T20/T26)"
+
+    by_id = {d.id: d for d in ad_side(dimensions)}
+    per_dimension = {
+        d: _dimension_f1([p for p in pairs if p[1].dimension == d], by_id[d]) for d in scorable
+    }
+    scored = {d: s for d, s in per_dimension.items() if s["f1"] is not None}
+    measured["extraction_f1_by_dimension"] = per_dimension
+    measured["dimensions_without_positives"] = sorted(set(per_dimension) - set(scored))
+    if scored:
+        # D-2's third requirement: `n` beside the aggregate as well as beside
+        # each dimension, and it counts only the dimensions the mean is over.
+        measured["extraction_macro_f1"] = round(
+            sum(s["f1"] for s in scored.values()) / len(scored), 4
         )
+        measured["extraction_status"] = "measured"
+        measured["extraction_scored_n"] = sum(s["n"] for s in scored.values())
+        measured["extraction_scored_dimensions"] = sorted(scored)
     return measured
 
 

@@ -51,5 +51,7 @@
   ],
   "prefilter_suppressed_positives": 0,
   "prefilter_positives_checked": 40,
-  "prefilter_suppressions": []
+  "prefilter_suppressions": [],
+  "extraction_f1_by_dimension": {},
+  "dimensions_without_positives": []
 }

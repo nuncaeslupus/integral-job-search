@@ -335,3 +335,71 @@ def test_every_supported_market_has_applicable_dimensions() -> None:
     assert reach, "the corpus reported no job families at all"
     unreached = {family: row for family, row in reach.items() if row["applicable_dimensions"] == 0}
     assert not unreached, f"markets with no applicable dimension: {unreached}"
+
+
+# ---------------------------------------------------------------------------
+# T56 — macro-F1, on a corpus that clears the floor
+
+
+def _store(tmp_path: Path, rows: list[tuple[str, str, float]]) -> Path:
+    """A store of evaluation-split ads, one `remote_arrangement` label each."""
+    path = tmp_path / "ads.jsonl"
+    path.write_text(
+        "\n".join(
+            json.dumps(
+                {
+                    "id": ad_id,
+                    "language": "es",
+                    "text": text,
+                    "source_url": "https://example.test/ad",
+                    "split": "evaluation",
+                    "labels": [
+                        {
+                            "dimension": "remote_arrangement",
+                            "value": value,
+                            "spans": [{"start": 0, "end": len(text)}],
+                            "labeller": "test",
+                        }
+                    ],
+                }
+            )
+            for ad_id, text, value in rows
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_macro_f1_is_measured_once_a_dimension_clears_the_floor(tmp_path: Path) -> None:
+    """Six cue hits, two misses, two true negatives — F1 = 2·6/(2·6+0+2) = 0.8571."""
+    rows = (
+        [(f"hit{i}", "Puesto 100% remoto en Madrid.", 1.0) for i in range(6)]
+        + [(f"off{i}", "Puesto presencial en Madrid.", 0.0) for i in range(2)]
+        + [(f"miss{i}", "Puedes trabajar desde casa siempre.", 1.0) for i in range(2)]
+    )
+    measured = measure(_store(tmp_path, rows))
+
+    assert measured["extraction_status"] == "measured"
+    assert measured["scorable_dimensions"] == ["remote_arrangement"]
+    per = measured["extraction_f1_by_dimension"]["remote_arrangement"]
+    assert (per["true_positives"], per["false_positives"], per["false_negatives"]) == (6, 0, 2)
+    assert per["n"] == 10, "D-2 requires n beside every per-dimension score"
+    assert per["f1"] == 0.8571
+    assert measured["extraction_macro_f1"] == 0.8571
+    assert measured["extraction_scored_n"] == 10, "and n beside the aggregate too"
+
+
+def test_a_dimension_nobody_asserted_is_not_a_free_1_point_0(tmp_path: Path) -> None:
+    """Ten labels, none of them positive, no cue firing: there is no ratio.
+
+    Scoring that as 1.0 would let a dimension the extractor was never asked to
+    find anything in carry the macro mean upwards — the same "a number appeared
+    so it must be true" failure D-2 exists to stop, one level down.
+    """
+    measured = measure(_store(tmp_path, [(f"n{i}", "Puesto presencial.", 0.0) for i in range(10)]))
+
+    assert measured["extraction_f1_by_dimension"]["remote_arrangement"]["f1"] is None
+    assert measured["dimensions_without_positives"] == ["remote_arrangement"]
+    assert measured["extraction_macro_f1"] is None
+    assert measured["extraction_status"] == "unmeasured"
