@@ -22,6 +22,18 @@ Every session, without waiting to be asked:
 @claude-arsenal/AGENTS.md
 <!-- /claude-arsenal: auto-managed -->
 
+> **That protocol is the ORCHESTRATOR's, not every session's.** It is injected by
+> `/init` and says "every session", which was true when every session was
+> interactive. It is not true now: a **spawned child reads this same file** and
+> cannot perform steps 2, 4 or 5 — it has no GitHub API at all (see "No session this
+> one spawns can reach the GitHub API" below). A child that tries them blocks, which
+> is exactly what happened to three workers on 2026-08-25.
+>
+> So a child runs **only** step 1 (read handover, optional) and the work itself. Its
+> orchestrator hands it the task id, issue number and title, and it stops after
+> pushing. Do not edit the block above to say so — it is auto-managed and `/init`
+> will overwrite it; this note is the host-owned place to record it.
+
 ## The GitHub channel depends on the surface — detect it, don't assume
 
 `bash claude-arsenal/bin/github_channel.sh --detect` answers this, and its answer
@@ -87,8 +99,8 @@ never needs to resolve any of them. It ends when its task does, which is what ke
 unattended run from ever needing to compact: the only long-lived context is the
 orchestrator's, and everything it must remember is in GitHub, not in the window.
 
-Steps 3 and 4 of the protocol need no workaround on either surface — run them as
-written. Since the fetch drops `body`, issues resolve to tasks by **title**;
+Steps 3 and 4 of the protocol need no workaround on either surface — **in an
+orchestrator session**, run them as written; a child runs neither. Since the fetch drops `body`, issues resolve to tasks by **title**;
 v0.36.1 made that robust and `query_status.py` names anything that still fails to
 resolve. Trust that list over `handle_sync.py`'s proposals — only one of the two is
 wired to an action.

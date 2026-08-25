@@ -35,10 +35,13 @@ specifies — *"workers never claim or release: the orchestrator owns the claim"
   (`trig_01GbzrsPtMYqnSgQVKVdTzBu`, `55 * * * *`). Holds the MCP grant. Per tick:
   harvest finished workers → open their PRs → re-fetch board → claim → dispatch →
   review and merge. Its state lives in GitHub, so compaction costs nothing.
+* **Orchestrator-only actions**, because they need the GitHub API no child has:
+  **fetching the board, claiming, opening a PR, and merging.** A worker performs
+  none of these, ever.
 * **Workers** — one `create_session` child per task, model `sonnet` (what
   `models.workers` is set to), tagged `arsenal-fleet`/`arsenal-worker`. Told their
   task id, issue number and title; told explicitly they have NO GitHub API and must
-  ignore CLAUDE.md's instructions to fetch the board. Worktree → `make host-gate` →
+  ignore CLAUDE.md's auto-managed protocol steps 2, 4 and 5. Worktree → `make host-gate` →
   `open_task_pr.sh` → push → stop. **Each dies with its task — that is the whole
   answer to keeping context clean over a long unattended run.**
 
