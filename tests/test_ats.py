@@ -99,6 +99,34 @@ def test_a_replacement_character_in_the_text_layer_fails(store: ProfileStore) ->
     assert any("corrupted text layer" in v for v in cid_result["violations"])
 
 
+def test_corruption_alone_is_not_counted_as_a_missing_field(store: ProfileStore) -> None:
+    """The gate's key names one breach; it must count only that one.
+
+    A document carrying every required field but a mojibake text layer is a
+    real failure under a different name. Counting it as a missing field made
+    `documents_missing_a_required_text_layer_field` a number that could not be
+    read literally. It still fails the gate — through the CLI exit code in the
+    task's own ```bash``` block, which reads the all-violations total.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — ada.lovelace@example.invalid"),
+        experience=(_experience(),),
+    )
+    write_master(store, master)
+    generate(store, master, offer_id="girona-1", advert=ADVERT)
+
+    cv = store.path("cv", "generated", "girona-1", "v1", "cv.md")
+    intact = cv.read_text(encoding="utf-8")
+    corrupted = cv.with_name("cv-corrupt-only.md")
+    corrupted.write_text(intact + "Experience \ufffd Cintra Logistics\n", encoding="utf-8")
+
+    audited = audit_documents([corrupted])
+
+    assert audited["documents_missing_a_required_text_layer_field"] == 0
+    assert audited["documents_with_text_layer_violations"] == 1
+    assert check_document(corrupted)["missing_fields"] == []
+
+
 def test_the_gate_does_not_pass_on_an_empty_input_set(store: ProfileStore) -> None:
     empty = audit_documents([])
     assert empty["documents_missing_a_required_text_layer_field_evaluated"] == 0

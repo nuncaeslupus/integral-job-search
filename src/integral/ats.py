@@ -153,11 +153,20 @@ def audit_documents(paths: list[Path]) -> dict[str, Any]:
     """
     checks = [check_document(path) for path in paths]
     violating = [check for check in checks if check["violations"]]
+    # The gate's key names ONE of the two contract breaches, so it must count
+    # only that one. `violations` is the union of missing fields and corruption
+    # markers, so counting it here reported a document whose fields are all
+    # present but whose text layer is mojibake as "missing a required field" —
+    # a true failure under a false name. Corruption still fails the gate, via
+    # the CLI exit code in the task's own ```bash``` block, which is why the
+    # total below exists.
+    missing_required_field = [check for check in checks if check["missing_fields"]]
     evaluated = len(checks)
 
     return {
-        "documents_missing_a_required_text_layer_field": len(violating),
+        "documents_missing_a_required_text_layer_field": len(missing_required_field),
         "documents_missing_a_required_text_layer_field_evaluated": evaluated,
+        "documents_with_text_layer_violations": len(violating),
         # Same count, the addendum's own name for it — see the module
         # docstring's "a zero count must prove the mechanism ran" section.
         "documents_checked": evaluated,
@@ -220,7 +229,7 @@ def write_evidence(
 
 
 def _main(argv: list[str]) -> int:
-    """Write T80's gate evidence. Exit 1 on any document missing a required field."""
+    """Write T80's gate evidence. Exit 1 on any text-layer contract violation."""
     args = [arg for arg in argv[1:] if not arg.startswith("--")]
     measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
     for line in measured["violations"]:
@@ -234,7 +243,9 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 0
-    return 1 if measured["documents_missing_a_required_text_layer_field"] else 0
+    # Fail on ANY contract breach, not only the named half: a corrupted text
+    # layer is as unreadable to an ATS as an absent field.
+    return 1 if measured["documents_with_text_layer_violations"] else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
