@@ -709,9 +709,9 @@
       "status_is_asserted": false
     },
     {
-      "task": "t-570404b2",
-      "key": "standing_scope_decisions_not_resurfaced",
-      "evidence": "status/evidence/T67.json",
+      "task": "t-4efbff9b",
+      "key": "exhausted_searches_reported_as_a_scope_change",
+      "evidence": "status/evidence/T66.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

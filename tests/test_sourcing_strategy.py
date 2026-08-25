@@ -22,6 +22,15 @@ from integral.sourcing_cycles import (
     improved,
     write_cycle_evidence,
 )
+from integral.sourcing_market import (
+    HARD_CONSTRAINT_TERMS,
+    MINIMUM_EMPTY_MARKETS,
+    RETRY_TIMES,
+    EmptyMarketReport,
+    market_is_empty,
+    report_empty_market,
+    write_market_evidence,
+)
 from integral.sourcing_strategy import (
     EXHAUSTION_REPEAT_SHARE,
     MINIMUM_PROPOSALS,
@@ -499,3 +508,115 @@ def test_the_cycle_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
     # A probe whose cycles all improved has not tested the rule.
     assert measured["non_improving_cycles"] >= MINIMUM_NON_IMPROVING
     assert measured["unproposed_regression_detected"] is True
+
+
+# --- T66: the empty market — a time, never a relaxed constraint (§5.6) -------
+
+
+def _steered(cycle: int, direction: str, facet: str) -> ScopeDecision:
+    """A recorded, accepted decision — the licence T65 says a scope change needs."""
+    return ScopeDecision(
+        session="cse_t66",
+        about=f"{facet}:madrid",
+        decision=direction,  # type: ignore[arg-type]
+        accepted=True,
+        cycle=cycle,
+        reason="the candidate agreed to try the search this way",
+        proposed_alternatives=("narrow:employer", "widen:country"),
+        trigger="cycle 1 returned the same adverts it returned before",
+    )
+
+
+def _both_directions_tried() -> list[Cycle]:
+    """Widened, then narrowed, and neither one helped."""
+    return [
+        Cycle(cycle=1, offers_returned=20, offers_rejected=18),
+        Cycle(
+            cycle=2,
+            offers_returned=20,
+            offers_rejected=19,
+            steered_by=_steered(2, "widen", "country"),
+        ),
+        Cycle(
+            cycle=3,
+            offers_returned=20,
+            offers_rejected=19,
+            steered_by=_steered(3, "narrow", "employer"),
+        ),
+    ]
+
+
+def test_an_empty_market_is_reported_as_a_time_not_a_compromise() -> None:
+    report = report_empty_market(_both_directions_tried())
+    # What is offered is when to come back, and nothing else.
+    assert report.retry_options == RETRY_TIMES
+    assert all(when in ("tomorrow", "next week") for when in report.retry_options)
+    said = json.dumps(report.model_dump(), ensure_ascii=False).lower()
+    assert not [term for term in HARD_CONSTRAINT_TERMS if term in said]
+    # And nothing may be reported when the market is not the problem.
+    with pytest.raises(ValueError, match="not empty"):
+        report_empty_market([Cycle(cycle=1, offers_returned=20, offers_rejected=18)])
+
+
+def test_the_empty_market_needs_exhaustion_in_both_directions() -> None:
+    both = _both_directions_tried()
+    assert market_is_empty(both)
+
+    # One stale cycle is not a market. Nor are two, unsteered.
+    assert not market_is_empty(both[:1])
+    assert not market_is_empty([both[0], Cycle(cycle=2, offers_returned=20, offers_rejected=19)])
+
+    # Widened only: the other remedy has not been tried, so the diagnosis is unreached.
+    assert not market_is_empty(both[:2])
+
+    # Both tried, and the narrowing worked — a search problem after all.
+    it_worked = [
+        *both[:2],
+        Cycle(
+            cycle=3,
+            offers_returned=20,
+            offers_rejected=4,
+            steered_by=_steered(3, "narrow", "employer"),
+        ),
+    ]
+    assert not market_is_empty(it_worked)
+
+    # Order is a claim (T68's lesson): out of order, the comparison inverts.
+    with pytest.raises(ValueError, match="consecutively"):
+        market_is_empty([both[2], both[1], both[0]])
+
+
+def test_no_hard_constraint_is_proposed_for_relaxation_on_an_empty_result() -> None:
+    reason = "it looks like it is not a good day to find jobs"
+    # A relaxed constraint dressed as an option is not a time.
+    with pytest.raises(ValidationError):
+        EmptyMarketReport(reason=reason, retry_options=("or we could lower your salary floor",))
+    with pytest.raises(ValidationError):
+        EmptyMarketReport(reason="we could look at relocation instead", retry_options=RETRY_TIMES)
+    # Nor can the report carry a scope change at all: there is no field for one.
+    with pytest.raises(ValidationError):
+        EmptyMarketReport(
+            reason=reason,
+            retry_options=RETRY_TIMES,
+            proposal=ScopeProposal(  # type: ignore[call-arg]
+                direction="narrow",
+                facet="employer",
+                reason="we could read only Acme",
+                alternatives=(
+                    ScopeAlternative(
+                        direction="widen", facet="country", reason="or look further out"
+                    ),
+                ),
+            ),
+        )
+
+
+def test_the_market_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
+    target = tmp_path / "T66.json"
+    measured = write_market_evidence(target)
+    assert json.loads(target.read_text(encoding="utf-8")) == measured
+    assert measured["exhausted_searches_reported_as_a_scope_change"] == 0
+    # A probe where the market was never empty has not tested the rule.
+    assert measured["empty_markets_reported"] >= MINIMUM_EMPTY_MARKETS
+    assert measured["relaxed_constraint_rejected"] is True
+    assert measured["scope_change_field_rejected"] is True
