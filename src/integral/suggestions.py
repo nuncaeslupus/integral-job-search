@@ -116,8 +116,10 @@ class SuggestionSet(Strict):
     # "this file happens to contain no unmapped concept" from "this file could
     # not have recorded one", which are the two states the metric must never
     # confuse. It is a list rather than a bool so the staleness signal is
-    # readable as names, not as a count nobody can interpret.
-    unmapped: list[str] = Field(default_factory=list)
+    # readable as names, not as a count nobody can interpret — and it defaults to
+    # `None`, not `[]`, because a default of `[]` would collapse those two states
+    # back together for any file written before the key existed.
+    unmapped: list[str] | None = None
 
     def for_ad(self, ad_id: str) -> list[Suggestion]:
         return self.by_ad.get(ad_id, [])

@@ -95,7 +95,9 @@ def test_committed_store_roundtrips_without_loss() -> None:
     measured = measure(DEFAULT_STORE_PATH)
 
     assert measured["corpus_harness_roundtrip_loss"] == 0, measured["roundtrip_losses"]
-    assert measured["ad_count"] == len(load_ads())
+    # The ids, not the count: a store that drops one raw ad and gains one from
+    # somewhere else has the right count and the wrong corpus.
+    assert {ad.id for ad in load_store(DEFAULT_STORE_PATH)} == {ad["id"] for ad in load_ads()}
 
 
 def test_probe_labels_take_their_offsets_from_real_ad_text() -> None:

@@ -387,3 +387,15 @@ def test_propose_reports_an_export_carrying_no_proposals(tmp_path: Path) -> None
     export.write_text(json.dumps({"labels": []}), encoding="utf-8")
 
     assert suggestions_main(["propose", str(export), "--dimensions", str(tmp_path)]) == 1
+
+
+def test_a_file_that_never_declared_unmapped_is_not_read_as_declaring_none() -> None:
+    """`None` and `[]` are the two states `ontology_health` may never confuse.
+
+    A default of `[]` would make a pre-T57 file — written by a pass that could not
+    have recorded an unmapped concept — indistinguishable from one that read the
+    adverts freely and found nothing outside the model. `ontology_health` decides
+    capability from the raw payload for that reason; the model must not undo it.
+    """
+    assert suggestion_set().unmapped is None
+    assert suggestion_set(unmapped=[]).unmapped == []
