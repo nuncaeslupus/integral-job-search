@@ -228,7 +228,9 @@ def _suggestion_payload(
             marks[ad_id] = sorted(placed, key=lambda m: ad.text.index(m["quote"]))
     return {
         "method": suggestions.method,
-        "control": sorted(suggestions.blind_control),
+        # Intersected with the ads actually on the page: a filtered page that
+        # reported the corpus-wide control count would overstate its own cohort.
+        "control": sorted(set(suggestions.blind_control) & set(by_id)),
         "marks": marks,
         "dropped": sorted(dropped),
     }
@@ -282,9 +284,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="mark nothing — every ad is labelled cold, as the control ads are",
     )
+    parser.add_argument(
+        "--only",
+        default="",
+        help="comma-separated ad ids — build the page for those adverts alone (a round's cover)",
+    )
     args = parser.parse_args(argv)
 
     ads = load_store(args.store)
+    wanted = {i.strip() for i in args.only.split(",") if i.strip()}
+    missing = sorted(wanted - {ad.id for ad in ads})
+    if missing:
+        # An id that is not in the store is a typo in a shortlist, and silently
+        # building a shorter page would hide a dimension going unfloored.
+        print(f"--only: not in the store: {', '.join(missing)}", file=sys.stderr)
+        return 2
     dimensions = load_dimensions(args.dimensions)
 
     suggestions = None
@@ -324,11 +338,19 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {problem}", file=sys.stderr)
             return 2
 
+    # Narrowing happens *after* validation, never before: `validate_suggestions`
+    # checks the set against the corpus it was generated from — the control
+    # cohort is derived from every ad id — so validating a subset reports the
+    # whole rest of the corpus as missing and refuses to build anything.
+    if wanted:
+        ads = [ad for ad in ads if ad.id in wanted]
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(build_page(ads, dimensions, suggestions), encoding="utf-8")
 
     marked = sum(len(v) for v in _suggestion_payload(suggestions, ads)["marks"].values())
-    control = len(suggestions.blind_control) if suggestions else len(ads)
+    shown = {ad.id for ad in ads}
+    control = len(set(suggestions.blind_control) & shown) if suggestions else len(ads)
     print(f"{args.out}  ({len(ads)} ads, {marked} marks, {control} control ads)")
     if suggestions is None:
         print("  no suggestions applied — every ad is blind", flush=True)

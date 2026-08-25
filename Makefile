@@ -91,6 +91,11 @@ reader-steps:  ## regenerate the step-spec reader only
 	uv run --with markdown python3 claude-arsenal/scripts/create_reader.py \
 		--input status/spec-v2-steps.md --output-dir docs/spec-v2-steps --name "$(READER_NAME)"
 
+labelling-round:  ## build the labelling page for just the adverts T56's round must cover
+	uv run python tools/labelling_page.py \
+		--only "$$(uv run python tools/labelling_round.py --ids)" \
+		--out corpus/labelled/round-01.html
+
 clean:  ## remove build and tool caches
 	rm -rf dist build .pytest_cache .mypy_cache .ruff_cache *.egg-info
 	find . -type d -name __pycache__ -not -path './.git/*' -exec rm -rf {} +
