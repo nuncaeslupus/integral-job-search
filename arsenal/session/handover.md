@@ -1,4 +1,4 @@
-# Session handover — 2026-08-25, two rounds labelled and a merged task reopened
+# Session handover — 2026-08-26, two rounds labelled, T15 reopened, spec v3 seeded
 
 `main` clean and green, **no open PRs**. Seven PRs merged (#194–#200). Board: 107
 tasks — **open 6**, claimed 0, merged 98, done 1, cancelled 2. Nothing flagged.
@@ -132,3 +132,68 @@ this repo's layout today.
    Actions is out of runner minutes. Create them with `handle_sync.py` when that
    branch lands. Nothing above is superseded by it.
 5. Round 3 (30 adverts) whenever there is an evening for it.
+
+
+---
+
+## Spec v3 landed, and the queue is ready — 2026-08-26
+
+**#201 and #202 are merged. No open PRs. `main` clean and green.** Board: 124 tasks —
+open 15, claimed 0, blocked 8, merged 98. All 17 spec-v3 task files now carry issue
+handles (**#203–#219**), created by hand because the queue workflow cannot run while
+Actions has no runner minutes. `task_select.py` returns **T85** first, as the
+specification intends.
+
+### What #201's review actually found
+
+Fourteen inline findings, and **most were stale or wrong** — that batch predated the
+branch's merge commit and was reading an older tree. Verified one by one rather than
+taken on trust:
+
+* **Real, and the deepest thing in the increment.** All sixteen gates assert a
+  violation count of zero, and an empty input set produces zero too — each could
+  pass without evaluating a single offer, verdict, document or technique. That is
+  this specification's own thesis reproduced inside its acceptance criteria. A
+  second assertion in the gate block is impossible (line 1 of a `gate` fence *is*
+  the gate), so all sixteen now carry **`status-key: gate_status`**, and each task
+  requires its module to record the evaluated count and write
+  `gate_status: "unmeasured"` when it is zero. `gate_evidence.py` then exits 3 —
+  not a pass, not a fail. Same machinery `lo-6f53` uses.
+* **Real, small:** the Option comparison table said "Two additive fields" where §5
+  defines three; a reader taking the table could have dropped `language_requirement`.
+  And D-23's writer must be wired into `_main`, or `make evidence` never regenerates
+  the file its gate names.
+* **Declined as wrong on the facts:** T83's deps already cover T70–T82 and T84, and
+  its own text says "do not credit upstream for T85"; the spec does not name two
+  first tasks (line 227 says first is T85, line 236 says *second* is the robots
+  fixture, and the same sentence explains why T85 is deliberately not a blocking
+  dep); D-23 is already in the systems impact table; the fence tag and blockquote
+  already read correctly.
+
+### T15's gate now separates soundness from coverage
+
+`prefilter_suppressed_positives` was counting two different failures as one. Split
+on **did any cue match inside the span the labeller cited?** Yes → the stage read
+the right words and got the sign wrong (T15's). No → nothing reaches that text, so
+the stage never saw it (T57's `ontology_hit_rate`), recorded as
+`prefilter_uncovered_positives`.
+
+Defined before it was measured, and it did **not** make the gate green: **1 / 209**.
+`manfred-8360/process_formality` is the survivor — the `sprint` cue matches inside
+"se huye de los *sprints* infinitos" and resolves to +0.5, because the rejection is
+phrased with a verb `_NEGATORS` does not carry. **Do not close it by adding "huye
+de"** — that advert is evaluation-split, and choosing negator vocabulary by reading
+it is training on the test set. The general question belongs with T59: negation here
+is carried by **verbs of rejection**, not only the three negator words per language.
+
+Review caught a real bug in that split, since fixed: the helper matched cues against
+the store's **raw** text while `cue_findings` matches NFC output, so a decomposed
+cited span would have misfiled a soundness failure as coverage. Sliced then
+normalised, with a regression test.
+
+### Two sessions shared this checkout, and it cost time
+
+Branches were switched under each other twice, and a `git add -A` swept 17 of the
+other session's uncommitted files into a commit whose message described only mine.
+Nothing was lost. **Work in a linked worktree, and stage explicit paths.** That
+session has since ended.
