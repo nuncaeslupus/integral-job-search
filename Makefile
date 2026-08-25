@@ -91,6 +91,12 @@ reader-steps:  ## regenerate the step-spec reader only
 	uv run --with markdown python3 claude-arsenal/scripts/create_reader.py \
 		--input status/spec-v2-steps.md --output-dir docs/spec-v2-steps --name "$(READER_NAME)"
 
+labelling-round:  ## regenerate the T56 round document and its annotatable reader
+	uv run python tools/labelling_round.py
+	uv run --with markdown python3 claude-arsenal/scripts/create_reader.py \
+		--input status/specs/labelling-round-01.md \
+		--output-dir docs/labelling-round-01 --name "Integral job search"
+
 clean:  ## remove build and tool caches
 	rm -rf dist build .pytest_cache .mypy_cache .ruff_cache *.egg-info
 	find . -type d -name __pycache__ -not -path './.git/*' -exec rm -rf {} +
