@@ -288,7 +288,7 @@
       "task": "lo-6f53",
       "key": "extraction_macro_f1",
       "evidence": "status/evidence/T15.json",
-      "value_is_numeric": false,
+      "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
     },
