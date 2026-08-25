@@ -1,5 +1,5 @@
 {
-  "corpus_size": 100,
+  "corpus_size": 208,
   "labelled_ad_count": 7,
   "label_count": 46,
   "span_count": 57,
@@ -42,8 +42,8 @@
     "work_intensity"
   ],
   "languages": {
-    "ca": 15,
+    "ca": 90,
     "en": 25,
-    "es": 60
+    "es": 93
   }
 }

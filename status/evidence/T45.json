@@ -1,8 +1,8 @@
 {
   "cv_generation_traceability": 1.0,
-  "claims_total": 1800,
+  "claims_total": 3744,
   "claims_untraced": [],
   "claims_unused": [],
-  "adverts_generated": 100,
-  "gaps_named": 200
+  "adverts_generated": 208,
+  "gaps_named": 416
 }

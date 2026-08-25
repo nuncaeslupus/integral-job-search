@@ -82,9 +82,22 @@ def test_a_source_that_cannot_report_unmapped_concepts_leaves_the_rate_unmeasure
 
 
 def test_the_committed_corpus_is_read_and_nothing_is_dropped() -> None:
-    """The gate's own number, over the real files rather than a fixture."""
+    """The gate's own number, over the real files rather than a fixture.
+
+    The corpus read pass now declares the `unmapped` capability, so the rate is
+    **measured** rather than refused (T57). What this test still owns is the
+    invariant underneath it: `discarded_concepts == 0`, meaning every concept the
+    pass stated ended up in exactly one bucket. A reader that quietly filtered out
+    what it could not name would raise the rate while breaking this line, which is
+    why the drop is the gate and the ratio is only the reading.
+    """
     measured = measure()
     assert measured["concepts_read"] > 0
     assert measured["discarded_concepts"] == 0
-    assert measured["ontology_status"] == "unmeasured"
-    assert measured["ontology_hit_rate"] is None
+    assert measured["ontology_status"] == "measured"
+    assert 0.0 < measured["ontology_hit_rate"] < 1.0
+    # Not 1.0 by construction, which is the whole of T57: a pass briefed from the
+    # dimension list alone reports every concept mapped, and that number measures
+    # the briefing. A non-zero unmapped count is what makes the rate a reading of
+    # the market rather than of how the reader was asked to look.
+    assert measured["unmapped_concepts"] > 0
