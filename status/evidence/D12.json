@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 104,
-  "gates_declaring_status_key": 4,
+  "evidence_gates_read": 105,
+  "gates_declaring_status_key": 5,
   "unrecordable": [],
   "readings": [
     {
@@ -707,6 +707,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-37cfb89e",
+      "key": "silent_connector_failures",
+      "evidence": "status/evidence/T72.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-4efbff9b",

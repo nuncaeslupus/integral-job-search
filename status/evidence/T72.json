@@ -1,0 +1,16 @@
+{
+  "silent_connector_failures": 0,
+  "connector_runs_evaluated": 1,
+  "silent_connector_failures_evaluated": 1,
+  "gate_status": "measured",
+  "readings": [
+    {
+      "connector": "trabajos",
+      "site": "trabajos.com",
+      "health": "healthy",
+      "baseline_items": 40,
+      "probe_items": 40,
+      "reasons": []
+    }
+  ]
+}
