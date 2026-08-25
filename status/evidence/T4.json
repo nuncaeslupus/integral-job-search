@@ -2,8 +2,8 @@
   "corpus_harness_roundtrip_loss": 0,
   "roundtrip_losses": [],
   "ad_count": 208,
-  "labelled_ad_count": 18,
-  "label_count": 119,
+  "labelled_ad_count": 35,
+  "label_count": 231,
   "unknown_dimension_labels": [],
   "splits": {
     "elicitation": {

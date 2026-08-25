@@ -1,126 +1,134 @@
-# Session handover — 2026-08-25, the day two gates stopped being null
+# Session handover — 2026-08-25, two rounds labelled and a merged task reopened
 
-`main` is clean and green. **Five PRs merged, no PRs open.** Board: 107 tasks —
-open 5, claimed 0, merged 99, done 1, cancelled 2. Nothing flagged.
+`main` clean and green, **no open PRs**. Seven PRs merged (#194–#200). Board: 107
+tasks — **open 6**, claimed 0, merged 98, done 1, cancelled 2. Nothing flagged.
 
-| PR | what |
-|---|---|
-| #194 | claude-arsenal v2.4.9 → v2.4.16, and the downgrade that caused it |
-| #195 | T56's scorer: macro-F1 implemented, the placeholder `raise` disarmed |
-| #196 | T59: `Cue.denies`, and corroboration asked of positives only — recall 2/9 → 6/9 |
-| #197 | **T56 round 1: 76 labels, `extraction_macro_f1` measured for the first time** |
-| #198 | round 2's cover, and a shortfall that separates "label more" from "collect more" |
+claude-arsenal is at **v2.4.21**; `check_update.sh` reports current.
 
-## Where the numbers stand
+## The numbers
 
-| gate | threshold | now |
-|---|---|---|
-| `extraction_macro_f1` | ≥ 0.75 | **0.5539** — measured, failing |
-| `extraction_negation_recall` | ≥ 0.80 | 6/9 hits, **still `unmeasured`** (floor is 10) |
-| `ontology_hit_rate` | ≥ 0.85 | 0.6168, unchanged this session |
-| `prefilter_suppressed_positives` | == 0 | 0 / 100 |
+| gate | threshold | now | was this morning |
+|---|---|---|---|
+| `extraction_macro_f1` | ≥ 0.75 | **0.4943** over 11 dimensions, n=161 | `null` |
+| `prefilter_suppressed_positives` | == 0 | **2 / 209** | 0 / 40 |
+| `extraction_negation_recall` | ≥ 0.80 | 6/9 hits, `unmeasured` | 2/9, `unmeasured` |
+| `ontology_hit_rate` | ≥ 0.85 | 0.6168 (untouched) | 0.6168 |
 
-**0.5539 is a measured shortfall, not a failed round.** Per dimension:
-`compensation_transparency` 0.8235, `contract_stability` 0.6667,
-`remote_arrangement` 0.5714, `schedule_flexibility` 0.4000,
-`seniority_expectation` 0.3077 (2 tp, 0 fp, **9 fn**). The last is the corpus
-telling you what T57 already said in another voice: the model was built for
-programming ads and does not read seniority in a hospitality or care advert.
+**0.5539 → 0.4943 is not a regression.** The macro went from five dimensions to
+eleven and n from 52 to 161; the six that entered are where the extractor is worst.
+`seniority_expectation` 0.3077 → 0.6061 and `remote_arrangement` 0.5714 → 0.6957 on
+doubled n; `compensation_transparency` 0.8235 → 0.6452, which is what a ten-label
+estimate does when it meets twenty. `team_autonomy` is **0.0000 over 10 labels**
+(0 tp, 0 fp, 10 fn) and `product_vs_services` 0.1667 — those two are the next thing
+to look at, and they are cue-coverage failures, not scoring failures.
 
-## What round 1 proved about the method
+## T15 is reopened, and this is the important thing to understand
 
-The eleven adverts were a greedy cover computed from T57's marks, and the cover
-held exactly — every one of the five reached ten with no shortfall. **That is the
-reusable part.** `tools/labelling_round.py --dimensions <ids>` computes it for any
-list, `--dimensions below-floor` for everything unscorable, and
-`make labelling-round ROUND=NN DIMENSIONS=...` builds the page.
+`lo-25b1` is out of `_history/`, `status: open`, issue **#52 reopened**.
+`prefilter_suppressed_positives == 0` no longer holds and `verify_gates.py` says so
+— 99 terminal tasks now, not 100.
 
-The corpus also found a real cue error on contact, which is the whole argument for
-having one: nine adverts name both remote and on-site in one clause
-(`presencial con 1 día de teletrabajo`, `teletrabajo y 2 presencial`,
-`tant presencial com remot`) and the cue set called every one of them on-site.
-Naming both poles **is** the hybrid statement; it is a cue in all three languages
-now, and a general rule drops a cue match that lies wholly inside a longer one so
-the specific reading is not averaged back down by the general one.
+**Do not close it by tuning cues.** Both suppressions are adverts carrying evidence
+at *both poles* of a bipolar dimension where the cue set has vocabulary for one:
 
-## Round 2 is built and needs no new adverts
+* `manfred-8360/process_formality` — "se huye de los *sprints* infinitos… Funcionan
+  con **Kanban**". Person -0.6, cues +0.5.
+* `tecnoempleo-5daa18bff2393309c941/stack_modernity` — Kubernetes and cloud **and**
+  "Experiencia sólida en JBoss / JBoss EAP". Person -0.7, cues +0.53.
 
-`corpus/labelled/round-02.html` — **18 adverts, six dimensions, shortfall none**:
-`talking_clients`, `english_demand`, `team_autonomy`, `product_vs_services`,
-`travel_requirement`, `learning_support`. Every mark comes from T57's read pass;
-nothing here waits on collection. Round 1's labels show as already-confirmed where
-the adverts overlap.
+One structural cause was found and fixed: `process_formality` was bipolar with a
+declared -0.6 rung and **zero negative-pole cues in any language**. Provable from
+the cue set alone. Cues written from the rung's own `tell` were added, and they do
+**not** resolve `manfred-8360` — it phrases its rejection with a verb `_NEGATORS`
+does not carry. Extending the negator list to match one advert, or picking
+legacy-stack vocabulary by reading an evaluation-split miss, is D-2's failure in a
+new costume. **`== 0` was set when four adverts were labelled; at thirty-three it
+is a rate with no denominator. That threshold needs a decision, not a patch.**
 
-## The corpus: 141 adverts collected, deliberately NOT merged
+The regression signal did not go away. `_main` prints suppressions and exits 0 so
+`make evidence` is not blocked repo-wide, and `test_prefilter` names the exact two —
+a **third** suppression fails the suite.
+
+## `mission_alignment` is narrowed — the owner's finding, and it was right
+
+Its definition read "how much the stated purpose matters **to the candidate**",
+which describes a weight, not an advert. The `-0.7` "a sector to refuse" rung was
+the same error in the levels: an advert states a *sector*; whether that is a draw or
+a refusal is the candidate's. `sanidad → +0.7` and `sector defensa → -0.7` put one
+person's ethics in the extractor.
+
+Now **unipolar, two rungs** — "not stated" / "purpose stated". Refusal belongs to
+the candidate's weights and step 2's knockouts. Eleven suggestion marks proposing
+the dead rung were dropped rather than converted.
+
+**This is a template, not a one-off.** Any dimension whose definition says "matters
+to the candidate" is suspect. `ambition`, `creativity`, `learning_orientation` and
+`spare_time_engagement` are already `side: candidate_trait`; `mission_alignment` was
+the only `matched` one carrying a candidate judgement, but the check is worth
+repeating when T57 adds dimensions.
+
+## Labelling: two rounds done, the tooling generalised
+
+* **Round 1** — 11 adverts, 5 dimensions, 76 labels.
+* **Round 2** — 18 adverts, 6 dimensions, 127 labels.
+* 231 labels in the store, 206 on the evaluation split, 33 adverts labelled.
+
+`make labelling-round ROUND=NN DIMENSIONS=a,b,c` builds the page;
+`tools/labelling_round.py --dimensions below-floor` reports what labelling cannot
+fix. **Round 3 would be 30 adverts for 6 more dimensions**, and eight cannot be
+floored at all: `on_call_load` (short 7), `social_intensity` (7), `company_stage`
+(5), `mission_alignment` (5), `inclusion_commitment` (4), `mentoring_culture` (4),
+`career_progression` (3), `technical_depth` (1).
+
+**The import refuses same-dimension marks with different values, and it was right
+to.** T57's read pass proposes two marks for one dimension and both quotes are
+true — "Modalidad híbrida (60 de teletrabajo)" *and* "Centro de trabajo Barcelona".
+A `Label` holds one value with several spans. Round 2 was merged strongest-value,
+all spans kept, on the owner's instruction. Expect this again; consider making the
+page reconcile it rather than the importer refuse it.
+
+## The 141 collected adverts, still parked
 
 `tools/collect_ads.py --target-es 140 --target-en 60 --target-ca 110 --target-family 30`
-ran this session and took the raw corpus 208 → **349** (evaluation 175, elicitation
-174; ca 72/72, es 74/75, en 28/28). The result is **parked, not lost** — re-run the
-same command to reproduce it.
-
-**It was not merged, and the ordering matters.** `suggestions.blind_control` is
+takes the raw corpus 208 → 349. **Deliberately not merged**: `blind_control` is
 derived from ad ids with `count = ceil(len(slice) * share)`, so growing the corpus
-**recomputes the cohort** and invalidates the declared one — `validate_suggestions`
-then refuses to build any page at all. Every new advert also needs T57's read pass
-before it is cheap to label. Landing it before round 2 would have broken the page
-round 2 runs on.
+recomputes the cohort, invalidates the declared one, and `validate_suggestions`
+then refuses to build any page. Every new advert also needs T57's read pass before
+it is cheap to label. Re-run the command to reproduce it.
 
-So: **round 2 first, corpus second.** After round 2, land the 141 and run the read
-pass over them.
+Those eight unfloorable dimensions, and T59's tenth negated label, are the whole
+case for landing it.
 
-### What the corpus is actually needed for
+## Upstream — all five findings fixed
 
-`--dimensions below-floor` says 44 adverts would floor 13 of the 20 remaining
-dimensions from marks already on disk, and that **seven cannot be floored however
-hard anyone labels**: `on_call_load` (short 7), `social_intensity` (7),
-`company_stage` (5), `inclusion_commitment` (4), `mentoring_culture` (4),
-`career_progression` (3), `technical_depth` (1). Those seven, and T59's tenth
-negated label, are the entire case for collecting.
+`claude-arsenal#237` and `#239` (four findings) shipped as v2.4.17–v2.4.21 (#238,
+#240, #241, #242, #243) and this repo is on v2.4.21.
 
-## T59 — 6/9, and why the last three are not this task's
-
-Two mistakes were fixed, neither a corpus problem:
-
-* **`Cue.denies`.** Three misses were *correct extractions* scored as failures.
-  `value=0.0, negated=False` was already taken — it is what an advert stating its
-  lowest rung means (`presencial` is rung 0 "On-site"). Ten of the sixteen
-  zero-valued cues are denials and six are rung-0 statements, and one encoding
-  carried both. The rule for telling them apart is mechanical: **a cue denies iff
-  its pattern cannot match without a negator word.**
-* **Corroboration is asked of positives, not denials.** One `sprint` establishes
-  nothing; `sin sprints tradicionales` is not ambiguous that way. Measured before
-  keeping it: 3 pairs out of 2,080, all true denials, suppression still 0.
-
-The remaining three misses are vocabulary the cue set does not contain (`dailies`,
-`reuniones innecesarias`) — T57's shortlist. And the gate stays `unmeasured`
-regardless: 9 negated labels against a floor of 10, and round 1 added **zero**
-(none of the 76 labels was negated).
-
-## Upstream
-
-`claude-arsenal#237` (the downgrade guard on the wrong side of the version
-boundary) is **fixed** — v2.4.17 / #238 put the check in `check_update.sh`, which
-is the side that can reach a stale host. **Update to v2.4.17 when convenient.**
-
-`claude-arsenal#239` filed for four findings a review bot raised against the
-vendored bundle. Two were verified against source: `open_task_pr.sh` resolves
-`ARSENAL_HOME` relative to the caller's cwd while its `cd "$_repo_root"` calls are
-subshell-only, so archiving from a subdirectory writes the wrong path; and
-`handle_sync.py` lets an ambiguous loose key create two handles (deliberate per its
-own comment, but this repo resolves issues **by title**, so the collision is live).
+**`claude-arsenal#244` is open** with two gaps in those fixes, both verified:
+`check_update.sh`'s skew probe uses `find … | head -1` — unsorted and unanchored, so
+another skill matching first makes the guard fail **open** and silently, the exact
+property #237 was filed about; and `open_task_pr.sh`'s `git rev-parse … || pwd`
+means that outside a repository the gates run against arbitrary files. Neither bites
+this repo's layout today.
 
 ## Next session
 
-1. **Round 2** — `corpus/labelled/round-02.html`, 18 adverts, needs the owner.
-2. **Then land the 141 collected adverts** and run T57's read pass over them, in
-   that order.
-3. **T57 closes by adding dimensions, not by remapping** — 648 unmapped concepts;
-   credentials (83), pay structure (54), place/mobility (41), working-time shape
-   (37) is the shortlist, and `seniority_expectation`'s 9 false negatives are the
-   same finding arriving from the other direction.
-4. **T20 and T69 still need the owner in person.** `tools/blind_ranking_page.py`
-   for T20; T69 needs the exhaustion signal watched on a live cycle.
-
-Four open tasks carry no issue handle and are not claimable until one exists —
-`lo-c48f` is T20 (#59 exists but the title no longer resolves), plus `t-192eaa52`,
-`lo-3100`, `lo-9e41`. Worth a `handle_sync.py` pass.
+1. **`team_autonomy` 0.0000 and `product_vs_services` 0.1667** are the loudest
+   signals in the evidence file. Diagnose from the **cue set and the elicitation
+   split** — not from evaluation misses.
+2. **T15's threshold needs the owner's decision** — rate, or accept and name.
+3. **T57 closes by adding dimensions**: credentials (83 unmapped concepts), pay
+   structure (54), place/mobility (41), working-time shape (37).
+4. **T20 and T69 are PARKED** — 2026-08-25, by the owner: deferred, not abandoned.
+   Both already carry `requires: [surface:human]`, which *is* the parking mechanism —
+   no worker surface declares that capability, so `task_select.py` never offers them
+   and only a person can start them. Do **not** close their issues or add
+   `arsenal:cancelled`: upstream reads a closed task issue as `done` and would
+   release everything downstream. They resume when the owner says so.
+   (`tools/blind_ranking_page.py` is T20's surface; T69 needs the exhaustion signal
+   watched on a live cycle.)
+5. **Spec v3 is in flight on `feat/spec-v3-silent-success-seed`** — 17 new task
+   files, none with an issue handle yet, because the queue workflow cannot run while
+   Actions is out of runner minutes. Create them with `handle_sync.py` when that
+   branch lands. Nothing above is superseded by it.
+5. Round 3 (30 adverts) whenever there is an evening for it.
