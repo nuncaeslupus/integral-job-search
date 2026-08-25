@@ -30,6 +30,7 @@ None — this is the one step with no preconditions, because every other step de
 - Resolve in order: an explicit handle or name; exactly one profile exists — name it and ask for confirmation, never assume; otherwise list display names and ask; no match — offer to create a profile.
 - On a first run, ask what they would like to be called and derive a directory-safe handle from the answer. A nickname is fine; a legal name is not required and is not asked for. The name they choose is the identifier, unless it is already taken.
 - Record the language they wrote in — the rest of the process happens in it.
+- **On a return, open with the substance and not only the position.** `integral.sourcing_scope_review.resurface` builds the opening from the recorded position *and* every standing scope decision (§5.7): what the search was narrowed onto, and what widening was refused — a refusal is evidence and is not permanent, so it comes back too. Any of them can be corrected right there, and the correction is a new recorded decision rather than an edit to the old one. Consent nobody can review is not consent.
 
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
 
@@ -69,10 +70,12 @@ This governs the **exit** alone. §3.3's *offered skip* — "we can stop here an
 jobs with what I have" — is a move **forward** to a provisional ranking, not a way out, and is
 offered at the end of every first-run step exactly as that section requires.
 
-What the tool says out loud when the step ends, verbatim — the settled example from the spec:
+What the tool says out loud when the step ends, verbatim — the settled example from the spec.
+`resurface()` supplies the **substance** (the position, and one line per standing decision);
+the wording below is the guide's, so the two are not expected to match string for string:
 
 ```text
-"Hello again, Marcos — last time we were partway through your work history, about three weeks ago. Pick up there, or something else?"
+"Hello again, Marcos — last time we were partway through your work history, about three weeks ago. The search is still narrowed onto employers like Acme (you accepted that in cycle 3) and still not widened outside Spain (you refused that). Pick up there, change any of it, or something else?"
 ```
 
 Writes `last_activity` immediately, before any other step begins.

@@ -16,10 +16,13 @@ from pathlib import Path
 from typing import get_args
 
 import pytest
+from pydantic import ValidationError
 
-from integral import employment_mode, session_exit, step_narration
+from integral import employment_mode, session_exit, sourcing_scope_review, step_narration
 from integral.candidate import EmploymentModeName
 from integral.process_spec import Step, StepList, load_steps
+from integral.session import Resumption
+from integral.sourcing_strategy import EvidenceRow, ScopeDecision
 from integral.step_skills import (
     DEFAULT_SKILLS_DIR,
     SkillCheck,
@@ -1184,3 +1187,106 @@ def test_every_step_skill_shows_the_candidate_the_pause_ending() -> None:
     """The committed library closes every pause it opens, in its own words."""
     for reading in step_narration.probe():
         assert reading.completions, f"{reading.step} opens a silence it never closes"
+
+
+# --- T67: standing scope, re-surfaced on return (§5.7) -----------------
+
+
+def _decision(**overrides: object) -> ScopeDecision:
+    """A §5.5 row, with only what a test cares about spelled out."""
+    row: dict[str, object] = {
+        "about": "employer:acme",
+        "decision": "narrow",
+        "accepted": True,
+        "cycle": 3,
+        "reason": "you read both of Acme's adverts end to end",
+        "session": "s1",
+        "proposed_alternatives": ("widen:country",),
+        "trigger": "the same eight adverts keep coming back",
+    }
+    row.update(overrides)
+    return ScopeDecision(**row)  # type: ignore[arg-type]
+
+
+_RETURNING = Resumption(
+    step="history",
+    rule="position",
+    reason="last time we were partway through your work history",
+)
+
+
+def test_returning_shows_every_standing_scope_decision() -> None:
+    """§5.7: the opening extends from position to substance — all of it."""
+    log = [
+        _decision(),
+        EvidenceRow(kind="episode", step="history", session="s1"),
+        _decision(about="country:spain", decision="widen", accepted=False, cycle=4),
+    ]
+    opening = sourcing_scope_review.resurface(_RETURNING, log)
+
+    standing = sourcing_scope_review.standing_decisions(log)
+    assert len(standing) == 2, "a refusal is a standing decision too (§5.5)"
+    said = opening.say()
+    assert _RETURNING.reason in said, "the opening still says where we stopped"
+    for row in standing:
+        assert row.about in said, f"{row.about} was never re-surfaced"
+        assert row.decision in said
+    assert "refused" in said, "a refusal that never re-surfaces cannot be revisited"
+
+
+def test_a_resurfaced_decision_can_be_corrected_in_place() -> None:
+    """Consent nobody can review is not consent — so the review can change it."""
+    refusal = _decision(about="country:spain", decision="widen", accepted=False, cycle=4)
+
+    corrected = sourcing_scope_review.correct(
+        refusal, accepted=True, reason="I would look at Portugal now", session="s2", cycle=5
+    )
+    assert corrected.accepted
+    assert corrected.trigger == sourcing_scope_review.REVIEW_TRIGGER
+
+    log = [refusal, corrected]
+    assert sourcing_scope_review.standing_decisions(log) == (corrected,), (
+        "the correction is what stands, not the old word"
+    )
+    assert "accepted" in sourcing_scope_review.resurface(_RETURNING, log).say()
+
+
+def test_an_opening_that_omits_a_standing_decision_is_rejected() -> None:
+    """The rule has to bite, or the count is zero by nothing having tried it."""
+    with pytest.raises(ValidationError):
+        sourcing_scope_review.Opening(
+            position=_RETURNING.announcement(),
+            standing=(_decision(),),
+            lines=(sourcing_scope_review.CORRECTION_INVITATION,),
+        )
+
+
+def test_a_review_that_never_invites_a_correction_is_rejected() -> None:
+    """Showing the decisions without saying they can change is not a review."""
+    with pytest.raises(ValidationError):
+        sourcing_scope_review.Opening(
+            position=_RETURNING.announcement(),
+            standing=(),
+            lines=(),
+        )
+
+
+def test_a_log_out_of_recorded_order_is_refused_not_believed() -> None:
+    """The latest word wins — so the argument's order is a claim, and is checked."""
+    with pytest.raises(ValueError, match="recorded order"):
+        sourcing_scope_review.standing_decisions(
+            [_decision(cycle=4), _decision(cycle=2, about="employer:globex")]
+        )
+
+
+def test_step_zero_re_surfaces_scope_not_only_position() -> None:
+    """The skill that opens on return has to say it shows the standing scope."""
+    text = (DEFAULT_SKILLS_DIR / "step-00-identify" / "SKILL.md").read_text(encoding="utf-8")
+    assert "integral.sourcing_scope_review" in text, "step 0 does not name the re-surfacing"
+    assert "scope" in text.lower()
+
+
+def test_scope_review_evidence_matches_measure(tmp_path: Path) -> None:
+    written = sourcing_scope_review.write_evidence(tmp_path / "T67.json")
+    assert json.loads((tmp_path / "T67.json").read_text(encoding="utf-8")) == written
+    assert written["standing_scope_decisions_not_resurfaced"] == 0
