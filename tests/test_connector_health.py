@@ -118,6 +118,18 @@ def test_an_explicit_port_is_the_same_host() -> None:
     assert on_portal_host("https://tracker.example:443/x", _SITE) is False
 
 
+def test_a_malformed_url_is_off_host_and_does_not_raise() -> None:
+    """`urlsplit` raises on a malformed authority. A connector emitting one is
+    the rot this module catches, so it must be a signal, not an exception that
+    aborts the whole measurement."""
+    assert on_portal_host("https://[::1", _SITE) is False
+
+    items = [{"company": "Acme", "detail_url": "https://[::1"}]
+    reasons = free_signals(items, _SITE)
+
+    assert any("do not point at" in reason for reason in reasons)
+
+
 def test_an_opaque_scheme_is_not_a_relative_url() -> None:
     """`mailto:` and `javascript:` also parse to an empty `netloc`, so a
     bare emptiness test waves them through as on-host. They are neither

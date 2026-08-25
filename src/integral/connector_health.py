@@ -102,7 +102,14 @@ def on_portal_host(url: str, site: str) -> bool:
     uses `hostname` rather than `netloc` because `netloc` carries the
     port, and `trabajos.com:443` is the same host as `trabajos.com`.
     """
-    parsed = urlsplit(url)
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        # `urlsplit` raises on a malformed authority — `https://[::1` is an
+        # "Invalid IPv6 URL". A connector emitting one is exactly the rot this
+        # module exists to catch, so it must become a signal, never an
+        # exception that aborts `measure()` before any verdict is reached.
+        return False
     if not parsed.netloc:
         return not parsed.scheme
     host = (parsed.hostname or "").lower()
