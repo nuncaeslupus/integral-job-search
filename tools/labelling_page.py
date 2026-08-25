@@ -286,13 +286,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--only",
-        default="",
+        default=None,
         help="comma-separated ad ids — build the page for those adverts alone (a round's cover)",
     )
     args = parser.parse_args(argv)
 
     ads = load_store(args.store)
-    wanted = {i.strip() for i in args.only.split(",") if i.strip()}
+    # `None` is "no filter"; an empty *string* is a filter that selected nothing,
+    # which is what a shell substitution produces when the round is already
+    # complete. Treating the two alike would silently build the whole corpus.
+    if args.only is not None and not args.only.strip():
+        print("--only: empty selection — nothing to build", file=sys.stderr)
+        return 2
+    wanted = {i.strip() for i in (args.only or "").split(",") if i.strip()}
     missing = sorted(wanted - {ad.id for ad in ads})
     if missing:
         # An id that is not in the store is a typo in a shortlist, and silently

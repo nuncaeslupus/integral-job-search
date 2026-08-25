@@ -1034,3 +1034,56 @@ def test_only_validates_the_suggestion_set_against_the_whole_corpus(tmp_path: Pa
 def test_only_refuses_an_id_that_is_not_in_the_store(tmp_path: Path) -> None:
     """Silently dropping a typo would hide a dimension going unfloored."""
     assert page_main(["--only", "not-an-ad", "--out", str(tmp_path / "x.html")]) == 2
+
+
+# ---------------------------------------------------------------------------
+# the round's cover, and what it refuses
+
+
+def _round_module() -> Any:
+    path = Path(__file__).resolve().parents[1] / "tools" / "labelling_round.py"
+    spec = importlib.util.spec_from_file_location("labelling_round", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_ROUND = _round_module()
+
+
+def test_an_empty_only_selection_is_not_the_same_as_no_filter(tmp_path: Path) -> None:
+    """A shell substitution that selects nothing must not build the whole corpus.
+
+    `--only "$(...)"` is how `make labelling-round` passes its cover, and the
+    substitution is empty exactly when the round is already complete. Treating
+    that like an omitted flag would hand back a 349-advert page at the moment
+    the right answer was "there is nothing left to label".
+    """
+    assert page_main(["--only", "", "--out", str(tmp_path / "x.html")]) == 2
+
+
+def test_a_dimension_that_is_not_ad_side_is_refused() -> None:
+    """A typo would otherwise become a permanent, unfixable-looking shortfall.
+
+    An unknown id can never be labelled, so it stays in `need` forever and is
+    reported under "needs collecting, not labelling" — sending someone to widen
+    the corpus for a dimension that does not exist. Candidate-side ids fail the
+    same way: they carry no cues and are never read from an advert.
+    """
+    with pytest.raises(ValueError, match="not ad-side dimensions: nope"):
+        _ROUND.cover(["nope"], 10)
+
+
+def test_a_floor_below_one_is_refused() -> None:
+    """`--floor 0` satisfies every dimension at once and reports shortfall none."""
+    with pytest.raises(ValueError, match="scores nothing"):
+        _ROUND.cover(["talking_clients"], 0)
+
+
+def test_a_repeated_dimension_does_not_inflate_the_coverage_report() -> None:
+    """`cover` is keyed by dimension, so the duplicate collapses before counting."""
+    once, _ = _ROUND.cover(["talking_clients"], 10)
+    twice, _ = _ROUND.cover(["talking_clients", "talking_clients"], 10)
+    assert once == twice
