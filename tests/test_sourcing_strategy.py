@@ -15,6 +15,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from integral.sourcing_cycles import (
+    MINIMUM_NON_IMPROVING,
+    Cycle,
+    cycles_neither_improving_nor_proposing,
+    improved,
+    write_cycle_evidence,
+)
 from integral.sourcing_strategy import (
     EXHAUSTION_REPEAT_SHARE,
     MINIMUM_PROPOSALS,
@@ -385,3 +392,110 @@ def test_the_consent_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
     measured = write_consent_evidence(target)
     assert json.loads(target.read_text(encoding="utf-8")) == measured
     assert measured["narrowings_without_a_recorded_decision"] == 0
+# --- T68: the cycle improves, or it says why ------------------------------
+#
+# `status/specs/iterative-sourcing.md` §1, the `cycle_rejection_rate` row:
+# strictly decreasing across a candidate's cycles, or the cycle proposes a
+# scope change. The metric and §5.2's exhaustion trigger are the same
+# measurement read twice, so what is checked here is the *second* reading:
+# where the search did not get better, the tool has to say something.
+
+
+def _widening() -> ScopeProposal:
+    return ScopeProposal(
+        direction="widen",
+        facet="country",
+        reason="cycle 3 rejected more than cycle 2 did — we could look outside Spain",
+        alternatives=(
+            ScopeAlternative(
+                direction="narrow",
+                facet="employer",
+                reason="or hold the country and look only at the two employers you read",
+            ),
+        ),
+    )
+
+
+def test_a_cycle_that_did_not_improve_proposes_a_scope_change() -> None:
+    first = Cycle(cycle=1, offers_returned=20, offers_rejected=12)
+    worse = Cycle(cycle=2, offers_returned=20, offers_rejected=18)
+    assert not improved(worse, first)
+    # Silent, it is exactly the failure the gate counts.
+    assert cycles_neither_improving_nor_proposing([first, worse])
+    # Carrying a proposal, it is not — the search got worse and the tool said so.
+    spoke = worse.model_copy(update={"proposal": _widening()})
+    assert cycles_neither_improving_nor_proposing([first, spoke]) == []
+
+
+def test_an_improving_cycle_is_left_alone() -> None:
+    """The tool does not speak when the search is working."""
+    first = Cycle(cycle=1, offers_returned=20, offers_rejected=19)
+    better = Cycle(cycle=2, offers_returned=20, offers_rejected=12)
+    assert improved(better, first)
+    assert better.proposal is None
+    assert cycles_neither_improving_nor_proposing([first, better]) == []
+    # The first cycle has nothing to be better than, so it is never counted.
+    assert cycles_neither_improving_nor_proposing([first]) == []
+    # Flat is not improving: "strictly decreasing" is strict.
+    flat = Cycle(cycle=2, offers_returned=20, offers_rejected=19)
+    assert not improved(flat, first)
+
+
+def test_cycles_out_of_order_or_with_a_gap_are_refused() -> None:
+    """`pairwise` reads its left element as "the last search" — so order is the claim."""
+    first = Cycle(cycle=1, offers_returned=20, offers_rejected=2)
+    third = Cycle(cycle=3, offers_returned=20, offers_rejected=18)
+    # Reordered, the regression reads as an improvement and the gate passes on it.
+    with pytest.raises(ValueError, match="consecutively"):
+        cycles_neither_improving_nor_proposing([third, first])
+    # A gap compares cycle 3 with cycle 1 as though cycle 2 had not happened.
+    with pytest.raises(ValueError, match="consecutively"):
+        cycles_neither_improving_nor_proposing([first, third])
+
+
+def test_a_later_window_of_one_candidates_cycles_is_still_judgeable() -> None:
+    """Only adjacency is load-bearing — starting at 1 is not required."""
+    second = Cycle(cycle=2, offers_returned=20, offers_rejected=2)
+    third = Cycle(cycle=3, offers_returned=20, offers_rejected=18)
+    assert cycles_neither_improving_nor_proposing([second, third])
+
+
+def test_the_rate_is_measured_within_subject_only() -> None:
+    """No cross-candidate comparison exists to make."""
+    import inspect
+
+    mine = [
+        Cycle(cycle=1, offers_returned=20, offers_rejected=12),
+        Cycle(cycle=2, offers_returned=20, offers_rejected=18),
+    ]
+    somebody_else = [
+        Cycle(cycle=1, offers_returned=20, offers_rejected=18),
+        Cycle(cycle=2, offers_returned=20, offers_rejected=2),
+    ]
+    before = cycles_neither_improving_nor_proposing(mine)
+    cycles_neither_improving_nor_proposing(somebody_else)
+    # Judging another candidate in between changes nothing: there is no store
+    # their cycles could have landed in.
+    assert cycles_neither_improving_nor_proposing(mine) == before
+    assert len(before) == 1
+    # And the signature cannot express a second subject — one sequence in, one
+    # candidate's own cycles, and no identifier for whose they are.
+    assert list(inspect.signature(cycles_neither_improving_nor_proposing).parameters) == ["cycles"]
+
+
+def test_a_cycle_that_returned_nothing_has_no_rate_to_improve_on() -> None:
+    # 0/0 is not a rejection rate of zero, the way T62's repeat share is not a
+    # repeat share of zero. An empty return improved on nothing.
+    empty = Cycle(cycle=2, offers_returned=0, offers_rejected=0)
+    assert empty.rejection_rate is None
+    assert not improved(empty, Cycle(cycle=1, offers_returned=20, offers_rejected=12))
+
+
+def test_the_cycle_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
+    target = tmp_path / "T68.json"
+    measured = write_cycle_evidence(target)
+    assert json.loads(target.read_text(encoding="utf-8")) == measured
+    assert measured["cycles_neither_improving_nor_proposing"] == 0
+    # A probe whose cycles all improved has not tested the rule.
+    assert measured["non_improving_cycles"] >= MINIMUM_NON_IMPROVING
+    assert measured["unproposed_regression_detected"] is True

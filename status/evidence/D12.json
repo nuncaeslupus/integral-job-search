@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 101,
+  "evidence_gates_read": 102,
   "gates_declaring_status_key": 4,
   "unrecordable": [],
   "readings": [
@@ -792,6 +792,14 @@
       "task": "t-c40f0f88",
       "key": "ranked_offers_without_a_url",
       "evidence": "status/evidence/T44.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-c4b681d4",
+      "key": "cycles_neither_improving_nor_proposing",
+      "evidence": "status/evidence/T68.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

@@ -39,7 +39,7 @@ from integral.profile import EvidenceLog, rebuild
 from integral.session import SessionStore
 from integral.sourcing_reentry import MINIMUM_TRIGGERS
 from integral.sourcing_reentry import write_evidence as write_reentry_evidence
-from integral.sourcing_strategy import judge_cycle
+from integral.sourcing_strategy import ScopeAlternative, ScopeProposal, judge_cycle
 
 NOW = datetime.fromisoformat("2026-08-18T09:00:00+00:00")
 
@@ -236,7 +236,18 @@ def test_the_probe_fires_all_three_kinds(tmp_path: Path) -> None:
 
 STUCK = judge_cycle(cycle=3, offers_returned=10, offers_already_seen=9)
 HEALTHY = judge_cycle(cycle=1, offers_returned=10, offers_already_seen=1)
-PROPOSAL = "widen: drop the country filter, or narrow to the two employers you read"
+PROPOSAL = ScopeProposal(
+    direction="widen",
+    facet="country",
+    reason="the same eight adverts keep coming back — we could drop the country filter",
+    alternatives=(
+        ScopeAlternative(
+            direction="narrow",
+            facet="employer",
+            reason="or stay put and read only the two employers you opened in full",
+        ),
+    ),
+)
 
 
 def test_an_exhausted_step_seven_is_offered_again(store: ProfileStore) -> None:
@@ -268,7 +279,7 @@ def test_an_exhausted_cycle_never_reruns_the_same_search_silently(
     with pytest.raises(FreshnessError, match="proposal"):
         exhaustion_offers(STUCK, proposal=None)
     with pytest.raises(FreshnessError, match="proposal"):
-        offers(store, now=NOW, exhaustion=STUCK, proposal="   ")
+        offers(store, now=NOW, exhaustion=STUCK)
     with pytest.raises(FreshnessError, match="reason"):
         Offer(kind="exhausted", step="sourcing", subject="s", says="?", proposal=PROPOSAL)
     assert exhaustion_offers(STUCK, proposal=PROPOSAL)[0].proposal == PROPOSAL

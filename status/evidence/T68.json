@@ -1,0 +1,15 @@
+{
+  "cycles_neither_improving_nor_proposing": 0,
+  "cycles_judged": 5,
+  "non_improving_cycles": 2,
+  "rejection_rates": [
+    0.95,
+    0.6,
+    0.7,
+    0.7,
+    0.3
+  ],
+  "proposals_made": 2,
+  "unproposed_regression_detected": true,
+  "failures": []
+}
