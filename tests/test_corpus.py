@@ -9,6 +9,7 @@ protocol calls for.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -83,17 +84,20 @@ def test_corpus_roundtrip_preserves_text_and_offsets(tmp_path: Path) -> None:
 def test_committed_store_roundtrips_without_loss() -> None:
     """The real store, and every ad in it carrying a probe label, survives intact.
 
-    The count is checked against the programming slice, not the whole raw corpus:
-    T25 broadened `corpus/raw/` to six further job families, and labelling those is
-    T5-scale human work that T26 sequences, not something this task did. Equality
-    against the slice the store was actually built from still catches an ad the
-    harness drops, which is the loss this test exists to see.
+    The count is checked against the **whole** raw corpus. It used to be checked
+    against the programming slice alone, because the store had never caught up
+    with T25's broadening to six further job families. T57 re-seeded it: the
+    meaning-first read pass has to cover the families the model was *not* built
+    for, and `validate_suggestions` refuses a suggestion for an ad the store does
+    not hold. Equality against the raw file still catches an ad the harness drops,
+    which is the loss this test exists to see.
     """
     measured = measure(DEFAULT_STORE_PATH)
-    labelled_slice = [ad for ad in load_ads() if ad["job_family"] == "programming"]
 
     assert measured["corpus_harness_roundtrip_loss"] == 0, measured["roundtrip_losses"]
-    assert measured["ad_count"] == len(labelled_slice)
+    # The ids, not the count: a store that drops one raw ad and gains one from
+    # somewhere else has the right count and the wrong corpus.
+    assert {ad.id for ad in load_store(DEFAULT_STORE_PATH)} == {ad["id"] for ad in load_ads()}
 
 
 def test_probe_labels_take_their_offsets_from_real_ad_text() -> None:
@@ -142,8 +146,9 @@ def test_each_language_is_halved_between_the_splits() -> None:
     the aggregate is what hid it.
     """
     counts = split_counts(load_store(DEFAULT_STORE_PATH))
+    totals = Counter(ad["language"] for ad in load_ads())
 
-    for language, total in (("es", 60), ("en", 25), ("ca", 15)):
+    for language, total in sorted(totals.items()):
         evaluation = counts["evaluation"][language]
         elicitation = counts["elicitation"][language]
         assert evaluation + elicitation == total

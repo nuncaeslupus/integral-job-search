@@ -1,22 +1,22 @@
 {
   "corpus_harness_roundtrip_loss": 0,
   "roundtrip_losses": [],
-  "ad_count": 100,
+  "ad_count": 208,
   "labelled_ad_count": 7,
   "label_count": 46,
   "unknown_dimension_labels": [],
   "splits": {
     "elicitation": {
-      "total": 49,
-      "es": 30,
+      "total": 103,
+      "es": 46,
       "en": 12,
-      "ca": 7
+      "ca": 45
     },
     "evaluation": {
-      "total": 51,
-      "es": 30,
+      "total": 105,
+      "es": 47,
       "en": 13,
-      "ca": 8
+      "ca": 45
     }
   },
   "self_agreement": {

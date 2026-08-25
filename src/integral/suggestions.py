@@ -77,16 +77,25 @@ class Strict(BaseModel):
 
 
 class Suggestion(Strict):
-    """One proposed label: a span of the ad, and the rung it argues for.
+    """One concept the reader found in the ad — mapped to a dimension, or not.
 
     `quote` rather than offsets, for the same reason `harness import` takes a
     quote: an offset typed or computed against a slightly different copy of the
     text points at the wrong words while still validating, and a verbatim quote
     either locates or is refused.
+
+    **`dimension` is optional, and that is the whole of T57.** A reader that can
+    only record what the dimension list already holds reports an unmapped count
+    of 0 by construction, and `ontology_hit_rate` computed from it measures the
+    briefing rather than the market. So an entry may name a concept and leave
+    `dimension` null; `note` then carries what the reader called it, and
+    `ontology_health.read_suggestions` counts it as **unmapped, not skipped**.
+    `value` is null there too: a rung on no dimension is not a reading of
+    anything.
     """
 
-    dimension: str = Field(min_length=1)
-    value: float = Field(ge=-1.0, le=1.0)
+    dimension: str | None = None
+    value: float | None = Field(default=None, ge=-1.0, le=1.0)
     quote: str = Field(min_length=1)
     negated: bool = False
     confidence: Literal["high", "medium", "low"] = "medium"
@@ -101,6 +110,16 @@ class SuggestionSet(Strict):
     note: str = ""
     blind_control: list[str] = Field(default_factory=list)
     by_ad: dict[str, list[Suggestion]] = Field(default_factory=dict)
+    # The **capability declaration** T57 turns into a measurement, and a roll-up
+    # of the concept names behind it. `ontology_health` counts the unmapped
+    # entries in `by_ad` and reads nothing here — what this key does is separate
+    # "this file happens to contain no unmapped concept" from "this file could
+    # not have recorded one", which are the two states the metric must never
+    # confuse. It is a list rather than a bool so the staleness signal is
+    # readable as names, not as a count nobody can interpret — and it defaults to
+    # `None`, not `[]`, because a default of `[]` would collapse those two states
+    # back together for any file written before the key existed.
+    unmapped: list[str] | None = None
 
     def for_ad(self, ad_id: str) -> list[Suggestion]:
         return self.by_ad.get(ad_id, [])
@@ -180,12 +199,23 @@ def validate_suggestions(
                 "the extractor against its own output (D-2)"
             )
         for index, suggestion in enumerate(proposed):
-            where = f"{ad_id}[{index}] {suggestion.dimension}"
-            dimension = by_dimension.get(suggestion.dimension)
-            if dimension is None:
+            where = f"{ad_id}[{index}] {suggestion.dimension or suggestion.note or '<unnamed>'}"
+            # An entry with no dimension is the deliberate one T57 needs, so it
+            # is checked for what it *must* carry rather than reported as an
+            # unknown dimension. `note` is required there because an unmapped
+            # concept nobody named is not a staleness signal, it is a gap in
+            # the file; and a rung on no dimension is not a reading of anything.
+            if suggestion.dimension is None:
+                if not suggestion.note.strip():
+                    problems.append(f"{where}: unmapped entry with no note naming the concept")
+                if suggestion.value is not None:
+                    problems.append(f"{where}: unmapped entry carries a rung value")
+            elif (dimension := by_dimension.get(suggestion.dimension)) is None:
                 problems.append(f"{where}: unknown dimension")
                 continue
-            if dimension.level_for(suggestion.value) is None:
+            elif suggestion.value is None:
+                problems.append(f"{where}: mapped entry with no rung value")
+            elif dimension.level_for(suggestion.value) is None:
                 rungs = sorted(level.value for level in dimension.levels)
                 problems.append(f"{where}: value {suggestion.value} is not a rung {rungs}")
             occurrences = ad.text.count(suggestion.quote)
@@ -227,6 +257,12 @@ def cue_agreement(
         if ad is None:
             continue
         for suggestion in proposed:
+            # An unmapped entry names a concept the model has no home for, so it
+            # has no cue set to be reachable by and cannot belong in this
+            # denominator. Counting it would drag the agreement ratio down for a
+            # reason that has nothing to do with cue independence.
+            if suggestion.dimension is None:
+                continue
             dimension = by_dimension.get(suggestion.dimension)
             if dimension is None:
                 continue

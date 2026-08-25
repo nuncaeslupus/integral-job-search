@@ -206,6 +206,11 @@ def _suggestion_payload(
             continue
         placed: list[dict[str, Any]] = []
         for suggestion in proposed:
+            # T57's unmapped entries are concepts the model has no home for, not
+            # proposed labels. Offering one as a mark would ask the labeller to
+            # confirm a dimension that does not exist.
+            if suggestion.dimension is None:
+                continue
             if ad.text.count(suggestion.quote) != 1:
                 dropped.append(f"{ad_id}:{suggestion.dimension}")
                 continue
