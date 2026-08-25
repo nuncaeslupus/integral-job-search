@@ -86,3 +86,15 @@ failure.
 Requires the candidate personally. Carries `requires: [surface:human]`, a
 capability no surface declares, so the selector excludes it by default — the
 `human` tag alone would not, since tags only filter when LOOP_TAGS is set.
+
+## Parked — 2026-08-25, by the owner
+
+Deferred deliberately, not abandoned. **The mechanism is already in the front
+matter**: `requires: [surface:human]` is a capability no worker surface declares,
+so `task_select.py` never offers this task and only a person can start it. Nothing
+else is needed to park it, and `docs/repo-playbook.md` is explicit that closing the
+issue would be the wrong move — upstream reads any closed task issue as `done`, so
+it would silently release everything downstream.
+
+If a future session finds this task open and never selected, that is the design
+working, not a stuck queue. It resumes when the owner says so.

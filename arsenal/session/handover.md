@@ -119,6 +119,16 @@ this repo's layout today.
 2. **T15's threshold needs the owner's decision** — rate, or accept and name.
 3. **T57 closes by adding dimensions**: credentials (83 unmapped concepts), pay
    structure (54), place/mobility (41), working-time shape (37).
-4. **T20 and T69 need the owner in person.** `tools/blind_ranking_page.py` for T20;
-   T69 needs the exhaustion signal watched on a live cycle.
+4. **T20 and T69 are PARKED** — 2026-08-25, by the owner: deferred, not abandoned.
+   Both already carry `requires: [surface:human]`, which *is* the parking mechanism —
+   no worker surface declares that capability, so `task_select.py` never offers them
+   and only a person can start them. Do **not** close their issues or add
+   `arsenal:cancelled`: upstream reads a closed task issue as `done` and would
+   release everything downstream. They resume when the owner says so.
+   (`tools/blind_ranking_page.py` is T20's surface; T69 needs the exhaustion signal
+   watched on a live cycle.)
+5. **Spec v3 is in flight on `feat/spec-v3-silent-success-seed`** — 17 new task
+   files, none with an issue handle yet, because the queue workflow cannot run while
+   Actions is out of runner minutes. Create them with `handle_sync.py` when that
+   branch lands. Nothing above is superseded by it.
 5. Round 3 (30 adverts) whenever there is an evening for it.
