@@ -5,6 +5,7 @@ priority: 10
 deps: []
 workspace: PROFILE
 tags: [v3, m5]
+status: merged
 ---
 
 # T84: Step 11's two drafting rules — relevance-weighted cutting and the backtrack test
