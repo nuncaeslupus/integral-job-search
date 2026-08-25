@@ -52,7 +52,7 @@ extraction:
         negatable: false
       - pattern: "no\\s+on-?call"
         value: 0.0
-        negatable: false
+        denies: true
     es:
       - pattern: "guardias"
         value: 0.8
@@ -62,7 +62,7 @@ extraction:
         negatable: false
       - pattern: "sin\\s+guardias"
         value: 0.0
-        negatable: false
+        denies: true
     ca:
       - pattern: "gu[àa]rdies"
         value: 0.8
@@ -72,7 +72,7 @@ extraction:
         negatable: false
       - pattern: "sense\\s+gu[àa]rdies"
         value: 0.0
-        negatable: false
+        denies: true
   gold:
     - ad_id: manfred-8389
       language: es
