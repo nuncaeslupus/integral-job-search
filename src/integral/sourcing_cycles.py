@@ -56,7 +56,7 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
-from integral.sourcing_strategy import ScopeAlternative, ScopeProposal, Strict
+from integral.sourcing_strategy import ScopeAlternative, ScopeDecision, ScopeProposal, Strict
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T68.json"
@@ -76,11 +76,23 @@ class Cycle(Strict):
     #: What the tool said when this cycle did not improve. `None` is correct and
     #: usual — the tool does not speak when the search is working.
     proposal: ScopeProposal | None = None
+    #: The scope change the candidate agreed to before this cycle ran — T65's
+    #: recorded licence, and what tells §5.6 the search was actually re-aimed
+    #: rather than merely asked about. `None` is the usual case: most cycles
+    #: search the scope the last one did.
+    steered_by: ScopeDecision | None = None
 
     @model_validator(mode="after")
     def _the_counts_hold_together(self) -> Cycle:
         if self.offers_rejected > self.offers_returned:
             raise ValueError("more offers were rejected than the cycle returned")
+        if self.steered_by is not None and not self.steered_by.accepted:
+            raise ValueError("a refused decision steered nothing — §5.5, a refusal licenses none")
+        if self.steered_by is not None and self.steered_by.cycle > self.cycle:
+            raise ValueError(
+                f"cycle {self.cycle} cannot have been steered by a decision taken in "
+                f"cycle {self.steered_by.cycle}"
+            )
         return self
 
     @property

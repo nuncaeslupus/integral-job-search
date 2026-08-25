@@ -4,6 +4,7 @@ title: "T66: The empty market: report a time, never a relaxed constraint"
 priority: 5
 deps: [t-16a59a39, t-8cebf0ec]
 workspace: SUPPLY
+status: merged
 ---
 
 ## Acceptance gate
@@ -15,8 +16,7 @@ key: exhausted_searches_reported_as_a_scope_change
 ```
 
 ```bash
-# e.g. bash tests/surface_probe_test.sh
-false  # fail until a real check replaces this
+uv run python -m integral.sourcing_market && uv run pytest tests/test_sourcing_strategy.py -q
 ```
 
 The `gate` block is settled by the design and is read from the default branch —

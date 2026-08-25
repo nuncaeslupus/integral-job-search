@@ -1,0 +1,12 @@
+{
+  "exhausted_searches_reported_as_a_scope_change": 0,
+  "sequences_judged": 6,
+  "empty_markets_reported": 2,
+  "retry_times_offered": [
+    "next week",
+    "tomorrow"
+  ],
+  "relaxed_constraint_rejected": true,
+  "scope_change_field_rejected": true,
+  "failures": []
+}
