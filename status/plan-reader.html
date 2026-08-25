@@ -122,7 +122,7 @@ h4.sec-h{font-size:16.5px;color:var(--fg)}
 <body>
 <div class="topbar">
   <div class="wrap">
-    <div class="brand">Integral Job Search — Plan<small>annotatable reader · 2026-08-24</small></div>
+    <div class="brand">Integral Job Search — Plan<small>annotatable reader · 2026-08-25</small></div>
     <span class="savestate ok" id="savestate">✓ Auto-saving</span>
     <button class="btn primary" id="btn-export">Save / Export</button>
   </div>
@@ -1215,6 +1215,66 @@ traverses is documentation rather than a feature.</p>
 <td><code>test_a_profile_reentry_is_offered_never_imposed</code> in <code>tests/test_step_runtime.py</code> — declining leaves the search running; <code>test_no_reentry_is_offered_while_the_deciding_evidence_is_sufficient</code>; <code>test_a_declined_reentry_is_not_reoffered_in_the_same_session</code></td>
 <td>☐</td>
 </tr>
+<tr>
+<td>T70</td>
+<td>Robots matching that cannot fail open: RFC 9309 record grouping, longest-match precedence and <code>Allow</code> beating <code>Disallow</code> on an equal-length tie, replacing the <code>urllib.robotparser</code> delegation that reads a blank line as the end of a record</td>
+<td>7</td>
+<td>M</td>
+<td>T32</td>
+<td><code>robots_verdicts_misread == 0</code></td>
+<td><code>test_a_blank_line_inside_a_record_does_not_end_it</code> in <code>tests/test_robots.py</code> — a <code>Disallow: /</code> after a blank line still binds its agent; <code>test_longest_match_wins_over_file_order</code>; <code>test_allow_beats_disallow_on_an_equal_length_tie</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T71</td>
+<td>Read <code>robots.txt</code> with a browser user-agent when the honest one is refused — the policy resource only, never content, and the recovered policy is then obeyed more strictly rather than less</td>
+<td>7</td>
+<td>S</td>
+<td>T70</td>
+<td><code>robots_policies_abandoned_on_refusal == 0</code></td>
+<td><code>test_a_403_on_the_policy_is_retried_with_a_browser_agent</code> in <code>tests/test_robots.py</code>; <code>test_only_the_policy_url_is_refetched_never_content</code>; <code>test_a_recovered_policy_is_obeyed_not_ignored</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T72</td>
+<td>Connector health: free signals over evidence already in hand — company null on every row, undecoded entities, off-portal URLs, zero yield from a portal that has yielded before — then one bounded sentinel probe using the connector's own recorded example query</td>
+<td>7</td>
+<td>M</td>
+<td>T12, T32</td>
+<td><code>silent_connector_failures == 0</code></td>
+<td><code>test_a_connector_whose_selectors_no_longer_match_is_reported_broken</code> in <code>tests/test_connector_health.py</code>; <code>test_zero_yield_from_a_portal_that_never_yielded_is_not_breakage</code>; <code>test_a_healthy_connector_over_its_fixture_reads_ok</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T73</td>
+<td>The converse verdict: a 429 or a block page is never evidence of breakage but <code>inconclusive</code>, and disabling a connector always asks first and touches exactly one connector</td>
+<td>7</td>
+<td>S</td>
+<td>T72</td>
+<td><code>rate_limited_runs_reported_as_broken == 0</code></td>
+<td><code>test_a_429_is_inconclusive_not_broken</code> in <code>tests/test_connector_health.py</code>; <code>test_a_block_page_is_inconclusive</code>; <code>test_disabling_a_connector_requires_confirmation</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T74</td>
+<td>Liveness reads page identity, not only URL identity: a fetch landing on content that is not the advert is <code>unverified</code>, including the fragment-anchor case where the URL never changed</td>
+<td>7</td>
+<td>M</td>
+<td>T11, T13</td>
+<td><code>offers_presented_from_a_page_that_is_not_the_advert == 0</code></td>
+<td><code>test_a_fragment_anchor_landing_on_a_listing_page_is_unverified</code> in <code>tests/test_liveness.py</code>; <code>test_a_page_whose_title_does_not_match_the_offer_is_unverified</code>; <code>test_the_advert_itself_still_reads_live</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T75</td>
+<td>Dedup prefers the employer's own posting over an aggregator copy, because aggregators strip the grade that <code>seniority_expectation</code> reads</td>
+<td>7</td>
+<td>M</td>
+<td>T13</td>
+<td><code>duplicate_groups_resolved_away_from_the_canonical_source == 0</code></td>
+<td><code>test_the_employers_own_posting_wins_over_an_aggregator_copy</code> in <code>tests/test_dedup.py</code>; <code>test_a_group_with_no_canonical_source_keeps_its_survivor</code>; <code>test_source_rank_never_overrides_a_liveness_verdict</code></td>
+<td>☐</td>
+</tr>
 </tbody>
 </table></div>
 <div class="note" data-for="s-plan-supply-connectors-offers-lifecyc"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › SUPPLY — connectors, offers, lifecycle</span></div><textarea class="note-ta" data-key="s-plan-supply-connectors-offers-lifecyc" data-label="SUPPLY — connectors, offers, lifecycle" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
@@ -1375,6 +1435,46 @@ traverses is documentation rather than a feature.</p>
 <td><code>test_ranking_correlates_with_manual_order</code> in <code>tests/test_calibration.py</code> — Spearman ρ ≥ 0.60 against the recorded manual order</td>
 <td>☐</td>
 </tr>
+<tr>
+<td>T76</td>
+<td>The eligibility gate: a stated, role-level bar the candidate cannot meet excludes the offer before scoring — "silence is not permission", and a company-wide welcome to international applicants is not role-level permission</td>
+<td>9</td>
+<td>L</td>
+<td>T11</td>
+<td><code>offers_ranked_despite_a_stated_disqualification == 0</code></td>
+<td><code>test_a_stated_citizenship_requirement_excludes_the_offer</code> in <code>tests/test_eligibility.py</code>; <code>test_silence_about_permits_is_not_a_disqualification</code>; <code>test_a_company_wide_statement_is_not_role_level_permission</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T77</td>
+<td>Every verdict carries the advert's own sentence — a veto with no quote is unfalsifiable — and the quote must be a span of the advert text, never of an outside source</td>
+<td>9</td>
+<td>S</td>
+<td>T76</td>
+<td><code>disqualification_verdicts_without_quoted_wording == 0</code></td>
+<td><code>test_every_fail_verdict_carries_the_adverts_own_sentence</code> in <code>tests/test_eligibility.py</code>; <code>test_a_verdict_quote_is_a_span_of_the_advert_text</code>; <code>test_a_flag_verdict_quotes_too</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T78</td>
+<td><code>language_requirement</code> as its own hard field, read by the gate and never by the ranker so a preference weight cannot cancel a legal bar; it records the role's stated requirement, not the language the advert happens to be written in</td>
+<td>9</td>
+<td>M</td>
+<td>T76</td>
+<td><code>gate_fields_read_by_the_ranker == 0</code></td>
+<td><code>test_a_hard_gate_field_is_never_read_by_the_ranker</code> in <code>tests/test_eligibility.py</code>; <code>test_a_dimension_weight_cannot_change_a_gate_verdict</code>; <code>test_the_role_language_is_read_not_the_adverts_own_language</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T79</td>
+<td>Ranking shows an Excluded section carrying each exclusion's quoted reason, and a <code>FLAG</code> offer stays ranked with its marker — the withheld count is reported, never silently dropped</td>
+<td>9</td>
+<td>M</td>
+<td>T18, T76</td>
+<td><code>excluded_offers_shown_without_a_reason == 0</code></td>
+<td><code>test_an_excluded_offer_appears_with_its_quoted_reason</code> in <code>tests/test_ranking.py</code>; <code>test_an_excluded_offer_is_not_on_the_frontier</code>; <code>test_a_flagged_offer_is_ranked_with_its_marker</code></td>
+<td>☐</td>
+</tr>
 </tbody>
 </table></div>
 <div class="note" data-for="s-plan-match-extraction-annotation-rank"><div class="note-head"><span class="note-ico">✎</span><span class="note-label">Your note</span><span class="note-ref">PLAN › MATCH — extraction, annotation, ranking</span></div><textarea class="note-ta" data-key="s-plan-match-extraction-annotation-rank" data-label="MATCH — extraction, annotation, ranking" data-part="Plan" rows="1" placeholder="Tap to add a note for this point…"></textarea></div>
@@ -1443,6 +1543,46 @@ traverses is documentation rather than a feature.</p>
 <td>S6</td>
 <td><code>mock_interview_character_breaks == 0</code></td>
 <td><code>test_no_coaching_turn_occurs_inside_the_roleplay</code> in <code>tests/test_mock_interview.py</code>; <code>test_roleplay_is_announced_before_it_begins</code>; <code>test_feedback_is_given_only_after_it_ends</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T80</td>
+<td>The ATS text-layer contract, asserted over the generated document text so it is renderer-independent: contact e-mail, telephone and every employment date present as literal text, with no mojibake</td>
+<td>11</td>
+<td>M</td>
+<td>T45</td>
+<td><code>documents_missing_a_required_text_layer_field == 0</code></td>
+<td><code>test_a_generated_cv_carries_contact_email_as_literal_text</code> in <code>tests/test_ats.py</code>; <code>test_a_document_missing_a_required_field_fails</code>; <code>test_a_replacement_character_in_the_text_layer_fails</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T81</td>
+<td>Keyword coverage against the posting in four statuses, so a document bug stays distinguishable from a candidate gap: <code>covered</code>, <code>synonym-only</code>, <code>missing (have it)</code>, <code>missing (gap)</code> — and never keyword stuffing</td>
+<td>11</td>
+<td>M</td>
+<td>T80</td>
+<td><code>posting_keywords_left_unclassified == 0</code></td>
+<td><code>test_every_posting_keyword_receives_exactly_one_status</code> in <code>tests/test_ats.py</code>; <code>test_a_keyword_the_store_holds_but_the_document_omits_is_missing_have_it</code>; <code>test_a_keyword_the_candidate_lacks_is_missing_gap</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T82</td>
+<td>The application status vocabulary — <code>drafted</code>, <code>applied</code>, <code>interview</code>, <code>offer</code>, <code>hired</code>, <code>rejected</code>, <code>no_response</code>, <code>offer_declined</code>, <code>withdrawn</code>, split Open and Final — with legacy space-spellings accepted on read and never written</td>
+<td>11</td>
+<td>M</td>
+<td>T45</td>
+<td><code>applications_with_a_noncanonical_status == 0</code></td>
+<td><code>test_a_status_outside_the_vocabulary_is_refused</code> in <code>tests/test_lifecycle.py</code>; <code>test_a_legacy_spelling_is_accepted_on_read_and_never_written</code>; <code>test_open_and_final_statuses_are_distinguishable</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T84</td>
+<td>Step 11's two drafting rules, in prose: relevance-weighted cutting scored by relevance, uniqueness and narrative load; and the interview backtrack test for a line the candidate could not defend in the room</td>
+<td>11</td>
+<td>S</td>
+<td>—</td>
+<td><code>step_skills_without_the_drafting_rules == 0</code></td>
+<td><code>test_step_eleven_states_the_relevance_weighted_cut_rule</code> in <code>tests/test_step_skills.py</code>; <code>test_step_eleven_states_the_interview_backtrack_test</code>; <code>test_the_cut_rule_names_narrative_load</code></td>
 <td>☐</td>
 </tr>
 </tbody>
@@ -1575,6 +1715,26 @@ plan is a complete ledger of the queue rather than of the implementation only.</
 <td>—</td>
 <td><code>old_name_references == 0</code></td>
 <td><code>test_no_module_imports_the_old_package_name</code> in <code>tests/test_naming.py</code>; <code>test_no_document_names_the_old_repository</code>; <code>test_the_preserved_names_are_not_swept</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T85</td>
+<td>The evidence run reaches every module that writes evidence. <code>make evidence</code> selects on <code>^def _main</code>, so <code>plan_v2</code>, <code>process_spec</code> and <code>step_specs</code> were never regenerated or drift-checked — <code>S8.json</code> read 81 rows against 107 measured while the gate printed "no drift". Fix the <strong>selection</strong>, not the three names</td>
+<td>all</td>
+<td>S</td>
+<td>—</td>
+<td><code>gate_modules_outside_the_evidence_run == 0</code></td>
+<td><code>test_every_module_writing_evidence_is_reached_by_the_evidence_run</code> in <code>tests/test_repo_gate.py</code>; <code>test_a_module_that_writes_evidence_and_is_missed_fails_the_check</code>; <code>test_the_selection_does_not_depend_on_a_private_name_convention</code></td>
+<td>☐</td>
+</tr>
+<tr>
+<td>T83</td>
+<td>Attribution: an Acknowledgements section in <code>README.md</code>, and a <code>docs/METHODS.md</code> entry per borrowed technique naming its upstream source and its limits</td>
+<td>all</td>
+<td>S</td>
+<td>T70, T71, T72, T73, T74, T75, T76, T77, T78, T79, T80, T81, T82, T84</td>
+<td><code>borrowed_techniques_without_attribution == 0</code></td>
+<td><code>test_every_borrowed_technique_has_a_methods_entry</code> in <code>tests/test_methods_links.py</code>; <code>test_the_readme_carries_an_acknowledgements_section</code>; <code>test_each_entry_names_its_upstream_source</code></td>
 <td>☐</td>
 </tr>
 </tbody>
@@ -1807,6 +1967,16 @@ plan is a complete ledger of the queue rather than of the implementation only.</
 <td><code>test_every_gate_the_docs_require_has_a_runnable_enforcement_point</code> in <code>tests/test_plan_v2.py</code>; <code>test_a_task_pr_runs_the_repo_gate_not_only_its_payload_gate</code></td>
 <td>☑</td>
 </tr>
+<tr>
+<td>D-23</td>
+<td>The eligibility and language gates are gated on <strong>mechanism</strong> over fixtures and never on <strong>accuracy</strong> over real adverts: no corpus labels exist for permit, citizenship, clearance or role-language requirements, so a gate firing wrongly on a Spanish advert passes every check in this increment. Filed per the D-12 precedent — the mechanism ships, the accuracy waits behind a corpus round</td>
+<td>9</td>
+<td>M</td>
+<td>T76</td>
+<td><code>unlabelled_gate_accuracy_claims == 0</code></td>
+<td><code>test_no_document_claims_the_eligibility_gate_is_accurate_on_real_adverts</code> in <code>tests/test_spec_consistency.py</code>; <code>test_the_gate_reports_its_accuracy_as_unmeasured</code></td>
+<td>☐</td>
+</tr>
 </tbody>
 </table>
 <p><strong>Status legend</strong>: ☐ open · ◐ in progress · ☑ merged · ☒ cancelled (absorbed or abandoned; never done)</p>
@@ -1841,6 +2011,11 @@ listed; every open task appears in exactly one milestone.</p>
 <td><strong>M4 — per opportunity</strong></td>
 <td>documents for one advert, and the interview around it</td>
 <td>S4, D-9, T45, T46, S6, T47, T43, T22, T26b, T25, T29, T51, T52, T53, T54, T55, S9, S10, S11, S12</td>
+</tr>
+<tr>
+<td><strong>M5 — contact with the world</strong></td>
+<td>the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary</td>
+<td>T85, T70, T71, T72, T73, T74, T75, T76, T77, T78, T79, T80, T81, T82, T84, T83, D-23</td>
 </tr>
 <tr>
 <td><strong>cross-cutting</strong></td>
@@ -2529,9 +2704,13 @@ T25, T26, T28, T30, T31, T32, T33, S5, S7, D-1, D-2.</p></div>
     var rd=new FileReader();
     rd.onload=function(){
       var txt=String(rd.result||'');var obj=null;
-      var m=txt.lastIndexOf('SPEC-NOTES-DATA');
+      // Last LINE-ANCHORED marker. A plain lastIndexOf lands inside the JSON
+      // string of a note that mentions the marker, and the import then reads as
+      // a corrupt file — the same defect the Python seeder had (#239).
+      var mk=/^[ \t]*<!--[ \t]*SPEC-NOTES-DATA/gm,mm=null,mx;
+      while((mx=mk.exec(txt))!==null){mm=mx;}
       try{
-        if(m>=0){var after=txt.slice(m+15);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
+        if(mm){var after=txt.slice(mm.index+mm[0].length);var jstart=after.indexOf('{');var jend=after.lastIndexOf('}');
                   if(jstart>=0&&jend>jstart){obj=JSON.parse(after.slice(jstart,jend+1));}}
         else{obj=JSON.parse(txt);}
       }catch(err){obj=null;}
