@@ -342,8 +342,12 @@ def test_every_supported_market_has_applicable_dimensions() -> None:
 # T56 — macro-F1, on a corpus that clears the floor
 
 
-def _store(tmp_path: Path, rows: list[tuple[str, str, float]]) -> Path:
-    """A store of evaluation-split ads, one `remote_arrangement` label each."""
+def _store(
+    tmp_path: Path,
+    rows: list[tuple[str, str, float]],
+    dimension: str = "remote_arrangement",
+) -> Path:
+    """A store of evaluation-split ads, one label each on `dimension`."""
     path = tmp_path / "ads.jsonl"
     path.write_text(
         "\n".join(
@@ -356,7 +360,7 @@ def _store(tmp_path: Path, rows: list[tuple[str, str, float]]) -> Path:
                     "split": "evaluation",
                     "labels": [
                         {
-                            "dimension": "remote_arrangement",
+                            "dimension": dimension,
                             "value": value,
                             "spans": [{"start": 0, "end": len(text)}],
                             "labeller": "test",
@@ -456,9 +460,11 @@ def test_the_declared_subset_is_recorded_beside_what_was_actually_scored(
     dimension entering the mean without anyone able to see that it did. So the
     declaration is recorded beside the outcome, and the difference is named.
     """
-    rows = [(f"a{i}", "Puesto 100% remoto en Madrid.", 1.0) for i in range(10)]
-    measured = measure(_store(tmp_path, rows))
+    rows = [(f"a{i}", "Incluye guardias semanales.", 0.8) for i in range(10)]
+    measured = measure(_store(tmp_path, rows, dimension="on_call_load"))
 
     assert measured["declared_subset"] == sorted(DECLARED_SUBSET)
-    assert measured["extraction_scored_dimensions"] == ["remote_arrangement"]
-    assert measured["scored_beyond_the_declared_subset"] == [], "inside the declaration"
+    assert "on_call_load" not in DECLARED_SUBSET
+    assert measured["extraction_scored_dimensions"] == ["on_call_load"]
+    assert measured["scored_beyond_the_declared_subset"] == ["on_call_load"]
+    assert measured["extraction_macro_f1"] is not None, "it still counts — it is just named"
