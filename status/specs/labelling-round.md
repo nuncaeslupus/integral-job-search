@@ -115,6 +115,13 @@ What this commits the round to:
   others stay in `dimensions_below_floor` where `T15.json` already names them.
   A reader who quotes the score without that list is quoting a mean over a fifth
   of the model.
+* **The declared subset and the measured subset are not the same list, and both
+  are reported.** A dimension can clear the floor with ten labels and still sit
+  outside the macro, because F1 needs a positive class: ten class-0 labels assert
+  nothing to score. `T15.json` names the declared five, `extraction_scored_dimensions`
+  names what the mean actually covered, and `dimensions_without_positives` names the
+  gap between them. If that gap ever swallows all five, the aggregate stays
+  `unmeasured` — which is the honest answer and not a failure of the round.
 * ~45 labels, ten per dimension minus the one each already holds — and every one
   is a confirm-and-move rather than a blind read, because T57's re-seed pre-marked
   all 176 non-control ads.

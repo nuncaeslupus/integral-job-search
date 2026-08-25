@@ -661,10 +661,18 @@ def _dimension_f1(
     on both polarities, so a bipolar -1 read as +1 is one false positive and one
     false negative, which is what a sign error deserves.
 
-    `f1` is **None**, not 0.0, when nothing was asserted and nothing predicted:
-    with no positives on either side there is no ratio, and 1.0 would let a
-    dimension nobody could get wrong lift the macro mean. `measure` drops those
-    from the average and names them.
+    `f1` is **None** when the labels assert nothing — every one of them class 0.
+    F1 on an empty positive class is undefined, not zero: the 0.0 that a
+    precision of 0 conventionally yields is a *convention*, and averaging a
+    convention into a mean and calling the mean a measurement is the move D-2
+    exists to refuse. `measure` drops those dimensions from the average and
+    names them.
+
+    Dropping them must not hide anything, and it does not: `false_positives` is
+    still counted for a dropped dimension, and `measure` totals those into
+    `false_positives_outside_the_macro`, so a cue set hallucinating a dimension
+    onto every advert is a visible number rather than an absent one. What it is
+    not is a *score*, because there is nothing to score it against.
     """
     tp = fp = fn = 0
     for ad, label in pairs:
@@ -676,9 +684,15 @@ def _dimension_f1(
             continue
         fp += predicted != 0
         fn += truth != 0
+    # `asserted`, not `denominator`: a dimension whose labels are all class 0 has
+    # no positive class, so no F1 — even when the rules stage fired on it and
+    # `fp` is non-zero. Keying on the denominator instead let one false positive
+    # manufacture an `f1: 0.0` and drag a dimension into the macro that the macro
+    # cannot say anything about.
+    asserted = tp + fn
     denominator = 2 * tp + fp + fn
     return {
-        "f1": round(2 * tp / denominator, 4) if denominator else None,
+        "f1": round(2 * tp / denominator, 4) if asserted else None,
         "n": len(pairs),
         "true_positives": tp,
         "false_positives": fp,
@@ -731,17 +745,28 @@ def measure(
         d: _dimension_f1([p for p in pairs if p[1].dimension == d], by_id[d]) for d in scorable
     }
     scored = {d: s for d, s in per_dimension.items() if s["f1"] is not None}
+    unscored = sorted(set(per_dimension) - set(scored))
     measured["extraction_f1_by_dimension"] = per_dimension
-    measured["dimensions_without_positives"] = sorted(set(per_dimension) - set(scored))
+    measured["dimensions_without_positives"] = unscored
+    # The false positives of the dimensions the macro cannot cover. Zero here and
+    # a short `extraction_scored_dimensions` means "nothing to score"; non-zero
+    # means the rules stage is asserting dimensions no labeller did, which the
+    # macro would otherwise never mention.
+    measured["false_positives_outside_the_macro"] = sum(
+        per_dimension[d]["false_positives"] for d in unscored
+    )
+    # D-2's third requirement: `n` beside the aggregate as well as beside each
+    # dimension, counting only the dimensions the mean is over. Emitted on every
+    # run, including an unmeasured one — a key that appears only on success makes
+    # the two outcomes different *shapes*, and a reader who has to branch on which
+    # keys exist cannot tell an unmeasured run from a run that never happened.
+    measured["extraction_scored_n"] = sum(s["n"] for s in scored.values())
+    measured["extraction_scored_dimensions"] = sorted(scored)
     if scored:
-        # D-2's third requirement: `n` beside the aggregate as well as beside
-        # each dimension, and it counts only the dimensions the mean is over.
         measured["extraction_macro_f1"] = round(
             sum(s["f1"] for s in scored.values()) / len(scored), 4
         )
         measured["extraction_status"] = "measured"
-        measured["extraction_scored_n"] = sum(s["n"] for s in scored.values())
-        measured["extraction_scored_dimensions"] = sorted(scored)
     return measured
 
 

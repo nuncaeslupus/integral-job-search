@@ -53,5 +53,8 @@
   "prefilter_positives_checked": 40,
   "prefilter_suppressions": [],
   "extraction_f1_by_dimension": {},
-  "dimensions_without_positives": []
+  "dimensions_without_positives": [],
+  "false_positives_outside_the_macro": 0,
+  "extraction_scored_n": 0,
+  "extraction_scored_dimensions": []
 }

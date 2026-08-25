@@ -403,3 +403,43 @@ def test_a_dimension_nobody_asserted_is_not_a_free_1_point_0(tmp_path: Path) -> 
     assert measured["dimensions_without_positives"] == ["remote_arrangement"]
     assert measured["extraction_macro_f1"] is None
     assert measured["extraction_status"] == "unmeasured"
+
+
+def test_a_false_positive_cannot_manufacture_a_score_for_an_unasserted_dimension(
+    tmp_path: Path,
+) -> None:
+    """Ten class-0 labels and ten cue hits: `f1: null`, and the ten stay visible.
+
+    F1 on an empty positive class is undefined. Keying the refusal on the F1
+    denominator instead of on the labels let a single false positive make the
+    denominator non-zero, yield the conventional `0.0`, and drag a dimension
+    into the macro that the macro cannot say anything about — averaging a
+    convention and calling the result a measurement.
+
+    Dropping it must not hide the false positives, and this asserts that too:
+    they are what `false_positives_outside_the_macro` is for.
+    """
+    rows = [(f"fp{i}", "Puesto 100% remoto en Madrid.", 0.0) for i in range(10)]
+    measured = measure(_store(tmp_path, rows))
+
+    per = measured["extraction_f1_by_dimension"]["remote_arrangement"]
+    assert (per["true_positives"], per["false_positives"], per["false_negatives"]) == (0, 10, 0)
+    assert per["f1"] is None, "no positive class, so no F1 — not a zero"
+    assert measured["extraction_macro_f1"] is None
+    assert measured["extraction_status"] == "unmeasured"
+    assert measured["false_positives_outside_the_macro"] == 10
+
+
+def test_an_unmeasured_result_has_the_same_shape_as_a_measured_one(tmp_path: Path) -> None:
+    """Aggregate keys are emitted on every run, not only on the runs that score.
+
+    A key that appears only on success makes the two outcomes different shapes,
+    and a reader who has to branch on which keys exist cannot tell an unmeasured
+    run from a run that never happened — the distinction the whole file rests on.
+    """
+    rows = [(f"n{i}", "Puesto presencial.", 0.0) for i in range(10)]
+    unmeasured = measure(_store(tmp_path, rows))
+
+    assert unmeasured["extraction_scored_n"] == 0
+    assert unmeasured["extraction_scored_dimensions"] == []
+    assert unmeasured["extraction_macro_f1"] is None
