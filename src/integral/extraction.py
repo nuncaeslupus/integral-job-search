@@ -561,7 +561,7 @@ def _per_dimension_counts(pairs: list[tuple[LabelledAd, Label]]) -> dict[str, in
 def prefilter_suppression(
     store: list[LabelledAd],
     dimensions: list[Dimension],
-) -> tuple[int, int, list[str]]:
+) -> tuple[int, int, list[str], list[str]]:
     """T14's recall obligation, folded in: how often did the rules stage bury a positive?
 
     The stage cannot drop a dimension outright — anything its cues do not settle
@@ -571,11 +571,34 @@ def prefilter_suppression(
     cues settle a dimension a person labelled positive, and settle it with the
     wrong sign, so the model is never asked and the wrong answer stands.
 
+    **Two different failures were being counted as one, and only the first is
+    this stage's.** Split on a question with a checkable answer: *did any cue
+    match inside the span the person cited as their evidence?*
+
+    * **Yes** — the stage read the very words the labeller pointed at and
+      resolved them to the opposite sign. Nothing was missing; the combination
+      was wrong. That is a soundness bug in this stage, and it is what
+      `prefilter_suppressed_positives` counts.
+    * **No** — no pattern in the cue set reaches that text at all, so the stage
+      never saw the evidence and settled on whatever else the advert happened to
+      contain. That is a vocabulary gap, which is T57's `ontology_hit_rate` and
+      not this gate's, and it is counted separately as
+      `prefilter_uncovered_positives`.
+
+    Both are recorded, because the second is not harmless — a confident wrong
+    answer stops the model being asked either way. It is simply not evidence
+    that *this* stage reasons badly, and a gate that cannot tell the two apart
+    sends whoever reads it to fix the wrong thing. Widening the corpus adds
+    adverts the cue set has never seen; without the split, `== 0` becomes a
+    threshold on how much vocabulary the model happens to have, asserted against
+    a task that does not own it.
+
     Counted over both splits. This is a property of the cue set, not a score
     against held-out data, so the elicitation-split labels are legitimate here
     in a way they are not for `extraction_macro_f1`.
     """
     suppressed: list[str] = []
+    uncovered: list[str] = []
     checked = 0
     by_id = {d.id: d for d in dimensions}
     for ad in store:
@@ -591,12 +614,44 @@ def prefilter_suppression(
             if found is None:
                 continue  # not settled — the model still gets asked, which is the contract
             predicted = _class_of(_sign(found.value, found.negated), dimension)
-            if predicted != _class_of(truth, dimension):
-                suppressed.append(
-                    f"{ad.id}/{label.dimension}: cues settled {predicted}, "
-                    f"a person labelled {_class_of(truth, dimension)}"
-                )
-    return len(suppressed), checked, sorted(suppressed)
+            if predicted == _class_of(truth, dimension):
+                continue
+            where = (
+                f"{ad.id}/{label.dimension}: cues settled {predicted}, "
+                f"a person labelled {_class_of(truth, dimension)}"
+            )
+            if _cue_reaches_the_cited_span(ad, label, dimension):
+                suppressed.append(where)
+            else:
+                uncovered.append(f"{where} — no cue reaches the cited span")
+    return len(suppressed), checked, sorted(suppressed), sorted(uncovered)
+
+
+def _cue_reaches_the_cited_span(ad: LabelledAd, label: Label, dimension: Dimension) -> bool:
+    """Did any cue match inside the text the labeller pointed at?
+
+    The span is the labeller's own answer to "what in this advert made you say
+    that", so a cue matching inside it is the strongest available evidence that
+    the stage was looking at the right words.
+
+    **Sliced with the stored offsets, then NFC-normalised — in that order, and
+    both steps matter.** The offsets index the store's raw text, so slicing must
+    happen first or they point at the wrong characters. But `cue_findings`
+    matches against `_normalise_labelled`'s NFC output, so comparing a cue to the
+    *raw* segment asks a different question than the stage was asked: a cited span
+    holding decomposed characters would fail to match a composed cue that had
+    matched perfectly well upstream. The audit would then file a real soundness
+    failure under `prefilter_uncovered_positives` and quietly drop it out of the
+    gate — the corpus is full of decomposed text and non-BMP characters, and this
+    is the same hazard `test_decomposed_characters_are_composed_before_cues_run`
+    exists for, one layer up.
+    """
+    for span in label.spans:
+        segment = unicodedata.normalize("NFC", ad.text[span.start : span.end])
+        for cue in dimension.extraction.cues.get(ad.language, []):
+            if re.search(cue.pattern, segment, re.IGNORECASE):
+                return True
+    return False
 
 
 def negation_recall(
@@ -793,7 +848,9 @@ def measure(
     scorable = sorted(d for d in ad_side_ids if counts.get(d, 0) >= floor)
     below_floor = sorted(d for d in ad_side_ids if d not in scorable)
 
-    suppressed_count, positives_checked, suppressed = prefilter_suppression(store, dimensions)
+    suppressed_count, positives_checked, suppressed, uncovered = prefilter_suppression(
+        store, dimensions
+    )
 
     measured: dict[str, Any] = {
         # Null, not 0.0, and not omitted. Zero would be a failing score; an
@@ -809,6 +866,11 @@ def measure(
         "prefilter_suppressed_positives": suppressed_count,
         "prefilter_positives_checked": positives_checked,
         "prefilter_suppressions": suppressed,
+        # Not this gate's failure, and recorded so that it cannot be mistaken for
+        # one: the cue set has no pattern reaching the text the labeller cited, so
+        # the stage never saw the evidence it got wrong. T57 owns the vocabulary.
+        "prefilter_uncovered_positives": len(uncovered),
+        "prefilter_uncovered": uncovered,
     }
 
     by_id = {d.id: d for d in ad_side(dimensions)}

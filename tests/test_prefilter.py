@@ -13,15 +13,18 @@ labelled the other way, so the model is never asked and the wrong answer stands.
 
 from __future__ import annotations
 
+import unicodedata
+
 from integral.dimensions import Cue, Extraction, load_dimensions
 from integral.extraction import (
+    _cue_reaches_the_cited_span,
     cue_findings,
     normalise,
     prefilter_suppression,
     rules_stage,
     unsettled_dimensions,
 )
-from integral.harness import load_store
+from integral.harness import Label, LabelledAd, Span, load_store
 from integral.offers import Offer, compute_offer_id
 
 _DIMENSIONS = load_dimensions()
@@ -37,18 +40,28 @@ def test_prefilter_retains_all_corpus_positives() -> None:
     dressed as a gate. The reachable failure is a confident wrong answer, and
     that is what this counts.
     """
-    suppressed, checked, detail = prefilter_suppression(_STORE, _DIMENSIONS)
+    suppressed, checked, detail, uncovered = prefilter_suppression(_STORE, _DIMENSIONS)
     assert checked > 0, "a clean result over nothing is not a result"
-    # Locked to the two the corpus actually holds, not to zero. T56's round 2 took
-    # this from 0/40 to 2/209, and T15 (`lo-25b1`) is reopened on that — neither
-    # case is a cue bug, and neither is reachable without choosing cue vocabulary
-    # by looking at an evaluation-split miss. Naming them keeps the signal `== 0`
-    # was giving: a *third* suppression still fails this test.
+    # Locked to what the corpus actually holds, not to zero — and split, because
+    # the two were different failures. `manfred-8360` is this stage's: a cue
+    # matched inside the very span the labeller cited ("se huye de los *sprints*
+    # infinitos") and resolved it to the opposite sign, because the rejection is
+    # phrased with a verb `_NEGATORS` does not carry. Nothing was missing; the
+    # combination was wrong.
     assert detail == [
         "manfred-8360/process_formality: cues settled 1, a person labelled -1",
-        "tecnoempleo-5daa18bff2393309c941/stack_modernity: cues settled 1, a person labelled -1",
     ], detail
-    assert suppressed == 2
+    assert suppressed == 1
+
+    # `stack_modernity` is not: no cue reaches "Experiencia sólida en JBoss /
+    # JBoss EAP" at all, so the stage never saw the evidence and settled on the
+    # Kubernetes and cloud mentions elsewhere. That is vocabulary, which T57's
+    # `ontology_hit_rate` owns. Asserted, not ignored — a confident wrong answer
+    # still stops the model being asked.
+    assert uncovered == [
+        "tecnoempleo-5daa18bff2393309c941/stack_modernity: cues settled 1, "
+        "a person labelled -1 — no cue reaches the cited span",
+    ], uncovered
 
 
 def test_the_suppression_check_would_notice_a_bad_cue() -> None:
@@ -84,7 +97,7 @@ def test_the_suppression_check_would_notice_a_bad_cue() -> None:
         else d
         for d in _DIMENSIONS
     ]
-    suppressed, _, detail = prefilter_suppression([ad], poisoned)
+    suppressed, _, detail, _uncovered = prefilter_suppression([ad], poisoned)
     assert suppressed >= 1, f"an inverted cue on {label.dimension} went unnoticed: {detail}"
 
 
@@ -103,3 +116,38 @@ def test_a_dimension_the_cues_miss_still_reaches_the_model() -> None:
     )
     assert cue_findings(ad, blind) is None
     assert unsettled_dimensions([blind], rules_stage(ad, [blind])) == ["travel_requirement"]
+
+
+def test_a_decomposed_cited_span_is_still_matched_against_the_cues() -> None:
+    """The split must not misfile a soundness failure as a coverage gap.
+
+    `cue_findings` matches NFC-normalised text. If this audit compared cues to
+    the *raw* cited span, a labeller's span holding decomposed characters would
+    fail to match a composed cue that had matched perfectly well upstream — and
+    the failure would be recorded as `prefilter_uncovered_positives`, dropping a
+    real T15 failure out of its own gate.
+    """
+    composed = "Puesto presencial en Barcelona."
+    decomposed = unicodedata.normalize("NFD", "Modalidad híbrida presencial en Barcelona.")
+    assert decomposed != unicodedata.normalize("NFC", decomposed), "fixture must be decomposed"
+
+    ad = LabelledAd(
+        id="nfd-1",
+        language="es",
+        text=decomposed,
+        source_url="https://example.test/ad",
+        split="evaluation",
+        labels=[
+            Label(
+                dimension="remote_arrangement",
+                value=0.5,
+                spans=[Span(start=0, end=len(decomposed))],
+                labeller="test",
+            )
+        ],
+    )
+    dimension = next(d for d in _DIMENSIONS if d.id == "remote_arrangement")
+    assert _cue_reaches_the_cited_span(ad, ad.labels[0], dimension), (
+        "the cited span was decomposed; matching it raw would have hidden a real failure"
+    )
+    assert composed  # the composed control, for the reader
