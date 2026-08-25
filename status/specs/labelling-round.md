@@ -101,6 +101,56 @@ tiebreak, never the criterion:
 `remote_arrangement`, `compensation_transparency`, `contract_stability`,
 `schedule_flexibility`, `seniority_expectation`.
 
+### Decided — 2026-08-25, before the first label of the round
+
+The owner accepted those five unchanged, and they are recorded in code as
+`extraction.DECLARED_SUBSET` — the declaration lives beside the thing it describes.
+
+**It is a target, not a cap, and the first version of this section got that wrong.**
+It said the subset was "closed", which read as a rule that `measure()` does not
+enforce and should not: the macro is the mean over every dimension that reaches the
+label floor, and it must stay that way. As the corpus grows more dimensions clear the
+floor and the score *should* widen with them; freezing the mean to five ids would
+make the gate permanently narrower than the model.
+
+What D-2 forbids is choosing the subset to flatter the number — narrowing it, or
+picking again once a score is known. Widening by labelling honestly is the opposite
+of that. So the rule is enforced the way this repo enforces its other rules, by
+making a divergence **visible** rather than impossible: `T15.json` records
+`declared_subset` beside `scorable_dimensions`, and anything in the second and not
+the first is named in `scored_beyond_the_declared_subset`. A widening is then
+auditable — a reader can ask why a sixth dimension appeared and when it was labelled
+— which is what "closed" was reaching for and could not deliver on its own.
+
+If five turns out to be the wrong size, the honest move is still to say so and start
+over rather than to quietly add a sixth once a number is on the table.
+
+What this commits the round to:
+
+* `extraction_macro_f1` is the mean over **exactly these five**, and the twenty
+  others stay in `dimensions_below_floor` where `T15.json` already names them.
+  A reader who quotes the score without that list is quoting a mean over a fifth
+  of the model.
+* **The declared subset and the measured subset are not the same list, and both
+  are reported.** A dimension can clear the floor with ten labels and still sit
+  outside the macro, because F1 needs a positive class: ten class-0 labels assert
+  nothing to score. `T15.json` names the declared five, `extraction_scored_dimensions`
+  names what the mean actually covered, and `dimensions_without_positives` names the
+  gap between them. If that gap ever swallows all five, the aggregate stays
+  `unmeasured` — which is the honest answer and not a failure of the round.
+* ~45 labels, ten per dimension minus the one each already holds — and every one
+  is a confirm-and-move rather than a blind read, because T57's re-seed pre-marked
+  all 176 non-control ads.
+* `collaboration_mode` is **out**, and stays out for this round. Not because it is
+  unfindable — that inference would come from cue firings, which are the thing the
+  labels are meant to judge — but because it is the one dimension with no pre-mark,
+  so it is the only one whose labels cost a blind read each. Establish its
+  prevalence first, in a round of its own.
+
+The scorer these labels feed is in place as of this round's start: `measure()` no
+longer raises when a dimension crosses the floor, so label ten does not break
+`make host-gate` for the repo.
+
 **`collaboration_mode` is the expensive one, for a reason worth stating carefully.**
 It is the only dimension with no pre-mark even inside the 84, so every label for it is
 a blind read rather than a confirmation. What is *not* established is that ten

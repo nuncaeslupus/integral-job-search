@@ -95,6 +95,29 @@ DEFAULT_NEGATION_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T16.json"
 # passes (D-2).
 MIN_EVALUATION_LABELS_PER_DIMENSION = 10
 
+# T56's round-1 subset, decided cold on 2026-08-25 and recorded here so that the
+# declaration lives beside the thing it describes rather than only in prose.
+#
+# It is a **target, not a cap.** `measure` scores every dimension that reaches the
+# label floor, and it must keep doing so: as the corpus grows, more dimensions
+# clear the floor and the macro *should* widen with them. Freezing the mean to
+# five ids would make the gate permanently narrower than the model.
+#
+# What D-2 forbids is choosing the subset to flatter the number — narrowing it,
+# or picking again once a score is known. Widening by labelling honestly is the
+# opposite of that. So the rule is enforced the way this repo enforces its other
+# rules: `declared_subset` and `scorable_dimensions` are both recorded, and any
+# dimension in the second and not the first is named in the evidence. A widening
+# is then visible and auditable instead of silent — which is what "closed" was
+# reaching for and could not deliver on its own.
+DECLARED_SUBSET: tuple[str, ...] = (
+    "compensation_transparency",
+    "contract_stability",
+    "remote_arrangement",
+    "schedule_flexibility",
+    "seniority_expectation",
+)
+
 # Words that flip a `negatable` cue. Deliberately small and per-language:
 # enough for "no on-call" / "sense guàrdies" / "sin guardias". Scope, not
 # vocabulary, is what made this wrong in practice — see `_CLAUSE_BOUNDARY`.
@@ -666,6 +689,61 @@ def negation_audit(
     }
 
 
+def _dimension_f1(
+    pairs: list[tuple[LabelledAd, Label]],
+    dimension: Dimension,
+) -> dict[str, Any]:
+    """One dimension's F1 = 2PR/(P+R), scored against the **rules stage**.
+
+    Stage 3 asks a model, and an evidence file cannot make that call — so the
+    prediction here is `cue_findings` alone, exactly as in `negation_recall`,
+    and a dimension no cue settles predicts class 0. That is a *miss* against a
+    positive label rather than an exclusion: excluding it would score the cue
+    set against precisely the adverts the cue set already reaches.
+
+    Binary, over "the advert asserts this dimension" — class 0 is the negative
+    on both polarities, so a bipolar -1 read as +1 is one false positive and one
+    false negative, which is what a sign error deserves.
+
+    `f1` is **None** when the labels assert nothing — every one of them class 0.
+    F1 on an empty positive class is undefined, not zero: the 0.0 that a
+    precision of 0 conventionally yields is a *convention*, and averaging a
+    convention into a mean and calling the mean a measurement is the move D-2
+    exists to refuse. `measure` drops those dimensions from the average and
+    names them.
+
+    Dropping them must not hide anything, and it does not: `false_positives` is
+    still counted for a dropped dimension, and `measure` totals those into
+    `false_positives_outside_the_macro`, so a cue set hallucinating a dimension
+    onto every advert is a visible number rather than an absent one. What it is
+    not is a *score*, because there is nothing to score it against.
+    """
+    tp = fp = fn = 0
+    for ad, label in pairs:
+        truth = _class_of(_sign(label.value, label.negated), dimension)
+        found = cue_findings(_normalise_labelled(ad), dimension)
+        predicted = 0 if found is None else _class_of(_sign(found.value, found.negated), dimension)
+        if truth == predicted:
+            tp += truth != 0
+            continue
+        fp += predicted != 0
+        fn += truth != 0
+    # `asserted`, not `denominator`: a dimension whose labels are all class 0 has
+    # no positive class, so no F1 — even when the rules stage fired on it and
+    # `fp` is non-zero. Keying on the denominator instead let one false positive
+    # manufacture an `f1: 0.0` and drag a dimension into the macro that the macro
+    # cannot say anything about.
+    asserted = tp + fn
+    denominator = 2 * tp + fp + fn
+    return {
+        "f1": round(2 * tp / denominator, 4) if asserted else None,
+        "n": len(pairs),
+        "true_positives": tp,
+        "false_positives": fp,
+        "false_negatives": fn,
+    }
+
+
 def measure(
     store_path: Path = DEFAULT_STORE_PATH,
     dimensions_dir: Path = DEFAULT_DIMENSIONS_DIR,
@@ -705,12 +783,36 @@ def measure(
         "prefilter_positives_checked": positives_checked,
         "prefilter_suppressions": suppressed,
     }
-    if scorable:  # pragma: no cover - unreachable until the corpus grows
-        raise ExtractionError(
-            "dimensions are now above the label floor, so extraction_macro_f1 is "
-            f"measurable for {scorable} — this branch is a placeholder and scoring "
-            "must be implemented before it can report a number (T20/T26)"
+
+    by_id = {d.id: d for d in ad_side(dimensions)}
+    per_dimension = {
+        d: _dimension_f1([p for p in pairs if p[1].dimension == d], by_id[d]) for d in scorable
+    }
+    scored = {d: s for d, s in per_dimension.items() if s["f1"] is not None}
+    unscored = sorted(set(per_dimension) - set(scored))
+    measured["extraction_f1_by_dimension"] = per_dimension
+    measured["dimensions_without_positives"] = unscored
+    # The false positives of the dimensions the macro cannot cover. Zero here and
+    # a short `extraction_scored_dimensions` means "nothing to score"; non-zero
+    # means the rules stage is asserting dimensions no labeller did, which the
+    # macro would otherwise never mention.
+    measured["false_positives_outside_the_macro"] = sum(
+        per_dimension[d]["false_positives"] for d in unscored
+    )
+    # D-2's third requirement: `n` beside the aggregate as well as beside each
+    # dimension, counting only the dimensions the mean is over. Emitted on every
+    # run, including an unmeasured one — a key that appears only on success makes
+    # the two outcomes different *shapes*, and a reader who has to branch on which
+    # keys exist cannot tell an unmeasured run from a run that never happened.
+    measured["extraction_scored_n"] = sum(s["n"] for s in scored.values())
+    measured["extraction_scored_dimensions"] = sorted(scored)
+    measured["declared_subset"] = sorted(DECLARED_SUBSET)
+    measured["scored_beyond_the_declared_subset"] = sorted(set(scored) - set(DECLARED_SUBSET))
+    if scored:
+        measured["extraction_macro_f1"] = round(
+            sum(s["f1"] for s in scored.values()) / len(scored), 4
         )
+        measured["extraction_status"] = "measured"
     return measured
 
 

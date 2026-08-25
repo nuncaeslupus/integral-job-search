@@ -51,5 +51,18 @@
   ],
   "prefilter_suppressed_positives": 0,
   "prefilter_positives_checked": 40,
-  "prefilter_suppressions": []
+  "prefilter_suppressions": [],
+  "extraction_f1_by_dimension": {},
+  "dimensions_without_positives": [],
+  "false_positives_outside_the_macro": 0,
+  "extraction_scored_n": 0,
+  "extraction_scored_dimensions": [],
+  "declared_subset": [
+    "compensation_transparency",
+    "contract_stability",
+    "remote_arrangement",
+    "schedule_flexibility",
+    "seniority_expectation"
+  ],
+  "scored_beyond_the_declared_subset": []
 }

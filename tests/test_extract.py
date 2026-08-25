@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from integral.dimensions import Cue, Dimension, Extraction, Language, load_dimensions
 from integral.extraction import (
+    DECLARED_SUBSET,
     DimensionScore,
     EvidenceSpan,
     ExtractionError,
@@ -341,6 +342,135 @@ def test_every_supported_market_has_applicable_dimensions() -> None:
 
 
 # ---------------------------------------------------------------------------
+# T56 — macro-F1, on a corpus that clears the floor
+
+
+def _store(
+    tmp_path: Path,
+    rows: list[tuple[str, str, float]],
+    dimension: str = "remote_arrangement",
+) -> Path:
+    """A store of evaluation-split ads, one label each on `dimension`."""
+    path = tmp_path / "ads.jsonl"
+    path.write_text(
+        "\n".join(
+            json.dumps(
+                {
+                    "id": ad_id,
+                    "language": "es",
+                    "text": text,
+                    "source_url": "https://example.test/ad",
+                    "split": "evaluation",
+                    "labels": [
+                        {
+                            "dimension": dimension,
+                            "value": value,
+                            "spans": [{"start": 0, "end": len(text)}],
+                            "labeller": "test",
+                        }
+                    ],
+                }
+            )
+            for ad_id, text, value in rows
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_macro_f1_is_measured_once_a_dimension_clears_the_floor(tmp_path: Path) -> None:
+    """Six cue hits, two misses, two true negatives — F1 = 2·6/(2·6+0+2) = 0.8571."""
+    rows = (
+        [(f"hit{i}", "Puesto 100% remoto en Madrid.", 1.0) for i in range(6)]
+        + [(f"off{i}", "Puesto presencial en Madrid.", 0.0) for i in range(2)]
+        + [(f"miss{i}", "Puedes trabajar desde casa siempre.", 1.0) for i in range(2)]
+    )
+    measured = measure(_store(tmp_path, rows))
+
+    assert measured["extraction_status"] == "measured"
+    assert measured["scorable_dimensions"] == ["remote_arrangement"]
+    per = measured["extraction_f1_by_dimension"]["remote_arrangement"]
+    assert (per["true_positives"], per["false_positives"], per["false_negatives"]) == (6, 0, 2)
+    assert per["n"] == 10, "D-2 requires n beside every per-dimension score"
+    assert per["f1"] == 0.8571
+    assert measured["extraction_macro_f1"] == 0.8571
+    assert measured["extraction_scored_n"] == 10, "and n beside the aggregate too"
+
+
+def test_a_dimension_nobody_asserted_is_not_a_free_1_point_0(tmp_path: Path) -> None:
+    """Ten labels, none of them positive, no cue firing: there is no ratio.
+
+    Scoring that as 1.0 would let a dimension the extractor was never asked to
+    find anything in carry the macro mean upwards — the same "a number appeared
+    so it must be true" failure D-2 exists to stop, one level down.
+    """
+    measured = measure(_store(tmp_path, [(f"n{i}", "Puesto presencial.", 0.0) for i in range(10)]))
+
+    assert measured["extraction_f1_by_dimension"]["remote_arrangement"]["f1"] is None
+    assert measured["dimensions_without_positives"] == ["remote_arrangement"]
+    assert measured["extraction_macro_f1"] is None
+    assert measured["extraction_status"] == "unmeasured"
+
+
+def test_a_false_positive_cannot_manufacture_a_score_for_an_unasserted_dimension(
+    tmp_path: Path,
+) -> None:
+    """Ten class-0 labels and ten cue hits: `f1: null`, and the ten stay visible.
+
+    F1 on an empty positive class is undefined. Keying the refusal on the F1
+    denominator instead of on the labels let a single false positive make the
+    denominator non-zero, yield the conventional `0.0`, and drag a dimension
+    into the macro that the macro cannot say anything about — averaging a
+    convention and calling the result a measurement.
+
+    Dropping it must not hide the false positives, and this asserts that too:
+    they are what `false_positives_outside_the_macro` is for.
+    """
+    rows = [(f"fp{i}", "Puesto 100% remoto en Madrid.", 0.0) for i in range(10)]
+    measured = measure(_store(tmp_path, rows))
+
+    per = measured["extraction_f1_by_dimension"]["remote_arrangement"]
+    assert (per["true_positives"], per["false_positives"], per["false_negatives"]) == (0, 10, 0)
+    assert per["f1"] is None, "no positive class, so no F1 — not a zero"
+    assert measured["extraction_macro_f1"] is None
+    assert measured["extraction_status"] == "unmeasured"
+    assert measured["false_positives_outside_the_macro"] == 10
+
+
+def test_an_unmeasured_result_has_the_same_shape_as_a_measured_one(tmp_path: Path) -> None:
+    """Aggregate keys are emitted on every run, not only on the runs that score.
+
+    A key that appears only on success makes the two outcomes different shapes,
+    and a reader who has to branch on which keys exist cannot tell an unmeasured
+    run from a run that never happened — the distinction the whole file rests on.
+    """
+    rows = [(f"n{i}", "Puesto presencial.", 0.0) for i in range(10)]
+    unmeasured = measure(_store(tmp_path, rows))
+
+    assert unmeasured["extraction_scored_n"] == 0
+    assert unmeasured["extraction_scored_dimensions"] == []
+    assert unmeasured["extraction_macro_f1"] is None
+
+
+def test_the_declared_subset_is_recorded_beside_what_was_actually_scored(
+    tmp_path: Path,
+) -> None:
+    """A widening must be visible, which is the enforceable half of "closed".
+
+    `measure` scores every dimension that reaches the floor, deliberately — the
+    macro should widen as the corpus grows. What must not happen is a sixth
+    dimension entering the mean without anyone able to see that it did. So the
+    declaration is recorded beside the outcome, and the difference is named.
+    """
+    rows = [(f"a{i}", "Incluye guardias semanales.", 0.8) for i in range(10)]
+    measured = measure(_store(tmp_path, rows, dimension="on_call_load"))
+
+    assert measured["declared_subset"] == sorted(DECLARED_SUBSET)
+    assert "on_call_load" not in DECLARED_SUBSET
+    assert measured["extraction_scored_dimensions"] == ["on_call_load"]
+    assert measured["scored_beyond_the_declared_subset"] == ["on_call_load"]
+    assert measured["extraction_macro_f1"] is not None, "it still counts — it is just named"
 # T59 — a denial is not an absence
 
 
