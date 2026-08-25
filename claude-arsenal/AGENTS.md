@@ -1,6 +1,6 @@
 # Claude Arsenal
 
-<!-- claude-arsenal v2.4.16 — imported via @claude-arsenal/AGENTS.md -->
+<!-- claude-arsenal v2.4.21 — imported via @claude-arsenal/AGENTS.md -->
 
 This file is imported by the host repo's `CLAUDE.md` via the session-protocol block
 that `/init` injects, so it sits in context on **every turn of every session**. It
@@ -10,6 +10,9 @@ how to start, what a task is, how a claim is decided, and how a task finishes.
 The rest of the protocol lives in `claude-arsenal/references/`, read **on demand**.
 Those are plain paths, never `@` imports — nothing here pulls them into context. The
 table at the end says which file answers what.
+
+Paths starting `arsenal/` are the host-owned tree, and a host that sets `ARSENAL_HOME`
+relocates all of them at once. `claude-arsenal/` is the vendored bundle and never moves.
 
 ---
 
@@ -29,8 +32,10 @@ At the start of every session (fresh start, context compaction, or cold restart)
    b. Run `python3 .claude/skills/init/scripts/init.py --repo-path . --silent` to refresh
       any stale bundle script, and report anything it refreshes. It writes nothing when
       the installed bundle is NEWER than the skill's copies — report that line as-is and
-      update the plugin; do not pass `--allow-downgrade` to get past it. Skip (a) and (b)
-      when that script is not present.
+      update the plugin; do not pass `--allow-downgrade` to get past it. That refusal is
+      itself part of the skill, so if (a) reported `VENDORED SKILL BEHIND BUNDLE`, skip (b)
+      entirely: a skill old enough to be behind may be old enough to predate the guard, and
+      it will rewrite the bundle backwards. Skip (a) and (b) when that script is not present.
 
 1. **Establish the GitHub channel** — `bash claude-arsenal/bin/github_channel.sh --detect`
    prints `gh`, `rest`, or `none`. **`none` is not a failure**: it means no scriptable
@@ -61,7 +66,8 @@ At the start of every session (fresh start, context compaction, or cold restart)
    `arsenal:task` label and a **visible** `` `arsenal-task: <id>` `` line in the body. It
    must be visible text, not an HTML comment: some GitHub tools strip angle-bracketed
    content from bodies, and an id that is stripped leaves the issue anonymous and the board
-   reading as stateless. This is the only sync in the system: one-directional and
+   reading as stateless. A row carrying an `ambiguous` key is a collision to resolve first,
+   not an issue to create. This is the only sync in the system: one-directional and
    idempotent, so a failure delays work rather than corrupting it.
 
 4b. **Import issues filed between sessions** — list open issues carrying the import label
