@@ -85,8 +85,16 @@ _gate_fail() {
 # Silently skipping the enforcement is the exact failure this whole change
 # exists to remove; it would just move it one layer out.
 host_gate=""
+# Both the read and the RUN are anchored to the git root. The read was, and the
+# run was not: a gate declared as `make lint` — or any of the relative forms a
+# gate block is conventionally written in — was read correctly from a
+# subdirectory and then executed there, where there is no Makefile. The refusal
+# a worker got was `host gate failed (make lint)` over a green repo, and the
+# only ways out are editing config.toml or cd-ing, the first being the one
+# somebody under pressure reaches for. A linked worktree was never affected:
+# its cwd and its `--show-toplevel` are the same directory.
+_repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 if [[ -f "${BUNDLE_SCRIPTS}/arsenal_config.py" ]]; then
-    _repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
     if ! host_gate="$(python3 "${BUNDLE_SCRIPTS}/arsenal_config.py" \
             --repo-root "${_repo_root}" --get host-gate 2>&1)"; then
         _gate_fail "could not read host-gate from ${_repo_root}/arsenal/config.toml: ${host_gate}"
@@ -94,7 +102,8 @@ if [[ -f "${BUNDLE_SCRIPTS}/arsenal_config.py" ]]; then
 fi
 if [[ -n "${host_gate}" ]]; then
     echo "open_task_pr: running host gate: ${host_gate}" >&2
-    if ! bash -c "${host_gate}" >&2; then
+    # A subshell, so the rest of the script keeps the cwd it was invoked with.
+    if ! ( cd "${_repo_root}" && bash -c "${host_gate}" ) >&2; then
         _gate_fail "host gate failed (${host_gate})"
     fi
 fi
@@ -109,7 +118,10 @@ if [[ -f "${SCRIPT_DIR}/gate_run.sh" ]]; then
     # gate is a precondition the board sets, and a worker that could edit its
     # own gate on its own branch would be certifying itself. gate_run.sh still
     # falls back to the working copy for a task that has not merged yet.
-    ARSENAL_GATE_FROM_DEFAULT=1 bash "${SCRIPT_DIR}/gate_run.sh" "${TASK_ID}" >&2
+    # Same anchor as the host gate above: a task's gate block is written
+    # relative to the repo root (`bash tests/foo.sh`), and `${ARSENAL_HOME}` is
+    # a repo-root-relative path in every other script that reads it.
+    ( cd "${_repo_root}" && ARSENAL_GATE_FROM_DEFAULT=1 bash "${SCRIPT_DIR}/gate_run.sh" "${TASK_ID}" ) >&2
     _rc=$?
     case ${_rc} in
         0) ;;
@@ -354,9 +366,19 @@ _unarchive_task_file() {
     # task file may have been untracked (a task added by this very PR) or
     # carrying unstaged edits, and `git add -A` would turn either into a staged
     # change the worker never made.
-    git rm -q --cached --ignore-unmatch -- "${_ARCHIVED_LIVE}" "${_ARCHIVED_DEST}" 2>/dev/null || true
+    local index_ok=1
+    git rm -q --cached --ignore-unmatch -- "${_ARCHIVED_LIVE}" "${_ARCHIVED_DEST}" 2>/dev/null || index_ok=0
     if [[ -n "${_ARCHIVED_INDEX}" ]]; then
-        printf '%s\n' "${_ARCHIVED_INDEX}" | git update-index --index-info 2>/dev/null || true
+        printf '%s\n' "${_ARCHIVED_INDEX}" | git update-index --index-info 2>/dev/null || index_ok=0
+    fi
+    # Assert the outcome rather than the commands: `cp` succeeding is not the
+    # same fact as the tree being back. An `rm` that fails leaves the archived
+    # copy in place — the state `task_select.py` reads as finished work — and
+    # every caller here treats this function's status as proof of restoration,
+    # so a success returned over a half-undone tree is the claim that misleads.
+    if [[ ! -f "${_ARCHIVED_LIVE}" || -e "${_ARCHIVED_DEST}" || "${index_ok}" != 1 ]]; then
+        echo "open_task_pr: the rollback did not complete — ${_ARCHIVED_LIVE} should be present and ${_ARCHIVED_DEST} should be gone; check both, and the index, by hand." >&2
+        return 1
     fi
     echo "open_task_pr: restored ${_ARCHIVED_LIVE} — the archive was undone" >&2
 }
@@ -429,7 +451,22 @@ PY
     echo "open_task_pr: archived ${live} -> ${dest} (status: merged)" >&2
 }
 if ! _archive_task_file; then
-    echo "open_task_pr: refusing to open a PR whose task file could not be archived — the merge would close the issue and leave the task file live. Fix the error above and re-run; nothing has been committed." >&2
+    # The undo belongs here, not at each `return 1` inside the function. Two of
+    # those fire after `git mv` has already succeeded — the stamp, and the
+    # re-check of it — and neither used to roll back, so the run refused while
+    # leaving the task file in `_history/`. `task_select.py` reads it there as
+    # finished work, so the task left the queue with nothing merged: the outcome
+    # the backup was added to prevent, reached through a different door. One
+    # call site covers every path out of the function, including later ones.
+    restored=""
+    if [[ -n "${_ARCHIVED_DEST}" && -e "${_ARCHIVED_DEST}" ]]; then
+        if _unarchive_task_file; then
+            restored=" The task file has been restored to ${ARSENAL_HOME}/tasks/."
+        else
+            restored=" THE ROLLBACK ALSO FAILED — see above; the tree needs a hand before re-running."
+        fi
+    fi
+    echo "open_task_pr: refusing to open a PR whose task file could not be archived — the merge would close the issue and leave the task file live.${restored} Fix the error above and re-run; nothing has been committed." >&2
     exit 1
 fi
 
@@ -443,9 +480,16 @@ fi
 # that only checks confirms the tree being committed is the certified one.
 if [[ -n "${host_gate}" && -n "${_ARCHIVED_DEST}" ]]; then
     echo "open_task_pr: re-running host gate over the archived tree: ${host_gate}" >&2
-    if ! bash -c "${host_gate}" >&2; then
-        _unarchive_task_file || echo "open_task_pr: THE ROLLBACK ALSO FAILED — see above; the tree needs a hand before re-running." >&2
-        echo "open_task_pr: host gate failed after the task file was archived (${host_gate}) — no PR opened. The task file has been restored to ${ARSENAL_HOME}/tasks/ — nothing was committed. A gate that passes before the archive and fails after it is measuring the repo's own files; re-run once the measurement accounts for ${ARSENAL_HOME}/tasks/_history/." >&2
+    if ! ( cd "${_repo_root}" && bash -c "${host_gate}" ) >&2; then
+        # Say which of the two happened. Claiming the restoration unconditionally
+        # told a reader the tree was back the way it started in exactly the case
+        # where it is not, and that is the case where they have to act.
+        if _unarchive_task_file; then
+            restored="The task file has been restored to ${ARSENAL_HOME}/tasks/ — nothing was committed."
+        else
+            restored="THE ROLLBACK ALSO FAILED — see above; the tree needs a hand before re-running. Nothing was committed."
+        fi
+        echo "open_task_pr: host gate failed after the task file was archived (${host_gate}) — no PR opened. ${restored} A gate that passes before the archive and fails after it is measuring the repo's own files; re-run once the measurement accounts for ${ARSENAL_HOME}/tasks/_history/." >&2
         exit 1
     fi
 fi

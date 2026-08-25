@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from integral.dimensions import Cue, Dimension, Extraction, Language, load_dimensions
 from integral.extraction import (
@@ -26,11 +27,13 @@ from integral.extraction import (
     extract,
     measure,
     model_request,
+    negation_recall,
     normalise,
     rules_stage,
     unsettled_dimensions,
     write_evidence,
 )
+from integral.harness import load_store
 from integral.offers import Offer, compute_offer_id
 
 _DIMENSIONS = load_dimensions()
@@ -468,3 +471,73 @@ def test_the_declared_subset_is_recorded_beside_what_was_actually_scored(
     assert measured["extraction_scored_dimensions"] == ["on_call_load"]
     assert measured["scored_beyond_the_declared_subset"] == ["on_call_load"]
     assert measured["extraction_macro_f1"] is not None, "it still counts — it is just named"
+# T59 — a denial is not an absence
+
+
+def test_a_denial_cue_records_a_denial_not_an_absence() -> None:
+    """`Cue.denies` is how a cue whose pattern *contains* its own negator says so.
+
+    `sin\\s+viajes` cannot be read by `_is_negated`, which looks backwards from
+    the match for a negator: here the negator is inside the match. Before
+    `denies` such a cue could only report `value=0.0, negated=False` — the
+    encoding that means "the advert states the lowest rung", which is what
+    `presencial` means and emphatically not what `sin viajes` means.
+    """
+    base = _dimension("travel_requirement")
+    dimension = _with_cues(base, [Cue(pattern=r"sin\s+viajes", value=0.0, denies=True)])
+    found = cue_findings(normalise(_offer("Sin viajes ni guardias.")), dimension)
+
+    assert found is not None
+    assert found.negated is True, "the advert denies travel; it does not omit it"
+
+
+def test_a_zero_rung_cue_is_not_a_denial() -> None:
+    """`presencial` states rung 0 affirmatively — that is a value, not a negation.
+
+    The distinction this pair of tests draws is the whole of the change: of the
+    sixteen zero-valued cues in the model, ten are denials and six are adverts
+    naming their lowest rung outright. Marking the second kind `denies` would
+    make "this job is on-site" read as "this job denies being on-site".
+    """
+    base = _dimension("remote_arrangement")
+    dimension = _with_cues(base, [Cue(pattern="presencial", value=0.0)])
+    found = cue_findings(normalise(_offer("Puesto presencial en Madrid.")), dimension)
+
+    assert found is not None
+    assert found.negated is False
+
+
+def test_a_denial_cue_that_also_claims_to_be_negatable_is_refused() -> None:
+    """Both at once is not wrong, it is unreadable — `negatable` would do nothing."""
+    with pytest.raises(ValidationError):
+        Cue(pattern=r"sin\s+viajes", value=0.0, denies=True, negatable=True)
+
+
+def test_every_denial_in_the_model_reaches_the_store_as_a_denial() -> None:
+    """The gate's own corpus: every negated evaluation label a cue settles is settled as negated.
+
+    This is `negation_recall`'s "settled, but not as negated" bucket, asserted
+    to be empty. It is the half of T59 the dimension model owns — the other
+    half is denials no cue reaches at all, which is a coverage question and
+    stays visible in `negation_recall_misses`.
+    """
+    _, misses = negation_recall(load_store(), load_dimensions())
+    mis_encoded = [m for m in misses if "settled, but not as negated" in m]
+    assert mis_encoded == []
+
+
+def test_a_negated_single_match_settles_a_bipolar_dimension() -> None:
+    """The asymmetry: corroboration is asked of positives, not of denials.
+
+    `test_a_bipolar_dimension_is_not_settled_by_one_keyword` is still true and
+    still the rule — one `sprint` in a tool list establishes nothing. A denial
+    is the other case: the advert went out of its way to say it, and asking for
+    a second one sends an unambiguous statement to the model as "unsettled".
+    """
+    base = _dimension("process_formality")
+    dimension = _with_cues(base, [Cue(pattern="sprint", value=0.5, negatable=True)])
+    found = cue_findings(normalise(_offer("Trabajamos sin sprints tradicionales.")), dimension)
+
+    assert found is not None, "one denial is enough; one keyword is not"
+    assert found.negated is True
+    assert found.value == -0.5

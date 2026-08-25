@@ -998,3 +998,39 @@ def test_a_banked_span_keeps_the_round_it_was_labelled_in() -> None:
     assert banked[0]["labeller"] == "someone-else"
     assert banked[0]["round"] == 2
     assert banked[0]["source"] == "confirmed"
+
+
+# ---------------------------------------------------------------------------
+# --only — a round's cover, not the whole corpus
+
+
+def test_only_builds_the_named_adverts_and_nothing_else(tmp_path: Path) -> None:
+    """A labelling round is a shortlist. 208 adverts on one page is not one."""
+    out = tmp_path / "round.html"
+    wanted = [ad.id for ad in STORE[:3]]
+
+    assert page_main(["--only", ",".join(wanted), "--out", str(out)]) == 0
+
+    page = out.read_text(encoding="utf-8")
+    embedded = re.search(r'id="integral-data"[^>]*>(.*?)</script>', page, re.S)
+    assert embedded is not None
+    payload = json.loads(embedded.group(1))
+    assert [ad["id"] for ad in payload["ads"]] == sorted(wanted)
+
+
+def test_only_validates_the_suggestion_set_against_the_whole_corpus(tmp_path: Path) -> None:
+    """Narrowing must happen *after* validation, and this is why.
+
+    `validate_suggestions` checks the set against the corpus it was generated
+    from — the blind-control cohort is derived from every ad id in the store —
+    so validating against a subset reports the entire rest of the corpus as
+    "not in the store" and refuses to build. Filtering first turned a working
+    shortlist into 232 violations.
+    """
+    out = tmp_path / "round.html"
+    assert page_main(["--only", STORE[0].id, "--out", str(out)]) == 0
+
+
+def test_only_refuses_an_id_that_is_not_in_the_store(tmp_path: Path) -> None:
+    """Silently dropping a typo would hide a dimension going unfloored."""
+    assert page_main(["--only", "not-an-ad", "--out", str(tmp_path / "x.html")]) == 2

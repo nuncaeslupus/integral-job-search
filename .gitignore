@@ -249,6 +249,7 @@ data/
 # actual work lives in the browser's localStorage until exported and applied
 # with `harness import`; this file itself carries no state worth committing.
 corpus/labelled/label.html
+corpus/labelled/round-*.html
 
 arsenal/session/surface_profile.json
 

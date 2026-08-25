@@ -196,16 +196,45 @@ class Elicitation(Strict):
 
 
 class Cue(Strict):
-    """A regex over ad text and the dimension value a match contributes.
+    r"""A regex over ad text and the dimension value a match contributes.
 
     `negatable` records that a negated match inverts the sign rather than
     dropping the cue — "no on-call" is evidence *against*, not absence of
     evidence (spec risk register; T16).
+
+    `denies` is for the other shape, which `negatable` cannot reach: a cue whose
+    pattern **contains its own negator**. `_is_negated` looks *backwards* from a
+    match for a negator, so in `sin\s+viajes` the negator is inside the match and
+    invisible to it. Without `denies` such a cue can only report
+    `value=0.0, negated=False` — and that is already the encoding for something
+    else entirely: an advert stating its lowest rung outright, which is what
+    `presencial` (rung 0, "On-site") and `horario\s+fijo` (rung 0, "Fixed
+    timetable") mean. Ten of the model's sixteen zero-valued cues are denials and
+    six are rung-0 statements; collapsing them made "this job denies travel" and
+    "this job is on-site" the same record, and cost `negation_recall` three of its
+    nine labels (T59).
     """
 
     pattern: str = Field(min_length=1)
     value: float = Field(ge=-1.0, le=1.0)
     negatable: bool = False
+    denies: bool = False
+
+    @model_validator(mode="after")
+    def _a_denial_is_not_also_negatable(self) -> Cue:
+        """Both at once is unreadable rather than wrong — `negatable` would do nothing.
+
+        A cue that already carries its negator has no second negator to find, so
+        `negatable` could only ever be a no-op beside `denies`. Refusing the pair
+        keeps the model from acquiring cues whose declaration disagrees with its
+        behaviour.
+        """
+        if self.denies and self.negatable:
+            raise ValueError(
+                "a cue cannot be both `denies` and `negatable`: the pattern already "
+                "carries its negator, so there is no second one to look for"
+            )
+        return self
 
     @field_validator("pattern")
     @classmethod
