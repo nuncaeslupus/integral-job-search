@@ -1,21 +1,19 @@
 id: mission_alignment
 kind: soft
-polarity: bipolar
+polarity: unipolar
 group: growth
 label:
   en: Mission alignment
   es: Alineación con la misión
   ca: Alineació amb la missió
 definition: >
-  How much the stated purpose of the work matters to the candidate — public service,
-  health, climate, education at one end; sectors they would refuse at the other.
+  Whether the advert says what the work is ultimately for — a named purpose, meant,
+  rather than a sector left to infer. It does not say whether that purpose is one
+  the candidate wants: an advert states a sector, and whether the sector is a draw
+  or a refusal is the candidate's, carried by their weight on this dimension and by
+  the knockouts recorded in step 2. Encoding that judgement here would put one
+  person's ethics in the extractor and score every other candidate against them.
 levels:
-  - value: -0.7
-    label:
-      en: "A sector to refuse"
-      es: "Un sector a rechazar"
-      ca: "Un sector a rebutjar"
-    tell: "gambling, tobacco, defence — work the candidate would rule out on purpose"
   - value: 0.0
     label:
       en: "Not stated"
@@ -50,18 +48,12 @@ extraction:
       - pattern: "healthcare|education|climate|public\\s+sector|non-?profit"
         value: 0.7
         negatable: false
-      - pattern: "gambling|betting|tobacco|defen[cs]e\\s+(sector|industry|contractor)"
-        value: -0.7
-        negatable: false
     es:
       - pattern: "nuestra\\s+misi[óo]n|impacto\\s+social"
         value: 0.6
         negatable: true
       - pattern: "sanidad|educaci[óo]n|sector\\s+p[úu]blico|administraci[óo]n\\s+p[úu]blica"
         value: 0.7
-        negatable: false
-      - pattern: "apuestas|juego\\s+online|ciberdefensa|sector\\s+defensa"
-        value: -0.7
         negatable: false
     ca:
       - pattern: "la\\s+nostra\\s+missi[óo]|impacte\\s+social"
@@ -70,19 +62,11 @@ extraction:
       - pattern: "salut\\s+mental|sanitari|hospital|SISCAT|educaci[óo]"
         value: 0.7
         negatable: false
-      - pattern: "apostes|sector\\s+defensa"
-        value: -0.7
-        negatable: false
   gold:
     - ad_id: wwr-stripe-backend-engineer-core-technology
       language: en
       span: "Our mission is to increase the GDP of the internet, and we have a staggering amount of work ahead. That means you have an unprecedented"
       value: 0.7
-      derived_from: cue
-    - ad_id: tecnoempleo-0e9510e2527fd31cd240
-      language: es
-      span: "Estamos ampliando nuestros equipos en el sector defensa para asumir un proyecto relacionado con sistemas UAS/UAV. Nos gusta ir al grano te vamos a contar lo que no está"
-      value: -0.7
       derived_from: cue
     - ad_id: feinaactiva-FA92320466
       language: ca

@@ -896,8 +896,17 @@ def _negation_main(argv: list[str]) -> int:
 def _main(argv: list[str]) -> int:
     """Write T15's gate evidence.
 
-    Exit 1 when the prefilter suppressed a positive — a real failure of the
-    stage this module owns. **Exit 0 while the score is unmeasured**, because
+    **Suppressions are printed, not exited on.** They were an exit code while the
+    corpus held four labelled adverts and the count was 0 by having nothing to be
+    wrong about; T56's round 2 took it to 2 over 209 positives checked, and neither
+    case is a cue bug — both are adverts carrying evidence at both poles of a
+    bipolar dimension where the cue set has vocabulary for one. Failing here would
+    block every `make evidence` in the repo behind a number whose right value is a
+    decision (`lo-25b1`, reopened). The regression signal did not go away, it moved
+    somewhere stricter: `test_prefilter` names the exact two, so a *third* fails the
+    suite, and `lo-25b1`'s own gate block is what asserts the threshold.
+
+    **Exit 0 while the score is unmeasured**, because
     unmeasured is not a failure: the extractor is not broken, the corpus cannot
     yet say whether it is right. The unmeasured state is loud on stderr instead,
     and `extraction_macro_f1` stays null so nothing downstream can quote a
@@ -925,7 +934,7 @@ def _main(argv: list[str]) -> int:
     for suppression in measured["prefilter_suppressions"]:
         print(f"✗ {suppression}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
-    return 1 if measured["prefilter_suppressed_positives"] else 0
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

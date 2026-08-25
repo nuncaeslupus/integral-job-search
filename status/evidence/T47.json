@@ -1,6 +1,6 @@
 {
   "mock_interview_character_breaks": 0,
-  "sessions_rehearsed": 175,
+  "sessions_rehearsed": 177,
   "character_breaks": [],
   "sessions_not_announced": [],
   "sessions_never_closed": [],
@@ -16,7 +16,6 @@
     "feinaactiva-FA92317540",
     "feinaactiva-FA92317562",
     "feinaactiva-FA92317752",
-    "feinaactiva-FA92317772",
     "feinaactiva-FA92317790",
     "feinaactiva-FA92317864",
     "feinaactiva-FA92317908",
@@ -25,7 +24,6 @@
     "feinaactiva-FA92318078",
     "feinaactiva-FA92318575",
     "feinaactiva-FA92318658",
-    "feinaactiva-FA92318721",
     "feinaactiva-FA92318753",
     "feinaactiva-FA92318766",
     "feinaactiva-FA92318788",
@@ -42,5 +40,5 @@
     "tecnoempleo-38021664327933990244",
     "tecnoempleo-9ae7135032ea738f104e"
   ],
-  "adverts_at_the_question_cap": 1
+  "adverts_at_the_question_cap": 2
 }

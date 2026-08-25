@@ -5,9 +5,9 @@
   "violations": [],
   "ads_with_suggestions": 176,
   "blind_control_count": 32,
-  "suggestion_count": 1043,
-  "suggestion_cue_agreement": 0.2426,
-  "cue_unreachable": 790,
+  "suggestion_count": 1032,
+  "suggestion_cue_agreement": 0.2422,
+  "cue_unreachable": 782,
   "cue_unreachable_examples": [
     "feinaactiva-09202618331:compensation_transparency",
     "feinaactiva-09202618331:contract_stability",
