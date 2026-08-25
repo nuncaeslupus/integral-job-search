@@ -1,0 +1,11 @@
+{
+  "standing_scope_decisions_not_resurfaced": 0,
+  "standing_decisions": 3,
+  "acceptances_resurfaced": 2,
+  "refusals_resurfaced": 1,
+  "corrections_applied": 1,
+  "omission_rejected": true,
+  "silent_review_rejected": true,
+  "unordered_log_rejected": true,
+  "failures": []
+}
