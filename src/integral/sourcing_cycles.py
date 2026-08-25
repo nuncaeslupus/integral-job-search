@@ -121,7 +121,19 @@ def cycles_neither_improving_nor_proposing(cycles: Sequence[Cycle]) -> list[str]
     The gate is that this is empty. Note the single argument: there is no
     second candidate to pass, which is how §5.8's "cross-candidate anything" is
     kept out — by there being nothing to call.
+
+    `cycles` must run consecutively — 3 then 4 then 5, no gaps and no
+    reordering — because `pairwise` reads its left element as "the last
+    search", and "each search must be better than the last" is a claim about
+    the one immediately before. Out of order, the comparison silently inverts:
+    a regression handed over as [3, 1] reads as an improvement and the gate
+    passes on a cycle that got worse. It need not start at 1; judging a later
+    window of one candidate's cycles is a fair question, and only adjacency is
+    load-bearing.
     """
+    numbers = [c.cycle for c in cycles]
+    if any(b != a + 1 for a, b in pairwise(numbers)):
+        raise ValueError(f"cycles must run consecutively, got {numbers}")
     return [
         f"{_did_not_improve(cycle, previous)} and proposed no change of scope"
         for previous, cycle in pairwise(cycles)

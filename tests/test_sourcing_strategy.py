@@ -441,6 +441,25 @@ def test_an_improving_cycle_is_left_alone() -> None:
     assert not improved(flat, first)
 
 
+def test_cycles_out_of_order_or_with_a_gap_are_refused() -> None:
+    """`pairwise` reads its left element as "the last search" — so order is the claim."""
+    first = Cycle(cycle=1, offers_returned=20, offers_rejected=2)
+    third = Cycle(cycle=3, offers_returned=20, offers_rejected=18)
+    # Reordered, the regression reads as an improvement and the gate passes on it.
+    with pytest.raises(ValueError, match="consecutively"):
+        cycles_neither_improving_nor_proposing([third, first])
+    # A gap compares cycle 3 with cycle 1 as though cycle 2 had not happened.
+    with pytest.raises(ValueError, match="consecutively"):
+        cycles_neither_improving_nor_proposing([first, third])
+
+
+def test_a_later_window_of_one_candidates_cycles_is_still_judgeable() -> None:
+    """Only adjacency is load-bearing — starting at 1 is not required."""
+    second = Cycle(cycle=2, offers_returned=20, offers_rejected=2)
+    third = Cycle(cycle=3, offers_returned=20, offers_rejected=18)
+    assert cycles_neither_improving_nor_proposing([second, third])
+
+
 def test_the_rate_is_measured_within_subject_only() -> None:
     """No cross-candidate comparison exists to make."""
     import inspect
