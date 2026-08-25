@@ -528,6 +528,44 @@ def prefilter_suppression(
     return len(suppressed), checked, sorted(suppressed)
 
 
+def negation_recall(
+    store: list[LabelledAd],
+    dimensions: list[Dimension],
+) -> tuple[int, list[str]]:
+    """T59's score: of the negated evaluation labels, which does the extractor also read as negated?
+
+    Recall over the **rules stage**, because that is the only stage a gate can
+    run — stage 3 asks a model and an evidence file cannot make that call. So a
+    negated label whose dimension no cue settles is a **miss**, not an exclusion.
+    Excluding it would measure the scope rule against exactly the adverts the
+    cue set already reaches and report ~1.0 whatever the cues cover; the miss
+    reasons below say which of the two failures each one is.
+
+    Unlike `prefilter_suppression`, a label naming an unknown dimension is
+    counted rather than skipped. There, skipping shrinks a count that is not a
+    scored denominator; here it would shrink the denominator of a score, so a
+    typo would raise recall.
+    """
+    by_id = {d.id: d for d in dimensions}
+    hits = 0
+    misses: list[str] = []
+    for ad, label in evaluation_labels(store):
+        if not label.negated:
+            continue
+        dimension = by_id.get(label.dimension)
+        if dimension is None:
+            misses.append(f"{ad.id}/{label.dimension}: no such dimension")
+            continue
+        found = cue_findings(_normalise_labelled(ad), dimension)
+        if found is None:
+            misses.append(f"{ad.id}/{label.dimension}: no cue settled the dimension")
+        elif not found.negated:
+            misses.append(f"{ad.id}/{label.dimension}: settled, but not as negated")
+        else:
+            hits += 1
+    return hits, sorted(misses)
+
+
 def negation_audit(
     store: list[LabelledAd],
     dimensions: list[Dimension],
@@ -547,6 +585,10 @@ def negation_audit(
     the raw character window but not under the clause rule. Every one of those
     was a wrong negation before T16, so this is the count that would be 0 if the
     change had done nothing.
+
+    `extraction_negation_recall` is the third and is a **score**, so it obeys
+    D-2's floor: `negation_recall` computes it on every run, and it is recorded
+    only once the evaluation split carries enough negated labels to divide by.
     """
     firings: list[str] = []
     leaks: list[str] = []
@@ -579,12 +621,8 @@ def negation_audit(
     negated_labels = [
         f"{ad.id}/{label.dimension}" for ad, label in evaluation_labels(store) if label.negated
     ]
-    if len(negated_labels) >= MIN_EVALUATION_LABELS_PER_DIMENSION:  # pragma: no cover
-        raise ExtractionError(
-            f"the corpus now carries {len(negated_labels)} negated evaluation labels, so "
-            "extraction_negation_recall is measurable — this branch is a placeholder "
-            "and scoring must be implemented before it can report a number (T59)"
-        )
+    hits, misses = negation_recall(store, dimensions)
+    measurable = len(negated_labels) >= MIN_EVALUATION_LABELS_PER_DIMENSION
 
     return {
         "negation_scope_leaks": len(leaks),
@@ -593,11 +631,14 @@ def negation_audit(
         "negation_firings": sorted(firings),
         "negation_window_only_count": len(window_only),
         "negation_window_only": sorted(window_only),
-        # T59's payload, recorded here because this is where a person looks to
-        # find out why the recall number is absent. Null, not 0.0 — the same
-        # third outcome D-2 requires of `extraction_macro_f1`.
-        "extraction_negation_recall": None,
-        "negation_status": "unmeasured",
+        # T59's score. Null while the corpus is below the floor — not 0.0, the
+        # same third outcome D-2 requires of `extraction_macro_f1`. The hits and
+        # misses are recorded either way: below the floor they are what a person
+        # reads to find out what the round is walking into.
+        "extraction_negation_recall": round(hits / len(negated_labels), 4) if measurable else None,
+        "negation_status": "measured" if measurable else "unmeasured",
+        "negation_recall_hits": hits,
+        "negation_recall_misses": misses,
         "negated_label_count": len(negated_labels),
         "negated_labels": sorted(negated_labels),
         "negation_label_floor": MIN_EVALUATION_LABELS_PER_DIMENSION,
@@ -679,12 +720,23 @@ def _negation_main(argv: list[str]) -> int:
     """Write T16's gate evidence. Exit 1 on a scope leak, 0 while recall waits."""
     args = [arg for arg in argv[1:] if not arg.startswith("--")]
     audited = write_negation_evidence(Path(args[0]) if args else DEFAULT_NEGATION_EVIDENCE_PATH)
-    print(
-        "extraction_negation_recall: UNMEASURED — "
-        f"{audited['negated_label_count']} negated label(s), floor "
-        f"{audited['negation_label_floor']}. Not a pass and not a fail (D-2); T59 owns it.",
-        file=sys.stderr,
-    )
+    if audited["negation_status"] == "measured":
+        print(
+            f"extraction_negation_recall: {audited['extraction_negation_recall']} over "
+            f"{audited['negated_label_count']} negated label(s) "
+            f"({audited['negation_recall_hits']} hit, {len(audited['negation_recall_misses'])} "
+            "missed). The threshold is the gate block's to assert, not this command's.",
+            file=sys.stderr,
+        )
+        for miss in audited["negation_recall_misses"]:
+            print(f"  missed {miss}", file=sys.stderr)
+    else:
+        print(
+            "extraction_negation_recall: UNMEASURED — "
+            f"{audited['negated_label_count']} negated label(s), floor "
+            f"{audited['negation_label_floor']}. Not a pass and not a fail (D-2); T59 owns it.",
+            file=sys.stderr,
+        )
     for leak in audited["negation_leaks"]:
         print(f"✗ {leak}", file=sys.stderr)
     print(json.dumps(audited, ensure_ascii=False))

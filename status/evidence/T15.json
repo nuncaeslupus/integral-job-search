@@ -2,22 +2,24 @@
   "extraction_macro_f1": null,
   "extraction_status": "unmeasured",
   "label_floor": 10,
-  "evaluation_label_count": 14,
+  "evaluation_label_count": 21,
   "evaluation_labels_by_dimension": {
     "compensation_transparency": 1,
     "contract_stability": 1,
     "english_demand": 1,
-    "leadership": 1,
+    "leadership": 2,
     "mentoring_culture": 1,
-    "on_call_load": 1,
+    "on_call_load": 2,
+    "process_formality": 2,
     "product_vs_services": 1,
     "remote_arrangement": 1,
     "schedule_flexibility": 1,
     "seniority_expectation": 1,
+    "social_intensity": 2,
     "stack_modernity": 1,
     "talking_clients": 1,
     "team_autonomy": 1,
-    "travel_requirement": 1
+    "travel_requirement": 2
   },
   "scorable_dimensions": [],
   "dimensions_below_floor": [
@@ -48,6 +50,6 @@
     "work_intensity"
   ],
   "prefilter_suppressed_positives": 0,
-  "prefilter_positives_checked": 36,
+  "prefilter_positives_checked": 40,
   "prefilter_suppressions": []
 }

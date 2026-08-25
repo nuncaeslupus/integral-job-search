@@ -1,16 +1,16 @@
 {
   "corpus_size": 100,
-  "labelled_ad_count": 4,
-  "label_count": 39,
-  "span_count": 50,
+  "labelled_ad_count": 7,
+  "label_count": 46,
+  "span_count": 57,
   "labels_by_source": {
-    "confirmed": 22,
+    "confirmed": 29,
     "edited": 7,
     "human": 10
   },
   "labels_by_split": {
     "elicitation": 25,
-    "evaluation": 14
+    "evaluation": 21
   },
   "labels_by_dimension": {
     "career_progression": 1,
@@ -20,25 +20,25 @@
     "contract_stability": 2,
     "english_demand": 3,
     "inclusion_commitment": 2,
-    "leadership": 1,
+    "leadership": 2,
     "learning_support": 1,
     "mentoring_culture": 1,
-    "on_call_load": 1,
+    "on_call_load": 2,
+    "process_formality": 2,
     "product_vs_services": 3,
     "remote_arrangement": 3,
     "schedule_flexibility": 3,
     "seniority_expectation": 4,
+    "social_intensity": 2,
     "stack_modernity": 2,
     "talking_clients": 2,
     "team_autonomy": 2,
     "technical_depth": 1,
-    "travel_requirement": 2,
+    "travel_requirement": 3,
     "wellbeing_benefits": 1
   },
   "dimensions_without_labels": [
     "mission_alignment",
-    "process_formality",
-    "social_intensity",
     "work_intensity"
   ],
   "languages": {
