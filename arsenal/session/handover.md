@@ -1,7 +1,8 @@
 # Session handover — 2026-08-24/25, iterative sourcing built end to end
 
-A long worker session on the laptop. **The whole T60–T68 chain is merged**; the only
-sourcing work left is T69, which is `[HUMAN]`. Nine PRs merged, two closed unmerged.
+A long worker session on the laptop. **The whole T60–T68 chain is now merged**; the only
+sourcing work left is T69, which is `[HUMAN]`. T60 landed in the previous session (#176);
+this session merged the other **eight task PRs**, and closed two unmerged.
 `main` is green: ruff, strict mypy over 161 files, full pytest, `evidence: no drift`,
 `verify-gates: 100 terminal task(s); 100 gate(s) asserted`.
 
@@ -24,8 +25,11 @@ scored yet".
 
 ## What merged
 
+T60's row is the previous session's, kept so the chain reads whole:
+
 | PR | Task | Gate, measured |
 |---|---|---|
+| #176 | T60 — step 7 reads the weights and the reaction/outcome evidence *(previous session)* | `sourcing_inputs_excluding_learned_evidence = 0` |
 | #180 | T61 — the §1 amendment across D-3's three documents | `spec_consistency_violations = 0` |
 | #179 | T62 — exhaustion as a measurement | `exhaustion_triggers_without_a_reason = 0` |
 | #184 | T63 — the `exhausted` trigger kind beside staleness | `stuck_cycles_without_a_proposal = 0` |
