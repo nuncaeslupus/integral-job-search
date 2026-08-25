@@ -19,8 +19,28 @@ in a different hat.
 from cue firings, which are what the labels are meant to judge — but the only dimension
 with no pre-mark, so the only one costing a blind read per label.
 
-**So the round can start.** ~45 labels, ten per dimension minus the one each holds, and
-every one is confirm-and-move: T57's re-seed pre-marked all 176 non-control ads.
+**So the round can start — and it is eleven adverts, not forty-five reads.**
+
+45 labels exactly: each of the five holds one already, so nine each. But labels are placed
+per *advert*, and T57's re-seed pre-marked the evaluation split heavily — 31 to 56 marks
+per dimension across 73 evaluation ads, none of them a control:
+
+| dimension | pre-marks on evaluation ads | labels still needed |
+|---|---|---|
+| `remote_arrangement` | 37 | 9 |
+| `compensation_transparency` | 48 | 9 |
+| `contract_stability` | 50 | 9 |
+| `schedule_flexibility` | 31 | 9 |
+| `seniority_expectation` | 56 | 9 |
+
+Three evaluation ads pre-mark all five at once, thirteen mark four. A greedy cover over
+those — read the ads that carry the most of the five first — **floors all five dimensions
+in 11 adverts** with no shortfall. Every mark is confirm / change / delete, and the page
+carries no cue data at all, so nothing here scores the extractor against itself.
+
+Do not spend the round on `blind_control` (32 ads): they are deliberately unmarked so that
+blind agreement can be read against confirmed agreement. They are a different measurement,
+not cheap labels.
 
 ## The trap is gone — label ten is now safe
 
