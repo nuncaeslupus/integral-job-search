@@ -1,0 +1,9 @@
+{
+  "documents_missing_a_required_text_layer_field": 0,
+  "documents_missing_a_required_text_layer_field_evaluated": 208,
+  "documents_with_text_layer_violations": 0,
+  "documents_checked": 208,
+  "gate_status": "measured",
+  "violations": [],
+  "adverts_generated": 208
+}

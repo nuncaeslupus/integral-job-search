@@ -733,6 +733,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-66530856",
+      "key": "documents_missing_a_required_text_layer_field",
+      "evidence": "status/evidence/T80.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-6f79e090",
       "key": "unfilterable_stated_constraints",
       "evidence": "status/evidence/D-20.json",
