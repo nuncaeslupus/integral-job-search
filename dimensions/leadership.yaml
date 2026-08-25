@@ -78,7 +78,7 @@ extraction:
       # outright there is no team to manage.
       - pattern: "gesti[óo]n\\s+de\\s+equipos\\s+no\\b"
         value: 0.0
-        negatable: false
+        denies: true
       - pattern: "(liderar|dirigir)\\s+(la\\s+)?(implementaci[óo]n|proyectos?|la\\s+arquitectura)"
         value: 0.33
         negatable: false

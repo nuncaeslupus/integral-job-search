@@ -15,15 +15,12 @@
   ],
   "extraction_negation_recall": null,
   "negation_status": "unmeasured",
-  "negation_recall_hits": 2,
+  "negation_recall_hits": 5,
   "negation_recall_misses": [
     "manfred-8386/process_formality: no cue settled the dimension",
     "manfred-8386/social_intensity: no cue settled the dimension",
     "manfred-8392/process_formality: no cue settled the dimension",
-    "manfred-8392/social_intensity: no cue settled the dimension",
-    "tecnoempleo-799b12ca520d03c0e743/leadership: settled, but not as negated",
-    "tecnoempleo-799b12ca520d03c0e743/travel_requirement: settled, but not as negated",
-    "tecnoempleo-98201f7d82b073d32d45/travel_requirement: settled, but not as negated"
+    "manfred-8392/social_intensity: no cue settled the dimension"
   ],
   "negated_label_count": 9,
   "negated_labels": [

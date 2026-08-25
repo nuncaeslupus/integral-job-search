@@ -50,7 +50,10 @@ extraction:
       - pattern: "english\\s*\\(?\\s*(b2|c1|c2)"
         value: 0.7
         negatable: false
-      - pattern: "english\\s+(is\\s+)?(not\\s+required|optional)"
+      - pattern: "english\\s+(is\\s+)?not\\s+required"
+        value: 0.0
+        denies: true
+      - pattern: "english\\s+(is\\s+)?optional"
         value: 0.0
         negatable: false
     es:
@@ -62,7 +65,7 @@ extraction:
         negatable: false
       - pattern: "ingl[ée]s\\s+no\\s+(necesario|requerido)|no\\s+se\\s+requiere\\s+ingl[ée]s"
         value: 0.0
-        negatable: false
+        denies: true
     ca:
       - pattern: "angl[èe]s\\s*\\(?\\s*(c1|c2|alt|parlat\\s+superior)"
         value: 0.9
@@ -72,7 +75,7 @@ extraction:
         negatable: false
       - pattern: "angl[èe]s\\s+no\\s+(necessari|requerit)"
         value: 0.0
-        negatable: false
+        denies: true
   gold:
     - ad_id: manfred-8389
       language: es

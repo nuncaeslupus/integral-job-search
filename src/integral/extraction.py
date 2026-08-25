@@ -309,7 +309,13 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
             if match.end() <= match.start():  # pragma: no cover - zero-width cue
                 continue
             value = cue.value
-            negated = cue.negatable and _is_negated(ad.text, match.start(), ad.language)
+            # Two routes to the same conclusion, and both must reach it. A
+            # `negatable` cue is negated by a negator *before* it, which is what
+            # `_is_negated` can see; a `denies` cue carries its negator inside its
+            # own pattern, where nothing looking backwards ever will.
+            negated = cue.denies or (
+                cue.negatable and _is_negated(ad.text, match.start(), ad.language)
+            )
             if negated:
                 value = -value
                 negated_any = True
