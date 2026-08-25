@@ -1,0 +1,14 @@
+{
+  "narrowings_without_a_recorded_decision": 0,
+  "scope_changes_applied": 2,
+  "decisions_recorded": 3,
+  "refusals_recorded": 1,
+  "unconsented_narrowing_rejected": true,
+  "reask_after_refusal_rejected": true,
+  "reask_licensed_by": [
+    "changed trigger",
+    "new evidence",
+    "new session"
+  ],
+  "failures": []
+}

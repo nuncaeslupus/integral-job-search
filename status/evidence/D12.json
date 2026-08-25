@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 100,
+  "evidence_gates_read": 101,
   "gates_declaring_status_key": 4,
   "unrecordable": [],
   "readings": [
@@ -736,6 +736,14 @@
       "task": "t-7bf38efa",
       "key": "spec_consistency_violations",
       "evidence": "status/evidence/T61.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-8cebf0ec",
+      "key": "narrowings_without_a_recorded_decision",
+      "evidence": "status/evidence/T65.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
