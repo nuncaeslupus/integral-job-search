@@ -101,6 +101,33 @@ tiebreak, never the criterion:
 `remote_arrangement`, `compensation_transparency`, `contract_stability`,
 `schedule_flexibility`, `seniority_expectation`.
 
+### Decided — 2026-08-25, before the first label of the round
+
+The owner accepted those five unchanged. **The subset is now closed**: no dimension
+joins or leaves it on the strength of a score, because the whole reason it was picked
+cold is that picking again with a number in hand is D-2's failure wearing a different
+hat. If five turns out to be the wrong size, the honest move is to say so *and start
+over*, not to widen.
+
+What this commits the round to:
+
+* `extraction_macro_f1` is the mean over **exactly these five**, and the twenty
+  others stay in `dimensions_below_floor` where `T15.json` already names them.
+  A reader who quotes the score without that list is quoting a mean over a fifth
+  of the model.
+* ~45 labels, ten per dimension minus the one each already holds — and every one
+  is a confirm-and-move rather than a blind read, because T57's re-seed pre-marked
+  all 176 non-control ads.
+* `collaboration_mode` is **out**, and stays out for this round. Not because it is
+  unfindable — that inference would come from cue firings, which are the thing the
+  labels are meant to judge — but because it is the one dimension with no pre-mark,
+  so it is the only one whose labels cost a blind read each. Establish its
+  prevalence first, in a round of its own.
+
+The scorer these labels feed is in place as of this round's start: `measure()` no
+longer raises when a dimension crosses the floor, so label ten does not break
+`make host-gate` for the repo.
+
 **`collaboration_mode` is the expensive one, for a reason worth stating carefully.**
 It is the only dimension with no pre-mark even inside the 84, so every label for it is
 a blind read rather than a confirmation. What is *not* established is that ten
