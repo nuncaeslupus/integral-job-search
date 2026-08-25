@@ -95,6 +95,29 @@ DEFAULT_NEGATION_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T16.json"
 # passes (D-2).
 MIN_EVALUATION_LABELS_PER_DIMENSION = 10
 
+# T56's round-1 subset, decided cold on 2026-08-25 and recorded here so that the
+# declaration lives beside the thing it describes rather than only in prose.
+#
+# It is a **target, not a cap.** `measure` scores every dimension that reaches the
+# label floor, and it must keep doing so: as the corpus grows, more dimensions
+# clear the floor and the macro *should* widen with them. Freezing the mean to
+# five ids would make the gate permanently narrower than the model.
+#
+# What D-2 forbids is choosing the subset to flatter the number — narrowing it,
+# or picking again once a score is known. Widening by labelling honestly is the
+# opposite of that. So the rule is enforced the way this repo enforces its other
+# rules: `declared_subset` and `scorable_dimensions` are both recorded, and any
+# dimension in the second and not the first is named in the evidence. A widening
+# is then visible and auditable instead of silent — which is what "closed" was
+# reaching for and could not deliver on its own.
+DECLARED_SUBSET: tuple[str, ...] = (
+    "compensation_transparency",
+    "contract_stability",
+    "remote_arrangement",
+    "schedule_flexibility",
+    "seniority_expectation",
+)
+
 # Words that flip a `negatable` cue. Deliberately small and per-language:
 # enough for "no on-call" / "sense guàrdies" / "sin guardias". Scope, not
 # vocabulary, is what made this wrong in practice — see `_CLAUSE_BOUNDARY`.
@@ -762,6 +785,8 @@ def measure(
     # keys exist cannot tell an unmeasured run from a run that never happened.
     measured["extraction_scored_n"] = sum(s["n"] for s in scored.values())
     measured["extraction_scored_dimensions"] = sorted(scored)
+    measured["declared_subset"] = sorted(DECLARED_SUBSET)
+    measured["scored_beyond_the_declared_subset"] = sorted(set(scored) - set(DECLARED_SUBSET))
     if scored:
         measured["extraction_macro_f1"] = round(
             sum(s["f1"] for s in scored.values()) / len(scored), 4

@@ -103,11 +103,27 @@ tiebreak, never the criterion:
 
 ### Decided — 2026-08-25, before the first label of the round
 
-The owner accepted those five unchanged. **The subset is now closed**: no dimension
-joins or leaves it on the strength of a score, because the whole reason it was picked
-cold is that picking again with a number in hand is D-2's failure wearing a different
-hat. If five turns out to be the wrong size, the honest move is to say so *and start
-over*, not to widen.
+The owner accepted those five unchanged, and they are recorded in code as
+`extraction.DECLARED_SUBSET` — the declaration lives beside the thing it describes.
+
+**It is a target, not a cap, and the first version of this section got that wrong.**
+It said the subset was "closed", which read as a rule that `measure()` does not
+enforce and should not: the macro is the mean over every dimension that reaches the
+label floor, and it must stay that way. As the corpus grows more dimensions clear the
+floor and the score *should* widen with them; freezing the mean to five ids would
+make the gate permanently narrower than the model.
+
+What D-2 forbids is choosing the subset to flatter the number — narrowing it, or
+picking again once a score is known. Widening by labelling honestly is the opposite
+of that. So the rule is enforced the way this repo enforces its other rules, by
+making a divergence **visible** rather than impossible: `T15.json` records
+`declared_subset` beside `scorable_dimensions`, and anything in the second and not
+the first is named in `scored_beyond_the_declared_subset`. A widening is then
+auditable — a reader can ask why a sixth dimension appeared and when it was labelled
+— which is what "closed" was reaching for and could not deliver on its own.
+
+If five turns out to be the wrong size, the honest move is still to say so and start
+over rather than to quietly add a sixth once a number is on the table.
 
 What this commits the round to:
 

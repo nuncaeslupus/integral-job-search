@@ -16,6 +16,7 @@ import pytest
 
 from integral.dimensions import Cue, Dimension, Extraction, Language, load_dimensions
 from integral.extraction import (
+    DECLARED_SUBSET,
     DimensionScore,
     EvidenceSpan,
     ExtractionError,
@@ -443,3 +444,21 @@ def test_an_unmeasured_result_has_the_same_shape_as_a_measured_one(tmp_path: Pat
     assert unmeasured["extraction_scored_n"] == 0
     assert unmeasured["extraction_scored_dimensions"] == []
     assert unmeasured["extraction_macro_f1"] is None
+
+
+def test_the_declared_subset_is_recorded_beside_what_was_actually_scored(
+    tmp_path: Path,
+) -> None:
+    """A widening must be visible, which is the enforceable half of "closed".
+
+    `measure` scores every dimension that reaches the floor, deliberately — the
+    macro should widen as the corpus grows. What must not happen is a sixth
+    dimension entering the mean without anyone able to see that it did. So the
+    declaration is recorded beside the outcome, and the difference is named.
+    """
+    rows = [(f"a{i}", "Puesto 100% remoto en Madrid.", 1.0) for i in range(10)]
+    measured = measure(_store(tmp_path, rows))
+
+    assert measured["declared_subset"] == sorted(DECLARED_SUBSET)
+    assert measured["extraction_scored_dimensions"] == ["remote_arrangement"]
+    assert measured["scored_beyond_the_declared_subset"] == [], "inside the declaration"
