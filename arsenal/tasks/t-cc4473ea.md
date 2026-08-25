@@ -27,6 +27,14 @@ uv run --extra dev python -m integral.spec_consistency
 
 The `bash` block regenerates it; the `gate` block asserts the number in it.
 
+**Wire the writer into `_main`, not only into the module.** Today
+`spec_consistency._main` writes `D3.json` and `T61.json`; a `write_evidence` for
+D-23 that `_main` does not call leaves the `bash` block above running a command
+that never touches the file the `gate` block names — the acceptance would pass
+against a stale or absent file, which is this increment's own failure class. `make
+evidence` discovers modules by `^def _main` and runs each with no arguments, so a
+record only reachable through a flag is a record the drift check never regenerates.
+
 ## Why
 
 The eligibility and language gates (T76–T79) are gated on **mechanism** over hand-built fixtures and never on **accuracy** over real adverts. No corpus labels exist for permit, citizenship, clearance or role-language requirements, so a gate that fires wrongly on a Spanish advert passes every check in this increment.

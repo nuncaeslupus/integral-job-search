@@ -189,7 +189,7 @@ each is cheaper to fix now than to explain to a candidate.
 | Effort | Small | Medium | Large |
 | Risk | Low build risk; leaves the candidate-visible defect in place for the first session | Medium — mechanism gates could be over-trusted, mitigated by FLAG | High — two hard blockers, neither removable by working harder |
 | Completeness | The three bugs only | Every borrowed idea that can be honestly gated now | Full, including the loop |
-| Compatibility | No schema change | Two additive fields | Additive + corpus schema |
+| Compatibility | No schema change | Three additive fields (two offer, one application) | Additive + corpus schema |
 | Maintenance | Three modules | Three new, four modified — all fixture-tested | Adds a labelling burden and a mail integration |
 | Autonomous-work fit | ~3 tasks | **16 tasks, mostly independent** | Blocks on a human within one task |
 

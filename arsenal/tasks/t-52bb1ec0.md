@@ -15,6 +15,7 @@ tags: [v3, m5]
 rate_limited_runs_reported_as_broken == 0
 evidence: status/evidence/T73.json
 key: rate_limited_runs_reported_as_broken
+status-key: gate_status
 ```
 
 ```bash
@@ -62,3 +63,29 @@ Service: **SUPPLY** · Size: S
 
 Spec: `status/spec-v3-silent-success.md` · Plan: `status/plan.md` (T73) ·
 Methods: `docs/METHODS.md`
+
+## A zero count must prove the mechanism ran — 2026-08-26
+
+This gate asserts a **violation count of zero**, and an empty input set produces
+zero too. As written it could pass without evaluating a single offer, verdict,
+ranked result, document, keyword, application or technique — which is *precisely*
+the failure class this increment exists to catch, reproduced inside its own
+acceptance criteria.
+
+The gate block therefore carries `status-key: gate_status`, and the producing
+module must honour it:
+
+* record **``runs_evaluated``** — how many inputs were actually evaluated — in the evidence
+  file, beside the violation count;
+* write **`gate_status: "unmeasured"`** whenever that count is `0`, and
+  `"measured"` otherwise.
+
+`gate_evidence.py` reads `status-key` before it reads the metric and exits **3** on
+`unmeasured` — "the check ran, and what it found is that this cannot be scored
+yet". Not a pass and not a fail, which is the honest third outcome for a run that
+processed nothing. That is the same mechanism `lo-6f53` uses for
+`extraction_macro_f1`, so this is existing machinery rather than a new rule.
+
+**A second assertion in the gate block would not have worked**: line 1 of a `gate`
+fence *is* the gate, one metric per block. Making the emptiness visible through the
+status key is what makes the invariant executable rather than prose.
