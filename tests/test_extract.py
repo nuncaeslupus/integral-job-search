@@ -589,3 +589,27 @@ def test_a_contained_cue_match_does_not_dilute_the_cue_that_contains_it() -> Non
         assert found is not None, text
         assert found.value == 0.5, f"{text} -> {found.value}, which is not a rung"
         assert len(found.spans) == 1, "the contained match is dropped, not averaged"
+
+
+def test_a_dropped_match_does_not_leave_its_negation_behind() -> None:
+    """`negated_any` is recomputed from what survived containment, not carried over.
+
+    A contained negatable cue whose match is negated would otherwise leave
+    `negated=True` on a score with no negated span under it. On a bipolar
+    dimension that is not cosmetic: a negated match settles on its own (T59), so
+    one leftover flag bypasses the two-match requirement entirely.
+    """
+    base = _dimension("process_formality")
+    dimension = _with_cues(
+        base,
+        [
+            Cue(pattern="sprint", value=0.5, negatable=True),
+            Cue(pattern=r"sin\s+sprints\s+tradicionales", value=0.5, negatable=False),
+        ],
+    )
+    found = cue_findings(normalise(_offer("Trabajamos sin sprints tradicionales.")), dimension)
+
+    # The bare `sprint` match lies inside the longer one and is dropped; the
+    # survivor is not negated, so a single positive match cannot settle a
+    # bipolar dimension.
+    assert found is None

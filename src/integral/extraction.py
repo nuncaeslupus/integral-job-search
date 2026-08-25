@@ -325,7 +325,7 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
     cues = dimension.extraction.cues.get(ad.language, [])
     spans: list[EvidenceSpan] = []
     values: list[float] = []
-    negated_any = False
+    negations: list[bool] = []
 
     for cue in cues:
         for match in re.finditer(cue.pattern, ad.text, re.IGNORECASE):
@@ -341,7 +341,6 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
             )
             if negated:
                 value = -value
-                negated_any = True
             spans.append(
                 EvidenceSpan(
                     start=match.start(),
@@ -350,6 +349,7 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
                 )
             )
             values.append(value)
+            negations.append(negated)
 
     if not spans:
         return None
@@ -373,6 +373,13 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
     ]
     spans = [spans[i] for i in kept]
     values = [values[i] for i in kept]
+    # Recomputed from what survived, never carried over. A dropped match must
+    # not leave its negation behind: the score would report `negated=True` with
+    # no negated span under it, and — since a negated match settles a bipolar
+    # dimension on its own (T59) — one leftover flag would bypass the two-match
+    # requirement entirely.
+    negations = [negations[i] for i in kept]
+    negated_any = any(negations)
 
     # A bipolar dimension needs corroboration, and needs the matches to agree.
     # Disagreeing cues on a bipolar scale are the clearest possible signal that
