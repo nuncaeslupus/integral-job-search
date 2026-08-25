@@ -57,55 +57,83 @@ def _with_cues(base: Dimension, cues: list[Cue], language: Language = "es") -> D
 
 
 def test_extraction_matches_corpus_labels() -> None:
-    """The named gate test — and today it asserts a *refusal*, on purpose.
+    """The named gate test. It asserts a **measured shortfall** — that is the finding.
 
-    `extraction_macro_f1 >= 0.75` is measured over evaluation-split labels a
-    person placed. There are 14, no dimension above 1, and D-2 (`lo-77a6`)
-    binds this task to refuse a number below the per-dimension floor rather
-    than compute one over three rows.
+    This test used to assert a refusal, and said of itself: "when the corpus
+    grows past the floor this test is what should start failing — that is the
+    signal". Round 1 of T56's labelling grew it, and this is that signal
+    arriving. Five dimensions now clear the floor and
+    `extraction_macro_f1 >= 0.75` is finally a question with an answer.
 
-    So the correct output is `null` plus `unmeasured` plus the dimensions
-    named. When the corpus grows past the floor this test is what should start
-    failing — that is the signal to implement scoring, and `measure` raises
-    rather than silently reporting a number it never computed.
+    The answer is **no**, and the assertions below say so without softening it:
+    the number exists, it is real, and it is under the threshold. Asserting
+    `>= 0.75` here would make the suite red for a shortfall the evidence file
+    already records honestly, which is the gate's job (`gate_evidence.py`), not
+    this test's. What this test defends is that the number is *computed over
+    what D-2 allows* — evaluation-split labels a person placed, every scored
+    dimension at or above the floor, `n` reported beside it.
     """
     measured = measure()
-    assert measured["extraction_status"] == "unmeasured"
-    assert measured["extraction_macro_f1"] is None
-    assert measured["scorable_dimensions"] == []
-    assert measured["dimensions_below_floor"], "a refusal must say what it could not score"
-    assert measured["evaluation_label_count"] < (
-        measured["label_floor"] * len(measured["dimensions_below_floor"])
+
+    assert measured["extraction_status"] == "measured"
+    assert isinstance(measured["extraction_macro_f1"], float)
+    assert measured["scorable_dimensions"], "five dimensions cleared the floor in round 1"
+    assert measured["extraction_macro_f1"] < 0.75, (
+        "if this fails the extractor got better and the gate can close — "
+        f"macro-F1 is now {measured['extraction_macro_f1']}"
+    )
+
+    floor = measured["label_floor"]
+    counts = measured["evaluation_labels_by_dimension"]
+    for dimension in measured["scorable_dimensions"]:
+        assert counts[dimension] >= floor, f"{dimension} was scored below the floor"
+    per = measured["extraction_f1_by_dimension"]
+    assert measured["extraction_scored_n"] == sum(
+        per[d]["n"] for d in measured["extraction_scored_dimensions"]
     )
 
 
-def test_unmeasured_is_not_a_zero_score() -> None:
-    """Null, not 0.0 — the distinction the whole of D-2 rests on.
+def test_a_measured_score_still_names_what_it_could_not_reach() -> None:
+    """A number is not permission to stop reporting the twenty dimensions under it.
 
-    A 0.0 in this key is a *failing* extractor. An extractor nobody has been
-    able to measure is not failing, and a reader who cannot tell those apart
-    will either ship something broken or rewrite something that works.
+    `extraction_macro_f1` is a macro over the dimensions that cleared the
+    floor — five of twenty-five. A reader who quotes it without
+    `dimensions_below_floor` is quoting a mean over a fifth of the model, and
+    that list is the only thing standing between the figure and that reading.
     """
     measured = measure()
+
+    assert measured["dimensions_below_floor"], "twenty dimensions are still unlabelled"
+    assert set(measured["scorable_dimensions"]).isdisjoint(measured["dimensions_below_floor"])
+    assert measured["declared_subset"], "the round's declaration travels with the number"
+
+
+def test_unmeasured_is_not_a_zero_score(tmp_path: Path) -> None:
+    """Null, not 0.0 — the distinction the whole of D-2 rests on.
+
+    The real corpus can no longer show this: it scores. So the case is made on
+    a store that cannot be scored, which is the one that matters — a reader who
+    cannot tell "nobody could measure this" from "this scored nothing right"
+    will either ship something broken or rewrite something that works.
+    """
+    measured = measure(_store(tmp_path, [("only", "Puesto presencial.", 0.0)]))
+
     # Present-and-null, which is a third thing from absent and from 0.0. An
     # absent key reads as "this run never happened"; 0.0 reads as "the
     # extractor scored nothing right".
     assert "extraction_macro_f1" in measured
     assert measured["extraction_macro_f1"] is None
     assert measured["extraction_macro_f1"] != 0.0
+    assert measured["extraction_status"] == "unmeasured"
 
 
 def test_the_evidence_file_records_what_it_measured(tmp_path: Path) -> None:
     evidence = tmp_path / "T15.json"
     write_evidence(evidence)
     recorded = json.loads(evidence.read_text(encoding="utf-8"))
-    assert recorded["extraction_macro_f1"] is None
+    assert isinstance(recorded["extraction_macro_f1"], float)
     assert recorded["prefilter_suppressed_positives"] == 0
     assert recorded["prefilter_positives_checked"] > 0, "a clean result over nothing is nothing"
-
-
-# ---------------------------------------------------------------------------
-# stage 1 — normalise
 
 
 def test_decomposed_characters_are_composed_before_cues_run() -> None:
@@ -541,3 +569,47 @@ def test_a_negated_single_match_settles_a_bipolar_dimension() -> None:
     assert found is not None, "one denial is enough; one keyword is not"
     assert found.negated is True
     assert found.value == -0.5
+
+
+def test_a_contained_cue_match_does_not_dilute_the_cue_that_contains_it() -> None:
+    """Both orders of the hybrid phrasing, and neither averages down to a non-rung.
+
+    A guard on the narrower pattern can only look one way: a lookahead on
+    `presencial` catches "presencial con teletrabajo" and misses "teletrabajo y
+    presencial", where the on-site word comes last. Dropping a match that lies
+    wholly inside a longer one is symmetric by construction and needs no guard.
+    """
+    dimension = _dimension("remote_arrangement")
+
+    for text in (
+        "Modelo presencial con 1 día de teletrabajo semanal.",
+        "Teletrabajo y 2 presencial.",
+    ):
+        found = cue_findings(normalise(_offer(text)), dimension)
+        assert found is not None, text
+        assert found.value == 0.5, f"{text} -> {found.value}, which is not a rung"
+        assert len(found.spans) == 1, "the contained match is dropped, not averaged"
+
+
+def test_a_dropped_match_does_not_leave_its_negation_behind() -> None:
+    """`negated_any` is recomputed from what survived containment, not carried over.
+
+    A contained negatable cue whose match is negated would otherwise leave
+    `negated=True` on a score with no negated span under it. On a bipolar
+    dimension that is not cosmetic: a negated match settles on its own (T59), so
+    one leftover flag bypasses the two-match requirement entirely.
+    """
+    base = _dimension("process_formality")
+    dimension = _with_cues(
+        base,
+        [
+            Cue(pattern="sprint", value=0.5, negatable=True),
+            Cue(pattern=r"sin\s+sprints\s+tradicionales", value=0.5, negatable=False),
+        ],
+    )
+    found = cue_findings(normalise(_offer("Trabajamos sin sprints tradicionales.")), dimension)
+
+    # The bare `sprint` match lies inside the longer one and is dropped; the
+    # survivor is not negated, so a single positive match cannot settle a
+    # bipolar dimension.
+    assert found is None

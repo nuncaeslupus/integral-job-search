@@ -325,7 +325,7 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
     cues = dimension.extraction.cues.get(ad.language, [])
     spans: list[EvidenceSpan] = []
     values: list[float] = []
-    negated_any = False
+    negations: list[bool] = []
 
     for cue in cues:
         for match in re.finditer(cue.pattern, ad.text, re.IGNORECASE):
@@ -341,7 +341,6 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
             )
             if negated:
                 value = -value
-                negated_any = True
             spans.append(
                 EvidenceSpan(
                     start=match.start(),
@@ -350,9 +349,37 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
                 )
             )
             values.append(value)
+            negations.append(negated)
 
     if not spans:
         return None
+
+    # A cue whose match lies wholly inside another cue's match is the less
+    # specific reading of the same words, and must not be averaged in beside it.
+    # "Modelo presencial con 1 día de teletrabajo" matches both the hybrid cue
+    # and the bare `presencial` inside it; averaging 0.5 with 0.0 records 0.25,
+    # which is not a rung this dimension has. Dropping the contained match is
+    # what a guard on the narrower pattern was reaching for, except that a guard
+    # can only look one way — a lookahead misses `teletrabajo … presencial` — and
+    # this is symmetric by construction.
+    kept = [
+        i
+        for i, span in enumerate(spans)
+        if not any(
+            j != i and other.start <= span.start and span.end <= other.end
+            and (other.end - other.start) > (span.end - span.start)
+            for j, other in enumerate(spans)
+        )
+    ]
+    spans = [spans[i] for i in kept]
+    values = [values[i] for i in kept]
+    # Recomputed from what survived, never carried over. A dropped match must
+    # not leave its negation behind: the score would report `negated=True` with
+    # no negated span under it, and — since a negated match settles a bipolar
+    # dimension on its own (T59) — one leftover flag would bypass the two-match
+    # requirement entirely.
+    negations = [negations[i] for i in kept]
+    negated_any = any(negations)
 
     # A bipolar dimension needs corroboration, and needs the matches to agree.
     # Disagreeing cues on a bipolar scale are the clearest possible signal that

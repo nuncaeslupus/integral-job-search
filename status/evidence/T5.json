@@ -1,45 +1,45 @@
 {
   "corpus_size": 208,
-  "labelled_ad_count": 7,
-  "label_count": 46,
-  "span_count": 57,
+  "labelled_ad_count": 18,
+  "label_count": 119,
+  "span_count": 133,
   "labels_by_source": {
-    "confirmed": 29,
-    "edited": 7,
-    "human": 10
+    "confirmed": 95,
+    "edited": 10,
+    "human": 14
   },
   "labels_by_split": {
     "elicitation": 25,
-    "evaluation": 21
+    "evaluation": 94
   },
   "labels_by_dimension": {
-    "career_progression": 1,
-    "collaboration_mode": 1,
+    "career_progression": 2,
+    "collaboration_mode": 3,
     "company_stage": 1,
-    "compensation_transparency": 2,
-    "contract_stability": 2,
-    "english_demand": 3,
-    "inclusion_commitment": 2,
+    "compensation_transparency": 11,
+    "contract_stability": 11,
+    "english_demand": 6,
+    "inclusion_commitment": 3,
     "leadership": 2,
-    "learning_support": 1,
-    "mentoring_culture": 1,
+    "learning_support": 4,
+    "mentoring_culture": 2,
     "on_call_load": 2,
-    "process_formality": 2,
-    "product_vs_services": 3,
-    "remote_arrangement": 3,
-    "schedule_flexibility": 3,
-    "seniority_expectation": 4,
+    "process_formality": 3,
+    "product_vs_services": 5,
+    "remote_arrangement": 12,
+    "schedule_flexibility": 13,
+    "seniority_expectation": 14,
     "social_intensity": 2,
-    "stack_modernity": 2,
-    "talking_clients": 2,
-    "team_autonomy": 2,
+    "stack_modernity": 4,
+    "talking_clients": 6,
+    "team_autonomy": 5,
     "technical_depth": 1,
-    "travel_requirement": 3,
-    "wellbeing_benefits": 1
+    "travel_requirement": 4,
+    "wellbeing_benefits": 2,
+    "work_intensity": 1
   },
   "dimensions_without_labels": [
-    "mission_alignment",
-    "work_intensity"
+    "mission_alignment"
   ],
   "languages": {
     "ca": 90,

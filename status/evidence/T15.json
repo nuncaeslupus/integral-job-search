@@ -1,33 +1,43 @@
 {
-  "extraction_macro_f1": null,
-  "extraction_status": "unmeasured",
+  "extraction_macro_f1": 0.5539,
+  "extraction_status": "measured",
   "label_floor": 10,
-  "evaluation_label_count": 21,
+  "evaluation_label_count": 94,
   "evaluation_labels_by_dimension": {
-    "compensation_transparency": 1,
-    "contract_stability": 1,
-    "english_demand": 1,
+    "career_progression": 1,
+    "collaboration_mode": 2,
+    "compensation_transparency": 10,
+    "contract_stability": 10,
+    "english_demand": 4,
+    "inclusion_commitment": 1,
     "leadership": 2,
-    "mentoring_culture": 1,
+    "learning_support": 3,
+    "mentoring_culture": 2,
     "on_call_load": 2,
-    "process_formality": 2,
-    "product_vs_services": 1,
-    "remote_arrangement": 1,
-    "schedule_flexibility": 1,
-    "seniority_expectation": 1,
+    "process_formality": 3,
+    "product_vs_services": 3,
+    "remote_arrangement": 10,
+    "schedule_flexibility": 11,
+    "seniority_expectation": 11,
     "social_intensity": 2,
-    "stack_modernity": 1,
-    "talking_clients": 1,
-    "team_autonomy": 1,
-    "travel_requirement": 2
+    "stack_modernity": 3,
+    "talking_clients": 5,
+    "team_autonomy": 4,
+    "travel_requirement": 3,
+    "wellbeing_benefits": 1,
+    "work_intensity": 1
   },
-  "scorable_dimensions": [],
+  "scorable_dimensions": [
+    "compensation_transparency",
+    "contract_stability",
+    "remote_arrangement",
+    "schedule_flexibility",
+    "seniority_expectation"
+  ],
   "dimensions_below_floor": [
     "career_progression",
     "collaboration_mode",
     "company_stage",
-    "compensation_transparency",
-    "contract_stability",
     "english_demand",
     "inclusion_commitment",
     "leadership",
@@ -37,9 +47,6 @@
     "on_call_load",
     "process_formality",
     "product_vs_services",
-    "remote_arrangement",
-    "schedule_flexibility",
-    "seniority_expectation",
     "social_intensity",
     "stack_modernity",
     "talking_clients",
@@ -50,13 +57,55 @@
     "work_intensity"
   ],
   "prefilter_suppressed_positives": 0,
-  "prefilter_positives_checked": 40,
+  "prefilter_positives_checked": 100,
   "prefilter_suppressions": [],
-  "extraction_f1_by_dimension": {},
+  "extraction_f1_by_dimension": {
+    "compensation_transparency": {
+      "f1": 0.8235,
+      "n": 10,
+      "true_positives": 7,
+      "false_positives": 0,
+      "false_negatives": 3
+    },
+    "contract_stability": {
+      "f1": 0.6667,
+      "n": 10,
+      "true_positives": 5,
+      "false_positives": 0,
+      "false_negatives": 5
+    },
+    "remote_arrangement": {
+      "f1": 0.5714,
+      "n": 10,
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 3
+    },
+    "schedule_flexibility": {
+      "f1": 0.4,
+      "n": 11,
+      "true_positives": 1,
+      "false_positives": 2,
+      "false_negatives": 1
+    },
+    "seniority_expectation": {
+      "f1": 0.3077,
+      "n": 11,
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 9
+    }
+  },
   "dimensions_without_positives": [],
   "false_positives_outside_the_macro": 0,
-  "extraction_scored_n": 0,
-  "extraction_scored_dimensions": [],
+  "extraction_scored_n": 52,
+  "extraction_scored_dimensions": [
+    "compensation_transparency",
+    "contract_stability",
+    "remote_arrangement",
+    "schedule_flexibility",
+    "seniority_expectation"
+  ],
   "declared_subset": [
     "compensation_transparency",
     "contract_stability",

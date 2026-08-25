@@ -50,6 +50,9 @@ extraction:
       - pattern: "hybrid"
         value: 0.5
         negatable: false
+      - pattern: "on-?site[^.\\n]{0,60}(remote|from\\s+home)|(remote|work\\s+from\\s+home)[^.\\n]{0,60}on-?site"
+        value: 0.5
+        negatable: false
       - pattern: "on-?site|in\\s+the\\s+office"
         value: 0.0
         negatable: false
@@ -60,6 +63,9 @@ extraction:
       - pattern: "h[ií]brid[oa]"
         value: 0.5
         negatable: false
+      - pattern: "presencial[^.\\n]{0,60}(teletrabajo|remoto)|(teletrabajo|remoto)[^.\\n]{0,60}presencial"
+        value: 0.5
+        negatable: false
       - pattern: "presencial"
         value: 0.0
         negatable: false
@@ -68,6 +74,9 @@ extraction:
         value: 1.0
         negatable: true
       - pattern: "h[ií]brid"
+        value: 0.5
+        negatable: false
+      - pattern: "presencial[^.\\n]{0,60}(teletreball|remot)|(teletreball|remot)[^.\\n]{0,60}presencial"
         value: 0.5
         negatable: false
       - pattern: "presencial"
