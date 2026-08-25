@@ -2,11 +2,11 @@
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 9231,
+  "description_chars_total": 9235,
   "skills_counted": 31,
-  "headroom_chars": 1769,
+  "headroom_chars": 1765,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 1231,
+  "overage_against_upstream_default": 1235,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
@@ -82,8 +82,8 @@
     },
     {
       "skill": "session-end",
-      "description_chars": 458,
-      "listing_chars": 473
+      "description_chars": 462,
+      "listing_chars": 477
     },
     {
       "skill": "ship",

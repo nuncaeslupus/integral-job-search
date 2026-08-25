@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
@@ -13,13 +14,16 @@ CLAUDE_MD_END_MARKER = "<!-- /claude-arsenal: auto-managed -->"
 # How the block ended before it had a closing marker.
 LEGACY_BLOCK_TAIL = "@claude-arsenal/AGENTS.md"
 
-CLAUDE_MD_BLOCK = """\
+# `{home}` is substituted with the resolved host tree — the block is
+# auto-managed and rewritten on every init, so a hand-corrected path would be
+# overwritten anyway; it has to be generated right instead.
+_CLAUDE_MD_TEMPLATE = """\
 <!-- claude-arsenal: auto-managed -->
 ## Automatic session protocol
 
 Every session, without waiting to be asked:
 
-1. Read `arsenal/session/handover.md` for the previous session's context.
+1. Read `{home}/session/handover.md` for the previous session's context.
 2. List the repository's issues labelled `arsenal:task` — **open and closed** — and
    save the JSON. Use whatever GitHub access this surface has; run
    `claude-arsenal/bin/github_channel.sh --detect` to find out which. Request
@@ -33,7 +37,7 @@ Every session, without waiting to be asked:
    - **Nothing returned + workspace plans exist** → seed tasks from each plan.
    - **Nothing at all** → ask what to work on.
 5. Open each task's PR with `Closes #<issue>` so merging it closes the task by itself.
-6. After any session with tasks: update `arsenal/session/handover.md`.
+6. After any session with tasks: update `{home}/session/handover.md`.
 
 @claude-arsenal/AGENTS.md
 <!-- /claude-arsenal: auto-managed -->"""
@@ -41,11 +45,28 @@ Every session, without waiting to be asked:
 _CONFIG_TEMPLATE = """\
 # claude-arsenal host configuration — yours; upstream never rewrites this file.
 
-# How far must a task PR get before it may be merged?
-#   always | after-review | after-ci | after-ci-and-review | never
-# after-review is for a repo with no CI, or whose CI is unavailable rather than
-# failing — a policy nothing can ever satisfy gets waved through, and then it
-# gets waved through on the day it starts meaning something again.
+# How far must a task PR get before an agent may merge it?
+#
+#   always               The gates open_task_pr.sh already ran are the whole bar.
+#   after-ci             Every required check has REPORTED, and is green.
+#                        Absent is not green: no runners, no workflows, or a
+#                        job that died unassigned means "wait", not "pass".
+#   after-review         A review has landed (human or bot — whatever GitHub
+#                        reports on the PR) and every comment it raised is
+#                        fixed or answered. CI is NOT consulted. This is the
+#                        value for a repo with no CI, or whose CI is
+#                        unavailable rather than failing.
+#   after-ci-and-review  Both of the two above: green checks AND a review whose
+#                        comments are all addressed. The usual choice for a repo
+#                        that has CI and a review bot — pick this one if you
+#                        expect "wait for green, answer the bot, then merge".
+#   never                An agent never merges. It reports the PR ready and
+#                        stops; a human merges.
+#
+# Whichever is set, both directions are failures: merging past what it allows,
+# and stopping to ask a question this file already answers. Do not set a policy
+# nothing in the repo can ever satisfy — it gets waved through, and then it
+# stays waved through on the day it starts meaning something again.
 merge-policy = "after-ci"
 
 # Shell command run before any task PR is opened; a non-zero exit means no PR.
@@ -243,18 +264,49 @@ def _prune_bundle(bundle: Path, target: Path) -> None:
             print(f"  removed (no longer shipped): {dirname}/{installed.name}")
 
 
-def _check_bundle_version(bundle: Path, arsenal: Path) -> None:
-    """Print an upgrade banner when the installed bundle version is behind the plugin source."""
+def _parse_version(text: str) -> tuple[int, ...] | None:
+    """(major, minor, patch), or None when this is not a plain numeric version.
+
+    None means "cannot compare", and the caller then behaves as it always did:
+    a hand-edited or pre-release marker must not be able to wedge an install shut.
+    """
+    parts = text.strip().split(".")
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return None
+    try:
+        return tuple(int(part) for part in parts)
+    except ValueError:
+        # CPython caps int() on very long digit strings. A garbage marker is
+        # "cannot compare", never a crash in the one step every session runs.
+        return None
+
+
+def _check_bundle_version(bundle: Path, arsenal: Path) -> tuple[str, str] | None:
+    """Print an upgrade banner; REPORT a downgrade instead of performing one.
+
+    Returns (installed, bundle) when the host's committed bundle is newer than
+    this skill's vendored copies, and None otherwise. That direction used to be
+    invisible: the refresh is by checksum, so an older vendored copy differs from
+    a newer installed one exactly as a newer copy does, and step 0b — which a
+    session runs before it knows what kind of session it is — quietly replaced
+    upstream fixes with the versions that predate them. A session that trusts it
+    then ships the regression inside whatever PR it opens next (#220).
+    """
     bundle_ver_path = bundle / ".bundle-version"
     installed_ver_path = arsenal / ".bundle-version"
     if not bundle_ver_path.exists() or not installed_ver_path.exists():
-        return
+        return None
     bundle_ver = bundle_ver_path.read_text(encoding="utf-8").strip()
     installed_ver = installed_ver_path.read_text(encoding="utf-8").strip()
-    if installed_ver != bundle_ver:
-        print(
-            f"Upgrading claude-arsenal bundle: {installed_ver} → {bundle_ver}"
-        )
+    if installed_ver == bundle_ver:
+        return None
+    installed_parsed, bundle_parsed = _parse_version(installed_ver), _parse_version(bundle_ver)
+    if installed_parsed and bundle_parsed and installed_parsed > bundle_parsed:
+        return installed_ver, bundle_ver
+    print(
+        f"Upgrading claude-arsenal bundle: {installed_ver} → {bundle_ver}"
+    )
+    return None
 
 
 def _register_statusline(repo_path: Path) -> None:
@@ -460,7 +512,7 @@ def _add_gitignore_entry(repo_path: Path, entry: str) -> None:
     print(f"  .gitignore: added {entry}")
 
 
-def _replace_managed_block(content: str) -> str | None:
+def _replace_managed_block(content: str, block: str) -> str | None:
     """Return content with the managed block replaced, or None if there is none.
 
     The block is delimited by the two markers. Repos installed before the end
@@ -492,19 +544,26 @@ def _replace_managed_block(content: str) -> str | None:
             # the file would eat host-owned content, so leave it and say so.
             return ""
         end = offsets[-1]
-    return content[:start] + CLAUDE_MD_BLOCK + content[end:]
+    return content[:start] + block + content[end:]
+
+
+def _claude_md_block(repo_path: Path) -> str:
+    """The managed block, naming the host tree this repo actually has."""
+    home_rel = _home(repo_path).relative_to(repo_path).as_posix()
+    return _CLAUDE_MD_TEMPLATE.replace("{home}", home_rel)
 
 
 def _inject_claude_md(repo_path: Path) -> None:
+    block = _claude_md_block(repo_path)
     claude_md = repo_path / "CLAUDE.md"
     if not claude_md.exists():
-        claude_md.write_text(f"{CLAUDE_MD_BLOCK}\n", encoding="utf-8")
+        claude_md.write_text(f"{block}\n", encoding="utf-8")
         print("  CLAUDE.md: created with session-protocol block")
         return
 
     content = claude_md.read_text(encoding="utf-8")
     if CLAUDE_MD_MARKER not in content:
-        claude_md.write_text(content.rstrip("\n") + f"\n\n{CLAUDE_MD_BLOCK}\n", encoding="utf-8")
+        claude_md.write_text(content.rstrip("\n") + f"\n\n{block}\n", encoding="utf-8")
         print("  CLAUDE.md: injected session-protocol block")
         return
 
@@ -512,7 +571,7 @@ def _inject_claude_md(repo_path: Path) -> None:
     # once and never touched again, which meant an upgrade that rewrote the
     # protocol left every consumer running the old one — naming paths that had
     # moved and scripts that had been deleted.
-    replaced = _replace_managed_block(content)
+    replaced = _replace_managed_block(content, block)
     if replaced == "":
         print(
             "  CLAUDE.md: managed block has no end marker and no recognisable tail — "
@@ -526,8 +585,38 @@ def _inject_claude_md(repo_path: Path) -> None:
     print("  CLAUDE.md: session-protocol block refreshed (was out of date)")
 
 
+def _home(repo_path: Path) -> Path:
+    """The host-owned tree — tasks, specs, plans, config, session.
+
+    `ARSENAL_HOME` relocates it, and eight shipped bundle files already read it
+    that way, `arsenal_config.py` included. This script is the one thing that
+    CREATES the tree, and it hardcoded `arsenal/` — so with the variable set,
+    `/init` scaffolded a config in one place and every reader looked in another.
+    The consumer edits a file nothing reads and every setting silently stays at
+    its default.
+    """
+    home = repo_path / os.environ.get("ARSENAL_HOME", "arsenal")
+    # It has to land inside the repo. A task is a file in the repository —
+    # versioned, and committed by the PR that opens it — so a tree outside it
+    # can never reach the board, and `${ARSENAL_HOME}/tasks` as an absolute
+    # path is a queue that quietly stops being git-backed. It also breaks every
+    # repo-root-relative comparison (evidence paths, the rebase helper). An
+    # absolute value used to reach `relative_to(repo_path)` and raise a
+    # traceback halfway through an install, which is a worse way to find out.
+    try:
+        home.resolve().relative_to(repo_path.resolve())
+    except ValueError:
+        sys.exit(
+            f"init: ARSENAL_HOME resolves to {home}, which is outside {repo_path}. "
+            "The host tree is versioned in the repository — a task file outside it "
+            "cannot be committed, so the queue would never see it. Set ARSENAL_HOME "
+            "to a path inside the repo, or unset it to use arsenal/."
+        )
+    return home
+
+
 def _upsert_overview(repo_path: Path, workspace: str, root: str, spec: str, plan: str) -> None:
-    overview = repo_path / "arsenal" / "project" / "overview.md"
+    overview = _home(repo_path) / "project" / "overview.md"
     if not overview.exists():
         overview.write_text(OVERVIEW_HEADER, encoding="utf-8")
     content = overview.read_text(encoding="utf-8")
@@ -640,7 +729,7 @@ def _install_queue_workflow(repo_path: Path, arsenal: Path, silent: bool = False
     if not source.is_file():
         return
     target = repo_path / ".github" / "workflows" / _QUEUE_WORKFLOW
-    config = repo_path / "arsenal" / "config.toml"
+    config = _home(repo_path) / "config.toml"
     setting = _queue_automation_setting(config)
 
     if setting == "false":
@@ -693,15 +782,31 @@ def init_base(
     repo_path: Path,
     bundle_override: Path | None = None,
     silent: bool = False,
-) -> None:
+    allow_downgrade: bool = False,
+) -> bool:
+    """True when the install ran; False when it refused to downgrade (nothing written)."""
     bundle = _bundle_dir(bundle_override)
     arsenal = repo_path / "claude-arsenal"
 
     if not silent:
         print("Initializing claude-arsenal/...")
 
-    # Version check — prints upgrade banner when behind the plugin source
-    _check_bundle_version(bundle, arsenal)
+    # Version check — upgrade banner when behind, a hard stop when AHEAD.
+    newer_installed = _check_bundle_version(bundle, arsenal)
+    if newer_installed is not None:
+        installed_ver, bundle_ver = newer_installed
+        # Printed whatever --silent says: this is the one line that tells a
+        # refresh from a revert, and the caller is usually the session-start
+        # protocol, which runs silent.
+        print(
+            f"init: the installed bundle ({installed_ver}) is NEWER than this skill's "
+            f"vendored copies ({bundle_ver}) — nothing written. Update the plugin so its "
+            f"copies catch up. To overwrite {installed_ver} with {bundle_ver} anyway, "
+            f"pass --allow-downgrade."
+        )
+        if not allow_downgrade:
+            return False
+        print(f"init: --allow-downgrade — DOWNGRADING {installed_ver} → {bundle_ver}")
 
     # Scaffold directories. `claude-arsenal/` is upstream's and may be
     # overwritten freely; `arsenal/` is the host's and is created once, never
@@ -709,7 +814,19 @@ def init_base(
     # vendor the bundle without an update ever touching their tasks or config.
     for d in ["bin", "scripts", "agents"]:
         (arsenal / d).mkdir(parents=True, exist_ok=True)
-    home = repo_path / "arsenal"
+    home = _home(repo_path)
+    # An existing default tree while ARSENAL_HOME points somewhere else is an
+    # install about to be orphaned: the tasks and config stay on disk and every
+    # script starts reading past them. Scaffolding a second tree beside the
+    # first is the less useful of the two answers, and it is silent.
+    default_home = repo_path / "arsenal"
+    if home != default_home and default_home.is_dir() and not home.exists():
+        sys.exit(
+            f"init: ARSENAL_HOME points at {home}, which does not exist, while "
+            f"{default_home} does. Scaffolding a second host tree would leave the "
+            "existing tasks and config where nothing reads them. Move it "
+            f"(`mv {default_home} {home}`), or unset ARSENAL_HOME to keep using it."
+        )
     for d in ["tasks", "specs", "plans", "project", "session"]:
         (home / d).mkdir(parents=True, exist_ok=True)
 
@@ -745,17 +862,21 @@ def init_base(
 
     # .gitignore — surface profile, the statusLine-written rate-limit snapshot,
     # and the per-session dispatch-round counter (all live, machine-local state)
+    # Derived from `home`, not from the literal: ignoring `arsenal/session/…`
+    # for a tree that lives at `hosttree/session/` leaves machine-local state
+    # stageable, which is the accident these entries exist to prevent.
+    session = home.relative_to(repo_path) / "session"
     for entry in (
-        "arsenal/session/surface_profile.json",
-        "arsenal/session/rate_limits.json",
-        "arsenal/session/budget_iterations.json",
-        "arsenal/session/worktree_isolation",
-        "arsenal/session/host_branch",
+        "surface_profile.json",
+        "rate_limits.json",
+        "budget_iterations.json",
+        "worktree_isolation",
+        "host_branch",
         # Rescue metadata is machine-local too; it was previously omitted, so a
         # forced-restore snapshot could be swept into a task commit (#140).
-        "arsenal/session/rescue_refs",
+        "rescue_refs",
     ):
-        _add_gitignore_entry(repo_path, entry)
+        _add_gitignore_entry(repo_path, f"{session.as_posix()}/{entry}")
 
     # GitHub-side queue upkeep (see the function's docstring for why by default)
     _install_queue_workflow(repo_path, arsenal, silent=silent)
@@ -778,6 +899,7 @@ def init_base(
             print(f"claude-arsenal {ver_path.read_text(encoding='utf-8').strip()}")
     else:
         print(f"\ninit: claude-arsenal/ ready at {repo_path}")
+    return True
 
 
 def init_workspace(
@@ -787,6 +909,7 @@ def init_workspace(
     spec: str,
     plan: str,
     bundle_override: Path | None = None,
+    allow_downgrade: bool = False,
 ) -> None:
     # The workspace name becomes a directory under arsenal/project/ — host-owned,
     # so a bundle upgrade never touches a workspace's spec, plan, or context.
@@ -801,11 +924,14 @@ def init_workspace(
 
     arsenal = repo_path / "claude-arsenal"
 
-    # Ensure base exists first
-    if not (arsenal / "bin").is_dir():
-        init_base(repo_path, bundle_override)
+    # Ensure base exists first. A refusal there wrote nothing, so registering a
+    # workspace on top would report one ready over an uninitialized bundle.
+    if not (arsenal / "bin").is_dir() and not init_base(
+        repo_path, bundle_override, allow_downgrade=allow_downgrade
+    ):
+        sys.exit("init: workspace not registered — the bundle refused to install (see above)")
 
-    ws_dir = repo_path / "arsenal" / "project" / workspace
+    ws_dir = _home(repo_path) / "project" / workspace
     ws_dir.mkdir(parents=True, exist_ok=True)
     print(f"Registering workspace {workspace!r}...")
 
@@ -839,6 +965,10 @@ def main() -> None:
         "--silent", action="store_true",
         help="Suppress 'up to date' lines; only print refreshed files and version banner.",
     )
+    p.add_argument(
+        "--allow-downgrade", action="store_true",
+        help="Overwrite a NEWER installed bundle with this skill's older copies.",
+    )
     args = p.parse_args()
 
     repo_path = Path(args.repo_path).resolve()
@@ -847,11 +977,16 @@ def main() -> None:
     if args.workspace:
         name = args.workspace
         root = args.root or f"./{name}/"
-        spec = args.spec or f"arsenal/project/{name}/spec.md"
-        plan = args.plan or f"arsenal/project/{name}/plan.md"
-        init_workspace(repo_path, name, root, spec, plan, bundle_override)
+        # The stubs are written under the resolved home, so the paths recorded
+        # in overview.md have to point at the same place.
+        ws_rel = (_home(repo_path).relative_to(repo_path) / "project" / name).as_posix()
+        spec = args.spec or f"{ws_rel}/spec.md"
+        plan = args.plan or f"{ws_rel}/plan.md"
+        init_workspace(repo_path, name, root, spec, plan, bundle_override,
+                       allow_downgrade=args.allow_downgrade)
     else:
-        init_base(repo_path, bundle_override, silent=args.silent)
+        init_base(repo_path, bundle_override, silent=args.silent,
+                  allow_downgrade=args.allow_downgrade)
 
 
 if __name__ == "__main__":

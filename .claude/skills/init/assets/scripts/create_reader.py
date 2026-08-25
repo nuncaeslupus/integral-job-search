@@ -14,8 +14,13 @@ default: directory of the single input, or docs/spec-reader/ in workspace mode):
                         (notes auto-save in browser; Export button saves a Markdown file)
   <doc>-annotated.md    same document as Markdown with a note slot per section
 
-Seed notes from a previous Export by placing the downloaded file as
-{output-dir}/notes.json. Notes are keyed by stable section IDs and are
+The Export button names its download for the reader title and document kind
+(`<project>-<doc>-notes-<date>.md`) so it stays findable in a Downloads folder.
+A returned export belongs in {output-dir} beside the reader — it is part of the
+project, not a scratch file. Seed a rebuilt reader from one with
+`--notes <that file>`; it is Markdown with the note data embedded in a trailing
+comment, and a plain JSON object is accepted too ({output-dir}/notes.json is
+still read when --notes is not given). Notes are keyed by stable section IDs and are
 re-injected into both output artifacts.
 
 Requires: pip install markdown   (or: uv run --with markdown python3 create_reader.py)
@@ -31,6 +36,7 @@ Usage (run from repo root):
 """
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -93,9 +99,21 @@ def strip_inline_md(text: str) -> str:
 
 
 def slug(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9]+", "-", text)
-    return text.strip("-")
+    """A filename-safe stem. Never empty, and never the same for two titles.
+
+    It names the export file and the reader's storage namespace, so a title
+    that is entirely non-ASCII or punctuation ("项目") stripped down to nothing
+    produced `-spec-notes-….md`. Falling back to a fixed `doc` fixed the empty
+    name and gave every such title the SAME name: two readers then shared an
+    export filename and a localStorage namespace, so one project's notes came
+    up under another's headings. The digest keeps the fallback stable across
+    runs — the namespace has to survive regeneration — while telling two of
+    them apart.
+    """
+    text_slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    if text_slug:
+        return text_slug
+    return "doc-" + hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]  # a name, not a signature
 
 
 def parse_doc(raw: str) -> tuple[str, str, list[dict]]:
@@ -297,6 +315,46 @@ def infer_title(cwd: Path) -> str:
     return cwd.name.replace("-", " ").replace("_", " ").title()
 
 
+# The Export button writes Markdown for a human to read, with the note data
+# embedded verbatim in a trailing HTML comment so that the same file can be read
+# back. Seeding used to demand a `notes.json` nothing produces — a reviewer who
+# followed the instructions with the file the page had just handed them got a
+# JSON decode error.
+MARKER_RE = re.compile(r"<!--\s*SPEC-NOTES-DATA\s*")
+
+
+def read_notes(path: Path) -> dict:
+    """Notes from an exported reader file: raw JSON, or the block the export embeds."""
+    text = path.read_text(encoding="utf-8")
+    try:
+        loaded = json.loads(text)
+    except ValueError:
+        match = MARKER_RE.search(text)
+        if not match:
+            raise ValueError(
+                "no notes found — expected a JSON object, or a Markdown export "
+                "carrying its SPEC-NOTES-DATA block"
+            ) from None
+        # Where the object ENDS is the decoder's answer, not a regex's. Matching
+        # `{.*?}` up to a `-->` ended the block at the first `}` a note happened
+        # to contain, and truncated JSON reads as unparseable — so a reviewer
+        # whose note quoted a marker got their notes dropped, silently enough
+        # that the regenerated file overwrote them.
+        try:
+            loaded, _ = json.JSONDecoder().raw_decode(text, match.end())
+        except ValueError as exc:
+            raise ValueError(f"the SPEC-NOTES-DATA block is not valid JSON — {exc}") from None
+    if not isinstance(loaded, dict):
+        raise ValueError("the notes are not a JSON object")
+    # Every note is text, and `build_markdown` calls `.strip()` on it. A file
+    # spelling one as a number or an object raised an AttributeError out of the
+    # build; it is bad input, and it gets the message every other bad input gets.
+    bad = [k for k, v in loaded.items() if not isinstance(v, str)]
+    if bad:
+        raise ValueError(f"note values must be strings; not for: {', '.join(sorted(bad)[:5])}")
+    return loaded
+
+
 # ---------------------------------------------------------------- HTML build
 
 def esc(t: str) -> str:
@@ -370,7 +428,11 @@ def build_html(parts: list[tuple[str, dict]], title: str, gen_date: str, seed_no
     page = page.replace("__BODY__", body_html)
     page = page.replace("__CSS__", CSS)
     page = page.replace("__DOC_LABEL__", esc(single_label))
-    page = page.replace("__JS__", JS.replace("__LS_NS__", ls_ns).replace("__DOC_SLUG__", doc_slug)
+    # The export lands in the reviewer's Downloads beside everything else they saved
+    # that week, so the filename carries the project as well as the document kind:
+    # `my-project-spec-notes-2026-08-24.md`, not a bare `spec-notes-…`.
+    file_slug = f"{slug(title)}-{doc_slug}"
+    page = page.replace("__JS__", JS.replace("__LS_NS__", ls_ns).replace("__DOC_SLUG__", file_slug)
                                     .replace("__DOC_LABEL__", single_label))
     page = page.replace(
         "__SEED_NOTES__",
@@ -756,6 +818,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--input", metavar="FILE", help="single spec or plan Markdown file")
     parser.add_argument("--input-dir", metavar="DIR", help="directory containing workspace subdirs with spec.md")
+    parser.add_argument("--notes", metavar="FILE",
+                        help="returned export to seed notes from (default: <output-dir>/notes.json)")
     parser.add_argument("--output-dir", metavar="DIR", help="where to write the reader and annotated Markdown")
     parser.add_argument("--name", metavar="TEXT", help="project name for the reader title (default: git repo name)")
     args = parser.parse_args()
@@ -791,24 +855,39 @@ def main() -> int:
     title = args.name or infer_title(cwd)
     gen_date = date.today().isoformat()
 
-    notes_path = out_dir / "notes.json"
+    notes_path = Path(args.notes) if args.notes else out_dir / "notes.json"
     seed_notes: dict = {}
+    html_file = out_dir / f"{doc_slug}-reader.html"
+    md_file = out_dir / f"{doc_slug}-annotated.md"
+
     if notes_path.exists():
         try:
-            loaded = json.loads(notes_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                seed_notes = loaded
-                print(f"ℹ  seeding from {notes_path} ({len(seed_notes)} notes)", file=sys.stderr)
-            else:
-                print(f"⚠  {notes_path} does not contain a JSON object", file=sys.stderr)
-        except Exception as exc:
+            loaded = read_notes(notes_path)
+        except (ValueError, OSError) as exc:
             print(f"⚠  could not read {notes_path}: {exc}", file=sys.stderr)
+            # Continuing unseeded is right for a stray notes.json — the reader
+            # is still worth writing. It is not right when the unreadable file
+            # is one this run is about to write: the notes are then replaced by
+            # a fresh empty reader, and the warning scrolls past above the ✓
+            # that says it worked.
+            if notes_path.resolve() in {html_file.resolve(), md_file.resolve()}:
+                print(
+                    f"✗ {notes_path} is also this run's output — refusing to overwrite "
+                    "notes that could not be read. Fix the file, or point --notes at "
+                    "the export the page produced.",
+                    file=sys.stderr,
+                )
+                return 2
+        else:
+            seed_notes = loaded
+            print(f"ℹ  seeding from {notes_path} ({len(seed_notes)} notes)", file=sys.stderr)
+    elif args.notes:
+        print(f"✗ {notes_path} does not exist", file=sys.stderr)
+        return 2
 
     html_out = build_html(parts, title, gen_date, seed_notes, single_label, doc_slug)
     md_out = build_markdown(parts, title, gen_date, seed_notes, single_label)
 
-    html_file = out_dir / f"{doc_slug}-reader.html"
-    md_file = out_dir / f"{doc_slug}-annotated.md"
     html_file.write_text(html_out, encoding="utf-8")
     md_file.write_text(md_out, encoding="utf-8")
 
