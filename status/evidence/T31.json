@@ -2,8 +2,7 @@
   "reader_note_rebindings": 0,
   "readers_declared": [
     "docs/spec-v2",
-    "docs/spec-v2-steps",
-    "docs/labelling-round-01"
+    "docs/spec-v2-steps"
   ],
   "readers_with_notes": [
     "docs/spec-v2",
