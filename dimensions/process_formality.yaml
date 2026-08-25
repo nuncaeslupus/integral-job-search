@@ -52,33 +52,33 @@ extraction:
     en:
       - pattern: "scrum|sprint|kanban"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "agile\\s+methodolog"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "itil|cmmi|waterfall"
         value: 0.8
-        negatable: false
+        negatable: true
     es:
       - pattern: "scrum|sprint|kanban"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "metodolog[ií]as?\\s+[áa]giles?"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "itil|cascada"
         value: 0.8
-        negatable: false
+        negatable: true
     ca:
       - pattern: "scrum|sprint|kanban"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "metodologies?\\s+[àa]gils?"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "itil"
         value: 0.8
-        negatable: false
+        negatable: true
   gold:
     - ad_id: manfred-8419
       language: en

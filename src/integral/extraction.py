@@ -336,9 +336,24 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
     # the advert is saying something the cue list cannot read — exactly the case
     # the model exists for — so this returns None and the dimension stays on
     # stage 3's agenda rather than being settled by whichever cue averaged out.
+    #
+    # Corroboration is asked of **positives only**, and the asymmetry is the
+    # point. One `sprint` does not establish a process culture: the word appears
+    # in passing, in a tool list, in a sentence about something else. `sin
+    # sprints tradicionales` is not ambiguous in any of those ways — a denial is
+    # a claim the advert went out of its way to make. Requiring a second match
+    # before believing it is how `manfred-8392/process_formality` reached the
+    # model as "unsettled" while the advert said plainly what it meant (T59).
+    #
+    # Measured over the committed corpus when this landed: three (ad, dimension)
+    # pairs out of 2,080 become settled this way, all three the same true denial,
+    # and `prefilter_suppressed_positives` stays 0. That is a narrow base of
+    # evidence and worth re-reading if the corpus grows.
     if dimension.polarity == "bipolar":
         signs = {_sign(value, False) for value in values}
-        if len(spans) < _CONFIRMING_MATCHES_FOR_BIPOLAR or len(signs) > 1:
+        if len(signs) > 1:
+            return None
+        if len(spans) < _CONFIRMING_MATCHES_FOR_BIPOLAR and not negated_any:
             return None
 
     return DimensionScore(

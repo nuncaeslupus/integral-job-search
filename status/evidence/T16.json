@@ -1,9 +1,12 @@
 {
   "negation_scope_leaks": 0,
   "negation_leaks": [],
-  "negation_firings_count": 4,
+  "negation_firings_count": 7,
   "negation_firings": [
+    "manfred-8379/process_formality: 'sprint'",
+    "manfred-8383/process_formality: 'sprint'",
     "manfred-8389/on_call_load: 'guardias'",
+    "manfred-8392/process_formality: 'sprint'",
     "tecnoempleo-799b12ca520d03c0e743/on_call_load: 'guardias'",
     "tecnoempleo-98201f7d82b073d32d45/on_call_load: 'guardias'",
     "tecnoempleo-b57e13f992dc636ab549/on_call_load: 'guardias'"
@@ -15,11 +18,10 @@
   ],
   "extraction_negation_recall": null,
   "negation_status": "unmeasured",
-  "negation_recall_hits": 5,
+  "negation_recall_hits": 6,
   "negation_recall_misses": [
     "manfred-8386/process_formality: no cue settled the dimension",
     "manfred-8386/social_intensity: no cue settled the dimension",
-    "manfred-8392/process_formality: no cue settled the dimension",
     "manfred-8392/social_intensity: no cue settled the dimension"
   ],
   "negated_label_count": 9,

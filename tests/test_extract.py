@@ -394,3 +394,20 @@ def test_every_denial_in_the_model_reaches_the_store_as_a_denial() -> None:
     _, misses = negation_recall(load_store(), load_dimensions())
     mis_encoded = [m for m in misses if "settled, but not as negated" in m]
     assert mis_encoded == []
+
+
+def test_a_negated_single_match_settles_a_bipolar_dimension() -> None:
+    """The asymmetry: corroboration is asked of positives, not of denials.
+
+    `test_a_bipolar_dimension_is_not_settled_by_one_keyword` is still true and
+    still the rule — one `sprint` in a tool list establishes nothing. A denial
+    is the other case: the advert went out of its way to say it, and asking for
+    a second one sends an unambiguous statement to the model as "unsettled".
+    """
+    base = _dimension("process_formality")
+    dimension = _with_cues(base, [Cue(pattern="sprint", value=0.5, negatable=True)])
+    found = cue_findings(normalise(_offer("Trabajamos sin sprints tradicionales.")), dimension)
+
+    assert found is not None, "one denial is enough; one keyword is not"
+    assert found.negated is True
+    assert found.value == -0.5
