@@ -19,7 +19,7 @@ from integral.extraction import (
     negation_audit,
 )
 from integral.harness import DEFAULT_STORE_PATH as STORE
-from integral.harness import load_store
+from integral.harness import Label, LabelledAd, Span, load_store
 
 
 def _ad(text: str, language: Language = "es") -> NormalisedAd:
@@ -102,3 +102,80 @@ def test_recall_is_refused_while_the_corpus_cannot_carry_it(
     # itself, and would trip the placeholder raise on the wrong population.
     expected = [label for _, label in evaluation_labels(store) if label.negated]
     assert audit["negated_label_count"] == len(expected)
+
+
+def _negated_ad(index: int, text: str, quote: str) -> LabelledAd:
+    """One evaluation-split ad carrying a single negated `on_call_load` label."""
+    start = text.index(quote)
+    return LabelledAd(
+        id=f"t59-{index}",
+        language="es",
+        text=text,
+        source_url="https://example.invalid/t59",
+        split="evaluation",
+        labels=[
+            Label(
+                dimension="on_call_load",
+                value=0.0,
+                spans=[Span(start=start, end=start + len(quote))],
+                negated=True,
+                labeller="fixture",
+            )
+        ],
+    )
+
+
+def test_recall_is_scored_once_the_floor_is_met(dimensions: dict[str, Dimension]) -> None:
+    """The floor's tenth label scores the corpus; it does not break the build.
+
+    Nine adverts phrase the denial the cue set reaches, one phrases it a way no
+    cue does. Ten labels is the floor exactly, so this fixture is also the
+    assertion that the boundary is `>=` and not `>`.
+    """
+    store = [
+        _negated_ad(i, "Puesto estable. Sin guardias ni retenes.", "guardias") for i in range(9)
+    ]
+    store.append(_negated_ad(9, "Olvídate de las llamadas nocturnas.", "llamadas nocturnas"))
+
+    audit = negation_audit(store, list(dimensions.values()))
+
+    assert audit["negated_label_count"] == 10
+    assert audit["negation_status"] == "measured"
+    assert audit["extraction_negation_recall"] == 0.9
+    assert audit["negation_recall_hits"] == 9
+    assert audit["negation_recall_misses"] == ["t59-9/on_call_load: no cue settled the dimension"]
+
+
+def test_a_settled_but_unnegated_dimension_is_a_miss_not_a_hit(
+    dimensions: dict[str, Dimension],
+) -> None:
+    """The other way recall fails, and the reason that distinguishes it.
+
+    The cue fires and settles `on_call_load`, but the negator sits on the far
+    side of a full stop, so the extractor reads a rotation where a person read a
+    denial. Silently excluding this — as excluding the unsettled case would —
+    is how a recall number reaches 1.0 by construction.
+    """
+    text = "No trabajarás los fines de semana. Guardias en rotación semanal."
+    store = [_negated_ad(i, text, "Guardias") for i in range(10)]
+
+    audit = negation_audit(store, list(dimensions.values()))
+
+    assert audit["extraction_negation_recall"] == 0.0
+    assert audit["negation_recall_misses"][0].endswith("settled, but not as negated")
+
+
+def test_an_unknown_dimension_lowers_recall_rather_than_the_denominator(
+    dimensions: dict[str, Dimension],
+) -> None:
+    """A typo'd dimension must not be able to raise the score by leaving."""
+    store = [
+        _negated_ad(i, "Puesto estable. Sin guardias ni retenes.", "guardias") for i in range(10)
+    ]
+    store[0].labels[0] = store[0].labels[0].model_copy(update={"dimension": "on_call_lod"})
+
+    audit = negation_audit(store, list(dimensions.values()))
+
+    assert audit["negated_label_count"] == 10
+    assert audit["extraction_negation_recall"] == 0.9
+    assert audit["negation_recall_misses"] == ["t59-0/on_call_lod: no such dimension"]
