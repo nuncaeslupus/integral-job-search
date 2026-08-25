@@ -632,11 +632,22 @@ def _cue_reaches_the_cited_span(ad: LabelledAd, label: Label, dimension: Dimensi
 
     The span is the labeller's own answer to "what in this advert made you say
     that", so a cue matching inside it is the strongest available evidence that
-    the stage was looking at the right words. Matched against the raw span
-    rather than the normalised advert because the offsets are the store's.
+    the stage was looking at the right words.
+
+    **Sliced with the stored offsets, then NFC-normalised — in that order, and
+    both steps matter.** The offsets index the store's raw text, so slicing must
+    happen first or they point at the wrong characters. But `cue_findings`
+    matches against `_normalise_labelled`'s NFC output, so comparing a cue to the
+    *raw* segment asks a different question than the stage was asked: a cited span
+    holding decomposed characters would fail to match a composed cue that had
+    matched perfectly well upstream. The audit would then file a real soundness
+    failure under `prefilter_uncovered_positives` and quietly drop it out of the
+    gate — the corpus is full of decomposed text and non-BMP characters, and this
+    is the same hazard `test_decomposed_characters_are_composed_before_cues_run`
+    exists for, one layer up.
     """
     for span in label.spans:
-        segment = ad.text[span.start : span.end]
+        segment = unicodedata.normalize("NFC", ad.text[span.start : span.end])
         for cue in dimension.extraction.cues.get(ad.language, []):
             if re.search(cue.pattern, segment, re.IGNORECASE):
                 return True

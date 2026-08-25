@@ -13,15 +13,18 @@ labelled the other way, so the model is never asked and the wrong answer stands.
 
 from __future__ import annotations
 
+import unicodedata
+
 from integral.dimensions import Cue, Extraction, load_dimensions
 from integral.extraction import (
+    _cue_reaches_the_cited_span,
     cue_findings,
     normalise,
     prefilter_suppression,
     rules_stage,
     unsettled_dimensions,
 )
-from integral.harness import load_store
+from integral.harness import Label, LabelledAd, Span, load_store
 from integral.offers import Offer, compute_offer_id
 
 _DIMENSIONS = load_dimensions()
@@ -113,3 +116,38 @@ def test_a_dimension_the_cues_miss_still_reaches_the_model() -> None:
     )
     assert cue_findings(ad, blind) is None
     assert unsettled_dimensions([blind], rules_stage(ad, [blind])) == ["travel_requirement"]
+
+
+def test_a_decomposed_cited_span_is_still_matched_against_the_cues() -> None:
+    """The split must not misfile a soundness failure as a coverage gap.
+
+    `cue_findings` matches NFC-normalised text. If this audit compared cues to
+    the *raw* cited span, a labeller's span holding decomposed characters would
+    fail to match a composed cue that had matched perfectly well upstream — and
+    the failure would be recorded as `prefilter_uncovered_positives`, dropping a
+    real T15 failure out of its own gate.
+    """
+    composed = "Puesto presencial en Barcelona."
+    decomposed = unicodedata.normalize("NFD", "Modalidad híbrida presencial en Barcelona.")
+    assert decomposed != unicodedata.normalize("NFC", decomposed), "fixture must be decomposed"
+
+    ad = LabelledAd(
+        id="nfd-1",
+        language="es",
+        text=decomposed,
+        source_url="https://example.test/ad",
+        split="evaluation",
+        labels=[
+            Label(
+                dimension="remote_arrangement",
+                value=0.5,
+                spans=[Span(start=0, end=len(decomposed))],
+                labeller="test",
+            )
+        ],
+    )
+    dimension = next(d for d in _DIMENSIONS if d.id == "remote_arrangement")
+    assert _cue_reaches_the_cited_span(ad, ad.labels[0], dimension), (
+        "the cited span was decomposed; matching it raw would have hidden a real failure"
+    )
+    assert composed  # the composed control, for the reader
