@@ -58,11 +58,14 @@
     "wellbeing_benefits",
     "work_intensity"
   ],
-  "prefilter_suppressed_positives": 2,
+  "prefilter_suppressed_positives": 1,
   "prefilter_positives_checked": 209,
   "prefilter_suppressions": [
-    "manfred-8360/process_formality: cues settled 1, a person labelled -1",
-    "tecnoempleo-5daa18bff2393309c941/stack_modernity: cues settled 1, a person labelled -1"
+    "manfred-8360/process_formality: cues settled 1, a person labelled -1"
+  ],
+  "prefilter_uncovered_positives": 1,
+  "prefilter_uncovered": [
+    "tecnoempleo-5daa18bff2393309c941/stack_modernity: cues settled 1, a person labelled -1 — no cue reaches the cited span"
   ],
   "extraction_f1_by_dimension": {
     "compensation_transparency": {

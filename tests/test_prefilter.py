@@ -37,18 +37,28 @@ def test_prefilter_retains_all_corpus_positives() -> None:
     dressed as a gate. The reachable failure is a confident wrong answer, and
     that is what this counts.
     """
-    suppressed, checked, detail = prefilter_suppression(_STORE, _DIMENSIONS)
+    suppressed, checked, detail, uncovered = prefilter_suppression(_STORE, _DIMENSIONS)
     assert checked > 0, "a clean result over nothing is not a result"
-    # Locked to the two the corpus actually holds, not to zero. T56's round 2 took
-    # this from 0/40 to 2/209, and T15 (`lo-25b1`) is reopened on that — neither
-    # case is a cue bug, and neither is reachable without choosing cue vocabulary
-    # by looking at an evaluation-split miss. Naming them keeps the signal `== 0`
-    # was giving: a *third* suppression still fails this test.
+    # Locked to what the corpus actually holds, not to zero — and split, because
+    # the two were different failures. `manfred-8360` is this stage's: a cue
+    # matched inside the very span the labeller cited ("se huye de los *sprints*
+    # infinitos") and resolved it to the opposite sign, because the rejection is
+    # phrased with a verb `_NEGATORS` does not carry. Nothing was missing; the
+    # combination was wrong.
     assert detail == [
         "manfred-8360/process_formality: cues settled 1, a person labelled -1",
-        "tecnoempleo-5daa18bff2393309c941/stack_modernity: cues settled 1, a person labelled -1",
     ], detail
-    assert suppressed == 2
+    assert suppressed == 1
+
+    # `stack_modernity` is not: no cue reaches "Experiencia sólida en JBoss /
+    # JBoss EAP" at all, so the stage never saw the evidence and settled on the
+    # Kubernetes and cloud mentions elsewhere. That is vocabulary, which T57's
+    # `ontology_hit_rate` owns. Asserted, not ignored — a confident wrong answer
+    # still stops the model being asked.
+    assert uncovered == [
+        "tecnoempleo-5daa18bff2393309c941/stack_modernity: cues settled 1, "
+        "a person labelled -1 — no cue reaches the cited span",
+    ], uncovered
 
 
 def test_the_suppression_check_would_notice_a_bad_cue() -> None:
@@ -84,7 +94,7 @@ def test_the_suppression_check_would_notice_a_bad_cue() -> None:
         else d
         for d in _DIMENSIONS
     ]
-    suppressed, _, detail = prefilter_suppression([ad], poisoned)
+    suppressed, _, detail, _uncovered = prefilter_suppression([ad], poisoned)
     assert suppressed >= 1, f"an inverted cue on {label.dimension} went unnoticed: {detail}"
 
 
