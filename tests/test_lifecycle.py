@@ -150,6 +150,13 @@ def test_a_malformed_status_record_is_an_error_not_a_missing_one(store: ProfileS
     with pytest.raises(ApplicationStatusError, match="could not be read"):
         read_application_status(store, "offer-1")
 
+    # The read raising is only half of it. The guarantee this defect was about
+    # is that the corrupt record SURVIVES — a write that silently replaced it
+    # would destroy the very thing the error exists to protect.
+    with pytest.raises(ApplicationStatusError):
+        record_application_status(store, "offer-1", status="applied", at=NOW)
+    assert store.read_text("applications", "offer-1", "status.json") == "{ not json"
+
 
 def test_a_status_never_recorded_is_still_none(store: ProfileStore) -> None:
     """The missing case must survive the fix above."""

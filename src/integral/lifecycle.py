@@ -1115,6 +1115,14 @@ def record_application_status(
             f"{canonical!r} is only recorded when the candidate says so — pass "
             "candidate_confirmed=True for an explicit confirmation; it is never inferred"
         )
+    # Refusing to READ a corrupt record protects nothing on its own: the very
+    # next write replaced it, which is the data loss the read guard was added
+    # for. So the write refuses too, and the corrupt file survives to be looked
+    # at by a person. `read_application_status` raises for exactly the cases
+    # that must not be overwritten and returns None when there is no record, so
+    # calling it here is the whole check.
+    read_application_status(store, offer_id)
+
     record = ApplicationStatusRecord(status=canonical, recorded_at=at)
     store.write_json(record.model_dump(mode="json"), *_application_status_parts(offer_id))
     return record
@@ -1133,12 +1141,28 @@ def read_application_status(store: ProfileStore, offer_id: str) -> ApplicationSt
     # record that parses as JSON but fails the schema below is already an
     # ApplicationStatusError, so the same damage was an error or a silent
     # overwrite depending only on *how* broken the file was.
+    # ONE read, not exists() then read. Two operations left a window in which
+    # the file could vanish between them — reporting a record that was merely
+    # deleted as unreadable — and, worse, said nothing about failures that are
+    # neither: `read_text` catches only FileNotFoundError, so a `status.json`
+    # that is a directory raised IsADirectoryError straight through this
+    # function. Measured: `ESCAPES as IsADirectoryError`.
+    #
+    # `__cause__` is what separates the two, because `read_text` re-raises the
+    # FileNotFoundError as IdentityError `from` it. That couples this to
+    # identity.py's internals, and an explicit ProfileStore API for "missing
+    # versus unreadable" would be better — worth doing when something else
+    # needs the same distinction.
     parts = _application_status_parts(offer_id)
-    if not store.exists(*parts):
-        return None
     try:
         raw = store.read_json(*parts)
     except IdentityError as exc:
+        if isinstance(exc.__cause__, FileNotFoundError):
+            return None
+        raise ApplicationStatusError(
+            f"{offer_id}'s application status record could not be read: {exc}"
+        ) from exc
+    except (OSError, UnicodeError) as exc:
         raise ApplicationStatusError(
             f"{offer_id}'s application status record could not be read: {exc}"
         ) from exc
