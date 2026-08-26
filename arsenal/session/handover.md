@@ -1,16 +1,22 @@
 # Session handover — 2026-08-26 ~08:30 UTC, orchestrator takeover + second fleet round
 
-Board: **101 gates on `main`**, 124 tasks. `main` at `8e68bdc`, unmoved — **nothing merged
-this session.** Five PRs open, all with `make host-gate` exit 0 verified by the
-orchestrator itself, none merged.
+Board: **103 gates on `main`**, 124 tasks. `main` at `0033160`. Two of five PRs merged;
+every merge was gate-verified by the orchestrator on that exact commit, never on a
+worker's word.
 
 | PR | task | threads | state |
 |---|---|---|---|
-| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | 1 held | gate now `unmeasured` per owner's decision; must NOT close #203 |
+| [#226](https://github.com/nuncaeslupus/integral-job-search/pull/226) | T81 keyword coverage | resolved | **merged** `0033160`; #210 auto-closed |
+| [#228](https://github.com/nuncaeslupus/integral-job-search/pull/228) | T85 evidence reach | none | **merged** `7adf423`; #217 auto-closed |
+| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | 1 held | gate now `unmeasured` per owner's decision; must NOT close #203. **Needs the combined `evidence` recipe below — main now carries T85's discovery half.** |
 | [#225](https://github.com/nuncaeslupus/integral-job-search/pull/225) | claude-arsenal v2.4.22 | 1 parked | CodeRabbit holds it open until upstream ships `claude-arsenal#253` |
-| [#226](https://github.com/nuncaeslupus/integral-job-search/pull/226) | T81 keyword coverage | none | first review only triggered at 08:28, by hand |
 | [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) | T70 robots | 3 open | **NOT merge-ready — still fails open. Owner decision.** |
-| [#228](https://github.com/nuncaeslupus/integral-job-search/pull/228) | T85 evidence reach | none | **clear to merge** |
+
+The merge authorisation is the one in the previous handover and still stands: squash, when
+the PR is not held, every CodeRabbit thread reads `is_resolved: true`, and `make host-gate`
+was run on that branch by the orchestrator. Both merges met all three. The predicted
+`D12.json` conflict did **not** materialise on #226 — `main` merged cleanly and only
+`make evidence` regeneration was needed.
 
 ## The finding that matters more than any individual fix
 
