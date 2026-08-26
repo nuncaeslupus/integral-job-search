@@ -30,6 +30,7 @@ that apply.
 from __future__ import annotations
 
 import contextlib
+import re
 import json
 import sys
 import urllib.error
@@ -46,6 +47,19 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T70.json"
 # Who we say we are. A contact URL, because a board that wants this to stop
 # needs somewhere to say so — that is the half of politeness a delay cannot do.
 USER_AGENT = "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)"
+
+# RFC 9309 §2.2.1: a group is selected by the *product token*, which is a
+# substring of the identification string — not the whole `User-Agent` header.
+# Matching on the header meant a site's own `User-agent: integral-job-search`
+# group never matched us, so we silently fell through to `*` and obeyed the
+# wrong rules. On a module named "cannot fail open", that is the failure.
+def _product_token(agent: str) -> str:
+    """The robots product token inside an identification string.
+
+    `integral-job-search/0.1 (+https://...)` -> `integral-job-search`. A bare
+    token (`ClaudeBot`) is returned unchanged, which is what a robots.txt
+    actually writes and what the fixtures below use."""
+    return agent.split("/", 1)[0].strip()
 
 Fetch = Callable[[str], str]
 
@@ -127,7 +141,7 @@ def _select_rules(groups: list[_Group], agent: str) -> tuple[list[tuple[bool, st
     still one set of rules for one crawler). Only when no explicit token
     matches does the wildcard group apply.
     """
-    agent_lower = agent.lower()
+    agent_lower = _product_token(agent).lower()
     explicit = [group for group in groups if any(a.lower() == agent_lower for a in group.agents)]
     matched = explicit or [group for group in groups if "*" in group.agents]
     rules = [rule for group in matched for rule in group.rules]
@@ -135,23 +149,72 @@ def _select_rules(groups: list[_Group], agent: str) -> tuple[list[tuple[bool, st
     return rules, delay
 
 
+# `%` is safe here on purpose: without it `quote` re-encodes an escape that is
+# already there, so `/private%20jobs` became `/private%2520jobs` and a
+# `Disallow: /private%20jobs` rule stopped matching — the crawler then fetched a
+# path the site had explicitly excluded. `*` and `$` are safe because they are
+# RFC 9309 pattern syntax in a rule, and encoding them would defeat the matcher.
+_SAFE = "/%*$~:@!&'()+,;=-._"
+
+
+def _normalize(path: str) -> str:
+    """One percent-encoding for both sides of the comparison (RFC 9309 §2.2.2).
+
+    Applied to the request path AND to every rule pattern, because a
+    comparison is only meaningful when both sides are normalised the same way.
+    """
+    return quote(path, safe=_SAFE)
+
+
 def _request_path(url: str) -> str:
     parts = urlsplit(url)
-    path = quote(parts.path) or "/"
+    path = _normalize(parts.path) or "/"
     return f"{path}?{parts.query}" if parts.query else path
 
 
+_PATTERN_CACHE: dict[str, re.Pattern[str]] = {}
+
+
+def _compile(pattern: str) -> re.Pattern[str]:
+    """RFC 9309 §2.2.3 pattern syntax, compiled once per distinct rule.
+
+    `*` matches any run of characters and a trailing `$` anchors the match to
+    the end of the path; everything else is literal. `str.startswith` treated
+    both as ordinary characters, so `Disallow: /*.pdf$` matched nothing at all
+    and every PDF the site excluded was fetched anyway — a rule the site wrote
+    to stop us reading as permission, which is the fail-open this module is
+    named for.
+
+    An unanchored pattern still matches by prefix, which is what `match`
+    (rather than `fullmatch`) gives, so the existing rules are unaffected. An
+    empty pattern still matches everything, exactly as `startswith("")` did.
+    """
+    cached = _PATTERN_CACHE.get(pattern)
+    if cached is not None:
+        return cached
+    body, anchored = (pattern[:-1], True) if pattern.endswith("$") else (pattern, False)
+    regex = "".join(".*" if ch == "*" else re.escape(ch) for ch in body)
+    compiled = re.compile(regex + ("$" if anchored else ""))
+    _PATTERN_CACHE[pattern] = compiled
+    return compiled
+
+
 def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
-    """RFC 9309 §2.2.2: longest prefix match wins; `Allow` wins an equal-length tie.
+    """RFC 9309 §2.2.2: longest match wins; `Allow` wins an equal-length tie.
 
     No matching rule at all is an implicit allow — the file simply said
     nothing about this path, which is not the same as forbidding it.
+
+    Rule patterns are normalised with the same `_normalize` as the request
+    path: comparing a raw pattern against an encoded path is how an excluded
+    path slips through.
     """
     best_len, best_allow = -1, True
     for is_allow, pattern in rules:
-        if not path.startswith(pattern):
+        normalized = _normalize(pattern)
+        if not _compile(normalized).match(path):
             continue
-        length = len(pattern)
+        length = len(normalized)
         if length > best_len or (length == best_len and is_allow):
             best_len, best_allow = length, is_allow
     return best_allow
@@ -346,6 +409,54 @@ Disallow: /private/
         agent="claudebot",
         url="https://f9.example/private/x",
         expected_allowed=False,
+    ),
+    # The four below were added after review found the matcher failing open on
+    # each of them while this gate still read `robots_verdicts_misread: 0`.
+    # A fixture table that cannot express the failure is the same defect the
+    # module is about, one level up — so they live here, in the measurement,
+    # rather than only in the unit tests.
+    _Fixture(
+        name="our_own_product_token_beats_the_wildcard_group",
+        robots_txt="""
+User-agent: integral-job-search
+Disallow: /private
+
+User-agent: *
+Allow: /
+""",
+        agent=USER_AGENT,
+        url="https://f10.example/private",
+        expected_allowed=False,
+    ),
+    _Fixture(
+        name="an_already_percent_encoded_path_still_matches_its_rule",
+        robots_txt="""
+User-agent: *
+Disallow: /private%20jobs
+""",
+        agent="SomeBot",
+        url="https://f11.example/private%20jobs",
+        expected_allowed=False,
+    ),
+    _Fixture(
+        name="a_wildcard_and_end_anchor_exclude_the_path",
+        robots_txt="""
+User-agent: *
+Disallow: /*.pdf$
+""",
+        agent="SomeBot",
+        url="https://f12.example/docs/file.pdf",
+        expected_allowed=False,
+    ),
+    _Fixture(
+        name="an_end_anchor_does_not_over_block_a_near_miss",
+        robots_txt="""
+User-agent: *
+Disallow: /*.pdf$
+""",
+        agent="SomeBot",
+        url="https://f13.example/docs/file.pdf.txt",
+        expected_allowed=True,
     ),
 )
 
