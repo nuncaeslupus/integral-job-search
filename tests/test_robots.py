@@ -18,6 +18,7 @@ from integral.robots import (
     USER_AGENT,
     Robots,
     RobotsError,
+    _allowed,
     _matches,
     _normalize_rule,
     _request_path,
@@ -248,3 +249,12 @@ def test_a_percent_encoded_asterisk_is_not_a_wildcard() -> None:
 
     assert _matches(chunks, anchored, _request_path("https://x.test/a*b")) is True
     assert _matches(chunks, anchored, _request_path("https://x.test/axb")) is False
+
+
+def test_specificity_counts_the_wildcard_octets() -> None:
+    """RFC 9309 §2.2.2 picks the longest matching *pattern*. Splitting a rule
+    on `*` drops those octets, so the length has to add them back — otherwise
+    a wildcard rule silently loses precedence contests it should win."""
+    rules = [(False, "/a/b/c"), (True, "/a*b*c")]  # disallow 6, allow 6 -> allow wins the tie
+
+    assert _allowed(rules, "/a/b/c") is True

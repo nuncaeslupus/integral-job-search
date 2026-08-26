@@ -249,7 +249,12 @@ def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
         chunks, anchored = _normalize_rule(pattern)
         if not _matches(chunks, anchored, path):
             continue
-        length = sum(len(chunk) for chunk in chunks)
+        # Specificity is the length of the PATTERN, wildcards included — the
+        # `len(chunks) - 1` term restores the `*` octets that splitting removed.
+        # Counting only the literal runs looks tidier and quietly rewrites
+        # precedence: `/a*b*c` would score 4 against a rival 5-character rule
+        # and lose a contest it should win.
+        length = sum(len(chunk) for chunk in chunks) + len(chunks) - 1
         if length > best_len or (length == best_len and is_allow):
             best_len, best_allow = length, is_allow
     return best_allow
