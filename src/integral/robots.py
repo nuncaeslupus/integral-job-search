@@ -156,10 +156,13 @@ def _select_rules(groups: list[_Group], agent: str) -> tuple[list[tuple[bool, st
 # must survive on both sides or a query rule can never match anything.
 _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
 
-# `%` stays safe so an escape already present is not re-encoded. `*` is absent
-# on purpose: a target's literal `*` becomes `%2A`, which is exactly how a rule
-# must spell a literal asterisk, so the two sides meet.
-_CHUNK_SAFE = "/%:@!$&'()+,;=?~-._"
+# `%` stays safe so an escape already present is not re-encoded. `*` and `$` are
+# both absent on purpose, for one reason: they are the two pattern metacharacters,
+# so a rule can only spell either literally as an escape (`%2A`, `%24`). Encoding
+# them in the target too is what makes the two sides meet. An earlier revision
+# reasoned this out for `*` and then left `$` safe — half the symmetry, so
+# `Disallow: /report%24` never matched `/report$` and the target was permitted.
+_CHUNK_SAFE = "/%:@!&'()+,;=?~-._"
 
 _ESCAPE_RE = re.compile(r"%([0-9A-Fa-f]{2})")
 
@@ -249,12 +252,13 @@ def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
         chunks, anchored = _normalize_rule(pattern)
         if not _matches(chunks, anchored, path):
             continue
-        # Specificity is the length of the PATTERN, wildcards included — the
-        # `len(chunks) - 1` term restores the `*` octets that splitting removed.
-        # Counting only the literal runs looks tidier and quietly rewrites
-        # precedence: `/a*b*c` would score 4 against a rival 5-character rule
-        # and lose a contest it should win.
-        length = sum(len(chunk) for chunk in chunks) + len(chunks) - 1
+        # Specificity is the length of the PATTERN, metacharacters included:
+        # `len(chunks) - 1` restores the `*` octets that splitting removed, and
+        # `int(anchored)` the trailing `$` that `_normalize_rule` stripped.
+        # Restoring only the wildcards is how `Disallow: /foo/*$` scored 6
+        # against `Allow: /foo/x`, tied, and lost to the allow rule — which
+        # permits a path the site anchored a rule to exclude.
+        length = sum(len(chunk) for chunk in chunks) + len(chunks) - 1 + int(anchored)
         if length > best_len or (length == best_len and is_allow):
             best_len, best_allow = length, is_allow
     return best_allow
@@ -530,6 +534,28 @@ Disallow: /a%2Ab
         agent="SomeBot",
         url="https://f16.example/axb",
         expected_allowed=True,
+    ),
+    # `$` is the other metacharacter, and it needed both of `*`'s treatments.
+    _Fixture(
+        name="a_percent_encoded_dollar_matches_a_literal_dollar_target",
+        robots_txt="""
+User-agent: *
+Disallow: /report%24
+""",
+        agent="SomeBot",
+        url="https://f17.example/report$",
+        expected_allowed=False,
+    ),
+    _Fixture(
+        name="an_anchored_rule_outranks_a_shorter_allow",
+        robots_txt="""
+User-agent: *
+Disallow: /foo/*$
+Allow: /foo/x
+""",
+        agent="SomeBot",
+        url="https://f18.example/foo/x",
+        expected_allowed=False,
     ),
 )
 
