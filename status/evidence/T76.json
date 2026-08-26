@@ -1,7 +1,7 @@
 {
   "offers_ranked_despite_a_stated_disqualification": 0,
-  "offers_ranked_despite_a_stated_disqualification_evaluated": 3,
-  "probes_run": 10,
+  "offers_ranked_despite_a_stated_disqualification_evaluated": 5,
+  "probes_run": 13,
   "gate_status": "measured",
   "violations": [],
   "readings": [
@@ -65,6 +65,33 @@
       "actual": "FLAG",
       "reason": "citizenship",
       "quote": "Citizenship is required",
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "negation-in-a-neighbouring-sentence-does-not-cancel-a-bar",
+      "expected": "FAIL",
+      "actual": "FAIL",
+      "reason": "clearance",
+      "quote": "Must hold an active TS/SCI clearance",
+      "is_disqualification": true,
+      "match": true
+    },
+    {
+      "name": "soft-language-in-a-neighbouring-sentence-does-not-soften-a-bar",
+      "expected": "FAIL",
+      "actual": "FAIL",
+      "reason": "citizenship",
+      "quote": "must hold German citizenship",
+      "is_disqualification": true,
+      "match": true
+    },
+    {
+      "name": "the-requirement-noun-is-not-a-target",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "reason": "clearance",
+      "quote": "Must hold an active security clearance",
       "is_disqualification": false,
       "match": true
     },

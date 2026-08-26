@@ -272,3 +272,49 @@ def test_main_writes_evidence_and_exits_zero_on_the_real_probe_set(tmp_path: Pat
 )
 def test_is_company_wide_statement_recognises_common_boilerplate(text: str, expected: bool) -> None:
     assert eligibility.is_company_wide_statement(text) is expected
+
+
+def test_negation_in_a_neighbouring_sentence_does_not_cancel_a_bar() -> None:
+    """The look-behind used to be a fixed 30 characters, so "not necessary"
+    from the sentence *before* the bar negated it and a stated TS/SCI
+    requirement returned PASS. That is a fail-open on the exact thing
+    `offers_ranked_despite_a_stated_disqualification` counts: the barred offer
+    goes on to `rank.py` and the candidate is shown a job they cannot take."""
+    reading = eligibility.evaluate_text(
+        "offer-1",
+        "Experience is not necessary. Must hold an active TS/SCI clearance.",
+        CandidateEligibility(clearances=()),
+    )
+
+    assert reading.verdict == "FAIL"
+    assert reading.reason == "clearance"
+
+
+def test_soft_language_in_a_neighbouring_sentence_does_not_soften_a_bar() -> None:
+    """Same defect in the other window: "a plus" from the preceding sentence
+    fell inside the 40-character soft-language window, so a hard citizenship
+    bar reported FLAG. Milder than the case above — the offer is marked rather
+    than silently permitted — but it still reaches the ranked list."""
+    reading = eligibility.evaluate_text(
+        "offer-2",
+        "Relevant certifications are a plus. Applicants must hold German citizenship.",
+        CandidateEligibility(citizenships=()),
+    )
+
+    assert reading.verdict == "FAIL"
+    assert reading.reason == "citizenship"
+
+
+def test_the_requirement_noun_is_not_a_target() -> None:
+    """"Must hold an active security clearance" names no level, but `_TARGET`
+    captured "security" and compared it against the candidate's held
+    clearances — so someone holding TS/SCI was excluded by a bar they meet.
+    A false FAIL is invisible, so this folds to the generic no-target branch:
+    the candidate holds *something*, and a human decides."""
+    reading = eligibility.evaluate_text(
+        "offer-3",
+        "Must hold an active security clearance.",
+        CandidateEligibility(clearances=("TS/SCI",)),
+    )
+
+    assert reading.verdict == "FLAG"

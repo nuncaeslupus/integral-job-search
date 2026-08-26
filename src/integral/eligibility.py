@@ -287,6 +287,38 @@ def _normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
+# The requirement noun itself is never the thing required. `_TARGET` is
+# deliberately greedy enough to catch "TS/SCI" in "must hold an active TS/SCI
+# clearance", which also lets it capture "security" in "must hold an active
+# security clearance" — where the advert has named no level at all. Treating
+# that as a target compares "security" against the candidate's held clearances
+# and returns FAIL for someone who holds one; folding it to `None` routes the
+# phrase to the generic no-target branch, which is what it is.
+_NOT_A_TARGET = frozenset({"security", "citizenship", "citizen", "work", "valid", "active"})
+
+_SENTENCE_END = re.compile(r"[.!?;\n]")
+
+
+def _sentence_around(text: str, start: int, end: int) -> tuple[str, str]:
+    """The text before the match, and the whole window around it, both clipped
+    to the sentence the match sits in.
+
+    Fixed character slices read across sentence boundaries, and both windows
+    decide whether a stated bar counts. A 30-character look-behind turned
+    "Experience is not necessary. Must hold an active TS/SCI clearance." into
+    PASS, because "not necessary" from the previous sentence negated a bar that
+    sentence never mentioned — a fail-open on exactly what this gate counts.
+    A 40-character look-behind turned "Relevant certifications are a plus.
+    Applicants must hold German citizenship." into FLAG for the same reason.
+    A sentence is the smallest unit in which "not" can honestly refer to the
+    requirement, so it is the bound.
+    """
+    left = max((text.rfind(mark, 0, start) for mark in ".!?;\n"), default=-1)
+    tail = _SENTENCE_END.search(text, end)
+    right = tail.start() if tail else len(text)
+    return text[left + 1 : start], text[left + 1 : right]
+
+
 def _scan(
     text: str, kind: RequirementKind, patterns: tuple[re.Pattern[str], ...]
 ) -> list[Requirement]:
@@ -297,15 +329,15 @@ def _scan(
     found: list[Requirement] = []
     for pattern in patterns:
         for match in pattern.finditer(text):
-            preceding = text[max(0, match.start() - 30) : match.start()]
-            if _NEGATION_RE.search(preceding):
+            before, window = _sentence_around(text, match.start(), match.end())
+            if _NEGATION_RE.search(before):
                 continue
-            window_start = max(0, match.start() - 40)
-            window = text[window_start : match.end() + 20]
             target: str | None = None
             if "target" in pattern.groupindex:
                 raw = match.group("target")
                 target = _normalize(raw) if raw else None
+                if target in _NOT_A_TARGET:
+                    target = None
             ambiguous = bool(_SOFT_RE.search(window))
             found.append(
                 Requirement(
@@ -484,6 +516,34 @@ PROBES: tuple[Probe, ...] = (
         name="generic-bar-with-no-extractable-target-and-candidate-holds-something",
         text="Citizenship is required for this government contract.",
         candidate=CandidateEligibility(citizenships=("ES",)),
+        expected="FLAG",
+    ),
+    # Round-1 review, 2026-08-26. Three cases where the gate was wrong in both
+    # directions and its evidence still read 0 violations, because no probe
+    # paired a bar with text from a neighbouring sentence, or a requirement
+    # noun with a candidate who holds one. Committed here so the denominator
+    # counts them, not only the comment thread that found them.
+    Probe(
+        name="negation-in-a-neighbouring-sentence-does-not-cancel-a-bar",
+        text="Experience is not necessary. Must hold an active TS/SCI clearance.",
+        candidate=CandidateEligibility(clearances=()),
+        expected="FAIL",
+        is_disqualification=True,
+    ),
+    Probe(
+        name="soft-language-in-a-neighbouring-sentence-does-not-soften-a-bar",
+        text=(
+            "Relevant certifications are a plus. "
+            "Applicants must hold German citizenship."
+        ),
+        candidate=CandidateEligibility(citizenships=()),
+        expected="FAIL",
+        is_disqualification=True,
+    ),
+    Probe(
+        name="the-requirement-noun-is-not-a-target",
+        text="Must hold an active security clearance.",
+        candidate=CandidateEligibility(clearances=("TS/SCI",)),
         expected="FLAG",
     ),
     Probe(
