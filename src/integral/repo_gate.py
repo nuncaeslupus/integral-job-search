@@ -27,13 +27,31 @@ meantime. What the host can do — and now does — is *have* the enforcement po
 under the name upstream's `host-gate` key expects, so the hook has something
 real to call the day it lands. `payload_gate_is_not_the_repo_gate` records that
 the two are still distinct here, which is what made the confusion possible.
+
+**T85 lives here too, beside D-22, not replacing it.** `make evidence` derives
+its module list by grepping `src/integral/*.py` for a naming convention on the
+entry-point function — first `^def _main`, and three modules
+(`plan_v2`, `process_spec`, `step_specs`) that define `main` instead were
+invisible to it, so their evidence never regenerated and never drift-checked.
+Renaming those three would only rebuild the trap for the next module that
+defines `main`. `evidence_writing_modules` fixes the *selection*: it statically
+reads each module's source for a path expression it constructs under
+`status/evidence/`, which does not care what the function that builds that
+path is called — and never imports the module to find out, since nothing in
+this package may execute arbitrary contributed code (PR #77). `measure_evidence_reach`
+is the same assertion `measure` makes for D-22, one level down: not just "does
+every required gate have an enforcement point" but "does the one command that
+regenerates evidence actually reach every module that produces it".
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
+import itertools
 import json
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,8 +59,10 @@ from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-22.json"
+DEFAULT_T85_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T85.json"
 DEFAULT_MAKEFILE = _REPO_ROOT / "Makefile"
 DEFAULT_INSTRUCTIONS = _REPO_ROOT / "CLAUDE.md"
+DEFAULT_SRC_DIR = _REPO_ROOT / "src" / "integral"
 
 #: The target that runs the whole repo gate in one command. Named for the key
 #: `claude-arsenal` points a worker at, not for what CI happens to call it.
@@ -267,20 +287,178 @@ def write_evidence(
     return measured
 
 
-def _main(argv: list[str]) -> int:
-    """`python -m integral.repo_gate [--check]`.
+# ---------------------------------------------------------------------------
+# T85 — the evidence run reaches every module that writes evidence
 
-    Without arguments it writes the evidence file, so `make evidence` — whose
-    module list is derived from `^def _main` — regenerates D-22's number with
-    no flag to remember.
+
+def _slash_chain_string_parts(node: ast.AST) -> list[str]:
+    """The literal string segments of a `/`-joined path expression, in order.
+
+    Handles `_REPO_ROOT / "status" / "evidence" / "x.json"` (each `/` a
+    `BinOp`, `_REPO_ROOT` contributing nothing since it is not a literal) and
+    `Path("status/evidence/x.json")` (one string, split on `/`) — both forms
+    are in real use here — plus any mix of the two. A part of the chain that
+    is neither just drops out rather than breaking the scan, since it never
+    carries the two literals this is looking for anyway.
+    """
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        return _slash_chain_string_parts(node.left) + _slash_chain_string_parts(node.right)
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value.split("/")
+    if isinstance(node, ast.Call) and node.args:
+        first = node.args[0]
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            return first.value.split("/")
+    return []
+
+
+def _names_status_evidence_path(node: ast.AST) -> bool:
+    parts = _slash_chain_string_parts(node)
+    return any(a == "status" and b == "evidence" for a, b in itertools.pairwise(parts))
+
+
+def _writes_evidence(source: str) -> bool:
+    """Does this module's source construct a path under `status/evidence/`?
+
+    Parsed statically, never imported: nothing in this package may execute
+    arbitrary module code, `test_nothing_in_the_codebase_executes_a_contributed_parse_module`
+    holds that line for the whole tree, and evidence discovery is not an
+    exception to it. Any assignment whose right-hand side names such a path —
+    see `_slash_chain_string_parts` — counts, regardless of what the constant
+    or the function around it is called; a module that writes evidence
+    through a function named `main`, `_main`, `write_cycle_evidence`, or
+    anything else is found the same way. That is what
+    `test_the_selection_does_not_depend_on_a_private_name_convention` asserts
+    directly.
+    """
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)) or node.value is None:
+            continue
+        if _names_status_evidence_path(node.value):
+            return True
+    return False
+
+
+def evidence_writing_modules(src_dir: Path = DEFAULT_SRC_DIR) -> list[str]:
+    """Every `src/integral/*.py` module that writes to `status/evidence/`.
+
+    Found by reading each module's source and checking `_writes_evidence` —
+    the ground truth this file's own T85 gate is measured against, and what
+    `make evidence` now asks for through `--list-evidence-modules` instead of
+    grepping for a private naming convention.
+    """
+    names = []
+    for path in sorted(src_dir.glob("*.py")):
+        if path.stem == "__init__":
+            continue
+        if _writes_evidence(path.read_text(encoding="utf-8")):
+            names.append(path.stem)
+    return names
+
+
+# The `evidence` target's header line, then its tab-indented recipe body.
+_EVIDENCE_TARGET_RE = re.compile(r"^evidence:[^\n]*\n(?P<body>(?:\t[^\n]*\n?)+)", re.M)
+
+# The module-list command inside `for m in $$(...); do` — read, not assumed,
+# so a fixture Makefile carrying the old `grep '^def _main'` selection is
+# exercised exactly as it would run, and a future rewrite of the target is
+# checked against what it actually says rather than what this module expects.
+_MODULE_LIST_CMD_RE = re.compile(r"for m in \$\$\((?P<cmd>.*?)\)\s*;\s*do", re.S)
+
+
+def evidence_run_module_list_command(makefile: Path = DEFAULT_MAKEFILE) -> str:
+    """The shell command the `evidence` target's `for` loop iterates over."""
+    text = makefile.read_text(encoding="utf-8")
+    target = _EVIDENCE_TARGET_RE.search(text)
+    if target is None:
+        raise ValueError(f"no `evidence` target in {makefile}")
+    command = _MODULE_LIST_CMD_RE.search(target.group("body"))
+    if command is None:
+        raise ValueError(f"`evidence` target in {makefile} has no `for m in $$(...)` module list")
+    # `$$` is Make's escape for a literal `$` inside a recipe; a real shell
+    # never sees the doubled form.
+    return command.group("cmd").replace("$$", "$")
+
+
+def modules_reached_by_evidence_run(
+    makefile: Path = DEFAULT_MAKEFILE, repo_root: Path = _REPO_ROOT
+) -> set[str]:
+    """Which modules `make evidence` actually iterates — run for real, not parsed.
+
+    The command can be an arbitrary shell pipeline (today: `uv run python -m
+    integral.repo_gate --list-evidence-modules`; before this task, a `grep`/
+    `sed`/`xargs` chain keyed on a function name). Running it is the only way
+    to know its result without re-encoding its logic a second time here.
+    """
+    command = evidence_run_module_list_command(makefile)
+    result = subprocess.run(
+        ["bash", "-c", command], cwd=repo_root, capture_output=True, text=True, check=True
+    )
+    return {name for name in result.stdout.split() if name}
+
+
+def measure_evidence_reach(
+    makefile: Path = DEFAULT_MAKEFILE,
+    src_dir: Path = DEFAULT_SRC_DIR,
+    repo_root: Path = _REPO_ROOT,
+) -> dict[str, Any]:
+    """T85's gate reading: `gate_modules_outside_the_evidence_run`.
+
+    A zero count over zero evaluated modules is not a pass — it is what a
+    check that never ran also reports — so `gate_modules_discovered` (the
+    denominator) is asserted alongside it, and `gate_status` reads
+    `"unmeasured"` rather than a clean pass while that denominator is empty.
+    """
+    discovered = evidence_writing_modules(src_dir)
+    evaluated = len(discovered)
+    if evaluated == 0:
+        return {
+            "gate_modules_outside_the_evidence_run": 0,
+            "gate_modules_outside_the_evidence_run_evaluated": 0,
+            "gate_modules_discovered": 0,
+            "modules_missing": [],
+            "gate_status": "unmeasured",
+        }
+    reached = modules_reached_by_evidence_run(makefile, repo_root)
+    missing = sorted(set(discovered) - reached)
+    return {
+        "gate_modules_outside_the_evidence_run": len(missing),
+        "gate_modules_outside_the_evidence_run_evaluated": evaluated,
+        "gate_modules_discovered": evaluated,
+        "modules_missing": missing,
+        "gate_status": "measured",
+    }
+
+
+def write_evidence_reach(
+    evidence: Path = DEFAULT_T85_EVIDENCE_PATH,
+    makefile: Path = DEFAULT_MAKEFILE,
+    src_dir: Path = DEFAULT_SRC_DIR,
+    repo_root: Path = _REPO_ROOT,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T85.json`."""
+    measured = measure_evidence_reach(makefile, src_dir, repo_root)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _main(argv: list[str]) -> int:
+    """`python -m integral.repo_gate [--check] [--list-evidence-modules]`.
+
+    Without arguments it writes both D-22's and T85's evidence files —
+    `make evidence`'s module list invokes this module once, like any other, so
+    both records are produced from the one run. `--list-evidence-modules` is
+    the discovery command `make evidence` itself now runs to build that list.
     """
     parser = argparse.ArgumentParser(
-        description="D-22's gate: every gate the docs require has something that runs it"
+        description="D-22 and T85: the gates that check the evidence run's own machinery"
     )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="measure and report only; do not write the evidence file",
+        help="measure and report only; do not write the evidence files",
     )
     parser.add_argument(
         "--write-evidence",
@@ -288,17 +466,39 @@ def _main(argv: list[str]) -> int:
         const=str(DEFAULT_EVIDENCE_PATH),
         default=str(DEFAULT_EVIDENCE_PATH),
         metavar="PATH",
-        help="write evidence JSON to PATH (default: status/evidence/D-22.json)",
+        help="write D-22 evidence JSON to PATH (default: status/evidence/D-22.json)",
+    )
+    parser.add_argument(
+        "--list-evidence-modules",
+        action="store_true",
+        help=(
+            "print every module under src/integral that writes evidence, one per line, "
+            "and exit — this is what `make evidence` iterates"
+        ),
     )
     args = parser.parse_args(argv[1:])
 
-    measured = measure() if args.check else write_evidence(Path(args.write_evidence))
-    print(json.dumps(measured, ensure_ascii=False))
-    for reason in measured["unenforced"]:
+    if args.list_evidence_modules:
+        for name in evidence_writing_modules():
+            print(name)
+        return 0
+
+    d22 = measure() if args.check else write_evidence(Path(args.write_evidence))
+    t85 = measure_evidence_reach() if args.check else write_evidence_reach()
+
+    print(json.dumps({"D-22": d22, "T85": t85}, ensure_ascii=False))
+    for reason in d22["unenforced"]:
         print(reason, file=sys.stderr)
-    if measured["required_gates_with_no_enforcement_point"] == -1:
+    for module in t85["modules_missing"]:
+        print(f"{module} writes evidence but is not reached by `make evidence`", file=sys.stderr)
+
+    d22_unenforced = d22["required_gates_with_no_enforcement_point"]
+    t85_unreached = t85["gate_modules_outside_the_evidence_run"]
+    if d22_unenforced == -1 or t85["gate_status"] == "unmeasured":
         return 3
-    return 1 if measured["required_gates_with_no_enforcement_point"] else 0
+    if d22_unenforced or t85_unreached:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

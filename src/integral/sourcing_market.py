@@ -22,8 +22,8 @@ nothing if wrong. `True` is the terminal one, so it is reached only from evidenc
 **Its own module, and not a fourth line in `sourcing_strategy`, for a mechanical
 reason**: it needs both T68's `Cycle` and T65's `ScopeDecision`, and
 `sourcing_cycles` already imports from `sourcing_strategy` — putting it there
-would close an import loop. `make evidence` discovers modules by their `_main`,
-so a new one is picked up with no wiring.
+would close an import loop. `make evidence` discovers modules by the evidence
+path they construct (T85), so a new one is picked up with no wiring.
 
 **The forbidden move is forbidden by the type, and the word list is the belt.**
 `EmptyMarketReport` has no field a scope change fits in, so `extra="forbid"`

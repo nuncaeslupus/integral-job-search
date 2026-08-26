@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 106,
-  "gates_declaring_status_key": 6,
+  "evidence_gates_read": 107,
+  "gates_declaring_status_key": 7,
   "unrecordable": [],
   "readings": [
     {
@@ -827,6 +827,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-cd8dcc16",
+      "key": "gate_modules_outside_the_evidence_run",
+      "evidence": "status/evidence/T85.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-e1ca8374",

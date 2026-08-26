@@ -15,13 +15,13 @@
     "understanding",
     "ranking"
   ],
-  "gates_implemented": 0,
+  "gates_implemented": 12,
   "required_item_words": {
     "step-list": 2049,
-    "connections": 1448,
-    "artefact-tree": 719,
-    "offer-lifecycle": 1770,
-    "resumption": 983,
+    "connections": 1746,
+    "artefact-tree": 801,
+    "offer-lifecycle": 1822,
+    "resumption": 1093,
     "capture-scoring": 509
   }
 }
