@@ -14,8 +14,17 @@ from pathlib import Path
 
 import pytest
 
-from integral.ats import audit_documents, check_document
-from integral.cv_store import CVMaster, Experience, SourcedText, write_master
+from integral.ats import (
+    COVERED,
+    KEYWORD_STATUSES,
+    SYNONYM_ONLY,
+    _application_text,
+    audit_documents,
+    check_document,
+    classify_keyword,
+    keyword_coverage,
+)
+from integral.cv_store import CVMaster, Experience, Skill, SourcedText, write_master
 from integral.generate import generate
 from integral.identity import ProfileStore, create_profile
 
@@ -147,3 +156,113 @@ def test_the_gate_does_not_pass_on_an_empty_input_set(store: ProfileStore) -> No
     real = audit_documents([cv])
     assert real["documents_missing_a_required_text_layer_field_evaluated"] > 0
     assert real["gate_status"] == "measured"
+
+
+# ---------------------------------------------------------------------------
+# T81 — keyword coverage against the posting, in four statuses
+
+
+def _master_with_an_omittable_skill() -> CVMaster:
+    """A store built so all four keyword statuses are reachable off one document.
+
+    `PostgreSQL` is in `_experience()`'s description, an `_ALWAYS` section, so
+    it is always rendered — the `covered` case, and (under the spelling
+    `Postgres`) the `synonym-only` case. `Salesforce` is a `_SELECTED`-section
+    skill that `ADVERT` never mentions and generation is called with no
+    `asks`, so `_select` omits it — the store holds it, the document does not
+    — `missing (have it)`. `Kubernetes` is nowhere in the store at all —
+    `missing (gap)`.
+    """
+    return CVMaster(
+        headline=SourcedText(text="Data engineer — ada.lovelace@example.invalid"),
+        experience=(_experience(),),
+        skills=(Skill(name="Salesforce", level="working"),),
+    )
+
+
+def test_every_posting_keyword_receives_exactly_one_status(store: ProfileStore) -> None:
+    master = _master_with_an_omittable_skill()
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="girona-1", advert=ADVERT)
+    document_text = _application_text(store, "girona-1", manifest.version)
+
+    keywords = ("PostgreSQL", "Postgres", "Salesforce", "Kubernetes")
+    result = keyword_coverage(document_text, master, keywords)
+
+    assert result["posting_keywords_left_unclassified"] == 0
+    assert result["posting_keywords_left_unclassified_evaluated"] == len(keywords)
+    statuses = {row["keyword"]: row["status"] for row in result["rows"]}
+    assert statuses == {
+        "PostgreSQL": "covered",
+        "Postgres": "synonym-only",
+        "Salesforce": "missing (have it)",
+        "Kubernetes": "missing (gap)",
+    }
+    # Every one of the four declared statuses is actually reachable, not just
+    # named — the D-21 guard for this gate.
+    assert set(statuses.values()) == set(KEYWORD_STATUSES)
+
+
+def test_a_keyword_the_store_holds_but_the_document_omits_is_missing_have_it(
+    store: ProfileStore,
+) -> None:
+    master = _master_with_an_omittable_skill()
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="girona-1", advert=ADVERT)
+    document_text = _application_text(store, "girona-1", manifest.version)
+    assert "Salesforce" not in document_text  # the omission this test relies on
+
+    result = keyword_coverage(document_text, master, ("Salesforce",))
+    assert result["rows"] == [{"keyword": "Salesforce", "status": "missing (have it)"}]
+
+
+def test_a_keyword_the_candidate_lacks_is_missing_gap(store: ProfileStore) -> None:
+    master = _master_with_an_omittable_skill()
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="girona-1", advert=ADVERT)
+    document_text = _application_text(store, "girona-1", manifest.version)
+
+    result = keyword_coverage(document_text, master, ("Kubernetes",))
+    assert result["rows"] == [{"keyword": "Kubernetes", "status": "missing (gap)"}]
+
+
+def test_the_keyword_coverage_gate_does_not_pass_on_an_empty_input_set(
+    store: ProfileStore,
+) -> None:
+    master = _master_with_an_omittable_skill()
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="girona-1", advert=ADVERT)
+    document_text = _application_text(store, "girona-1", manifest.version)
+
+    empty = keyword_coverage(document_text, master, ())
+    assert empty["posting_keywords_left_unclassified_evaluated"] == 0
+    assert empty["posting_keywords_left_unclassified"] == 0
+    assert empty["gate_status"] == "unmeasured", (
+        "a zero violation count over zero keywords checked is not a pass — "
+        "the gate must be able to tell the two apart"
+    )
+
+    real = keyword_coverage(document_text, master, ("PostgreSQL",))
+    assert real["posting_keywords_left_unclassified_evaluated"] > 0
+    assert real["gate_status"] == "measured"
+
+
+def test_a_longer_declared_spelling_is_synonym_only_not_covered() -> None:
+    """`_SYNONYMS` declares `node.js` an alternate spelling of `node`, so a
+    document that only ever wrote `Node.js` said it differently — it did not
+    say `node`. `_mentions` treats `.` as a term boundary, so a plain literal
+    check reported `covered` and contradicted the table.
+
+    The distinction is the point of the status: the candidate is told to add
+    the posting's own wording, which an ATS may match literally.
+    """
+
+    master = CVMaster()
+
+    assert classify_keyword("We use Node.js daily", master, "node") == SYNONYM_ONLY
+    # Unchanged: the standalone spelling, and a document carrying both.
+    assert classify_keyword("We use node daily", master, "node") == COVERED
+    assert classify_keyword("node and Node.js", master, "node") == COVERED
+    # Unchanged for the pair that has no substring relationship.
+    assert classify_keyword("We use PostgreSQL", master, "postgres") == SYNONYM_ONLY
+    assert classify_keyword("We use Postgres", master, "postgres") == COVERED
