@@ -19,8 +19,10 @@ from integral.robots import (
     Robots,
     RobotsError,
     _allowed,
+    _canon,
     _matches,
     _normalize_rule,
+    _product_token,
     _request_path,
     measure,
 )
@@ -258,3 +260,38 @@ def test_specificity_counts_the_wildcard_octets() -> None:
     rules = [(False, "/a/b/c"), (True, "/a*b*c")]  # disallow 6, allow 6 -> allow wins the tie
 
     assert _allowed(rules, "/a/b/c") is True
+
+
+def test_a_raw_percent_canonicalises_to_its_escape() -> None:
+    """RFC 9309 §2.2.2 compares octets, and a `%` that heads no escape is a
+    literal one. Leaving it raw spelled the same octet two ways, so
+    `Disallow: /100%25` never matched `/100%` and the fetch was permitted."""
+    assert _canon("/100%") == _canon("/100%25") == "/100%25"
+    assert _canon("/a%2Ab") == "/a%2Ab"  # a real escape is still not re-encoded
+
+
+def test_an_empty_query_keeps_its_delimiter() -> None:
+    """`urlsplit` reports an empty query for both `/foo` and `/foo?`, but they
+    are different request targets and only the second is caught by
+    `Disallow: /foo?`. Testing the query alone dropped the delimiter."""
+    assert _request_path("https://x.test/search?") == "/search?"
+    assert _request_path("https://x.test/search") == "/search"
+    assert _request_path("https://x.test/search?#frag") == "/search?"
+
+
+def test_a_single_product_identification_string_yields_its_token() -> None:
+    """The ordinary case, including the `(+url)` comment we actually send."""
+    assert _product_token("integral-job-search/0.1 (+https://x.test)") == "integral-job-search"
+    assert _product_token("ClaudeBot") == "ClaudeBot"
+
+
+def test_a_browser_style_agent_naming_two_products_is_refused() -> None:
+    """RFC 9309 §2.2.1 gives a crawler one product token, so a string naming
+    two has no correct answer. Splitting on the first `/` answered `Mozilla`,
+    which reads the group written for browsers and ignores the one written for
+    us by name — a fail-open, and exactly what T71's browser agent produces."""
+    with pytest.raises(RobotsError, match="more than one product"):
+        _product_token("Mozilla/5.0 (compatible; integral-job-search/0.1; +https://x.test)")
+
+    with pytest.raises(RobotsError, match="no product token"):
+        _product_token("   ")

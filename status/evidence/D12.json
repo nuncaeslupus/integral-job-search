@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 108,
-  "gates_declaring_status_key": 8,
+  "evidence_gates_read": 109,
+  "gates_declaring_status_key": 9,
   "unrecordable": [],
   "readings": [
     {
@@ -763,6 +763,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-804d4c01",
+      "key": "robots_verdicts_misread",
+      "evidence": "status/evidence/T70.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-82720e4f",

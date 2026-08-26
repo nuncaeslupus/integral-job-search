@@ -54,13 +54,49 @@ USER_AGENT = "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral
 # Matching on the header meant a site's own `User-agent: integral-job-search`
 # group never matched us, so we silently fell through to `*` and obeyed the
 # wrong rules. On a module named "cannot fail open", that is the failure.
+_TOKEN_RE = re.compile(r"[A-Za-z_-]+")
+# A *product* is a token followed by a version: `Mozilla/5`, `integral-job-search/0`.
+# Requiring the digit is what keeps `(+https://...)` from reading as a second
+# product — `https` is followed by `:`, and `//` by no digit.
+_PRODUCT_RE = re.compile(r"([A-Za-z_-]+)/\d")
+
+
 def _product_token(agent: str) -> str:
     """The robots product token inside an identification string.
 
     `integral-job-search/0.1 (+https://...)` -> `integral-job-search`. A bare
     token (`ClaudeBot`) is returned unchanged, which is what a robots.txt
-    actually writes and what the fixtures below use."""
-    return agent.split("/", 1)[0].strip()
+    actually writes and what the fixtures below use.
+
+    A browser-style string names *several* products —
+    `Mozilla/5.0 (compatible; integral-job-search/0.1; +https://...)` names
+    `Mozilla` and `integral-job-search` — and RFC 9309 §2.2.1 gives a crawler
+    one token, not a list, so there is no correct answer to pick. Splitting on
+    the first `/` silently answered `Mozilla`, which reads whichever group the
+    site wrote for browsers (usually none) and ignores the group written for
+    us by name. That is a fail-open, and it is the one T71 walks into by
+    design, since presenting a browser agent is the whole of that task.
+
+    So refuse instead of guessing. `RobotsError` is what the rest of this
+    module raises when the rules cannot be established, and an agent whose
+    governing group is undecidable is exactly that case.
+    """
+    products: list[str] = [m.group(1) for m in _PRODUCT_RE.finditer(agent)]
+    if len(products) > 1:
+        raise RobotsError(
+            f"the identification string {agent!r} names more than one product "
+            f"({', '.join(products)}), so which robots group governs this crawler is "
+            "undecidable; identify with a single product token"
+        )
+    if products:
+        return products[0]
+    bare = agent.strip()
+    if _TOKEN_RE.fullmatch(bare):
+        return bare
+    raise RobotsError(
+        f"the identification string {agent!r} names no product token, "
+        "so no robots group can be matched to this crawler"
+    )
 
 Fetch = Callable[[str], str]
 
@@ -162,7 +198,12 @@ _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
 # them in the target too is what makes the two sides meet. An earlier revision
 # reasoned this out for `*` and then left `$` safe — half the symmetry, so
 # `Disallow: /report%24` never matched `/report$` and the target was permitted.
-_CHUNK_SAFE = "/%:@!&'()+,;=?~-._"
+# A raw `%` is NOT safe: it is only ever legitimate as the head of an escape,
+# and `_canon` quotes the runs *between* escapes, where any `%` left standing is
+# a literal one. Leaving it safe meant `/100%` canonicalised to itself while the
+# rule `Disallow: /100%25` canonicalised to `/100%25` — the same octet spelled
+# two ways, so the rule never matched and the target was permitted.
+_CHUNK_SAFE = "/:@!&'()+,;=?~-._"
 
 _ESCAPE_RE = re.compile(r"%([0-9A-Fa-f]{2})")
 
@@ -177,11 +218,15 @@ def _canon(chunk: str) -> str:
     rule spells a literal asterisk.
     """
 
-    def _decode(match: re.Match[str]) -> str:
+    out: list[str] = []
+    pos = 0
+    for match in _ESCAPE_RE.finditer(chunk):
+        out.append(quote(chunk[pos : match.start()], safe=_CHUNK_SAFE))
         char = chr(int(match.group(1), 16))
-        return char if char in _UNRESERVED else "%" + match.group(1).upper()
-
-    return quote(_ESCAPE_RE.sub(_decode, chunk), safe=_CHUNK_SAFE)
+        out.append(char if char in _UNRESERVED else "%" + match.group(1).upper())
+        pos = match.end()
+    out.append(quote(chunk[pos:], safe=_CHUNK_SAFE))
+    return "".join(out)
 
 
 def _normalize_rule(pattern: str) -> tuple[list[str], bool]:
@@ -232,7 +277,11 @@ def _request_path(url: str) -> str:
     """The request target — path and query together — in canonical form."""
     parts = urlsplit(url)
     target = parts.path or "/"
-    if parts.query:
+    # `urlsplit` reports an empty query for both `/foo` and `/foo?`, and those
+    # are different request targets: `Disallow: /foo?` must catch the second.
+    # Testing `parts.query` alone dropped the delimiter and let it through, so
+    # look for the delimiter itself, in the URL with any fragment removed.
+    if parts.query or "?" in url.split("#", 1)[0]:
         target = f"{target}?{parts.query}"
     return _canon(target)
 
@@ -555,6 +604,29 @@ Allow: /foo/x
 """,
         agent="SomeBot",
         url="https://f18.example/foo/x",
+        expected_allowed=False,
+    ),
+    # Both of these fail OPEN before the fix: the target and the rule spell the
+    # same octet two different ways, so the rule never matches and the fetch is
+    # permitted. That is the direction that actually hurts a site.
+    _Fixture(
+        name="a_raw_percent_in_the_target_matches_a_percent_encoded_rule",
+        robots_txt="""
+User-agent: ClaudeBot
+Disallow: /100%25
+""",
+        agent="ClaudeBot",
+        url="https://f21.example/100%",
+        expected_allowed=False,
+    ),
+    _Fixture(
+        name="a_bare_query_delimiter_still_matches_a_rule_that_ends_in_one",
+        robots_txt="""
+User-agent: ClaudeBot
+Disallow: /search?
+""",
+        agent="ClaudeBot",
+        url="https://f22.example/search?",
         expected_allowed=False,
     ),
 )
