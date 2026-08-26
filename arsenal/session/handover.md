@@ -1,135 +1,105 @@
-# Session handover — 2026-08-26 ~08:30 UTC, orchestrator takeover + second fleet round
+# Session handover — 2026-08-26 ~15:20 UTC, orchestrator, third fleet round
 
-Board: **103 gates on `main`**, 124 tasks. `main` at `0033160`. Two of five PRs merged;
-every merge was gate-verified by the orchestrator on that exact commit, never on a
-worker's word.
+Board: **106 gates**, 124 tasks. `main` at `2a3b8dd`. **Eight PRs merged today**, every one
+gate-verified by the orchestrator on that exact commit, never on a worker's word.
 
-| PR | task | threads | state |
-|---|---|---|---|
-| [#226](https://github.com/nuncaeslupus/integral-job-search/pull/226) | T81 keyword coverage | resolved | **merged** `0033160`; #210 auto-closed |
-| [#228](https://github.com/nuncaeslupus/integral-job-search/pull/228) | T85 evidence reach | none | **merged** `7adf423`; #217 auto-closed |
-| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | 1 held | gate now `unmeasured` per owner's decision; must NOT close #203. **Needs the combined `evidence` recipe below — main now carries T85's discovery half.** |
-| [#225](https://github.com/nuncaeslupus/integral-job-search/pull/225) | claude-arsenal v2.4.22 | 1 parked | CodeRabbit holds it open until upstream ships `claude-arsenal#253` |
-| [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) | T70 robots | 3 open | **NOT merge-ready — still fails open. Owner decision.** |
+| PR | task | outcome |
+|---|---|---|
+| [#226](https://github.com/nuncaeslupus/integral-job-search/pull/226) | T81 keyword coverage | merged `0033160`, #210 closed |
+| [#228](https://github.com/nuncaeslupus/integral-job-search/pull/228) | T85 evidence reach | merged `7adf423`, #217 closed |
+| [#225](https://github.com/nuncaeslupus/integral-job-search/pull/225) | claude-arsenal v2.4.22 | merged `928e957`, one thread left open by decision |
+| [#229](https://github.com/nuncaeslupus/integral-job-search/pull/229) | adversarial-fixture rule | merged `9d15d76` |
+| [#230](https://github.com/nuncaeslupus/integral-job-search/pull/230) | T74 liveness identity | merged `2241a91`, #213 closed |
+| [#233](https://github.com/nuncaeslupus/integral-job-search/pull/233) | T74 follow-up fix | merged `ddcdc4e` |
+| [#231](https://github.com/nuncaeslupus/integral-job-search/pull/231) | T75 dedup | merged `c77ba8f`, #211 closed |
+| [#232](https://github.com/nuncaeslupus/integral-job-search/pull/232) | T82 status vocabulary | merged `2a3b8dd`, #214 closed |
 
-The merge authorisation is the one in the previous handover and still stands: squash, when
-the PR is not held, every CodeRabbit thread reads `is_resolved: true`, and `make host-gate`
-was run on that branch by the orchestrator. Both merges met all three. The predicted
-`D12.json` conflict did **not** materialise on #226 — `main` merged cleanly and only
-`make evidence` regeneration was needed.
+## Open, and both waiting only on the owner
 
-## The finding that matters more than any individual fix
+| PR | state |
+|---|---|
+| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) T72 | `62996f5`. **HELD by the owner.** Zero open threads, Merge Risk Minimal, `make host-gate` exit 0. Six verified defects fixed today. Squash message must omit `Closes #203`. |
+| [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) T70 | `fac3cac`. Four fail-opens fixed, audit reported. **Blocked by the fixture-report gap below**, not by a known defect. |
 
-**Seven-plus real defects across four PRs today, every one a check that could not report
-its own inability to run, every one behind a green `make host-gate`.**
+## The finding of the day: a check can be correct by coincidence
 
-- T72: the probe compared a fixture with itself; rot was undetectable while the evidence
-  said `measured`.
-- T70: no adversarial fixture — five review rounds found a ReDoS (measured hanging past
-  60s), two encoding asymmetries, two precedence errors, and three more still open.
-- T85: the reach check raised a traceback instead of reporting `unmeasured`.
+Fourteen real defects were fixed across these PRs, and the ones that mattered shared a
+shape — **the gate was green because the fixtures happened not to exercise the broken
+case**, not because the code was right.
 
-**Eight of T70's ten findings were introduced by the orchestrator's own fixes**, each
-pushed after verifying the previous defect, adding fixtures and seeing a green gate. That
-is not carelessness per round; it is what happens when one author writes both the code and
-the fixtures that judge it. Percent-encoding equivalence for robots matching has a long
-tail (`%`, `?`, `$`, `*`, empty delimiters, unreserved octets, product tokens) and it was
-met one review at a time.
+- **T74**: `title_in_body` searched the whole document, so any listings page *mentioning*
+  the vacancy read as the advert. The fixtures passed only because their listings page
+  happens not to contain the word `CISO`. Now matched against `<title>`/`<h1>` only.
+- **T70**: `Disallow:` with an empty value was stored as the pattern `""`, which matches
+  every path — so the "allow all" idiom made a whole site unfetchable. Every existing
+  fixture asserted a *refusal* was correct, so none could see it. **Fail-closed defects
+  are invisible to a fixture set built around fail-open.**
+- **T82**: guarding the *read* of a corrupt record left the *write* overwriting it. The
+  guarantee was unmet while the code claimed it was met.
 
-**Proposed process change, awaiting the owner:** adversarial fixtures for a task written by
-a session *other* than the implementer, derived from the spec rather than the code, before
-review. More care did not fix this — four careful rounds did not.
+The rule that follows, now in `CLAUDE.md`: **a test that checks the function behaves is
+not a test that checks the guarantee holds.** Write the second.
 
-## Decisions the owner made this session
+## Decisions the owner made today
 
-1. **T72: the honest fix.** Probe reads `probe/list.html`, a separately captured read that
-   does not exist here, so the gate is `unmeasured`. T72 is **un-archived and open**;
-   `Closes #203` was removed from the PR body and must be omitted from the squash message.
-   Finishes when someone captures `connectors/trabajos_es/probe/list.html` on the laptop.
-2. **Fleet: three workers** — T70, T81, T85, all completed and pushed.
+1. **#227**: fix the three fail-opens, then a separate session audits from the spec. Done.
+2. **#225**: merge over the parked thread — the finding is upstream's (`claude-arsenal#253`).
+3. **Fleet: three** — T75, T74, T82. All three merged.
+4. **Adopt the adversarial-fixture rule**, strengthened after review caught that its first
+   wording was satisfiable without a single independent case ever running.
 
-## Decisions still owed
+## Still owed by the owner
 
-1. **The `.claude/settings.json` paste** — here *and* in `nuncaeslupus/opos`, which carries
-   an identical block. See "auto mode" below. A session cannot apply it.
-2. **#225's parked thread** — blocks that PR indefinitely under the all-threads-resolved
-   rule, by CodeRabbit's own choice.
-3. **Merge #228 first?** It triggers #221's conflict (see below).
-4. **The adversarial-fixture process change.**
-5. **T70's scope** — patch it further, or accept that a correct RFC 9309 matcher is larger
-   than the task assumed. Same shape as T72's decision.
+1. **The `.claude/settings.json` paste** — here *and* in `nuncaeslupus/opos`. A session is
+   hard-blocked from applying it, correctly.
+2. **#221's hold.**
+3. **#227's fixture gap** (below): re-run the audit with durable output, or accept the two
+   failures as its deliverable.
 
-## The #221 / #228 conflict — do NOT resolve mechanically
+## The process error worth not repeating
 
-Both rewrite the `Makefile`'s `evidence` recipe, and each keeps only half of what the
-merged result needs. PR #228 replaces module *discovery* — the derived `grep -l '^def
-_main'` list becomes `repo_gate --list-evidence-modules`, which is the whole point of
-T85 — but keeps the old `|| GATE FAILED` handling. PR #221 keeps the old discovery and
-replaces that handling, so a module reporting exit 3 records as `unmeasured`, without
-which T72's honest gate cannot be recorded at all.
+The T70 audit derived **19 spec cases; 17 passed, 2 failed**. Only the 2 are committed.
+The other 17 lived solely in that session's final message, and the session is an
+unreachable cloud session — `ListAgents` shows nothing, so the report is gone.
 
-Taking either side wholesale silently undoes the other, **and neither loss fails a
-test**, because each branch's own fixtures pass on its own change. The correct merged
-recipe keeps both:
+**The dispatch asked the auditor to report in its final message rather than to write its
+cases to a file and push a branch.** A report that lives only in a transcript is exactly
+the "evidence that cannot be re-run" this repository refuses everywhere else, built into
+the process created to fix that. Fix the dispatch prompt before the next audit.
 
-```make
-@for m in $$(uv run python -m integral.repo_gate --list-evidence-modules); do \
-	printf '  %-18s ' "$$m"; \
-	uv run python -m integral.$$m >/dev/null; status=$$?; \
-	case $$status in \
-		0) echo ok ;; \
-		3) echo "unmeasured (recorded)" ;; \
-		*) echo "GATE FAILED"; exit 1 ;; \
-	esac; \
-done
-```
+## Mechanics worth keeping
 
-PRs #221, #227 and #228 all touch `status/evidence/D12.json`/`T55.json`; regenerate with
-`make evidence`, never hand-edit.
-
-## Capability findings — three contradict the previous handover
-
-- **A spawned worker CAN open its own PR.** #226 was opened by
-  `session_016QzEMD7VNkJv5JbMU352Qx` itself. The prior handover recorded as *measured* that
-  a child has no GitHub API and that `open_task_pr.sh`'s last step 403s. **Falsified for PR
-  creation.** The whole orchestrator/worker split rests on that invariant — re-measure it.
-- **A worker also schedules its own check-ins.** `trig_01KzrSNDviGWcZTkmL4dEnFZ` is
-  self-bound to that worker to babysit #226 — so two agents may act on one PR.
-- **A self-bound routine keeps its `mcp__*` tools.** The 08:16 tick fired into this live
-  session with every tool intact. *Limit:* the container was alive throughout, so a cold
-  resume is still unmeasured. Do not round that up.
-- **Auto mode has a second permission gate.** `permissions.allow` is not what prompts:
-  `create_session` and `get_session` were both allow-listed and both prompted anyway. The
-  classifier is configured under a top-level `autoMode` key (`allow`/`soft_deny`/
-  `hard_deny`, `"$defaults"` inherits). It also **hard-blocks a session editing
-  `.claude/settings.json`** — four attempts, three tools, including the sanctioned
-  `update-config` skill. That is correct and must not be routed around.
-- **Three `create_session` calls in one message are all denied; one per message all
-  succeed.** Dispatch workers one call at a time.
-
-## Costs
-
-T85 alone was **$8.73** against a ~$5.45 estimate; T70 and T81 unmeasured but comparable.
-A separate orchestrator is running in `nuncaeslupus/opos` on the same account, sharing
-CodeRabbit's 10-reviews/hour ceiling — which is part of why reviews stalled here.
+- **Re-read PR threads at the moment of merging, not once beforehand.** #230 was merged
+  over a Major posted ninety seconds earlier; the next PR, #232, had two findings arrive
+  three minutes before its merge and the re-read caught them.
+- A `409 Head branch is out of date` can appear while `git rev-list` says **0 behind** —
+  GitHub had not indexed the push. Verify before assuming a conflict.
+- `git add -A` during conflict resolution swept a source fix into a commit labelled
+  `chore: regenerate evidence`. Squash-merge makes the landed record right; check what a
+  conflict-resolution commit actually contains.
+- Three `create_branch` calls in one message all succeed. The one-per-message limit is
+  specific to `create_session`.
 
 ## Unchanged and still true
 
-CI is red repository-wide: `runner_id: 0`, no runner assigned, ~3s per job, red on `main`.
-**Measured again today** — the check *"task PR closes its task"* failed on #227, whose body
-carries `Closes #209`, which could only pass with a runner. Never gate merging on it.
+**CI is red repository-wide because the GitHub Actions runner minutes are exhausted for
+the billing period** — not because of any diff. The signature is `runner_id: 0` with an
+empty `runner_name` and a 3–5 second job, on `main` as much as on any branch.
+
+Check that signature before applying this, every time. "Never gate merging on CI" is only
+true *while that cause holds*: once the minutes are restored, a red check is a red check
+again, and a session that carried this instruction forward without its precondition would
+skip a real failure. Which is this file committing the same error the rest of it is about —
+an instruction that reports safety without the measurement behind it. Delete this section
+once runs show real durations.
 
 Commit before gating (`make evidence` compares committed evidence). Never put an
 angle-bracket placeholder in a GitHub body. Vendored `claude-arsenal/` and
-`.claude/skills/` are refreshed by `/init`, never hand-edited — CodeRabbit has now
-recorded that as a learning.
+`.claude/skills/` are refreshed by `/init`, never hand-edited.
 
-Skip `lo-4b17` (T59), `lo-6f53` (T56), `lo-7c14` (T57). Next unblocked: `t-854ae281` (T75),
-`t-921a4ef5` (T74), `t-9e5a05a0` (T82).
+All three task files this round named their denominator two ways — prose
+`<metric>_evaluated`, dated section a domain name. **The template that generates those
+sections is producing the mismatch**; workers were told to write both keys.
 
-## Upstream
-
-`claude-arsenal` **#253** filed today: v2.4.22's skew-probe fallback still picks a winner
-among ambiguous candidates instead of declining. #245–#251 remain open; **#249's proposed
-fix is falsified** — this repo already carries all ten entries and still prompts (see auto
-mode above), and that is commented on the issue. Deduplicate by content before filing more.
+Skip `lo-4b17` (T59), `lo-6f53` (T56), `lo-7c14` (T57). Next unblocked: `lo-25b1` (T15),
+`t-e6f1dc24` (T76).
