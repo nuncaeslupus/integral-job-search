@@ -1,0 +1,14 @@
+{
+  "posting_keywords_left_unclassified": 0,
+  "posting_keywords_left_unclassified_evaluated": 832,
+  "posting_keywords_checked": 832,
+  "gate_status": "measured",
+  "by_status": {
+    "covered": 416,
+    "synonym-only": 0,
+    "missing (have it)": 0,
+    "missing (gap)": 416
+  },
+  "adverts_generated": 208,
+  "unclassified_keywords": []
+}
