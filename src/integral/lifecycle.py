@@ -66,6 +66,25 @@ grows (a purge appends one row, a resighting appends another with the counter
 incremented), and `current_tombstones` folds it down to one row per offer id
 by taking the latest. This is what lets `resightings` increase over time
 without ever mutating a row that already exists on disk.
+
+**T82 — the application status vocabulary (spec §5.2), a second and separate
+vocabulary from §7.1's `OfferStatus` above.** `applications/{offer_id}/`
+records what was sent and when (T46's `approval.record_sent`) but, until now,
+had no vocabulary for what became of it. §5.2 fixes nine statuses, closed,
+split Open (`drafted`, `applied`, `interview`, `offer`) and Final (`hired`,
+`rejected`, `no_response`, `offer_declined`, `withdrawn`) — a vocabulary's
+entire value is in being fixed, so `normalise_application_status` refuses
+anything outside it rather than growing to fit a new case. Legacy
+space-spellings (`no response`) are tolerated on *read* only: the migration
+strategy is tolerance at the boundary, not a rewrite of stored records, so
+`record_application_status` always canonicalises before it writes and
+`read_application_status` never rewrites the file it just tolerated a legacy
+spelling from. `hired` and `offer_declined` are never inferred — accepting or
+declining is the candidate's decision, so `record_application_status` refuses
+either without an explicit `candidate_confirmed=True`, the same "nothing
+without a name" shape `revive` above uses for its own irreversible action.
+Adapted from `MadsLorentzen/ai-job-search` (MIT, © 2026 Mads Lorentzen); T83
+records the attribution, not this docstring.
 """
 
 from __future__ import annotations
@@ -79,7 +98,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, Literal, get_args
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from integral.dedup import Tombstone, load_tombstones, tombstone_match
@@ -949,11 +968,8 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
-def _main(argv: list[str]) -> int:
-    """`python -m integral.lifecycle [path]` -> S5's gate evidence."""
-    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
-    target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
-    measured = write_evidence(target)
+def _s5_report(measured: dict[str, Any]) -> int:
+    """Print S5's measurement and say whether it fails that gate."""
     print(json.dumps(measured, ensure_ascii=False))
     if measured["scenarios_checked"] < MINIMUM_SCENARIOS:
         print(
@@ -971,6 +987,306 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
     return 1 if (measured["violations"] or measured["resurrected_purged_offers"]) else 0
+
+
+# ---------------------------------------------------------------------------
+# T82 — the application status vocabulary (spec §5.2)
+
+DEFAULT_APPLICATION_STATUS_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T82.json"
+
+ApplicationStatus = Literal[
+    "drafted",
+    "applied",
+    "interview",
+    "offer",
+    "hired",
+    "rejected",
+    "no_response",
+    "offer_declined",
+    "withdrawn",
+]
+
+# §5.2's table, split in two. A status absent from both sets is a schema
+# defect, caught at import time below — the same fail-fast shape §7.1's
+# `ALLOWED_TRANSITIONS` completeness check uses for `OfferStatus`.
+OPEN_APPLICATION_STATUSES: frozenset[ApplicationStatus] = frozenset(
+    {"drafted", "applied", "interview", "offer"}
+)
+FINAL_APPLICATION_STATUSES: frozenset[ApplicationStatus] = frozenset(
+    {"hired", "rejected", "no_response", "offer_declined", "withdrawn"}
+)
+
+_ALL_APPLICATION_STATUSES: frozenset[ApplicationStatus] = frozenset(get_args(ApplicationStatus))
+if OPEN_APPLICATION_STATUSES & FINAL_APPLICATION_STATUSES:
+    raise LifecycleError("a status cannot be both Open and Final (§5.2)")
+_APPLICATION_STATUS_SPLIT = OPEN_APPLICATION_STATUSES | FINAL_APPLICATION_STATUSES
+if _APPLICATION_STATUS_SPLIT != _ALL_APPLICATION_STATUSES:
+    raise LifecycleError(
+        "OPEN_APPLICATION_STATUSES/FINAL_APPLICATION_STATUSES disagree with ApplicationStatus "
+        f"on: {sorted(_ALL_APPLICATION_STATUSES ^ _APPLICATION_STATUS_SPLIT)}"
+    )
+
+# §5.2: "Legacy space-spellings ... accepted on read, never written." Closed
+# on purpose — only the spellings the spec names verbatim, not a general
+# space-to-underscore rule, so a genuinely unrecognised string still refuses
+# rather than being silently coerced into whatever it looks closest to.
+_LEGACY_APPLICATION_STATUS_SPELLINGS: dict[str, ApplicationStatus] = {
+    "no response": "no_response",
+    "offer declined": "offer_declined",
+}
+
+# "Never infer hired or offer_declined. Accepting or declining is the
+# candidate's decision and is recorded only when they say so." Made
+# mechanical here rather than trusted to every future caller's memory — the
+# same "nothing without a name" shape `revive` uses above for its own
+# action that cannot happen by accident.
+_CONFIRMATION_REQUIRED_APPLICATION_STATUSES: frozenset[ApplicationStatus] = frozenset(
+    {"hired", "offer_declined"}
+)
+
+
+class ApplicationStatusError(LifecycleError):
+    """A status is outside the closed nine-value vocabulary (§5.2), or
+    `hired`/`offer_declined` was recorded without an explicit confirmation."""
+
+
+def normalise_application_status(raw: str) -> ApplicationStatus:
+    """Canonicalise `raw`, tolerating the legacy space-spellings §5.2 accepts
+    **on read** — never called to normalise a value this module is about to
+    write without first passing back through the canonical form, since
+    `record_application_status` stores whatever this function returns, never
+    the spelling it was given.
+    """
+    if raw in _ALL_APPLICATION_STATUSES:
+        return raw
+    canonical = _LEGACY_APPLICATION_STATUS_SPELLINGS.get(raw)
+    if canonical is not None:
+        return canonical
+    raise ApplicationStatusError(
+        f"{raw!r} is not one of the nine canonical application statuses (§5.2) — the "
+        "vocabulary is closed; a case that seems unhandled is raised, never added"
+    )
+
+
+def application_status_class(status: ApplicationStatus) -> Literal["open", "final"]:
+    """§5.2's two-way split. Every one of the nine statuses lands in exactly
+    one class — enforced at import time by the completeness check above, so
+    this is total rather than a fallback."""
+    return "open" if status in OPEN_APPLICATION_STATUSES else "final"
+
+
+class ApplicationStatusRecord(Strict):
+    """`applications/{offer_id}/status.json` — spec §5.2's shape, verbatim.
+
+    `status` is typed `str`, not `ApplicationStatus`: a legacy space-spelling
+    already on disk (or in a file this module did not write) still has to
+    parse so it can be tolerated on read, and a `Literal` field would refuse
+    it before `normalise_application_status` ever got a chance to.
+    """
+
+    status: str
+    recorded_at: str
+
+
+def _application_status_parts(offer_id: str) -> tuple[str, str, str]:
+    return ("applications", offer_id, "status.json")
+
+
+def record_application_status(
+    store: ProfileStore,
+    offer_id: str,
+    *,
+    status: str,
+    at: str,
+    candidate_confirmed: bool = False,
+) -> ApplicationStatusRecord:
+    """Write `applications/{offer_id}/status.json` (§5.2).
+
+    `status` is normalised before it is written, so even a caller that
+    passes a legacy space-spelling lands a canonical, underscored value on
+    disk — "accepted on read, never written" applies to every write this
+    module performs, not only ones a candidate already typed correctly.
+    `hired`/`offer_declined` are refused unless `candidate_confirmed=True` —
+    see the module docstring's T82 paragraph.
+    """
+    canonical = normalise_application_status(status)
+    if canonical in _CONFIRMATION_REQUIRED_APPLICATION_STATUSES and not candidate_confirmed:
+        raise ApplicationStatusError(
+            f"{canonical!r} is only recorded when the candidate says so — pass "
+            "candidate_confirmed=True for an explicit confirmation; it is never inferred"
+        )
+    # Refusing to READ a corrupt record protects nothing on its own: the very
+    # next write replaced it, which is the data loss the read guard was added
+    # for. So the write refuses too, and the corrupt file survives to be looked
+    # at by a person. `read_application_status` raises for exactly the cases
+    # that must not be overwritten and returns None when there is no record, so
+    # calling it here is the whole check.
+    read_application_status(store, offer_id)
+
+    record = ApplicationStatusRecord(status=canonical, recorded_at=at)
+    store.write_json(record.model_dump(mode="json"), *_application_status_parts(offer_id))
+    return record
+
+
+def read_application_status(store: ProfileStore, offer_id: str) -> ApplicationStatus | None:
+    """The current status for `offer_id`, or `None` if none was ever
+    recorded. Tolerates a legacy space-spelling found on disk (§5.2)
+    in-memory only — reading is never a migration, so the file itself is
+    left exactly as it was found.
+    """
+    # `read_json` raises IdentityError for BOTH a missing file and malformed
+    # JSON, so catching it wholesale reported a corrupt record as "never
+    # recorded" — and the next `record_application_status` then overwrote the
+    # corruption rather than refusing. Note the contradiction it created: a
+    # record that parses as JSON but fails the schema below is already an
+    # ApplicationStatusError, so the same damage was an error or a silent
+    # overwrite depending only on *how* broken the file was.
+    # ONE read, not exists() then read. Two operations left a window in which
+    # the file could vanish between them — reporting a record that was merely
+    # deleted as unreadable — and, worse, said nothing about failures that are
+    # neither: `read_text` catches only FileNotFoundError, so a `status.json`
+    # that is a directory raised IsADirectoryError straight through this
+    # function. Measured: `ESCAPES as IsADirectoryError`.
+    #
+    # `__cause__` is what separates the two, because `read_text` re-raises the
+    # FileNotFoundError as IdentityError `from` it. That couples this to
+    # identity.py's internals, and an explicit ProfileStore API for "missing
+    # versus unreadable" would be better — worth doing when something else
+    # needs the same distinction.
+    parts = _application_status_parts(offer_id)
+    try:
+        raw = store.read_json(*parts)
+    except IdentityError as exc:
+        if isinstance(exc.__cause__, FileNotFoundError):
+            return None
+        raise ApplicationStatusError(
+            f"{offer_id}'s application status record could not be read: {exc}"
+        ) from exc
+    except (OSError, UnicodeError) as exc:
+        raise ApplicationStatusError(
+            f"{offer_id}'s application status record could not be read: {exc}"
+        ) from exc
+    try:
+        record = ApplicationStatusRecord.model_validate(raw)
+    except Exception as exc:
+        raise ApplicationStatusError(
+            f"{offer_id}'s application status record is malformed: {exc}"
+        ) from exc
+    return normalise_application_status(record.status)
+
+
+def audit_application_statuses(rows: Sequence[tuple[str, str]]) -> dict[str, Any]:
+    """The gate: every `(offer_id, raw_status)` pair checked against §5.2's
+    closed vocabulary (legacy spellings tolerated, same as a real read).
+
+    Takes `rows` rather than discovering them, so a test's handful of
+    fixture rows and the real measurement below share one function — the
+    same split `audit_documents`/T80 and `keyword_coverage`/T81 use in
+    `ats.py`.
+    """
+    violations: list[str] = []
+    for offer_id, raw in rows:
+        try:
+            normalise_application_status(raw)
+        except ApplicationStatusError:
+            violations.append(f"{offer_id}: {raw!r} is not a canonical application status")
+    evaluated = len(rows)
+    return {
+        "applications_with_a_noncanonical_status": len(violations),
+        "applications_with_a_noncanonical_status_evaluated": evaluated,
+        # The dated addendum's own name for the same denominator — the
+        # prose and the addendum name it differently, so both are written
+        # with the same value rather than picking one and breaking the other.
+        "application_records_checked": evaluated,
+        "gate_status": "unmeasured" if evaluated == 0 else "measured",
+        "violations": violations,
+    }
+
+
+def probe_application_statuses() -> dict[str, Any]:
+    """§5.2's gate, measured for real against a throwaway profile.
+
+    Drives every one of the nine canonical statuses through the real
+    `record_application_status`, plus one legacy space-spelled record
+    written directly to disk (never through this module's own write path —
+    it is what a pre-existing or externally authored file looks like), then
+    re-reads every `applications/*/status.json` from disk and audits it —
+    the same "measure off disk, not off what the calls above claimed to do"
+    discipline `probe_lifecycle` uses for S5. There is no candidate in this
+    repository and there must not be one (see `ats.py`'s module docstring),
+    so this fixture is a throwaway profile, not real data.
+    """
+    with tempfile.TemporaryDirectory(prefix="integral-t82-") as tmp:
+        root = Path(tmp) / "profiles"
+        identity = create_profile(root, "Probe Candidate", language="en")
+        store = ProfileStore(root, identity.handle)
+
+        at = _iso(datetime(2026, 8, 26, tzinfo=UTC))
+        for index, status in enumerate(sorted(_ALL_APPLICATION_STATUSES)):
+            record_application_status(
+                store,
+                f"offer-{index}",
+                status=status,
+                at=at,
+                candidate_confirmed=status in _CONFIRMATION_REQUIRED_APPLICATION_STATUSES,
+            )
+        store.write_json(
+            {"status": "no response", "recorded_at": at},
+            *_application_status_parts("offer-legacy"),
+        )
+
+        rows: list[tuple[str, str]] = []
+        for status_path in sorted(store.path("applications").glob("*/status.json")):
+            offer_id = status_path.parent.name
+            raw = json.loads(status_path.read_text(encoding="utf-8"))
+            rows.append((offer_id, raw["status"]))
+
+        return audit_application_statuses(rows)
+
+
+def write_application_status_evidence(
+    evidence: Path = DEFAULT_APPLICATION_STATUS_EVIDENCE_PATH,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T82.json`."""
+    measured = probe_application_statuses()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _t82_report(measured: dict[str, Any]) -> int:
+    """Print T82's measurement and say whether it fails that gate."""
+    print(json.dumps(measured, ensure_ascii=False))
+    if measured["gate_status"] == "unmeasured":
+        print(
+            "applications_with_a_noncanonical_status: UNMEASURED — "
+            f"{measured['applications_with_a_noncanonical_status_evaluated']} application "
+            "record(s) evaluated. Not a pass and not a fail (D-2).",
+            file=sys.stderr,
+        )
+        return 0
+    if measured["applications_with_a_noncanonical_status"]:
+        print(
+            "applications_with_a_noncanonical_status: " + "; ".join(measured["violations"]),
+            file=sys.stderr,
+        )
+    return 1 if measured["applications_with_a_noncanonical_status"] else 0
+
+
+def _main(argv: list[str]) -> int:
+    """Write S5's and T82's gate evidence — one module, two gates. `make
+    evidence` discovers this module once and runs `python -m
+    integral.lifecycle` once, so both gates are written from the same entry
+    point (the same shape `ats.py`'s `_main` uses for T80/T81).
+    """
+    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+    s5_measured = write_evidence(Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH)
+    s5_exit = _s5_report(s5_measured)
+
+    t82_measured = write_application_status_evidence()
+    t82_exit = _t82_report(t82_measured)
+
+    return s5_exit if s5_exit else t82_exit
 
 
 if __name__ == "__main__":
