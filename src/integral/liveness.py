@@ -33,7 +33,6 @@ word and nothing else. Liveness of an advert lives here.
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import re
@@ -48,6 +47,7 @@ from integral.offers import Offer
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-18.json"
+DEFAULT_IDENTITY_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T74.json"
 
 Liveness = Literal["live", "dead", "unverified"]
 
@@ -96,6 +96,21 @@ def dead_phrase_in(text: str) -> str | None:
     return next((phrase for phrase in DEAD_PHRASES if phrase in haystack), None)
 
 
+def title_in_body(title: str, body: str) -> bool:
+    """Does the fetched page mention the offer's own title, tolerantly?
+
+    Casefold and collapse whitespace, then a plain substring test — no more.
+    A listing page that renders unrelated roles will not carry this vacancy's
+    title anywhere in it, which is what tells the fragment-anchor case (T74)
+    apart from the advert itself: the URL never changed, so `same_page`
+    passes, and only the content says this is a different page. Strict would
+    be worse than useless here — a title match that trips on markup or
+    punctuation turns live adverts into `unverified`, and the candidate sees
+    nothing, which is the failure this exists to fix, reproduced.
+    """
+    return normalise(title) in normalise(body)
+
+
 #: Statuses that mean the record is retired. Liveness answers "is the advert
 #: still there", never "should this candidate see it" — so a `live` verdict on
 #: a retired record must not put it back in the list. Showing one would also
@@ -131,6 +146,7 @@ def read_response(
     *,
     advert_url: str | None = None,
     final_url: str | None = None,
+    title: str | None = None,
 ) -> SourceCheck:
     """Turn one fetch of the advert's own URL into a verdict.
 
@@ -144,6 +160,15 @@ def read_response(
     the redirect fixes the status code and not the problem. When the landing
     page is a different page from the one asked for, the verdict is
     `unverified` — we read something, but not this vacancy.
+
+    `title` is the offer's own title, and it is checked even when the URL
+    never moved (T74): a stored URL can fetch 200 at the address it always
+    had and still render a listings page rather than the advert — a fragment
+    anchor (`#ikerian`) is never sent to the server, so the redirect check
+    above sees nothing wrong. Only the content says otherwise. `title=None`
+    skips the check rather than failing it: an offer this module cannot name
+    a title for gives the identity check nothing to compare, and refusing to
+    guess is safer than manufacturing a mismatch.
     """
     if advert_url is not None and final_url is not None and not same_page(advert_url, final_url):
         return SourceCheck(
@@ -181,6 +206,13 @@ def read_response(
     phrase = dead_phrase_in(body)
     if phrase is not None:
         return SourceCheck(offer_id, "dead", f"the advert's own page says {phrase!r}")
+    if title is not None and not title_in_body(title, body):
+        return SourceCheck(
+            offer_id,
+            "unverified",
+            f"the page does not mention {title!r} — the URL checks out but this reads as "
+            "some other page, not the advert",
+        )
     return SourceCheck(offer_id, "live", f"fetched from source, {status}, no closure notice")
 
 
@@ -262,6 +294,10 @@ class Scenario:
     expect: Liveness
     advert_url: str | None = None
     final_url: str | None = None
+    #: The offer's own title, when this scenario is meant to exercise T74's
+    #: page-identity check. `None` for every arrival shape that predates it —
+    #: those keep testing D-18 alone, exactly as before.
+    title: str | None = None
 
 
 #: The seven offers of 2026-08-20, generalised. Every arrival shape the session
@@ -317,6 +353,30 @@ SCENARIOS: tuple[Scenario, ...] = (
         200,
         "<h1>Albañil</h1><p>Se busca. Jornada completa.</p>",
         "live",
+        title="Albañil",
+    ),
+    # T74 — page identity, not only the URL. The two below are the
+    # fragment-anchor and generic-mismatch shapes; the "connector listing"
+    # scenario above now doubles as their live counterpart, so the identity
+    # check has both a violation shape and a still-live shape to prove
+    # against, the same as every other verdict here.
+    Scenario(
+        "a fragment anchor lands on the listings page",
+        SEARCH_SOURCE,
+        200,
+        "<h1>Ofertas de empleo</h1><p>Explora nuestras vacantes en el sector servicios</p>",
+        "unverified",
+        advert_url="https://board.example.com/jobs/ciso/#ikerian",
+        final_url="https://board.example.com/jobs/ciso/#ikerian",
+        title="CISO",
+    ),
+    Scenario(
+        "a page whose title does not match the offer",
+        "examplejobs",
+        200,
+        "<h1>Recepcionista</h1><p>Media jornada, turno de tarde.</p>",
+        "unverified",
+        title="Ingeniero de Datos",
     ),
 )
 
@@ -329,6 +389,7 @@ def _offer_for(scenario: Scenario) -> Offer:
     return Offer(
         id=f"sha256:{digest}",
         source=scenario.source,
+        title=scenario.title,
         text=scenario.body or f"An advert that arrived as: {scenario.name}.",
     )
 
@@ -344,6 +405,7 @@ def probe() -> list[dict[str, Any]]:
             scenario.body,
             advert_url=scenario.advert_url,
             final_url=scenario.final_url,
+            title=offer.title,
         )
         shown, _ = presentable([offer], {offer.id: check})
         expired = expire(offer, check).status == "expired"
@@ -366,6 +428,7 @@ def probe() -> list[dict[str, Any]]:
                 "scenario": scenario.name,
                 "source": scenario.source,
                 "index_sourced": index_sourced(offer),
+                "title": offer.title,
                 "liveness": check.liveness,
                 "expected": scenario.expect,
                 "presented": bool(shown),
@@ -417,32 +480,111 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
-def _main(argv: list[str]) -> int:
-    """`python -m integral.liveness [--check]`.
+def _identity_unmeasured(reason: str, readings: list[dict[str, Any]]) -> dict[str, Any]:
+    """The shape a reading that could not happen takes: `-1`, never `0`."""
+    return {
+        "offers_presented_from_a_page_that_is_not_the_advert": -1,
+        "offers_presented_from_a_page_that_is_not_the_advert_evaluated": 0,
+        "pages_checked": 0,
+        "gate_status": "unmeasured",
+        "violations": [reason],
+        "readings": readings,
+    }
 
-    Without arguments it writes the evidence file, so `make evidence` — whose
-    module list is derived from `^def _main` — regenerates D-18's number with
-    no flag to remember.
+
+def measure_page_identity(readings: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """T74's gate reading: `offers_presented_from_a_page_that_is_not_the_advert`.
+
+    Reads off the same scenarios `measure()` probes rather than running a
+    second fetch cycle — a scenario either carries a `title` to check page
+    identity against or it does not, and only the ones that do count toward
+    this gate's denominator. `readings=None` (every real caller) draws them
+    from `probe()`; a caller may pass its own list to prove the empty-input
+    case cannot pass — see `test_the_gate_does_not_pass_on_an_empty_input_set`.
+
+    A zero-violation count over zero evaluated pages is indistinguishable
+    from a genuine pass unless something separates them: `gate_status` is
+    that something, `"unmeasured"` whenever nothing was evaluated and
+    `"measured"` otherwise, so the gate block's `status-key` can refuse to
+    score a run that checked nothing rather than reading it as a clean one.
     """
-    parser = argparse.ArgumentParser(
-        description="D-18's gate: an advert is verified at source before it is offered"
-    )
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="measure and report only; do not write the evidence file",
-    )
-    parser.add_argument(
-        "--write-evidence",
-        nargs="?",
-        const=str(DEFAULT_EVIDENCE_PATH),
-        default=str(DEFAULT_EVIDENCE_PATH),
-        metavar="PATH",
-        help="write evidence JSON to PATH (default: status/evidence/D-18.json)",
-    )
-    args = parser.parse_args(argv[1:])
+    if readings is None:
+        try:
+            readings = probe()
+        except Exception as exc:  # a probe that cannot run is evidence, not a crash
+            return _identity_unmeasured(f"a scenario could not be probed: {exc}", [])
+    evaluated = [r for r in readings if r.get("title") is not None]
+    if not evaluated:
+        return _identity_unmeasured(
+            "no scenario carried a title to check page identity against — nothing was evaluated",
+            list(readings),
+        )
+    violations = [
+        f"{r['scenario']}: presented although the page read as {r['liveness']!r}, not the advert"
+        for r in evaluated
+        if r["presented"] and r["liveness"] != "live"
+    ]
+    return {
+        "offers_presented_from_a_page_that_is_not_the_advert": len(violations),
+        "offers_presented_from_a_page_that_is_not_the_advert_evaluated": len(evaluated),
+        "pages_checked": len(evaluated),
+        "gate_status": "measured",
+        "violations": violations,
+        "readings": evaluated,
+    }
 
-    measured = measure() if args.check else write_evidence(Path(args.write_evidence))
+
+def write_page_identity_evidence(evidence: Path = DEFAULT_IDENTITY_EVIDENCE_PATH) -> dict[str, Any]:
+    """Measure and record `status/evidence/T74.json`, beside D-18's own file.
+
+    A separate file, not a key folded into D-18.json: the gate block names
+    `status/evidence/T74.json` directly, and CA-12's rule is that a gate must
+    never name a file no module produces.
+    """
+    measured = measure_page_identity()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _main(argv: list[str]) -> int:
+    """`python -m integral.liveness [--check] [--identity] [path]`.
+
+    Bare invocation writes **both** evidence files, D-18's and T74's — the
+    same reason `dimensions.py` writes T2, T3 and T23 on a bare run: `make
+    evidence` derives its module list from `^def _main` and runs each module
+    once, with no way to know a module owns more than one gate. Naming
+    `--identity` still writes T74 alone, so that gate block's own invocation
+    stays precise.
+    """
+    identity = "--identity" in argv[1:]
+    check = "--check" in argv[1:]
+    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+
+    if not identity and not positional:
+        # Each recursive call carries a positional path (or `--identity`) so
+        # it lands past this branch rather than back in it — otherwise a bare
+        # `python -m integral.liveness` would recurse into itself forever.
+        identity_rc = _main([argv[0], "--identity", *(["--check"] if check else [])])
+        liveness_rc = _main(
+            [argv[0], str(DEFAULT_EVIDENCE_PATH), *(["--check"] if check else [])]
+        )
+        return max(identity_rc, liveness_rc)
+
+    if identity:
+        target = Path(positional[0]) if positional else DEFAULT_IDENTITY_EVIDENCE_PATH
+        measured_identity = (
+            measure_page_identity() if check else write_page_identity_evidence(target)
+        )
+        print(json.dumps(measured_identity, ensure_ascii=False))
+        for violation in measured_identity["violations"]:
+            print(violation, file=sys.stderr)
+        if measured_identity["gate_status"] == "unmeasured":
+            return 3
+        return 1 if measured_identity["offers_presented_from_a_page_that_is_not_the_advert"] else 0
+
+    target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
+    measured = measure() if check else write_evidence(target)
     print(json.dumps(measured, ensure_ascii=False))
     for violation in measured["violations"]:
         print(violation, file=sys.stderr)
