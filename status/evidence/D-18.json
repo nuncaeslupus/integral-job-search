@@ -1,6 +1,6 @@
 {
   "offers_presented_without_a_liveness_check": 0,
-  "scenarios_probed": 9,
+  "scenarios_probed": 11,
   "dead_phrases_known": 9,
   "violations": [],
   "readings": [
@@ -110,6 +110,30 @@
       "presented": false,
       "expired": false,
       "reason": "the page does not mention 'Ingeniero de Datos' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "an offer with no title cannot be identified against any page",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "title": "",
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the page does not mention '' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "a live advert whose title is split across markup still reads live",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "title": "Ingeniero de Datos",
+      "liveness": "live",
+      "expected": "live",
+      "presented": true,
+      "expired": false,
+      "reason": "fetched from source, 200, no closure notice",
       "reasons": []
     }
   ]

@@ -125,19 +125,21 @@ def test_the_gate_does_not_pass_on_an_empty_input_set() -> None:
     assert empty["pages_checked"] == 0
 
 
-def test_page_identity_evidence_is_written_beside_d18s() -> None:
+def test_page_identity_evidence_is_written_beside_d18s(tmp_path: Path) -> None:
     """The gate must never name a file no module produces — `write_evidence`
     for D-18 already exists, and T74's file has to sit beside it rather than
-    replace it."""
-    measured = liveness.write_page_identity_evidence(
-        liveness.DEFAULT_IDENTITY_EVIDENCE_PATH.parent / "T74-test.json"
-    )
-    written = liveness.DEFAULT_IDENTITY_EVIDENCE_PATH.parent / "T74-test.json"
-    try:
-        assert written.exists()
-        assert measured["gate_status"] == "measured"
-    finally:
-        written.unlink(missing_ok=True)
+    replace it.
+
+    Written under `tmp_path`, not the repository's own evidence directory: a
+    test that writes into the tree it is testing fails on a read-only checkout
+    and collides with a parallel worker, and neither failure would be about
+    the behaviour under test."""
+    written = tmp_path / "T74-test.json"
+
+    measured = liveness.write_page_identity_evidence(written)
+
+    assert written.exists()
+    assert measured["gate_status"] == "measured"
 
 
 def test_bare_invocation_writes_both_evidence_files(
@@ -156,3 +158,32 @@ def test_bare_invocation_writes_both_evidence_files(
     assert rc == 0
     assert d18_path.exists()
     assert t74_path.exists()
+
+
+def test_a_blank_title_matches_no_page() -> None:
+    """`"" in anything` is True, so an offer with no title passed identity
+    against every page — an unrelated listing verified as the advert, and
+    counted toward the denominator as though it had been checked. That is this
+    check failing open at the one thing it was added to do."""
+    assert liveness.title_in_body("", "<h1>Completely Unrelated Listing</h1>") is False
+    assert liveness.title_in_body("   ", "<h1>Completely Unrelated Listing</h1>") is False
+
+
+def test_a_title_split_across_markup_still_matches() -> None:
+    """The worse failure of the two, per the task: the candidate sees nothing.
+    A real advert whose heading is split across tags does not *contain* its own
+    plain title, so comparing raw HTML withheld a live advert — the exact
+    strictness the docstring above `title_in_body` promised to avoid."""
+    body = "<h1>Ingeniero <span>de</span> Datos</h1><p>Jornada completa.</p>"
+
+    assert liveness.title_in_body("Ingeniero de Datos", body) is True
+    assert liveness.title_in_body("Ingeniero de Datos", "<h1>Recepcionista</h1>") is False
+
+
+def test_an_unknown_option_is_refused_rather_than_ignored() -> None:
+    """`--identiy` matched neither name and was filtered out of the positional
+    list too, so the call fell into the bare-invocation branch, wrote both
+    evidence files and exited 0 — a typo that silently does something else and
+    reports success."""
+    assert liveness._main(["liveness", "--identiy"]) == 2
+    assert liveness._main(["liveness", "a.json", "b.json"]) == 2

@@ -84,6 +84,9 @@ DEAD_PHRASES: tuple[str, ...] = (
 
 _WHITESPACE = re.compile(r"\s+")
 
+#: The only options `_main` accepts; anything else is a typo, not a no-op.
+_KNOWN_OPTIONS = frozenset({"--check", "--identity"})
+
 
 def normalise(text: str) -> str:
     """Lowercase, collapse whitespace — enough for phrase matching, no more."""
@@ -96,19 +99,43 @@ def dead_phrase_in(text: str) -> str | None:
     return next((phrase for phrase in DEAD_PHRASES if phrase in haystack), None)
 
 
+_TAG = re.compile(r"<[^>]*>")
+
+
+def visible_text(html: str) -> str:
+    """The text a reader sees, with markup removed and whitespace collapsed.
+
+    Comparing against raw markup is what made the previous revision strict in
+    exactly the way its own docstring promised it was not: a real advert
+    rendered as `<h1>Software <span>Engineer</span></h1>` does not *contain*
+    the string `Software Engineer`, so the live advert read as `unverified`
+    and the candidate saw nothing — the failure this check exists to fix,
+    reproduced by the check itself.
+    """
+    return normalise(_TAG.sub(" ", html))
+
+
 def title_in_body(title: str, body: str) -> bool:
     """Does the fetched page mention the offer's own title, tolerantly?
 
-    Casefold and collapse whitespace, then a plain substring test — no more.
-    A listing page that renders unrelated roles will not carry this vacancy's
-    title anywhere in it, which is what tells the fragment-anchor case (T74)
-    apart from the advert itself: the URL never changed, so `same_page`
-    passes, and only the content says this is a different page. Strict would
-    be worse than useless here — a title match that trips on markup or
-    punctuation turns live adverts into `unverified`, and the candidate sees
-    nothing, which is the failure this exists to fix, reproduced.
+    Markup is stripped from both sides, then whitespace is collapsed, then a
+    plain substring test — no more. A listing page that renders unrelated
+    roles will not carry this vacancy's title anywhere in it, which is what
+    tells the fragment-anchor case (T74) apart from the advert itself: the URL
+    never changed, so `same_page` passes, and only the content says this is a
+    different page.
+
+    **A blank title never matches.** `"" in anything` is `True`, so an offer
+    with no title used to pass identity against *any* page — an unrelated
+    listing counted as verified, and counted toward the denominator as though
+    it had been checked. That is this check failing open at the one thing it
+    was added to do. With no title there is nothing to identify the page by,
+    so the honest answer is that identity could not be confirmed.
     """
-    return normalise(title) in normalise(body)
+    wanted = visible_text(title)
+    if not wanted:
+        return False
+    return wanted in visible_text(body)
 
 
 #: Statuses that mean the record is retired. Liveness answers "is the advert
@@ -378,6 +405,33 @@ SCENARIOS: tuple[Scenario, ...] = (
         "unverified",
         title="Ingeniero de Datos",
     ),
+    # The two directions the identity check can get wrong. Both were live
+    # defects, caught in review after this gate was already green over the
+    # three scenarios above — which is why they are fixtures and not only unit
+    # tests: a case that is not counted here protects nothing.
+    Scenario(
+        # FAIL-OPEN. `"" in anything` is True, so an offer with no title
+        # matched every page: an unrelated listing was verified as the advert
+        # AND counted toward the denominator as though it had been checked.
+        "an offer with no title cannot be identified against any page",
+        "examplejobs",
+        200,
+        "<h1>Ofertas de empleo</h1><p>Explora nuestras vacantes.</p>",
+        "unverified",
+        title="",
+    ),
+    Scenario(
+        # FAIL-CLOSED, and the worse failure of the two per this task: the
+        # candidate sees nothing. A real advert whose heading is split across
+        # markup does not *contain* its own plain title, so comparing raw HTML
+        # withheld it — the exact strictness the docstring promised to avoid.
+        "a live advert whose title is split across markup still reads live",
+        "examplejobs",
+        200,
+        "<h1>Ingeniero <span>de</span> Datos</h1><p>Jornada completa.</p>",
+        "live",
+        title="Ingeniero de Datos",
+    ),
 )
 
 
@@ -557,9 +611,32 @@ def _main(argv: list[str]) -> int:
     `--identity` still writes T74 alone, so that gate block's own invocation
     stays precise.
     """
-    identity = "--identity" in argv[1:]
-    check = "--check" in argv[1:]
-    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+    # An unrecognised option used to be dropped on the floor: `--identiy`
+    # matched neither name and was filtered out of `positional` too, so the
+    # call fell into the bare-invocation branch below, wrote both evidence
+    # files and exited 0. A typo that silently does something else and reports
+    # success is the failure mode this module is about, in its own front door.
+    options = [arg for arg in argv[1:] if arg.startswith("-")]
+    unknown = [arg for arg in options if arg not in _KNOWN_OPTIONS]
+    if unknown:
+        print(
+            f"liveness: unknown option(s) {' '.join(unknown)} — "
+            f"expected any of {' '.join(sorted(_KNOWN_OPTIONS))}",
+            file=sys.stderr,
+        )
+        return 2
+
+    positional = [arg for arg in argv[1:] if not arg.startswith("-")]
+    if len(positional) > 1:
+        print(
+            f"liveness: expected at most one path, got {len(positional)}: "
+            f"{' '.join(positional)}",
+            file=sys.stderr,
+        )
+        return 2
+
+    identity = "--identity" in options
+    check = "--check" in options
 
     if not identity and not positional:
         # Each recursive call carries a positional path (or `--identity`) so

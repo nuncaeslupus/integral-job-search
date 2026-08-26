@@ -1,7 +1,7 @@
 {
   "offers_presented_from_a_page_that_is_not_the_advert": 0,
-  "offers_presented_from_a_page_that_is_not_the_advert_evaluated": 3,
-  "pages_checked": 3,
+  "offers_presented_from_a_page_that_is_not_the_advert_evaluated": 5,
+  "pages_checked": 5,
   "gate_status": "measured",
   "violations": [],
   "readings": [
@@ -39,6 +39,30 @@
       "presented": false,
       "expired": false,
       "reason": "the page does not mention 'Ingeniero de Datos' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "an offer with no title cannot be identified against any page",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "title": "",
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the page does not mention '' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "a live advert whose title is split across markup still reads live",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "title": "Ingeniero de Datos",
+      "liveness": "live",
+      "expected": "live",
+      "presented": true,
+      "expired": false,
+      "reason": "fetched from source, 200, no closure notice",
       "reasons": []
     }
   ]
