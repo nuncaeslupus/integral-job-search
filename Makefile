@@ -42,8 +42,13 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 # commit changes what the measurement would now say. The module list is
 # derived, never listed here — a hardcoded list silently stops covering the
 # next module somebody adds, which is the failure this target exists to catch.
+#
+# Derived by `integral.repo_gate --list-evidence-modules`, not by grepping for
+# a naming convention on the module's entry-point function (T85): that used to
+# be `grep -l '^def _main'`, and three modules that write evidence through a
+# function named `main` instead were invisible to it and never drift-checked.
 evidence:  ## regenerate every module's gate evidence and fail on any drift
-	@for m in $$(grep -l '^def _main' src/integral/*.py | xargs -n1 basename | sed 's/\.py$$//'); do \
+	@for m in $$(uv run python -m integral.repo_gate --list-evidence-modules); do \
 		printf '  %-18s ' "$$m"; \
 		uv run python -m integral.$$m >/dev/null || { echo "GATE FAILED"; exit 1; }; \
 		echo ok; \

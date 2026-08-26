@@ -403,12 +403,14 @@ def write_proposals(
 def _main(argv: list[str] | None = None) -> int:
     """Measure the suggestion set (the gate), or write dimension proposals.
 
-    Named `_main` rather than `main` on purpose: `make evidence` derives its
-    module list by grepping for `^def _main`, runs each one, and refuses any
+    Named `_main` rather than `main` on purpose: `make evidence` used to derive
+    its module list by grepping for `^def _main`, run each one, and refuse any
     diff in `status/evidence/`. Under the old name this module was invisible to
     that loop, so `T5-suggestions.json` was a committed number nothing ever
-    re-measured — the exact failure the target's own comment warns about. The
-    no-argument run is `check`, so joining the loop needed nothing else.
+    re-measured — the exact failure the target's own comment warns about.
+    `make evidence` now discovers modules by the evidence path they construct
+    (T85) rather than this naming convention, but the no-argument run is still
+    `check`, so nothing here needed to change to stay reached.
     """
     parser = argparse.ArgumentParser(description="Suggestion-set checks and proposals.")
     sub = parser.add_subparsers(dest="command")

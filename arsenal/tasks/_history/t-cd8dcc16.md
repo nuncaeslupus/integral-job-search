@@ -5,6 +5,7 @@ priority: 10
 deps: []
 workspace: SOLO
 tags: [v3, m5]
+status: merged
 ---
 
 # T85: The evidence run reaches every module that writes evidence
