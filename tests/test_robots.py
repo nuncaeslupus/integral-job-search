@@ -10,7 +10,6 @@ the identity is not a detail of the request, it is the input to the decision.
 from __future__ import annotations
 
 import time
-
 import urllib.error
 
 import pytest
