@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 110,
-  "gates_declaring_status_key": 10,
+  "evidence_gates_read": 111,
+  "gates_declaring_status_key": 11,
   "unrecordable": [],
   "readings": [
     {
