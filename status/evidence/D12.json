@@ -709,6 +709,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-37cfb89e",
+      "key": "silent_connector_failures",
+      "evidence": "status/evidence/T72.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-4efbff9b",
       "key": "exhausted_searches_reported_as_a_scope_change",
       "evidence": "status/evidence/T66.json",
