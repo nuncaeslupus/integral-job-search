@@ -67,7 +67,10 @@
       "mcp__Claude_Code_Remote__list_sessions",
       "mcp__Claude_Code_Remote__send_message",
       "mcp__Claude_Code_Remote__interrupt_session",
-      "mcp__Claude_Code_Remote__add_repo"
+      "mcp__Claude_Code_Remote__add_repo",
+      "mcp__Claude_Code_Remote__delete_trigger",
+      "mcp__Claude_Code_Remote__list_triggers",
+      "mcp__Claude_Code_Remote__send_later"
     ]
   }
 }
