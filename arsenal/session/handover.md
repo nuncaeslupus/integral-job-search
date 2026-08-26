@@ -55,12 +55,16 @@ review. More care did not fix this — four careful rounds did not.
 
 ## The #221 / #228 conflict — do NOT resolve mechanically
 
-Both rewrite the `Makefile`'s `evidence` recipe and each keeps only half of what is needed:
-#228 replaces module *discovery* (`repo_gate --list-evidence-modules`, the point of T85) and
-keeps `|| GATE FAILED`; #221 keeps the old discovery and replaces the handling so exit 3
-records as `unmeasured` (without which T72's gate cannot be recorded at all). Taking either
-side wholesale silently undoes the other, **and neither loss fails a test.** The correct
-merged recipe:
+Both rewrite the `Makefile`'s `evidence` recipe, and each keeps only half of what the
+merged result needs. PR #228 replaces module *discovery* — the derived `grep -l '^def
+_main'` list becomes `repo_gate --list-evidence-modules`, which is the whole point of
+T85 — but keeps the old `|| GATE FAILED` handling. PR #221 keeps the old discovery and
+replaces that handling, so a module reporting exit 3 records as `unmeasured`, without
+which T72's honest gate cannot be recorded at all.
+
+Taking either side wholesale silently undoes the other, **and neither loss fails a
+test**, because each branch's own fixtures pass on its own change. The correct merged
+recipe keeps both:
 
 ```make
 @for m in $$(uv run python -m integral.repo_gate --list-evidence-modules); do \
@@ -74,7 +78,7 @@ merged recipe:
 done
 ```
 
-#221, #227 and #228 all touch `status/evidence/D12.json`/`T55.json`; regenerate with
+PRs #221, #227 and #228 all touch `status/evidence/D12.json`/`T55.json`; regenerate with
 `make evidence`, never hand-edit.
 
 ## Capability findings — three contradict the previous handover
