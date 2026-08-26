@@ -24,14 +24,18 @@ from integral.dedup import (
     DedupError,
     ExpiryFinding,
     Tombstone,
+    _canonical_source_fixture,
     _fixture_batch,
     _majority_cluster_fixture,
+    canonical_source_report,
     detect_expired,
     find_duplicates,
     jaccard,
     load_tombstones,
     normalise_for_comparison,
+    probe_canonical_source,
     probe_dedup,
+    resolve_canonical_source,
     shingles,
     similarity,
     tombstone_match,
@@ -349,6 +353,77 @@ def test_write_evidence_persists_the_measurement(tmp_path: Path) -> None:
     measured = write_evidence(target)
     assert target.exists()
     assert measured["dedup_precision"] >= 0.95
+
+
+# ---------------------------------------------------------------------------
+# T75 — survivor selection prefers the employer's own posting
+
+
+def test_the_employers_own_posting_wins_over_an_aggregator_copy() -> None:
+    """Marketing Manager: the employer's own posting (`acme_careers`) and a
+    live aggregator repost are the same duplicate group; the employer's
+    posting must be the one that survives."""
+    offers, source_kind, liveness_map = _canonical_source_fixture()
+    employer = next(
+        o for o in offers if o.source == "acme_careers" and o.title == "Marketing Manager"
+    )
+    aggregator = next(o for o in offers if o.title == "Marketing Manager (Remote)")
+
+    resolutions = resolve_canonical_source(offers, source_kind=source_kind, liveness=liveness_map)
+    group = next(r for r in resolutions if employer.id in r.group)
+
+    assert aggregator.id in group.group  # fixture sanity: they were seen as duplicates
+    assert group.survivor == employer.id
+    assert group.resolved_to_canonical is True
+
+
+def test_a_group_with_no_canonical_source_keeps_its_survivor() -> None:
+    """Copywriter: neither posting is declared `employer` — the group must
+    resolve exactly as it would with no source preference in play at all,
+    i.e. its first member in the fixture's own order."""
+    offers, source_kind, liveness_map = _canonical_source_fixture()
+    copywriters = [o for o in offers if "Copywriter" in (o.title or "")]
+    assert len(copywriters) == 2  # fixture sanity
+
+    resolutions = resolve_canonical_source(offers, source_kind=source_kind, liveness=liveness_map)
+    group = next(r for r in resolutions if copywriters[0].id in r.group)
+
+    assert group.canonical_available is False
+    assert group.survivor == copywriters[0].id
+
+
+def test_source_rank_never_overrides_a_liveness_verdict() -> None:
+    """Warehouse Supervisor: the employer's own posting is dead; the
+    aggregator repost is live. The live aggregator must survive — a dead
+    canonical copy never beats a live one, whatever its declared rank."""
+    offers, source_kind, liveness_map = _canonical_source_fixture()
+    employer = next(
+        o for o in offers if o.source == "acme_careers" and o.title == "Warehouse Supervisor"
+    )
+    assert liveness_map[employer.id] == "dead"  # fixture sanity
+
+    resolutions = resolve_canonical_source(offers, source_kind=source_kind, liveness=liveness_map)
+    group = next(r for r in resolutions if employer.id in r.group)
+
+    assert group.survivor != employer.id
+    assert group.canonical_available is True
+    assert group.canonical_live is False
+    assert group.resolved_to_canonical is False  # not a violation — canonical_live is False
+
+
+def test_the_gate_does_not_pass_on_an_empty_input_set() -> None:
+    """A zero violation count over zero evaluated groups is not a pass — the
+    denominator must be written and be non-zero for a real run."""
+    empty = canonical_source_report([])
+    assert empty["duplicate_groups_resolved_away_from_the_canonical_source_evaluated"] == 0
+    assert empty["duplicate_groups_evaluated"] == 0
+    assert empty["gate_status"] == "unmeasured"
+
+    measured = probe_canonical_source()
+    assert measured["duplicate_groups_resolved_away_from_the_canonical_source_evaluated"] > 0
+    assert measured["duplicate_groups_evaluated"] > 0
+    assert measured["gate_status"] == "measured"
+    assert measured["duplicate_groups_resolved_away_from_the_canonical_source"] == 0
 
 
 # ---------------------------------------------------------------------------
