@@ -15,6 +15,9 @@ from pathlib import Path
 import pytest
 
 from integral.ats import (
+    COVERED,
+    SYNONYM_ONLY,
+    classify_keyword,
     KEYWORD_STATUSES,
     _application_text,
     audit_documents,
@@ -242,3 +245,27 @@ def test_the_keyword_coverage_gate_does_not_pass_on_an_empty_input_set(
     real = keyword_coverage(document_text, master, ("PostgreSQL",))
     assert real["posting_keywords_left_unclassified_evaluated"] > 0
     assert real["gate_status"] == "measured"
+
+
+def test_a_longer_declared_spelling_is_synonym_only_not_covered() -> None:
+    """`_SYNONYMS` declares `node.js` an alternate spelling of `node`, so a
+    document that only ever wrote `Node.js` said it differently — it did not
+    say `node`. `_mentions` treats `.` as a term boundary, so a plain literal
+    check reported `covered` and contradicted the table.
+
+    The distinction is the point of the status: the candidate is told to add
+    the posting's own wording, which an ATS may match literally.
+    """
+
+    class _Master:
+        pass
+
+    master = _Master()
+
+    assert classify_keyword("We use Node.js daily", master, "node") == SYNONYM_ONLY
+    # Unchanged: the standalone spelling, and a document carrying both.
+    assert classify_keyword("We use node daily", master, "node") == COVERED
+    assert classify_keyword("node and Node.js", master, "node") == COVERED
+    # Unchanged for the pair that has no substring relationship.
+    assert classify_keyword("We use PostgreSQL", master, "postgres") == SYNONYM_ONLY
+    assert classify_keyword("We use Postgres", master, "postgres") == COVERED

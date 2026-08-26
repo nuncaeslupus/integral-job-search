@@ -331,9 +331,20 @@ def classify_keyword(document_text: str, master: CVMaster, keyword: str) -> str:
     from "the document left this out"; the synonym check is what makes that
     distinction, so it has to run before the store is consulted.
     """
-    if _mentions(document_text, keyword):
-        return COVERED
     synonyms = _synonyms_of(keyword)
+    # A longer declared spelling contains the shorter one (`node.js` contains
+    # `node`) and `_mentions` treats `.` as a term boundary, so a plain literal
+    # check reports `covered` for a document that only ever used the alternate
+    # spelling — contradicting the very table that declares them to be two
+    # spellings. Mask the longer spellings first so the matcher and `_SYNONYMS`
+    # agree: the candidate is told to add the posting's own wording, which is
+    # the whole point of separating `covered` from `synonym-only`.
+    masked = document_text
+    for synonym in sorted(synonyms, key=len, reverse=True):
+        if len(synonym) > len(keyword):
+            masked = re.sub(re.escape(synonym), " ", masked, flags=re.IGNORECASE)
+    if _mentions(masked, keyword):
+        return COVERED
     if any(_mentions(document_text, synonym) for synonym in synonyms):
         return SYNONYM_ONLY
     if _holds(master, keyword) or any(_holds(master, synonym) for synonym in synonyms):
