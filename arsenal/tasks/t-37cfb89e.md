@@ -5,7 +5,6 @@ priority: 5
 deps: []
 workspace: SUPPLY
 tags: [v3, m5]
-status: merged
 ---
 
 # T72: Connector health — detect a silently rotted parser
@@ -64,6 +63,26 @@ Service: **SUPPLY** · Size: M
 
 Spec: `status/spec-v3-silent-success.md` · Plan: `status/plan.md` (T72) ·
 Methods: `docs/METHODS.md`
+
+## Why this is still open — 2026-08-26
+
+The module landed; the *measurement* did not. `default_fetch` read the same
+`fixture/list.html` that `assess` uses as `baseline_html`, so the production
+path compared a string with itself: the regression branch was unreachable,
+`silent_connector_failures` could only ever be 0, and the evidence recorded
+`"gate_status": "measured"` on a check whose whole purpose is detecting
+parser rot.
+
+The probe now reads `probe/list.html` — a separately captured current read,
+written by the permitted `[LAPTOP]` process — and there is none in this
+repository, so `gate_status` is `unmeasured` and `gate_evidence.py` exits 3.
+Not a pass and not a fail.
+
+**What finishes this task:** capture `connectors/trabajos_es/probe/list.html`
+on the laptop, where egress is permitted (the same surface T12 needs), and
+re-run `python -m integral.connector_health`. Nothing in the module changes.
+Until then `connector_runs_probed` is 0 and the number is a lower bound over
+the free signals alone.
 
 ## A zero count must prove the mechanism ran — 2026-08-26
 

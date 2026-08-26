@@ -42,11 +42,23 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 # commit changes what the measurement would now say. The module list is
 # derived, never listed here — a hardcoded list silently stops covering the
 # next module somebody adds, which is the failure this target exists to catch.
+#
+# Exit 3 is "unmeasured", and it is a verdict, not a failure: the check ran and
+# found that it cannot be scored yet. This target's job is to REGENERATE the
+# record and refuse drift; adjudicating the number is `verify-gates`'s. Treating
+# every non-zero alike meant a module that exists and honestly reports it cannot
+# measure could not have its record written at all — D-12's defect ("an
+# unmeasured gate has no way to be recorded") reappearing one layer up. Any
+# other non-zero is still a hard stop.
 evidence:  ## regenerate every module's gate evidence and fail on any drift
 	@for m in $$(grep -l '^def _main' src/integral/*.py | xargs -n1 basename | sed 's/\.py$$//'); do \
 		printf '  %-18s ' "$$m"; \
-		uv run python -m integral.$$m >/dev/null || { echo "GATE FAILED"; exit 1; }; \
-		echo ok; \
+		uv run python -m integral.$$m >/dev/null; status=$$?; \
+		case $$status in \
+			0) echo ok ;; \
+			3) echo "unmeasured (recorded)" ;; \
+			*) echo "GATE FAILED"; exit 1 ;; \
+		esac; \
 	done
 	@git diff --exit-code --stat status/evidence/ \
 		|| { echo "evidence: committed evidence does not match what the code measures now" >&2; exit 1; }

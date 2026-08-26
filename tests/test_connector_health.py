@@ -13,9 +13,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from integral.connector_health import (
     MAX_PROBE_ATTEMPTS,
+    PROBE_DIRNAME,
     assess,
+    default_fetch,
     free_signals,
     measure,
     on_portal_host,
@@ -167,11 +171,72 @@ def test_probe_gives_up_after_the_bounded_number_of_attempts(tmp_path: Path) -> 
     assert len(calls) == MAX_PROBE_ATTEMPTS
 
 
-def test_the_real_library_measures_clean() -> None:
-    """The gate as it stands today: the one real, non-example connector
-    reads healthy over its own committed fixture."""
+def test_the_real_library_is_unmeasured_until_a_probe_is_captured() -> None:
+    """The gate as it stands today. The one real, non-example connector is
+    evaluated and its free signals are clean — but no `probe/list.html` has
+    been captured, so the rot stage did not run and the honest report is
+    `unmeasured`, not a healthy verdict.
+
+    Capturing a probe on the laptop is what turns this green; until then the
+    number is a lower bound over the free signals, and saying so is the whole
+    point of T72."""
     measured = measure()
 
-    assert measured["gate_status"] == "measured"
     assert measured["connector_runs_evaluated"] >= 1
+    assert measured["connector_runs_probed"] == 0
+    assert measured["gate_status"] == "unmeasured"
     assert measured["silent_connector_failures"] == 0
+
+
+def test_the_default_probe_never_reads_the_baseline_fixture(tmp_path: Path) -> None:
+    """The regression that matters most. `default_fetch` reading the same
+    `fixture/list.html` that `assess` uses as its baseline made the whole
+    module compare a string with itself: `silent_connector_failures` could
+    only ever be 0, while the evidence recorded `gate_status: measured`.
+
+    A package carrying a fixture and no probe must therefore raise, not
+    return the fixture."""
+    (tmp_path / "fixture").mkdir()
+    (tmp_path / "fixture" / "list.html").write_text(_LIST_HTML, encoding="utf-8")
+
+    with pytest.raises(OSError):
+        default_fetch(tmp_path)
+
+    assert probe_fetch(tmp_path) is None
+
+
+def test_a_captured_probe_is_what_default_fetch_returns(tmp_path: Path) -> None:
+    """And the positive half: a probe capture beside the fixture is read,
+    and it is that file's bytes rather than the fixture's."""
+    (tmp_path / "fixture").mkdir()
+    (tmp_path / "fixture" / "list.html").write_text(_LIST_HTML, encoding="utf-8")
+    (tmp_path / PROBE_DIRNAME).mkdir()
+    (tmp_path / PROBE_DIRNAME / "list.html").write_text("<html>today</html>", encoding="utf-8")
+
+    assert default_fetch(tmp_path) == "<html>today</html>"
+
+
+def test_an_unprobed_reading_cannot_report_rot() -> None:
+    """With no probe, the regression branch must not fire — and must not be
+    faked green either. The reading is marked unprobed, and that is what
+    `measure` reads to withhold `measured`."""
+    reading = assess(_CONNECTOR, _SITE, baseline_html=_LIST_HTML, probe_html=None)
+
+    assert reading.probed is False
+    assert reading.probe_items == 0
+    assert reading.baseline_items > 0
+    assert not any("recorded previously" in reason for reason in reading.reasons)
+
+
+def test_free_signals_still_run_over_the_baseline_when_unprobed() -> None:
+    """A defect visible in the recorded evidence costs no request to see, so
+    the free pass must still reach a verdict with no probe — that is the task
+    payload's "the free pass runs first and must be able to reach a verdict
+    alone". Here every `detail_url` is redirected off the portal's own host."""
+    rotted = _LIST_HTML.replace("https://www.trabajos.com/ofertas/", "https://scraped.example/o/")
+
+    reading = assess(_CONNECTOR, _SITE, baseline_html=rotted, probe_html=None)
+
+    assert reading.probed is False
+    assert reading.health == "broken"
+    assert any("do not point at" in reason for reason in reading.reasons)
