@@ -1,0 +1,69 @@
+{
+  "offers_presented_from_a_page_that_is_not_the_advert": 0,
+  "offers_presented_from_a_page_that_is_not_the_advert_evaluated": 5,
+  "pages_checked": 5,
+  "gate_status": "measured",
+  "violations": [],
+  "readings": [
+    {
+      "scenario": "a connector listing, fetched and open",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "title": "Albañil",
+      "liveness": "live",
+      "expected": "live",
+      "presented": true,
+      "expired": false,
+      "reason": "fetched from source, 200, no closure notice",
+      "reasons": []
+    },
+    {
+      "scenario": "a fragment anchor lands on the listings page",
+      "source": "web_search",
+      "index_sourced": true,
+      "title": "CISO",
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the page does not mention 'CISO' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "a page whose title does not match the offer",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "title": "Ingeniero de Datos",
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the page does not mention 'Ingeniero de Datos' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "an offer with no title cannot be identified against any page",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "title": "",
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the page does not mention '' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "a live advert whose title is split across markup still reads live",
+      "source": "examplejobs",
+      "index_sourced": false,
+      "title": "Ingeniero de Datos",
+      "liveness": "live",
+      "expected": "live",
+      "presented": true,
+      "expired": false,
+      "reason": "fetched from source, 200, no closure notice",
+      "reasons": []
+    }
+  ]
+}

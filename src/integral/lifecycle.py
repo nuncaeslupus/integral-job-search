@@ -1126,10 +1126,22 @@ def read_application_status(store: ProfileStore, offer_id: str) -> ApplicationSt
     in-memory only — reading is never a migration, so the file itself is
     left exactly as it was found.
     """
-    try:
-        raw = store.read_json(*_application_status_parts(offer_id))
-    except IdentityError:
+    # `read_json` raises IdentityError for BOTH a missing file and malformed
+    # JSON, so catching it wholesale reported a corrupt record as "never
+    # recorded" — and the next `record_application_status` then overwrote the
+    # corruption rather than refusing. Note the contradiction it created: a
+    # record that parses as JSON but fails the schema below is already an
+    # ApplicationStatusError, so the same damage was an error or a silent
+    # overwrite depending only on *how* broken the file was.
+    parts = _application_status_parts(offer_id)
+    if not store.exists(*parts):
         return None
+    try:
+        raw = store.read_json(*parts)
+    except IdentityError as exc:
+        raise ApplicationStatusError(
+            f"{offer_id}'s application status record could not be read: {exc}"
+        ) from exc
     try:
         record = ApplicationStatusRecord.model_validate(raw)
     except Exception as exc:

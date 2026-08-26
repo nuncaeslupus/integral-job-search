@@ -135,3 +135,22 @@ def test_hired_and_offer_declined_are_never_inferred(store: ProfileStore) -> Non
 
 def test_an_unrecorded_offer_has_no_status(store: ProfileStore) -> None:
     assert read_application_status(store, "offer-none") is None
+
+
+def test_a_malformed_status_record_is_an_error_not_a_missing_one(store: ProfileStore) -> None:
+    """`read_json` raises IdentityError for a missing file AND for malformed
+    JSON, so catching it wholesale reported corruption as "never recorded" —
+    and the next write then overwrote the corrupt record instead of refusing.
+
+    A record that parses as JSON but fails the schema was already an error, so
+    the same damage was an error or a silent overwrite depending only on how
+    broken the file was."""
+    store.write_text("{ not json", "applications", "offer-1", "status.json")
+
+    with pytest.raises(ApplicationStatusError, match="could not be read"):
+        read_application_status(store, "offer-1")
+
+
+def test_a_status_never_recorded_is_still_none(store: ProfileStore) -> None:
+    """The missing case must survive the fix above."""
+    assert read_application_status(store, "never-seen") is None
