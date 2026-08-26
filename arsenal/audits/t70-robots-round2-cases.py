@@ -103,16 +103,28 @@ CASES = [
         ),
     },
     {
+        # CORRECTED after Phase 3 execution -- see t70-robots-round2.md. The
+        # original version of this case used an UNANCHORED rule
+        # ("Disallow: /100%25") and asserted that a longer, double-encoded
+        # request ("/100%2525") must not match it. That was a modeling error,
+        # not a code error: an unanchored Disallow value is a PREFIX rule under
+        # RFC 9309 SS2.2.2, and "/100%25" genuinely is a literal-octet prefix of
+        # "/100%2525", so the original expectation (True/allowed) was wrong
+        # regardless of what any implementation does. Anchoring the rule with
+        # '$' is what actually isolates the double-encoding question from the
+        # unrelated question of prefix matching.
         "name": "double-encoded-percent-sign-does-not-match-single-encoded",
-        "robots_txt": "User-agent: *\nDisallow: /100%25\n",
+        "robots_txt": "User-agent: *\nDisallow: /100%25$\n",
         "agent": "TestBot/1.0",
         "url": "https://example.com/100%2525",
         "expected_allowed": True,
         "citation": (
-            "RFC 9309 SS2.2.2 -- percent-decoding is applied one level. '%2525' "
-            "decodes to the literal string '%25' (a '%' followed by '2' and '5'), a "
-            "different, longer octet sequence than the single encoded-percent octet "
-            "the rule denotes; they are different resources and must not match."
+            "RFC 9309 SS2.2.2/SS2.2.3 -- '$' anchors the pattern to the exact end of "
+            "the path. Percent-decoding is applied one level only: '%2525' decodes "
+            "to the literal string '%25' (a '%' followed by '2' and '5'), which is "
+            "a longer, different octet sequence than the single '%'-octet the "
+            "anchored rule '/100%25$' denotes. The anchored pattern therefore "
+            "cannot match the full request path, and the rule does not apply."
         ),
     },
     {
