@@ -96,9 +96,21 @@ The gate block therefore carries `status-key: gate_status`, and the producing
 module must honour it:
 
 * record **``connector_runs_evaluated``** — how many inputs were actually evaluated — in the evidence
-  file, beside the violation count;
-* write **`gate_status: "unmeasured"`** whenever that count is `0`, and
-  `"measured"` otherwise.
+  file, beside the violation count, and **``connector_runs_probed``** beside it;
+* write **`gate_status: "measured"`** only when `connector_runs_evaluated` is
+  non-zero **and every evaluated connector was probed**; write
+  **`"unmeasured"`** otherwise — which covers both an empty input set and a
+  probe that is missing or incomplete.
+
+  The probe coverage half is not a refinement of the emptiness rule, it is the
+  same rule one level down: a connector evaluated without a current read had its
+  rot stage skipped, so counting it as measured claims a check that did not run.
+
+* a violation the free signals **did** find is a measured failure and outranks
+  any missing probe. `_main` therefore reports it before it considers
+  `unmeasured`, because `make evidence` accepts exit 3 and walks past it — so
+  reporting a real finding as "cannot be scored yet" is how this module would
+  fail silently at the one job it exists to do.
 
 `gate_evidence.py` reads `status-key` before it reads the metric and exits **3** on
 `unmeasured` — "the check ran, and what it found is that this cannot be scored

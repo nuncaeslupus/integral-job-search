@@ -124,6 +124,11 @@ def on_portal_host(url: str, site: str) -> bool:
     """
     try:
         parsed = urlsplit(url)
+        # `urlsplit` defers port validation to attribute access, so a non-numeric
+        # or out-of-range port parses fine and leaves `hostname` intact — reading
+        # as on-host and raising no signal. Touching `.port` here is what makes it
+        # follow the malformed path instead.
+        _ = parsed.port
     except ValueError:
         # `urlsplit` raises on a malformed authority — `https://[::1` is an
         # "Invalid IPv6 URL". A connector emitting one is exactly the rot this
@@ -214,7 +219,11 @@ def probe_fetch(package: Path, *, fetch: Callable[[Path], str] = default_fetch) 
     for _ in range(MAX_PROBE_ATTEMPTS):
         try:
             result = fetch(package)
-        except OSError:
+        except (OSError, UnicodeError):
+            # `read_text` raises UnicodeDecodeError — a ValueError, NOT an OSError —
+            # on a capture that is not valid UTF-8. Catching OSError alone let it
+            # escape past `write_evidence`, so a corrupt probe produced no evidence
+            # at all rather than an unmeasured gate.
             continue
         else:
             return result
@@ -339,6 +348,14 @@ def _main(argv: list[str]) -> int:
         for reason in reading["reasons"]:
             print(f"{reading['connector']}: {reason}", file=sys.stderr)
 
+    # A violation the free signals actually FOUND is a measured failure, and it
+    # outranks any missing probe. Testing `unmeasured` first meant one unprobed
+    # connector turned every real finding on every other connector into exit 3 —
+    # which `make evidence` records as "unmeasured (recorded)" and walks past. The
+    # module built to catch a connector failing silently would have failed silently.
+    # `unmeasured` is only honest when there is nothing to report.
+    if measured["silent_connector_failures"]:
+        return 1
     if measured["gate_status"] == "unmeasured":
         evaluated = measured["connector_runs_evaluated"]
         probed = measured["connector_runs_probed"]

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from integral import connector_health
 from integral.connector_health import (
     MAX_PROBE_ATTEMPTS,
     PROBE_DIRNAME,
@@ -171,20 +172,27 @@ def test_probe_gives_up_after_the_bounded_number_of_attempts(tmp_path: Path) -> 
     assert len(calls) == MAX_PROBE_ATTEMPTS
 
 
-def test_the_real_library_is_unmeasured_until_a_probe_is_captured() -> None:
-    """The gate as it stands today. The one real, non-example connector is
-    evaluated and its free signals are clean — but no `probe/list.html` has
-    been captured, so the rot stage did not run and the honest report is
-    `unmeasured`, not a healthy verdict.
+def test_the_real_library_never_reports_measured_without_full_probe_coverage() -> None:
+    """The invariant over the real library, not today's snapshot of it.
 
-    Capturing a probe on the laptop is what turns this green; until then the
-    number is a lower bound over the free signals, and saying so is the whole
-    point of T72."""
+    An earlier version of this test asserted `connector_runs_probed == 0`,
+    which pinned the repository's *current* lack of a capture. Capturing
+    `connectors/trabajos_es/probe/list.html` on the laptop is the documented
+    step that finishes T72 — so that assertion would have failed at exactly
+    the moment the task was completed, and the completion step would have
+    looked like a regression.
+
+    What must hold in both states is the relationship: a connector that was
+    not probed cannot be counted as measured, because the rot stage did not
+    run for it."""
     measured = measure()
 
-    assert measured["connector_runs_evaluated"] >= 1
-    assert measured["connector_runs_probed"] == 0
-    assert measured["gate_status"] == "unmeasured"
+    evaluated = measured["connector_runs_evaluated"]
+    probed = measured["connector_runs_probed"]
+
+    assert evaluated >= 1
+    assert 0 <= probed <= evaluated
+    assert measured["gate_status"] == ("measured" if probed == evaluated else "unmeasured")
     assert measured["silent_connector_failures"] == 0
 
 
@@ -240,3 +248,69 @@ def test_free_signals_still_run_over_the_baseline_when_unprobed() -> None:
     assert reading.probed is False
     assert reading.health == "broken"
     assert any("do not point at" in reason for reason in reading.reasons)
+
+
+def test_a_detected_violation_fails_even_when_another_connector_is_unprobed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`unmeasured` is only honest when there is nothing to report.
+
+    Testing it first meant one unprobed connector turned every real finding on
+    every other connector into exit 3, which `make evidence` records as
+    "unmeasured (recorded)" and walks past — the module built to catch a
+    connector failing silently, failing silently."""
+    payload = {
+        "silent_connector_failures": 2,
+        "connector_runs_evaluated": 2,
+        "connector_runs_probed": 1,
+        "gate_status": "unmeasured",
+        "readings": [
+            {"connector": "a", "probed": True, "reasons": ["every row has a null company"]},
+            {"connector": "b", "probed": False, "reasons": []},
+        ],
+    }
+    monkeypatch.setattr(connector_health, "write_evidence", lambda path: payload)
+
+    assert connector_health._main(["--path", str(tmp_path / "T72.json")]) == 1
+
+
+def test_an_unmeasured_run_with_nothing_found_still_exits_three(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The honest third outcome survives the fix above."""
+    payload = {
+        "silent_connector_failures": 0,
+        "connector_runs_evaluated": 1,
+        "connector_runs_probed": 0,
+        "gate_status": "unmeasured",
+        "readings": [{"connector": "a", "probed": False, "reasons": []}],
+    }
+    monkeypatch.setattr(connector_health, "write_evidence", lambda path: payload)
+
+    assert connector_health._main(["--path", str(tmp_path / "T72.json")]) == 3
+
+
+def test_a_probe_that_is_not_valid_utf8_reads_as_no_probe(tmp_path: Path) -> None:
+    """`read_text` raises UnicodeDecodeError, which is a ValueError and not an
+    OSError. Catching OSError alone let it escape past `write_evidence`, so a
+    corrupt capture produced no evidence at all rather than an unmeasured gate."""
+    probe = tmp_path / connector_health.PROBE_DIRNAME
+    probe.mkdir()
+    (probe / "list.html").write_bytes(b"\xff")
+
+    assert connector_health.probe_fetch(tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://trabajos.com:not-a-port/x", "https://trabajos.com:65536/x"],
+)
+def test_a_malformed_port_is_off_host(url: str) -> None:
+    """`urlsplit` defers port validation to attribute access, so these parse
+    fine and leave `hostname` intact — reading as on-host and raising no signal."""
+    assert connector_health.on_portal_host(url, "trabajos.com") is False
+
+
+def test_a_valid_explicit_port_is_still_on_host() -> None:
+    """The fix above must not make every ported URL off-host."""
+    assert connector_health.on_portal_host("https://trabajos.com:443/x", "trabajos.com") is True
