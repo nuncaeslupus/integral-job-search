@@ -789,6 +789,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-921a4ef5",
+      "key": "offers_presented_from_a_page_that_is_not_the_advert",
+      "evidence": "status/evidence/T74.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-b1355b65",
       "key": "offers_presented_without_a_liveness_check",
       "evidence": "status/evidence/D-18.json",
