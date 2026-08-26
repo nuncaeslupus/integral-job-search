@@ -30,8 +30,8 @@ that apply.
 from __future__ import annotations
 
 import contextlib
-import re
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
