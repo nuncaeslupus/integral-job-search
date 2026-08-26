@@ -2,12 +2,15 @@
 
 Board: **101 gates asserted** (was 99). `main` at `e8d1921`.
 
-| PR | task | outcome |
+| PR | subject | outcome |
 |---|---|---|
-| [#220](https://github.com/nuncaeslupus/integral-job-search/pull/220) | docs: cloud capability model | merged `2571bef` |
+| [#220](https://github.com/nuncaeslupus/integral-job-search/pull/220) | *(not a queue task)* docs: cloud capability model | merged `2571bef` |
 | [#222](https://github.com/nuncaeslupus/integral-job-search/pull/222) | T80 ATS text-layer contract | merged `f627666`, #208 closed |
 | [#223](https://github.com/nuncaeslupus/integral-job-search/pull/223) | T84 step-11 drafting rules | merged `e8d1921`, #219 closed |
 | [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | **HELD — owner decision** |
+
+Four PRs, **three queue tasks** — T72, T80, T84. #220 and #224 are documentation and
+close no issue, so they do not count toward the task tally in the heading.
 
 ## The capability map, measured — this shapes every fleet design
 
@@ -86,17 +89,21 @@ on all three.
 
 Orchestrator (interactive, holds the grant): fetch board → claim via
 `create_branch` on `arsenal/claims/<id>` (success = won, "Reference already exists" =
-lost, obey it) → `create_session` child **with explicit `source_url`** → open its PR →
-verify `make host-gate` yourself → merge when CodeRabbit threads are all resolved.
+lost, obey it) → `create_session` child **with explicit `source_url`** → **open its PR
+with `Closes #NNN` in the body, as a literal number** → verify `make host-gate` yourself
+→ merge when CodeRabbit threads are all resolved.
+
+That closing keyword is the orchestrator's responsibility precisely because the worker
+cannot do it: the worker's own PR-open step 403s, so the orchestrator creates the PR and
+is the only place the keyword can be added.
 
 Worker (git-only): worktree off `origin/main`, implement, `make host-gate`,
 `ARSENAL_TASK_ISSUE=<number> open_task_pr.sh <id>` (its final PR step 403s — expected,
 the push is the deliverable), report branch + sha, stop.
 
-**The PR body must carry `Closes #NNN` as a literal number.** That is the whole
-completion mechanism: merging closes the issue and archives the task file in one move,
-so a PR opened without it merges while leaving the queue stale. `open_task_pr.sh` also
-writes it into the commit message, which is what survives a squash.
+`open_task_pr.sh` also writes `Closes #NNN` into the **commit message**, which is what
+survives a squash merge — belt and braces with the PR body, since between them the issue
+closes and the task file is archived in one move.
 
 Selection: `worktree_probe.sh > /tmp/wt-sentinel.txt` then `task_select.py
 --isolation-sentinel /tmp/wt-sentinel.txt` — the sentinel records the probe's real
