@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 108,
-  "gates_declaring_status_key": 8,
+  "evidence_gates_read": 109,
+  "gates_declaring_status_key": 9,
   "unrecordable": [],
   "readings": [
     {
@@ -779,6 +779,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-9e5a05a0",
+      "key": "applications_with_a_noncanonical_status",
+      "evidence": "status/evidence/T82.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-b1355b65",
