@@ -44,6 +44,48 @@ whenever `documents_missing_a_required_text_layer_field_evaluated` is `0`,
 `"measured"` otherwise — the same third outcome D-2 gives
 `extraction_macro_f1`, read by `gate_evidence.py`'s `status-key` before it
 reads the metric.
+
+## T81 — keyword coverage against the posting, in four statuses
+
+The second gate this module owns. Every keyword a posting names is classified
+into exactly one of `covered` / `synonym-only` / `missing (have it)` /
+`missing (gap)` against one generated application (`cv.md` and `letter.md`
+together — T81 asks what the application says, not what an ATS parses, so it
+is not scoped to the CV alone the way T80 is).
+
+* `covered` — the keyword itself is present, literally, somewhere in the
+  application.
+* `synonym-only` — the keyword itself is not there, but a spelling
+  `_SYNONYMS` records as the same thing is (`PostgreSQL` for a posting that
+  says `Postgres`). Closed on purpose, like `REQUIRED_TEXT_LAYER_FIELDS`
+  above: two spellings of the same technology are not evidence of anything,
+  and only a mapping a reviewer can see should ever decide that.
+* `missing (have it)` — `_holds` finds the keyword (or a synonym of it)
+  somewhere in the store, but neither made it into the application. This is
+  the manifest's own `omissions` surfacing here: a `_SELECTED`-section entry
+  the store holds and generation left out. A document bug, never the
+  candidate's to answer for.
+* `missing (gap)` — the store holds nothing that matches, under any spelling
+  this module knows. A fact about the candidate, and never something to
+  quietly write in.
+
+`classify_keyword` checks literal presence, then synonym presence, then the
+store, in that order: `_holds` alone cannot tell "the document phrased this
+differently" from "the document left this out", which is the whole
+distinction the synonym check exists to make, so the store is consulted last.
+
+Maps onto T45's generation nearly for free: `_holds` and `_mentions` are T45's
+own. Every entry in an `_ALWAYS` section (experience, education, headline,
+languages) is rendered unconditionally, whatever the advert says, so it can
+never be the store holding something the document leaves out — a keyword
+`missing (have it)` can only ever come from a `_SELECTED`-section entry
+(skills, certifications), the one kind of entry T45's own selection can omit.
+
+**A zero count must prove the mechanism ran, here too.**
+`posting_keywords_left_unclassified == 0` is what zero posting keywords
+produces as well as a correctly classified nonzero set — `classify_keyword`
+is total over the four statuses by construction, so the count that actually
+carries information is `posting_keywords_left_unclassified_evaluated`.
 """
 
 from __future__ import annotations
@@ -53,11 +95,12 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from integral.cv_store import CVMaster, SourcedText, write_master
-from integral.generate import DEFAULT_FIXTURE_MASTER, generate
+from integral.generate import _FIXTURE_ASKS, DEFAULT_FIXTURE_MASTER, _holds, _mentions, generate
 from integral.identity import ProfileStore, create_profile
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -228,10 +271,8 @@ def write_evidence(
     return measured
 
 
-def _main(argv: list[str]) -> int:
-    """Write T80's gate evidence. Exit 1 on any text-layer contract violation."""
-    args = [arg for arg in argv[1:] if not arg.startswith("--")]
-    measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
+def _text_layer_report(measured: dict[str, Any]) -> int:
+    """Print T80's measurement and say whether it fails the gate."""
     for line in measured["violations"]:
         print(f"✗ {line}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
@@ -246,6 +287,204 @@ def _main(argv: list[str]) -> int:
     # Fail on ANY contract breach, not only the named half: a corrupted text
     # layer is as unreadable to an ATS as an absent field.
     return 1 if measured["documents_with_text_layer_violations"] else 0
+
+
+# ---------------------------------------------------------------------------
+# T81 — keyword coverage against the posting, in four statuses
+
+DEFAULT_KEYWORD_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T81.json"
+
+COVERED = "covered"
+SYNONYM_ONLY = "synonym-only"
+MISSING_HAVE_IT = "missing (have it)"
+MISSING_GAP = "missing (gap)"
+
+KEYWORD_STATUSES: tuple[str, ...] = (COVERED, SYNONYM_ONLY, MISSING_HAVE_IT, MISSING_GAP)
+
+# Closed on purpose — see the module docstring's T81 section. A new pair is a
+# diff a reviewer sees, never a runtime decision about what counts as "close
+# enough".
+_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "postgres": ("postgresql",),
+    "k8s": ("kubernetes",),
+    "js": ("javascript",),
+    "node": ("node.js", "nodejs"),
+}
+
+
+def _synonyms_of(keyword: str) -> tuple[str, ...]:
+    """The other spellings `_SYNONYMS` records for `keyword`, from either side of the pair."""
+    key = keyword.casefold()
+    if key in _SYNONYMS:
+        return _SYNONYMS[key]
+    for canonical, alternates in _SYNONYMS.items():
+        if key in alternates:
+            return (canonical, *(alt for alt in alternates if alt != key))
+    return ()
+
+
+def classify_keyword(document_text: str, master: CVMaster, keyword: str) -> str:
+    """One posting keyword's status against one candidate's application.
+
+    Checked in this order — literal, then synonym, then the store — because
+    `_holds` alone cannot distinguish "the document said this differently"
+    from "the document left this out"; the synonym check is what makes that
+    distinction, so it has to run before the store is consulted.
+    """
+    if _mentions(document_text, keyword):
+        return COVERED
+    synonyms = _synonyms_of(keyword)
+    if any(_mentions(document_text, synonym) for synonym in synonyms):
+        return SYNONYM_ONLY
+    if _holds(master, keyword) or any(_holds(master, synonym) for synonym in synonyms):
+        return MISSING_HAVE_IT
+    return MISSING_GAP
+
+
+def _application_text(store: ProfileStore, offer_id: str, version: int) -> str:
+    """Everything one generated application says — the CV and the letter, together.
+
+    Unlike `_cv_documents`, not scoped to the CV alone: T81 asks whether the
+    application addresses a keyword at all, not whether the one document an
+    ATS parses does.
+    """
+    where = store.path("cv", "generated", offer_id, f"v{version}")
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (where / "cv.md", where / "letter.md")
+        if path.exists()
+    )
+
+
+def keyword_coverage(
+    document_text: str, master: CVMaster, keywords: tuple[str, ...]
+) -> dict[str, Any]:
+    """The gate: every posting keyword classified into exactly one of the four statuses."""
+    rows = [
+        {"keyword": keyword, "status": classify_keyword(document_text, master, keyword)}
+        for keyword in keywords
+    ]
+    evaluated = len(rows)
+    # `classify_keyword` is total over `KEYWORD_STATUSES` by construction, so
+    # this stays at 0 for a correct implementation — it exists to catch a
+    # future status this counter does not yet know about, the same role
+    # `documents_missing_a_required_text_layer_field` plays for T80.
+    unclassified = [row["keyword"] for row in rows if row["status"] not in KEYWORD_STATUSES]
+    by_status = Counter(row["status"] for row in rows)
+
+    return {
+        "posting_keywords_left_unclassified": len(unclassified),
+        "posting_keywords_left_unclassified_evaluated": evaluated,
+        "posting_keywords_checked": evaluated,
+        "gate_status": "unmeasured" if evaluated == 0 else "measured",
+        "by_status": {status: by_status.get(status, 0) for status in KEYWORD_STATUSES},
+        "rows": rows,
+        "unclassified_keywords": sorted(unclassified),
+    }
+
+
+# What the measurement treats a posting as asking for. T45's own `measure`
+# names this same honesty problem for `asks` — no module in this repository
+# extracts a posting's own keywords from its text yet, so the real-corpus
+# measurement below states its fixed set rather than pretending it read one
+# off the advert. Reusing `_FIXTURE_ASKS` rather than inventing a second list
+# keeps the two gates' real-corpus runs asking the same question of the same
+# fixture candidate.
+_FIXTURE_KEYWORDS: tuple[str, ...] = _FIXTURE_ASKS
+
+
+def measure_keyword_coverage(
+    fixture_master: Path = DEFAULT_FIXTURE_MASTER,
+    store_path: Path | None = None,
+) -> dict[str, Any]:
+    """`posting_keywords_left_unclassified` over every advert in the corpus."""
+    from integral.harness import DEFAULT_STORE_PATH, load_store
+
+    master = CVMaster.model_validate_json(fixture_master.read_text(encoding="utf-8"))
+    ads = load_store(store_path or DEFAULT_STORE_PATH)
+
+    # A row per advert per keyword, not kept: 208 adverts times 4 keywords is
+    # a multi-hundred-line evidence file for a number that `by_status`
+    # already carries. `unclassified` is the exception — every entry in it is
+    # this gate's own violation and has to be named, the same way T80 names
+    # each `violations` line rather than only counting them.
+    unclassified: list[str] = []
+    by_status: Counter[str] = Counter()
+    evaluated = 0
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch) / "profiles"
+        identity = create_profile(root, "Gate Fixture", handle="fixture", language="en")
+        store = ProfileStore(root, identity.handle)
+        write_master(store, master)
+        for ad in ads:
+            manifest = generate(
+                store, master, offer_id=ad.id, advert=ad.text, asks=_FIXTURE_KEYWORDS
+            )
+            document_text = _application_text(store, ad.id, manifest.version)
+            measured = keyword_coverage(document_text, master, _FIXTURE_KEYWORDS)
+            evaluated += measured["posting_keywords_left_unclassified_evaluated"]
+            by_status.update(measured["by_status"])
+            unclassified.extend(
+                f"{ad.id}: {keyword}" for keyword in measured["unclassified_keywords"]
+            )
+
+    return {
+        "posting_keywords_left_unclassified": len(unclassified),
+        "posting_keywords_left_unclassified_evaluated": evaluated,
+        "posting_keywords_checked": evaluated,
+        "gate_status": "unmeasured" if evaluated == 0 else "measured",
+        "by_status": {status: by_status.get(status, 0) for status in KEYWORD_STATUSES},
+        "adverts_generated": len(ads),
+        "unclassified_keywords": sorted(unclassified),
+    }
+
+
+def write_keyword_coverage_evidence(
+    evidence: Path = DEFAULT_KEYWORD_EVIDENCE_PATH,
+    fixture_master: Path = DEFAULT_FIXTURE_MASTER,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T81.json`."""
+    measured = measure_keyword_coverage(fixture_master)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _keyword_coverage_report(measured: dict[str, Any]) -> int:
+    """Print T81's measurement and say whether it fails the gate."""
+    print(json.dumps(measured, ensure_ascii=False))
+    if measured["gate_status"] == "unmeasured":
+        print(
+            "posting_keywords_left_unclassified: UNMEASURED — "
+            f"{measured['posting_keywords_left_unclassified_evaluated']} keyword(s) "
+            "evaluated. Not a pass and not a fail (D-2).",
+            file=sys.stderr,
+        )
+        return 0
+    if measured["posting_keywords_left_unclassified"]:
+        print(
+            f"posting_keywords_left_unclassified: {measured['unclassified_keywords']}",
+            file=sys.stderr,
+        )
+    return 1 if measured["posting_keywords_left_unclassified"] else 0
+
+
+def _main(argv: list[str]) -> int:
+    """Write T80's and T81's gate evidence — one module, two gates.
+
+    `make evidence` discovers this module once (`grep -l '^def _main'`) and
+    runs `python -m integral.ats` once, so both this module's gates are
+    written from the same entry point rather than needing a second `_main`
+    nothing would ever call.
+    """
+    args = [arg for arg in argv[1:] if not arg.startswith("--")]
+    text_layer_measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
+    text_layer_exit = _text_layer_report(text_layer_measured)
+
+    keyword_measured = write_keyword_coverage_evidence()
+    keyword_exit = _keyword_coverage_report(keyword_measured)
+
+    return 1 if (text_layer_exit or keyword_exit) else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
