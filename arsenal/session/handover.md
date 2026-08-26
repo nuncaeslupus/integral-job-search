@@ -1,80 +1,122 @@
-# Session handover — 2026-08-25, parallel fleet stood up, cloud capability model corrected
+# Session handover — 2026-08-26 ~02:00 UTC, parallel fleet run: 3 tasks, 2 merged, 1 held
 
-Board: **124 tasks — open 15, claimed 0→3, done 1, cancelled 2, blocked 8, merged 98**.
-`query_status.py` flagged nothing. Three workers dispatched and running.
+Board: **101 gates asserted** (was 99). `main` at `e8d1921`.
 
-## The finding that matters most: what a spawned session can and cannot do
-
-Measured this session, both directions, against this repo:
-
-| | this (interactive) session | any session it spawns |
+| PR | subject | outcome |
 |---|---|---|
-| `mcp__github__*` | yes | **no — neither routine-fired nor `create_session` children** |
-| REST (`api.github.com`) | 403 | 403 |
+| [#220](https://github.com/nuncaeslupus/integral-job-search/pull/220) | *(not a queue task)* docs: cloud capability model | merged `2571bef` |
+| [#222](https://github.com/nuncaeslupus/integral-job-search/pull/222) | T80 ATS text-layer contract | merged `f627666`, #208 closed |
+| [#223](https://github.com/nuncaeslupus/integral-job-search/pull/223) | T84 step-11 drafting rules | merged `e8d1921`, #219 closed |
+| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | **HELD — owner decision** |
+
+Four PRs, **three queue tasks** — T72, T80, T84. #220 and #224 are documentation and
+close no issue, so they do not count toward the task tally in the heading.
+
+## The capability map, measured — this shapes every fleet design
+
+| | interactive session | any session it spawns |
+|---|---|---|
+| `mcp__*` tools | yes | **NO — none at all** |
+| REST | 403 | 403 |
 | `git` fetch / ls-remote / **push** | yes | **yes** |
-| `git push --delete` | **blocked** (disconnect, then a lying `Everything up-to-date`) | blocked |
+| `git push --delete` | **blocked**, and lies (`Everything up-to-date`, ref survives) | blocked |
 
-The trigger API states it outright at creation: *"this trigger stores no MCP
-connectors, so the sessions it fires will run without connector tools."*
-`create_session` carries no such warning but behaves identically — two children
-came back `"GitHub access denied (403); no MCP tools available"` and blocked,
-costing ~$1.75 to learn.
+**Be precise about which half is measured.** The `create_session` path IS measured: two
+children reported *"GitHub access denied (403); no MCP tools available"* and blocked.
+The **routine-fired path is inferred, not run** — a probe trigger built to test it was
+deleted before firing, so the evidence there is the trigger API's own statement at
+creation (*"this trigger stores no MCP connectors, so the sessions it fires will run
+without connector tools"*) plus the absence of any `mcp__*` entry in the returned
+`allowed_tools`. Strong, but not a measurement; say so rather than rounding it up.
 
-**`CLAUDE.md` was wrong that pushes are restricted to the designated branch.** A
-real push of a fresh branch returns exit 0. So `open_task_pr.sh` IS usable here:
-pass `ARSENAL_TASK_ISSUE=<n>`, let it gate/commit/push, and only its final
-PR-open step fails (that step alone uses REST). Corrected in
-[#220](https://github.com/nuncaeslupus/integral-job-search/pull/220).
+Separately measured: `create_trigger`'s `connectors` parameter returns **"not available
+for this organization"**, so the grant cannot be passed to a fired session even
+deliberately. Since `create_session` is itself an MCP tool, a spawned session cannot
+spawn anything either — which is what makes a fresh-orchestrator-per-tick design
+impossible, and leaves interactively opened sessions as the only holders of the grant.
 
-## The fleet architecture, and why it is shaped this way
+**Permissions ≠ tool availability.** `.claude/settings.json` (committed, 10 allow rules)
+decides whether an existing call *prompts*; it cannot make an absent MCP tool exist. It
+is also read at session **startup**, so pulling it into a running session does nothing —
+that session keeps prompting until `/hooks` is opened or it restarts.
 
-The capability split above forces the arrangement `worker-loop.md` already
-specifies — *"workers never claim or release: the orchestrator owns the claim"*:
+## Traps that each cost real time
 
-* **Orchestrator** — this session, woken hourly by a **self-bound** routine
-  (`trig_01GbzrsPtMYqnSgQVKVdTzBu`, `55 * * * *`). Holds the MCP grant. Per tick:
-  harvest finished workers → open their PRs → re-fetch board → claim → dispatch →
-  review and merge. Its state lives in GitHub, so compaction costs nothing.
-* **Orchestrator-only actions**, because they need the GitHub API no child has:
-  **fetching the board, claiming, opening a PR, and merging.** A worker performs
-  none of these, ever.
-* **Workers** — one `create_session` child per task, model `sonnet` (what
-  `models.workers` is set to), tagged `arsenal-fleet`/`arsenal-worker`. Told their
-  task id, issue number and title; told explicitly they have NO GitHub API and must
-  ignore CLAUDE.md's auto-managed protocol steps 2, 4 and 5. Worktree → `make host-gate` →
-  `open_task_pr.sh` → push → stop. **Each dies with its task — that is the whole
-  answer to keeping context clean over a long unattended run.**
+- `make host-gate`'s evidence check compares **committed** evidence against measured.
+  Commit first, then gate. Gating an uncommitted tree reports drift forever.
+- Task PRs all touch `status/evidence/D12.json`; after one merges the rest conflict.
+  Merge `main` in and regenerate with `make evidence` — never hand-edit evidence JSON.
+- **Never put a placeholder in angle brackets in a GitHub body.** GitHub silently strips
+  it: `ARSENAL_TASK_ISSUE=<n>` rendered as `ARSENAL_TASK_ISSUE=`, making the instruction
+  wrong. Same hazard `AGENTS.md` warns about for issue bodies.
+- CI is red for everyone — Actions is out of runner minutes. `runner_id: 0`, no runner
+  assigned, 3-5s, red on `main` too. Confirm that signature; never gate merging on CI.
+- CodeRabbit allows **10 reviews/hour** and every push spends one. Three concurrent PRs
+  saturate it — a throughput ceiling independent of worker count.
 
-## In flight
+## The finding worth internalising
 
-| task | issue | worker session | state |
-|---|---|---|---|
-| `t-f662cfd0` T84 | #219 | `session_01DHv6qxTdNW3NzjaeV1TpZX` | running, worktree set up |
-| `t-37cfb89e` T72 | #203 | `session_01DuLd3ucWb6rjh1yEfA5i8o` | running, reading connector code |
-| `t-66530856` T80 | #208 | `session_015RLrFPE869PTcshAK6JySj` | running |
+Three workers each shipped a **green host-gate and passing tests**. Review found **six**
+issues across them, five real. Three were defects in the *measurement itself*:
 
-All three issues carry `arsenal:claimed` + assignee.
+- **T72** — `default_fetch` reads the same `fixture/list.html` that `assess_package` uses
+  as `baseline_html`, so the production path compares a string with itself.
+  `silent_connector_failures` can only ever be 0, on a task whose purpose is detecting
+  parser rot — and its evidence says `"gate_status": "measured"`.
+- **T80** — `documents_missing_a_required_text_layer_field` counted corruption-only
+  violations too, so a document with every field present but a mojibake text layer was
+  reported as missing a field. Fixed before merge.
+- **T84** (merged, minor) — the rule-detection regexes search the whole `SKILL.md`, so a
+  paraphrase dropping one backtrack tier could still match the word elsewhere and read as
+  present. Not fixed; a small follow-up task if wanted.
 
-## Two messes to clean up from the laptop (ref deletion is blocked here)
+**A green gate is necessary, never sufficient.** Every automated check in the repo passed
+on all three.
 
-1. **`arsenal/claims/t-cd8dcc16` is an orphaned claim.** A first-generation worker
-   created it via `git push` before being interrupted; T85 is therefore unclaimable
-   until the ref is deleted. `create_branch` correctly returned
-   `Reference already exists` and that `lost` was obeyed, not routed around.
-2. **`arsenal/probe-push-restriction`** is a leftover probe branch.
+## Needs the owner
 
-## Not dispatched, deliberately
+1. **T72 (#221).** Fix the tautological probe — which makes the gate `unmeasured`,
+   un-completes T72 and drops 101 → 100 — or accept and document the limitation? It is a
+   scoping decision like T15's threshold, not a patch. Proposed patch is in the PR.
+2. **Fleet cost.** ~$5.45 per completed worker; **at least $18** spent (three completed
+   at $5.97/$4.56/$5.82, plus $1.75 burned by two that blocked before the GitHub-free
+   worker prompt existed, plus one interrupted worker not accounted). Three concurrent workers
+   also triple CodeRabbit traffic and the notification load on the orchestrator.
+   No workers were dispatched after the first round, pending this decision.
+3. **`/hooks`** in any long-running session that predates the permissions commit.
 
-`lo-4b17` (T59), `lo-6f53` (T56), `lo-7c14` (T57) rank high but their label floors
-are unmet and **T15's `== 0` threshold still needs the owner's decision, not a
-patch** — an autonomous worker cannot pass those gates. Unchanged from yesterday.
+## Fleet recipe that works
 
-## Blocked on the owner
+Orchestrator (interactive, holds the grant): fetch board → claim via
+`create_branch` on `arsenal/claims/<id>` (success = won, "Reference already exists" =
+lost, obey it) → `create_session` child **with explicit `source_url`** → **open its PR
+with `Closes #NNN` in the body, as a literal number** → verify `make host-gate` yourself
+→ merge when CodeRabbit threads are all resolved.
 
-`.claude/settings.json` needs a `permissions.allow` block so unattended ticks never
-stall on a prompt. **The auto-mode classifier refused to let this session write it**
-— an agent widening its own permission surface — and that refusal was correct, so it
-was not worked around. The exact JSON is in the session transcript. Project settings
-is the right file: a cloud session never sees `~/.claude/`, but `.claude/` *is* part
-of the clone, so one committed file covers the orchestrator and every worker child.
-Not urgent: `auto` mode already permits the dispatch calls.
+That closing keyword is the orchestrator's responsibility precisely because the worker
+cannot do it: the worker's own PR-open step 403s, so the orchestrator creates the PR and
+is the only place the keyword can be added.
+
+Worker (git-only): worktree off `origin/main`, implement, `make host-gate`,
+`ARSENAL_TASK_ISSUE=<number> open_task_pr.sh <id>` (its final PR step 403s — expected,
+the push is the deliverable), report branch + sha, stop.
+
+`open_task_pr.sh` also writes `Closes #NNN` into the **commit message**, which is what
+survives a squash merge — belt and braces with the PR body, since between them the issue
+closes and the task file is archived in one move.
+
+Selection: `worktree_probe.sh > /tmp/wt-sentinel.txt` then `task_select.py
+--isolation-sentinel /tmp/wt-sentinel.txt` — the sentinel records the probe's real
+verdict; `--no-isolation-clamp` just disables the check.
+
+Skip `lo-4b17` (T59), `lo-6f53` (T56), `lo-7c14` (T57): label floors unmet and T15's
+threshold needs a decision, so a worker cannot pass those gates.
+
+## Upstream
+
+`claude-arsenal` **#245–#248** filed from tonight's findings: budget_check inert on cloud
+plus a round cap that never resets (reads `CLAUDE_SESSION_ID`, which is unset here);
+the injected protocol and `agents/worker.md` assuming every session has the API;
+worktree isolation unconfirmable for separate-session workers; `github_channel.sh
+--detect` reporting `rest` where REST 403s. **Deduplicate by content before filing more**
+— a sibling session files as the same GitHub user.
