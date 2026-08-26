@@ -1,6 +1,6 @@
 {
   "offers_presented_without_a_liveness_check": 0,
-  "scenarios_probed": 11,
+  "scenarios_probed": 12,
   "dead_phrases_known": 9,
   "violations": [],
   "readings": [
@@ -122,6 +122,18 @@
       "presented": false,
       "expired": false,
       "reason": "the page does not mention '' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "a listings page that merely mentions the vacancy is not the advert",
+      "source": "web_search",
+      "index_sourced": true,
+      "title": "CISO",
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the page does not mention 'CISO' — the URL checks out but this reads as some other page, not the advert",
       "reasons": []
     },
     {

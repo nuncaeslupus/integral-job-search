@@ -115,11 +115,37 @@ def visible_text(html: str) -> str:
     return normalise(_TAG.sub(" ", html))
 
 
+#: The elements that state what page this *is*, rather than what it links to.
+#: `<title>` and `<h1>` are the page's own claim about its identity; a nav item,
+#: a result card or a script payload is a claim about somewhere else.
+_IDENTITY_FIELD = re.compile(r"<(title|h1)\b[^>]*>(.*?)</\1>", re.IGNORECASE | re.DOTALL)
+
+
+def identity_fields(html: str) -> list[str]:
+    """The page's own identity claims, as visible text.
+
+    Searching the *whole* document for the offer's title was a fail-open, and
+    a quiet one, because the T74 fixtures passed: the listings page they use
+    happens not to contain the word `CISO`. A listings page that does — in a
+    nav item, in a card for a neighbouring vacancy, in a JSON-LD payload —
+    read as the advert and was presented. The check was correct by
+    coincidence, which is the same as not being correct.
+
+    Returning a list rather than one string keeps a match from spanning two
+    fields: a `<title>` ending in one word and an `<h1>` starting with the
+    next must not join up into a phrase neither of them contains.
+    """
+    return [visible_text(match.group(2)) for match in _IDENTITY_FIELD.finditer(html)]
+
+
 def title_in_body(title: str, body: str) -> bool:
     """Does the fetched page mention the offer's own title, tolerantly?
 
-    Markup is stripped from both sides, then whitespace is collapsed, then a
-    plain substring test — no more. A listing page that renders unrelated
+    Markup is stripped from both sides and whitespace collapsed, then the
+    title is looked for in the page's **identity fields** — its `<title>` and
+    `<h1>` — and nowhere else. Searching the whole document meant any listings
+    page that merely *mentioned* the vacancy, in a nav item or a card for a
+    neighbouring role, read as the advert. A listing page that renders unrelated
     roles will not carry this vacancy's title anywhere in it, which is what
     tells the fragment-anchor case (T74) apart from the advert itself: the URL
     never changed, so `same_page` passes, and only the content says this is a
@@ -135,7 +161,7 @@ def title_in_body(title: str, body: str) -> bool:
     wanted = visible_text(title)
     if not wanted:
         return False
-    return wanted in visible_text(body)
+    return any(wanted in field for field in identity_fields(body))
 
 
 #: Statuses that mean the record is retired. Liveness answers "is the advert
@@ -419,6 +445,22 @@ SCENARIOS: tuple[Scenario, ...] = (
         "<h1>Ofertas de empleo</h1><p>Explora nuestras vacantes.</p>",
         "unverified",
         title="",
+    ),
+    Scenario(
+        # FAIL-OPEN, and the one the other listings fixture missed by luck: its
+        # body happens not to contain the word "CISO", so searching the whole
+        # document passed it. A listings page that DOES mention the vacancy —
+        # here in a card for a neighbouring role — read as the advert and was
+        # presented. The check was correct by coincidence.
+        "a listings page that merely mentions the vacancy is not the advert",
+        SEARCH_SOURCE,
+        200,
+        "<h1>Ofertas de empleo</h1><ul><li><a href=/jobs/ciso-madrid>CISO Madrid</a>"
+        "</li><li><a href=/jobs/dev>Desarrollador</a></li></ul>",
+        "unverified",
+        advert_url="https://board.example.com/jobs/ciso/#ikerian",
+        final_url="https://board.example.com/jobs/ciso/#ikerian",
+        title="CISO",
     ),
     Scenario(
         # FAIL-CLOSED, and the worse failure of the two per this task: the

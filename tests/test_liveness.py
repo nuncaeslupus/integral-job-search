@@ -187,3 +187,29 @@ def test_an_unknown_option_is_refused_rather_than_ignored() -> None:
     reports success."""
     assert liveness._main(["liveness", "--identiy"]) == 2
     assert liveness._main(["liveness", "a.json", "b.json"]) == 2
+
+
+def test_a_listings_page_that_mentions_the_vacancy_is_not_the_advert() -> None:
+    """Searching the whole document was a fail-open that the T74 fixtures
+    passed by luck: their listings page happens not to contain the word
+    `CISO`. One that does — a nav item, a card for a neighbouring role, a
+    JSON-LD payload — read as the advert and was presented."""
+    listings = (
+        "<h1>Ofertas de empleo</h1>"
+        "<ul><li><a href=/jobs/ciso-madrid>CISO Madrid</a></li></ul>"
+    )
+
+    assert liveness.title_in_body("CISO", listings) is False
+    assert liveness.title_in_body("CISO", "<h1>CISO</h1><p>Jornada completa.</p>") is True
+
+
+def test_the_page_title_element_also_states_identity() -> None:
+    """An advert whose heading is an image or a styled div still declares
+    itself in `<title>`; refusing that would withhold live adverts."""
+    assert liveness.title_in_body("CISO", "<title>CISO - Acme</title><p>x</p>") is True
+
+
+def test_a_match_may_not_span_two_identity_fields() -> None:
+    """`<title>` and `<h1>` are separate claims. Concatenating them would let a
+    phrase neither contains be assembled across the join."""
+    assert liveness.title_in_body("Acme CISO", "<title>Acme</title><h1>CISO</h1>") is False
