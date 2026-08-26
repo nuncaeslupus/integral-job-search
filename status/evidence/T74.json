@@ -1,7 +1,7 @@
 {
   "offers_presented_from_a_page_that_is_not_the_advert": 0,
-  "offers_presented_from_a_page_that_is_not_the_advert_evaluated": 5,
-  "pages_checked": 5,
+  "offers_presented_from_a_page_that_is_not_the_advert_evaluated": 6,
+  "pages_checked": 6,
   "gate_status": "measured",
   "violations": [],
   "readings": [
@@ -51,6 +51,18 @@
       "presented": false,
       "expired": false,
       "reason": "the page does not mention '' — the URL checks out but this reads as some other page, not the advert",
+      "reasons": []
+    },
+    {
+      "scenario": "a listings page that merely mentions the vacancy is not the advert",
+      "source": "web_search",
+      "index_sourced": true,
+      "title": "CISO",
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the page does not mention 'CISO' — the URL checks out but this reads as some other page, not the advert",
       "reasons": []
     },
     {

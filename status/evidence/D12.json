@@ -773,6 +773,14 @@
       "status_is_asserted": true
     },
     {
+      "task": "t-854ae281",
+      "key": "duplicate_groups_resolved_away_from_the_canonical_source",
+      "evidence": "status/evidence/T75.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-8cebf0ec",
       "key": "narrowings_without_a_recorded_decision",
       "evidence": "status/evidence/T65.json",
