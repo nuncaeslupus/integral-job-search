@@ -16,12 +16,12 @@ import pytest
 
 from integral.ats import (
     COVERED,
-    SYNONYM_ONLY,
-    classify_keyword,
     KEYWORD_STATUSES,
+    SYNONYM_ONLY,
     _application_text,
     audit_documents,
     check_document,
+    classify_keyword,
     keyword_coverage,
 )
 from integral.cv_store import CVMaster, Experience, Skill, SourcedText, write_master
