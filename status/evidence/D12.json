@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 109,
-  "gates_declaring_status_key": 9,
+  "evidence_gates_read": 110,
+  "gates_declaring_status_key": 10,
   "unrecordable": [],
   "readings": [
     {
@@ -768,6 +768,14 @@
       "task": "t-82720e4f",
       "key": "posting_keywords_left_unclassified",
       "evidence": "status/evidence/T81.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-854ae281",
+      "key": "duplicate_groups_resolved_away_from_the_canonical_source",
+      "evidence": "status/evidence/T75.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
