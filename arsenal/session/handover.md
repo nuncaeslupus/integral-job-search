@@ -1,6 +1,6 @@
 # Session handover — 2026-08-26 ~15:20 UTC, orchestrator, third fleet round
 
-Board: **106 gates**, 124 tasks. `main` at `2a3b8dd`. **Six PRs merged today**, every one
+Board: **106 gates**, 124 tasks. `main` at `2a3b8dd`. **Eight PRs merged today**, every one
 gate-verified by the orchestrator on that exact commit, never on a worker's word.
 
 | PR | task | outcome |
@@ -82,8 +82,16 @@ the process created to fix that. Fix the dispatch prompt before the next audit.
 
 ## Unchanged and still true
 
-CI is red repository-wide: `runner_id: 0`, no runner assigned, ~3s per job, red on `main`.
-Never gate merging on it.
+**CI is red repository-wide because the GitHub Actions runner minutes are exhausted for
+the billing period** — not because of any diff. The signature is `runner_id: 0` with an
+empty `runner_name` and a 3–5 second job, on `main` as much as on any branch.
+
+Check that signature before applying this, every time. "Never gate merging on CI" is only
+true *while that cause holds*: once the minutes are restored, a red check is a red check
+again, and a session that carried this instruction forward without its precondition would
+skip a real failure. Which is this file committing the same error the rest of it is about —
+an instruction that reports safety without the measurement behind it. Delete this section
+once runs show real durations.
 
 Commit before gating (`make evidence` compares committed evidence). Never put an
 angle-bracket placeholder in a GitHub body. Vendored `claude-arsenal/` and
