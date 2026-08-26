@@ -155,8 +155,20 @@ def _parse_groups(text: str) -> list[_Group]:
             agents.append(value)
         elif field_name in ("allow", "disallow"):
             if agents:
-                rules.append((field_name == "allow", value))
+                # An EMPTY value is a no-op rule, not a rule matching everything.
+                # `Disallow:` with nothing after it is the standard idiom for
+                # "allow all", and storing it as the pattern `""` made it match
+                # every path — so a site using that idiom had its ENTIRE tree
+                # read as disallowed and nothing was ever fetched from it. Fail
+                # closed, but the candidate sees nothing, which this project
+                # counts as the worse failure. `urllib.robotparser` allows these
+                # and so must we.
+                #
+                # It still counts as a directive for grouping: the line is
+                # present, so it closes the run of `User-agent` lines above it.
                 started = True
+                if value:
+                    rules.append((field_name == "allow", value))
         elif field_name == "crawl-delay":
             if agents:
                 with contextlib.suppress(ValueError):
@@ -618,6 +630,31 @@ Disallow: /100%25
         agent="ClaudeBot",
         url="https://f21.example/100%",
         expected_allowed=False,
+    ),
+    # From the independent RFC 9309 audit (session_014PVqB2HnzAsTQhTm3sktHs):
+    # 19 spec-derived cases, 17 passing, these two failing. Both are fail-CLOSED
+    # — the whole site became unfetchable — which is why they went unnoticed:
+    # nothing was ever wrongly fetched, there was simply nothing at all.
+    _Fixture(
+        name="an_empty_disallow_is_a_no_op_not_a_rule_matching_everything",
+        robots_txt="""
+User-agent: ClaudeBot
+Disallow:
+""",
+        agent="ClaudeBot",
+        url="https://f23.example/anything",
+        expected_allowed=True,
+    ),
+    _Fixture(
+        name="an_empty_disallow_does_not_swallow_the_rules_beside_it",
+        robots_txt="""
+User-agent: ClaudeBot
+Disallow:
+Disallow: /private
+""",
+        agent="ClaudeBot",
+        url="https://f24.example/public",
+        expected_allowed=True,
     ),
     _Fixture(
         name="a_bare_query_delimiter_still_matches_a_rule_that_ends_in_one",

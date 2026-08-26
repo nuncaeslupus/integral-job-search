@@ -96,6 +96,17 @@ two normalisation rules that could quietly disagree about what "the same ad"
 means. `tombstone_match` takes those keys as already-computed arguments; it is
 the seam this task leaves for S5 to fill in, not a second implementation of
 S5's rule.
+
+**Survivor selection prefers the employer's own posting (T75).** Collapsing a
+duplicate group is only half the job — `find_duplicates` says which offers
+are the same ad, but says nothing about *which one to keep*, and picking one
+with no preference for where it came from silently costs a scored dimension
+whenever the survivor is an aggregator copy: aggregators routinely strip the
+requisition id and the seniority grade that `dimensions/seniority_expectation.yaml`
+reads. `select_survivor` and `resolve_canonical_source` add that preference,
+ranked by what the caller declares each `source` to be (`SourceKind`), never
+by a hard-coded list of aggregator domains — see that section for the full
+rule, in particular why liveness always outranks source.
 """
 
 from __future__ import annotations
@@ -383,6 +394,334 @@ def find_duplicates(
         if score > threshold:
             matches.append(DuplicateMatch(offer_a.id, offer_b.id, score))
     return matches
+
+
+# ---------------------------------------------------------------------------
+# T75 — survivor selection prefers the employer's own posting, never blindly
+
+
+SourceKind = Literal["employer", "aggregator"]
+# Declared by whoever assembles the batch — a connector's own metadata, once
+# a caller wires that up — never guessed here from a URL, a company name, or
+# a hard-coded list of aggregator domains (the task's "what it must not
+# become"). A `source` absent from this mapping is treated exactly like a
+# declared `"aggregator"`: unranked, neither preferred nor penalised further.
+# This module never invents the classification; it only applies whatever
+# classification it is given, keyed by `Offer.source` — the connector's own
+# name — so a new connector needs an entry wherever this mapping is built,
+# never an edit here.
+
+# Mirrors `integral.liveness.Liveness`'s vocabulary rather than importing that
+# module: this only needs the *shape* of a verdict ("dead" outranks nothing),
+# not `liveness.py`'s network-facing machinery.
+Liveness = Literal["live", "dead", "unverified"]
+
+
+def _is_dead(offer: Offer, liveness: Mapping[str, Liveness]) -> bool:
+    return liveness.get(offer.id, "unverified") == "dead"
+
+
+def _is_employer_source(offer: Offer, source_kind: Mapping[str, SourceKind]) -> bool:
+    return source_kind.get(offer.source) == "employer"
+
+
+def select_survivor(
+    group: Sequence[Offer],
+    *,
+    source_kind: Mapping[str, SourceKind] | None = None,
+    liveness: Mapping[str, Liveness] | None = None,
+) -> Offer:
+    """Which member of one duplicate group to keep.
+
+    **Liveness wins over source rank every time** — the task's own "what it
+    must not become": a dead posting on the employer's own site is worth less
+    than a live copy anywhere, so liveness is compared *first* and source
+    rank only breaks a tie within the same liveness tier. Within a tier, a
+    member whose `source` is declared `"employer"` in `source_kind` is
+    preferred; `"aggregator"` and an undeclared source are treated
+    identically — neither preferred nor penalised further — which is what
+    keeps a group with no declared employer resolving exactly as it would
+    without this preference at all: `group[0]`, the first member in whatever
+    order the caller already provides. This function invents no other
+    tie-break.
+
+    Raises `DedupError` on an empty group — there is nothing to survive.
+    """
+    if not group:
+        raise DedupError("select_survivor called with an empty duplicate group")
+    source_kind = source_kind or {}
+    liveness = liveness or {}
+
+    def rank(offer: Offer) -> tuple[int, int]:
+        alive = 0 if _is_dead(offer, liveness) else 1
+        employer = 1 if _is_employer_source(offer, source_kind) else 0
+        return (alive, employer)
+
+    best = group[0]
+    best_rank = rank(best)
+    for offer in group[1:]:
+        offer_rank = rank(offer)
+        if offer_rank > best_rank:
+            best, best_rank = offer, offer_rank
+    return best
+
+
+def _group_duplicate_ids(
+    offers: Sequence[Offer], matches: Sequence[DuplicateMatch]
+) -> list[list[str]]:
+    """Connected components over `matches`' pairs, as offer ids, each group
+    ordered the way `offers` itself is ordered — so `select_survivor`'s
+    "first member wins ties" means `offers`' own order, not an incidental
+    dict-iteration order. A singleton (an offer `find_duplicates` matched
+    nothing) is dropped: a group of one has no survivor question to answer.
+    """
+    parent = {offer.id: offer.id for offer in offers}
+
+    def find(offer_id: str) -> str:
+        while parent[offer_id] != offer_id:
+            parent[offer_id] = parent[parent[offer_id]]
+            offer_id = parent[offer_id]
+        return offer_id
+
+    def union(a: str, b: str) -> None:
+        root_a, root_b = find(a), find(b)
+        if root_a != root_b:
+            parent[root_b] = root_a
+
+    for match in matches:
+        union(match.offer_a, match.offer_b)
+
+    order = {offer.id: index for index, offer in enumerate(offers)}
+    groups: dict[str, list[str]] = {}
+    for offer in offers:
+        groups.setdefault(find(offer.id), []).append(offer.id)
+    return [sorted(ids, key=order.__getitem__) for ids in groups.values() if len(ids) > 1]
+
+
+@dataclass(frozen=True)
+class CanonicalResolution:
+    """One duplicate group's survivor, and whether a *live* employer posting
+    existed and won.
+
+    `canonical_available` and `canonical_live` are reported separately from
+    `resolved_to_canonical` because "no canonical offer in this group" and
+    "the canonical offer lost to liveness, correctly" must never be counted
+    as the same violation `canonical_source_report` guards against — only the
+    third case, a live canonical offer that still lost, is a bug.
+    """
+
+    group: tuple[str, ...]
+    survivor: str
+    canonical_available: bool
+    canonical_live: bool
+    resolved_to_canonical: bool
+
+
+def resolve_canonical_source(
+    offers: Sequence[Offer],
+    *,
+    source_kind: Mapping[str, SourceKind] | None = None,
+    liveness: Mapping[str, Liveness] | None = None,
+    threshold: float = SIMILARITY_THRESHOLD,
+    cluster_threshold: float = _RAW_CLUSTER_THRESHOLD,
+) -> list[CanonicalResolution]:
+    """Group `offers` by `find_duplicates`, then pick a survivor per group
+    with `select_survivor`, reporting whether the employer's own posting won
+    wherever one was live and in the running."""
+    source_kind = source_kind or {}
+    liveness = liveness or {}
+    matches = find_duplicates(offers, threshold=threshold, cluster_threshold=cluster_threshold)
+    by_id = {offer.id: offer for offer in offers}
+    resolutions: list[CanonicalResolution] = []
+    for ids in _group_duplicate_ids(offers, matches):
+        members = [by_id[offer_id] for offer_id in ids]
+        survivor = select_survivor(members, source_kind=source_kind, liveness=liveness)
+        employer_ids = {offer.id for offer in members if _is_employer_source(offer, source_kind)}
+        live_employer_ids = {
+            offer_id for offer_id in employer_ids if liveness.get(offer_id, "unverified") != "dead"
+        }
+        resolutions.append(
+            CanonicalResolution(
+                group=tuple(ids),
+                survivor=survivor.id,
+                canonical_available=bool(employer_ids),
+                canonical_live=bool(live_employer_ids),
+                resolved_to_canonical=survivor.id in employer_ids,
+            )
+        )
+    return resolutions
+
+
+def canonical_source_report(
+    offers: Sequence[Offer],
+    *,
+    source_kind: Mapping[str, SourceKind] | None = None,
+    liveness: Mapping[str, Liveness] | None = None,
+) -> dict[str, Any]:
+    """T75's evidence payload: how many duplicate groups had a *live*
+    canonical (employer) member that still did not survive — that, and only
+    that, is the violation this gate counts (see `CanonicalResolution`).
+
+    Written under two keys carrying the same value —
+    `duplicate_groups_resolved_away_from_the_canonical_source_evaluated` (the
+    task's prose) and `duplicate_groups_evaluated` (the task's dated
+    addendum) — because both name the same denominator and the task asks for
+    both spellings to keep reading. `gate_status` is `"unmeasured"` whenever
+    that denominator is `0`: a duplicate-free input set scores a hollow zero
+    violations, which is not evidence the preference works, only that
+    nothing tested it.
+    """
+    resolutions = resolve_canonical_source(offers, source_kind=source_kind, liveness=liveness)
+    evaluated = len(resolutions)
+    violations = [
+        resolution
+        for resolution in resolutions
+        if resolution.canonical_live and not resolution.resolved_to_canonical
+    ]
+    return {
+        "duplicate_groups_resolved_away_from_the_canonical_source": len(violations),
+        "duplicate_groups_resolved_away_from_the_canonical_source_evaluated": evaluated,
+        "duplicate_groups_evaluated": evaluated,
+        "gate_status": "unmeasured" if evaluated == 0 else "measured",
+        "violations": [list(resolution.group) for resolution in violations],
+    }
+
+
+def _canonical_source_fixture() -> tuple[list[Offer], dict[str, SourceKind], dict[str, Liveness]]:
+    """Three duplicate groups, each seeded with a known right answer:
+
+    * a Marketing Manager pair — the employer's own posting (`acme_careers`)
+      and a live aggregator repost — the employer copy must survive;
+    * a Warehouse Supervisor pair — the employer's own posting is *dead*, the
+      aggregator repost is live — the aggregator must survive, because
+      liveness overrides source rank, never the reverse;
+    * a Copywriter pair with no declared employer source at all — the
+      survivor must be whichever member `select_survivor` picks with no
+      preference in play, i.e. the group's first member in `offers`' order.
+
+    Shared by `probe_canonical_source` (the gate) and importable by tests,
+    same reason `_fixture_batch` is: the gate's number and the tests'
+    assertions are checked against the same fixture.
+    """
+    marketing_employer = (
+        "We are looking for a Marketing Manager to lead our brand strategy across paid and "
+        "organic channels. You will own the content calendar, manage agency relationships, and "
+        "report on campaign performance to the leadership team. Experience with marketing "
+        "automation tooling, A/B testing and budget forecasting is required. You should be "
+        "comfortable presenting results to stakeholders and coordinating with sales on lead "
+        "handoff. This is a permanent role based at our headquarters."
+    )
+    marketing_aggregator = (
+        "Great opportunity for a Marketing Manager to lead brand strategy across paid and "
+        "organic channels. You will own the content calendar, manage agency relationships, and "
+        "report on campaign performance to the leadership team. Experience with marketing "
+        "automation tooling, A/B testing and budget forecasting is required. You should be "
+        "comfortable presenting results to stakeholders and coordinating with sales on lead "
+        "handoff. Competitive salary and flexible working available."
+    )
+    warehouse_employer = (
+        "We need a Warehouse Supervisor to run day-to-day operations across two shifts at our "
+        "main distribution centre. You will manage inventory accuracy, coordinate with logistics "
+        "on inbound and outbound shipments, and lead a team of pickers and packers. Experience "
+        "with warehouse management systems, safety compliance and shift scheduling is required. "
+        "You should be comfortable handling escalations and improving throughput for a busy "
+        "site. This position reports to the operations manager."
+    )
+    warehouse_aggregator = (
+        "Immediate opening for a Warehouse Supervisor to run day-to-day operations across two "
+        "shifts at our main distribution centre. You will manage inventory accuracy, coordinate "
+        "with logistics on inbound and outbound shipments, and lead a team of pickers and "
+        "packers. Experience with warehouse management systems, safety compliance and shift "
+        "scheduling is required. You should be comfortable handling escalations and improving "
+        "throughput for a busy site. Night shift differential paid on top of base salary."
+    )
+    copywriter_a = (
+        "We are hiring a Copywriter to write persuasive marketing copy across email, landing "
+        "pages and paid social. You will collaborate with designers and the brand team to keep "
+        "tone consistent across every channel. Experience with A/B testing headlines and a "
+        "portfolio of consumer-facing work is required. You should be comfortable taking "
+        "feedback quickly and working to tight campaign deadlines. This role sits within the "
+        "growth marketing team."
+    )
+    copywriter_b = (
+        "Exciting opportunity for a Copywriter to write persuasive marketing copy across email, "
+        "landing pages and paid social. You will collaborate with designers and the brand team "
+        "to keep tone consistent across every channel. Experience with A/B testing headlines and "
+        "a portfolio of consumer-facing work is required. You should be comfortable taking "
+        "feedback quickly and working to tight campaign deadlines. Remote-friendly with "
+        "quarterly in-person offsites."
+    )
+
+    offers = [
+        Offer(
+            id=f"sha256:{201:064x}",
+            source="acme_careers",
+            title="Marketing Manager",
+            company="Acme",
+            text=marketing_employer,
+        ),
+        Offer(
+            id=f"sha256:{202:064x}",
+            source="jobsboard_agg",
+            title="Marketing Manager (Remote)",
+            company="Acme Retail",
+            text=marketing_aggregator,
+        ),
+        Offer(
+            id=f"sha256:{203:064x}",
+            source="acme_careers",
+            title="Warehouse Supervisor",
+            company="Acme",
+            text=warehouse_employer,
+        ),
+        Offer(
+            id=f"sha256:{204:064x}",
+            source="jobsboard_agg",
+            title="Warehouse Supervisor - Acme",
+            company="Acme",
+            text=warehouse_aggregator,
+        ),
+        Offer(
+            id=f"sha256:{205:064x}",
+            source="jobsboard_agg",
+            title="Copywriter",
+            company="Nova Media",
+            text=copywriter_a,
+        ),
+        Offer(
+            id=f"sha256:{206:064x}",
+            source="other_board",
+            title="Copywriter (Remote)",
+            company="Nova Media",
+            text=copywriter_b,
+        ),
+    ]
+    source_kind: dict[str, SourceKind] = {"acme_careers": "employer", "jobsboard_agg": "aggregator"}
+    liveness: dict[str, Liveness] = {
+        offers[0].id: "live",
+        offers[1].id: "live",
+        offers[2].id: "dead",
+        offers[3].id: "live",
+    }
+    return offers, source_kind, liveness
+
+
+def probe_canonical_source() -> dict[str, Any]:
+    """T75's gate, measured over `_canonical_source_fixture`."""
+    offers, source_kind, liveness = _canonical_source_fixture()
+    return canonical_source_report(offers, source_kind=source_kind, liveness=liveness)
+
+
+DEFAULT_CANONICAL_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T75.json"
+
+
+def write_canonical_evidence(evidence: Path = DEFAULT_CANONICAL_EVIDENCE_PATH) -> dict[str, Any]:
+    """Measure and record T75's evidence, beside T13's own file (see the
+    module docstring: "add this record beside it rather than replacing it")."""
+    measured = probe_canonical_source()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
 
 
 # ---------------------------------------------------------------------------
@@ -902,12 +1241,9 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
-def _main(argv: list[str]) -> int:
-    """`python -m integral.dedup [path]` -> T13's gate evidence."""
-    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
-    target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
-    measured = write_evidence(target)
-    print(json.dumps(measured, ensure_ascii=False))
+def _dedup_report(measured: dict[str, Any]) -> int:
+    """T13's CLI report and exit code, factored out of `_main` so both this
+    module's gates run unconditionally — see `_main`'s docstring."""
     if measured["pairs_judged"] < MINIMUM_PAIRS:
         print(
             f"only {measured['pairs_judged']} pair(s) were judged (floor {MINIMUM_PAIRS}) — "
@@ -934,6 +1270,48 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
     return 1 if measured["failures"] or measured["majority_cluster_missed"] else 0
+
+
+def _canonical_source_cli_report(measured: dict[str, Any]) -> int:
+    """T75's CLI report and exit code — the `gate_status` third outcome (see
+    `canonical_source_report`'s docstring) is 0, not a failure: it means
+    nothing was evaluated, which `gate_evidence.py` reads via `status-key`
+    and turns into its own exit 3, not this one's job to duplicate."""
+    if measured["gate_status"] == "unmeasured":
+        print(
+            "duplicate_groups_resolved_away_from_the_canonical_source: UNMEASURED — "
+            f"{measured['duplicate_groups_evaluated']} duplicate group(s) evaluated. "
+            "Not a pass and not a fail.",
+            file=sys.stderr,
+        )
+        return 0
+    for group in measured["violations"]:
+        print(
+            f"canonical-source violation: group {group} resolved away from its live "
+            "employer posting",
+            file=sys.stderr,
+        )
+    return 1 if measured["duplicate_groups_resolved_away_from_the_canonical_source"] else 0
+
+
+def _main(argv: list[str]) -> int:
+    """`python -m integral.dedup [path]` -> T13's and T75's gate evidence —
+    one module, two gates, the same pattern `integral.ats._main` uses: both
+    are written from this one entry point rather than needing a second
+    `_main` `make evidence` would have to discover separately."""
+    positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+    target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
+    measured = write_evidence(target)
+    print(json.dumps(measured, ensure_ascii=False))
+    dedup_exit = _dedup_report(measured)
+
+    canonical_measured = write_canonical_evidence()
+    print(json.dumps(canonical_measured, ensure_ascii=False))
+    canonical_exit = _canonical_source_cli_report(canonical_measured)
+
+    if 3 in (dedup_exit, canonical_exit):
+        return 3
+    return 1 if (dedup_exit or canonical_exit) else 0
 
 
 if __name__ == "__main__":
