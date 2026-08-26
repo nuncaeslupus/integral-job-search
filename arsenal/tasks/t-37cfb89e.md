@@ -64,6 +64,26 @@ Service: **SUPPLY** · Size: M
 Spec: `status/spec-v3-silent-success.md` · Plan: `status/plan.md` (T72) ·
 Methods: `docs/METHODS.md`
 
+## Why this is still open — 2026-08-26
+
+The module landed; the *measurement* did not. `default_fetch` read the same
+`fixture/list.html` that `assess` uses as `baseline_html`, so the production
+path compared a string with itself: the regression branch was unreachable,
+`silent_connector_failures` could only ever be 0, and the evidence recorded
+`"gate_status": "measured"` on a check whose whole purpose is detecting
+parser rot.
+
+The probe now reads `probe/list.html` — a separately captured current read,
+written by the permitted `[LAPTOP]` process — and there is none in this
+repository, so `gate_status` is `unmeasured` and `gate_evidence.py` exits 3.
+Not a pass and not a fail.
+
+**What finishes this task:** capture `connectors/trabajos_es/probe/list.html`
+on the laptop, where egress is permitted (the same surface T12 needs), and
+re-run `python -m integral.connector_health`. Nothing in the module changes.
+Until then `connector_runs_probed` is 0 and the number is a lower bound over
+the free signals alone.
+
 ## A zero count must prove the mechanism ran — 2026-08-26
 
 This gate asserts a **violation count of zero**, and an empty input set produces
@@ -76,15 +96,38 @@ The gate block therefore carries `status-key: gate_status`, and the producing
 module must honour it:
 
 * record **``connector_runs_evaluated``** — how many inputs were actually evaluated — in the evidence
-  file, beside the violation count;
-* write **`gate_status: "unmeasured"`** whenever that count is `0`, and
-  `"measured"` otherwise.
+  file, beside the violation count, and **``connector_runs_probed``** beside it;
+* write **`gate_status: "measured"`** only when `connector_runs_evaluated` is
+  non-zero **and every evaluated connector was probed**; write
+  **`"unmeasured"`** otherwise — which covers both an empty input set and a
+  probe that is missing or incomplete.
+
+  The probe coverage half is not a refinement of the emptiness rule, it is the
+  same rule one level down: a connector evaluated without a current read had its
+  rot stage skipped, so counting it as measured claims a check that did not run.
+
+* a violation the free signals **did** find is a measured failure and outranks
+  any missing probe. `_main` therefore reports it before it considers
+  `unmeasured`, because `make evidence` accepts exit 3 and walks past it — so
+  reporting a real finding as "cannot be scored yet" is how this module would
+  fail silently at the one job it exists to do.
 
 `gate_evidence.py` reads `status-key` before it reads the metric and exits **3** on
 `unmeasured` — "the check ran, and what it found is that this cannot be scored
-yet". Not a pass and not a fail, which is the honest third outcome for a run that
-processed nothing. That is the same mechanism `lo-6f53` uses for
+yet". Not a pass and not a fail. That is the same mechanism `lo-6f53` uses for
 `extraction_macro_f1`, so this is existing machinery rather than a new rule.
+
+Exit 3 covers **two** runs, and only the first is an empty input set:
+
+* nothing was evaluated at all;
+* something was evaluated but its **rot stage did not run**, because no current
+  read was captured for it. Such a connector is not idle — its baseline was
+  parsed and its free signals were checked in full — so "a run that processed
+  nothing" describes only half of what reaches this exit, and describing it that
+  way was how the incomplete-coverage case looked like a non-case.
+
+Neither of those is a run that found something. A violation the free signals did
+find never reaches exit 3 at all; it is reported first, as a measured failure.
 
 **A second assertion in the gate block would not have worked**: line 1 of a `gate`
 fence *is* the gate, one metric per block. Making the emptiness visible through the
