@@ -129,7 +129,21 @@ the implementer** writes adversarial fixtures, and:
 - it weights **fail-open** over fail-closed. A fail-closed bug costs a fetch; a fail-open
   bug means the check said yes to something it was built to refuse.
 
-It reports findings; it does not push. The implementer's PR waits for that report.
+It reports; it does not push. The report names, for each case: the input, the verdict the
+spec requires, **the section it is citing**, what the implementation actually returns, and
+whether a failure is fail-open or fail-closed.
+
+**Every accepted case is then committed into the gate's own fixtures before the PR
+merges** — not merely answered in a comment. A report that is read and waved through
+leaves the code exactly as unprotected as it was, and the next regression re-opens the
+same hole with nothing to catch it. The measured denominator must rise: if the audit
+accepted twelve cases, the evidence counts twelve more than it did.
+
+That requirement is the section's own subject turned on itself. "The implementer's PR
+waits for the report" is satisfiable without a single independent case ever running —
+which is a process that reports success over work it did not do, exactly what this exists
+to stop. **Caught by review on the PR that introduced this section**, which is the
+argument for the section, made twice.
 
 **"More care" is not the alternative and does not work** — four careful rounds did not
 catch what the fifth did. The fix is a second reader, not a more diligent first one.
