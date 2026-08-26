@@ -105,6 +105,38 @@ v0.36.1 made that robust and `query_status.py` names anything that still fails t
 resolve. Trust that list over `handle_sync.py`'s proposals — only one of the two is
 wired to an action.
 
+## Fixtures for a correctness-critical gate are written by a second session
+
+A gate that a worker writes alongside its own implementation judges that implementation
+by the author's own reading of the spec. When the reading is wrong, the code and the
+fixtures are wrong together, and the gate is green.
+
+That is not hypothetical here. **T70 took ten defects across five review rounds, and
+eight of the ten were introduced by the session fixing the previous one** — each pushed
+after adding fixtures and watching `make host-gate` pass. Percent-encoding equivalence
+for robots matching has a long tail (`%`, `?`, `$`, `*`, empty delimiters, unreserved
+octets, product tokens) and it was met one round at a time, because every round's
+fixtures were derived from the code that had just been written.
+
+So for any task whose gate can pass while the code is wrong — parsers, matchers,
+normalisers, anything comparing two encodings of the same thing — a **session other than
+the implementer** writes adversarial fixtures, and:
+
+- it reads the **spec first** and derives its cases from that text, before opening the
+  implementation, so the cases are not a description of what the code already does;
+- it justifies each expected verdict by citing the spec, never by running the code —
+  deciding correctness by execution is the exact circularity this exists to break;
+- it weights **fail-open** over fail-closed. A fail-closed bug costs a fetch; a fail-open
+  bug means the check said yes to something it was built to refuse.
+
+It reports findings; it does not push. The implementer's PR waits for that report.
+
+**"More care" is not the alternative and does not work** — four careful rounds did not
+catch what the fifth did. The fix is a second reader, not a more diligent first one.
+
+**A green gate is necessary and is not sufficient.** Every one of those ten defects was
+behind one.
+
 ## Work each task in a linked worktree — that is the whole branch protocol
 
 `open_task_pr.sh` cuts the branch off `origin/main` itself, commits, pushes and opens
