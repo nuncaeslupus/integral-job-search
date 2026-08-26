@@ -13,7 +13,7 @@ import urllib.error
 
 import pytest
 
-from integral.robots import USER_AGENT, Robots, RobotsError
+from integral.robots import USER_AGENT, Robots, RobotsError, measure
 
 # Trimmed from the live files on 2026-08-24, keeping the groups that decide the
 # cases below. Frozen on purpose: a test that re-fetches measures the boards'
@@ -131,3 +131,86 @@ def test_the_declared_user_agent_names_the_tool_and_carries_a_contact() -> None:
     assert "Mozilla" not in USER_AGENT
     assert "integral-job-search" in USER_AGENT
     assert "https://" in USER_AGENT
+
+
+def test_a_blank_line_inside_a_record_does_not_end_it() -> None:
+    """A `Disallow: /` after a blank line still binds its agent group.
+
+    `urllib.robotparser` reads the blank line as the record's end, so the
+    `Disallow: /` that follows binds nothing — a board that disallowed
+    ClaudeBot outright then reads as *permitting* it. That is the fail-open
+    direction, and it is the dangerous one (see the module docstring).
+    """
+    robots_txt = """
+User-agent: ClaudeBot
+
+Disallow: /
+"""
+    robots = _robots({"https://blanks.example/robots.txt": robots_txt}, "ClaudeBot")
+    assert not robots.allows("https://blanks.example/anything")
+
+
+def test_longest_match_wins_over_file_order() -> None:
+    """`Allow: /jobs/public/` beats an earlier, shorter `Disallow: /jobs/` (RFC 9309 §2.2.2)."""
+    robots_txt = """
+User-agent: *
+Disallow: /jobs/
+Allow: /jobs/public/
+"""
+    robots = _robots({"https://longest.example/robots.txt": robots_txt})
+    assert robots.allows("https://longest.example/jobs/public/x")
+    assert not robots.allows("https://longest.example/jobs/private")
+
+
+def test_allow_beats_disallow_on_an_equal_length_tie() -> None:
+    robots_txt = """
+User-agent: *
+Disallow: /x
+Allow: /x
+"""
+    robots = _robots({"https://tie.example/robots.txt": robots_txt})
+    assert robots.allows("https://tie.example/x")
+
+
+def test_duplicate_groups_for_one_token_are_combined_not_first_wins() -> None:
+    """RFC 9309 §2.2.1: repeated groups for the same token are merged."""
+    robots_txt = """
+User-agent: ClaudeBot
+Disallow: /a
+
+User-agent: Other
+Disallow: /b
+
+User-agent: ClaudeBot
+Disallow: /c
+"""
+    robots = _robots({"https://dup.example/robots.txt": robots_txt}, "ClaudeBot")
+    assert not robots.allows("https://dup.example/a")
+    assert not robots.allows("https://dup.example/c")
+    assert robots.allows("https://dup.example/b")
+
+
+def test_an_explicit_token_group_is_not_merged_with_the_wildcard() -> None:
+    """The most specific token applies exclusively; `*` is a fallback, not an addition."""
+    robots_txt = """
+User-agent: *
+Allow: /
+
+User-agent: ClaudeBot
+Disallow: /
+"""
+    robots = _robots({"https://specific.example/robots.txt": robots_txt}, "ClaudeBot")
+    assert not robots.allows("https://specific.example/jobs")
+
+
+def test_the_gate_does_not_pass_on_an_empty_input_set() -> None:
+    """A zero-violation count over zero evaluated fixtures is not a pass."""
+    measured = measure(())
+    assert measured["robots_verdicts_evaluated"] == 0
+    assert measured["gate_status"] == "unmeasured"
+
+
+def test_the_fixture_table_itself_evaluates_clean() -> None:
+    measured = measure()
+    assert measured["robots_verdicts_evaluated"] > 0
+    assert measured["robots_verdicts_misread"] == 0, measured["misread_cases"]
