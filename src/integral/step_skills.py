@@ -242,6 +242,219 @@ def write_evidence(
     return measured
 
 
+DEFAULT_T84_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T84.json"
+
+# The one step these two rules belong to. There is no artefact in the spec to
+# derive it from the way D-14 derives its owning step from
+# `CONSTRAINT_FIELD_NAMES` — step 11 (`application`) is simply the step whose
+# skill drafts the CV and letter these rules govern, so it is named here
+# directly rather than manufacturing a lookup with nothing behind it.
+DRAFTING_RULES_OWNER = "application"
+
+_RELEVANCE_RE = re.compile(r"\brelevance\b", re.IGNORECASE)
+_UNIQUENESS_RE = re.compile(r"\buniqueness\b", re.IGNORECASE)
+_NARRATIVE_LOAD_RE = re.compile(r"\bnarrative load\b", re.IGNORECASE)
+_SECTION_BOUNDARY_RE = re.compile(r"ignoring section boundaries", re.IGNORECASE)
+_BACKTRACK_RE = re.compile(r"\bbacktrack", re.IGNORECASE)
+_BACKTRACK_TIER_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bOK\b"),
+    re.compile(r"\bFlag it\b", re.IGNORECASE),
+    re.compile(r"\bNever\b"),
+)
+
+
+class DraftingRulesReading(Strict):
+    """One step's answer to "does it state both of T84's drafting rules?"
+
+    Only the owning step (`application`) is required to carry them; every
+    other step reads as `owns_drafting_rules=False` and is never counted —
+    the same owning-step shape `employment_mode` (D-14) uses for a rule that
+    belongs to one step out of thirteen.
+    """
+
+    step: str
+    n: int
+    skill_dir: str
+    skill_md_exists: bool
+    owns_drafting_rules: bool
+    states_cut_rule: bool = False
+    names_narrative_load: bool = False
+    states_backtrack_test: bool = False
+    reasons: tuple[str, ...] = ()
+
+    @property
+    def lacks_the_rules(self) -> bool:
+        return bool(self.reasons)
+
+
+def read_drafting_rules(
+    step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR
+) -> DraftingRulesReading:
+    """This step's `DraftingRulesReading` — read off its SKILL.md, never asserted.
+
+    Only `DRAFTING_RULES_OWNER` is required to carry the rules; a non-owning
+    step's SKILL.md is not even inspected for them, so it can never be counted
+    as an offender for a requirement that was never its own.
+    """
+    directory = skill_dir_name(step)
+    skill_md = skills_dir / directory / "SKILL.md"
+    owns = step.id == DRAFTING_RULES_OWNER
+
+    if not skill_md.is_file():
+        return DraftingRulesReading(
+            step=step.id,
+            n=step.n,
+            skill_dir=directory,
+            skill_md_exists=False,
+            owns_drafting_rules=owns,
+            reasons=(f"no SKILL.md at {skill_md}",) if owns else (),
+        )
+
+    if not owns:
+        return DraftingRulesReading(
+            step=step.id,
+            n=step.n,
+            skill_dir=directory,
+            skill_md_exists=True,
+            owns_drafting_rules=False,
+        )
+
+    try:
+        text = skill_md.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        # `UnicodeDecodeError` is a `ValueError`, not an `OSError` — catching
+        # only the latter would let undecodable prose crash the probe instead
+        # of recording it as a reason.
+        return DraftingRulesReading(
+            step=step.id,
+            n=step.n,
+            skill_dir=directory,
+            skill_md_exists=True,
+            owns_drafting_rules=True,
+            reasons=(f"SKILL.md could not be read: {exc}",),
+        )
+
+    states_cut_rule = bool(
+        _RELEVANCE_RE.search(text)
+        and _UNIQUENESS_RE.search(text)
+        and _NARRATIVE_LOAD_RE.search(text)
+        and _SECTION_BOUNDARY_RE.search(text)
+    )
+    names_narrative_load = bool(_NARRATIVE_LOAD_RE.search(text))
+    states_backtrack_test = bool(
+        _BACKTRACK_RE.search(text) and all(rx.search(text) for rx in _BACKTRACK_TIER_RES)
+    )
+
+    reasons: list[str] = []
+    if not states_cut_rule:
+        reasons.append(
+            "does not state the relevance-weighted cut rule (relevance, uniqueness, "
+            "narrative load, ignoring section boundaries)"
+        )
+    if not names_narrative_load:
+        reasons.append("the cut rule never names narrative load")
+    if not states_backtrack_test:
+        reasons.append(
+            "does not state the interview backtrack test (OK / Flag it / Never)"
+        )
+
+    return DraftingRulesReading(
+        step=step.id,
+        n=step.n,
+        skill_dir=directory,
+        skill_md_exists=True,
+        owns_drafting_rules=True,
+        states_cut_rule=states_cut_rule,
+        names_narrative_load=names_narrative_load,
+        states_backtrack_test=states_backtrack_test,
+        reasons=tuple(reasons),
+    )
+
+
+def probe_drafting_rules(
+    steps: StepList | None = None, skills_dir: Path = DEFAULT_SKILLS_DIR
+) -> list[DraftingRulesReading]:
+    """Every settled step's `DraftingRulesReading`, in step order."""
+    steps = steps or load_steps()
+    ordered = sorted(steps.steps, key=lambda s: s.n)
+    return [read_drafting_rules(step, skills_dir) for step in ordered]
+
+
+def measure_drafting_rules(
+    steps_path: Path | None = None, skills_dir: Path = DEFAULT_SKILLS_DIR
+) -> dict[str, Any]:
+    """T84's gate reading: `step_skills_without_the_drafting_rules`.
+
+    `step_skills_checked` is the divisor a reader needs to trust the zero: it
+    is 0 only when nothing could be examined at all (the step list failed to
+    load, or no step carries `DRAFTING_RULES_OWNER`'s id any more), and
+    `gate_status` is written `"unmeasured"` in exactly that case — the same
+    "processed nothing" state `gate_evidence.py` reads via `status-key` rather
+    than as a false pass.
+    """
+    try:
+        steps = load_steps() if steps_path is None else load_steps(steps_path)
+    except Exception as exc:  # a load failure is evidence to report, never a crash
+        return {
+            "step_skills_without_the_drafting_rules": -1,
+            "step_skills_checked": 0,
+            "gate_status": "unmeasured",
+            "owning_steps": [],
+            "offenders": [{"step": None, "reasons": [f"step list could not be loaded: {exc}"]}],
+            "readings": [],
+        }
+
+    readings = probe_drafting_rules(steps, skills_dir)
+    owning = [r.step for r in readings if r.owns_drafting_rules]
+    offenders = [r for r in readings if r.lacks_the_rules]
+
+    if not owning:
+        # A rename of the owning step's id must not read as a clean pass over
+        # a requirement nothing examined any more.
+        return {
+            "step_skills_without_the_drafting_rules": -1,
+            "step_skills_checked": 0,
+            "gate_status": "unmeasured",
+            "owning_steps": [],
+            "offenders": [
+                {
+                    "step": None,
+                    "skill_dir": None,
+                    "reasons": [
+                        f"no step with id {DRAFTING_RULES_OWNER!r} exists — the drafting "
+                        "rules check measured nothing"
+                    ],
+                }
+            ],
+            "readings": [r.model_dump(mode="json") for r in readings],
+        }
+
+    checked = len(readings)
+    return {
+        "step_skills_without_the_drafting_rules": len(offenders),
+        "step_skills_checked": checked,
+        "gate_status": "measured" if checked else "unmeasured",
+        "owning_steps": owning,
+        "offenders": [
+            {"step": r.step, "skill_dir": r.skill_dir, "reasons": list(r.reasons)}
+            for r in offenders
+        ],
+        "readings": [r.model_dump(mode="json") for r in readings],
+    }
+
+
+def write_drafting_rules_evidence(
+    evidence: Path = DEFAULT_T84_EVIDENCE_PATH,
+    steps_path: Path | None = None,
+    skills_dir: Path = DEFAULT_SKILLS_DIR,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T84.json`, beside S7's own evidence."""
+    measured = measure_drafting_rules(steps_path, skills_dir)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.step_skills [--check] [--write-evidence [PATH]]` → S7's gate.
 
@@ -277,16 +490,44 @@ def _main(argv: list[str]) -> int:
 
     if args.check:
         measured = measure(skills_dir=skills_dir)
+        drafting = measure_drafting_rules(skills_dir=skills_dir)
     else:
-        measured = write_evidence(Path(args.write_evidence), skills_dir=skills_dir)
+        s7_path = Path(args.write_evidence)
+        measured = write_evidence(s7_path, skills_dir=skills_dir)
+        # T84's evidence beside S7's — a second record from the same run,
+        # never a replacement of it, so both gates keep reading. "Beside"
+        # has to mean beside *this* run's S7 target, not the repository's:
+        # honouring --write-evidence for one record and not the other meant a
+        # caller redirecting to a temp dir still overwrote the committed
+        # status/evidence/T84.json.
+        drafting = write_drafting_rules_evidence(
+            s7_path.parent / DEFAULT_T84_EVIDENCE_PATH.name, skills_dir=skills_dir
+        )
 
     print(json.dumps(measured, ensure_ascii=False))
+    print(json.dumps(drafting, ensure_ascii=False))
+
+    exit_code = 0
     if measured["steps_checked"] == 0:
         print("no steps were checked — nothing was measured", file=sys.stderr)
-        return 3
-    for shortfall in measured["shortfalls"]:
-        print(f"{shortfall['step']}: {', '.join(shortfall['reasons'])}", file=sys.stderr)
-    return 1 if measured["shortfalls"] else 0
+        exit_code = 3
+    else:
+        for shortfall in measured["shortfalls"]:
+            print(f"{shortfall['step']}: {', '.join(shortfall['reasons'])}", file=sys.stderr)
+        if measured["shortfalls"]:
+            exit_code = 1
+
+    if drafting["gate_status"] == "unmeasured":
+        print("drafting rules: nothing was measured", file=sys.stderr)
+        exit_code = exit_code or 3
+    else:
+        for offender in drafting["offenders"]:
+            reasons = "; ".join(offender["reasons"])
+            print(f"drafting rules — {offender['step']}: {reasons}", file=sys.stderr)
+        if drafting["offenders"] and exit_code == 0:
+            exit_code = 1
+
+    return exit_code
 
 
 if __name__ == "__main__":

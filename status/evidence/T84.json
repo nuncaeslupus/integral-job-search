@@ -1,0 +1,154 @@
+{
+  "step_skills_without_the_drafting_rules": 0,
+  "step_skills_checked": 13,
+  "gate_status": "measured",
+  "owning_steps": [
+    "application"
+  ],
+  "offenders": [],
+  "readings": [
+    {
+      "step": "identify",
+      "n": 0,
+      "skill_dir": "step-00-identify",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "intake",
+      "n": 1,
+      "skill_dir": "step-01-intake",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "constraints",
+      "n": 2,
+      "skill_dir": "step-02-constraints",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "history",
+      "n": 3,
+      "skill_dir": "step-03-history",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "traits",
+      "n": 4,
+      "skill_dir": "step-04-traits",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "reactions",
+      "n": 5,
+      "skill_dir": "step-05-reactions",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "preferences",
+      "n": 6,
+      "skill_dir": "step-06-preferences",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "sourcing",
+      "n": 7,
+      "skill_dir": "step-07-sourcing",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "understanding",
+      "n": 8,
+      "skill_dir": "step-08-understanding",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "ranking",
+      "n": 9,
+      "skill_dir": "step-09-ranking",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "feedback",
+      "n": 10,
+      "skill_dir": "step-10-feedback",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    },
+    {
+      "step": "application",
+      "n": 11,
+      "skill_dir": "step-11-application",
+      "skill_md_exists": true,
+      "owns_drafting_rules": true,
+      "states_cut_rule": true,
+      "names_narrative_load": true,
+      "states_backtrack_test": true,
+      "reasons": []
+    },
+    {
+      "step": "interview_log",
+      "n": 12,
+      "skill_dir": "step-12-interview-log",
+      "skill_md_exists": true,
+      "owns_drafting_rules": false,
+      "states_cut_rule": false,
+      "names_narrative_load": false,
+      "states_backtrack_test": false,
+      "reasons": []
+    }
+  ]
+}
