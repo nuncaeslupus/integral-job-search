@@ -257,10 +257,7 @@ def test_a_longer_declared_spelling_is_synonym_only_not_covered() -> None:
     the posting's own wording, which an ATS may match literally.
     """
 
-    class _Master:
-        pass
-
-    master = _Master()
+    master = CVMaster()
 
     assert classify_keyword("We use Node.js daily", master, "node") == SYNONYM_ONLY
     # Unchanged: the standalone spelling, and a document carrying both.
