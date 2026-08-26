@@ -25,11 +25,17 @@ from integral.session import Resumption
 from integral.sourcing_strategy import EvidenceRow, ScopeDecision
 from integral.step_skills import (
     DEFAULT_SKILLS_DIR,
+    DEFAULT_T84_EVIDENCE_PATH,
+    DRAFTING_RULES_OWNER,
     SkillCheck,
+    _main,
     check_step_skill,
     measure,
+    measure_drafting_rules,
     probe_step_skills,
+    read_drafting_rules,
     skill_dir_name,
+    write_drafting_rules_evidence,
     write_evidence,
 )
 
@@ -188,6 +194,25 @@ def test_write_evidence_matches_measure(tmp_path: Path) -> None:
     measured = write_evidence(target)
     assert json.loads(target.read_text(encoding="utf-8")) == measured
     assert measured["steps_with_a_skill_fraction"] == 1.0
+
+
+def test_write_evidence_redirects_both_records_not_just_s7(tmp_path: Path) -> None:
+    """`--write-evidence PATH` must move T84's record too.
+
+    It honoured the flag for S7 and used the repository default for T84, so a
+    caller redirecting to a temp directory still overwrote the committed
+    `status/evidence/T84.json`. A test writing to `tmp_path` is exactly the
+    caller that would have done it.
+    """
+    committed = DEFAULT_T84_EVIDENCE_PATH
+    before = committed.read_text(encoding="utf-8") if committed.exists() else None
+
+    target = tmp_path / "S7.json"
+    _main(["step_skills", "--write-evidence", str(target)])
+
+    assert (tmp_path / DEFAULT_T84_EVIDENCE_PATH.name).exists()
+    after = committed.read_text(encoding="utf-8") if committed.exists() else None
+    assert after == before, "the committed T84 record must not be touched"
 
 
 # --- the gate over a synthetic, incomplete library --------------------------
@@ -1290,3 +1315,149 @@ def test_scope_review_evidence_matches_measure(tmp_path: Path) -> None:
     written = sourcing_scope_review.write_evidence(tmp_path / "T67.json")
     assert json.loads((tmp_path / "T67.json").read_text(encoding="utf-8")) == written
     assert written["standing_scope_decisions_not_resurfaced"] == 0
+
+
+# --- T84: step 11's two drafting rules --------------------------------------
+
+
+def test_step_eleven_states_the_relevance_weighted_cut_rule(steps: StepList) -> None:
+    step = next(s for s in steps.steps if s.id == DRAFTING_RULES_OWNER)
+    reading = read_drafting_rules(step, DEFAULT_SKILLS_DIR)
+    assert reading.states_cut_rule, reading.reasons
+
+
+def test_step_eleven_states_the_interview_backtrack_test(steps: StepList) -> None:
+    step = next(s for s in steps.steps if s.id == DRAFTING_RULES_OWNER)
+    reading = read_drafting_rules(step, DEFAULT_SKILLS_DIR)
+    assert reading.states_backtrack_test, reading.reasons
+
+
+def test_the_cut_rule_names_narrative_load(tmp_path: Path, steps: StepList) -> None:
+    """The third factor is the one most likely to be dropped in a paraphrase."""
+    step = next(s for s in steps.steps if s.id == DRAFTING_RULES_OWNER)
+    reading = read_drafting_rules(step, DEFAULT_SKILLS_DIR)
+    assert reading.names_narrative_load
+
+    # relevance and uniqueness alone, narrative load dropped, must not pass —
+    # otherwise a paraphrase that quietly lost the third factor would score
+    # the same as the real rule.
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / skill_dir_name(step)
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: x\ndescription: x\n---\n\n"
+        "Score each line by relevance to this posting and uniqueness in the "
+        "document. Cut the lowest-scoring lines first, ignoring section "
+        "boundaries.\n",
+        encoding="utf-8",
+    )
+    reading = read_drafting_rules(step, skills_dir)
+    assert not reading.names_narrative_load
+    assert not reading.states_cut_rule
+    assert any("narrative load" in reason for reason in reading.reasons)
+
+
+def test_the_committed_skill_states_both_drafting_rules() -> None:
+    """T84's gate over the committed library: `== 0`, and the rules are really there."""
+    measured = measure_drafting_rules()
+    assert measured["step_skills_without_the_drafting_rules"] == 0, measured["offenders"]
+    assert measured["step_skills_checked"] == 13
+    assert measured["gate_status"] == "measured"
+    assert measured["owning_steps"] == [DRAFTING_RULES_OWNER]
+
+
+def test_only_the_owning_step_is_required_to_carry_the_rules(steps: StepList) -> None:
+    """Every other step's SKILL.md is never inspected for a rule that is not its own."""
+    for step in steps.steps:
+        if step.id == DRAFTING_RULES_OWNER:
+            continue
+        reading = read_drafting_rules(step, DEFAULT_SKILLS_DIR)
+        assert not reading.owns_drafting_rules
+        assert not reading.lacks_the_rules
+
+
+def test_a_synthetic_skill_missing_the_backtrack_test_is_counted(
+    tmp_path: Path, steps: StepList
+) -> None:
+    step = next(s for s in steps.steps if s.id == DRAFTING_RULES_OWNER)
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / skill_dir_name(step)
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: x\ndescription: x\n---\n\n"
+        "Score each line by relevance, uniqueness and narrative load. Cut the "
+        "lowest-scoring lines first, ignoring section boundaries.\n",
+        encoding="utf-8",
+    )
+    reading = read_drafting_rules(step, skills_dir)
+    assert reading.states_cut_rule
+    assert not reading.states_backtrack_test
+    assert reading.lacks_the_rules
+    assert any("backtrack" in reason for reason in reading.reasons)
+
+
+def test_a_complete_synthetic_drafting_skill_passes(tmp_path: Path, steps: StepList) -> None:
+    step = next(s for s in steps.steps if s.id == DRAFTING_RULES_OWNER)
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / skill_dir_name(step)
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: x\ndescription: x\n---\n\n"
+        "Score each line by relevance, uniqueness and narrative load. Cut the "
+        "lowest-scoring lines first, ignoring section boundaries.\n\n"
+        "The interview backtrack test: OK, Flag it, or Never.\n",
+        encoding="utf-8",
+    )
+    reading = read_drafting_rules(step, skills_dir)
+    assert reading.states_cut_rule
+    assert reading.states_backtrack_test
+    assert not reading.lacks_the_rules
+    assert reading.reasons == ()
+
+
+def test_no_drafting_rules_owner_records_minus_one_never_a_clean_zero(tmp_path: Path) -> None:
+    """A rename of the owning step's id must not read as a clean pass.
+
+    The check only runs over the step whose id is `DRAFTING_RULES_OWNER`. If no
+    step carries that id any more, a bare `0` would read as "both rules are
+    stated everywhere they need to be" over a check that examined nothing.
+    """
+    spec = json.loads(Path("status/spec-v2-steps.json").read_text(encoding="utf-8"))
+    for step in spec["steps"]:
+        if step["id"] == DRAFTING_RULES_OWNER:
+            step["id"] = "renamed_step"
+    drifted = tmp_path / "steps.json"
+    drifted.write_text(json.dumps(spec), encoding="utf-8")
+
+    measured = measure_drafting_rules(drifted, DEFAULT_SKILLS_DIR)
+    assert measured["step_skills_without_the_drafting_rules"] == -1
+    assert measured["step_skills_checked"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["owning_steps"] == []
+
+
+def test_the_gate_does_not_pass_on_an_empty_input_set(tmp_path: Path) -> None:
+    """A step list that cannot be read yields no measurement, not a passing one.
+
+    The gate asserts `step_skills_without_the_drafting_rules == 0`, and an
+    empty input set — nothing examined at all — produces zero too. So the
+    evidence record carries `step_skills_checked` beside the violation count,
+    and `gate_status` reads `"unmeasured"` whenever that count is `0`, which is
+    what `gate_evidence.py`'s `status-key` reads before it ever looks at the
+    metric itself.
+    """
+    bad = tmp_path / "not-json.json"
+    bad.write_text("{not json", encoding="utf-8")
+    measured = measure_drafting_rules(bad, DEFAULT_SKILLS_DIR)
+    assert measured["step_skills_checked"] == 0
+    assert measured["step_skills_without_the_drafting_rules"] == -1
+    assert measured["gate_status"] == "unmeasured"
+
+
+def test_t84_evidence_matches_measure(tmp_path: Path) -> None:
+    """The committed number is what the code says now, not what it said once."""
+    target = tmp_path / "T84.json"
+    measured = write_drafting_rules_evidence(target)
+    assert json.loads(target.read_text(encoding="utf-8")) == measured
+    assert measured["step_skills_without_the_drafting_rules"] == 0
+    assert measured["gate_status"] == "measured"

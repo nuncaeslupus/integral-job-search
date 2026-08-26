@@ -33,6 +33,10 @@ An offer with status `shortlisted`, and `cv/master.json` with enough in it to dr
 - Where the advert asks for something they lack, say so and offer the options honestly: apply anyway and address the gap in the letter, or leave this one.
 - **This is where personal details are collected** — the name to print, contact details, whatever this employer's form requires — asked for the document being produced, not gathered speculatively months earlier.
 
+**Relevance-weighted cutting.** When a draft runs long, score each line by three things: relevance to *this* posting, uniqueness in the document, and narrative load — whether the cover letter depends on it. If cutting the line would force a letter paragraph to be rewritten, it is load-bearing. Cut the lowest-scoring lines first, ignoring section boundaries — a weak line in a strong section goes before a strong line in a weak one. This is the method for choosing what to leave out, not a reason to stop saying so.
+
+**The interview backtrack test.** Before a claim goes in, ask whether the candidate could comfortably explain it in an interview without backtracking — without ever needing to say "well, what I actually meant was…". Three tiers: **OK** — stands as written; **Flag it** — say so to the candidate before including it; **Never** — leave it out. Traceability is not defensibility: a true fact can still be framed past what its owner can hold up under questioning.
+
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
 
 In this step that sounds like:
