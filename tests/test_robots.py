@@ -9,11 +9,21 @@ the identity is not a detail of the request, it is the input to the decision.
 
 from __future__ import annotations
 
+import time
+
 import urllib.error
 
 import pytest
 
-from integral.robots import USER_AGENT, Robots, RobotsError, measure
+from integral.robots import (
+    USER_AGENT,
+    Robots,
+    RobotsError,
+    _matches,
+    _normalize_rule,
+    _request_path,
+    measure,
+)
 
 # Trimmed from the live files on 2026-08-24, keeping the groups that decide the
 # cases below. Frozen on purpose: a test that re-fetches measures the boards'
@@ -214,3 +224,28 @@ def test_the_fixture_table_itself_evaluates_clean() -> None:
     measured = measure()
     assert measured["robots_verdicts_evaluated"] > 0
     assert measured["robots_verdicts_misread"] == 0, measured["misread_cases"]
+
+
+def test_an_adversarial_wildcard_rule_matches_in_bounded_time() -> None:
+    """A remote robots.txt is attacker-controlled input: any site can serve one.
+
+    The regex matcher this replaced expanded each `*` to a greedy `.*`, so
+    `/*a*a*a...b` against a long path with no final `b` backtracked
+    catastrophically — measured hanging past 60s, which turns a politeness
+    check into a denial of service against ourselves. The linear matcher must
+    answer immediately.
+    """
+    rule = "/" + "a" * 1 + "".join("*a" for _ in range(30)) + "b"
+    chunks, anchored = _normalize_rule(rule)
+    started = time.monotonic()
+    assert _matches(chunks, anchored, "/" + "a" * 5000) is False
+    assert time.monotonic() - started < 1.0
+
+
+def test_a_percent_encoded_asterisk_is_not_a_wildcard() -> None:
+    """`%2A` is how a rule spells a literal asterisk. Decoding it into the
+    pattern character would silently widen every rule that contains one."""
+    chunks, anchored = _normalize_rule("/a%2Ab")
+
+    assert _matches(chunks, anchored, _request_path("https://x.test/a*b")) is True
+    assert _matches(chunks, anchored, _request_path("https://x.test/axb")) is False

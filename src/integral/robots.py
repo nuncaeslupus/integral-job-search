@@ -32,6 +32,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import string
 import sys
 import urllib.error
 import urllib.request
@@ -149,54 +150,88 @@ def _select_rules(groups: list[_Group], agent: str) -> tuple[list[tuple[bool, st
     return rules, delay
 
 
-# `%` is safe here on purpose: without it `quote` re-encodes an escape that is
-# already there, so `/private%20jobs` became `/private%2520jobs` and a
-# `Disallow: /private%20jobs` rule stopped matching — the crawler then fetched a
-# path the site had explicitly excluded. `*` and `$` are safe because they are
-# RFC 9309 pattern syntax in a rule, and encoding them would defeat the matcher.
-_SAFE = "/%*$~:@!&'()+,;=-._"
+# RFC 9309 §2.2.2 comparison rules. A rule and a request target are NOT
+# normalised the same way, and conflating them let two excluded paths through:
+# `*` is pattern syntax in a rule but an ordinary octet in a target, and `?`
+# must survive on both sides or a query rule can never match anything.
+_UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
+
+# `%` stays safe so an escape already present is not re-encoded. `*` is absent
+# on purpose: a target's literal `*` becomes `%2A`, which is exactly how a rule
+# must spell a literal asterisk, so the two sides meet.
+_CHUNK_SAFE = "/%:@!$&'()+,;=?~-._"
+
+_ESCAPE_RE = re.compile(r"%([0-9A-Fa-f]{2})")
 
 
-def _normalize(path: str) -> str:
-    """One percent-encoding for both sides of the comparison (RFC 9309 §2.2.2).
+def _canon(chunk: str) -> str:
+    """One canonical octet form for a literal run of a path.
 
-    Applied to the request path AND to every rule pattern, because a
-    comparison is only meaningful when both sides are normalised the same way.
+    Escapes encoding an *unreserved* character are decoded, because `%62` and
+    `b` denote the same octet and a `Disallow: /foo/%62ar` that fails to match
+    `/foo/bar` is a fail-open. Every other escape is kept and upper-cased, so
+    `%2A` survives as `%2A` rather than becoming a wildcard — which is how a
+    rule spells a literal asterisk.
     """
-    return quote(path, safe=_SAFE)
+
+    def _decode(match: re.Match[str]) -> str:
+        char = chr(int(match.group(1), 16))
+        return char if char in _UNRESERVED else "%" + match.group(1).upper()
+
+    return quote(_ESCAPE_RE.sub(_decode, chunk), safe=_CHUNK_SAFE)
+
+
+def _normalize_rule(pattern: str) -> tuple[list[str], bool]:
+    """A rule as canonical literal runs plus its end-anchor flag.
+
+    Splitting on `*` before canonicalising is what keeps the wildcard as
+    syntax: only the runs between wildcards are percent-normalised.
+    """
+    body, anchored = (pattern[:-1], True) if pattern.endswith("$") else (pattern, False)
+    return [_canon(chunk) for chunk in body.split("*")], anchored
+
+
+def _matches(chunks: list[str], anchored: bool, path: str) -> bool:
+    """Greedy wildcard match, iterative and bounded — never exponential.
+
+    The previous revision compiled each rule to a regex with `.*` per wildcard.
+    Correct, but it backtracks catastrophically: a remote robots.txt could ship
+    `/*a*a*a...b$` and hang the crawler on any path lacking the final `b`,
+    turning a politeness check into a denial of service against ourselves. Any
+    site can serve a robots.txt, so the matcher must be bounded by construction
+    rather than by trusting the input.
+
+    Each run is found once, left to right, never reconsidered: O(len(path) x
+    len(rule)).
+    """
+    if not chunks:
+        return True
+    first, *rest = chunks
+    if not path.startswith(first):
+        return False
+    if not rest:
+        return len(path) == len(first) if anchored else True
+    position = len(first)
+    for index, chunk in enumerate(rest):
+        if index == len(rest) - 1 and anchored:
+            # The final run must sit flush against the end of the path.
+            return len(path) - position >= len(chunk) and path.endswith(chunk)
+        if not chunk:
+            continue
+        found = path.find(chunk, position)
+        if found == -1:
+            return False
+        position = found + len(chunk)
+    return True
 
 
 def _request_path(url: str) -> str:
+    """The request target — path and query together — in canonical form."""
     parts = urlsplit(url)
-    path = _normalize(parts.path) or "/"
-    return f"{path}?{parts.query}" if parts.query else path
-
-
-_PATTERN_CACHE: dict[str, re.Pattern[str]] = {}
-
-
-def _compile(pattern: str) -> re.Pattern[str]:
-    """RFC 9309 §2.2.3 pattern syntax, compiled once per distinct rule.
-
-    `*` matches any run of characters and a trailing `$` anchors the match to
-    the end of the path; everything else is literal. `str.startswith` treated
-    both as ordinary characters, so `Disallow: /*.pdf$` matched nothing at all
-    and every PDF the site excluded was fetched anyway — a rule the site wrote
-    to stop us reading as permission, which is the fail-open this module is
-    named for.
-
-    An unanchored pattern still matches by prefix, which is what `match`
-    (rather than `fullmatch`) gives, so the existing rules are unaffected. An
-    empty pattern still matches everything, exactly as `startswith("")` did.
-    """
-    cached = _PATTERN_CACHE.get(pattern)
-    if cached is not None:
-        return cached
-    body, anchored = (pattern[:-1], True) if pattern.endswith("$") else (pattern, False)
-    regex = "".join(".*" if ch == "*" else re.escape(ch) for ch in body)
-    compiled = re.compile(regex + ("$" if anchored else ""))
-    _PATTERN_CACHE[pattern] = compiled
-    return compiled
+    target = parts.path or "/"
+    if parts.query:
+        target = f"{target}?{parts.query}"
+    return _canon(target)
 
 
 def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
@@ -205,16 +240,16 @@ def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
     No matching rule at all is an implicit allow — the file simply said
     nothing about this path, which is not the same as forbidding it.
 
-    Rule patterns are normalised with the same `_normalize` as the request
-    path: comparing a raw pattern against an encoded path is how an excluded
+    Rule patterns and the request path go through the same canonical percent
+    form: comparing a raw pattern against an encoded path is how an excluded
     path slips through.
     """
     best_len, best_allow = -1, True
     for is_allow, pattern in rules:
-        normalized = _normalize(pattern)
-        if not _compile(normalized).match(path):
+        chunks, anchored = _normalize_rule(pattern)
+        if not _matches(chunks, anchored, path):
             continue
-        length = len(normalized)
+        length = sum(len(chunk) for chunk in chunks)
         if length > best_len or (length == best_len and is_allow):
             best_len, best_allow = length, is_allow
     return best_allow
@@ -456,6 +491,39 @@ Disallow: /*.pdf$
 """,
         agent="SomeBot",
         url="https://f13.example/docs/file.pdf.txt",
+        expected_allowed=True,
+    ),
+    # A second review round found the first fix had itself opened two more
+    # holes, both in normalisation. Same lesson as the round before: the
+    # fixture table is where a normalisation bug becomes visible.
+    _Fixture(
+        name="a_rule_carrying_a_query_string_still_matches",
+        robots_txt="""
+User-agent: *
+Disallow: /search?q=x
+""",
+        agent="SomeBot",
+        url="https://f14.example/search?q=x",
+        expected_allowed=False,
+    ),
+    _Fixture(
+        name="an_escape_for_an_unreserved_octet_is_the_same_path",
+        robots_txt="""
+User-agent: *
+Disallow: /foo/%62ar
+""",
+        agent="SomeBot",
+        url="https://f15.example/foo/bar",
+        expected_allowed=False,
+    ),
+    _Fixture(
+        name="a_percent_encoded_asterisk_is_a_literal_not_a_wildcard",
+        robots_txt="""
+User-agent: *
+Disallow: /a%2Ab
+""",
+        agent="SomeBot",
+        url="https://f16.example/axb",
         expected_allowed=True,
     ),
 )
