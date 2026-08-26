@@ -837,6 +837,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-cd8dcc16",
+      "key": "gate_modules_outside_the_evidence_run",
+      "evidence": "status/evidence/T85.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-e1ca8374",
       "key": "unrecordable_task_gates",
       "evidence": "status/evidence/D12.json",
