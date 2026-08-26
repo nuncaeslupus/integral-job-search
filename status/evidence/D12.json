@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 107,
-  "gates_declaring_status_key": 7,
+  "evidence_gates_read": 108,
+  "gates_declaring_status_key": 8,
   "unrecordable": [],
   "readings": [
     {
@@ -709,14 +709,6 @@
       "status_is_asserted": false
     },
     {
-      "task": "t-37cfb89e",
-      "key": "silent_connector_failures",
-      "evidence": "status/evidence/T72.json",
-      "value_is_numeric": true,
-      "declares_status_key": true,
-      "status_is_asserted": true
-    },
-    {
       "task": "t-4efbff9b",
       "key": "exhausted_searches_reported_as_a_scope_change",
       "evidence": "status/evidence/T66.json",
@@ -771,6 +763,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-82720e4f",
+      "key": "posting_keywords_left_unclassified",
+      "evidence": "status/evidence/T81.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-8cebf0ec",
@@ -835,6 +835,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-cd8dcc16",
+      "key": "gate_modules_outside_the_evidence_run",
+      "evidence": "status/evidence/T85.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-e1ca8374",

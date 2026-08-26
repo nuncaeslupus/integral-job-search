@@ -43,6 +43,11 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 # derived, never listed here — a hardcoded list silently stops covering the
 # next module somebody adds, which is the failure this target exists to catch.
 #
+# Derived by `integral.repo_gate --list-evidence-modules`, not by grepping for
+# a naming convention on the module's entry-point function (T85): that used to
+# be `grep -l '^def _main'`, and three modules that write evidence through a
+# function named `main` instead were invisible to it and never drift-checked.
+#
 # Exit 3 is "unmeasured", and it is a verdict, not a failure: the check ran and
 # found that it cannot be scored yet. This target's job is to REGENERATE the
 # record and refuse drift; adjudicating the number is `verify-gates`'s. Treating
@@ -51,7 +56,7 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 # unmeasured gate has no way to be recorded") reappearing one layer up. Any
 # other non-zero is still a hard stop.
 evidence:  ## regenerate every module's gate evidence and fail on any drift
-	@for m in $$(grep -l '^def _main' src/integral/*.py | xargs -n1 basename | sed 's/\.py$$//'); do \
+	@for m in $$(uv run python -m integral.repo_gate --list-evidence-modules); do \
 		printf '  %-18s ' "$$m"; \
 		uv run python -m integral.$$m >/dev/null; status=$$?; \
 		case $$status in \
