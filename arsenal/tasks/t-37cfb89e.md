@@ -114,9 +114,20 @@ module must honour it:
 
 `gate_evidence.py` reads `status-key` before it reads the metric and exits **3** on
 `unmeasured` — "the check ran, and what it found is that this cannot be scored
-yet". Not a pass and not a fail, which is the honest third outcome for a run that
-processed nothing. That is the same mechanism `lo-6f53` uses for
+yet". Not a pass and not a fail. That is the same mechanism `lo-6f53` uses for
 `extraction_macro_f1`, so this is existing machinery rather than a new rule.
+
+Exit 3 covers **two** runs, and only the first is an empty input set:
+
+* nothing was evaluated at all;
+* something was evaluated but its **rot stage did not run**, because no current
+  read was captured for it. Such a connector is not idle — its baseline was
+  parsed and its free signals were checked in full — so "a run that processed
+  nothing" describes only half of what reaches this exit, and describing it that
+  way was how the incomplete-coverage case looked like a non-case.
+
+Neither of those is a run that found something. A violation the free signals did
+find never reaches exit 3 at all; it is reported first, as a measured failure.
 
 **A second assertion in the gate block would not have worked**: line 1 of a `gate`
 fence *is* the gate, one metric per block. Making the emptiness visible through the
