@@ -410,17 +410,34 @@ def measure_evidence_reach(
     denominator) is asserted alongside it, and `gate_status` reads
     `"unmeasured"` rather than a clean pass while that denominator is empty.
     """
-    discovered = evidence_writing_modules(src_dir)
-    evaluated = len(discovered)
-    if evaluated == 0:
+    def _unmeasured(reason: str) -> dict[str, Any]:
         return {
             "gate_modules_outside_the_evidence_run": 0,
             "gate_modules_outside_the_evidence_run_evaluated": 0,
             "gate_modules_discovered": 0,
             "modules_missing": [],
             "gate_status": "unmeasured",
+            "unmeasured_reason": reason,
         }
-    reached = modules_reached_by_evidence_run(makefile, repo_root)
+
+    discovered = evidence_writing_modules(src_dir)
+    evaluated = len(discovered)
+    if evaluated == 0:
+        return _unmeasured("no module under src/ constructs an evidence path")
+    try:
+        reached = modules_reached_by_evidence_run(makefile, repo_root)
+    except ValueError as exc:
+        # The `evidence` target was rewritten into a shape this cannot read.
+        # That is exactly what a merge between two branches that both edit the
+        # recipe can produce, and a traceback there would take `--check` down
+        # instead of reporting that the reach cannot be scored. A check that
+        # cannot run must say so, which is the same rule the empty-input branch
+        # above already follows.
+        return _unmeasured(f"cannot read the evidence target: {exc}")
+    except subprocess.CalledProcessError as exc:
+        return _unmeasured(
+            f"the evidence target's module list failed to evaluate: exit {exc.returncode}"
+        )
     missing = sorted(set(discovered) - reached)
     return {
         "gate_modules_outside_the_evidence_run": len(missing),

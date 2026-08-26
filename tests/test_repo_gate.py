@@ -117,3 +117,29 @@ def test_the_gate_does_not_pass_on_an_empty_input_set(tmp_path: Path) -> None:
     assert real["gate_modules_outside_the_evidence_run_evaluated"] > 0
     assert real["gate_modules_discovered"] > 0
     assert real["gate_status"] == "measured"
+
+
+def test_an_unreadable_evidence_target_is_unmeasured_not_a_traceback(tmp_path: Path) -> None:
+    """A rewritten `evidence` recipe this cannot parse must report that the
+    reach is unscoreable, not abort the run. Merging two branches that both
+    edit that recipe is the realistic way to produce one."""
+    makefile = tmp_path / "Makefile"
+    makefile.write_text("evidence:\n\t@echo nothing here\n", encoding="utf-8")
+
+    measured = repo_gate.measure_evidence_reach(makefile=makefile)
+
+    assert measured["gate_status"] == "unmeasured"
+    assert "cannot read the evidence target" in measured["unmeasured_reason"]
+
+
+def test_a_failing_module_list_command_is_unmeasured_not_a_traceback(tmp_path: Path) -> None:
+    """Same rule for the module-list command itself exiting non-zero."""
+    makefile = tmp_path / "Makefile"
+    makefile.write_text(
+        "evidence:\n\t@for m in $$(exit 7); do \\\n\t\techo $$m; \\\n\tdone\n", encoding="utf-8"
+    )
+
+    measured = repo_gate.measure_evidence_reach(makefile=makefile)
+
+    assert measured["gate_status"] == "unmeasured"
+    assert "module list failed to evaluate" in measured["unmeasured_reason"]
