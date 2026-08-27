@@ -5,6 +5,7 @@ priority: 10
 deps: [t-e6f1dc24]
 workspace: MATCH
 tags: [v3, m5]
+status: merged
 ---
 
 # T77: Every disqualification carries the advert's own sentence
