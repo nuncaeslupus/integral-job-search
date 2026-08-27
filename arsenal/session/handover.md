@@ -1,99 +1,154 @@
-# Session handover — 2026-08-27 ~15:20 UTC, orchestrator, fourth fleet round
+# Session handover — 2026-08-27 ~18:35 UTC, interactive, laptop
 
-Board: **110 gates**, 124 tasks. `main` at `768cb9b`. **Thirteen PRs merged across this run.**
+Board: **110 gates on `main`**, 124 tasks. `main` at `e53ca9c` — **unchanged this
+session**. Nothing merged into this repo; one PR is open and one upstream PR merged.
 
-**No worker is in flight and no branch is unmerged.** Every `arsenal-worker` session is idle
-with its branch merged; `git ls-remote origin 'refs/heads/arsenal/t-*'` returns nothing. The
-next round starts from `task_select.py`, not from anything left running.
+The session was asked to fix whatever could be fixed without a live human/browser
+session, and to stop the routines.
 
-On each, the orchestrator ran `make host-gate` itself and saw exit 0 — on the **branch head**
-immediately before merging, never on a worker's word. The SHAs in the table below are the
-*squash* commits on `main`; they carry the same tree, but no gate ran against them by that
-name, so do not go looking for one.
+## Routines are off
 
-**Exit 0 from `host-gate` is not the same as a task's own gate passing.** T72 is the case that
-proves it: `make evidence` records an exit-3 module as `unmeasured (recorded)` and carries on,
-so the run is green while `silent_connector_failures` remains unscored. That is the intended
-behaviour and the entire point of #221 — a gate that refuses to score itself.
+One routine was live: **`arsenal orchestrator — hourly tick`**
+(`trig_015sxLyaFivf7aduKX6xQQur`, cron `16 * * * *`, last fired 17:16). It is now
+`enabled: false`. The other 18 in the account are spent one-shot reminders
+(`ended_reason: run_once_fired`).
 
-## Merged since the last handover
+**The API has no delete verb** — `enabled: false` is the stop, and it is one
+`RemoteTrigger update` to bring back. Note also that `list` **ignores its cursor**
+and re-serves the same page, so `has_more: true` there is not a promise of more
+rows you can reach.
 
-| PR | task | outcome |
+That routine was **self-bound**: `persist_session: true` with
+`persistent_session_id: session_014yfFpB2ofL8TKeY199XQRH`. It did not create a
+session, it woke one — which is forced, because a trigger that creates a session
+stores no MCP connectors and would have no GitHub channel at all. Filed as
+[claude-arsenal#255](https://github.com/nuncaeslupus/claude-arsenal/issues/255):
+the tick's *contract* belongs in `references/orchestrator-tick.md`; only the clock
+is surface-specific. Today that contract exists solely inside a trigger object on
+one account — unversioned, unreviewed, and already drifted between copies.
+
+## Open
+
+| PR | task | state |
 |---|---|---|
-| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | merged `88dd3dc` (gated on `7a63627`). **Closes nothing, and its gate did not pass** — #203 stays open, the task file is not archived, and `python -m integral.connector_health` exits 3 with `gate_status: unmeasured`. Finishing it needs a probe capture on the laptop. Squash message deliberately carried no closing keyword — **and that is not a supported way to hold a task open.** `.github/workflows/arsenal-queue.yml`'s `pr-closed` job fires on any merged `arsenal/` PR and runs `queue_hooks.py pr-closed`, which closes the issue and archives the task whatever the squash message says. It did not fire here only because Actions has no runners. When minutes return, the same technique will not work: hold a task open by **not merging it**, or by parking the task file. |
-| [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) | T70 robots matching | merged `7cb26bc` (gated on `af1e57b`), #209 closed. Four fail-opens fixed; the round-2 audit's 32 accepted cases committed as fixtures, `robots_verdicts_evaluated` 24 → 56. |
-| [#235](https://github.com/nuncaeslupus/integral-job-search/pull/235) | T76 eligibility gate | merged `ff059aa` (gated on `4fcce80`), #218 closed. Unblocks five tasks. |
-| [#239](https://github.com/nuncaeslupus/integral-job-search/pull/239) | T77 quoted disqualifications | merged `d54d6de`, #206 closed. Every disqualification carries a byte-for-byte advert span; `_require_advert_span` raises `QuoteProvenanceError` on anything else. |
-| [#240](https://github.com/nuncaeslupus/integral-job-search/pull/240) | T78 language_requirement | merged `768cb9b` (gated on `4885248`), #205 closed. **Five defects across four review rounds, four of them in the gate's own audit machinery rather than in the feature.** See below. |
+| [#242](https://github.com/nuncaeslupus/integral-job-search/pull/242) | T86 eligibility vocabulary → closes #237 | **open**, head `fcaeccc`. CodeRabbit round 1 answered; round 2 not yet in. |
 
-## In flight
+`arsenal/claims/t-fdc8e19f` is held by this session. Issue #237 now carries
+`arsenal-task: t-fdc8e19f` and the `arsenal:task` label.
 
-**Nothing.** T77 and T78 both merged; see the table above.
+### T86 — what it fixes
 
-## Two follow-ups filed rather than lost
+`"DE"` against *"must hold German citizenship"* returned FAIL, and `"ES"` against
+the same advert returned FAIL identically: indistinguishable to the code. A false
+FAIL is the invisible direction, because an excluded job is one the candidate
+never sees. A scoped ES/EN/CA table resolves both sides; a term outside it goes to
+FLAG, never FAIL, so coverage is a quality dial rather than a correctness
+precondition. Clearances stay out by decision.
 
-Both are `arsenal:queue` issues, to be imported as tasks by `issue_import.py`.
+`_normalize` also **deleted** accented characters rather than folding them, so
+`alemán` became `alemn` — a key matching neither spelling. It folds now.
 
-- [#236](https://github.com/nuncaeslupus/integral-job-search/issues/236) — T70 audit case 22: does a rule's product token match as a **prefix** of a longer crawler token? Deliberately not committed as a fixture, because recording the implementation's own answer as the expectation is the circularity the audit exists to break. **Needs a surface whose egress is not blocked** — every host serving RFC 9309 is refused here by the proxy, for the auditor and the orchestrator alike. That means the laptop.
-- [#237](https://github.com/nuncaeslupus/integral-job-search/issues/237) — eligibility target vocabulary. A candidate declaring `DE` is excluded by "must hold German citizenship"; the code cannot tell that from `ES` against the same advert. **T77 and T78 have now merged and this is still true** — verified at handover time, nothing in `src/` or `tools/` imports `integral.eligibility`. **T79 is the one that changes that**, so #237 must land before T79 — until then nothing imports `eligibility`, so the false FAIL reaches no candidate. Owner's steer: a *scoped* ES/EN/CA table, unknown terms resolving to FLAG, and **no clearance taxonomy**.
+Its own gate counts the direction nothing counted: `false_disqualifications`,
+**0 of 15** evaluated, and **10 of 15** with the vocabulary switched off. That
+second number is asserted by a test, so the zero is a measurement rather than a
+tautology — the T72 failure mode, checked for.
 
-## What this round taught, and what to keep doing
+### T86 — the review round is the lesson again
 
-**The durable-output dispatch works, and the transcript-output one destroys work.** The first
-T70 audit derived 19 cases, reported them in its final chat message, disconnected, and 17 were
-lost. Round 2 was told to write its cases to a file and push a branch; it did, and 32 of them
-are now fixtures. Any commissioned report gets pushed, never narrated.
+CodeRabbit found **two real correctness defects, both in the new code, both false
+disqualifications** — the very failure the gate was written to expose, sitting in
+the gate's own fixtures:
 
-**An audit that reports before reading the code is worth the extra step.** Round 2's cases were
-committed in `21ad1af` *before* `robots.py` was opened, and one modelling error it later found
-in its own case was corrected in a separate commit citing the section — not because the code
-disagreed. That ordering is what makes the 32 accepted cases mean anything.
+- `_BLOCS["EEA"]` holds country codes, so it never contains the string `"EU"`.
+  Neither containment branch could settle a **bloc-against-bloc** pair, and `EEA`
+  against a bar naming `EU` fell through to a confident FAIL.
+- `held_codes` is a set, so `("ES", "España")` collapses to one code. Comparing
+  its size against the tuple's read that collapse as an unresolved term and
+  downgraded a correct FAIL to FLAG.
 
-**Re-read the thread list at the moment of merging.** Not once beforehand. This was learned the
-hard way earlier in the run and has now paid off three times.
+Neither case existed in the probe set, so `false_disqualifications` read 0 over
+both gaps. Both are now probes **and** tests; the denominator rose 13 → 15.
 
-**A green gate is necessary and never sufficient** — again. T76 arrived with 20 passing tests,
-a gate at exit 0, and a live fail-open: a stated TS/SCI bar returned PASS because "not
-necessary" bled in from the previous sentence. Both of its Major findings were reproduced
-before being touched, and both are now probes as well as fixes.
+**The independent fixture pass still has not run.** `CLAUDE.md` requires a session
+other than the implementer to derive adversarial cases from the spec before the
+implementation is opened, and this is squarely that class of code. The nine
+original probes were written by the implementing session. Two review findings
+inside one round is the argument for that rule, not against it. **#242 is blocked
+on that audit, not on review.**
 
-**Four of T78's five defects were in the gate's own audit machinery, not in the feature** — and
-two of those four were the same shape: *an audit that enumerates the syntax you thought of
-first, rather than the routes to the thing.* The import audit collected `ast.ImportFrom.module`
-and missed `from integral import rank`. The boundary scan walked `ast.Attribute` and missed
-`getattr(offer, "language_requirement")`. Both reported clean over exactly the case they
-existed to catch, and both were behind a green gate.
+## `open_task_pr.sh` cannot open a PR in this repo
 
-The rule that falls out, for the next static audit written here: **enumerate the routes, then
-prove each one fires by injection.** Every fix on that PR was reproduced before being made and
-each new test shown to fail against the code it replaced — which is the only reason there is
-any confidence the fifth round found the last of them rather than the last one anybody looked
-for.
+It runs the host gate **twice** — before the archive (line 118) and again after
+(line 495). `arsenal/tasks/` is counted by T55; `_history/` is correctly
+allowlisted, because a ledger is not edited afterwards. So the archive moves the
+count and the two runs demand different committed values:
 
-Where a route cannot be resolved statically — `getattr(offer, key)` with a computed key — the
-answer is `unmeasured`, not `0`. A zero obtained by not looking is the empty-input failure
-wearing a full denominator, and this repo already has the vocabulary for it (exit 3, D-12).
+| tree state | `T55.files_scanned` |
+|---|---|
+| task file in `arsenal/tasks/` | 561 |
+| task file in `arsenal/tasks/_history/` | 560 |
 
-**Four rounds of review is a signal, and it was not a signal to stop.** Round 4's finding was
-the most serious of the five. Counts fell 3 → 1 → 1 → 1 with no reshaped duplicates, which is
-convergence; a reviewer still landing real fail-opens on round four is not the same thing as a
-reviewer churning.
+No single committed value passes both. **The `CLAUDE.md` note about fixing this
+with "a second commit on the branch the script left you on" no longer applies** —
+the script now stops *before* committing, so there is no branch to add it to. #242
+was branched, archived, regenerated, committed, pushed and opened by hand.
 
-## Standing environment facts
+Filed as [claude-arsenal#256](https://github.com/nuncaeslupus/claude-arsenal/issues/256)
+with three ordered fix options. The rollback path itself is clean — it restores,
+deletes the archive, and asserts both — so a failed run does not leave the tree
+half-done.
 
-- **CI is red repo-wide and it is not any diff** — *while the signature below holds, and not a
-  moment longer.* Actions is out of runner minutes: jobs die in seconds with `runner_id: 0` and
-  an empty `runner_name`, meaning no runner was ever assigned, on `main` as much as any branch.
-  **Confirm that signature on the actual job record before discounting a red check**; a red CI
-  without it is a real failure and gates the merge. Two live costs of having written this
-  unconditionally the first time: it reads as a permanent CI bypass, and a dead Actions is *also*
-  a dead `arsenal-queue.yml` — every queue transition in that file (`pr-closed`, `sync-handles`,
-  `sweep-claims`, `keyword-guard`) is silently not running, which is how T72 above came to look
-  like a supported exception.
-- The **GitHub MCP server dropped once mid-run** (`400: invalid session`) and came back. Plain
-  `git` kept working throughout. If it drops again: fetch, gate and push still work; merging,
-  commenting and opening PRs do not.
-- Spawned sessions have **no `mcp__*` tools** and REST 403s. Workers get their task id, issue
-  number and lane from the dispatch, and stop after pushing.
-- `open_task_pr.sh` gates *then* archives the task file, so `T55.files_scanned` ships one
-  behind. A second commit on the branch it leaves you on fixes it; the squash folds it in.
+## Upstream: `issue_import.py` crashed on the second issue of every run
+
+Protocol step 4b was dead. `importable()` took an unused `known_ids` parameter and
+ran `del known_ids` **inside** its loop: the first issue unbound the name, the
+second raised `UnboundLocalError`. Every gate in `issue_import_test.sh` fed
+exactly one importable issue, which is why it shipped green.
+
+[claude-arsenal#254](https://github.com/nuncaeslupus/claude-arsenal/pull/254)
+**merged** — parameter removed, a gate added that feeds two and asserts two task
+files, verified to fail against the unfixed copy.
+
+**It is merged but not tagged.** The newest tag on `arsenal` is still `v2.4.22`, so
+`check_update.sh` reports the bundle current and the host cannot pull the fix. This
+is the `UNTAGGED UPSTREAM RELEASE` case, and its fix is upstream `make tag` — a
+public release, so it was left for the owner. Until then, run the fixed copy
+directly:
+
+```bash
+python3 ~/dev/claude-arsenal/plugins/core/skills/init/assets/scripts/issue_import.py \
+    --issues /tmp/arsenal-import.json --tasks-dir arsenal/tasks --apply
+```
+
+## The CI note in `CLAUDE.md` is repo-scoped, not account-wide
+
+`claude-arsenal` is **public** and its CI runs normally — 15–30 s, real runner
+ids, checks passing. `integral-job-search` is **private** and still shows the
+documented signature: 5–6 s, `runner_id: 0`, no runner assigned, red on `main` too.
+So this is private-repo billing, not a broken account, and the note should say so.
+Do not read a green run on the sibling repo as evidence that this one recovered.
+
+## Not imported, and why
+
+`issue_import.py` works now, but an imported task is not finished work here: this
+repo's `plan_v2` gate requires every queue task to carry a `T##`/`D-##` label
+**and** a matching row in `status/plan.md` with a real gate expression. That is a
+scoping act, not a mechanical one.
+
+- **#236** — robots product-token prefix matching (T70 audit case 22). Answerable
+  from RFC 9309, but it is a correctness-critical matcher, so `CLAUDE.md` wants a
+  second session to derive the cases. Left as `arsenal:queue`.
+- **#182** — merge-policy to `after-ci-and-review`. Genuinely blocked until runner
+  minutes return. Writing a plan row and a gate for it now would be speculative.
+
+Both keep the `arsenal:queue` label and neither has a task file.
+
+## Next
+
+1. **#242**: CodeRabbit round 2, then the independent fixture pass, then merge.
+   Board goes 110 → 111.
+2. `make tag` upstream, then refresh the bundle here so `issue_import.py` works
+   from the vendored copy.
+3. `task_select.py` returns **T71** (`t-490e52d5`, priority 10, dep T70 merged) —
+   read the robots policy with a browser agent when the honest one is refused.
+   That one needs the live browser session and was deliberately left.
