@@ -824,3 +824,76 @@ def test_the_cli_fails_when_a_verdict_mismatches_even_with_a_clean_boundary(
     exit_code = eligibility._main(["eligibility", str(tmp_path / "T76.json")])
 
     assert exit_code == 1
+
+
+def test_the_boundary_scan_catches_every_form_a_gate_field_could_be_read_by() -> None:
+    """A ranker does not have to write `offer.language_requirement` to read
+    it. `getattr(offer, "language_requirement")` is an `ast.Call` carrying
+    the name in a `Constant` argument, and a scan that walks only
+    `ast.Attribute` nodes reports a clean boundary over it — a zero the gate
+    did not earn, in the one direction it exists to close.
+
+    Each form is pinned separately so a regression names which route
+    reopened, and the last two pin the false positives that made an AST walk
+    the right choice in the first place.
+    """
+    reads = {
+        "attribute": "def f(o):\n    return o.language_requirement\n",
+        "getattr": 'def f(o):\n    return getattr(o, "language_requirement")\n',
+        "hasattr": 'def f(o):\n    return hasattr(o, "language_requirement")\n',
+        "setattr": 'def f(o, v):\n    setattr(o, "eligibility", v)\n',
+    }
+    for form, source in reads.items():
+        names = eligibility._field_access(source).names
+        hit = next((f for f in eligibility.GATE_ONLY_OFFER_FIELDS if f in names), None)
+        assert hit is not None, f"a {form} read of a gate-only field went unseen"
+
+    ignored = {
+        "docstring": '"""Never reads language_requirement."""\ndef f(o):\n    return o.salary\n',
+        "unrelated field": "def f(o):\n    return o.salary + o.seniority\n",
+    }
+    for form, source in ignored.items():
+        names = eligibility._field_access(source).names
+        hit = next((f for f in eligibility.GATE_ONLY_OFFER_FIELDS if f in names), None)
+        assert hit is None, f"a {form} must not be reported as a gate-field read"
+
+
+def test_an_access_the_scan_cannot_resolve_is_unmeasured_not_a_clean_zero(
+    tmp_path: Path,
+) -> None:
+    """`getattr(offer, key)` names its field at runtime. The scan cannot say
+    whether that field is a gate-only one, and the honest reading of a
+    question never answered is `unmeasured` — not the `0` that means "looked
+    and found none".
+
+    This is the empty-input failure with a full denominator: a count of zero
+    obtained by not looking. `-1`, never `0`, for the same reason
+    `_unmeasured_boundary` uses it everywhere else.
+    """
+    for opaque in (
+        "def score(o, key):\n    return getattr(o, key)\n",
+        'def score(o):\n    return o.__dict__["language_requirement"]\n',
+        "def score(o):\n    return vars(o)\n",
+    ):
+        module = tmp_path / "rank.py"
+        module.write_text(opaque, encoding="utf-8")
+
+        measured = eligibility.measure_boundary(eligibility.audit_boundary(modules=(module,)))
+
+        assert measured["gate_status"] == "unmeasured", opaque
+        assert measured["gate_fields_read_by_the_ranker"] == -1
+        assert "cannot resolve" in measured["unmeasured_reason"]
+
+
+def test_a_resolvable_ranker_module_still_measures_clean(tmp_path: Path) -> None:
+    """The counterpart to the case above, and the reason it is not enough to
+    make every scan unmeasured: a module whose accesses all resolve, and
+    which reads no gate-only field, must still produce a measured zero."""
+    module = tmp_path / "rank.py"
+    module.write_text("def score(o):\n    return o.salary + o.seniority\n", encoding="utf-8")
+
+    measured = eligibility.measure_boundary(eligibility.audit_boundary(modules=(module,)))
+
+    assert measured["gate_status"] == "measured"
+    assert measured["gate_fields_read_by_the_ranker"] == 0
+    assert measured["ranker_modules_scanned"] == 1

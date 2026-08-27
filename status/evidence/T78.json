@@ -11,12 +11,14 @@
       "direction": "ranker_never_reads_a_gate_field",
       "name": "rank.py",
       "match": true,
+      "resolved": true,
       "detail": null
     },
     {
       "direction": "ranker_never_reads_a_gate_field",
       "name": "scoring.py",
       "match": true,
+      "resolved": true,
       "detail": null
     },
     {

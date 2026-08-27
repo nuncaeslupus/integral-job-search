@@ -815,18 +815,73 @@ RANKER_MODULES: tuple[Path, ...] = (
 )
 
 
-def _attribute_names(source: str) -> frozenset[str]:
-    """Every `.name` accessed as an attribute anywhere in `source`.
+#: Builtins that reach a field by name at runtime rather than by syntax.
+#: `getattr(offer, "language_requirement")` reads the gate-only field without
+#: producing a single `ast.Attribute` node carrying that name.
+_DYNAMIC_ACCESSORS: frozenset[str] = frozenset({"getattr", "setattr", "hasattr", "delattr"})
+
+#: Ways to obtain a whole namespace at once. Neither names a field, so
+#: neither can be resolved to one — and both would hand a ranker every
+#: gate-only field there is.
+_NAMESPACE_ESCAPES: frozenset[str] = frozenset({"__dict__", "vars"})
+
+
+@dataclass(frozen=True)
+class _FieldAccess:
+    """What one module's source says about the fields it touches.
+
+    `names` is what the scan could resolve; `unresolved` is what it could
+    not. The split exists because those two are not the same answer: an
+    empty `names` means no gate-only field was read, while a non-empty
+    `unresolved` means the question was not answered at all, and reporting
+    the first when the second holds is how a boundary gate reports a clean
+    zero over a hole.
+    """
+
+    names: frozenset[str]
+    unresolved: tuple[str, ...]
+
+
+def _field_access(source: str) -> _FieldAccess:
+    """Every field `source` reaches, by syntax or by name, plus whatever it
+    reaches in a way this scan cannot resolve.
 
     An AST walk rather than a substring search on purpose: this module's own
     docstrings mention `language_requirement` by name, and a plain text
     search of `rank.py`/`scoring.py` would have to forbid that too, which
-    would ban documenting the boundary in the very files it protects. Only
-    `ast.Attribute` nodes — actual `something.language_requirement` reads —
-    count as a violation.
+    would ban documenting the boundary in the very files it protects.
+
+    Attribute syntax is not the only way in, which is the whole reason this
+    returns more than a set of names. `getattr(offer, "language_requirement")`
+    is an `ast.Call`; the field name sits in a `Constant` argument and no
+    `ast.Attribute` node carries it. Counting only attribute nodes reports a
+    clean boundary over exactly that read — fail-open in the one direction
+    this gate exists to close. So a literal accessor call resolves to the
+    name it names, and a non-literal one (`getattr(offer, key)`) or a whole
+    namespace (`offer.__dict__`, `vars(offer)`) resolves to nothing and is
+    recorded as unresolved instead of silently passing.
     """
     tree = ast.parse(source)
-    return frozenset(node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute))
+    names: set[str] = set()
+    unresolved: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            names.add(node.attr)
+            if node.attr in _NAMESPACE_ESCAPES:
+                unresolved.append(f"`.{node.attr}` exposes every field at once")
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in _DYNAMIC_ACCESSORS and len(node.args) >= 2:
+                field = node.args[1]
+                if isinstance(field, ast.Constant) and isinstance(field.value, str):
+                    names.add(field.value)
+                else:
+                    unresolved.append(
+                        f"`{node.func.id}(...)` names its field at runtime, "
+                        "so this scan cannot say which one"
+                    )
+            elif node.func.id in _NAMESPACE_ESCAPES:
+                unresolved.append(f"`{node.func.id}(...)` exposes every field at once")
+    return _FieldAccess(names=frozenset(names), unresolved=tuple(unresolved))
 
 
 @dataclass(frozen=True)
@@ -925,14 +980,29 @@ def audit_boundary(
     for module in modules:
         if not module.exists():
             continue
-        attrs = _attribute_names(module.read_text(encoding="utf-8"))
-        hit = next((field for field in GATE_ONLY_OFFER_FIELDS if field in attrs), None)
-        detail = f"{module.name} reads .{hit}, a gate-only field (spec §5.3)" if hit else None
+        access = _field_access(module.read_text(encoding="utf-8"))
+        hit = next((f for f in GATE_ONLY_OFFER_FIELDS if f in access.names), None)
+        if hit is not None:
+            detail = f"{module.name} reads .{hit}, a gate-only field (spec §5.3)"
+        elif access.unresolved:
+            detail = (
+                f"{module.name} reaches fields this scan cannot resolve "
+                f"({'; '.join(sorted(set(access.unresolved)))}), so whether it reads a "
+                "gate-only field is unknown"
+            )
+        else:
+            detail = None
         results.append(
             {
                 "direction": "ranker_never_reads_a_gate_field",
                 "name": module.name,
+                # A scan that could not resolve every access has not cleared
+                # the module; it has failed to look. `match` stays True so it
+                # is never counted as a proven breach, and `resolved` carries
+                # the difference to `measure_boundary`, which refuses to
+                # report a number over it.
                 "match": hit is None,
+                "resolved": hit is not None or not access.unresolved,
                 "detail": detail,
             }
         )
@@ -1003,6 +1073,17 @@ def measure_boundary(results: list[dict[str, Any]] | None = None) -> dict[str, A
     scans = [r for r in results if r["direction"] == "ranker_never_reads_a_gate_field"]
     offer_cases = [r for r in results if r["direction"] == "gate_verdict_matches_expectation"]
     violations = [r for r in results if not r["match"]]
+    # A module whose accesses this scan could not resolve has not been
+    # cleared — the question was never answered. Reporting
+    # `gate_fields_read_by_the_ranker: 0` over it would be the empty-input
+    # failure wearing a full denominator: a zero obtained by not looking.
+    # `unmeasured` is the reading that says so, and exits 3 rather than 0.
+    opaque = [r for r in scans if not r.get("resolved", True)]
+    if opaque:
+        return _unmeasured_boundary(
+            "; ".join(str(r["detail"]) for r in opaque),
+            results,
+        )
     return {
         "gate_fields_read_by_the_ranker": len([r for r in scans if not r["match"]]),
         "gate_verdicts_mismatching_expectation": len([r for r in offer_cases if not r["match"]]),
