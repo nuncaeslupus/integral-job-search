@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -201,6 +202,21 @@ def _outside_block(findings: Sequence[OutsideFinding]) -> str:
     return f"\n  {NOT_FROM_THE_ADVERT.capitalize()}:\n{lines}\n"
 
 
+def _excluded_line(entry: Mapping[str, Any], by_id: Mapping[str, Offer]) -> str:
+    """The one line `_excluded_block` renders for a single exclusion.
+
+    Shared with the gate check so both readings agree by construction: a
+    check that reformats the entry on its own can drift from what the page
+    actually renders and pass on wording nobody wrote.
+    """
+    offer = by_id.get(str(entry.get("offer_id")))
+    name = (offer.title if offer is not None else None) or str(entry.get("offer_id"))
+    quote = (entry.get("quote") or "").strip()
+    reason = entry.get("reason") or UNKNOWN
+    cited = f'"{quote}"' if quote else NO_REASON_GIVEN
+    return f"  - {name} ({reason}): {cited}"
+
+
 def _excluded_block(excluded: Sequence[Mapping[str, Any]], by_id: Mapping[str, Offer]) -> str:
     """The **Excluded** section: what was removed, and the advert's own sentence
     it was removed for.
@@ -219,14 +235,7 @@ def _excluded_block(excluded: Sequence[Mapping[str, Any]], by_id: Mapping[str, O
     """
     if not excluded:
         return ""
-    lines = []
-    for entry in excluded:
-        offer = by_id.get(str(entry.get("offer_id")))
-        name = (offer.title if offer is not None else None) or str(entry.get("offer_id"))
-        quote = (entry.get("quote") or "").strip()
-        reason = entry.get("reason") or UNKNOWN
-        cited = f'"{quote}"' if quote else NO_REASON_GIVEN
-        lines.append(f"  - {name} ({reason}): {cited}")
+    lines = [_excluded_line(entry, by_id) for entry in excluded]
     return "\n".join(
         [
             "",
@@ -595,22 +604,25 @@ def _t87_page(limit: int = DEFAULT_LIMIT) -> tuple[dict[str, Any], str]:
 
 
 def excluded_offers_missing_from_the_page(
-    renderings: Sequence[tuple[Mapping[str, Any], str]],
+    renderings: Sequence[tuple[Mapping[str, Any], str, Mapping[str, Offer]]],
 ) -> int:
     """Exclusions the ranking made that the page did not show, with wording.
 
-    An exclusion counts as shown only when its **verbatim quote** appears on the
-    page. Checking for the offer id, or for the heading, would pass a section
-    that listed what was removed and not why — and the reason a barred offer is
-    shown at all is that a false FAIL is invisible by construction. A verdict
-    the candidate cannot trace to a sentence in the advert is one they cannot
+    An exclusion counts as shown only when its **complete rendered line**
+    appears on the page — name, reason, and the verbatim quote together, not
+    the quote searched for on its own. A page-wide substring check on the
+    quote alone can pass with the entry never rendered: two exclusions that
+    happen to share a quote would let one line satisfy both, and a check
+    that only asks whether the offer id or heading is present would pass a
+    section that listed what was removed and not why. A verdict the
+    candidate cannot trace to a sentence in the advert is one they cannot
     dispute.
     """
     return sum(
         1
-        for ranking, page in renderings
+        for ranking, page, by_id in renderings
         for entry in ranking.get("excluded", ())
-        if not (entry.get("quote") or "").strip() or str(entry["quote"]).strip() not in page
+        if not (entry.get("quote") or "").strip() or _excluded_line(entry, by_id) not in page
     )
 
 
@@ -626,7 +638,7 @@ def _unmeasured_exclusions(reason: str) -> dict[str, Any]:
 def measure_exclusions_shown() -> dict[str, Any]:
     """T87's numbers: exclusions rendered with their wording, and proof the
     count can rise."""
-    offers, _, readings = _t87_fixture()
+    offers, candidates, readings = _t87_fixture()
     text_by_id = {offer.id: offer.text for offer in offers}
     for reading in readings:
         if reading.quote is not None and reading.quote not in text_by_id[reading.offer_id]:
@@ -639,14 +651,20 @@ def measure_exclusions_shown() -> dict[str, Any]:
     if not excluded:
         return _unmeasured_exclusions("the ranking excluded nothing, so the section showed nothing")
 
-    missing = excluded_offers_missing_from_the_page([(ranking, page)])
+    by_id = {offer.id: offer for offer in offers}
+    missing = excluded_offers_missing_from_the_page([(ranking, page, by_id)])
     # Take the section off the page. If the count does not rise, it is not
     # reading the page and a zero certifies the fixture rather than the code.
     stripped = page.split(f"\n{EXCLUDED_HEADING} (")[0]
-    planted = excluded_offers_missing_from_the_page([(ranking, stripped)])
+    planted = excluded_offers_missing_from_the_page([(ranking, stripped, by_id)])
 
     flagged = list(ranking["flagged"])
     carded = [offer_id for offer_id in ranking["pareto"][:DEFAULT_LIMIT]]
+    # Same explanations `_t87_page` fed to `render` — `explain` is pure, so
+    # recomputing it here reproduces the exact card text rather than
+    # approximating it.
+    explanations = explain(ranking, candidates, _FIXTURE_WEIGHTS)
+    stated_match = re.search(rf"{re.escape(EXCLUDED_HEADING)} \((\d+)\)", page)
     return {
         "excluded_offers_missing_from_the_page": missing,
         "excluded_offers_missing_from_the_page_evaluated": len(excluded),
@@ -654,17 +672,26 @@ def measure_exclusions_shown() -> dict[str, Any]:
         # The heading states the number rather than leaving it to be counted,
         # and the section is never cut to `limit` — D-18's rule is that the
         # withheld count is reported, and a truncated list under a correct
-        # count is the same silence with a number on top.
-        "excluded_count_stated_on_the_page": int(f"{EXCLUDED_HEADING} ({len(excluded)})" in page),
+        # count is the same silence with a number on top. Read literally off
+        # the page, not asserted as a match, so a wrong number shows itself
+        # as a wrong number rather than as a passing boolean.
+        "excluded_count_stated_on_the_page": int(stated_match.group(1)) if stated_match else -1,
         "excluded_offers_carded": sum(
             1
             for entry in excluded
             if (url := next((o.url for o in offers if o.id == entry["offer_id"]), None))
             and url in page
         ),
-        # §5.4's other half: a FLAG is ranked *and* marked.
+        # §5.4's other half: a FLAG is ranked *and* marked. Checked by
+        # re-rendering each flagged offer's own card with its marker set and
+        # requiring that exact card in the page, not by asking whether the
+        # marker appears anywhere on it — a page-wide search is satisfied by
+        # one marker no matter how many flagged offers there are.
         "flagged_offers_marked": sum(
-            1 for offer_id in flagged if offer_id in carded and FLAG_MARKER in page
+            1
+            for offer_id in flagged
+            if offer_id in carded
+            and card(by_id[offer_id], explanations.get(offer_id), None, (), flagged=True) in page
         ),
         "flagged_offers_evaluated": len(flagged),
         "gate_status": "measured",
