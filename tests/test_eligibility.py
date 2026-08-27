@@ -10,14 +10,16 @@ handling, the empty-input-set honesty — never accuracy on a real advert.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import json
 from pathlib import Path
 
 import pytest
 
-from integral import eligibility
+from integral import eligibility, rank
 from integral.eligibility import UNKNOWN_CANDIDATE, CandidateEligibility
-from integral.offers import connect_manual
+from integral.offers import LanguageRequirement, Offer, compute_offer_id, connect_manual
 
 
 def test_a_stated_citizenship_requirement_excludes_the_offer() -> None:
@@ -321,6 +323,286 @@ def test_the_requirement_noun_is_not_a_target() -> None:
 
 
 # ---------------------------------------------------------------------------
+# T78 — `offer.language_requirement`, a hard field the ranker never reads
+#
+# Settled by the owner, 2026-08-25: the language gate reads its own hard
+# field rather than `dimensions/english_demand.yaml`'s soft, scored
+# preference. Two directions of the same boundary (spec §5.3), because a
+# preference weight cancelling a legal or linguistic bar would be invisible
+# in any output either layer produces — appended here rather than
+# interleaved, per T78's lane.
+
+
+def _language_offer(
+    text: str,
+    *,
+    requirement_language: str,
+    applies_to: str = "role",
+    quote: str | None = None,
+    offer_language: str | None = None,
+) -> Offer:
+    return Offer(
+        id=compute_offer_id(text),
+        source="manual",
+        text=text,
+        language=offer_language,  # type: ignore[arg-type]
+        language_requirement=LanguageRequirement(
+            language=requirement_language,
+            level_stated=None,
+            quote=quote or text,
+            applies_to=applies_to,  # type: ignore[arg-type]
+        ),
+    )
+
+
+def test_a_hard_gate_field_is_never_read_by_the_ranker() -> None:
+    """Direction 1 of spec §5.3's boundary: `rank.py` and `scoring.py` — the
+    two modules the boundary table names as "the ranker" — must never access
+    `.language_requirement` or `.eligibility` on anything. A hit would mean
+    the preference layer can see a field only the hard gate may read."""
+    results = [
+        r
+        for r in eligibility.audit_boundary()
+        if r["direction"] == "ranker_never_reads_a_gate_field"
+    ]
+
+    assert results, "the ranker modules must actually have been scanned, not skipped"
+    assert all(r["match"] for r in results), [r["detail"] for r in results if not r["match"]]
+
+
+_RANKING_MODULES = frozenset({"rank", "scoring", "weights"})
+
+
+def _imported_names(source: str) -> frozenset[str]:
+    """Every module name `source` imports, by any form.
+
+    `from integral import rank` puts `integral` in `ImportFrom.module` and
+    `rank` in its `names` — so collecting only `.module` sees the package and
+    misses the module, which is the one that matters here. Both are collected,
+    for both statement forms.
+    """
+    tree = ast.parse(source)
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module:
+                names.add(node.module.split(".")[-1])
+            names.update(alias.name.split(".")[-1] for alias in node.names)
+        elif isinstance(node, ast.Import):
+            names.update(alias.name.split(".")[-1] for alias in node.names)
+    return frozenset(names)
+
+
+def test_the_import_audit_catches_every_form_a_ranking_module_could_arrive_by() -> None:
+    """The negative control for the assertion above.
+
+    An audit that cannot see the import it is looking for would pass silently
+    forever. `from integral import rank` is the form that slipped through a
+    first version of this check, so each form is pinned here.
+    """
+    assert "rank" in _imported_names("from integral import rank\n")
+    assert "rank" in _imported_names("from integral.rank import priced_dimensions\n")
+    assert "rank" in _imported_names("import integral.rank\n")
+    assert "rank" in _imported_names("from integral import rank as r\n")
+    assert "rank" not in _imported_names("from integral.offers import Offer\n")
+
+
+def test_a_dimension_weight_cannot_change_a_gate_verdict() -> None:
+    """Direction 2: no dimension weight can reach this gate's verdict.
+
+    The guarantee is structural — `evaluate_offer` takes no weights argument,
+    so there is no path by which one could arrive — and that is what this test
+    pins. Calling `evaluate_offer(offer, candidate)` twice and comparing the
+    two results cannot establish it: both calls pass identical arguments, so
+    the comparison holds for any deterministic function and would keep holding
+    if someone added a `weights=` parameter with a default. Asserting the
+    signature is what actually fails when the boundary is breached.
+    """
+    parameters = inspect.signature(eligibility.evaluate_offer).parameters
+    assert list(parameters) == ["offer", "candidate"], (
+        "evaluate_offer grew a parameter: if a weight can be passed in, the gate "
+        "and the ranker share a channel neither output layer would ever show"
+    )
+    assert list(inspect.signature(eligibility.evaluate_text).parameters) == [
+        "offer_id",
+        "text",
+        "candidate",
+    ]
+
+    imported = _imported_names(Path(eligibility.__file__).read_text(encoding="utf-8"))
+    assert not imported & _RANKING_MODULES, (
+        "eligibility imported a ranking module — the weight could reach the gate "
+        f"through it: {sorted(imported & _RANKING_MODULES)}"
+    )
+
+    # With the structure pinned above, the behavioural half is worth stating:
+    # two genuinely different weight scenarios, and a verdict that is the
+    # offer's alone under both.
+    offer = _language_offer(
+        "Backend Engineer, remote. German is required for this role.",
+        requirement_language="de",
+    )
+    candidate = CandidateEligibility(languages=("en",))
+
+    low = rank.priced_dimensions(
+        {"part_worths": {"english_demand": {"salary_equivalent_per_month": -5000.0}}}
+    )
+    high = rank.priced_dimensions(
+        {"part_worths": {"english_demand": {"salary_equivalent_per_month": 5000.0}}}
+    )
+    assert low != high, "the two weight scenarios must genuinely differ, or this proves nothing"
+
+    assert eligibility.evaluate_offer(offer, candidate).verdict == "FAIL"
+
+
+def test_the_role_language_is_read_not_the_adverts_own_language() -> None:
+    """A Catalan advert for a role needing only Spanish demands Spanish —
+    reading `Offer.language` (what the advert is written in) instead of
+    `language_requirement.language` (what the role demands) is the exact
+    mistake this task exists to prevent."""
+    offer = _language_offer(
+        "Es requereix castella per a aquest lloc de treball.",
+        requirement_language="es",
+        offer_language="ca",
+    )
+    candidate = CandidateEligibility(languages=("ca",))
+
+    reading = eligibility.evaluate_offer(offer, candidate)
+
+    assert reading.verdict == "FAIL"
+    assert reading.reason == "language"
+
+
+def test_the_role_language_is_read_not_the_adverts_own_language_inverse() -> None:
+    """The inverse of the case above: an advert written in English for a
+    role that explicitly requires Catalan. A gate that read `Offer.language`
+    would see "en" and never look for a bar at all."""
+    offer = _language_offer(
+        "Customer-facing role. Catalan is required for this position.",
+        requirement_language="ca",
+        offer_language="en",
+    )
+    candidate = CandidateEligibility(languages=("en",))
+
+    reading = eligibility.evaluate_offer(offer, candidate)
+
+    assert reading.verdict == "FAIL"
+    assert reading.reason == "language"
+
+
+def test_a_language_bar_the_candidate_meets_is_a_pass() -> None:
+    offer = _language_offer(
+        "Se requiere espanol fluido para el puesto.",
+        requirement_language="es",
+    )
+    candidate = CandidateEligibility(languages=("es", "en"))
+
+    reading = eligibility.evaluate_offer(offer, candidate)
+
+    assert reading.verdict == "PASS"
+
+
+def test_a_language_bar_with_unclear_candidate_status_is_flagged_not_failed() -> None:
+    """The candidate has never stated which languages they work in — FLAG,
+    never a confident FAIL over an absence of information, the same rule
+    every other requirement kind here follows."""
+    offer = _language_offer(
+        "Fluent German is required for this role.",
+        requirement_language="de",
+    )
+
+    reading = eligibility.evaluate_offer(offer, UNKNOWN_CANDIDATE)
+
+    assert reading.verdict == "FLAG"
+    assert reading.reason == "language"
+
+
+def test_a_company_wide_language_statement_does_not_gate_the_role() -> None:
+    """`applies_to == "company"` is a blanket statement about the employer,
+    not a role-level bar — the same principle `COMPANY_WIDE_WELCOME_RE`
+    applies to citizenship and permits, applied here to language. It must
+    produce no requirement at all, never a PASS or a FAIL either one."""
+    offer = _language_offer(
+        "Data Analyst. Our company's internal working language is English.",
+        requirement_language="en",
+        applies_to="company",
+    )
+
+    reading = eligibility.evaluate_offer(offer, CandidateEligibility(languages=()))
+
+    assert reading.verdict == "PASS"
+    assert reading.requirements == ()
+
+
+def test_evaluate_text_never_sees_a_language_requirement() -> None:
+    """`evaluate_text` takes raw text, not a structured `Offer` — it has no
+    way to see `language_requirement` and must never invent one, even when
+    the text itself talks about a language bar in citizenship-style
+    wording."""
+    reading = eligibility.evaluate_text(
+        "offer-lang-text",
+        "German is required for this role.",
+        CandidateEligibility(languages=()),
+    )
+
+    assert reading.verdict == "PASS"
+    assert reading.requirements == ()
+
+
+def test_the_boundary_gate_does_not_pass_on_an_empty_input_set() -> None:
+    """A zero violation count over zero audit points is not a pass — the
+    same empty-input-set honesty `offers_ranked_despite_a_stated_disqualification`
+    already holds, pinned here for T78's own metric."""
+    measured = eligibility.measure_boundary([])
+
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["gate_fields_read_by_the_ranker"] == -1
+    assert measured["ranked_offers_evaluated"] == 0
+
+
+def test_the_real_boundary_probe_set_has_a_non_zero_denominator() -> None:
+    """`> 0` is too weak to catch the failure that matters here.
+
+    The audit mixes two kinds of point — module scans and offer cases — and
+    reporting the combined length as `ranked_offers_evaluated` claimed five
+    offers where three were seen. An inflated denominator makes a zero look
+    better supported than it is, so both counts are asserted exactly: a case
+    added or dropped has to be acknowledged here rather than sliding under a
+    `> 0`.
+    """
+    measured = eligibility.measure_boundary()
+
+    assert measured["gate_status"] == "measured"
+    assert measured["gate_fields_read_by_the_ranker"] == 0
+    assert measured["ranked_offers_evaluated"] == len(eligibility.WEIGHT_INVARIANCE_CASES) == 3
+    assert measured["ranker_modules_scanned"] == len(eligibility.RANKER_MODULES) == 2
+    assert measured["audit_points_evaluated"] == 5
+    assert measured["gate_verdicts_mismatching_expectation"] == 0
+
+
+def test_write_boundary_evidence_writes_t78_json(tmp_path: Path) -> None:
+    target = tmp_path / "T78.json"
+
+    measured = eligibility.write_boundary_evidence(target)
+
+    written = json.loads(target.read_text(encoding="utf-8"))
+    assert written == measured
+    assert written["gate_status"] == "measured"
+    assert written["gate_fields_read_by_the_ranker"] == 0
+
+
+def test_main_regenerates_t78_evidence_beside_t76(tmp_path: Path) -> None:
+    """`python -m integral.eligibility` writes T78's boundary evidence beside
+    T76's, in the same directory, without one gate's exit code masking the
+    other."""
+    t76_target = tmp_path / "T76.json"
+
+    exit_code = eligibility._main(["eligibility", str(t76_target)])
+
+    assert exit_code == 0
+    t78_written = json.loads((tmp_path / "T78.json").read_text(encoding="utf-8"))
+    assert t78_written["gate_status"] == "measured"
+    assert t78_written["gate_fields_read_by_the_ranker"] == 0
 # T77 — every FAIL and every FLAG carries the advert's own sentence
 
 
@@ -445,3 +727,173 @@ def test_main_writes_t77_evidence_beside_t76(tmp_path: Path) -> None:
     assert t77_written["gate_status"] == "measured"
     assert t77_written["disqualification_verdicts_without_quoted_wording"] == 0
     assert t77_written["disqualification_verdicts_evaluated"] > 0
+
+
+def test_a_language_quote_the_advert_never_contained_is_a_schema_violation() -> None:
+    """T78 introduced a second source of requirements, and it is the one most
+    able to carry text the advert never held.
+
+    The other three kinds are found by a regex *over* the advert, so their
+    quote is a span by construction. A language bar instead comes from the
+    structured `offer.language_requirement`, whose `quote` is whatever the
+    connector put there — so nothing about how it was produced guarantees it
+    appears in `offer.text`. Without a check, T78 would have opened a path
+    around T77's whole guarantee: a candidate shown a sentence, attributed to
+    the advert, that the advert never contained.
+
+    `evaluate_offer` holds both sources to the same bar, so this raises.
+    """
+    offer = _language_offer(
+        "Backend Engineer, remote. German is required for this role.",
+        requirement_language="de",
+        quote="Fluent Klingon is required for this role.",
+    )
+
+    with pytest.raises(eligibility.QuoteProvenanceError):
+        eligibility.evaluate_offer(offer, CandidateEligibility(languages=("en",)))
+
+
+def test_a_language_quote_that_is_a_real_span_is_accepted() -> None:
+    """The other half of the case above: the check rejects fabrication, not
+    structured language requirements as such."""
+    offer = _language_offer(
+        "Backend Engineer, remote. German is required for this role.",
+        requirement_language="de",
+        quote="German is required for this role.",
+    )
+
+    reading = eligibility.evaluate_offer(offer, CandidateEligibility(languages=("en",)))
+
+    assert reading.verdict == "FAIL"
+
+
+def test_a_verdict_mismatch_is_not_reported_as_the_ranker_reading_a_gate_field() -> None:
+    """The two directions fail for different reasons and must count separately.
+
+    Folding both into `gate_fields_read_by_the_ranker` meant a regression in
+    *this* gate — a verdict no longer matching its expectation — was reported
+    as `rank.py` having read a gate-only field. The reader would go and inspect
+    a module that did nothing wrong. A metric that misnames its own failure
+    costs more than no metric, because disproving it takes longer than reading
+    it.
+    """
+    results = [
+        {
+            "direction": "ranker_never_reads_a_gate_field",
+            "name": "rank.py",
+            "match": True,
+            "detail": None,
+        },
+        {
+            "direction": "gate_verdict_matches_expectation",
+            "name": "a-language-bar",
+            "match": False,
+            "detail": "expected FAIL, got PASS",
+        },
+    ]
+
+    measured = eligibility.measure_boundary(results)
+
+    assert measured["gate_fields_read_by_the_ranker"] == 0
+    assert measured["gate_verdicts_mismatching_expectation"] == 1
+
+
+def test_the_cli_fails_when_a_verdict_mismatches_even_with_a_clean_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A count that is reported but never gates is decoration.
+
+    `_score` folds in the metric it is handed, so the second count has to be
+    checked explicitly or a verdict regression would be written to the evidence
+    file and exit 0 anyway.
+    """
+    clean_scan = {
+        "direction": "ranker_never_reads_a_gate_field",
+        "name": "rank.py",
+        "match": True,
+        "detail": None,
+    }
+    bad_verdict = {
+        "direction": "gate_verdict_matches_expectation",
+        "name": "a-language-bar",
+        "match": False,
+        "detail": "expected FAIL, got PASS",
+    }
+    monkeypatch.setattr(eligibility, "audit_boundary", lambda: [clean_scan, bad_verdict])
+
+    exit_code = eligibility._main(["eligibility", str(tmp_path / "T76.json")])
+
+    assert exit_code == 1
+
+
+def test_the_boundary_scan_catches_every_form_a_gate_field_could_be_read_by() -> None:
+    """A ranker does not have to write `offer.language_requirement` to read
+    it. `getattr(offer, "language_requirement")` is an `ast.Call` carrying
+    the name in a `Constant` argument, and a scan that walks only
+    `ast.Attribute` nodes reports a clean boundary over it — a zero the gate
+    did not earn, in the one direction it exists to close.
+
+    Each form is pinned separately so a regression names which route
+    reopened, and the last two pin the false positives that made an AST walk
+    the right choice in the first place.
+    """
+    reads = {
+        "attribute": "def f(o):\n    return o.language_requirement\n",
+        "getattr": 'def f(o):\n    return getattr(o, "language_requirement")\n',
+        "hasattr": 'def f(o):\n    return hasattr(o, "language_requirement")\n',
+        "setattr": 'def f(o, v):\n    setattr(o, "eligibility", v)\n',
+    }
+    for form, source in reads.items():
+        names = eligibility._field_access(source).names
+        hit = next((f for f in eligibility.GATE_ONLY_OFFER_FIELDS if f in names), None)
+        assert hit is not None, f"a {form} read of a gate-only field went unseen"
+
+    ignored = {
+        "docstring": '"""Never reads language_requirement."""\ndef f(o):\n    return o.salary\n',
+        "unrelated field": "def f(o):\n    return o.salary + o.seniority\n",
+    }
+    for form, source in ignored.items():
+        names = eligibility._field_access(source).names
+        hit = next((f for f in eligibility.GATE_ONLY_OFFER_FIELDS if f in names), None)
+        assert hit is None, f"a {form} must not be reported as a gate-field read"
+
+
+def test_an_access_the_scan_cannot_resolve_is_unmeasured_not_a_clean_zero(
+    tmp_path: Path,
+) -> None:
+    """`getattr(offer, key)` names its field at runtime. The scan cannot say
+    whether that field is a gate-only one, and the honest reading of a
+    question never answered is `unmeasured` — not the `0` that means "looked
+    and found none".
+
+    This is the empty-input failure with a full denominator: a count of zero
+    obtained by not looking. `-1`, never `0`, for the same reason
+    `_unmeasured_boundary` uses it everywhere else.
+    """
+    for opaque in (
+        "def score(o, key):\n    return getattr(o, key)\n",
+        'def score(o):\n    return o.__dict__["language_requirement"]\n',
+        "def score(o):\n    return vars(o)\n",
+    ):
+        module = tmp_path / "rank.py"
+        module.write_text(opaque, encoding="utf-8")
+
+        measured = eligibility.measure_boundary(eligibility.audit_boundary(modules=(module,)))
+
+        assert measured["gate_status"] == "unmeasured", opaque
+        assert measured["gate_fields_read_by_the_ranker"] == -1
+        assert "cannot resolve" in measured["unmeasured_reason"]
+
+
+def test_a_resolvable_ranker_module_still_measures_clean(tmp_path: Path) -> None:
+    """The counterpart to the case above, and the reason it is not enough to
+    make every scan unmeasured: a module whose accesses all resolve, and
+    which reads no gate-only field, must still produce a measured zero."""
+    module = tmp_path / "rank.py"
+    module.write_text("def score(o):\n    return o.salary + o.seniority\n", encoding="utf-8")
+
+    measured = eligibility.measure_boundary(eligibility.audit_boundary(modules=(module,)))
+
+    assert measured["gate_status"] == "measured"
+    assert measured["gate_fields_read_by_the_ranker"] == 0
+    assert measured["ranker_modules_scanned"] == 1
