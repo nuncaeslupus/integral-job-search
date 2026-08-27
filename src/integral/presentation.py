@@ -42,6 +42,7 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from string import Template
@@ -617,13 +618,27 @@ def excluded_offers_missing_from_the_page(
     section that listed what was removed and not why. A verdict the
     candidate cannot trace to a sentence in the advert is one they cannot
     dispute.
+
+    **Counted by occurrence, not by membership.** Two exclusions can render
+    the *identical* line — same name, same reason, same quote — and `in`
+    only asks whether the line appears at all, so one rendered copy would
+    satisfy both entries and a dropped second exclusion would go uncounted.
+    `page.count(line)` against how many entries expect that exact line is
+    what a second, third, or further duplicate is actually checked against.
     """
-    return sum(
-        1
-        for ranking, page, by_id in renderings
-        for entry in ranking.get("excluded", ())
-        if not (entry.get("quote") or "").strip() or _excluded_line(entry, by_id) not in page
-    )
+    missing = 0
+    for ranking, page, by_id in renderings:
+        expected_lines: Counter[str] = Counter()
+        for entry in ranking.get("excluded", ()):
+            if not (entry.get("quote") or "").strip():
+                missing += 1
+                continue
+            expected_lines[_excluded_line(entry, by_id)] += 1
+        for line, expected in expected_lines.items():
+            shown = page.count(line)
+            if shown < expected:
+                missing += expected - shown
+    return missing
 
 
 def _unmeasured_exclusions(reason: str) -> dict[str, Any]:

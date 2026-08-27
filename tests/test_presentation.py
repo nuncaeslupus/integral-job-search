@@ -472,6 +472,38 @@ def test_a_page_wide_quote_search_misses_a_dropped_exclusion_line() -> None:
     assert presentation.excluded_offers_missing_from_the_page([(ranking, page, by_id)]) == 1
 
 
+def test_two_exclusions_with_the_byte_identical_line_are_each_counted() -> None:
+    """Two entries can render the *exact same* line — same name, same reason,
+    same quote, from two different offers whose titles happen to coincide.
+    `in` only asks whether the line appears at all: one rendered copy would
+    satisfy both entries and a dropped second exclusion would go uncounted.
+    `page.count(line)` against how many entries expect it is what catches a
+    second copy that never made it onto the page."""
+    offers, _, _ = presentation._t87_fixture()
+    same_titled = offers[1].model_copy(update={"title": offers[0].title})
+    by_id = {offers[0].id: offers[0], offers[1].id: same_titled}
+    quote = "must hold German citizenship"
+    entries = [
+        {"offer_id": offers[0].id, "reason": "citizenship", "quote": quote},
+        {"offer_id": offers[1].id, "reason": "citizenship", "quote": quote},
+    ]
+    ranking = {"excluded": entries}
+    line = presentation._excluded_line(entries[0], by_id)
+    assert presentation._excluded_line(entries[1], by_id) == line, "the two lines must be identical"
+
+    # Only one copy of the (identical) line is on the page — the second
+    # exclusion was dropped, and a bare `in` check would miss that.
+    page = line
+    assert presentation.excluded_offers_missing_from_the_page([(ranking, page, by_id)]) == 1
+
+    # Both copies present: nothing missing.
+    page_with_both = f"{line}\n{line}"
+    missing_with_both = presentation.excluded_offers_missing_from_the_page(
+        [(ranking, page_with_both, by_id)]
+    )
+    assert missing_with_both == 0
+
+
 def test_a_page_wide_marker_search_misses_an_unmarked_flagged_card() -> None:
     """Two flagged offers must each be checked against its own rendered card.
     A page-wide search for the marker text is satisfied by either card and
