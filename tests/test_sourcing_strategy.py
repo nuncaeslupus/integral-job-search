@@ -200,9 +200,7 @@ def test_every_proposal_states_its_reason_in_candidate_terms() -> None:
             facet="employer",
             reason="  ",
             alternatives=(
-                ScopeAlternative(
-                    direction="widen", facet="country", reason="or look further out"
-                ),
+                ScopeAlternative(direction="widen", facet="country", reason="or look further out"),
             ),
         )
 
@@ -322,9 +320,7 @@ def test_a_refusal_is_recorded_as_evidence_not_as_a_veto() -> None:
         apply_scope_change(_WIDEN_COUNTRY, log=(refusal,))
     # Not a veto either, and not permanent. A new session may ask again…
     assert (
-        refusal_forbidding(
-            _WIDEN_COUNTRY, session="cse_later", trigger=_TRIGGER, log=(refusal,)
-        )
+        refusal_forbidding(_WIDEN_COUNTRY, session="cse_later", trigger=_TRIGGER, log=(refusal,))
         is None
     )
     # …so may a changed trigger…
@@ -401,6 +397,8 @@ def test_the_consent_evidence_file_carries_the_gate_key(tmp_path: Path) -> None:
     measured = write_consent_evidence(target)
     assert json.loads(target.read_text(encoding="utf-8")) == measured
     assert measured["narrowings_without_a_recorded_decision"] == 0
+
+
 # --- T68: the cycle improves, or it says why ------------------------------
 #
 # `status/specs/iterative-sourcing.md` §1, the `cycle_rejection_rate` row:

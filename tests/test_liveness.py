@@ -195,8 +195,7 @@ def test_a_listings_page_that_mentions_the_vacancy_is_not_the_advert() -> None:
     `CISO`. One that does — a nav item, a card for a neighbouring role, a
     JSON-LD payload — read as the advert and was presented."""
     listings = (
-        "<h1>Ofertas de empleo</h1>"
-        "<ul><li><a href=/jobs/ciso-madrid>CISO Madrid</a></li></ul>"
+        "<h1>Ofertas de empleo</h1><ul><li><a href=/jobs/ciso-madrid>CISO Madrid</a></li></ul>"
     )
 
     assert liveness.title_in_body("CISO", listings) is False

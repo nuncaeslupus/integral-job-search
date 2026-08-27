@@ -663,10 +663,7 @@ PROBES: tuple[Probe, ...] = (
     ),
     Probe(
         name="soft-language-in-a-neighbouring-sentence-does-not-soften-a-bar",
-        text=(
-            "Relevant certifications are a plus. "
-            "Applicants must hold German citizenship."
-        ),
+        text=("Relevant certifications are a plus. Applicants must hold German citizenship."),
         candidate=CandidateEligibility(citizenships=()),
         expected="FAIL",
         is_disqualification=True,
@@ -1234,8 +1231,7 @@ def _main(argv: list[str]) -> int:
             exit_code = max(exit_code, 1)
         elif measured["gate_status"] == "unmeasured":
             print(
-                f"{key}: UNMEASURED — {measured['unmeasured_reason']}. "
-                "Not a pass and not a fail.",
+                f"{key}: UNMEASURED — {measured['unmeasured_reason']}. Not a pass and not a fail.",
                 file=sys.stderr,
             )
             exit_code = max(exit_code, 3)

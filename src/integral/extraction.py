@@ -366,7 +366,9 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
         i
         for i, span in enumerate(spans)
         if not any(
-            j != i and other.start <= span.start and span.end <= other.end
+            j != i
+            and other.start <= span.start
+            and span.end <= other.end
             and (other.end - other.start) > (span.end - span.start)
             for j, other in enumerate(spans)
         )

@@ -54,6 +54,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from integral.eligibility import Reading
 from integral.extraction import OfferExtraction
 from integral.identity import ProfileStore
 from integral.profile import ProfileRevision
@@ -64,6 +65,7 @@ METHODS_REF = "METHODS.md#43-offer-comparison--pareto-dominance-then-salary-equi
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T18.json"
+DEFAULT_T79_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T79.json"
 
 #: How `rankings/<run_id>.json` names an offer's collapser (spec §5.5).
 DOMINATED_BY = "dominated_by:"
@@ -249,6 +251,7 @@ def rank(
     weights: Mapping[str, Any] | None,
     at: str,
     currency: str | None = None,
+    readings: Sequence[Reading] = (),
 ) -> dict[str, Any]:
     """`rankings/<run_id>.json` — spec §5.5, minus T19's `explanations`.
 
@@ -266,6 +269,16 @@ def rank(
             f"{currency!r} — converting between them is not this module's guess to make"
         )
     level: Sufficiency = "L2" if priced else "L1"
+
+    # T79. A FAIL is removed *before* the frontier, not scored badly inside it:
+    # dominance over a barred offer is meaningless, and an exclusion that
+    # arrives as a very low total is one the candidate can still be shown. A
+    # FLAG is the opposite — spec §5.4 keeps it ranked, marked, and lets the
+    # human be the tiebreaker.
+    excluded = exclusions(readings)
+    barred = {entry["offer_id"] for entry in excluded}
+    candidates = [candidate for candidate in candidates if candidate.offer_id not in barred]
+    flagged = sorted({reading.offer_id for reading in readings if reading.verdict == "FLAG"})
 
     kept, dominated = frontier(candidates, dimensions)
     by_id = {candidate.offer_id: candidate for candidate in candidates}
@@ -291,6 +304,8 @@ def rank(
         "dimensions": list(dimensions),
         "pareto": ordered,
         "dominated": dominated,
+        "excluded": excluded,
+        "flagged": flagged,
         "facets": _facets(ordered, by_id, dimensions, totals),
         "salary_equivalent_total": totals,
         "unknown_dimensions": {
@@ -338,6 +353,35 @@ def _facets(
                 offer_id for offer_id, value in scored.items() if value == best_score
             )
     return facets
+
+
+def exclusions(readings: Sequence[Reading]) -> list[dict[str, Any]]:
+    """The **Excluded** section — one entry per FAIL, carrying the advert's own
+    sentence.
+
+    Rendered from the reading, never assembled: D-17's lesson for the card
+    applies here too. The list is always emitted, empty or not, because a
+    withheld offer that is silently dropped looks identical to an offer that
+    was never found — D-18's rule, one layer on.
+    """
+    return [
+        {"offer_id": reading.offer_id, "reason": reading.reason, "quote": reading.quote}
+        for reading in readings
+        if reading.verdict == "FAIL"
+    ]
+
+
+def excluded_offers_without_a_reason(ranking: Mapping[str, Any]) -> int:
+    """T79's gate: an exclusion shown without the wording it was excluded for.
+
+    A verdict the candidate cannot trace to a sentence in the advert is one
+    they cannot dispute, which is exactly how a false FAIL stays invisible.
+    """
+    return sum(
+        1
+        for entry in ranking.get("excluded", ())
+        if not entry.get("reason") or not (entry.get("quote") or "").strip()
+    )
 
 
 def dominance_violations(ranking: Mapping[str, Any], candidates: Sequence[Candidate]) -> int:
@@ -412,6 +456,27 @@ _FIXTURE: tuple[tuple[str, float | None, dict[str, float]], ...] = (
     ("sha256:" + "6" * 64, None, {"remote": 1.0, "commute": 1.0, "mentoring": 1.0}),
 )
 _FIXTURE_DIMENSIONS = ("commute", "mentoring", "remote")
+
+#: T79's fixture verdicts. The FAIL is on offer 2 — the highest-paid one, which
+#: the frontier would otherwise keep — so the gate measures an exclusion that
+#: had somewhere to be excluded *from*. Excluding a collapsed offer would prove
+#: nothing.
+_FIXTURE_READINGS: tuple[Reading, ...] = (
+    Reading(
+        offer_id="sha256:" + "2" * 64,
+        verdict="FAIL",
+        reason="citizenship",
+        quote="must hold German citizenship",
+        requirements=(),
+    ),
+    Reading(
+        offer_id="sha256:" + "3" * 64,
+        verdict="FLAG",
+        reason="clearance",
+        quote="An active security clearance is a plus",
+        requirements=(),
+    ),
+)
 _FIXTURE_WEIGHTS: dict[str, Any] = {
     "currency": "EUR",
     "part_worths": {
@@ -477,6 +542,77 @@ def measure() -> dict[str, Any]:
     }
 
 
+def measure_exclusions() -> dict[str, Any]:
+    """T79's numbers: exclusions rendered, how many arrived without a reason,
+    and proof the count can rise."""
+    candidates = _fixture_candidates()
+    ranking = rank(
+        candidates,
+        dimensions=_FIXTURE_DIMENSIONS,
+        revision=ProfileRevision(rows=len(_FIXTURE), sha256="0" * 64),
+        weights=_FIXTURE_WEIGHTS,
+        at="2026-08-24T00:00:00Z",
+        readings=_FIXTURE_READINGS,
+    )
+    shown: list[dict[str, Any]] = list(ranking["excluded"])
+    if not shown:
+        # Nothing was excluded, so nothing can be scored. A zero here would be
+        # a violation count over an empty set — the exact silent success this
+        # increment exists to refuse.
+        return {
+            "excluded_offers_shown_without_a_reason": -1,
+            "excluded_offers_shown_without_a_reason_evaluated": 0,
+            "excluded_offers_evaluated": len(_FIXTURE_READINGS),
+            "gate_status": "unmeasured",
+            "reason": "no offer was excluded, so the Excluded section rendered nothing to score",
+            "excluded": [],
+        }
+
+    without = excluded_offers_without_a_reason(ranking)
+    # Strip one entry's quote and the audit has to notice. Without this the
+    # gate would certify a section that never carried a reason at all.
+    planted = excluded_offers_without_a_reason(
+        {**ranking, "excluded": [{**shown[0], "quote": None}, *shown[1:]]}
+    )
+
+    return {
+        "excluded_offers_shown_without_a_reason": without,
+        "excluded_offers_shown_without_a_reason_evaluated": len(shown),
+        "excluded_offers_evaluated": len(_FIXTURE_READINGS),
+        "violation_detected_when_planted": int(planted > without),
+        "excluded_offers_reaching_the_frontier": sum(
+            1 for entry in shown if entry["offer_id"] in ranking["pareto"]
+        ),
+        # A FLAG is kept, so its denominator is the FLAGs the fixture states
+        # and the two must be equal. Recording only the retained count would
+        # let a regression that drops every FLAG report a clean `0` — the
+        # violation-count-over-an-empty-set failure this gate exists to refuse,
+        # reproduced one field along.
+        "flagged_offers_evaluated": sum(
+            1 for reading in _FIXTURE_READINGS if reading.verdict == "FLAG"
+        ),
+        # `pareto` *and* `dominated`: a FLAG is kept, and being kept means
+        # entering the comparison — which a dominated offer did. Counting only
+        # the frontier would report a correctly-retained FLAG as dropped the
+        # moment another offer dominated it, failing the gate over the one
+        # behaviour it is checking.
+        "flagged_offers_still_ranked": sum(
+            1
+            for offer_id in ranking["flagged"]
+            if offer_id in ranking["pareto"] or offer_id in ranking["dominated"]
+        ),
+        "gate_status": "measured",
+        "excluded": shown,
+    }
+
+
+def write_exclusion_evidence(evidence: Path = DEFAULT_T79_EVIDENCE_PATH) -> dict[str, Any]:
+    measured = measure_exclusions()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     measured = measure()
     evidence.parent.mkdir(parents=True, exist_ok=True)
@@ -495,6 +631,28 @@ def _main(argv: list[str]) -> int:
         return 1
     if not measured["violation_detected_when_planted"]:
         print("the audit did not rise when a dominated offer was planted", file=sys.stderr)
+        return 1
+
+    # T79 rides beside T18 rather than replacing it — one module, two gates,
+    # two evidence files, as the task requires.
+    shown = write_exclusion_evidence(args.evidence.parent / "T79.json")
+    print(
+        "excluded_offers_shown_without_a_reason: "
+        f"{shown['excluded_offers_shown_without_a_reason']} (== 0)"
+    )
+    if shown["gate_status"] != "measured":
+        print(f"T79 cannot be scored: {shown['reason']}", file=sys.stderr)
+        return 1
+    if shown["excluded_offers_shown_without_a_reason"] != 0:
+        return 1
+    if not shown["violation_detected_when_planted"]:
+        print("the audit did not rise when a reason was stripped", file=sys.stderr)
+        return 1
+    if shown["excluded_offers_reaching_the_frontier"]:
+        print("an excluded offer reached the frontier", file=sys.stderr)
+        return 1
+    if shown["flagged_offers_still_ranked"] != shown["flagged_offers_evaluated"]:
+        print("a flagged offer was dropped from the ranking instead of marked", file=sys.stderr)
         return 1
     return 0
 

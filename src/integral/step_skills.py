@@ -287,9 +287,7 @@ class DraftingRulesReading(Strict):
         return bool(self.reasons)
 
 
-def read_drafting_rules(
-    step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR
-) -> DraftingRulesReading:
+def read_drafting_rules(step: Step, skills_dir: Path = DEFAULT_SKILLS_DIR) -> DraftingRulesReading:
     """This step's `DraftingRulesReading` — read off its SKILL.md, never asserted.
 
     Only `DRAFTING_RULES_OWNER` is required to carry the rules; a non-owning
@@ -354,9 +352,7 @@ def read_drafting_rules(
     if not names_narrative_load:
         reasons.append("the cut rule never names narrative load")
     if not states_backtrack_test:
-        reasons.append(
-            "does not state the interview backtrack test (OK / Flag it / Never)"
-        )
+        reasons.append("does not state the interview backtrack test (OK / Flag it / Never)")
 
     return DraftingRulesReading(
         step=step.id,

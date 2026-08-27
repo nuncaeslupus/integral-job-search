@@ -671,8 +671,7 @@ def _main(argv: list[str]) -> int:
     positional = [arg for arg in argv[1:] if not arg.startswith("-")]
     if len(positional) > 1:
         print(
-            f"liveness: expected at most one path, got {len(positional)}: "
-            f"{' '.join(positional)}",
+            f"liveness: expected at most one path, got {len(positional)}: {' '.join(positional)}",
             file=sys.stderr,
         )
         return 2
@@ -685,9 +684,7 @@ def _main(argv: list[str]) -> int:
         # it lands past this branch rather than back in it — otherwise a bare
         # `python -m integral.liveness` would recurse into itself forever.
         identity_rc = _main([argv[0], "--identity", *(["--check"] if check else [])])
-        liveness_rc = _main(
-            [argv[0], str(DEFAULT_EVIDENCE_PATH), *(["--check"] if check else [])]
-        )
+        liveness_rc = _main([argv[0], str(DEFAULT_EVIDENCE_PATH), *(["--check"] if check else [])])
         return max(identity_rc, liveness_rc)
 
     if identity:

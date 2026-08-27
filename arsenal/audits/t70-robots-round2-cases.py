@@ -310,9 +310,7 @@ CASES = [
     },
     {
         "name": "most-specific-agent-group-wins-over-shorter-token",
-        "robots_txt": (
-            "User-agent: Bot\nDisallow:\n\nUser-agent: Botly\nDisallow: /private\n"
-        ),
+        "robots_txt": ("User-agent: Bot\nDisallow:\n\nUser-agent: Botly\nDisallow: /private\n"),
         "agent": "Botly/2.0",
         "url": "https://example.com/private",
         "expected_allowed": False,
@@ -326,9 +324,7 @@ CASES = [
     },
     {
         "name": "agent-token-longer-than-crawler-token-does-not-match",
-        "robots_txt": (
-            "User-agent: Botly\nDisallow:\n\nUser-agent: *\nDisallow: /private\n"
-        ),
+        "robots_txt": ("User-agent: Botly\nDisallow:\n\nUser-agent: *\nDisallow: /private\n"),
         "agent": "Bot/1.0",
         "url": "https://example.com/private",
         "expected_allowed": False,
