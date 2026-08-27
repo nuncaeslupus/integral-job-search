@@ -502,6 +502,8 @@ def test_the_declared_subset_is_recorded_beside_what_was_actually_scored(
     assert measured["extraction_scored_dimensions"] == ["on_call_load"]
     assert measured["scored_beyond_the_declared_subset"] == ["on_call_load"]
     assert measured["extraction_macro_f1"] is not None, "it still counts — it is just named"
+
+
 # T59 — a denial is not an absence
 
 

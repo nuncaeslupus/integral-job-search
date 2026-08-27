@@ -98,6 +98,7 @@ def _product_token(agent: str) -> str:
         "so no robots group can be matched to this crawler"
     )
 
+
 Fetch = Callable[[str], str]
 
 
@@ -338,9 +339,7 @@ class Robots:
         origin = f"{parts.scheme}://{parts.netloc}"
         if origin not in self._groups:
             try:
-                text = self._fetch(
-                    urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
-                )
+                text = self._fetch(urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", "")))
             except urllib.error.HTTPError as exc:
                 # 404 is the site saying "no rules", which permits everything.
                 # Anything else — 403, 500, a redirect loop — is an unanswered
@@ -679,9 +678,9 @@ Disallow: /search?
         # unencoded character before path comparison, so '%7E' in a rule matches a
         # literal '~' in the request path.
         name="percent_encoded_unreserved_rule_vs_literal_request",
-        robots_txt='User-agent: *\nDisallow: /%7Euser\n',
-        agent='TestBot/1.0',
-        url='https://example.com/~user',
+        robots_txt="User-agent: *\nDisallow: /%7Euser\n",
+        agent="TestBot/1.0",
+        url="https://example.com/~user",
         expected_allowed=False,
     ),
     _Fixture(
@@ -689,9 +688,9 @@ Disallow: /search?
         # unencoded '~' in the rule must still match a request path that spells the
         # same character as '%7E'.
         name="literal_rule_vs_percent_encoded_unreserved_request",
-        robots_txt='User-agent: *\nDisallow: /~user\n',
-        agent='TestBot/1.0',
-        url='https://example.com/%7Euser',
+        robots_txt="User-agent: *\nDisallow: /~user\n",
+        agent="TestBot/1.0",
+        url="https://example.com/%7Euser",
         expected_allowed=False,
     ),
     _Fixture(
@@ -699,9 +698,9 @@ Disallow: /search?
         # unreserved, so '%2F' is never decode-normalized. An identically-encoded
         # rule and request path are the same octet sequence and must match.
         name="percent_encoded_reserved_slash_exact_match",
-        robots_txt='User-agent: *\nDisallow: /a%2Fb\n',
-        agent='TestBot/1.0',
-        url='https://example.com/a%2Fb',
+        robots_txt="User-agent: *\nDisallow: /a%2Fb\n",
+        agent="TestBot/1.0",
+        url="https://example.com/a%2Fb",
         expected_allowed=False,
     ),
     _Fixture(
@@ -712,9 +711,9 @@ Disallow: /search?
         # blocks) on the companion case above and under-blocks nothing here, but the
         # two cases together catch either direction of that bug.
         name="percent_encoded_reserved_slash_must_not_equal_literal_slash",
-        robots_txt='User-agent: *\nDisallow: /a%2Fb\n',
-        agent='TestBot/1.0',
-        url='https://example.com/a/b',
+        robots_txt="User-agent: *\nDisallow: /a%2Fb\n",
+        agent="TestBot/1.0",
+        url="https://example.com/a/b",
         expected_allowed=True,
     ),
     _Fixture(
@@ -722,9 +721,9 @@ Disallow: /search?
         # percent-encoded triplet are case-insensitive; '%C3%A9' and '%c3%a9' denote
         # the same two octets and must compare equal.
         name="percent_encoding_hex_digit_case_insensitivity",
-        robots_txt='User-agent: *\nDisallow: /caf%C3%A9\n',
-        agent='TestBot/1.0',
-        url='https://example.com/caf%c3%a9',
+        robots_txt="User-agent: *\nDisallow: /caf%C3%A9\n",
+        agent="TestBot/1.0",
+        url="https://example.com/caf%c3%a9",
         expected_allowed=False,
     ),
     _Fixture(
@@ -732,9 +731,9 @@ Disallow: /search?
         # literal '%' octet in a path is represented as '%25'. An identically
         # written rule and request path match.
         name="percent_25_literal_percent_sign_exact_match",
-        robots_txt='User-agent: *\nDisallow: /100%25\n',
-        agent='TestBot/1.0',
-        url='https://example.com/100%25',
+        robots_txt="User-agent: *\nDisallow: /100%25\n",
+        agent="TestBot/1.0",
+        url="https://example.com/100%25",
         expected_allowed=False,
     ),
     _Fixture(
@@ -745,9 +744,9 @@ Disallow: /search?
         # rule '/100%25$' denotes. The anchored pattern therefore cannot match the
         # full request path, and the rule does not apply.
         name="double_encoded_percent_sign_does_not_match_single_encoded",
-        robots_txt='User-agent: *\nDisallow: /100%25$\n',
-        agent='TestBot/1.0',
-        url='https://example.com/100%2525',
+        robots_txt="User-agent: *\nDisallow: /100%25$\n",
+        agent="TestBot/1.0",
+        url="https://example.com/100%2525",
         expected_allowed=True,
     ),
     _Fixture(
@@ -755,9 +754,9 @@ Disallow: /search?
         # '%41' (encoding 'A') normalizes to 'A', making the rule equivalent to
         # 'Disallow: /Admin'.
         name="percent_encoded_unreserved_letters_spelling_a_word",
-        robots_txt='User-agent: *\nDisallow: /%41dmin\n',
-        agent='TestBot/1.0',
-        url='https://example.com/Admin',
+        robots_txt="User-agent: *\nDisallow: /%41dmin\n",
+        agent="TestBot/1.0",
+        url="https://example.com/Admin",
         expected_allowed=False,
     ),
     _Fixture(
@@ -765,9 +764,9 @@ Disallow: /search?
         # restriction at all; a group whose only rule is an empty Disallow permits
         # every path.
         name="empty_disallow_value_permits_everything",
-        robots_txt='User-agent: *\nDisallow:\n',
-        agent='TestBot/1.0',
-        url='https://example.com/anything/at/all',
+        robots_txt="User-agent: *\nDisallow:\n",
+        agent="TestBot/1.0",
+        url="https://example.com/anything/at/all",
         expected_allowed=True,
     ),
     _Fixture(
@@ -775,9 +774,9 @@ Disallow: /search?
         # therefore has no specificity; it must not out-rank or otherwise suppress a
         # non-empty Disallow rule that actually matches the request path.
         name="empty_allow_value_does_not_suppress_real_disallow",
-        robots_txt='User-agent: *\nAllow:\nDisallow: /private\n',
-        agent='TestBot/1.0',
-        url='https://example.com/private',
+        robots_txt="User-agent: *\nAllow:\nDisallow: /private\n",
+        agent="TestBot/1.0",
+        url="https://example.com/private",
         expected_allowed=False,
     ),
     _Fixture(
@@ -786,9 +785,9 @@ Disallow: /search?
         # prefix of the path-plus-query string; '/path?' is a prefix of
         # '/path?query=1'.
         name="literal_question_mark_blocks_matching_query_string",
-        robots_txt='User-agent: *\nDisallow: /path?\n',
-        agent='TestBot/1.0',
-        url='https://example.com/path?query=1',
+        robots_txt="User-agent: *\nDisallow: /path?\n",
+        agent="TestBot/1.0",
+        url="https://example.com/path?query=1",
         expected_allowed=False,
     ),
     _Fixture(
@@ -796,9 +795,9 @@ Disallow: /search?
         # literal '?' octet the rule requires is absent from the request; the rule
         # does not apply.
         name="literal_question_mark_does_not_block_bare_path",
-        robots_txt='User-agent: *\nDisallow: /path?\n',
-        agent='TestBot/1.0',
-        url='https://example.com/path',
+        robots_txt="User-agent: *\nDisallow: /path?\n",
+        agent="TestBot/1.0",
+        url="https://example.com/path",
         expected_allowed=True,
     ),
     _Fixture(
@@ -806,9 +805,9 @@ Disallow: /search?
         # matches any path that contains a literal '?' anywhere after the root,
         # including '/page?x=1'.
         name="wildcard_then_literal_question_mark_blocks_any_query",
-        robots_txt='User-agent: *\nDisallow: /*?\n',
-        agent='TestBot/1.0',
-        url='https://example.com/page?x=1',
+        robots_txt="User-agent: *\nDisallow: /*?\n",
+        agent="TestBot/1.0",
+        url="https://example.com/page?x=1",
         expected_allowed=False,
     ),
     _Fixture(
@@ -816,18 +815,18 @@ Disallow: /search?
         # path; a request with no '?' cannot satisfy the pattern no matter how '*'
         # expands.
         name="wildcard_then_literal_question_mark_does_not_block_no_query",
-        robots_txt='User-agent: *\nDisallow: /*?\n',
-        agent='TestBot/1.0',
-        url='https://example.com/page',
+        robots_txt="User-agent: *\nDisallow: /*?\n",
+        agent="TestBot/1.0",
+        url="https://example.com/page",
         expected_allowed=True,
     ),
     _Fixture(
         # RFC 9309 SS2.2.3 -- '$' designates the end of the match pattern; '/path$'
         # matches only a request path that is exactly '/path'.
         name="dollar_anchor_exact_match",
-        robots_txt='User-agent: *\nDisallow: /path$\n',
-        agent='TestBot/1.0',
-        url='https://example.com/path',
+        robots_txt="User-agent: *\nDisallow: /path$\n",
+        agent="TestBot/1.0",
+        url="https://example.com/path",
         expected_allowed=False,
     ),
     _Fixture(
@@ -835,9 +834,9 @@ Disallow: /search?
         # 'path', a request path with trailing characters ('pathxyz') does not
         # match.
         name="dollar_anchor_rejects_longer_suffix",
-        robots_txt='User-agent: *\nDisallow: /path$\n',
-        agent='TestBot/1.0',
-        url='https://example.com/pathxyz',
+        robots_txt="User-agent: *\nDisallow: /path$\n",
+        agent="TestBot/1.0",
+        url="https://example.com/pathxyz",
         expected_allowed=True,
     ),
     _Fixture(
@@ -845,9 +844,9 @@ Disallow: /search?
         # '/path/' has an extra '/' octet after 'path' and therefore does not
         # satisfy '/path$'.
         name="dollar_anchor_rejects_trailing_slash",
-        robots_txt='User-agent: *\nDisallow: /path$\n',
-        agent='TestBot/1.0',
-        url='https://example.com/path/',
+        robots_txt="User-agent: *\nDisallow: /path$\n",
+        agent="TestBot/1.0",
+        url="https://example.com/path/",
         expected_allowed=True,
     ),
     _Fixture(
@@ -855,9 +854,9 @@ Disallow: /search?
         # none; '/*.php' matches any path that ends in the literal suffix '.php'
         # reached after zero or more characters, including '/index.php'.
         name="wildcard_basic_suffix_match",
-        robots_txt='User-agent: *\nDisallow: /*.php\n',
-        agent='TestBot/1.0',
-        url='https://example.com/index.php',
+        robots_txt="User-agent: *\nDisallow: /*.php\n",
+        agent="TestBot/1.0",
+        url="https://example.com/index.php",
         expected_allowed=False,
     ),
     _Fixture(
@@ -865,9 +864,9 @@ Disallow: /search?
         # '.php'; the request continues with '?x=1' after '.php', so the string does
         # not end where the pattern requires.
         name="wildcard_dollar_anchor_excludes_query_suffix",
-        robots_txt='User-agent: *\nDisallow: /*.php$\n',
-        agent='TestBot/1.0',
-        url='https://example.com/index.php?x=1',
+        robots_txt="User-agent: *\nDisallow: /*.php$\n",
+        agent="TestBot/1.0",
+        url="https://example.com/index.php?x=1",
         expected_allowed=True,
     ),
     _Fixture(
@@ -875,18 +874,18 @@ Disallow: /search?
         # tokens are semantically equivalent to one and together still match any run
         # of characters between 'a' and 'b', including 'xyz'.
         name="consecutive_wildcards_collapse_to_one",
-        robots_txt='User-agent: *\nDisallow: /a**b\n',
-        agent='TestBot/1.0',
-        url='https://example.com/axyzb',
+        robots_txt="User-agent: *\nDisallow: /a**b\n",
+        agent="TestBot/1.0",
+        url="https://example.com/axyzb",
         expected_allowed=False,
     ),
     _Fixture(
         # RFC 9309 SS2.2.3 -- '*' may expand to zero characters, so '/a*$' matches a
         # path that is exactly '/a' as well as any longer path beginning with '/a'.
         name="trailing_wildcard_before_dollar_matches_zero_expansion",
-        robots_txt='User-agent: *\nDisallow: /a*$\n',
-        agent='TestBot/1.0',
-        url='https://example.com/a',
+        robots_txt="User-agent: *\nDisallow: /a*$\n",
+        agent="TestBot/1.0",
+        url="https://example.com/a",
         expected_allowed=False,
     ),
     _Fixture(
@@ -896,9 +895,9 @@ Disallow: /search?
         # 'Botly/2.0', so the Botly group's Disallow applies even though the Bot
         # group alone would permit everything.
         name="most_specific_agent_group_wins_over_shorter_token",
-        robots_txt='User-agent: Bot\nDisallow:\n\nUser-agent: Botly\nDisallow: /private\n',
-        agent='Botly/2.0',
-        url='https://example.com/private',
+        robots_txt="User-agent: Bot\nDisallow:\n\nUser-agent: Botly\nDisallow: /private\n",
+        agent="Botly/2.0",
+        url="https://example.com/private",
         expected_allowed=False,
     ),
     _Fixture(
@@ -907,9 +906,9 @@ Disallow: /search?
         # is not a substring of the crawler token 'Bot', so that group does not
         # apply and the crawler falls back to the wildcard '*' group.
         name="agent_token_longer_than_crawler_token_does_not_match",
-        robots_txt='User-agent: Botly\nDisallow:\n\nUser-agent: *\nDisallow: /private\n',
-        agent='Bot/1.0',
-        url='https://example.com/private',
+        robots_txt="User-agent: Botly\nDisallow:\n\nUser-agent: *\nDisallow: /private\n",
+        agent="Bot/1.0",
+        url="https://example.com/private",
         expected_allowed=False,
     ),
     _Fixture(
@@ -917,9 +916,9 @@ Disallow: /search?
         # crawler's own token MUST be case-insensitive; 'GoogleBot' matches the
         # crawler's self-identification as 'googlebot'.
         name="agent_match_is_case_insensitive",
-        robots_txt='User-agent: GoogleBot\nDisallow: /private\n',
-        agent='googlebot/2.1',
-        url='https://example.com/private',
+        robots_txt="User-agent: GoogleBot\nDisallow: /private\n",
+        agent="googlebot/2.1",
+        url="https://example.com/private",
         expected_allowed=False,
     ),
     _Fixture(
@@ -927,9 +926,9 @@ Disallow: /search?
         # values are compared octet-for-octet, case-sensitively; '/Secret' does not
         # match the differently-cased path '/secret'.
         name="path_match_is_case_sensitive",
-        robots_txt='User-agent: *\nDisallow: /Secret\n',
-        agent='TestBot/1.0',
-        url='https://example.com/secret',
+        robots_txt="User-agent: *\nDisallow: /Secret\n",
+        agent="TestBot/1.0",
+        url="https://example.com/secret",
         expected_allowed=True,
     ),
     _Fixture(
@@ -938,9 +937,9 @@ Disallow: /search?
         # matching the second-listed token 'B' is bound exactly as one matching 'A'
         # would be.
         name="shared_group_applies_to_every_listed_agent_token",
-        robots_txt='User-agent: A\nUser-agent: B\nDisallow: /secret\n',
-        agent='B/1.0',
-        url='https://example.com/secret',
+        robots_txt="User-agent: A\nUser-agent: B\nDisallow: /secret\n",
+        agent="B/1.0",
+        url="https://example.com/secret",
         expected_allowed=False,
     ),
     _Fixture(
@@ -948,9 +947,9 @@ Disallow: /search?
         # contains no restrictions, so every path is permitted for a crawler
         # matching it.
         name="group_with_no_rules_permits_everything",
-        robots_txt='User-agent: *\n',
-        agent='TestBot/1.0',
-        url='https://example.com/anything',
+        robots_txt="User-agent: *\n",
+        agent="TestBot/1.0",
+        url="https://example.com/anything",
         expected_allowed=True,
     ),
     _Fixture(
@@ -958,18 +957,18 @@ Disallow: /search?
         # equal specificity (equal matched octet length), the Allow rule takes
         # precedence.
         name="equal_length_tie_allow_wins_subpath",
-        robots_txt='User-agent: *\nAllow: /page\nDisallow: /page\n',
-        agent='TestBot/1.0',
-        url='https://example.com/page',
+        robots_txt="User-agent: *\nAllow: /page\nDisallow: /page\n",
+        agent="TestBot/1.0",
+        url="https://example.com/page",
         expected_allowed=True,
     ),
     _Fixture(
         # RFC 9309 SS5.1 -- the Allow-wins tie-break applies regardless of path
         # depth; equal-length root rules still resolve to Allow.
         name="equal_length_tie_allow_wins_root",
-        robots_txt='User-agent: *\nAllow: /\nDisallow: /\n',
-        agent='TestBot/1.0',
-        url='https://example.com/',
+        robots_txt="User-agent: *\nAllow: /\nDisallow: /\n",
+        agent="TestBot/1.0",
+        url="https://example.com/",
         expected_allowed=True,
     ),
     _Fixture(
@@ -982,9 +981,9 @@ Disallow: /search?
         # therefore wrongly resolve to Allow, fail-open) under a matcher that
         # compares raw text length instead of decoded octet length.
         name="specificity_must_be_computed_on_decoded_octets_not_raw_text",
-        robots_txt='User-agent: *\nAllow: /%61/%62\nDisallow: /a/bcdef\n',
-        agent='TestBot/1.0',
-        url='https://example.com/a/bcdef',
+        robots_txt="User-agent: *\nAllow: /%61/%62\nDisallow: /a/bcdef\n",
+        agent="TestBot/1.0",
+        url="https://example.com/a/bcdef",
         expected_allowed=False,
     ),
     _Fixture(
@@ -993,9 +992,9 @@ Disallow: /search?
         # group's Disallow must still apply even though a later group for the same
         # token exists.
         name="duplicate_agent_groups_combine_first_groups_rule_survives",
-        robots_txt='User-agent: Bot\nDisallow: /a\n\nUser-agent: Bot\nDisallow: /b\n',
-        agent='Bot/1.0',
-        url='https://example.com/a',
+        robots_txt="User-agent: Bot\nDisallow: /a\n\nUser-agent: Bot\nDisallow: /b\n",
+        agent="Bot/1.0",
+        url="https://example.com/a",
         expected_allowed=False,
     ),
     _Fixture(
@@ -1003,9 +1002,9 @@ Disallow: /search?
         # Disallow must also apply; a matcher that keeps only the first group it
         # encounters for a token would incorrectly allow this path.
         name="duplicate_agent_groups_combine_second_groups_rule_survives",
-        robots_txt='User-agent: Bot\nDisallow: /a\n\nUser-agent: Bot\nDisallow: /b\n',
-        agent='Bot/1.0',
-        url='https://example.com/b',
+        robots_txt="User-agent: Bot\nDisallow: /a\n\nUser-agent: Bot\nDisallow: /b\n",
+        agent="Bot/1.0",
+        url="https://example.com/b",
         expected_allowed=False,
     ),
 )

@@ -308,7 +308,7 @@ def test_soft_language_in_a_neighbouring_sentence_does_not_soften_a_bar() -> Non
 
 
 def test_the_requirement_noun_is_not_a_target() -> None:
-    """"Must hold an active security clearance" names no level, but `_TARGET`
+    """ "Must hold an active security clearance" names no level, but `_TARGET`
     captured "security" and compared it against the candidate's held
     clearances — so someone holding TS/SCI was excluded by a bar they meet.
     A false FAIL is invisible, so this folds to the generic no-target branch:
@@ -603,6 +603,8 @@ def test_main_regenerates_t78_evidence_beside_t76(tmp_path: Path) -> None:
     t78_written = json.loads((tmp_path / "T78.json").read_text(encoding="utf-8"))
     assert t78_written["gate_status"] == "measured"
     assert t78_written["gate_fields_read_by_the_ranker"] == 0
+
+
 # T77 — every FAIL and every FLAG carries the advert's own sentence
 
 

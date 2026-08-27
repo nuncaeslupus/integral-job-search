@@ -577,9 +577,7 @@ def probe_consent() -> dict[str, Any]:
             trigger=judge_cycle(cycle=6, offers_returned=0, offers_already_seen=0).reason,
             log=log,
         ),
-        "new session": refusal_forbidding(
-            widening, session="cse_c40f", trigger=trigger, log=log
-        ),
+        "new session": refusal_forbidding(widening, session="cse_c40f", trigger=trigger, log=log),
         "new evidence": refusal_forbidding(
             widening,
             session=session,

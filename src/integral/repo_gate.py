@@ -410,6 +410,7 @@ def measure_evidence_reach(
     denominator) is asserted alongside it, and `gate_status` reads
     `"unmeasured"` rather than a clean pass while that denominator is empty.
     """
+
     def _unmeasured(reason: str) -> dict[str, Any]:
         return {
             "gate_modules_outside_the_evidence_run": 0,
