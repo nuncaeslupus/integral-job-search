@@ -1,15 +1,24 @@
 # Session handover — 2026-08-27 ~13:00 UTC, orchestrator, fourth fleet round
 
-Board: **108 gates**, 124 tasks. `main` at `ff059aa`. **Eleven PRs merged across this run**,
-every one gate-verified by the orchestrator on that exact commit, never on a worker's word.
+Board: **108 gates**, 124 tasks. `main` at `ff059aa`. **Eleven PRs merged across this run.**
+
+On each, the orchestrator ran `make host-gate` itself and saw exit 0 — on the **branch head**
+immediately before merging, never on a worker's word. The SHAs in the table below are the
+*squash* commits on `main`; they carry the same tree, but no gate ran against them by that
+name, so do not go looking for one.
+
+**Exit 0 from `host-gate` is not the same as a task's own gate passing.** T72 is the case that
+proves it: `make evidence` records an exit-3 module as `unmeasured (recorded)` and carries on,
+so the run is green while `silent_connector_failures` remains unscored. That is the intended
+behaviour and the entire point of #221 — a gate that refuses to score itself.
 
 ## Merged since the last handover
 
 | PR | task | outcome |
 |---|---|---|
-| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | merged `88dd3dc`. **Closes nothing** — #203 stays open, task file not archived, gate reports `unmeasured` and exits 3. Squash message deliberately carries no closing keyword. |
-| [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) | T70 robots matching | merged `7cb26bc`, #209 closed. Four fail-opens fixed; the round-2 audit's 32 accepted cases committed as fixtures, `robots_verdicts_evaluated` 24 → 56. |
-| [#235](https://github.com/nuncaeslupus/integral-job-search/pull/235) | T76 eligibility gate | merged `ff059aa`, #218 closed. Unblocks five tasks. |
+| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | merged `88dd3dc` (gated on `7a63627`). **Closes nothing, and its gate did not pass** — #203 stays open, the task file is not archived, and `python -m integral.connector_health` exits 3 with `gate_status: unmeasured`. Finishing it needs a probe capture on the laptop. Squash message deliberately carries no closing keyword. |
+| [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) | T70 robots matching | merged `7cb26bc` (gated on `af1e57b`), #209 closed. Four fail-opens fixed; the round-2 audit's 32 accepted cases committed as fixtures, `robots_verdicts_evaluated` 24 → 56. |
+| [#235](https://github.com/nuncaeslupus/integral-job-search/pull/235) | T76 eligibility gate | merged `ff059aa` (gated on `4fcce80`), #218 closed. Unblocks five tasks. |
 
 ## In flight
 
