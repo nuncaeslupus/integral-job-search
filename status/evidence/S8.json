@@ -1,8 +1,8 @@
 {
   "plan_queue_task_drift": 0,
   "rows_without_a_measurable_gate": 0,
-  "plan_rows": 124,
-  "queue_tasks": 124,
+  "plan_rows": 125,
+  "queue_tasks": 125,
   "in_queue_only": [],
   "in_plan_only": [],
   "duplicate_labels": [],

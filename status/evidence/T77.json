@@ -1,7 +1,7 @@
 {
   "disqualification_verdicts_without_quoted_wording": 0,
-  "disqualification_verdicts_without_quoted_wording_evaluated": 9,
-  "disqualification_verdicts_evaluated": 9,
+  "disqualification_verdicts_without_quoted_wording_evaluated": 13,
+  "disqualification_verdicts_evaluated": 13,
   "gate_status": "measured",
   "violations": [],
   "readings": [
@@ -79,6 +79,60 @@
     },
     {
       "name": "company-wide-welcome-alone-is-not-a-stated-permission",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "citizenship-bar-candidate-holds-it-under-another-spelling",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "citizenship-bar-target-outside-the-vocabulary-is-flagged",
+      "verdict": "FLAG",
+      "quote": "must hold Ruritanian citizenship",
+      "quoted": true
+    },
+    {
+      "name": "work-permit-bloc-bar-satisfied-by-a-member-state",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "work-permit-country-bar-satisfied-by-the-bloc",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "citizenship-bar-named-by-the-spanish-market-term",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "citizenship-bloc-does-not-pin-a-nationality",
+      "verdict": "FLAG",
+      "quote": "must be a Spanish citizen",
+      "quoted": true
+    },
+    {
+      "name": "citizenship-bar-candidate-resolves-and-lacks-it",
+      "verdict": "FAIL",
+      "quote": "must hold German citizenship",
+      "quoted": true
+    },
+    {
+      "name": "citizenship-bar-with-one-unresolved-holding-is-flagged",
+      "verdict": "FLAG",
+      "quote": "must hold German citizenship",
+      "quoted": true
+    },
+    {
+      "name": "accented-and-unaccented-spellings-fold-together",
       "verdict": "PASS",
       "quote": null,
       "quoted": false

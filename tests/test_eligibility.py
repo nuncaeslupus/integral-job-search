@@ -19,6 +19,7 @@ import pytest
 
 from integral import eligibility, rank
 from integral.eligibility import UNKNOWN_CANDIDATE, CandidateEligibility
+from integral.eligibility import CandidateEligibility as C
 from integral.offers import LanguageRequirement, Offer, compute_offer_id, connect_manual
 
 
@@ -308,7 +309,7 @@ def test_soft_language_in_a_neighbouring_sentence_does_not_soften_a_bar() -> Non
 
 
 def test_the_requirement_noun_is_not_a_target() -> None:
-    """"Must hold an active security clearance" names no level, but `_TARGET`
+    """ "Must hold an active security clearance" names no level, but `_TARGET`
     captured "security" and compared it against the candidate's held
     clearances — so someone holding TS/SCI was excluded by a bar they meet.
     A false FAIL is invisible, so this folds to the generic no-target branch:
@@ -603,6 +604,8 @@ def test_main_regenerates_t78_evidence_beside_t76(tmp_path: Path) -> None:
     t78_written = json.loads((tmp_path / "T78.json").read_text(encoding="utf-8"))
     assert t78_written["gate_status"] == "measured"
     assert t78_written["gate_fields_read_by_the_ranker"] == 0
+
+
 # T77 — every FAIL and every FLAG carries the advert's own sentence
 
 
@@ -897,3 +900,127 @@ def test_a_resolvable_ranker_module_still_measures_clean(tmp_path: Path) -> None
     assert measured["gate_status"] == "measured"
     assert measured["gate_fields_read_by_the_ranker"] == 0
     assert measured["ranker_modules_scanned"] == 1
+
+
+# ── T86: the scoped eligibility vocabulary ───────────────────────────────────
+
+
+def test_a_candidate_who_holds_the_required_citizenship_passes_it() -> None:
+    """The defect this task exists for. An advert says "German citizenship";
+    the candidate says "DE". Before the vocabulary these were two unequal
+    strings, so a qualifying candidate was FAILed — and `ES` against the same
+    advert was FAILed identically, which is correct. The two cases were
+    indistinguishable to the code."""
+    qualifies = eligibility.evaluate_text(
+        "x", "Applicants must hold German citizenship.", C(citizenships=("DE",))
+    )
+    does_not = eligibility.evaluate_text(
+        "x", "Applicants must hold German citizenship.", C(citizenships=("ES",))
+    )
+
+    assert qualifies.verdict == "PASS"
+    assert does_not.verdict == "FAIL"
+
+
+def test_a_target_outside_the_vocabulary_flags_rather_than_fails() -> None:
+    """What makes an incomplete table safe. A term the table does not carry
+    degrades to "a human decides", never to a confident exclusion — so coverage
+    is a quality dial rather than a correctness precondition."""
+    reading = eligibility.evaluate_text(
+        "x", "Applicants must hold Ruritanian citizenship.", C(citizenships=("ES",))
+    )
+
+    assert reading.verdict == "FLAG"
+
+
+def test_an_unresolved_holding_flags_even_when_the_target_resolves() -> None:
+    """The same rule read from the candidate's side. One term the table cannot
+    resolve may be the very thing that satisfies the bar, so the whole
+    requirement stays FLAG rather than FAILing on the terms that did resolve."""
+    reading = eligibility.evaluate_text(
+        "x",
+        "Applicants must hold German citizenship.",
+        C(citizenships=("ES", "Ruritanian")),
+    )
+
+    assert reading.verdict == "FLAG"
+
+
+def test_a_bloc_bar_is_satisfied_by_a_member_state() -> None:
+    """`ES` clears "right to work in the EU" because Spain is in it."""
+    reading = eligibility.evaluate_text(
+        "x", "You must already have the right to work in the EU.", C(work_authorisations=("ES",))
+    )
+
+    assert reading.verdict == "PASS"
+
+
+def test_the_spanish_market_term_for_an_eu_national_resolves() -> None:
+    """`comunitario` is what a Spanish advert actually writes; any spelling of
+    "European Union" is the rarer form in this market."""
+    reading = eligibility.evaluate_text(
+        "x", "Applicants must be a comunitario citizen.", C(citizenships=("ES",))
+    )
+
+    assert reading.verdict == "PASS"
+
+
+def test_a_bloc_holding_carries_work_rights_but_does_not_pin_a_nationality() -> None:
+    """The asymmetry the table encodes deliberately. The right to work in the EU
+    really does carry the right to work in Spain; being "an EU citizen" does not
+    make anyone Spanish, and guessing in either direction is the confident
+    answer this gate exists to avoid."""
+    permit = eligibility.evaluate_text(
+        "x", "You must already have the right to work in Spain.", C(work_authorisations=("EU",))
+    )
+    citizenship = eligibility.evaluate_text(
+        "x", "Applicants must be a Spanish citizen.", C(citizenships=("EU",))
+    )
+
+    assert permit.verdict == "PASS"
+    assert citizenship.verdict == "FLAG"
+
+
+def test_clearances_keep_the_exact_match_and_gain_no_taxonomy() -> None:
+    """Clearances are out of scope by decision. Routing them through the table
+    would resolve every clearance term to `None` and turn today's correct PASS
+    into a FLAG, which is why `_TABLE_KINDS` names only two kinds."""
+    reading = eligibility.evaluate_text(
+        "x",
+        "Candidates must hold an active TS/SCI clearance before starting.",
+        C(clearances=("TS/SCI",)),
+    )
+
+    assert reading.verdict == "PASS"
+
+
+def test_normalize_folds_an_accent_rather_than_deleting_it() -> None:
+    """Without folding, a non-ASCII character is *dropped*: `alemán` became
+    `alemn`, a key matching neither spelling of the word. Job adverts drop
+    accents freely, so both spellings must land on the same key."""
+    assert eligibility._normalize("alemán") == eligibility._normalize("aleman") == "aleman"
+
+
+def test_the_false_disqualification_gate_counts_the_invisible_direction() -> None:
+    """T76 counts offers ranked *despite* a bar. Nothing counted the opposite —
+    an offer excluded by a bar the candidate meets — which is the direction a
+    vocabulary gap produces and the one a candidate can never notice."""
+    measured = eligibility.measure_false_disqualifications()
+
+    assert measured["gate_status"] == "measured"
+    assert measured["false_disqualifications"] == 0
+    assert measured["false_disqualifications_evaluated"] > 0
+
+
+def test_the_false_disqualification_gate_fails_on_the_pre_fix_code_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gate must be able to fail, or its zero means nothing. With the
+    vocabulary switched off — exactly the code that shipped — the same probe set
+    reports real false disqualifications."""
+    monkeypatch.setattr(eligibility, "_TABLE_KINDS", frozenset())
+
+    measured = eligibility.measure_false_disqualifications()
+
+    assert measured["false_disqualifications"] > 0
+    assert measured["violations"]

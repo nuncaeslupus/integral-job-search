@@ -1,0 +1,86 @@
+{
+  "false_disqualifications": 0,
+  "false_disqualifications_evaluated": 13,
+  "gate_status": "measured",
+  "violations": [],
+  "readings": [
+    {
+      "name": "stated-authorisation-satisfies-the-bar",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "soft-language-is-not-a-hard-bar",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "generic-bar-with-no-extractable-target-and-candidate-holds-something",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "the-requirement-noun-is-not-a-target",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "hard-bar-candidate-status-unstated",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bar-candidate-holds-it-under-another-spelling",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bar-target-outside-the-vocabulary-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "work-permit-bloc-bar-satisfied-by-a-member-state",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "work-permit-country-bar-satisfied-by-the-bloc",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bar-named-by-the-spanish-market-term",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bloc-does-not-pin-a-nationality",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bar-with-one-unresolved-holding-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "accented-and-unaccented-spellings-fold-together",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    }
+  ]
+}

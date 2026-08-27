@@ -1,7 +1,7 @@
 {
   "offers_ranked_despite_a_stated_disqualification": 0,
-  "offers_ranked_despite_a_stated_disqualification_evaluated": 5,
-  "probes_run": 13,
+  "offers_ranked_despite_a_stated_disqualification_evaluated": 6,
+  "probes_run": 22,
   "gate_status": "measured",
   "violations": [],
   "readings": [
@@ -115,6 +115,87 @@
     },
     {
       "name": "company-wide-welcome-alone-is-not-a-stated-permission",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "citizenship-bar-candidate-holds-it-under-another-spelling",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "citizenship-bar-target-outside-the-vocabulary-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "reason": "citizenship",
+      "quote": "must hold Ruritanian citizenship",
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "work-permit-bloc-bar-satisfied-by-a-member-state",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "work-permit-country-bar-satisfied-by-the-bloc",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "citizenship-bar-named-by-the-spanish-market-term",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "citizenship-bloc-does-not-pin-a-nationality",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "reason": "citizenship",
+      "quote": "must be a Spanish citizen",
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "citizenship-bar-candidate-resolves-and-lacks-it",
+      "expected": "FAIL",
+      "actual": "FAIL",
+      "reason": "citizenship",
+      "quote": "must hold German citizenship",
+      "is_disqualification": true,
+      "match": true
+    },
+    {
+      "name": "citizenship-bar-with-one-unresolved-holding-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "reason": "citizenship",
+      "quote": "must hold German citizenship",
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "accented-and-unaccented-spellings-fold-together",
       "expected": "PASS",
       "actual": "PASS",
       "reason": null,

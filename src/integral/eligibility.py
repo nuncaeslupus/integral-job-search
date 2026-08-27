@@ -73,6 +73,7 @@ import ast
 import json
 import re
 import sys
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -349,11 +350,21 @@ _PATTERNS_BY_KIND: tuple[tuple[RequirementKind, tuple[re.Pattern[str], ...]], ..
 
 
 def _normalize(value: str) -> str:
-    """Fold a target phrase to a bare comparison key: lowercase, punctuation
-    and whitespace collapsed. This gate compares matched text against what a
-    candidate stated in the same vocabulary — it is not a geography or
-    clearance-taxonomy database, see the module docstring."""
-    return re.sub(r"[^a-z0-9]+", "", value.lower())
+    """Fold a target phrase to a bare comparison key: lowercase, accents
+    folded, punctuation and whitespace collapsed. This gate compares matched
+    text against what a candidate stated in the same vocabulary — it is not a
+    geography or clearance-taxonomy database, see the module docstring.
+
+    Accents are decomposed and their combining marks dropped, so `alemán` and
+    `aleman` fold together. Without that they do not merely fail to match: the
+    non-ASCII character is *deleted*, so `alemán` becomes `alemn` — a key that
+    matches neither spelling. Job adverts drop accents freely, and every
+    comparison here runs both sides through this function, so folding cannot
+    make two genuinely different terms collide without them already colliding
+    unaccented.
+    """
+    decomposed = unicodedata.normalize("NFKD", value.lower())
+    return re.sub(r"[^a-z0-9]+", "", "".join(c for c in decomposed if not unicodedata.combining(c)))
 
 
 # The requirement noun itself is never the thing required. `_TARGET` is
@@ -366,6 +377,204 @@ def _normalize(value: str) -> str:
 _NOT_A_TARGET = frozenset({"security", "citizenship", "citizen", "work", "valid", "active"})
 
 _SENTENCE_END = re.compile(r"[.!?;\n]")
+
+
+# ── The scoped eligibility vocabulary ────────────────────────────────────────
+#
+# An advert says "German citizenship"; a candidate says "DE". Comparing the two
+# normalized strings makes those unequal, so a qualifying candidate was FAILed —
+# and `ES` against the same advert was FAILed identically, which is correct. The
+# two cases were indistinguishable to the code, and a false FAIL is the invisible
+# direction: an excluded job is one the candidate never sees.
+#
+# This is deliberately NOT a world gazetteer. A term outside the table resolves
+# to `None` and its requirement goes to FLAG — a human decides — never FAIL. That
+# is what makes incompleteness safe here: coverage is a quality dial, not a
+# correctness precondition. Terms are derived from the languages and the market
+# this tool searches (ES/EN/CA, Spain-focused), never from corpus misses, which
+# would be fitting the vocabulary to an evaluation split.
+#
+# Clearances are out of scope by decision, not oversight: TS/SCI, SC, DV and
+# `habilitación de seguridad` are national schemes with real level hierarchies,
+# and modelling them is a taxonomy this market does not need. They keep the
+# exact-match path below, which is what `_TABLE_KINDS` selects.
+
+_EU_MEMBERS: frozenset[str] = frozenset(
+    [
+        "AT",
+        "BE",
+        "BG",
+        "HR",
+        "CY",
+        "CZ",
+        "DK",
+        "EE",
+        "FI",
+        "FR",
+        "DE",
+        "GR",
+        "HU",
+        "IE",
+        "IT",
+        "LV",
+        "LT",
+        "LU",
+        "MT",
+        "NL",
+        "PL",
+        "PT",
+        "RO",
+        "SK",
+        "SI",
+        "ES",
+        "SE",
+    ]
+)
+_EEA_MEMBERS: frozenset[str] = _EU_MEMBERS | frozenset({"IS", "LI", "NO"})
+
+#: Bloc code → the country codes whose holders are inside it.
+_BLOCS: dict[str, frozenset[str]] = {"EU": _EU_MEMBERS, "EEA": _EEA_MEMBERS}
+
+#: Canonical code → the ways an advert or a candidate spells it, across the
+#: three languages this search runs in. Accented spellings are written here as
+#: they appear; `_normalize` strips the accent from both sides identically, so
+#: "alemán" and "aleman" fold to the same key without a second entry.
+_COUNTRY_TERMS: dict[str, tuple[str, ...]] = {
+    "ES": ("spain", "spanish", "españa", "español", "española", "espanya", "espanyol", "espanyola"),
+    "DE": ("germany", "german", "alemania", "alemán", "alemana", "alemanya", "alemany"),
+    "FR": ("france", "french", "francia", "francés", "francesa", "frança", "francès"),
+    "IT": ("italy", "italian", "italia", "italiano", "italiana", "italià", "italiana"),
+    "PT": ("portugal", "portuguese", "portugués", "portuguesa", "portuguès"),
+    "NL": ("netherlands", "dutch", "holanda", "holandés", "holandesa", "països baixos"),
+    "BE": ("belgium", "belgian", "bélgica", "belga"),
+    "IE": ("ireland", "irish", "irlanda", "irlandés", "irlandesa", "irlandès"),
+    "AT": ("austria", "austrian", "austriaco", "austriaca", "austríac"),
+    "PL": ("poland", "polish", "polonia", "polaco", "polaca", "polonès"),
+    "SE": ("sweden", "swedish", "suecia", "sueco", "sueca", "suec"),
+    "DK": ("denmark", "danish", "dinamarca", "danés", "danesa", "danès"),
+    "FI": ("finland", "finnish", "finlandia", "finlandés", "finlandesa"),
+    "GR": ("greece", "greek", "grecia", "griego", "griega", "grec"),
+    "CZ": ("czechia", "czech", "chequia", "checo", "checa"),
+    "RO": ("romania", "romanian", "rumanía", "rumano", "rumana", "romanès"),
+    "HU": ("hungary", "hungarian", "hungría", "húngaro", "húngara"),
+    "BG": ("bulgaria", "bulgarian", "búlgaro", "búlgara"),
+    "HR": ("croatia", "croatian", "croacia", "croata"),
+    "SK": ("slovakia", "slovak", "eslovaquia", "eslovaco", "eslovaca"),
+    "SI": ("slovenia", "slovenian", "eslovenia", "esloveno", "eslovena"),
+    "LT": ("lithuania", "lithuanian", "lituania", "lituano", "lituana"),
+    "LV": ("latvia", "latvian", "letonia", "letón", "letona"),
+    "EE": ("estonia", "estonian", "estonio", "estonia"),
+    "LU": ("luxembourg", "luxembourgish", "luxemburgo", "luxemburgués"),
+    "MT": ("malta", "maltese", "maltés", "maltesa"),
+    "CY": ("cyprus", "cypriot", "chipre", "chipriota"),
+    "UK": (
+        "uk",
+        "gb",
+        "united kingdom",
+        "british",
+        "britain",
+        "reino unido",
+        "británico",
+        "británica",
+        "regne unit",
+        "britànic",
+    ),
+    "US": (
+        "us",
+        "usa",
+        "united states",
+        "american",
+        "estados unidos",
+        "estadounidense",
+        "eeuu",
+        "eua",
+        "nord-americà",
+    ),
+    "CH": ("switzerland", "swiss", "suiza", "suizo", "suiza", "suïssa"),
+    "NO": ("norway", "norwegian", "noruega", "noruego", "noruega"),
+    "IS": ("iceland", "icelandic", "islandia", "islandés", "islandesa"),
+    "LI": ("liechtenstein",),
+}
+
+#: The bloc terms an advert actually uses. `comunitario` is the Spanish market's
+#: everyday word for "EU national" and is far more common in a Spanish advert
+#: than any spelling of "European Union".
+_BLOC_TERMS: dict[str, tuple[str, ...]] = {
+    "EU": (
+        "eu",
+        "ue",
+        "european union",
+        "unión europea",
+        "unio europea",
+        "european",
+        "europeo",
+        "europea",
+        "europeu",
+        "comunitario",
+        "comunitaria",
+        "comunitari",
+        "comunitària",
+    ),
+    "EEA": (
+        "eea",
+        "eee",
+        "european economic area",
+        "espacio económico europeo",
+        "espai econòmic europeu",
+    ),
+}
+
+#: Normalized term → canonical code. The codes resolve to themselves so a
+#: candidate stating "DE" and an advert saying "German" meet in the same place.
+_ELIGIBILITY_ALIASES: dict[str, str] = {
+    _normalize(term): code
+    for source in (_COUNTRY_TERMS, _BLOC_TERMS)
+    for code, terms in source.items()
+    for term in (*terms, code)
+}
+
+#: The kinds scored through the table. Clearance and language keep the exact
+#: `_normalize` comparison: routing them here would resolve every one of their
+#: terms to `None` and turn today's correct PASSes into FLAGs.
+_TABLE_KINDS: frozenset[RequirementKind] = frozenset({"citizenship", "work_permit"})
+
+
+def _resolve_eligibility_term(value: str) -> str | None:
+    """The canonical code `value` names, or `None` when it is outside the
+    scoped vocabulary above. `None` is the safe answer, not a failure: every
+    caller routes it to FLAG."""
+    return _ELIGIBILITY_ALIASES.get(_normalize(value))
+
+
+def _vocabulary_verdict(kind: RequirementKind, target: str, held: tuple[str, ...]) -> Verdict:
+    """One resolved requirement target against what the candidate holds.
+
+    FAIL is reserved for the case where every term on both sides resolved and
+    none of them satisfies the bar. Anything unresolved on either side is FLAG,
+    because the unresolved term may be the very thing that satisfies it.
+
+    Blocs run in one direction by default: holding `ES` satisfies a bar naming
+    `EU`, because Spain is in it. The reverse — holding `EU` against a bar
+    naming `ES` — is PASS only for `work_permit`, where the right to work in the
+    EU really does carry the right to work in Spain. For `citizenship` it is
+    FLAG: "an EU citizen" does not pin a nationality, and guessing one in either
+    direction is exactly the confident answer this gate exists to avoid.
+    """
+    wanted = _resolve_eligibility_term(target)
+    if wanted is None:
+        return "FLAG"
+    held_codes = {code for value in held if (code := _resolve_eligibility_term(value)) is not None}
+    if wanted in held_codes:
+        return "PASS"
+    # The candidate holds a country inside the bloc the advert named.
+    if held_codes & _BLOCS.get(wanted, frozenset()):
+        return "PASS"
+    # The candidate holds a bloc that contains the country the advert named.
+    if any(wanted in _BLOCS.get(code, frozenset()) for code in held_codes):
+        return "PASS" if kind == "work_permit" else "FLAG"
+    if len(held_codes) < len(held):
+        return "FLAG"
+    return "FAIL"
 
 
 def _sentence_around(text: str, start: int, end: int) -> tuple[str, str]:
@@ -454,6 +663,9 @@ def _verdict_for_requirement(
         if not held:
             return "FAIL", requirement.kind, requirement.quote
         return "FLAG", requirement.kind, requirement.quote
+    if requirement.kind in _TABLE_KINDS:
+        verdict = _vocabulary_verdict(requirement.kind, requirement.target, held)
+        return verdict, requirement.kind, requirement.quote
     normalized_held = {_normalize(value) for value in held}
     if requirement.target in normalized_held:
         return "PASS", requirement.kind, requirement.quote
@@ -663,10 +875,7 @@ PROBES: tuple[Probe, ...] = (
     ),
     Probe(
         name="soft-language-in-a-neighbouring-sentence-does-not-soften-a-bar",
-        text=(
-            "Relevant certifications are a plus. "
-            "Applicants must hold German citizenship."
-        ),
+        text=("Relevant certifications are a plus. Applicants must hold German citizenship."),
         candidate=CandidateEligibility(citizenships=()),
         expected="FAIL",
         is_disqualification=True,
@@ -699,6 +908,67 @@ PROBES: tuple[Probe, ...] = (
             "regardless of nationality."
         ),
         candidate=UNKNOWN_CANDIDATE,
+        expected="PASS",
+    ),
+    # ── The scoped vocabulary ────────────────────────────────────────────────
+    # Before these, the probe set paired a target with a candidate spelling it
+    # the same way, so `offers_ranked_despite_a_stated_disqualification == 0`
+    # held by coincidence rather than by construction: no probe could tell a
+    # qualifying candidate from a disqualified one when the two sides used
+    # different words for the same country.
+    Probe(
+        name="citizenship-bar-candidate-holds-it-under-another-spelling",
+        text="Applicants must hold German citizenship at the time of application.",
+        candidate=CandidateEligibility(citizenships=("DE",)),
+        expected="PASS",
+    ),
+    Probe(
+        name="citizenship-bar-target-outside-the-vocabulary-is-flagged",
+        text="Applicants must hold Ruritanian citizenship at the time of application.",
+        candidate=CandidateEligibility(citizenships=("ES",)),
+        expected="FLAG",
+    ),
+    Probe(
+        name="work-permit-bloc-bar-satisfied-by-a-member-state",
+        text="You must already have the right to work in the EU.",
+        candidate=CandidateEligibility(work_authorisations=("ES",)),
+        expected="PASS",
+    ),
+    Probe(
+        name="work-permit-country-bar-satisfied-by-the-bloc",
+        text="You must already have the right to work in Spain.",
+        candidate=CandidateEligibility(work_authorisations=("EU",)),
+        expected="PASS",
+    ),
+    Probe(
+        name="citizenship-bar-named-by-the-spanish-market-term",
+        text="Applicants must be a comunitario citizen.",
+        candidate=CandidateEligibility(citizenships=("ES",)),
+        expected="PASS",
+    ),
+    Probe(
+        name="citizenship-bloc-does-not-pin-a-nationality",
+        text="Applicants must be a Spanish citizen.",
+        candidate=CandidateEligibility(citizenships=("EU",)),
+        expected="FLAG",
+    ),
+    Probe(
+        name="citizenship-bar-candidate-resolves-and-lacks-it",
+        text="Applicants must hold German citizenship at the time of application.",
+        candidate=CandidateEligibility(citizenships=("ES", "PT")),
+        expected="FAIL",
+        is_disqualification=True,
+    ),
+    Probe(
+        name="citizenship-bar-with-one-unresolved-holding-is-flagged",
+        text="Applicants must hold German citizenship at the time of application.",
+        candidate=CandidateEligibility(citizenships=("ES", "Ruritanian")),
+        expected="FLAG",
+    ),
+    Probe(
+        name="accented-and-unaccented-spellings-fold-together",
+        text="Applicants must hold German citizenship at the time of application.",
+        candidate=CandidateEligibility(citizenships=("alemán",)),
         expected="PASS",
     ),
 )
@@ -1199,10 +1469,82 @@ def write_evidence_quote_provenance(evidence: Path = DEFAULT_EVIDENCE_PATH_T77) 
     return measured
 
 
+# T86's own gate — a candidate who meets a stated bar is never FAILed
+
+
+def _unmeasured_false_disqualifications(readings: list[dict[str, Any]]) -> dict[str, Any]:
+    """The empty-input shape for T86's gate — `-1`, never a clean `0`, the same
+    rule `_unmeasured` applies to T76's."""
+    return {
+        "false_disqualifications": -1,
+        "false_disqualifications_evaluated": 0,
+        "gate_status": "unmeasured",
+        "unmeasured_reason": (
+            "no probe pairs a stated bar with a candidate who meets it — a zero "
+            "false-FAIL count over nothing evaluated is not a measurement"
+        ),
+        "readings": readings,
+    }
+
+
+def measure_false_disqualifications() -> dict[str, Any]:
+    """T86's gate reading: `false_disqualifications`.
+
+    T76 counts the offers ranked *despite* a bar — the visible direction. This
+    counts the opposite one, which has no other gate: an offer excluded by a bar
+    the candidate actually meets. That failure is invisible by construction,
+    because the candidate never sees the job it removed, and it is the direction
+    a vocabulary gap produces — `DE` against "German citizenship" read as a FAIL
+    for want of a table entry.
+
+    The denominator is every probe that states a real bar and whose expected
+    verdict is not FAIL: the candidate either clears it or their status is
+    unclear. A FAIL over any of those is a false disqualification. A denominator
+    of zero is `unmeasured`, never a clean `0` — which is exactly the state this
+    gate was in before it existed.
+    """
+    readings: list[dict[str, Any]] = []
+    for case in PROBES:
+        if not find_requirements(case.text):
+            continue
+        if case.expected == "FAIL":
+            continue
+        actual = evaluate_text(case.name, case.text, case.candidate).verdict
+        readings.append(
+            {
+                "name": case.name,
+                "expected": case.expected,
+                "actual": actual,
+                "false_disqualification": actual == "FAIL",
+            }
+        )
+    if not readings:
+        return _unmeasured_false_disqualifications(readings)
+    violations = [r for r in readings if r["false_disqualification"]]
+    return {
+        "false_disqualifications": len(violations),
+        "false_disqualifications_evaluated": len(readings),
+        "gate_status": "measured",
+        "violations": [
+            f"{r['name']}: expected {r['expected']}, got FAIL — the candidate meets this bar"
+            for r in violations
+        ],
+        "readings": readings,
+    }
+
+
+def write_false_disqualification_evidence(evidence: Path) -> dict[str, Any]:
+    """Measure T86's gate and write it to `evidence`."""
+    measured = measure_false_disqualifications()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.eligibility [T76-path [T77-path]]`.
 
-    One module, three gates. T76's `offers_ranked_despite_a_stated_disqualification`,
+    One module, four gates. T76's `offers_ranked_despite_a_stated_disqualification`,
     T77's `disqualification_verdicts_without_quoted_wording` and T78's
     `gate_fields_read_by_the_ranker` are all measured and written here, because
     all three task payloads name this same regeneration command.
@@ -1234,8 +1576,7 @@ def _main(argv: list[str]) -> int:
             exit_code = max(exit_code, 1)
         elif measured["gate_status"] == "unmeasured":
             print(
-                f"{key}: UNMEASURED — {measured['unmeasured_reason']}. "
-                "Not a pass and not a fail.",
+                f"{key}: UNMEASURED — {measured['unmeasured_reason']}. Not a pass and not a fail.",
                 file=sys.stderr,
             )
             exit_code = max(exit_code, 3)
@@ -1253,6 +1594,10 @@ def _main(argv: list[str]) -> int:
     _score(boundary, "gate_fields_read_by_the_ranker")
     if boundary["gate_verdicts_mismatching_expectation"] > 0:
         exit_code = max(exit_code, 1)
+    _score(
+        write_false_disqualification_evidence(target.parent / "T86.json"),
+        "false_disqualifications",
+    )
 
     return exit_code
 
