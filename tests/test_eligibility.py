@@ -370,6 +370,43 @@ def test_a_hard_gate_field_is_never_read_by_the_ranker() -> None:
     assert all(r["match"] for r in results), [r["detail"] for r in results if not r["match"]]
 
 
+_RANKING_MODULES = frozenset({"rank", "scoring", "weights"})
+
+
+def _imported_names(source: str) -> frozenset[str]:
+    """Every module name `source` imports, by any form.
+
+    `from integral import rank` puts `integral` in `ImportFrom.module` and
+    `rank` in its `names` — so collecting only `.module` sees the package and
+    misses the module, which is the one that matters here. Both are collected,
+    for both statement forms.
+    """
+    tree = ast.parse(source)
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module:
+                names.add(node.module.split(".")[-1])
+            names.update(alias.name.split(".")[-1] for alias in node.names)
+        elif isinstance(node, ast.Import):
+            names.update(alias.name.split(".")[-1] for alias in node.names)
+    return frozenset(names)
+
+
+def test_the_import_audit_catches_every_form_a_ranking_module_could_arrive_by() -> None:
+    """The negative control for the assertion above.
+
+    An audit that cannot see the import it is looking for would pass silently
+    forever. `from integral import rank` is the form that slipped through a
+    first version of this check, so each form is pinned here.
+    """
+    assert "rank" in _imported_names("from integral import rank\n")
+    assert "rank" in _imported_names("from integral.rank import priced_dimensions\n")
+    assert "rank" in _imported_names("import integral.rank\n")
+    assert "rank" in _imported_names("from integral import rank as r\n")
+    assert "rank" not in _imported_names("from integral.offers import Offer\n")
+
+
 def test_a_dimension_weight_cannot_change_a_gate_verdict() -> None:
     """Direction 2: no dimension weight can reach this gate's verdict.
 
@@ -392,21 +429,10 @@ def test_a_dimension_weight_cannot_change_a_gate_verdict() -> None:
         "candidate",
     ]
 
-    source = Path(eligibility.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    imported = {
-        node.module.split(".")[-1]
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module
-    } | {
-        alias.name.split(".")[-1]
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Import)
-        for alias in node.names
-    }
-    assert not imported & {"rank", "scoring", "weights"}, (
+    imported = _imported_names(Path(eligibility.__file__).read_text(encoding="utf-8"))
+    assert not imported & _RANKING_MODULES, (
         "eligibility imported a ranking module — the weight could reach the gate "
-        f"through it: {sorted(imported & {'rank', 'scoring', 'weights'})}"
+        f"through it: {sorted(imported & _RANKING_MODULES)}"
     )
 
     # With the structure pinned above, the behavioural half is worth stating:
