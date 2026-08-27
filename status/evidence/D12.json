@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 115,
-  "gates_declaring_status_key": 15,
+  "evidence_gates_read": 116,
+  "gates_declaring_status_key": 16,
   "unrecordable": [],
   "readings": [
     {
@@ -720,6 +720,14 @@
       "task": "t-4921255b",
       "key": "gate_fields_read_by_the_ranker",
       "evidence": "status/evidence/T78.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-4cfbcbd1",
+      "key": "disqualification_verdicts_without_quoted_wording",
+      "evidence": "status/evidence/T77.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true

@@ -1,0 +1,87 @@
+{
+  "disqualification_verdicts_without_quoted_wording": 0,
+  "disqualification_verdicts_without_quoted_wording_evaluated": 9,
+  "disqualification_verdicts_evaluated": 9,
+  "gate_status": "measured",
+  "violations": [],
+  "readings": [
+    {
+      "name": "stated-citizenship-bar-candidate-fails-it",
+      "verdict": "FAIL",
+      "quote": "must hold German citizenship",
+      "quoted": true
+    },
+    {
+      "name": "stated-clearance-bar-candidate-has-none",
+      "verdict": "FAIL",
+      "quote": "must hold an active TS/SCI clearance",
+      "quoted": true
+    },
+    {
+      "name": "company-wide-welcome-does-not-cancel-a-bar",
+      "verdict": "FAIL",
+      "quote": "No visa sponsorship is available",
+      "quoted": true
+    },
+    {
+      "name": "silence-about-permits",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "stated-authorisation-satisfies-the-bar",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "soft-language-is-not-a-hard-bar",
+      "verdict": "FLAG",
+      "quote": "An active security clearance is a plus",
+      "quoted": true
+    },
+    {
+      "name": "generic-bar-with-no-extractable-target-and-candidate-holds-something",
+      "verdict": "FLAG",
+      "quote": "Citizenship is required",
+      "quoted": true
+    },
+    {
+      "name": "negation-in-a-neighbouring-sentence-does-not-cancel-a-bar",
+      "verdict": "FAIL",
+      "quote": "Must hold an active TS/SCI clearance",
+      "quoted": true
+    },
+    {
+      "name": "soft-language-in-a-neighbouring-sentence-does-not-soften-a-bar",
+      "verdict": "FAIL",
+      "quote": "must hold German citizenship",
+      "quoted": true
+    },
+    {
+      "name": "the-requirement-noun-is-not-a-target",
+      "verdict": "FLAG",
+      "quote": "Must hold an active security clearance",
+      "quoted": true
+    },
+    {
+      "name": "hard-bar-candidate-status-unstated",
+      "verdict": "FLAG",
+      "quote": "Must hold an active security clearance",
+      "quoted": true
+    },
+    {
+      "name": "negated-requirement-is-not-a-bar",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "company-wide-welcome-alone-is-not-a-stated-permission",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 {
   "gate_fields_read_by_the_ranker": 0,
-  "ranked_offers_evaluated": 5,
+  "ranked_offers_evaluated": 3,
+  "audit_points_evaluated": 5,
   "gate_status": "measured",
   "violations": [],
   "results": [
@@ -17,19 +18,19 @@
       "detail": null
     },
     {
-      "direction": "gate_verdict_independent_of_weight",
+      "direction": "gate_verdict_matches_expectation",
       "name": "role-requires-german-candidate-lacks-it",
       "match": true,
       "detail": null
     },
     {
-      "direction": "gate_verdict_independent_of_weight",
+      "direction": "gate_verdict_matches_expectation",
       "name": "role-requires-spanish-candidate-holds-it",
       "match": true,
       "detail": null
     },
     {
-      "direction": "gate_verdict_independent_of_weight",
+      "direction": "gate_verdict_matches_expectation",
       "name": "company-wide-language-policy-does-not-gate-the-role",
       "match": true,
       "detail": null
