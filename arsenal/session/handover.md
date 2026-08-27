@@ -20,7 +20,7 @@ behaviour and the entire point of #221 — a gate that refuses to score itself.
 
 | PR | task | outcome |
 |---|---|---|
-| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | merged `88dd3dc` (gated on `7a63627`). **Closes nothing, and its gate did not pass** — #203 stays open, the task file is not archived, and `python -m integral.connector_health` exits 3 with `gate_status: unmeasured`. Finishing it needs a probe capture on the laptop. Squash message deliberately carries no closing keyword. |
+| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | merged `88dd3dc` (gated on `7a63627`). **Closes nothing, and its gate did not pass** — #203 stays open, the task file is not archived, and `python -m integral.connector_health` exits 3 with `gate_status: unmeasured`. Finishing it needs a probe capture on the laptop. Squash message deliberately carried no closing keyword — **and that is not a supported way to hold a task open.** `.github/workflows/arsenal-queue.yml`'s `pr-closed` job fires on any merged `arsenal/` PR and runs `queue_hooks.py pr-closed`, which closes the issue and archives the task whatever the squash message says. It did not fire here only because Actions has no runners. When minutes return, the same technique will not work: hold a task open by **not merging it**, or by parking the task file. |
 | [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) | T70 robots matching | merged `7cb26bc` (gated on `af1e57b`), #209 closed. Four fail-opens fixed; the round-2 audit's 32 accepted cases committed as fixtures, `robots_verdicts_evaluated` 24 → 56. |
 | [#235](https://github.com/nuncaeslupus/integral-job-search/pull/235) | T76 eligibility gate | merged `ff059aa` (gated on `4fcce80`), #218 closed. Unblocks five tasks. |
 | [#239](https://github.com/nuncaeslupus/integral-job-search/pull/239) | T77 quoted disqualifications | merged `d54d6de`, #206 closed. Every disqualification carries a byte-for-byte advert span; `_require_advert_span` raises `QuoteProvenanceError` on anything else. |
@@ -81,8 +81,15 @@ reviewer churning.
 
 ## Standing environment facts
 
-- **CI is red repo-wide and it is not any diff**: Actions is out of runner minutes, jobs die in
-  3–5 seconds with `runner_id: 0`, on `main` too. Never gate a merge on it.
+- **CI is red repo-wide and it is not any diff** — *while the signature below holds, and not a
+  moment longer.* Actions is out of runner minutes: jobs die in seconds with `runner_id: 0` and
+  an empty `runner_name`, meaning no runner was ever assigned, on `main` as much as any branch.
+  **Confirm that signature on the actual job record before discounting a red check**; a red CI
+  without it is a real failure and gates the merge. Two live costs of having written this
+  unconditionally the first time: it reads as a permanent CI bypass, and a dead Actions is *also*
+  a dead `arsenal-queue.yml` — every queue transition in that file (`pr-closed`, `sync-handles`,
+  `sweep-claims`, `keyword-guard`) is silently not running, which is how T72 above came to look
+  like a supported exception.
 - The **GitHub MCP server dropped once mid-run** (`400: invalid session`) and came back. Plain
   `git` kept working throughout. If it drops again: fetch, gate and push still work; merging,
   commenting and opening PRs do not.
