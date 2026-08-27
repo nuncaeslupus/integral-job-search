@@ -438,10 +438,14 @@ def test_a_dimension_weight_cannot_change_a_gate_verdict() -> None:
 
     # With the structure pinned above, the behavioural half is worth stating:
     # two genuinely different weight scenarios, and a verdict that is the
-    # offer's alone under both.
+    # offer's alone under both. Catalan, not German: T88 scopes the language
+    # vocabulary to the three languages this search runs in, so a resolvable
+    # mismatch is what genuinely FAILs here — an unresolved one is FLAG (see
+    # `test_an_unknown_language_flags_rather_than_fails`), and this test's
+    # own claim is about weights, not about vocabulary coverage.
     offer = _language_offer(
-        "Backend Engineer, remote. German is required for this role.",
-        requirement_language="de",
+        "Backend Engineer, remote. Catalan is required for this role.",
+        requirement_language="Catalan",
     )
     candidate = CandidateEligibility(languages=("en",))
 
@@ -758,11 +762,13 @@ def test_a_language_quote_the_advert_never_contained_is_a_schema_violation() -> 
 
 def test_a_language_quote_that_is_a_real_span_is_accepted() -> None:
     """The other half of the case above: the check rejects fabrication, not
-    structured language requirements as such."""
+    structured language requirements as such. Catalan, not German — this
+    needs a resolvable mismatch to genuinely FAIL, since T88 scopes the
+    language vocabulary to `en`/`es`/`ca` and an unresolved target is FLAG."""
     offer = _language_offer(
-        "Backend Engineer, remote. German is required for this role.",
-        requirement_language="de",
-        quote="German is required for this role.",
+        "Backend Engineer, remote. Catalan is required for this role.",
+        requirement_language="Catalan",
+        quote="Catalan is required for this role.",
     )
 
     reading = eligibility.evaluate_offer(offer, CandidateEligibility(languages=("en",)))
@@ -1163,3 +1169,167 @@ def test_two_spellings_of_one_country_do_not_read_as_an_unresolved_term() -> Non
     )
 
     assert reading.verdict == "FAIL"
+
+
+# ---------------------------------------------------------------------------
+# T88 — language parity: every supported language behaves the same
+
+
+def _language_requirement_verdict(role_language: str, candidate: CandidateEligibility) -> str:
+    """One `language_requirement.language` value against `candidate`, through
+    the same offer-shaped path `evaluate_offer` uses — never a shortcut
+    around `_language_as_requirement`."""
+    offer = Offer(
+        id=compute_offer_id(role_language),
+        source="manual",
+        text=f"Role requires {role_language}.",
+        language_requirement=LanguageRequirement(
+            language=role_language, quote=f"Role requires {role_language}.", applies_to="role"
+        ),
+    )
+    return eligibility.evaluate_offer(offer, candidate).verdict
+
+
+def test_a_language_is_recognised_under_every_supported_spelling() -> None:
+    """Failure 1's table: a candidate who holds `es` clears every spelling an
+    advert or a profile might use for Spanish — the code, the English word,
+    and the Spanish and Catalan words themselves. Byte-identical spelling was
+    the only path to PASS before T88 added `language` to `_TABLE_KINDS`."""
+    candidate = C(languages=("es",))
+    for spelling in ("Spanish", "español", "castellano", "es"):
+        assert _language_requirement_verdict(spelling, candidate) == "PASS", spelling
+
+    # The inverse spelling pairing from the same table: the candidate's own
+    # holding spelled out, the advert's requirement as a bare code.
+    assert _language_requirement_verdict("es", C(languages=("Spanish",))) == "PASS"
+    assert _language_requirement_verdict("català", C(languages=("ca",))) == "PASS"
+
+
+def test_an_unknown_language_flags_rather_than_fails() -> None:
+    """A language outside the scoped vocabulary — this search runs in
+    `en`/`es`/`ca` only — is unresolved, not disproven. `None` routes to
+    FLAG, the same rule the country table already follows, never a confident
+    FAIL over a language this table was never given words for."""
+    reading_verdict = _language_requirement_verdict("German", C(languages=("es",)))
+
+    assert reading_verdict == "FLAG"
+
+
+def test_a_spanish_advert_stating_a_bar_is_not_read_as_silence() -> None:
+    """Failure 2: `_CITIZENSHIP_PATTERNS`/`_WORK_PERMIT_PATTERNS` were
+    English-only, so a Spanish advert stating the same bar produced no
+    `Requirement` at all — read as silence, which is a PASS over a bar the
+    advert plainly stated."""
+    citizenship = eligibility.evaluate_text(
+        "x", "Se requiere nacionalidad española.", C(citizenships=("FR",))
+    )
+    work_permit = eligibility.evaluate_text(
+        "x", "Imprescindible tener permiso de trabajo en España.", C(work_authorisations=("FR",))
+    )
+    bloc = eligibility.evaluate_text(
+        "x", "Imprescindible ser ciudadano comunitario.", C(citizenships=("US",))
+    )
+
+    assert citizenship.verdict == "FAIL"
+    assert citizenship.reason == "citizenship"
+    assert work_permit.verdict == "FAIL"
+    assert work_permit.reason == "work_permit"
+    assert bloc.verdict == "FAIL"
+
+
+def test_a_catalan_advert_stating_a_bar_is_not_read_as_silence() -> None:
+    """The Catalan half of failure 2 — the same gap, the same fix."""
+    citizenship = eligibility.evaluate_text(
+        "x", "Cal tenir la nacionalitat espanyola.", C(citizenships=("FR",))
+    )
+    work_permit = eligibility.evaluate_text(
+        "x", "Cal tenir permís de treball a Espanya.", C(work_authorisations=("FR",))
+    )
+    bloc = eligibility.evaluate_text(
+        "x", "Imprescindible ser ciutadà comunitari.", C(citizenships=("US",))
+    )
+
+    assert citizenship.verdict == "FAIL"
+    assert citizenship.reason == "citizenship"
+    assert work_permit.verdict == "FAIL"
+    assert work_permit.reason == "work_permit"
+    assert bloc.verdict == "FAIL"
+
+
+def test_the_same_bar_in_three_languages_reaches_the_same_verdict() -> None:
+    """Parity itself, which is the gate: the same citizenship bar, targeting
+    Spain, stated in English, Spanish and Catalan, against the same
+    candidate — every language must agree."""
+    candidate = C(citizenships=("ES",))
+    texts = {
+        "en": "Applicants must hold Spanish citizenship at the time of application.",
+        "es": "Se requiere nacionalidad española.",
+        "ca": "Cal tenir la nacionalitat espanyola.",
+    }
+
+    verdicts = {
+        language: eligibility.evaluate_text("x", text, candidate).verdict
+        for language, text in texts.items()
+    }
+
+    assert set(verdicts.values()) == {"PASS"}, verdicts
+
+
+def test_a_targetless_english_work_permit_bar_is_found() -> None:
+    """Failure 2's second example: naming no country at all matched neither
+    the targeted "for {country}" pattern nor any sponsorship pattern, so a
+    plainly stated bar read as silence."""
+    must_hold = eligibility.evaluate_text(
+        "x", "You must hold a valid work permit.", C(work_authorisations=())
+    )
+    passive = eligibility.evaluate_text(
+        "x", "A valid work permit is required.", C(work_authorisations=())
+    )
+
+    assert must_hold.verdict == "FAIL"
+    assert must_hold.reason == "work_permit"
+    assert passive.verdict == "FAIL"
+    assert passive.reason == "work_permit"
+
+
+def test_a_targeted_bar_is_not_dragged_to_flag_by_its_own_targetless_pattern() -> None:
+    """Failure 3: "German citizenship is required" also matches the generic
+    "citizenship is required" pattern — the same sentence read twice.
+    Worst-verdict-wins then took the targetless FLAG over the targeted PASS,
+    flagging a German candidate an advert plainly clears."""
+    reading = eligibility.evaluate_text(
+        "x", "German citizenship is required.", C(citizenships=("DE",))
+    )
+
+    assert reading.verdict == "PASS"
+    assert len(reading.requirements) == 1, "the targetless duplicate must not survive the scan"
+
+
+def test_every_new_pattern_has_a_sentence_it_must_not_match() -> None:
+    """The negative control T88's own notes require: each ES/CA/targetless
+    pattern added for failures 2 and 3 has a sentence that names its subject
+    without stating a bar, and must not be read as one."""
+    negatives = (
+        "Se requiere experiencia en Python.",
+        "Buscamos personas ciudadanas del mundo, comprometidas con la excelencia.",
+        "Valoramos que tengas nacionalidad española, aunque no es imprescindible.",
+        "Cal tenir experiència prèvia en un lloc similar.",
+        "El permiso de conducir es muy valorado.",
+        "Work permit sponsorship may be available for the right candidate.",
+    )
+    for text in negatives:
+        assert eligibility.find_requirements(text) == (), text
+
+
+def test_the_language_parity_gate_does_not_pass_on_an_empty_input_set() -> None:
+    """A count of zero disagreements over nothing compared is not a pass —
+    the denominator is asserted, mirroring T86's own gate."""
+    measured = eligibility.measure_language_parity()
+
+    assert measured["cross_language_verdict_disagreements_evaluated"] > 0
+    assert measured["gate_status"] == "measured"
+    assert measured["cross_language_verdict_disagreements"] == 0
+
+    unmeasured = eligibility._unmeasured_language_parity([])
+    assert unmeasured["cross_language_verdict_disagreements"] == -1
+    assert unmeasured["gate_status"] == "unmeasured"

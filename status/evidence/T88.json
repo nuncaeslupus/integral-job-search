@@ -1,0 +1,58 @@
+{
+  "cross_language_verdict_disagreements": 0,
+  "cross_language_verdict_disagreements_evaluated": 5,
+  "gate_status": "measured",
+  "violations": [],
+  "readings": [
+    {
+      "name": "citizenship_bar_names_spain",
+      "expected": "PASS",
+      "verdicts": {
+        "ca": "PASS",
+        "en": "PASS",
+        "es": "PASS"
+      },
+      "agrees": true
+    },
+    {
+      "name": "citizenship_bar_names_the_eu_bloc",
+      "expected": "PASS",
+      "verdicts": {
+        "ca": "PASS",
+        "en": "PASS",
+        "es": "PASS"
+      },
+      "agrees": true
+    },
+    {
+      "name": "work_permit_bar_names_spain",
+      "expected": "PASS",
+      "verdicts": {
+        "ca": "PASS",
+        "en": "PASS",
+        "es": "PASS"
+      },
+      "agrees": true
+    },
+    {
+      "name": "language_requirement_names_spanish",
+      "expected": "PASS",
+      "verdicts": {
+        "ca": "PASS",
+        "en": "PASS",
+        "es": "PASS"
+      },
+      "agrees": true
+    },
+    {
+      "name": "language_requirement_names_an_unresolved_language",
+      "expected": "FLAG",
+      "verdicts": {
+        "ca": "FLAG",
+        "en": "FLAG",
+        "es": "FLAG"
+      },
+      "agrees": true
+    }
+  ]
+}

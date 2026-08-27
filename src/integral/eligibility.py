@@ -273,7 +273,14 @@ def is_company_wide_statement(text: str) -> bool:
 # trailing optional clause ("... in the EU without sponsorship") is not
 # swallowed into the target itself. This gate is not a geography or
 # clearance-taxonomy parser — see the module docstring on accuracy.
-_TARGET = r"(?P<target>[A-Za-z0-9][A-Za-z0-9./-]*(?:\s+[A-Za-z0-9][A-Za-z0-9./-]*){0,3}?)"
+#
+# `\w` rather than `A-Za-z0-9`: T88's ES/CA patterns below name their targets
+# in Spanish and Catalan — "España", "alemán", "català" — and an ASCII-only
+# class either drops the accented letter or truncates the target before it,
+# neither of which is a real word. Python's `re` treats `\w` as Unicode-aware
+# for `str` patterns by default, so this widens the target to any language's
+# letters without touching what already matched.
+_TARGET = r"(?P<target>[\w./-][\w./-]*(?:\s+[\w./-][\w./-]*){0,3}?)"
 
 _CITIZENSHIP_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
@@ -292,6 +299,18 @@ _CITIZENSHIP_PATTERNS: tuple[re.Pattern[str], ...] = (
     # is scored against whether the candidate has stated *any* citizenship at
     # all — see `_verdict_for_requirement`.
     re.compile(r"\bcitizenship\s+(?:is\s+)?required\b", re.I),
+    # T88 failure 2: the patterns above are English-only, so an ES/CA advert
+    # stating the exact same bar produced no `Requirement` at all — read as
+    # silence, which is a PASS over a bar the advert plainly stated. Written
+    # from adverts, not translated word-for-word from the English above (see
+    # the module's T88 note): "imprescindible" carries the hardness "must"
+    # carries, and "permiso de trabajo" is not "work permit" rendered literally.
+    re.compile(
+        rf"\b(?:se\s+requiere|imprescindible\s+tener)\s+(?:la\s+)?nacionalidad\s+{_TARGET}\b", re.I
+    ),
+    re.compile(rf"\bimprescindible\s+ser\s+ciudadan[oa]\s+{_TARGET}\b", re.I),
+    re.compile(rf"\bcal\s+tenir\s+(?:la\s+)?nacionalitat\s+{_TARGET}\b", re.I),
+    re.compile(rf"\bimprescindible\s+ser\s+ciutad[àa]n?a?\s+{_TARGET}\b", re.I),
 )
 
 _WORK_PERMIT_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -325,6 +344,24 @@ _WORK_PERMIT_PATTERNS: tuple[re.Pattern[str], ...] = (
     ),
     re.compile(r"\bwill\s+not\s+sponsor\b", re.I),
     re.compile(r"\bsponsorship\s+is\s+not\s+(?:available|offered|provided)\b", re.I),
+    # T88 failure 2, second example: "a valid work permit" naming no country
+    # at all matched neither the targeted pattern above (which requires
+    # "for X") nor any sponsorship pattern, so it read as silence though the
+    # advert plainly stated a bar. No target: scored against whether the
+    # candidate has stated *any* authorisation at all, same as the
+    # sponsorship patterns above.
+    re.compile(
+        r"\bmust\s+(?:hold|have)\s+(?:a\s+valid\s+work\s+permit|the\s+right\s+to\s+work)\b", re.I
+    ),
+    re.compile(r"\ba\s+valid\s+work\s+permit\s+is\s+required\b", re.I),
+    # T88 failure 2: the ES/CA equivalents of the targeted "right to work in
+    # {country}" pattern above, written from adverts rather than translated.
+    re.compile(
+        rf"\b(?:imprescindible\s+tener|se\s+requiere|es\s+necesario\s+tener)\s+"
+        rf"(?:el\s+)?permiso\s+de\s+trabajo\s+en\s+{_TARGET}\b",
+        re.I,
+    ),
+    re.compile(rf"\bcal\s+tenir\s+(?:el\s+)?perm[ií]s\s+de\s+treball\s+a\s+{_TARGET}\b", re.I),
 )
 
 _CLEARANCE_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -574,10 +611,41 @@ _ELIGIBILITY_ALIASES: dict[str, str] = {
     **{_normalize(code): code for code in (*_COUNTRY_TERMS, *_BLOC_TERMS)},
 }
 
-#: The kinds scored through the table. Clearance and language keep the exact
-#: `_normalize` comparison: routing them here would resolve every one of their
-#: terms to `None` and turn today's correct PASSes into FLAGs.
-_TABLE_KINDS: frozenset[RequirementKind] = frozenset({"citizenship", "work_permit"})
+# ── T88: the language vocabulary ─────────────────────────────────────────────
+#
+# The same false-FAIL this whole table exists to close, one field over: an
+# advert names the language a role needs by its word ("Spanish", "español"),
+# a candidate's profile names what they speak by its code (`es`) or by
+# whichever of the three languages this search runs in they were recorded in.
+# Comparing the two verbatim (`_normalize` equality, what this gate did before
+# T88) makes them agree only when they happen to be spelled identically —
+# which "Spanish" and "es" never are. Same shape as the country table, same
+# reason `_TABLE_KINDS` routes both through it: a term outside the table is
+# `None`, and `None` is FLAG, never FAIL.
+_LANGUAGE_TERMS: dict[str, tuple[str, ...]] = {
+    "es": ("spanish", "español", "espanyol", "castellano", "castellà", "castella"),
+    "en": ("english", "inglés", "ingles", "anglès", "angles"),
+    "ca": ("catalan", "català", "catala", "catalán"),
+}
+
+#: One vocabulary for both sides, unlike the country table's asymmetric
+#: `_ADVERT_TERMS`/`_ELIGIBILITY_ALIASES` split. That split exists because a
+#: country name is captured out of *free-running prose* by `_TARGET`, where a
+#: bare code risks matching a function word ("**at** least twelve months").
+#: `LanguageRequirement.language` is never captured that way — it is T78's
+#: own structured field, already segmented by whatever extracted it — so a
+#: bare `es` here is as legitimate a value as `Offer.language` itself uses,
+#: never a word plucked from a sentence. Both the advert's requirement and the
+#: candidate's stated holding resolve through the same table.
+_LANGUAGE_ALIASES: dict[str, str] = {
+    _normalize(term): code for code, terms in _LANGUAGE_TERMS.items() for term in terms
+} | {_normalize(code): code for code in _LANGUAGE_TERMS}
+
+#: The kinds scored through a table. Clearance keeps the exact `_normalize`
+#: comparison: routing it here would resolve every one of its terms to `None`
+#: and turn today's correct PASSes into FLAGs — clearances are national
+#: schemes this table does not model (see the module's vocabulary note).
+_TABLE_KINDS: frozenset[RequirementKind] = frozenset({"citizenship", "work_permit", "language"})
 
 
 def _resolve_eligibility_term(value: str) -> str | None:
@@ -594,6 +662,36 @@ def _resolve_advert_term(value: str) -> str | None:
     bare ISO code out of running prose. See `_ADVERT_TERMS`.
     """
     return _ADVERT_TERMS.get(_normalize(value))
+
+
+def _resolve_language_term(value: str) -> str | None:
+    """The canonical language code `value` names — a bare code or a spelled
+    name, from either the advert's stated requirement or the candidate's
+    stated holding — or `None` outside the scoped vocabulary. `None` is the
+    safe answer, not a failure: every caller routes it to FLAG."""
+    return _LANGUAGE_ALIASES.get(_normalize(value))
+
+
+def _language_verdict(target: str, held: tuple[str, ...]) -> Verdict:
+    """A language bar against what the candidate has stated they speak.
+
+    `_vocabulary_verdict`'s shape without the bloc handling: no language forms
+    a bloc the way EU/EEA/EFTA do for citizenship and work rights, so a
+    resolved target either matches something the candidate holds, or it does
+    not — there is no third side to contain it.
+    """
+    wanted = _resolve_language_term(target)
+    if wanted is None:
+        return "FLAG"
+    resolved = [_resolve_language_term(value) for value in held]
+    held_codes = {code for code in resolved if code is not None}
+    if wanted in held_codes:
+        return "PASS"
+    # An unresolved holding may be the very thing that satisfies the bar —
+    # same rule `_vocabulary_verdict` closes with, and for the same reason.
+    if any(code is None for code in resolved):
+        return "FLAG"
+    return "FAIL"
 
 
 def _vocabulary_verdict(kind: RequirementKind, target: str, held: tuple[str, ...]) -> Verdict:
@@ -705,7 +803,23 @@ def _scan(
                     ambiguous=ambiguous,
                 )
             )
-    return found
+    # T88 failure 3: a targetless pattern ("citizenship is required") can
+    # match a strict substring of a targeted match's own text ("German
+    # citizenship is required") — the same sentence read twice, by two
+    # patterns that both exist to catch different sentences. Worst-verdict-
+    # wins then lets the targetless reading (scored against "does the
+    # candidate hold anything of this kind at all", often FLAG) drag down a
+    # targeted PASS the advert never put in doubt. Dropping the targetless
+    # duplicate here, before either reaches `_reading_from_requirements`,
+    # leaves the targeted match — the one that actually named something — to
+    # speak for the sentence alone.
+    targeted_quotes = [requirement.quote for requirement in found if requirement.target is not None]
+    return [
+        requirement
+        for requirement in found
+        if requirement.target is not None
+        or not any(requirement.quote in quote for quote in targeted_quotes)
+    ]
 
 
 def find_requirements(text: str) -> tuple[Requirement, ...]:
@@ -743,6 +857,11 @@ def _verdict_for_requirement(
         if not held:
             return "FAIL", requirement.kind, requirement.quote
         return "FLAG", requirement.kind, requirement.quote
+    if requirement.kind == "language":
+        # No blocs, no passport-carries-a-permit special case: a language
+        # bar is scored against what the candidate has stated they speak,
+        # nothing else stands in for it.
+        return _language_verdict(requirement.target, held), requirement.kind, requirement.quote
     if requirement.kind in _TABLE_KINDS:
         verdict = _vocabulary_verdict(requirement.kind, requirement.target, held)
         # A passport is a work authorisation, and `work_authorisations` lists
@@ -1489,12 +1608,16 @@ def _language_offer(
 #: mechanism is right on real adverts.
 WEIGHT_INVARIANCE_CASES: tuple[WeightInvarianceCase, ...] = (
     WeightInvarianceCase(
-        name="role-requires-german-candidate-lacks-it",
+        # Catalan, not German: T88 scopes the language vocabulary to the
+        # three languages this search runs in, so this needs a resolvable
+        # mismatch to genuinely FAIL — an unresolved target is FLAG (see
+        # `test_an_unknown_language_flags_rather_than_fails`), which this
+        # boundary fixture is not testing.
+        name="role-requires-catalan-candidate-lacks-it",
         offer=_language_offer(
-            "Backend Engineer, remote. Verhandlungssicheres Deutsch ist Voraussetzung "
-            "fuer diese Rolle.",
-            requirement_language="de",
-            quote="Verhandlungssicheres Deutsch ist Voraussetzung fuer diese Rolle.",
+            "Backend Engineer, remote. Cal domini del català per a aquesta posició.",
+            requirement_language="ca",
+            quote="Cal domini del català per a aquesta posició.",
         ),
         candidate=CandidateEligibility(languages=("en",)),
         expected="FAIL",
@@ -1827,13 +1950,171 @@ def write_false_disqualification_evidence(evidence: Path) -> dict[str, Any]:
     return measured
 
 
+# T88's own gate — the same bar, stated in every supported language, reaches
+# the same verdict
+
+
+@dataclass(frozen=True)
+class _ParityGroup:
+    """One eligibility bar, or one language requirement, stated once per
+    supported language (`en`, `es`, `ca`) and scored against one candidate.
+
+    `texts` carries a full advert sentence per language, for the
+    text-scanned kinds (`citizenship`, `work_permit`); `language_targets`
+    carries the bare language word per language, for the structured
+    `language` kind, which `_language_as_requirement` sources from
+    `offer.language_requirement` rather than a regex scan (T78). A group
+    sets exactly one of the two, matching how its kind is evaluated.
+    """
+
+    name: str
+    candidate: CandidateEligibility
+    expected: Verdict
+    texts: dict[str, str] | None = None
+    language_targets: dict[str, str] | None = None
+
+
+#: Each group states the *same* bar three times — the exact sentences T88's
+#: audit found broken (see the module notes on failures 1 and 2), not a
+#: translation exercise: the ES/CA sentences are the ones `_CITIZENSHIP_
+#: PATTERNS`/`_WORK_PERMIT_PATTERNS` were extended with above, so this table
+#: measures the extension, not a hypothetical one.
+_PARITY_GROUPS: tuple[_ParityGroup, ...] = (
+    _ParityGroup(
+        name="citizenship_bar_names_spain",
+        candidate=CandidateEligibility(citizenships=("ES",)),
+        expected="PASS",
+        texts={
+            "en": "Applicants must hold Spanish citizenship at the time of application.",
+            "es": "Se requiere nacionalidad española.",
+            "ca": "Cal tenir la nacionalitat espanyola.",
+        },
+    ),
+    _ParityGroup(
+        name="citizenship_bar_names_the_eu_bloc",
+        candidate=CandidateEligibility(citizenships=("FR",)),
+        expected="PASS",
+        texts={
+            "en": "Applicants must hold EU citizenship.",
+            "es": "Imprescindible ser ciudadano comunitario.",
+            "ca": "Imprescindible ser ciutadà comunitari.",
+        },
+    ),
+    _ParityGroup(
+        name="work_permit_bar_names_spain",
+        candidate=CandidateEligibility(work_authorisations=("ES",)),
+        expected="PASS",
+        texts={
+            "en": "Applicants must have the legal right to work in Spain.",
+            "es": "Imprescindible tener permiso de trabajo en España.",
+            "ca": "Cal tenir permís de treball a Espanya.",
+        },
+    ),
+    _ParityGroup(
+        name="language_requirement_names_spanish",
+        candidate=CandidateEligibility(languages=("es",)),
+        expected="PASS",
+        language_targets={"en": "Spanish", "es": "español", "ca": "espanyol"},
+    ),
+    _ParityGroup(
+        name="language_requirement_names_an_unresolved_language",
+        candidate=CandidateEligibility(languages=("es",)),
+        expected="FLAG",
+        language_targets={"en": "Klingon", "es": "klingon", "ca": "klingon"},
+    ),
+)
+
+
+def _parity_verdict(group: _ParityGroup, language: str) -> Verdict:
+    """The group's verdict as stated in one `language` — routed through
+    exactly the same evaluator a real advert or a real structured field
+    would reach, never a shortcut around it."""
+    if group.language_targets is not None:
+        target = group.language_targets[language]
+        requirement = Requirement(
+            kind="language", quote=target, target=_normalize(target), ambiguous=False
+        )
+        verdict, _, _ = _verdict_for_requirement(requirement, group.candidate)
+        return verdict
+    assert group.texts is not None
+    text = group.texts[language]
+    return evaluate_text(f"{group.name}-{language}", text, group.candidate).verdict
+
+
+def _unmeasured_language_parity(readings: list[dict[str, Any]]) -> dict[str, Any]:
+    """The empty-input shape for T88's gate — `-1`, never a clean `0`, the
+    same rule `_unmeasured_false_disqualifications` applies to T86's."""
+    return {
+        "cross_language_verdict_disagreements": -1,
+        "cross_language_verdict_disagreements_evaluated": 0,
+        "gate_status": "unmeasured",
+        "unmeasured_reason": (
+            "no parity group is defined — a zero disagreement count over nothing "
+            "compared is not a measurement"
+        ),
+        "readings": readings,
+    }
+
+
+def measure_language_parity() -> dict[str, Any]:
+    """T88's gate reading: `cross_language_verdict_disagreements`.
+
+    Each group states one bar in every supported language and scores all
+    three against the same candidate. A disagreement is either the three
+    verdicts failing to agree with each other, or all three agreeing on
+    something other than `expected` — a language that quietly regressed to
+    the same wrong answer everywhere would not be caught by comparing the
+    languages to each other alone.
+    """
+    readings: list[dict[str, Any]] = []
+    for group in _PARITY_GROUPS:
+        by_language = group.language_targets if group.language_targets is not None else group.texts
+        assert by_language is not None
+        languages = sorted(by_language)
+        verdicts = {language: _parity_verdict(group, language) for language in languages}
+        agreed = len(set(verdicts.values())) == 1
+        agrees = agreed and next(iter(verdicts.values())) == group.expected
+        readings.append(
+            {
+                "name": group.name,
+                "expected": group.expected,
+                "verdicts": verdicts,
+                "agrees": agrees,
+            }
+        )
+    if not readings:
+        return _unmeasured_language_parity(readings)
+    disagreements = [reading for reading in readings if not reading["agrees"]]
+    return {
+        "cross_language_verdict_disagreements": len(disagreements),
+        "cross_language_verdict_disagreements_evaluated": len(readings),
+        "gate_status": "measured",
+        "violations": [
+            f"{reading['name']}: expected {reading['expected']} in every language, "
+            f"got {reading['verdicts']}"
+            for reading in disagreements
+        ],
+        "readings": readings,
+    }
+
+
+def write_language_parity_evidence(evidence: Path) -> dict[str, Any]:
+    """Measure T88's gate and write it to `evidence`."""
+    measured = measure_language_parity()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.eligibility [T76-path [T77-path]]`.
 
-    One module, four gates. T76's `offers_ranked_despite_a_stated_disqualification`,
-    T77's `disqualification_verdicts_without_quoted_wording` and T78's
-    `gate_fields_read_by_the_ranker` are all measured and written here, because
-    all three task payloads name this same regeneration command.
+    One module, six gates. T76's `offers_ranked_despite_a_stated_disqualification`,
+    T77's `disqualification_verdicts_without_quoted_wording`, T78's
+    `gate_fields_read_by_the_ranker`, T86's `false_disqualifications` and T88's
+    `cross_language_verdict_disagreements` are all measured and written here,
+    because every one of those task payloads names this same regeneration
+    command.
 
     Paths: T77's second positional defaults to sitting beside the first, and
     T78's target is derived the same way, so a test pointing T76's evidence at
@@ -1883,6 +2164,10 @@ def _main(argv: list[str]) -> int:
     _score(
         write_false_disqualification_evidence(target.parent / "T86.json"),
         "false_disqualifications",
+    )
+    _score(
+        write_language_parity_evidence(target.parent / "T88.json"),
+        "cross_language_verdict_disagreements",
     )
 
     return exit_code

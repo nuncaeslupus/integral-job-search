@@ -23,7 +23,7 @@
     },
     {
       "direction": "gate_verdict_matches_expectation",
-      "name": "role-requires-german-candidate-lacks-it",
+      "name": "role-requires-catalan-candidate-lacks-it",
       "match": true,
       "detail": null
     },
