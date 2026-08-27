@@ -1,7 +1,7 @@
 {
   "disqualification_verdicts_without_quoted_wording": 0,
-  "disqualification_verdicts_without_quoted_wording_evaluated": 17,
-  "disqualification_verdicts_evaluated": 17,
+  "disqualification_verdicts_without_quoted_wording_evaluated": 34,
+  "disqualification_verdicts_evaluated": 34,
   "gate_status": "measured",
   "violations": [],
   "readings": [
@@ -96,10 +96,154 @@
       "quoted": true
     },
     {
-      "name": "work-permit-bloc-bar-satisfied-by-a-member-state",
+      "name": "a-member-states-permit-is-not-a-bloc-wide-permit",
+      "verdict": "FLAG",
+      "quote": "must already have the right to work in the EU",
+      "quoted": true
+    },
+    {
+      "name": "citizenship-of-a-member-state-is-citizenship-of-the-bloc",
       "verdict": "PASS",
       "quote": null,
       "quoted": false
+    },
+    {
+      "name": "a-passport-clears-a-work-bar-naming-the-country-it-was-issued-by",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "an-eu-passport-clears-a-bloc-wide-work-bar",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "a-duration-clause-is-not-austria",
+      "verdict": "FLAG",
+      "quote": "Must hold a valid work permit for at",
+      "quoted": true
+    },
+    {
+      "name": "the-object-pronoun-is-not-the-united-states",
+      "verdict": "FLAG",
+      "quote": "Must hold a valid work permit for us",
+      "quoted": true
+    },
+    {
+      "name": "the-subject-pronoun-is-not-italy",
+      "verdict": "FLAG",
+      "quote": "must already have the right to work in it",
+      "quoted": true
+    },
+    {
+      "name": "a-negative-quantifier-is-not-norway",
+      "verdict": "FLAG",
+      "quote": "Must hold a valid work permit for no",
+      "quoted": true
+    },
+    {
+      "name": "an-eea-permit-holder-against-an-eu-work-bar-is-flagged",
+      "verdict": "FLAG",
+      "quote": "must already have the right to work in the EU",
+      "quoted": true
+    },
+    {
+      "name": "an-efta-permit-holder-against-an-eu-work-bar-is-flagged",
+      "verdict": "FLAG",
+      "quote": "must already have the right to work in the EU",
+      "quoted": true
+    },
+    {
+      "name": "an-eea-country-does-not-hold-eu-citizenship",
+      "verdict": "FAIL",
+      "quote": "must hold EU citizenship",
+      "quoted": true
+    },
+    {
+      "name": "switzerland-is-neither-eu-nor-eea-for-citizenship",
+      "verdict": "FAIL",
+      "quote": "must hold EU citizenship",
+      "quoted": true
+    },
+    {
+      "name": "the-uk-is-outside-the-eu",
+      "verdict": "FAIL",
+      "quote": "must hold EU citizenship",
+      "quoted": true
+    },
+    {
+      "name": "an-eu-member-state-satisfies-an-eea-citizenship-bar",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "two-resolved-holdings-outside-the-bloc-still-fail",
+      "verdict": "FAIL",
+      "quote": "must already have the right to work in the EU",
+      "quoted": true
+    },
+    {
+      "name": "case-folding-does-not-change-the-verdict",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "an-unaccented-advert-spelling-still-resolves",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "a-catalan-advert-spelling-resolves",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "a-spanish-demonym-resolves-to-the-iso-code",
+      "verdict": "PASS",
+      "quote": null,
+      "quoted": false
+    },
+    {
+      "name": "a-catalan-demonym-for-another-country-still-fails",
+      "verdict": "FAIL",
+      "quote": "must hold alemanya citizenship",
+      "quoted": true
+    },
+    {
+      "name": "a-negated-bloc-term-is-not-the-bloc",
+      "verdict": "FLAG",
+      "quote": "must be a non-comunitario citizen",
+      "quoted": true
+    },
+    {
+      "name": "a-nationality-outside-the-table-cannot-be-failed",
+      "verdict": "FLAG",
+      "quote": "must be a comunitario citizen",
+      "quoted": true
+    },
+    {
+      "name": "schengen-is-not-a-citizenship-this-table-models",
+      "verdict": "FLAG",
+      "quote": "must hold Schengen citizenship",
+      "quoted": true
+    },
+    {
+      "name": "one-unresolved-holding-beside-a-resolved-miss-is-flagged",
+      "verdict": "FLAG",
+      "quote": "must already have the right to work in the EU",
+      "quoted": true
+    },
+    {
+      "name": "a-preferred-citizenship-is-not-a-bar",
+      "verdict": "FLAG",
+      "quote": "Spanish citizenship is preferred",
+      "quoted": true
     },
     {
       "name": "work-permit-country-bar-satisfied-by-the-bloc",

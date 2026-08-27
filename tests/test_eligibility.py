@@ -946,13 +946,113 @@ def test_an_unresolved_holding_flags_even_when_the_target_resolves() -> None:
     assert reading.verdict == "FLAG"
 
 
-def test_a_bloc_bar_is_satisfied_by_a_member_state() -> None:
-    """`ES` clears "right to work in the EU" because Spain is in it."""
-    reading = eligibility.evaluate_text(
-        "x", "You must already have the right to work in the EU.", C(work_authorisations=("ES",))
+def test_a_member_state_satisfies_a_bloc_bar_only_for_citizenship() -> None:
+    """Citizenship of Spain **is** citizenship of the EU, so the bar is cleared.
+    A Spanish work permit is a *national* permit and does not authorise work in
+    Germany — so the same containment, for the other kind, is FLAG.
+
+    Returning PASS for both was a silent yes over a bar the candidate may well
+    not clear, and it is the shape of every remaining bloc rule here: a bloc
+    relates to a passport and to a permit oppositely.
+    """
+    assert (
+        eligibility.evaluate_text(
+            "x", "Applicants must hold EU citizenship.", C(citizenships=("ES",))
+        ).verdict
+        == "PASS"
+    )
+    assert (
+        eligibility.evaluate_text(
+            "x",
+            "You must already have the right to work in the EU.",
+            C(work_authorisations=("ES",)),
+        ).verdict
+        == "FLAG"
     )
 
-    assert reading.verdict == "PASS"
+
+def test_a_function_word_never_resolves_to_a_country() -> None:
+    """The false-disqualification class this table introduced, and the reason
+    the advert's vocabulary and the candidate's are now two tables.
+
+    Appending each ISO code as an alias made `at`, `us`, `it`, `no`, `de` and
+    `es` advert-side vocabulary, and `_TARGET` captures a function word as
+    happily as a country: "a valid work permit for **at** least twelve months"
+    resolved to Austria and FAILed a candidate with Spanish work rights. Every
+    one of these is a job the candidate is silently never shown.
+    """
+    for text in (
+        "Must hold a valid work permit for at least twelve months.",
+        "Must hold a valid work permit for us.",
+        "You must already have the right to work in it.",
+        "Must hold a valid work permit for no less than a year.",
+    ):
+        verdict = eligibility.evaluate_text("x", text, C(work_authorisations=("ES",))).verdict
+        assert verdict != "FAIL", f"{text!r} disqualified a candidate over a function word"
+
+
+def test_a_country_in_another_bloc_is_flagged_not_failed() -> None:
+    """`NO` is in the EEA and `CH` in EFTA; whether either carries into the EU
+    is the modelling this table refuses to guess at. Both fell through every
+    containment test to a confident FAIL over candidates who very likely
+    qualify — while `EEA` as a bare code, in the same position, was flagged."""
+    for held in ("NO", "CH"):
+        assert (
+            eligibility.evaluate_text(
+                "x",
+                "You must already have the right to work in the EU.",
+                C(work_authorisations=(held,)),
+            ).verdict
+            == "FLAG"
+        )
+    # A resolved country in no bloc at all is not that case and still fails.
+    assert (
+        eligibility.evaluate_text(
+            "x",
+            "You must already have the right to work in the EU.",
+            C(work_authorisations=("US", "UK")),
+        ).verdict
+        == "FAIL"
+    )
+
+
+def test_a_passport_is_a_work_authorisation() -> None:
+    """`work_authorisations` lists permits, so a Spanish citizen who holds no
+    separate permit — because they need none — recorded an empty tuple and was
+    FAILed by "the right to work in Spain". The most ordinary candidate in this
+    market, silently excluded."""
+    spaniard = C(citizenships=("ES",), work_authorisations=())
+
+    assert (
+        eligibility.evaluate_text(
+            "x", "You must already have the right to work in Spain.", spaniard
+        ).verdict
+        == "PASS"
+    )
+    assert (
+        eligibility.evaluate_text(
+            "x", "You must already have the right to work in the EU.", spaniard
+        ).verdict
+        == "PASS"
+    )
+    # The passport is consulted only to *clear* a work bar, never to raise one:
+    # a US citizen who has stated no permit still fails a German work bar.
+    assert (
+        eligibility.evaluate_text(
+            "x",
+            "You must already have the right to work in Germany.",
+            C(citizenships=("US",), work_authorisations=()),
+        ).verdict
+        == "FAIL"
+    )
+    # And an unstated permit list is still FLAG, not a guess in either
+    # direction — the passport does not turn "never said" into an answer.
+    assert (
+        eligibility.evaluate_text(
+            "x", "You must already have the right to work in Germany.", C(citizenships=("US",))
+        ).verdict
+        == "FLAG"
+    )
 
 
 def test_the_spanish_market_term_for_an_eu_national_resolves() -> None:

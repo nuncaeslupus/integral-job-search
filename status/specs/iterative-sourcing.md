@@ -288,14 +288,15 @@ model, no fitted weights, no rejection history, so it works on cycle two.
 ```python
 class Exhaustion(Strict):
     """Why a sourcing cycle is judged to have stopped finding anything new."""
-    cycle: int                 # 1-based, within this candidate
+
+    cycle: int  # 1-based, within this candidate
     offers_returned: int
-    offers_already_seen: int   # dedupe against every offer in the candidate's tree,
-                               # including purged tombstones — a purged ad the search
-                               # keeps re-finding is the definition of stuck
-    repeat_share: float        # offers_already_seen / offers_returned, 0.0 when none
+    offers_already_seen: int  # dedupe against every offer in the candidate's tree,
+    # including purged tombstones — a purged ad the search
+    # keeps re-finding is the definition of stuck
+    repeat_share: float  # offers_already_seen / offers_returned, 0.0 when none
     exhausted: bool
-    reason: str                # never empty when `exhausted` — §5.2's rule, applied here
+    reason: str  # never empty when `exhausted` — §5.2's rule, applied here
 ```
 
 `repeat_share == 0.0` when `offers_returned == 0`: a cycle that returned nothing is
@@ -332,9 +333,9 @@ is the same rule rather than a second one.
 ```python
 class ScopeProposal(Strict):
     direction: Literal["widen", "narrow"]
-    facet: str          # what would change: employer, country, stack, seniority, pay floor
-    reason: str         # why, in the candidate's terms, citing what was observed
-    alternatives: list[ScopeProposal]   # never empty, and never all one direction
+    facet: str  # what would change: employer, country, stack, seniority, pay floor
+    reason: str  # why, in the candidate's terms, citing what was observed
+    alternatives: list[ScopeProposal]  # never empty, and never all one direction
 ```
 
 **`alternatives` must contain at least one proposal of the opposite `direction`.** That is
