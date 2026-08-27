@@ -1,7 +1,8 @@
 # Session handover — 2026-08-27 ~18:35 UTC, interactive, laptop
 
 Board: **110 gates on `main`**, 124 tasks. `main` at `e53ca9c` — **unchanged this
-session**. Nothing merged into this repo; one PR is open and one upstream PR merged.
+session**. Nothing merged into this repo: three PRs are open here, and two merged
+upstream in `claude-arsenal` (plus the `v2.4.23` tag).
 
 The session was asked to fix whatever could be fixed without a live human/browser
 session, and to stop the routines.
@@ -31,7 +32,12 @@ one account — unversioned, unreviewed, and already drifted between copies.
 
 | PR | task | state |
 |---|---|---|
-| [#242](https://github.com/nuncaeslupus/integral-job-search/pull/242) | T86 eligibility vocabulary → closes #237 | **open**, head `fcaeccc`. CodeRabbit round 1 answered; round 2 not yet in. |
+| [#242](https://github.com/nuncaeslupus/integral-job-search/pull/242) | T86 eligibility vocabulary → closes #237 | head `fcaeccc`. CodeRabbit round 1 answered; round 2 not yet in. **Blocked on the independent fixture pass**, not on review — see below. |
+| [#244](https://github.com/nuncaeslupus/integral-job-search/pull/244) | bundle → v2.4.23 | mergeable, `make host-gate` exit 0. Closes no task. |
+| [#243](https://github.com/nuncaeslupus/integral-job-search/pull/243) | this handover | closes no task. |
+
+Merge order does not matter — the three touch disjoint files. Only #242 moves the
+board (110 → 111) and only #242 closes an issue.
 
 `arsenal/claims/t-fdc8e19f` is held by this session. Issue #237 now carries
 `arsenal-task: t-fdc8e19f` and the `arsenal:task` label.
@@ -109,16 +115,38 @@ exactly one importable issue, which is why it shipped green.
 **merged** — parameter removed, a gate added that feeds two and asserts two task
 files, verified to fail against the unfixed copy.
 
-**It is merged but not tagged.** The newest tag on `arsenal` is still `v2.4.22`, so
-`check_update.sh` reports the bundle current and the host cannot pull the fix. This
-is the `UNTAGGED UPSTREAM RELEASE` case, and its fix is upstream `make tag` — a
-public release, so it was left for the owner. Until then, run the fixed copy
-directly:
+**It merged without its version bump**, which is the part worth remembering:
+#254's own `version bump` check failed and went unaddressed, so the fix sat on
+`main` untaggable — `make tag` answered `v2.4.22 already published — nothing to
+release`, and every consumer's `check_update.sh` reported the bundle *current*
+while still carrying the crash. A merged fix nobody can install reads exactly
+like no fix at all.
 
-```bash
-python3 ~/dev/claude-arsenal/plugins/core/skills/init/assets/scripts/issue_import.py \
-    --issues /tmp/arsenal-import.json --tasks-dir arsenal/tasks --apply
-```
+Closed out the same session:
+
+| | |
+|---|---|
+| [claude-arsenal#257](https://github.com/nuncaeslupus/claude-arsenal/pull/257) | merged — `make bump` 2.4.22 → 2.4.23, all seven checks green including `version bump` |
+| `make tag` | **`v2.4.23` published** from `main` |
+| [#244](https://github.com/nuncaeslupus/integral-job-search/pull/244) | open — bundle refreshed here, `make host-gate` exit 0 |
+
+Verified from the **vendored** copy after the refresh: three `arsenal:queue`
+issues enumerated in one run, where the second used to raise.
+
+Two facts about refreshing that cost time to establish:
+
+- **`claude-arsenal/` here is not a git subtree**, so `git subtree pull` is not
+  the update path — `check_update.sh` says so and re-vendoring with
+  `init.py --repo-path . --silent` is what works.
+- `init.py` prints a `refreshed: session/handover.md` line that names the
+  **bundle's own template**, not this file. It does not touch this repo's
+  session record — but check the working tree before committing a refresh
+  rather than trusting that sentence.
+
+The plugin cache at `~/.claude/plugins/cache/claude-arsenal/core/` is stale at
+2.0.0. That blocks nothing, because `init.py` vendors from the checkout, but a
+future `/init` run from the cache would write *older* files over the bundle.
+`/plugin update claude-arsenal` is a user action; no session can do it.
 
 ## The CI note in `CLAUDE.md` is repo-scoped, not account-wide
 
@@ -147,8 +175,9 @@ Both keep the `arsenal:queue` label and neither has a task file.
 
 1. **#242**: CodeRabbit round 2, then the independent fixture pass, then merge.
    Board goes 110 → 111.
-2. `make tag` upstream, then refresh the bundle here so `issue_import.py` works
-   from the vendored copy.
-3. `task_select.py` returns **T71** (`t-490e52d5`, priority 10, dep T70 merged) —
+2. **#244**: merge the bundle update. **#243**: this file.
+3. `/plugin update claude-arsenal` when convenient, so the cache stops being
+   three minor versions behind what is vendored.
+4. `task_select.py` returns **T71** (`t-490e52d5`, priority 10, dep T70 merged) —
    read the robots policy with a browser agent when the honest one is refused.
    That one needs the live browser session and was deliberately left.
