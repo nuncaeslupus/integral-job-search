@@ -19,6 +19,7 @@ import pytest
 
 from integral import eligibility, rank
 from integral.eligibility import UNKNOWN_CANDIDATE, CandidateEligibility
+from integral.eligibility import CandidateEligibility as C
 from integral.offers import LanguageRequirement, Offer, compute_offer_id, connect_manual
 
 
@@ -899,3 +900,266 @@ def test_a_resolvable_ranker_module_still_measures_clean(tmp_path: Path) -> None
     assert measured["gate_status"] == "measured"
     assert measured["gate_fields_read_by_the_ranker"] == 0
     assert measured["ranker_modules_scanned"] == 1
+
+
+# ── T86: the scoped eligibility vocabulary ───────────────────────────────────
+
+
+def test_a_candidate_who_holds_the_required_citizenship_passes_it() -> None:
+    """The defect this task exists for. An advert says "German citizenship";
+    the candidate says "DE". Before the vocabulary these were two unequal
+    strings, so a qualifying candidate was FAILed — and `ES` against the same
+    advert was FAILed identically, which is correct. The two cases were
+    indistinguishable to the code."""
+    qualifies = eligibility.evaluate_text(
+        "x", "Applicants must hold German citizenship.", C(citizenships=("DE",))
+    )
+    does_not = eligibility.evaluate_text(
+        "x", "Applicants must hold German citizenship.", C(citizenships=("ES",))
+    )
+
+    assert qualifies.verdict == "PASS"
+    assert does_not.verdict == "FAIL"
+
+
+def test_a_target_outside_the_vocabulary_flags_rather_than_fails() -> None:
+    """What makes an incomplete table safe. A term the table does not carry
+    degrades to "a human decides", never to a confident exclusion — so coverage
+    is a quality dial rather than a correctness precondition."""
+    reading = eligibility.evaluate_text(
+        "x", "Applicants must hold Ruritanian citizenship.", C(citizenships=("ES",))
+    )
+
+    assert reading.verdict == "FLAG"
+
+
+def test_an_unresolved_holding_flags_even_when_the_target_resolves() -> None:
+    """The same rule read from the candidate's side. One term the table cannot
+    resolve may be the very thing that satisfies the bar, so the whole
+    requirement stays FLAG rather than FAILing on the terms that did resolve."""
+    reading = eligibility.evaluate_text(
+        "x",
+        "Applicants must hold German citizenship.",
+        C(citizenships=("ES", "Ruritanian")),
+    )
+
+    assert reading.verdict == "FLAG"
+
+
+def test_a_member_state_satisfies_a_bloc_bar_only_for_citizenship() -> None:
+    """Citizenship of Spain **is** citizenship of the EU, so the bar is cleared.
+    A Spanish work permit is a *national* permit and does not authorise work in
+    Germany — so the same containment, for the other kind, is FLAG.
+
+    Returning PASS for both was a silent yes over a bar the candidate may well
+    not clear, and it is the shape of every remaining bloc rule here: a bloc
+    relates to a passport and to a permit oppositely.
+    """
+    assert (
+        eligibility.evaluate_text(
+            "x", "Applicants must hold EU citizenship.", C(citizenships=("ES",))
+        ).verdict
+        == "PASS"
+    )
+    assert (
+        eligibility.evaluate_text(
+            "x",
+            "You must already have the right to work in the EU.",
+            C(work_authorisations=("ES",)),
+        ).verdict
+        == "FLAG"
+    )
+
+
+def test_a_function_word_never_resolves_to_a_country() -> None:
+    """The false-disqualification class this table introduced, and the reason
+    the advert's vocabulary and the candidate's are now two tables.
+
+    Appending each ISO code as an alias made `at`, `us`, `it`, `no`, `de` and
+    `es` advert-side vocabulary, and `_TARGET` captures a function word as
+    happily as a country: "a valid work permit for **at** least twelve months"
+    resolved to Austria and FAILed a candidate with Spanish work rights. Every
+    one of these is a job the candidate is silently never shown.
+    """
+    for text in (
+        "Must hold a valid work permit for at least twelve months.",
+        "Must hold a valid work permit for us.",
+        "You must already have the right to work in it.",
+        "Must hold a valid work permit for no less than a year.",
+    ):
+        verdict = eligibility.evaluate_text("x", text, C(work_authorisations=("ES",))).verdict
+        assert verdict != "FAIL", f"{text!r} disqualified a candidate over a function word"
+
+
+def test_a_country_in_another_bloc_is_flagged_not_failed() -> None:
+    """`NO` is in the EEA and `CH` in EFTA; whether either carries into the EU
+    is the modelling this table refuses to guess at. Both fell through every
+    containment test to a confident FAIL over candidates who very likely
+    qualify — while `EEA` as a bare code, in the same position, was flagged."""
+    for held in ("NO", "CH"):
+        assert (
+            eligibility.evaluate_text(
+                "x",
+                "You must already have the right to work in the EU.",
+                C(work_authorisations=(held,)),
+            ).verdict
+            == "FLAG"
+        )
+    # A resolved country in no bloc at all is not that case and still fails.
+    assert (
+        eligibility.evaluate_text(
+            "x",
+            "You must already have the right to work in the EU.",
+            C(work_authorisations=("US", "UK")),
+        ).verdict
+        == "FAIL"
+    )
+
+
+def test_a_passport_is_a_work_authorisation() -> None:
+    """`work_authorisations` lists permits, so a Spanish citizen who holds no
+    separate permit — because they need none — recorded an empty tuple and was
+    FAILed by "the right to work in Spain". The most ordinary candidate in this
+    market, silently excluded."""
+    spaniard = C(citizenships=("ES",), work_authorisations=())
+
+    assert (
+        eligibility.evaluate_text(
+            "x", "You must already have the right to work in Spain.", spaniard
+        ).verdict
+        == "PASS"
+    )
+    assert (
+        eligibility.evaluate_text(
+            "x", "You must already have the right to work in the EU.", spaniard
+        ).verdict
+        == "PASS"
+    )
+    # The passport is consulted only to *clear* a work bar, never to raise one:
+    # a US citizen who has stated no permit still fails a German work bar.
+    assert (
+        eligibility.evaluate_text(
+            "x",
+            "You must already have the right to work in Germany.",
+            C(citizenships=("US",), work_authorisations=()),
+        ).verdict
+        == "FAIL"
+    )
+    # And an unstated permit list is still FLAG, not a guess in either
+    # direction — the passport does not turn "never said" into an answer.
+    assert (
+        eligibility.evaluate_text(
+            "x", "You must already have the right to work in Germany.", C(citizenships=("US",))
+        ).verdict
+        == "FLAG"
+    )
+
+
+def test_the_spanish_market_term_for_an_eu_national_resolves() -> None:
+    """`comunitario` is what a Spanish advert actually writes; any spelling of
+    "European Union" is the rarer form in this market."""
+    reading = eligibility.evaluate_text(
+        "x", "Applicants must be a comunitario citizen.", C(citizenships=("ES",))
+    )
+
+    assert reading.verdict == "PASS"
+
+
+def test_a_bloc_holding_carries_work_rights_but_does_not_pin_a_nationality() -> None:
+    """The asymmetry the table encodes deliberately. The right to work in the EU
+    really does carry the right to work in Spain; being "an EU citizen" does not
+    make anyone Spanish, and guessing in either direction is the confident
+    answer this gate exists to avoid."""
+    permit = eligibility.evaluate_text(
+        "x", "You must already have the right to work in Spain.", C(work_authorisations=("EU",))
+    )
+    citizenship = eligibility.evaluate_text(
+        "x", "Applicants must be a Spanish citizen.", C(citizenships=("EU",))
+    )
+
+    assert permit.verdict == "PASS"
+    assert citizenship.verdict == "FLAG"
+
+
+def test_clearances_keep_the_exact_match_and_gain_no_taxonomy() -> None:
+    """Clearances are out of scope by decision. Routing them through the table
+    would resolve every clearance term to `None` and turn today's correct PASS
+    into a FLAG, which is why `_TABLE_KINDS` names only two kinds."""
+    reading = eligibility.evaluate_text(
+        "x",
+        "Candidates must hold an active TS/SCI clearance before starting.",
+        C(clearances=("TS/SCI",)),
+    )
+
+    assert reading.verdict == "PASS"
+
+
+def test_normalize_folds_an_accent_rather_than_deleting_it() -> None:
+    """Without folding, a non-ASCII character is *dropped*: `alemán` became
+    `alemn`, a key matching neither spelling of the word. Job adverts drop
+    accents freely, so both spellings must land on the same key."""
+    assert eligibility._normalize("alemán") == eligibility._normalize("aleman") == "aleman"
+
+
+def test_the_false_disqualification_gate_counts_the_invisible_direction() -> None:
+    """T76 counts offers ranked *despite* a bar. Nothing counted the opposite —
+    an offer excluded by a bar the candidate meets — which is the direction a
+    vocabulary gap produces and the one a candidate can never notice."""
+    measured = eligibility.measure_false_disqualifications()
+
+    assert measured["gate_status"] == "measured"
+    assert measured["false_disqualifications"] == 0
+    assert measured["false_disqualifications_evaluated"] > 0
+
+
+def test_the_false_disqualification_gate_fails_on_the_pre_fix_code_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gate must be able to fail, or its zero means nothing. With the
+    vocabulary switched off — exactly the code that shipped — the same probe set
+    reports real false disqualifications."""
+    monkeypatch.setattr(eligibility, "_TABLE_KINDS", frozenset())
+
+    measured = eligibility.measure_false_disqualifications()
+
+    assert measured["false_disqualifications"] > 0
+    assert measured["violations"]
+
+
+def test_a_bloc_on_both_sides_is_flagged_rather_than_failed() -> None:
+    """Neither containment test can settle a bloc pair: a bloc's membership is
+    country codes only, so `_BLOCS["EEA"]` never holds the string `"EU"`. That
+    pair fell through to a confident FAIL over a candidate who very likely
+    qualifies — found by review, not by the probe set, which had no such case."""
+    eea_against_eu = eligibility.evaluate_text(
+        "x", "You must already have the right to work in the EU.", C(work_authorisations=("EEA",))
+    )
+    eu_against_eea = eligibility.evaluate_text(
+        "x", "You must already have the right to work in the EEA.", C(work_authorisations=("EU",))
+    )
+
+    assert eea_against_eu.verdict == "FLAG"
+    assert eu_against_eea.verdict == "FLAG"
+
+
+def test_the_bloc_pair_guard_does_not_rescue_a_country_outside_the_bloc() -> None:
+    """The narrow edge of the guard above. `US` against an `EU` bar is not a
+    bloc pair, and a guard wide enough to catch it would turn every real
+    disqualification into a FLAG."""
+    reading = eligibility.evaluate_text(
+        "x", "You must already have the right to work in the EU.", C(work_authorisations=("US",))
+    )
+
+    assert reading.verdict == "FAIL"
+
+
+def test_two_spellings_of_one_country_do_not_read_as_an_unresolved_term() -> None:
+    """`held_codes` is a set, so `("ES", "España")` collapses to one code.
+    Comparing that set's size against the tuple's read the collapse as a term
+    the table could not resolve, and downgraded a correct FAIL to FLAG —
+    weakening T76's own count."""
+    reading = eligibility.evaluate_text(
+        "x", "Applicants must hold German citizenship.", C(citizenships=("ES", "España"))
+    )
+
+    assert reading.verdict == "FAIL"

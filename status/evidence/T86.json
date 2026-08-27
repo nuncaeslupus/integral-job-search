@@ -1,0 +1,212 @@
+{
+  "false_disqualifications": 0,
+  "false_disqualifications_evaluated": 34,
+  "gate_status": "measured",
+  "violations": [],
+  "readings": [
+    {
+      "name": "stated-authorisation-satisfies-the-bar",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "soft-language-is-not-a-hard-bar",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "generic-bar-with-no-extractable-target-and-candidate-holds-something",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "the-requirement-noun-is-not-a-target",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "hard-bar-candidate-status-unstated",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bar-candidate-holds-it-under-another-spelling",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bar-target-outside-the-vocabulary-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-member-states-permit-is-not-a-bloc-wide-permit",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-of-a-member-state-is-citizenship-of-the-bloc",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-passport-clears-a-work-bar-naming-the-country-it-was-issued-by",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "an-eu-passport-clears-a-bloc-wide-work-bar",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-duration-clause-is-not-austria",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "the-object-pronoun-is-not-the-united-states",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "the-subject-pronoun-is-not-italy",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-negative-quantifier-is-not-norway",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "an-eea-permit-holder-against-an-eu-work-bar-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "an-efta-permit-holder-against-an-eu-work-bar-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "an-eu-member-state-satisfies-an-eea-citizenship-bar",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "case-folding-does-not-change-the-verdict",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "an-unaccented-advert-spelling-still-resolves",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-catalan-advert-spelling-resolves",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-spanish-demonym-resolves-to-the-iso-code",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-negated-bloc-term-is-not-the-bloc",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-nationality-outside-the-table-cannot-be-failed",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "schengen-is-not-a-citizenship-this-table-models",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "one-unresolved-holding-beside-a-resolved-miss-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "a-preferred-citizenship-is-not-a-bar",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "work-permit-country-bar-satisfied-by-the-bloc",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bar-named-by-the-spanish-market-term",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bloc-does-not-pin-a-nationality",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "citizenship-bar-with-one-unresolved-holding-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "bloc-against-bloc-is-flagged-not-failed",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "bloc-against-bloc-is-flagged-in-the-other-direction-too",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "accented-and-unaccented-spellings-fold-together",
+      "expected": "PASS",
+      "actual": "PASS",
+      "false_disqualification": false
+    }
+  ]
+}

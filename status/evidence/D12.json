@@ -939,6 +939,14 @@
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
+    },
+    {
+      "task": "t-fdc8e19f",
+      "key": "false_disqualifications",
+      "evidence": "status/evidence/T86.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     }
   ]
 }
