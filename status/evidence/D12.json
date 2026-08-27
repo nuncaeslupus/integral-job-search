@@ -717,6 +717,14 @@
       "status_is_asserted": true
     },
     {
+      "task": "t-490e52d5",
+      "key": "robots_policies_abandoned_on_refusal",
+      "evidence": "status/evidence/T71.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-4921255b",
       "key": "gate_fields_read_by_the_ranker",
       "evidence": "status/evidence/T78.json",
