@@ -118,6 +118,30 @@ def test_a_flagged_offer_is_ranked_with_its_marker() -> None:
     assert _CLEAR not in ranking["flagged"]
 
 
+def test_a_dominated_flag_offer_is_still_retained() -> None:
+    """Kept means it entered the comparison, not that it survived it. A FLAG
+    another offer dominates is retained and marked exactly like any other —
+    counting only the frontier would report it as dropped."""
+    dominant = "sha256:" + "d" * 64
+    candidates = [
+        Candidate(offer_id=dominant, salary_per_month=5000.0, scores={"remote": 1.0}),
+        # Strictly worse on both axes, so `dominant` collapses it.
+        Candidate(offer_id=_FLAGGED, salary_per_month=3000.0, scores={"remote": 0.5}),
+    ]
+    ranking = rank(
+        candidates,
+        dimensions=("remote",),
+        revision=ProfileRevision(rows=2, sha256="0" * 64),
+        weights=None,
+        at="2026-08-27T00:00:00Z",
+        readings=(_READINGS[1],),
+    )
+
+    assert _FLAGGED not in ranking["pareto"], "the fixture must actually dominate it"
+    assert _FLAGGED in ranking["dominated"]
+    assert ranking["flagged"] == [_FLAGGED]
+
+
 def test_the_gate_does_not_pass_on_an_empty_input_set() -> None:
     """A violation count of zero over nothing excluded is not a pass. The
     denominator is asserted, and the negative control proves the count rises

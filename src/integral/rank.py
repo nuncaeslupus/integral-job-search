@@ -591,8 +591,15 @@ def measure_exclusions() -> dict[str, Any]:
         "flagged_offers_evaluated": sum(
             1 for reading in _FIXTURE_READINGS if reading.verdict == "FLAG"
         ),
+        # `pareto` *and* `dominated`: a FLAG is kept, and being kept means
+        # entering the comparison — which a dominated offer did. Counting only
+        # the frontier would report a correctly-retained FLAG as dropped the
+        # moment another offer dominated it, failing the gate over the one
+        # behaviour it is checking.
         "flagged_offers_still_ranked": sum(
-            1 for offer_id in ranking["flagged"] if offer_id in ranking["pareto"]
+            1
+            for offer_id in ranking["flagged"]
+            if offer_id in ranking["pareto"] or offer_id in ranking["dominated"]
         ),
         "gate_status": "measured",
         "excluded": shown,
