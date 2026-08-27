@@ -5,6 +5,7 @@ priority: 1
 deps: []
 workspace: MATCH
 tags: [v3, m5]
+status: merged
 ---
 
 # T76: The eligibility gate — refuse to score an offer the candidate is barred from

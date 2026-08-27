@@ -1,0 +1,126 @@
+{
+  "offers_ranked_despite_a_stated_disqualification": 0,
+  "offers_ranked_despite_a_stated_disqualification_evaluated": 5,
+  "probes_run": 13,
+  "gate_status": "measured",
+  "violations": [],
+  "readings": [
+    {
+      "name": "stated-citizenship-bar-candidate-fails-it",
+      "expected": "FAIL",
+      "actual": "FAIL",
+      "reason": "citizenship",
+      "quote": "must hold German citizenship",
+      "is_disqualification": true,
+      "match": true
+    },
+    {
+      "name": "stated-clearance-bar-candidate-has-none",
+      "expected": "FAIL",
+      "actual": "FAIL",
+      "reason": "clearance",
+      "quote": "must hold an active TS/SCI clearance",
+      "is_disqualification": true,
+      "match": true
+    },
+    {
+      "name": "company-wide-welcome-does-not-cancel-a-bar",
+      "expected": "FAIL",
+      "actual": "FAIL",
+      "reason": "work_permit",
+      "quote": "No visa sponsorship is available",
+      "is_disqualification": true,
+      "match": true
+    },
+    {
+      "name": "silence-about-permits",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "stated-authorisation-satisfies-the-bar",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "soft-language-is-not-a-hard-bar",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "reason": "clearance",
+      "quote": "An active security clearance is a plus",
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "generic-bar-with-no-extractable-target-and-candidate-holds-something",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "reason": "citizenship",
+      "quote": "Citizenship is required",
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "negation-in-a-neighbouring-sentence-does-not-cancel-a-bar",
+      "expected": "FAIL",
+      "actual": "FAIL",
+      "reason": "clearance",
+      "quote": "Must hold an active TS/SCI clearance",
+      "is_disqualification": true,
+      "match": true
+    },
+    {
+      "name": "soft-language-in-a-neighbouring-sentence-does-not-soften-a-bar",
+      "expected": "FAIL",
+      "actual": "FAIL",
+      "reason": "citizenship",
+      "quote": "must hold German citizenship",
+      "is_disqualification": true,
+      "match": true
+    },
+    {
+      "name": "the-requirement-noun-is-not-a-target",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "reason": "clearance",
+      "quote": "Must hold an active security clearance",
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "hard-bar-candidate-status-unstated",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "reason": "clearance",
+      "quote": "Must hold an active security clearance",
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "negated-requirement-is-not-a-bar",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    },
+    {
+      "name": "company-wide-welcome-alone-is-not-a-stated-permission",
+      "expected": "PASS",
+      "actual": "PASS",
+      "reason": null,
+      "quote": null,
+      "is_disqualification": false,
+      "match": true
+    }
+  ]
+}
