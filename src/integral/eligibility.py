@@ -994,16 +994,20 @@ def measure_boundary(results: list[dict[str, Any]] | None = None) -> dict[str, A
             "nothing evaluated is not a measurement",
             results,
         )
-    violations = [r for r in results if not r["match"]]
-    # `ranked_offers_evaluated` counts the offer cases only. `len(results)` also
-    # includes the module scans, and reporting that as offers evaluated claimed
-    # five where three offers were seen — an inflated denominator makes a zero
-    # look better supported than it is, which is the failure this gate exists
-    # to catch. Both numbers are recorded so neither is hidden.
+    # Each direction is counted under its own name. Folding both into
+    # `gate_fields_read_by_the_ranker` meant a verdict case failing its
+    # expectation — a regression in this gate — was reported as the ranker
+    # having read a gate-only field, sending the reader to inspect `rank.py`
+    # for a breach that never happened. A metric that misnames its own failure
+    # is worse than no metric: it costs the reader the time to disprove it.
+    scans = [r for r in results if r["direction"] == "ranker_never_reads_a_gate_field"]
     offer_cases = [r for r in results if r["direction"] == "gate_verdict_matches_expectation"]
+    violations = [r for r in results if not r["match"]]
     return {
-        "gate_fields_read_by_the_ranker": len(violations),
+        "gate_fields_read_by_the_ranker": len([r for r in scans if not r["match"]]),
+        "gate_verdicts_mismatching_expectation": len([r for r in offer_cases if not r["match"]]),
         "ranked_offers_evaluated": len(offer_cases),
+        "ranker_modules_scanned": len(scans),
         "audit_points_evaluated": len(results),
         "gate_status": "measured",
         "violations": [r["detail"] for r in violations if r["detail"]],
@@ -1160,7 +1164,14 @@ def _main(argv: list[str]) -> int:
         write_evidence_quote_provenance(t77_target),
         "disqualification_verdicts_without_quoted_wording",
     )
-    _score(write_boundary_evidence(target.parent / "T78.json"), "gate_fields_read_by_the_ranker")
+    # Both of T78's counts gate the exit code. `_score` folds in the one it is
+    # given, so the second is checked here rather than left to be reported and
+    # ignored — a verdict regression must fail the run as loudly as a boundary
+    # breach does.
+    boundary = write_boundary_evidence(target.parent / "T78.json")
+    _score(boundary, "gate_fields_read_by_the_ranker")
+    if boundary["gate_verdicts_mismatching_expectation"] > 0:
+        exit_code = max(exit_code, 1)
 
     return exit_code
 

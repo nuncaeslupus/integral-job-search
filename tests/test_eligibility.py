@@ -575,7 +575,9 @@ def test_the_real_boundary_probe_set_has_a_non_zero_denominator() -> None:
     assert measured["gate_status"] == "measured"
     assert measured["gate_fields_read_by_the_ranker"] == 0
     assert measured["ranked_offers_evaluated"] == len(eligibility.WEIGHT_INVARIANCE_CASES) == 3
-    assert measured["audit_points_evaluated"] == 3 + len(eligibility.RANKER_MODULES) == 5
+    assert measured["ranker_modules_scanned"] == len(eligibility.RANKER_MODULES) == 2
+    assert measured["audit_points_evaluated"] == 5
+    assert measured["gate_verdicts_mismatching_expectation"] == 0
 
 
 def test_write_boundary_evidence_writes_t78_json(tmp_path: Path) -> None:
@@ -763,3 +765,62 @@ def test_a_language_quote_that_is_a_real_span_is_accepted() -> None:
     reading = eligibility.evaluate_offer(offer, CandidateEligibility(languages=("en",)))
 
     assert reading.verdict == "FAIL"
+
+
+def test_a_verdict_mismatch_is_not_reported_as_the_ranker_reading_a_gate_field() -> None:
+    """The two directions fail for different reasons and must count separately.
+
+    Folding both into `gate_fields_read_by_the_ranker` meant a regression in
+    *this* gate — a verdict no longer matching its expectation — was reported
+    as `rank.py` having read a gate-only field. The reader would go and inspect
+    a module that did nothing wrong. A metric that misnames its own failure
+    costs more than no metric, because disproving it takes longer than reading
+    it.
+    """
+    results = [
+        {
+            "direction": "ranker_never_reads_a_gate_field",
+            "name": "rank.py",
+            "match": True,
+            "detail": None,
+        },
+        {
+            "direction": "gate_verdict_matches_expectation",
+            "name": "a-language-bar",
+            "match": False,
+            "detail": "expected FAIL, got PASS",
+        },
+    ]
+
+    measured = eligibility.measure_boundary(results)
+
+    assert measured["gate_fields_read_by_the_ranker"] == 0
+    assert measured["gate_verdicts_mismatching_expectation"] == 1
+
+
+def test_the_cli_fails_when_a_verdict_mismatches_even_with_a_clean_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A count that is reported but never gates is decoration.
+
+    `_score` folds in the metric it is handed, so the second count has to be
+    checked explicitly or a verdict regression would be written to the evidence
+    file and exit 0 anyway.
+    """
+    clean_scan = {
+        "direction": "ranker_never_reads_a_gate_field",
+        "name": "rank.py",
+        "match": True,
+        "detail": None,
+    }
+    bad_verdict = {
+        "direction": "gate_verdict_matches_expectation",
+        "name": "a-language-bar",
+        "match": False,
+        "detail": "expected FAIL, got PASS",
+    }
+    monkeypatch.setattr(eligibility, "audit_boundary", lambda: [clean_scan, bad_verdict])
+
+    exit_code = eligibility._main(["eligibility", str(tmp_path / "T76.json")])
+
+    assert exit_code == 1
