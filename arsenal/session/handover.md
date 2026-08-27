@@ -1,105 +1,73 @@
-# Session handover — 2026-08-26 ~15:20 UTC, orchestrator, third fleet round
+# Session handover — 2026-08-27 ~13:00 UTC, orchestrator, fourth fleet round
 
-Board: **106 gates**, 124 tasks. `main` at `2a3b8dd`. **Eight PRs merged today**, every one
-gate-verified by the orchestrator on that exact commit, never on a worker's word.
+Board: **108 gates**, 124 tasks. `main` at `ff059aa`. **Eleven PRs merged across this run.**
+
+On each, the orchestrator ran `make host-gate` itself and saw exit 0 — on the **branch head**
+immediately before merging, never on a worker's word. The SHAs in the table below are the
+*squash* commits on `main`; they carry the same tree, but no gate ran against them by that
+name, so do not go looking for one.
+
+**Exit 0 from `host-gate` is not the same as a task's own gate passing.** T72 is the case that
+proves it: `make evidence` records an exit-3 module as `unmeasured (recorded)` and carries on,
+so the run is green while `silent_connector_failures` remains unscored. That is the intended
+behaviour and the entire point of #221 — a gate that refuses to score itself.
+
+## Merged since the last handover
 
 | PR | task | outcome |
 |---|---|---|
-| [#226](https://github.com/nuncaeslupus/integral-job-search/pull/226) | T81 keyword coverage | merged `0033160`, #210 closed |
-| [#228](https://github.com/nuncaeslupus/integral-job-search/pull/228) | T85 evidence reach | merged `7adf423`, #217 closed |
-| [#225](https://github.com/nuncaeslupus/integral-job-search/pull/225) | claude-arsenal v2.4.22 | merged `928e957`, one thread left open by decision |
-| [#229](https://github.com/nuncaeslupus/integral-job-search/pull/229) | adversarial-fixture rule | merged `9d15d76` |
-| [#230](https://github.com/nuncaeslupus/integral-job-search/pull/230) | T74 liveness identity | merged `2241a91`, #213 closed |
-| [#233](https://github.com/nuncaeslupus/integral-job-search/pull/233) | T74 follow-up fix | merged `ddcdc4e` |
-| [#231](https://github.com/nuncaeslupus/integral-job-search/pull/231) | T75 dedup | merged `c77ba8f`, #211 closed |
-| [#232](https://github.com/nuncaeslupus/integral-job-search/pull/232) | T82 status vocabulary | merged `2a3b8dd`, #214 closed |
+| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) | T72 connector health | merged `88dd3dc` (gated on `7a63627`). **Closes nothing, and its gate did not pass** — #203 stays open, the task file is not archived, and `python -m integral.connector_health` exits 3 with `gate_status: unmeasured`. Finishing it needs a probe capture on the laptop. Squash message deliberately carries no closing keyword. |
+| [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) | T70 robots matching | merged `7cb26bc` (gated on `af1e57b`), #209 closed. Four fail-opens fixed; the round-2 audit's 32 accepted cases committed as fixtures, `robots_verdicts_evaluated` 24 → 56. |
+| [#235](https://github.com/nuncaeslupus/integral-job-search/pull/235) | T76 eligibility gate | merged `ff059aa` (gated on `4fcce80`), #218 closed. Unblocks five tasks. |
 
-## Open, and both waiting only on the owner
+## In flight
 
-| PR | state |
-|---|---|
-| [#221](https://github.com/nuncaeslupus/integral-job-search/pull/221) T72 | `62996f5`. **HELD by the owner.** Zero open threads, Merge Risk Minimal, `make host-gate` exit 0. Six verified defects fixed today. Squash message must omit `Closes #203`. |
-| [#227](https://github.com/nuncaeslupus/integral-job-search/pull/227) T70 | `fac3cac`. Four fail-opens fixed, audit reported. **Blocked by the fixture-report gap below**, not by a known defect. |
+| task | issue | worker | notes |
+|---|---|---|---|
+| T77 `t-4cfbcbd1` | #206 | `session_01V5xWu1C4WWtyCU5wLc2Mao` | Every disqualification carries the advert's own sentence. |
+| T78 `t-4921255b` | #205 | `session_014x1rgBHS4NhXF7te4RLMWh` | `language_requirement` as a hard field the ranker never reads. |
 
-## The finding of the day: a check can be correct by coincidence
+**These two edit the same two files** — `src/integral/eligibility.py` and
+`tests/test_eligibility.py`. Lanes were scoped in each dispatch (T77: the verdict record and
+the quote guarantee; T78: the hard field and the ranker boundary), and both were told to
+append tests rather than interleave. Expect to resolve one merge by hand; do not expect the
+workers to have seen each other.
 
-Fourteen real defects were fixed across these PRs, and the ones that mattered shared a
-shape — **the gate was green because the fixtures happened not to exercise the broken
-case**, not because the code was right.
+## Two follow-ups filed rather than lost
 
-- **T74**: `title_in_body` searched the whole document, so any listings page *mentioning*
-  the vacancy read as the advert. The fixtures passed only because their listings page
-  happens not to contain the word `CISO`. Now matched against `<title>`/`<h1>` only.
-- **T70**: `Disallow:` with an empty value was stored as the pattern `""`, which matches
-  every path — so the "allow all" idiom made a whole site unfetchable. Every existing
-  fixture asserted a *refusal* was correct, so none could see it. **Fail-closed defects
-  are invisible to a fixture set built around fail-open.**
-- **T82**: guarding the *read* of a corrupt record left the *write* overwriting it. The
-  guarantee was unmet while the code claimed it was met.
+Both are `arsenal:queue` issues, to be imported as tasks by `issue_import.py`.
 
-The rule that follows, now in `CLAUDE.md`: **a test that checks the function behaves is
-not a test that checks the guarantee holds.** Write the second.
+- [#236](https://github.com/nuncaeslupus/integral-job-search/issues/236) — T70 audit case 22: does a rule's product token match as a **prefix** of a longer crawler token? Deliberately not committed as a fixture, because recording the implementation's own answer as the expectation is the circularity the audit exists to break. **Needs a surface whose egress is not blocked** — every host serving RFC 9309 is refused here by the proxy, for the auditor and the orchestrator alike. That means the laptop.
+- [#237](https://github.com/nuncaeslupus/integral-job-search/issues/237) — eligibility target vocabulary. A candidate declaring `DE` is excluded by "must hold German citizenship"; the code cannot tell that from `ES` against the same advert. **Must land before T77/T78/T79 wire the gate into ranking** — until then nothing imports `eligibility`, so the false FAIL reaches no candidate. Owner's steer: a *scoped* ES/EN/CA table, unknown terms resolving to FLAG, and **no clearance taxonomy**.
 
-## Decisions the owner made today
+## What this round taught, and what to keep doing
 
-1. **#227**: fix the three fail-opens, then a separate session audits from the spec. Done.
-2. **#225**: merge over the parked thread — the finding is upstream's (`claude-arsenal#253`).
-3. **Fleet: three** — T75, T74, T82. All three merged.
-4. **Adopt the adversarial-fixture rule**, strengthened after review caught that its first
-   wording was satisfiable without a single independent case ever running.
+**The durable-output dispatch works, and the transcript-output one destroys work.** The first
+T70 audit derived 19 cases, reported them in its final chat message, disconnected, and 17 were
+lost. Round 2 was told to write its cases to a file and push a branch; it did, and 32 of them
+are now fixtures. Any commissioned report gets pushed, never narrated.
 
-## Still owed by the owner
+**An audit that reports before reading the code is worth the extra step.** Round 2's cases were
+committed in `21ad1af` *before* `robots.py` was opened, and one modelling error it later found
+in its own case was corrected in a separate commit citing the section — not because the code
+disagreed. That ordering is what makes the 32 accepted cases mean anything.
 
-1. **The `.claude/settings.json` paste** — here *and* in `nuncaeslupus/opos`. A session is
-   hard-blocked from applying it, correctly.
-2. **#221's hold.**
-3. **#227's fixture gap** (below): re-run the audit with durable output, or accept the two
-   failures as its deliverable.
+**Re-read the thread list at the moment of merging.** Not once beforehand. This was learned the
+hard way earlier in the run and has now paid off three times.
 
-## The process error worth not repeating
+**A green gate is necessary and never sufficient** — again. T76 arrived with 20 passing tests,
+a gate at exit 0, and a live fail-open: a stated TS/SCI bar returned PASS because "not
+necessary" bled in from the previous sentence. Both of its Major findings were reproduced
+before being touched, and both are now probes as well as fixes.
 
-The T70 audit derived **19 spec cases; 17 passed, 2 failed**. Only the 2 are committed.
-The other 17 lived solely in that session's final message, and the session is an
-unreachable cloud session — `ListAgents` shows nothing, so the report is gone.
+## Standing environment facts
 
-**The dispatch asked the auditor to report in its final message rather than to write its
-cases to a file and push a branch.** A report that lives only in a transcript is exactly
-the "evidence that cannot be re-run" this repository refuses everywhere else, built into
-the process created to fix that. Fix the dispatch prompt before the next audit.
-
-## Mechanics worth keeping
-
-- **Re-read PR threads at the moment of merging, not once beforehand.** #230 was merged
-  over a Major posted ninety seconds earlier; the next PR, #232, had two findings arrive
-  three minutes before its merge and the re-read caught them.
-- A `409 Head branch is out of date` can appear while `git rev-list` says **0 behind** —
-  GitHub had not indexed the push. Verify before assuming a conflict.
-- `git add -A` during conflict resolution swept a source fix into a commit labelled
-  `chore: regenerate evidence`. Squash-merge makes the landed record right; check what a
-  conflict-resolution commit actually contains.
-- Three `create_branch` calls in one message all succeed. The one-per-message limit is
-  specific to `create_session`.
-
-## Unchanged and still true
-
-**CI is red repository-wide because the GitHub Actions runner minutes are exhausted for
-the billing period** — not because of any diff. The signature is `runner_id: 0` with an
-empty `runner_name` and a 3–5 second job, on `main` as much as on any branch.
-
-Check that signature before applying this, every time. "Never gate merging on CI" is only
-true *while that cause holds*: once the minutes are restored, a red check is a red check
-again, and a session that carried this instruction forward without its precondition would
-skip a real failure. Which is this file committing the same error the rest of it is about —
-an instruction that reports safety without the measurement behind it. Delete this section
-once runs show real durations.
-
-Commit before gating (`make evidence` compares committed evidence). Never put an
-angle-bracket placeholder in a GitHub body. Vendored `claude-arsenal/` and
-`.claude/skills/` are refreshed by `/init`, never hand-edited.
-
-All three task files this round named their denominator two ways — prose
-`<metric>_evaluated`, dated section a domain name. **The template that generates those
-sections is producing the mismatch**; workers were told to write both keys.
-
-Skip `lo-4b17` (T59), `lo-6f53` (T56), `lo-7c14` (T57). Next unblocked: `lo-25b1` (T15),
-`t-e6f1dc24` (T76).
+- **CI is red repo-wide and it is not any diff**: Actions is out of runner minutes, jobs die in
+  3–5 seconds with `runner_id: 0`, on `main` too. Never gate a merge on it.
+- The **GitHub MCP server dropped once mid-run** (`400: invalid session`) and came back. Plain
+  `git` kept working throughout. If it drops again: fetch, gate and push still work; merging,
+  commenting and opening PRs do not.
+- Spawned sessions have **no `mcp__*` tools** and REST 403s. Workers get their task id, issue
+  number and lane from the dispatch, and stop after pushing.
+- `open_task_pr.sh` gates *then* archives the task file, so `T55.files_scanned` ships one
+  behind. A second commit on the branch it leaves you on fixes it; the squash folds it in.
