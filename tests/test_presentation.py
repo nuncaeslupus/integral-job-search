@@ -22,6 +22,7 @@ from typing import Any
 
 import pytest
 
+from integral import presentation
 from integral.explain import explain
 from integral.offers import Location, Offer, Salary, compute_offer_id
 from integral.presentation import _FIXTURE_WEIGHTS as _FIXTURE_WEIGHTS_FOR_TEST
@@ -349,3 +350,173 @@ def test_a_dominated_offer_is_not_counted_as_a_dropped_url() -> None:
     offers, _ = _fixture()
     assert any(offer.url for offer in offers)
     assert _urls_dropped(limit=1) == 0
+
+
+# ---------------------------------------------------------------------------
+# T87 — the Excluded section on the page
+
+
+def _t87() -> tuple[dict[str, Any], str]:
+    return presentation._t87_page()
+
+
+def test_an_excluded_offer_appears_on_the_page_with_its_quote() -> None:
+    """Shown, never silently dropped — and shown with the advert's own sentence.
+
+    T79 removed the offer and recorded the wording; until this section existed
+    the candidate saw neither, so a barred offer and an offer that was never
+    found looked identical from where they sit.
+    """
+    ranking, page = _t87()
+
+    assert f"{presentation.EXCLUDED_HEADING} (2)" in page
+    for entry in ranking["excluded"]:
+        assert entry["quote"] in page, f"{entry['quote']!r} was excluded for but never shown"
+        assert str(entry["reason"]) in page
+
+
+def test_an_excluded_offer_gets_no_card() -> None:
+    """Listed as excluded, not rendered as an offer the candidate might take.
+    The link is the test: a card carries it and the Excluded line does not."""
+    ranking, page = _t87()
+    offers, _, _ = presentation._t87_fixture()
+    by_id = {offer.id: offer for offer in offers}
+
+    for entry in ranking["excluded"]:
+        offer = by_id[entry["offer_id"]]
+        assert offer.url is not None
+        assert offer.url not in page, "an excluded offer was rendered as an applyable card"
+
+
+def test_a_flagged_offer_is_carded_with_its_marker() -> None:
+    """Spec §5.4: ranked, marked, and the human is the tiebreaker. T79 did the
+    ranking; the marking is the card's."""
+    ranking, page = _t87()
+
+    assert len(ranking["flagged"]) == 1
+    assert presentation.FLAG_MARKER in page
+    # The marker qualifies one card, not the page: the offer that states
+    # nothing must not inherit it.
+    assert page.count(presentation.FLAG_MARKER) == 1
+
+
+def test_the_page_reports_the_excluded_count_even_when_the_list_is_long() -> None:
+    """The count is stated, not implied by the length of a list that `limit`
+    may have cut. Cards are truncated because the candidate wants the best few;
+    exclusions are the opposite case, and cutting them would reintroduce the
+    silence the section exists to close."""
+    ranking, page = presentation._t87_page(limit=1)
+
+    assert "(1 more not shown.)" in page, "the fixture must actually truncate the cards"
+    assert f"{presentation.EXCLUDED_HEADING} (2)" in page
+    for entry in ranking["excluded"]:
+        assert entry["quote"] in page, "an exclusion was cut by the card limit"
+
+
+def test_an_exclusion_with_no_reason_is_shown_as_a_defect_not_omitted() -> None:
+    """The one case the gate counts. Dropping the line would make the page look
+    correct while the candidate lost an offer for wording nobody recorded."""
+    offers, _, _ = presentation._t87_fixture()
+    block = presentation._excluded_block(
+        [{"offer_id": offers[0].id, "reason": "citizenship", "quote": None}],
+        {offer.id: offer for offer in offers},
+    )
+
+    assert presentation.NO_REASON_GIVEN in block
+    assert offers[0].title is not None
+    assert offers[0].title in block
+
+
+def test_the_gate_does_not_pass_on_an_empty_input_set() -> None:
+    """A count of zero over nothing excluded is not a pass. The denominator is
+    asserted, and the negative control proves the count rises when the section
+    is taken off the page."""
+    measured = presentation.measure_exclusions_shown()
+
+    assert measured["excluded_offers_missing_from_the_page_evaluated"] > 0
+    assert measured["gate_status"] == "measured"
+    assert measured["excluded_offers_missing_from_the_page"] == 0
+    assert measured["missing_detected_when_the_section_is_removed"] == 1
+    assert measured["flagged_offers_marked"] == measured["flagged_offers_evaluated"] > 0
+
+
+def test_the_stated_excluded_count_is_the_number_actually_on_the_page() -> None:
+    """`excluded_count_stated_on_the_page` is read off the heading, not a
+    boolean flag in disguise — a `1` next to two exclusions would look like a
+    passing check while stating the wrong number."""
+    ranking, _ = _t87()
+    measured = presentation.measure_exclusions_shown()
+
+    assert measured["excluded_count_stated_on_the_page"] == len(ranking["excluded"]) == 2
+
+
+def test_a_page_wide_quote_search_misses_a_dropped_exclusion_line() -> None:
+    """Two exclusions sharing a quote must each be checked against its own
+    rendered line. A page-wide search for the quote alone is satisfied by
+    either line and would report zero missing while one entry was never
+    shown."""
+    offers, _, _ = presentation._t87_fixture()
+    by_id = {offer.id: offer for offer in offers}
+    shared_quote = "must hold German citizenship"
+    entries = [
+        {"offer_id": offers[0].id, "reason": "citizenship", "quote": shared_quote},
+        {"offer_id": offers[1].id, "reason": "citizenship", "quote": shared_quote},
+    ]
+    ranking = {"excluded": entries}
+    # Only the first entry's line is on the page; the second was dropped. The
+    # shared quote text is still present, which is exactly what would fool a
+    # substring-only check.
+    page = presentation._excluded_line(entries[0], by_id)
+    assert shared_quote in page
+
+    assert presentation.excluded_offers_missing_from_the_page([(ranking, page, by_id)]) == 1
+
+
+def test_two_exclusions_with_the_byte_identical_line_are_each_counted() -> None:
+    """Two entries can render the *exact same* line — same name, same reason,
+    same quote, from two different offers whose titles happen to coincide.
+    `in` only asks whether the line appears at all: one rendered copy would
+    satisfy both entries and a dropped second exclusion would go uncounted.
+    `page.count(line)` against how many entries expect it is what catches a
+    second copy that never made it onto the page."""
+    offers, _, _ = presentation._t87_fixture()
+    same_titled = offers[1].model_copy(update={"title": offers[0].title})
+    by_id = {offers[0].id: offers[0], offers[1].id: same_titled}
+    quote = "must hold German citizenship"
+    entries = [
+        {"offer_id": offers[0].id, "reason": "citizenship", "quote": quote},
+        {"offer_id": offers[1].id, "reason": "citizenship", "quote": quote},
+    ]
+    ranking = {"excluded": entries}
+    line = presentation._excluded_line(entries[0], by_id)
+    assert presentation._excluded_line(entries[1], by_id) == line, "the two lines must be identical"
+
+    # Only one copy of the (identical) line is on the page — the second
+    # exclusion was dropped, and a bare `in` check would miss that.
+    page = line
+    assert presentation.excluded_offers_missing_from_the_page([(ranking, page, by_id)]) == 1
+
+    # Both copies present: nothing missing.
+    page_with_both = f"{line}\n{line}"
+    missing_with_both = presentation.excluded_offers_missing_from_the_page(
+        [(ranking, page_with_both, by_id)]
+    )
+    assert missing_with_both == 0
+
+
+def test_a_page_wide_marker_search_misses_an_unmarked_flagged_card() -> None:
+    """Two flagged offers must each be checked against its own rendered card.
+    A page-wide search for the marker text is satisfied by either card and
+    would report both marked while one carries no marker at all."""
+    offers, _, _ = presentation._t87_fixture()
+    marked_card = card(offers[0], flagged=True)
+    unmarked_card = card(offers[1], flagged=False)
+    page = f"{marked_card}\n{unmarked_card}"
+
+    # The bug this guards against: the marker appears once, so a page-wide
+    # `FLAG_MARKER in page` check reads as "marked" for every flagged offer.
+    assert presentation.FLAG_MARKER in page
+
+    # The fix: check containment of each offer's own re-rendered card.
+    assert card(offers[0], flagged=True) in page
+    assert card(offers[1], flagged=True) not in page
