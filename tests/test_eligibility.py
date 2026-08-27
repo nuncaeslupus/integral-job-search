@@ -10,6 +10,8 @@ handling, the empty-input-set honesty — never accuracy on a real advert.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import json
 from pathlib import Path
 
@@ -369,12 +371,47 @@ def test_a_hard_gate_field_is_never_read_by_the_ranker() -> None:
 
 
 def test_a_dimension_weight_cannot_change_a_gate_verdict() -> None:
-    """Direction 2: this gate's verdict for a fixed offer and candidate does
-    not move when a dimension weight moves. Two `weights.json`-shaped
-    mappings, pricing `english_demand` at opposite extremes to prove the two
-    scenarios really do differ, and the gate's verdict is asserted identical
-    under both — because `evaluate_offer` takes no `weights` argument at all
-    and has no path by which either number could reach it."""
+    """Direction 2: no dimension weight can reach this gate's verdict.
+
+    The guarantee is structural — `evaluate_offer` takes no weights argument,
+    so there is no path by which one could arrive — and that is what this test
+    pins. Calling `evaluate_offer(offer, candidate)` twice and comparing the
+    two results cannot establish it: both calls pass identical arguments, so
+    the comparison holds for any deterministic function and would keep holding
+    if someone added a `weights=` parameter with a default. Asserting the
+    signature is what actually fails when the boundary is breached.
+    """
+    parameters = inspect.signature(eligibility.evaluate_offer).parameters
+    assert list(parameters) == ["offer", "candidate"], (
+        "evaluate_offer grew a parameter: if a weight can be passed in, the gate "
+        "and the ranker share a channel neither output layer would ever show"
+    )
+    assert list(inspect.signature(eligibility.evaluate_text).parameters) == [
+        "offer_id",
+        "text",
+        "candidate",
+    ]
+
+    source = Path(eligibility.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    imported = {
+        node.module.split(".")[-1]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+    } | {
+        alias.name.split(".")[-1]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    assert not imported & {"rank", "scoring", "weights"}, (
+        "eligibility imported a ranking module — the weight could reach the gate "
+        f"through it: {sorted(imported & {'rank', 'scoring', 'weights'})}"
+    )
+
+    # With the structure pinned above, the behavioural half is worth stating:
+    # two genuinely different weight scenarios, and a verdict that is the
+    # offer's alone under both.
     offer = _language_offer(
         "Backend Engineer, remote. German is required for this role.",
         requirement_language="de",
@@ -389,10 +426,7 @@ def test_a_dimension_weight_cannot_change_a_gate_verdict() -> None:
     )
     assert low != high, "the two weight scenarios must genuinely differ, or this proves nothing"
 
-    verdict_under_low_weight = eligibility.evaluate_offer(offer, candidate).verdict
-    verdict_under_high_weight = eligibility.evaluate_offer(offer, candidate).verdict
-
-    assert verdict_under_low_weight == verdict_under_high_weight == "FAIL"
+    assert eligibility.evaluate_offer(offer, candidate).verdict == "FAIL"
 
 
 def test_the_role_language_is_read_not_the_adverts_own_language() -> None:
