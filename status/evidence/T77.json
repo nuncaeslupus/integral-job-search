@@ -1,7 +1,7 @@
 {
   "disqualification_verdicts_without_quoted_wording": 0,
-  "disqualification_verdicts_without_quoted_wording_evaluated": 13,
-  "disqualification_verdicts_evaluated": 13,
+  "disqualification_verdicts_without_quoted_wording_evaluated": 17,
+  "disqualification_verdicts_evaluated": 17,
   "gate_status": "measured",
   "violations": [],
   "readings": [
@@ -128,6 +128,30 @@
     {
       "name": "citizenship-bar-with-one-unresolved-holding-is-flagged",
       "verdict": "FLAG",
+      "quote": "must hold German citizenship",
+      "quoted": true
+    },
+    {
+      "name": "bloc-against-bloc-is-flagged-not-failed",
+      "verdict": "FLAG",
+      "quote": "must already have the right to work in the EU",
+      "quoted": true
+    },
+    {
+      "name": "bloc-against-bloc-is-flagged-in-the-other-direction-too",
+      "verdict": "FLAG",
+      "quote": "must already have the right to work in the EEA",
+      "quoted": true
+    },
+    {
+      "name": "a-country-outside-the-named-bloc-still-fails",
+      "verdict": "FAIL",
+      "quote": "must already have the right to work in the EU",
+      "quoted": true
+    },
+    {
+      "name": "two-spellings-of-one-country-do-not-read-as-unresolved",
+      "verdict": "FAIL",
       "quote": "must hold German citizenship",
       "quoted": true
     },

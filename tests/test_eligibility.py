@@ -1024,3 +1024,42 @@ def test_the_false_disqualification_gate_fails_on_the_pre_fix_code_path(
 
     assert measured["false_disqualifications"] > 0
     assert measured["violations"]
+
+
+def test_a_bloc_on_both_sides_is_flagged_rather_than_failed() -> None:
+    """Neither containment test can settle a bloc pair: a bloc's membership is
+    country codes only, so `_BLOCS["EEA"]` never holds the string `"EU"`. That
+    pair fell through to a confident FAIL over a candidate who very likely
+    qualifies — found by review, not by the probe set, which had no such case."""
+    eea_against_eu = eligibility.evaluate_text(
+        "x", "You must already have the right to work in the EU.", C(work_authorisations=("EEA",))
+    )
+    eu_against_eea = eligibility.evaluate_text(
+        "x", "You must already have the right to work in the EEA.", C(work_authorisations=("EU",))
+    )
+
+    assert eea_against_eu.verdict == "FLAG"
+    assert eu_against_eea.verdict == "FLAG"
+
+
+def test_the_bloc_pair_guard_does_not_rescue_a_country_outside_the_bloc() -> None:
+    """The narrow edge of the guard above. `US` against an `EU` bar is not a
+    bloc pair, and a guard wide enough to catch it would turn every real
+    disqualification into a FLAG."""
+    reading = eligibility.evaluate_text(
+        "x", "You must already have the right to work in the EU.", C(work_authorisations=("US",))
+    )
+
+    assert reading.verdict == "FAIL"
+
+
+def test_two_spellings_of_one_country_do_not_read_as_an_unresolved_term() -> None:
+    """`held_codes` is a set, so `("ES", "España")` collapses to one code.
+    Comparing that set's size against the tuple's read the collapse as a term
+    the table could not resolve, and downgraded a correct FAIL to FLAG —
+    weakening T76's own count."""
+    reading = eligibility.evaluate_text(
+        "x", "Applicants must hold German citizenship.", C(citizenships=("ES", "España"))
+    )
+
+    assert reading.verdict == "FAIL"

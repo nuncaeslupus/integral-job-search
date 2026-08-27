@@ -563,7 +563,8 @@ def _vocabulary_verdict(kind: RequirementKind, target: str, held: tuple[str, ...
     wanted = _resolve_eligibility_term(target)
     if wanted is None:
         return "FLAG"
-    held_codes = {code for value in held if (code := _resolve_eligibility_term(value)) is not None}
+    resolved = [_resolve_eligibility_term(value) for value in held]
+    held_codes = {code for code in resolved if code is not None}
     if wanted in held_codes:
         return "PASS"
     # The candidate holds a country inside the bloc the advert named.
@@ -572,7 +573,22 @@ def _vocabulary_verdict(kind: RequirementKind, target: str, held: tuple[str, ...
     # The candidate holds a bloc that contains the country the advert named.
     if any(wanted in _BLOCS.get(code, frozenset()) for code in held_codes):
         return "PASS" if kind == "work_permit" else "FLAG"
-    if len(held_codes) < len(held):
+    # Both sides are blocs. Neither containment test above can settle that pair,
+    # because a bloc's membership is country codes only — `_BLOCS["EEA"]` never
+    # holds the string "EU" — so `EEA` against an `EU` bar fell through to a
+    # confident FAIL over a candidate who very likely qualifies. Whether one
+    # bloc's rights carry into another is exactly the modelling this table
+    # refuses to guess at, so it is FLAG. The guard stays narrow on purpose: a
+    # resolved *country* the advert's bloc does not contain — `US` against an
+    # `EU` bar — is not a bloc pair and still FAILs below.
+    if wanted in _BLOCS and any(code in _BLOCS for code in held_codes):
+        return "FLAG"
+    # An unresolved holding may be the very thing that satisfies the bar.
+    # Counted over `resolved`, not by comparing `held_codes`' size against the
+    # tuple's: two spellings of one country collapse into a single code, and the
+    # size comparison read that collapse as an unresolved term — downgrading a
+    # correct FAIL to FLAG for `("ES", "España")`.
+    if any(code is None for code in resolved):
         return "FLAG"
     return "FAIL"
 
@@ -964,6 +980,41 @@ PROBES: tuple[Probe, ...] = (
         text="Applicants must hold German citizenship at the time of application.",
         candidate=CandidateEligibility(citizenships=("ES", "Ruritanian")),
         expected="FLAG",
+    ),
+    # Both sides a bloc. `_BLOCS["EEA"]` holds country codes, never the string
+    # "EU", so no containment test settles this pair and it fell through to a
+    # confident FAIL. Found by review, not by the probe set — which had no
+    # bloc-against-bloc case, so `false_disqualifications` read 0 over the gap.
+    Probe(
+        name="bloc-against-bloc-is-flagged-not-failed",
+        text="You must already have the right to work in the EU.",
+        candidate=CandidateEligibility(work_authorisations=("EEA",)),
+        expected="FLAG",
+    ),
+    Probe(
+        name="bloc-against-bloc-is-flagged-in-the-other-direction-too",
+        text="You must already have the right to work in the EEA.",
+        candidate=CandidateEligibility(work_authorisations=("EU",)),
+        expected="FLAG",
+    ),
+    # The narrow edge of that guard: a resolved country the advert's bloc does
+    # not contain is not a bloc pair, and must still FAIL.
+    Probe(
+        name="a-country-outside-the-named-bloc-still-fails",
+        text="You must already have the right to work in the EU.",
+        candidate=CandidateEligibility(work_authorisations=("US",)),
+        expected="FAIL",
+        is_disqualification=True,
+    ),
+    # Two spellings of one country collapse to a single code. Comparing that
+    # set's size against the tuple's read the collapse as an unresolved term
+    # and downgraded this correct FAIL to a FLAG.
+    Probe(
+        name="two-spellings-of-one-country-do-not-read-as-unresolved",
+        text="Applicants must hold German citizenship at the time of application.",
+        candidate=CandidateEligibility(citizenships=("ES", "España")),
+        expected="FAIL",
+        is_disqualification=True,
     ),
     Probe(
         name="accented-and-unaccented-spellings-fold-together",

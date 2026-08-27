@@ -14,7 +14,7 @@ Carried over from [#235](https://github.com/nuncaeslupus/integral-job-search/pul
 
 ## The defect
 
-```
+```text
 candidate: citizenships=("DE",)     advert: "must hold German citizenship"     → FAIL
 candidate: citizenships=("ES",)     advert: "must hold German citizenship"     → FAIL
 ```

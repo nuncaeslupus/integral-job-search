@@ -1,6 +1,6 @@
 {
   "false_disqualifications": 0,
-  "false_disqualifications_evaluated": 13,
+  "false_disqualifications_evaluated": 15,
   "gate_status": "measured",
   "violations": [],
   "readings": [
@@ -72,6 +72,18 @@
     },
     {
       "name": "citizenship-bar-with-one-unresolved-holding-is-flagged",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "bloc-against-bloc-is-flagged-not-failed",
+      "expected": "FLAG",
+      "actual": "FLAG",
+      "false_disqualification": false
+    },
+    {
+      "name": "bloc-against-bloc-is-flagged-in-the-other-direction-too",
       "expected": "FLAG",
       "actual": "FLAG",
       "false_disqualification": false
