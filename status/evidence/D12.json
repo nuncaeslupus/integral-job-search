@@ -773,6 +773,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-804d4c01",
+      "key": "robots_verdicts_misread",
+      "evidence": "status/evidence/T70.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-82720e4f",
       "key": "posting_keywords_left_unclassified",
       "evidence": "status/evidence/T81.json",
