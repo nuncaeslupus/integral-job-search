@@ -126,6 +126,39 @@ class Salary(Strict):
     stated: bool
 
 
+#: `language_requirement.applies_to` — spec §5.1. `"role"` is a bar stated for
+#: *this* position; `"company"` is a blanket statement about the employer
+#: ("our working language is English") that says nothing about whether this
+#: particular role needs it. Only `"role"` may ever gate a candidate — the
+#: same distinction `eligibility.py`'s `COMPANY_WIDE_WELCOME_RE` draws for
+#: citizenship and permits, applied here to language.
+LanguageApplication = Literal["role", "company"]
+
+
+class LanguageRequirement(Strict):
+    """spec §5.1's `language_requirement` — a hard field the eligibility gate
+    (`eligibility.py`) reads, and `rank.py`/`scoring.py` must never see (§5.3):
+    a preference weight cancelling a legal or linguistic bar would be
+    invisible in any output either layer produces, which is why the boundary
+    is a test rather than a comment (T78).
+
+    `language` is the language **the role** demands — deliberately not the
+    same thing as `Offer.language`, which only records what the advert
+    happens to be written in. A Catalan advert for a role that needs only
+    Spanish still requires Spanish; reading `Offer.language` here would be
+    exactly that mistake.
+
+    `quote` is a verbatim span of `Offer.text`, on the same terms as
+    `Candidate.spans` and `eligibility.Requirement.quote`: nothing sourced
+    outside the advert may appear here.
+    """
+
+    language: str = Field(min_length=1)
+    level_stated: str | None = None
+    quote: str = Field(min_length=1)
+    applies_to: LanguageApplication
+
+
 class Offer(Strict):
     """§5.2's normalised offer — the shape every connector emits.
 
@@ -148,6 +181,11 @@ class Offer(Strict):
     language: Language | None = None
     text: str
     expires_at: str | None = None
+    # Additive, optional, never backfilled (§5.1) — T78's hard field. Absent
+    # means the advert stated no role-level language requirement, not that
+    # one was checked for and cleared; see `LanguageRequirement`'s docstring
+    # for why this is never `Offer.language`.
+    language_requirement: LanguageRequirement | None = None
     # T13 fills this in; a freshly connected offer is never a duplicate of
     # anything until dedup has looked at it.
     duplicate_of: str | None = None

@@ -47,10 +47,19 @@ Adapted from `MadsLorentzen/ai-job-search` (MIT). Attribution lives in
 
 Never reads `weights.json` or any `dimensions/*` score (spec §5.3's boundary —
 that is `rank.py`/`scoring.py`'s side; T78 tests the boundary directly).
+
+**T78** adds the fourth requirement kind, `"language"`, sourced not from a
+regex scan of `text` like the other three but from `offer.language_requirement`
+directly — spec §5.1/§5.3's own hard field, settled by the owner so the
+language gate never has to read `dimensions/english_demand.yaml`'s soft,
+scored preference for the same subject. `evaluate_text` (raw text, no
+structured offer) therefore never sees a language requirement; only
+`evaluate_offer` does, via `_language_as_requirement` below.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -59,13 +68,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from integral.offers import Offer
+from integral.dimensions import Language
+from integral.offers import LanguageApplication, LanguageRequirement, Offer, compute_offer_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T76.json"
+DEFAULT_T78_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T78.json"
 
 Verdict = Literal["FAIL", "FLAG", "PASS"]
-RequirementKind = Literal["citizenship", "work_permit", "clearance"]
+RequirementKind = Literal["citizenship", "work_permit", "clearance", "language"]
 
 _VERDICT_RANK: dict[Verdict, int] = {"PASS": 0, "FLAG": 1, "FAIL": 2}
 
@@ -88,6 +99,11 @@ class CandidateEligibility:
     citizenships: tuple[str, ...] | None = None
     work_authorisations: tuple[str, ...] | None = None
     clearances: tuple[str, ...] | None = None
+    #: Languages the candidate has stated they can work in (free-form codes,
+    #: compared case/punctuation-insensitively via `_normalize`, the same as
+    #: every other held fact here). `None` means the candidate has never
+    #: stated anything about languages — never "the candidate speaks none".
+    languages: tuple[str, ...] | None = None
 
 
 #: The candidate has stated nothing at all. Every hard bar against this
@@ -101,6 +117,7 @@ _CANDIDATE_FIELD: dict[
     "citizenship": lambda c: c.citizenships,
     "work_permit": lambda c: c.work_authorisations,
     "clearance": lambda c: c.clearances,
+    "language": lambda c: c.languages,
 }
 
 
@@ -391,13 +408,14 @@ def _verdict_for_requirement(
     return "FAIL", requirement.kind, requirement.quote
 
 
-def evaluate_text(
-    offer_id: str, text: str, candidate: CandidateEligibility = UNKNOWN_CANDIDATE
+def _reading_from_requirements(
+    offer_id: str, requirements: tuple[Requirement, ...], candidate: CandidateEligibility
 ) -> Reading:
-    """T76's verdict for one advert's text. `offer_id` is carried through
-    untouched — this function takes raw text so tests can probe it without
-    constructing a full `Offer`."""
-    requirements = find_requirements(text)
+    """Worst-verdict-wins over whatever requirements were found, regardless of
+    where they came from — a regex scan of `text`, or (T78) a structured
+    `offer.language_requirement` translated by `_language_as_requirement`.
+    One reducer, so a language bar and a citizenship bar compete on exactly
+    the same terms."""
     if not requirements:
         return Reading(offer_id=offer_id, verdict="PASS", reason=None, quote=None, requirements=())
 
@@ -420,10 +438,56 @@ def evaluate_text(
     )
 
 
+def evaluate_text(
+    offer_id: str, text: str, candidate: CandidateEligibility = UNKNOWN_CANDIDATE
+) -> Reading:
+    """T76's verdict for one advert's text. `offer_id` is carried through
+    untouched — this function takes raw text so tests can probe it without
+    constructing a full `Offer`.
+
+    Never sees a language requirement: that field lives on `Offer`, not in
+    `text`, so a caller reaching for this function alone gets exactly the
+    three text-scanned kinds — `evaluate_offer` is what wires in the fourth.
+    """
+    return _reading_from_requirements(offer_id, find_requirements(text), candidate)
+
+
+def _language_as_requirement(requirement: LanguageRequirement | None) -> Requirement | None:
+    """`offer.language_requirement` translated into this module's own
+    `Requirement` shape, so it flows through `_verdict_for_requirement`
+    exactly like a citizenship, work-permit or clearance bar.
+
+    Reads `requirement.language` — the language **the role** demands — never
+    `Offer.language`, which only records what the advert happens to be
+    written in (see `LanguageRequirement`'s docstring in `offers.py`; a
+    Catalan advert for a role that needs only Spanish still requires
+    Spanish). A company-wide statement (`applies_to == "company"`) is not
+    evidence about *this* role — the same principle `COMPANY_WIDE_WELCOME_RE`
+    applies to citizenship and permits — so it produces no `Requirement` at
+    all, never a PASS and never a FAIL.
+    """
+    if requirement is None or requirement.applies_to != "role":
+        return None
+    return Requirement(
+        kind="language",
+        quote=requirement.quote,
+        target=_normalize(requirement.language),
+        ambiguous=False,
+    )
+
+
 def evaluate_offer(offer: Offer, candidate: CandidateEligibility = UNKNOWN_CANDIDATE) -> Reading:
-    """`evaluate_text`, wired to a real `Offer` — the verbatim `text` §5.2
-    guarantees every connector emits, so this is what every real caller uses."""
-    return evaluate_text(offer.id, offer.text, candidate)
+    """`evaluate_text`'s three text-scanned kinds, plus (T78) the fourth:
+    `offer.language_requirement`, the hard field spec §5.3 reserves to this
+    gate alone. The verbatim `text` §5.2 guarantees every connector emits and
+    the structured field only `Offer` carries — this is what every real
+    caller uses; `evaluate_text` exists for tests that want the text-only
+    three."""
+    requirements = find_requirements(offer.text)
+    language_requirement = _language_as_requirement(offer.language_requirement)
+    if language_requirement is not None:
+        requirements = (*requirements, language_requirement)
+    return _reading_from_requirements(offer.id, requirements, candidate)
 
 
 def filter_eligible(
@@ -657,31 +721,278 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+# ---------------------------------------------------------------------------
+# T78 — the module-boundary gate (spec §5.3), measured over fixtures, never
+# accuracy (D-23). `offers_ranked_despite_a_stated_disqualification` above
+# measures whether *this* gate reaches the right verdict; this section
+# measures something different — whether the boundary between this gate and
+# `rank.py`/`scoring.py` holds at all. Two directions, per the owner's
+# ruling (§4 open question 2), because the failure being prevented — a
+# preference weight cancelling a legal or linguistic bar — is invisible in
+# any output either layer produces:
+#
+#   1. the ranker must never read a gate-only offer field
+#      (`language_requirement`, `eligibility`);
+#   2. this gate's verdict must never move because a weight moved — it has
+#      no path to see one in the first place.
+
+#: Offer fields spec §5.3 reserves to the eligibility/language gate alone.
+#: `rank.py` and `scoring.py` — named explicitly in the boundary table — must
+#: never access either as an attribute.
+GATE_ONLY_OFFER_FIELDS: tuple[str, ...] = ("language_requirement", "eligibility")
+
+#: The two modules the boundary table names as "the ranker".
+RANKER_MODULES: tuple[Path, ...] = (
+    _REPO_ROOT / "src" / "integral" / "rank.py",
+    _REPO_ROOT / "src" / "integral" / "scoring.py",
+)
+
+
+def _attribute_names(source: str) -> frozenset[str]:
+    """Every `.name` accessed as an attribute anywhere in `source`.
+
+    An AST walk rather than a substring search on purpose: this module's own
+    docstrings mention `language_requirement` by name, and a plain text
+    search of `rank.py`/`scoring.py` would have to forbid that too, which
+    would ban documenting the boundary in the very files it protects. Only
+    `ast.Attribute` nodes — actual `something.language_requirement` reads —
+    count as a violation.
+    """
+    tree = ast.parse(source)
+    return frozenset(node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute))
+
+
+@dataclass(frozen=True)
+class WeightInvarianceCase:
+    """One hand-built offer proving direction 2: this gate's verdict for a
+    fixed offer and candidate is what it is regardless of any weight —
+    because `evaluate_offer` takes no `weights` argument and has no path by
+    which one could reach it. `test_a_dimension_weight_cannot_change_a_gate_verdict`
+    varies `weights.json`-shaped mappings around this same fact directly.
+    """
+
+    name: str
+    offer: Offer
+    candidate: CandidateEligibility
+    expected: Verdict
+
+
+def _language_offer(
+    text: str,
+    *,
+    requirement_language: str,
+    applies_to: LanguageApplication = "role",
+    quote: str | None = None,
+    offer_language: Language | None = None,
+) -> Offer:
+    """A hand-built offer whose only interesting feature is its
+    `language_requirement`. `offer_language` — what the advert is written
+    in, `Offer.language` — is `None` unless a case supplies it explicitly:
+    `test_the_role_language_is_read_not_the_adverts_own_language` is exactly
+    the case that sets it to something *other* than `requirement_language`,
+    to prove the gate reads the latter and not the former."""
+    return Offer(
+        id=compute_offer_id(text),
+        source="manual",
+        text=text,
+        language=offer_language,
+        language_requirement=LanguageRequirement(
+            language=requirement_language,
+            level_stated=None,
+            quote=quote or text,
+            applies_to=applies_to,
+        ),
+    )
+
+
+#: Boundary-audit fixtures for direction 2. Not accuracy fixtures (D-23) —
+#: every case here already has an obviously correct verdict; what is being
+#: proven is that the verdict cannot be moved by a weight, not that the
+#: mechanism is right on real adverts.
+WEIGHT_INVARIANCE_CASES: tuple[WeightInvarianceCase, ...] = (
+    WeightInvarianceCase(
+        name="role-requires-german-candidate-lacks-it",
+        offer=_language_offer(
+            "Backend Engineer, remote. Verhandlungssicheres Deutsch ist Voraussetzung "
+            "fuer diese Rolle.",
+            requirement_language="de",
+            quote="Verhandlungssicheres Deutsch ist Voraussetzung fuer diese Rolle.",
+        ),
+        candidate=CandidateEligibility(languages=("en",)),
+        expected="FAIL",
+    ),
+    WeightInvarianceCase(
+        name="role-requires-spanish-candidate-holds-it",
+        offer=_language_offer(
+            "Customer support role. Se requiere espanol fluido para el puesto.",
+            requirement_language="es",
+            quote="Se requiere espanol fluido para el puesto.",
+        ),
+        candidate=CandidateEligibility(languages=("es", "en")),
+        expected="PASS",
+    ),
+    WeightInvarianceCase(
+        name="company-wide-language-policy-does-not-gate-the-role",
+        offer=_language_offer(
+            "Data Analyst. Our company's internal working language is English.",
+            requirement_language="en",
+            applies_to="company",
+            quote="Our company's internal working language is English.",
+        ),
+        candidate=CandidateEligibility(languages=()),
+        expected="PASS",
+    ),
+)
+
+
+def audit_boundary(
+    modules: tuple[Path, ...] = RANKER_MODULES,
+    cases: tuple[WeightInvarianceCase, ...] = WEIGHT_INVARIANCE_CASES,
+) -> list[dict[str, Any]]:
+    """Every audit point T78's boundary gate checks — `measure_boundary`'s
+    only source of truth, since this gate has no corpus to run against
+    (D-23). One entry per ranker module scanned for a gate-only field access
+    (direction 1), one entry per `WeightInvarianceCase` proving the verdict
+    is the offer's alone (direction 2)."""
+    results: list[dict[str, Any]] = []
+    for module in modules:
+        if not module.exists():
+            continue
+        attrs = _attribute_names(module.read_text(encoding="utf-8"))
+        hit = next((field for field in GATE_ONLY_OFFER_FIELDS if field in attrs), None)
+        detail = f"{module.name} reads .{hit}, a gate-only field (spec §5.3)" if hit else None
+        results.append(
+            {
+                "direction": "ranker_never_reads_a_gate_field",
+                "name": module.name,
+                "match": hit is None,
+                "detail": detail,
+            }
+        )
+    for case in cases:
+        actual = evaluate_offer(case.offer, case.candidate).verdict
+        results.append(
+            {
+                "direction": "gate_verdict_independent_of_weight",
+                "name": case.name,
+                "match": actual == case.expected,
+                "detail": None
+                if actual == case.expected
+                else f"{case.name}: expected {case.expected}, got {actual}",
+            }
+        )
+    return results
+
+
+def _unmeasured_boundary(reason: str, results: list[dict[str, Any]]) -> dict[str, Any]:
+    """The shape a boundary reading that could not happen takes: `-1`, never
+    `0` — see `connector_health.py` for the same rule applied to a different
+    gate."""
+    return {
+        "gate_fields_read_by_the_ranker": -1,
+        "ranked_offers_evaluated": 0,
+        "gate_status": "unmeasured",
+        "unmeasured_reason": reason,
+        "results": results,
+    }
+
+
+def measure_boundary(results: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """T78's gate reading: `gate_fields_read_by_the_ranker`.
+
+    `results=None` (every real caller) draws them from `audit_boundary`; a
+    caller may pass its own list to prove the empty-input case cannot pass —
+    see `test_the_gate_does_not_pass_on_an_empty_input_set`.
+
+    A violation is any audit point whose `match` came back `False` — either
+    direction counts identically toward the one asserted number, because
+    both are the same failure from opposite sides: a preference weight and a
+    hard bar sharing a channel neither output layer would ever show.
+
+    A zero count over zero audit points is not a pass — see the module
+    docstring on the empty-input-set failure — so `gate_status` reads
+    `"unmeasured"` whenever nothing was evaluated, never a clean `0`.
+    """
+    if results is None:
+        results = audit_boundary()
+    if not results:
+        return _unmeasured_boundary(
+            "no boundary audit point was run — a zero violation count over "
+            "nothing evaluated is not a measurement",
+            results,
+        )
+    violations = [r for r in results if not r["match"]]
+    return {
+        "gate_fields_read_by_the_ranker": len(violations),
+        "ranked_offers_evaluated": len(results),
+        "gate_status": "measured",
+        "violations": [r["detail"] for r in violations if r["detail"]],
+        "results": results,
+    }
+
+
+def write_boundary_evidence(evidence: Path = DEFAULT_T78_EVIDENCE_PATH) -> dict[str, Any]:
+    """Measure and record `status/evidence/T78.json`. This module owns that
+    file outright — nothing else writes it (CA-12: a gate must never name a
+    file no module produces)."""
+    measured = measure_boundary()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.eligibility [path]`.
 
     The violation count is checked **before** the unmeasured branch: a run
     that found a real, known violation must fail (exit 1), never report
     `unmeasured` — a known bad result outranks "could not be scored yet".
+
+    Also regenerates T78's boundary evidence, beside T76's rather than in
+    place of it (CA-12: a gate must never name a file no module produces).
+    Its target sits next to `target` — `target`'s own directory — so a
+    caller pointing T76's evidence at a tmp dir (as the unit tests do) gets
+    T78's evidence isolated there too, and a caller taking the default gets
+    the real `status/evidence/T78.json`. The overall exit code is the worse
+    of the two gates, each still checked violation-before-unmeasured on its
+    own terms.
     """
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)
     print(json.dumps(measured, ensure_ascii=False))
 
+    exit_code = 0
     violations = measured["offers_ranked_despite_a_stated_disqualification"]
     if violations > 0:
         for line in measured.get("violations", []):
             print(line, file=sys.stderr)
-        return 1
-    if measured["gate_status"] == "unmeasured":
+        exit_code = 1
+    elif measured["gate_status"] == "unmeasured":
         print(
             f"offers_ranked_despite_a_stated_disqualification: UNMEASURED — "
             f"{measured['unmeasured_reason']}. Not a pass and not a fail.",
             file=sys.stderr,
         )
-        return 3
-    return 0
+        exit_code = 3
+
+    boundary = write_boundary_evidence(target.parent / "T78.json")
+    print(json.dumps(boundary, ensure_ascii=False))
+
+    boundary_violations = boundary["gate_fields_read_by_the_ranker"]
+    if boundary_violations > 0:
+        for line in boundary.get("violations", []):
+            print(line, file=sys.stderr)
+        exit_code = max(exit_code, 1)
+    elif boundary["gate_status"] == "unmeasured":
+        print(
+            f"gate_fields_read_by_the_ranker: UNMEASURED — "
+            f"{boundary['unmeasured_reason']}. Not a pass and not a fail.",
+            file=sys.stderr,
+        )
+        exit_code = max(exit_code, 3)
+
+    return exit_code
 
 
 if __name__ == "__main__":
