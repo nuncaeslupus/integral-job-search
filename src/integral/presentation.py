@@ -46,6 +46,7 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
+from integral.eligibility import Reading
 from integral.enrichment import NOT_FROM_THE_ADVERT, OutsideFinding
 from integral.explain import explain
 from integral.offers import Location, Offer, Salary
@@ -55,6 +56,7 @@ from integral.rank import Candidate, rank
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T44.json"
+DEFAULT_T87_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T87.json"
 
 #: What an advert did not say. One token, so a reader learns it once and a test
 #: can count it — "not stated", "n/a" and "—" scattered across four bullets are
@@ -72,8 +74,20 @@ PROVISIONAL_LABEL = (
 #: "Show a handful at a time, not forty."
 DEFAULT_LIMIT = 5
 
+#: T87. The heading the Excluded section carries, and the marker a FLAG card
+#: carries. Both are constants for the same reason `PROVISIONAL_LABEL` is: the
+#: gate looks for the exact bytes the page shows, so the check cannot drift
+#: from the wording by paraphrasing it.
+EXCLUDED_HEADING = "Excluded"
+FLAG_MARKER = "[flagged — your call]"
+
+#: What an exclusion renders as when it arrived with no wording behind it.
+#: Never silently omitted: an exclusion with no reason is the defect this
+#: section's gate counts, and hiding it would make the page look correct.
+NO_REASON_GIVEN = "(no reason was recorded — this is a defect, please report it)"
+
 _CARD = Template(
-    """$title — $company
+    """$marker$title — $company
   pay:       $pay
   hours:     $hours
   location:  $location
@@ -136,6 +150,7 @@ def card(
     explanation: Mapping[str, Any] | None = None,
     net: NetEstimate | None = None,
     outside: Sequence[OutsideFinding] = (),
+    flagged: bool = False,
 ) -> str:
     """One offer, as the candidate sees it. Pure: same input, same bytes.
 
@@ -151,6 +166,13 @@ def card(
     if net is not None:
         pay = f"{pay}\n             {net.label()}"
     return _CARD.substitute(
+        # T87/§5.4: a FLAG is "ranked, marked, and the human is the
+        # tiebreaker". Ranked was T79's half; marked is this one. The marker
+        # sits above the title rather than in a bullet because it qualifies the
+        # whole card, and a card that is *not* flagged carries no empty row —
+        # "nothing to weigh up" and "this row was left blank" are different
+        # claims, the same distinction `_outside_block` draws.
+        marker=f"{FLAG_MARKER}\n" if flagged else "",
         title=offer.title or UNKNOWN,
         company=offer.company or UNKNOWN,
         pay=pay,
@@ -177,6 +199,42 @@ def _outside_block(findings: Sequence[OutsideFinding]) -> str:
     # The heading carries the marker once; `cite()` leaves it off each line and
     # keeps the source. `label()` is for anywhere a finding appears alone.
     return f"\n  {NOT_FROM_THE_ADVERT.capitalize()}:\n{lines}\n"
+
+
+def _excluded_block(excluded: Sequence[Mapping[str, Any]], by_id: Mapping[str, Offer]) -> str:
+    """The **Excluded** section: what was removed, and the advert's own sentence
+    it was removed for.
+
+    Rendered from the reading, never assembled — D-17's lesson for the card
+    applies here too, and the `quote` is a verbatim advert span T77 already
+    guarantees. Nothing here recomputes a verdict: the page shows what the gate
+    decided, and a page that decided for itself would be a second gate nobody
+    gated.
+
+    **Never truncated.** The cards are cut to `limit` because the candidate
+    wants the best few; the exclusions are the opposite case — the whole reason
+    they are shown is that nothing was dropped quietly, so cutting the list
+    would reintroduce exactly what the section exists to close. The count is
+    stated in the heading as well, so it is read rather than counted.
+    """
+    if not excluded:
+        return ""
+    lines = []
+    for entry in excluded:
+        offer = by_id.get(str(entry.get("offer_id")))
+        name = (offer.title if offer is not None else None) or str(entry.get("offer_id"))
+        quote = (entry.get("quote") or "").strip()
+        reason = entry.get("reason") or UNKNOWN
+        cited = f'"{quote}"' if quote else NO_REASON_GIVEN
+        lines.append(f"  - {name} ({reason}): {cited}")
+    return "\n".join(
+        [
+            "",
+            f"{EXCLUDED_HEADING} ({len(excluded)}) — you cannot apply for these, "
+            "and this is the wording each was removed for:",
+            *lines,
+        ]
+    )
 
 
 def render(
@@ -209,6 +267,7 @@ def render(
         raise KeyError(f"{len(missing)} ranked offer(s) were not supplied: {', '.join(missing)}")
     shown = frontier[:limit]
     remaining = len(frontier) - len(shown)
+    flagged = set(ranking.get("flagged", ()))
 
     lines: list[str] = []
     if ranking["level"] == "L1":
@@ -223,11 +282,15 @@ def render(
             # `card` directly, and the page — the thing the candidate actually
             # reads — could never show what the lookup found.
             (outside or {}).get(offer_id, ()),
+            offer_id in flagged,
         )
         for offer_id in shown
     ]
     if remaining > 0:
         lines.append(f"({remaining} more not shown.)")
+    excluded = list(ranking.get("excluded", ()))
+    if excluded:
+        lines.append(_excluded_block(excluded, by_id))
     return "\n".join(lines)
 
 
@@ -424,6 +487,198 @@ def measure() -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# T87 — the Excluded section, measured on the page the candidate reads
+
+
+#: T87's own fixture, deliberately separate from T44's. Four adverts: two state
+#: a hard bar the candidate cannot meet, one states a soft preference, one
+#: states nothing. Every `quote` below is a verbatim slice of the `text` beside
+#: it, and `measure_exclusions_shown` asserts that rather than trusting it — a
+#: section whose whole claim is "these are the advert's own words" cannot be
+#: measured against wording invented for the measurement.
+_T87_FIXTURE: tuple[tuple[str, str, str, str, str, str | None, str | None], ...] = (
+    (
+        "Backend engineer",
+        "Alemana GmbH",
+        "Backend en Python, 100% en remoto. Applicants must hold German citizenship.",
+        "https://example.invalid/offers/backend",
+        "FAIL",
+        "citizenship",
+        "must hold German citizenship",
+    ),
+    (
+        "SRE",
+        "Clearance Ltd",
+        "SRE para infraestructura crítica. Must hold an active TS/SCI clearance.",
+        "https://example.invalid/offers/sre",
+        "FAIL",
+        "clearance",
+        "Must hold an active TS/SCI clearance",
+    ),
+    (
+        "Platform engineer",
+        "Segura SL",
+        "Plataforma en Barcelona. An active security clearance is a plus.",
+        "https://example.invalid/offers/platform",
+        "FLAG",
+        "clearance",
+        "An active security clearance is a plus",
+    ),
+    (
+        "Data engineer",
+        "Abierta SA",
+        "Datos en remoto. Sin requisitos de nacionalidad ni de permiso.",
+        "https://example.invalid/offers/data",
+        "PASS",
+        None,
+        None,
+    ),
+)
+
+
+def _t87_fixture() -> tuple[list[Offer], list[Candidate], list[Reading]]:
+    from integral.offers import compute_offer_id
+
+    offers: list[Offer] = []
+    candidates: list[Candidate] = []
+    readings: list[Reading] = []
+    for index, (title, company, text, url, verdict, reason, quote) in enumerate(_T87_FIXTURE):
+        offer_id = compute_offer_id(text)
+        offers.append(
+            Offer(
+                id=offer_id,
+                source="fixture",
+                url=url,
+                title=title,
+                company=company,
+                text=text,
+                language="es",
+                salary=Salary(
+                    min=36000.0 + 1000 * index, max=None, currency="EUR", period="year", stated=True
+                ),
+                location=Location(raw="Barcelona", country="ES", remote="full"),
+            )
+        )
+        candidates.append(
+            Candidate(
+                offer_id=offer_id,
+                salary_per_month=3000.0 + 100 * index,
+                scores={"remote": 1.0 - 0.2 * index, "commute": -0.1 * index},
+            )
+        )
+        readings.append(
+            Reading(
+                offer_id=offer_id,
+                verdict=verdict,  # type: ignore[arg-type]
+                reason=reason,  # type: ignore[arg-type]
+                quote=quote,
+                requirements=(),
+            )
+        )
+    return offers, candidates, readings
+
+
+def _t87_page(limit: int = DEFAULT_LIMIT) -> tuple[dict[str, Any], str]:
+    offers, candidates, readings = _t87_fixture()
+    ranking = rank(
+        candidates,
+        dimensions=("commute", "remote"),
+        revision=ProfileRevision(rows=len(candidates), sha256="0" * 64),
+        weights=_FIXTURE_WEIGHTS,
+        at="2026-08-27T00:00:00Z",
+        readings=readings,
+    )
+    return ranking, render(
+        ranking, offers, explanations=explain(ranking, candidates, _FIXTURE_WEIGHTS), limit=limit
+    )
+
+
+def excluded_offers_missing_from_the_page(
+    renderings: Sequence[tuple[Mapping[str, Any], str]],
+) -> int:
+    """Exclusions the ranking made that the page did not show, with wording.
+
+    An exclusion counts as shown only when its **verbatim quote** appears on the
+    page. Checking for the offer id, or for the heading, would pass a section
+    that listed what was removed and not why — and the reason a barred offer is
+    shown at all is that a false FAIL is invisible by construction. A verdict
+    the candidate cannot trace to a sentence in the advert is one they cannot
+    dispute.
+    """
+    return sum(
+        1
+        for ranking, page in renderings
+        for entry in ranking.get("excluded", ())
+        if not (entry.get("quote") or "").strip() or str(entry["quote"]).strip() not in page
+    )
+
+
+def _unmeasured_exclusions(reason: str) -> dict[str, Any]:
+    return {
+        "excluded_offers_missing_from_the_page": -1,
+        "excluded_offers_missing_from_the_page_evaluated": 0,
+        "gate_status": "unmeasured",
+        "reason": reason,
+    }
+
+
+def measure_exclusions_shown() -> dict[str, Any]:
+    """T87's numbers: exclusions rendered with their wording, and proof the
+    count can rise."""
+    offers, _, readings = _t87_fixture()
+    text_by_id = {offer.id: offer.text for offer in offers}
+    for reading in readings:
+        if reading.quote is not None and reading.quote not in text_by_id[reading.offer_id]:
+            # The fixture, not the code, would be the thing at fault — and a
+            # gate that measured invented wording would certify nothing.
+            raise ValueError(f"fixture quote is not a span of its advert: {reading.quote!r}")
+
+    ranking, page = _t87_page()
+    excluded = list(ranking["excluded"])
+    if not excluded:
+        return _unmeasured_exclusions("the ranking excluded nothing, so the section showed nothing")
+
+    missing = excluded_offers_missing_from_the_page([(ranking, page)])
+    # Take the section off the page. If the count does not rise, it is not
+    # reading the page and a zero certifies the fixture rather than the code.
+    stripped = page.split(f"\n{EXCLUDED_HEADING} (")[0]
+    planted = excluded_offers_missing_from_the_page([(ranking, stripped)])
+
+    flagged = list(ranking["flagged"])
+    carded = [offer_id for offer_id in ranking["pareto"][:DEFAULT_LIMIT]]
+    return {
+        "excluded_offers_missing_from_the_page": missing,
+        "excluded_offers_missing_from_the_page_evaluated": len(excluded),
+        "missing_detected_when_the_section_is_removed": int(planted > missing),
+        # The heading states the number rather than leaving it to be counted,
+        # and the section is never cut to `limit` — D-18's rule is that the
+        # withheld count is reported, and a truncated list under a correct
+        # count is the same silence with a number on top.
+        "excluded_count_stated_on_the_page": int(f"{EXCLUDED_HEADING} ({len(excluded)})" in page),
+        "excluded_offers_carded": sum(
+            1
+            for entry in excluded
+            if (url := next((o.url for o in offers if o.id == entry["offer_id"]), None))
+            and url in page
+        ),
+        # §5.4's other half: a FLAG is ranked *and* marked.
+        "flagged_offers_marked": sum(
+            1 for offer_id in flagged if offer_id in carded and FLAG_MARKER in page
+        ),
+        "flagged_offers_evaluated": len(flagged),
+        "gate_status": "measured",
+        "excluded": excluded,
+    }
+
+
+def write_exclusion_evidence(evidence: Path = DEFAULT_T87_EVIDENCE_PATH) -> dict[str, Any]:
+    measured = measure_exclusions_shown()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     measured = measure()
     evidence.parent.mkdir(parents=True, exist_ok=True)
@@ -455,6 +710,34 @@ def _main(argv: list[str]) -> int:
             "an advert silent on it is not an advert promising anything about it",
             file=sys.stderr,
         )
+        return 1
+
+    # T87 rides beside T44 rather than replacing it — one module, two gates,
+    # two evidence files.
+    shown = write_exclusion_evidence(args.evidence.parent / "T87.json")
+    print(
+        "excluded_offers_missing_from_the_page: "
+        f"{shown['excluded_offers_missing_from_the_page']} (== 0)"
+    )
+    if shown["gate_status"] != "measured":
+        print(f"T87 cannot be scored: {shown['reason']}", file=sys.stderr)
+        return 1
+    if shown["excluded_offers_missing_from_the_page"] != 0:
+        return 1
+    if not shown["missing_detected_when_the_section_is_removed"]:
+        print("the count did not rise when the Excluded section was removed", file=sys.stderr)
+        return 1
+    if not shown["excluded_count_stated_on_the_page"]:
+        print("the page did not state how many offers were excluded", file=sys.stderr)
+        return 1
+    if shown["excluded_offers_carded"]:
+        print(
+            "an excluded offer was rendered as a card the candidate might apply for",
+            file=sys.stderr,
+        )
+        return 1
+    if shown["flagged_offers_marked"] != shown["flagged_offers_evaluated"]:
+        print("a flagged offer was carded without its marker", file=sys.stderr)
         return 1
     return 0
 

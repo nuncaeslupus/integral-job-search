@@ -1,0 +1,22 @@
+{
+  "excluded": [
+    {
+      "offer_id": "sha256:2e7a15662c4fbce3faa33d3d1ec46e4c5a48990e8e35887fc8e08133c9f3b06a",
+      "quote": "must hold German citizenship",
+      "reason": "citizenship"
+    },
+    {
+      "offer_id": "sha256:50861d1b1f9bcef85c4560750221a965474f257996bae80e087b8bfca94ba886",
+      "quote": "Must hold an active TS/SCI clearance",
+      "reason": "clearance"
+    }
+  ],
+  "excluded_count_stated_on_the_page": 1,
+  "excluded_offers_carded": 0,
+  "excluded_offers_missing_from_the_page": 0,
+  "excluded_offers_missing_from_the_page_evaluated": 2,
+  "flagged_offers_evaluated": 1,
+  "flagged_offers_marked": 1,
+  "gate_status": "measured",
+  "missing_detected_when_the_section_is_removed": 1
+}
