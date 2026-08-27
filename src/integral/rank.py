@@ -583,6 +583,14 @@ def measure_exclusions() -> dict[str, Any]:
         "excluded_offers_reaching_the_frontier": sum(
             1 for entry in shown if entry["offer_id"] in ranking["pareto"]
         ),
+        # A FLAG is kept, so its denominator is the FLAGs the fixture states
+        # and the two must be equal. Recording only the retained count would
+        # let a regression that drops every FLAG report a clean `0` — the
+        # violation-count-over-an-empty-set failure this gate exists to refuse,
+        # reproduced one field along.
+        "flagged_offers_evaluated": sum(
+            1 for reading in _FIXTURE_READINGS if reading.verdict == "FLAG"
+        ),
         "flagged_offers_still_ranked": sum(
             1 for offer_id in ranking["flagged"] if offer_id in ranking["pareto"]
         ),
@@ -635,6 +643,9 @@ def _main(argv: list[str]) -> int:
         return 1
     if shown["excluded_offers_reaching_the_frontier"]:
         print("an excluded offer reached the frontier", file=sys.stderr)
+        return 1
+    if shown["flagged_offers_still_ranked"] != shown["flagged_offers_evaluated"]:
+        print("a flagged offer was dropped from the ranking instead of marked", file=sys.stderr)
         return 1
     return 0
 

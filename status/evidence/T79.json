@@ -10,6 +10,7 @@
   "excluded_offers_reaching_the_frontier": 0,
   "excluded_offers_shown_without_a_reason": 0,
   "excluded_offers_shown_without_a_reason_evaluated": 1,
+  "flagged_offers_evaluated": 1,
   "flagged_offers_still_ranked": 1,
   "gate_status": "measured",
   "violation_detected_when_planted": 1

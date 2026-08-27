@@ -128,3 +128,6 @@ def test_the_gate_does_not_pass_on_an_empty_input_set() -> None:
     assert measured["gate_status"] == "measured"
     assert measured["excluded_offers_shown_without_a_reason"] == 0
     assert measured["violation_detected_when_planted"] == 1
+    assert (
+        measured["flagged_offers_still_ranked"] == measured["flagged_offers_evaluated"] > 0
+    ), "a FLAG is kept, so its retained count must equal the FLAGs the fixture states"
