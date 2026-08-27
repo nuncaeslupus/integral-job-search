@@ -318,3 +318,130 @@ def test_the_requirement_noun_is_not_a_target() -> None:
     )
 
     assert reading.verdict == "FLAG"
+
+
+# ---------------------------------------------------------------------------
+# T77 — every FAIL and every FLAG carries the advert's own sentence
+
+
+def test_every_fail_verdict_carries_the_adverts_own_sentence() -> None:
+    """A FAIL excludes the offer outright — spec's own objection to an
+    unexplained veto applies with full force here. If this module cannot show
+    the sentence that disqualified the offer, it has no business removing it
+    from the candidate's list."""
+    text = "Applicants must hold German citizenship at the time of application."
+    reading = eligibility.evaluate_text(
+        "t77-fail", text, CandidateEligibility(citizenships=("ES",))
+    )
+
+    assert reading.verdict == "FAIL"
+    assert reading.quote
+    assert reading.quote in text
+
+
+def test_a_flag_verdict_quotes_too() -> None:
+    """FLAG is a claim about the advert as much as FAIL is — "this is
+    ambiguous" or "your status here is unclear" still has to point at real
+    wording, not an implementation's own paraphrase of what it saw."""
+    text = "An active security clearance is a plus, but not required for most roles."
+    reading = eligibility.evaluate_text("t77-flag", text, CandidateEligibility(clearances=()))
+
+    assert reading.verdict == "FLAG"
+    assert reading.quote
+    assert reading.quote in text
+
+
+def test_a_verdict_quote_is_a_span_of_the_advert_text() -> None:
+    """`is_advert_span` is the exact bar a quote must clear: found, byte for
+    byte, somewhere in the text it is attributed to."""
+    text = "Must hold an active TS/SCI clearance before starting."
+
+    assert eligibility.is_advert_span("Must hold an active TS/SCI clearance", text)
+    assert not eligibility.is_advert_span("Must hold an active TS/SCI clearance!", text)
+
+
+def test_a_near_miss_quote_with_collapsed_whitespace_is_not_a_span() -> None:
+    """A plausible-but-wrong implementation normalises whitespace before
+    comparing, so a quote that collapses the advert's double space to one
+    would read as found when it was never actually written that way. No
+    normalisation: the check compares raw text."""
+    text = "Must hold an active TS/SCI  clearance before starting."
+    quote = "Must hold an active TS/SCI clearance before starting."
+
+    assert quote not in text, "the fixture must be a genuine near miss, not an accidental match"
+    assert not eligibility.is_advert_span(quote, text)
+
+
+def test_a_near_miss_quote_with_a_stripped_accent_is_not_a_span() -> None:
+    """Same failure mode, the accent-folding direction: 'España' and 'Espana'
+    are not the same bytes, and a quote is not entitled to the difference."""
+    text = "Debe tener residencia legal en España para este puesto."
+    quote = "residencia legal en Espana"
+
+    assert quote not in text
+    assert not eligibility.is_advert_span(quote, text)
+
+
+def test_a_near_miss_quote_with_an_inserted_ellipsis_is_not_a_span() -> None:
+    """A quote spliced from two non-adjacent parts of the advert and joined
+    with an ellipsis is not a span of the text, even though both halves,
+    read separately, are genuine."""
+    text = "Must hold an active TS/SCI clearance. Remote-first team, competitive salary."
+    quote = "Must hold an active TS/SCI clearance ... competitive salary."
+
+    assert quote not in text
+    assert not eligibility.is_advert_span(quote, text)
+
+
+def test_a_fabricated_quote_is_a_schema_violation_not_a_warning() -> None:
+    """The module's own rule, exercised directly: a quote not found in the
+    advert text must fail loudly, never pass through as a warning."""
+    with pytest.raises(eligibility.QuoteProvenanceError):
+        eligibility._require_advert_span(
+            "a sentence the advert never wrote", "the advert's actual text", context="test"
+        )
+
+
+def test_a_missing_quote_on_a_non_pass_verdict_is_also_a_schema_violation() -> None:
+    """No quote at all is refused exactly like a fabricated one — 'FAIL, no
+    quote given' is still an unfalsifiable veto."""
+    with pytest.raises(eligibility.QuoteProvenanceError):
+        eligibility._require_advert_span(None, "the advert's actual text", context="test")
+
+
+def test_the_quote_provenance_gate_does_not_pass_on_an_empty_input_set() -> None:
+    """The same failure this whole increment is about, turned on T77's own
+    gate: a zero-violation count over zero disqualification verdicts
+    evaluated is not a pass."""
+    measured = eligibility.measure_quote_provenance(readings=[])
+
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["disqualification_verdicts_evaluated"] == 0
+    assert measured["disqualification_verdicts_without_quoted_wording_evaluated"] == 0
+    assert measured["disqualification_verdicts_without_quoted_wording"] == -1
+
+
+def test_the_real_probe_set_has_a_non_zero_quote_provenance_denominator() -> None:
+    """The task's own gate: over the module's built-in adversarial fixtures,
+    `disqualification_verdicts_evaluated` must be written and non-zero, and
+    the violation count must be zero."""
+    measured = eligibility.measure_quote_provenance()
+
+    assert measured["gate_status"] == "measured"
+    assert measured["disqualification_verdicts_evaluated"] > 0
+    assert measured["disqualification_verdicts_without_quoted_wording"] == 0
+
+
+def test_main_writes_t77_evidence_beside_t76(tmp_path: Path) -> None:
+    """`_main` regenerates both gates in one run — both task payloads name the
+    same `python -m integral.eligibility` command, so the module must produce
+    both evidence files from it. Pointing the T76 path at a temp directory
+    must not write the T77 file over the committed one."""
+    t76_target = tmp_path / "T76.json"
+    exit_code = eligibility._main(["eligibility", str(t76_target)])
+
+    assert exit_code == 0
+    t77_written = json.loads((tmp_path / "T77.json").read_text(encoding="utf-8"))
+    assert t77_written["gate_status"] == "measured"
+    assert t77_written["disqualification_verdicts_without_quoted_wording"] == 0
+    assert t77_written["disqualification_verdicts_evaluated"] > 0

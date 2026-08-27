@@ -47,6 +47,17 @@ Adapted from `MadsLorentzen/ai-job-search` (MIT). Attribution lives in
 
 Never reads `weights.json` or any `dimensions/*` score (spec §5.3's boundary —
 that is `rank.py`/`scoring.py`'s side; T78 tests the boundary directly).
+
+**T77 — every FAIL and every FLAG carries a real quote.** A veto with no quote
+is unfalsifiable: if this module removes a job from someone's list, it must be
+able to show the sentence it removed it for. The quote is a span of the
+advert's own text, on the same terms `Candidate.spans` and `enrichment.py`
+hold an evidence span to — nothing sourced outside the advert may appear here.
+`_require_advert_span` checks every `Requirement.quote` this module finds
+against the text it was matched from and raises `QuoteProvenanceError` on
+anything that is not a byte-for-byte span: a fabricated justification for
+excluding someone's job is worse than no gate at all, so this fails loudly
+rather than warning.
 """
 
 from __future__ import annotations
@@ -63,6 +74,7 @@ from integral.offers import Offer
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T76.json"
+DEFAULT_EVIDENCE_PATH_T77 = _REPO_ROOT / "status" / "evidence" / "T77.json"
 
 Verdict = Literal["FAIL", "FLAG", "PASS"]
 RequirementKind = Literal["citizenship", "work_permit", "clearance"]
@@ -142,6 +154,47 @@ class Reading:
     reason: RequirementKind | None
     quote: str | None
     requirements: tuple[Requirement, ...]
+
+
+# ---------------------------------------------------------------------------
+# T77 — a quote attributed to the advert must actually be the advert's words
+
+
+class QuoteProvenanceError(ValueError):
+    """A `Requirement.quote` is not a byte-for-byte span of the advert text it
+    is attributed to.
+
+    A schema violation, never a warning: the module docstring's "fabricated
+    justification for excluding someone's job is worse than no gate at all"
+    is the whole reason this raises instead of logging and continuing."""
+
+
+def is_advert_span(quote: str, text: str) -> bool:
+    """Is `quote` found, byte for byte, somewhere in `text`?
+
+    The same bar `Candidate.spans` holds an evidence span to, and the one
+    `enrichment.py` already draws for explanations (`outside_source_spans`).
+    Deliberately no normalisation: collapsing whitespace, stripping an accent
+    or matching across an inserted ellipsis would let a paraphrase — or a
+    fabrication that merely resembles the text — pass as a quote.
+    """
+    return bool(quote) and quote in text
+
+
+def _require_advert_span(quote: str | None, text: str, *, context: str) -> None:
+    """Raise `QuoteProvenanceError` unless `quote` is a real span of `text`.
+
+    Called for every `Requirement` this module finds, whichever verdict it
+    ultimately contributes to: `Reading.quote` — the one shown to a
+    candidate for a FAIL or a FLAG — is always one of these, so validating
+    every requirement validates the one that reaches the candidate too.
+    """
+    if quote is None:
+        raise QuoteProvenanceError(f"{context}: carries no quote at all")
+    if not is_advert_span(quote, text):
+        raise QuoteProvenanceError(
+            f"{context}: quote {quote!r} is not a byte-for-byte span of the advert text"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +454,14 @@ def evaluate_text(
     if not requirements:
         return Reading(offer_id=offer_id, verdict="PASS", reason=None, quote=None, requirements=())
 
+    # T77: every requirement this scan found is checked against `text` here,
+    # once, before any of them can become the quote a FAIL or a FLAG shows to
+    # a candidate — see `_require_advert_span`.
+    for requirement in requirements:
+        _require_advert_span(
+            requirement.quote, text, context=f"{offer_id}: {requirement.kind} requirement"
+        )
+
     worst_verdict: Verdict = "PASS"
     worst_reason: RequirementKind | None = None
     worst_quote: str | None = None
@@ -657,27 +718,144 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
-def _main(argv: list[str]) -> int:
-    """`python -m integral.eligibility [path]`.
+# ---------------------------------------------------------------------------
+# T77's own gate — every disqualification verdict's quote is a real span
 
-    The violation count is checked **before** the unmeasured branch: a run
-    that found a real, known violation must fail (exit 1), never report
-    `unmeasured` — a known bad result outranks "could not be scored yet".
+
+def _quote_provenance_readings() -> list[dict[str, Any]]:
+    """`evaluate_text` over every `PROBES` case, reporting each verdict and
+    whether its quote is a genuine span of that case's own text.
+
+    Reads `PROBES` (T76's fixtures) but writes nothing to it — a second gate
+    over the same cases, not a change to the first. `evaluate_text` already
+    raises `QuoteProvenanceError` outright on a bad quote (see
+    `_require_advert_span`), so a run that reaches the end of this loop has
+    already proven the mechanism for every case evaluated; `quoted` below
+    records that proof rather than re-deciding it.
+    """
+    readings = []
+    for case in PROBES:
+        reading = evaluate_text(case.name, case.text, case.candidate)
+        quoted = reading.quote is not None and is_advert_span(reading.quote, case.text)
+        readings.append(
+            {
+                "name": case.name,
+                "verdict": reading.verdict,
+                "quote": reading.quote,
+                "quoted": quoted,
+            }
+        )
+    return readings
+
+
+def _unmeasured_quote_provenance(reason: str, readings: list[dict[str, Any]]) -> dict[str, Any]:
+    """The empty-input shape for T77's gate — `-1`, never a clean `0`, same
+    rule `_unmeasured` applies to T76's own gate."""
+    return {
+        "disqualification_verdicts_without_quoted_wording": -1,
+        # Both names on purpose: the task payload's body names the first, its
+        # later `status-key` addendum names the second. Same count, so a
+        # reader trusting either one finds it — the same convention
+        # `connector_health.py` uses for `silent_connector_failures_evaluated`.
+        "disqualification_verdicts_without_quoted_wording_evaluated": 0,
+        "disqualification_verdicts_evaluated": 0,
+        "gate_status": "unmeasured",
+        "unmeasured_reason": reason,
+        "readings": readings,
+    }
+
+
+def measure_quote_provenance(readings: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """T77's gate reading: `disqualification_verdicts_without_quoted_wording`.
+
+    `readings=None` (every real caller) draws them from `_quote_provenance_readings`;
+    a caller may pass its own list to prove the empty-input case cannot pass —
+    see `test_the_gate_does_not_pass_on_an_empty_input_set`.
+
+    The denominator is every reading whose verdict is FAIL or FLAG — spec
+    §5.4's two verdicts that remove or mark an offer, both named explicitly by
+    the task ("every FAIL and every FLAG"). PASS carries no quote and is not
+    part of this denominator. A zero count over zero such verdicts is not a
+    pass, so `gate_status` reads `"unmeasured"` whenever that denominator is
+    empty, never a clean `0`.
+    """
+    if readings is None:
+        readings = _quote_provenance_readings()
+    disqualification_verdicts = [r for r in readings if r["verdict"] in ("FAIL", "FLAG")]
+    if not disqualification_verdicts:
+        return _unmeasured_quote_provenance(
+            "no FAIL or FLAG verdict was evaluated — a zero violation count over "
+            "nothing evaluated is not a measurement",
+            readings,
+        )
+    violations = [r for r in disqualification_verdicts if not r["quoted"]]
+    evaluated = len(disqualification_verdicts)
+    return {
+        "disqualification_verdicts_without_quoted_wording": len(violations),
+        "disqualification_verdicts_without_quoted_wording_evaluated": evaluated,
+        "disqualification_verdicts_evaluated": evaluated,
+        "gate_status": "measured",
+        "violations": [
+            f"{r['name']}: verdict {r['verdict']} quote={r['quote']!r}" for r in violations
+        ],
+        "readings": readings,
+    }
+
+
+def write_evidence_quote_provenance(evidence: Path = DEFAULT_EVIDENCE_PATH_T77) -> dict[str, Any]:
+    """Measure and record `status/evidence/T77.json`. This module owns that
+    file outright alongside `T76.json` — see the T77 task payload, and CA-12
+    on a gate never naming a file no module produces."""
+    measured = measure_quote_provenance()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _main(argv: list[str]) -> int:
+    """`python -m integral.eligibility [T76-path [T77-path]]`.
+
+    One module, two gates: T76's `offers_ranked_despite_a_stated_disqualification`
+    and T77's `disqualification_verdicts_without_quoted_wording` are both
+    measured and written here, since both task payloads name this same
+    regeneration command. A second path defaults to sitting beside the first
+    (same directory, `T77.json`) — real callers pass no path at all and land
+    on `status/evidence/`; a test pointing the first path at a temp directory
+    gets the second there too, rather than writing over the committed file.
+
+    The violation count is checked **before** the unmeasured branch, for
+    both gates: a run that found a real, known violation must fail (exit 1),
+    never report `unmeasured` — a known bad result outranks "could not be
+    scored yet".
     """
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
+    t77_target = Path(positional[1]) if len(positional) > 1 else target.parent / "T77.json"
+
     measured = write_evidence(target)
     print(json.dumps(measured, ensure_ascii=False))
+    quote_measured = write_evidence_quote_provenance(t77_target)
+    print(json.dumps(quote_measured, ensure_ascii=False))
 
     violations = measured["offers_ranked_despite_a_stated_disqualification"]
-    if violations > 0:
+    quote_violations = quote_measured["disqualification_verdicts_without_quoted_wording"]
+    if violations > 0 or quote_violations > 0:
         for line in measured.get("violations", []):
+            print(line, file=sys.stderr)
+        for line in quote_measured.get("violations", []):
             print(line, file=sys.stderr)
         return 1
     if measured["gate_status"] == "unmeasured":
         print(
             f"offers_ranked_despite_a_stated_disqualification: UNMEASURED — "
             f"{measured['unmeasured_reason']}. Not a pass and not a fail.",
+            file=sys.stderr,
+        )
+        return 3
+    if quote_measured["gate_status"] == "unmeasured":
+        print(
+            f"disqualification_verdicts_without_quoted_wording: UNMEASURED — "
+            f"{quote_measured['unmeasured_reason']}. Not a pass and not a fail.",
             file=sys.stderr,
         )
         return 3
