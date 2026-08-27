@@ -1,8 +1,13 @@
 # Session handover — 2026-08-27 ~18:35 UTC, interactive, laptop
 
-Board: **110 gates on `main`**, 124 tasks. `main` at `e53ca9c` — **unchanged this
-session**. Nothing merged into this repo: three PRs are open here, and two merged
-upstream in `claude-arsenal` (plus the `v2.4.23` tag).
+Board: **110 gates on `main`**, 124 tasks. `make host-gate` exit 0 on `main`, and
+`verify-gates` reports **110 terminal task(s); 110 gate(s) asserted, 0 carry no
+fenced gate block** — the count alone would not say whether the gate passed or
+whether any terminal task was ungated, which is the whole point of recording it.
+
+`main` was at `e53ca9c` for the working part of this session; #244 has since
+merged and moved it. Two PRs are open here, and two merged upstream in
+`claude-arsenal` (plus the `v2.4.23` tag).
 
 The session was asked to fix whatever could be fixed without a live human/browser
 session, and to stop the routines.
@@ -33,11 +38,11 @@ one account — unversioned, unreviewed, and already drifted between copies.
 | PR | task | state |
 |---|---|---|
 | [#242](https://github.com/nuncaeslupus/integral-job-search/pull/242) | T86 eligibility vocabulary → closes #237 | head `fcaeccc`. CodeRabbit round 1 answered; round 2 not yet in. **Blocked on the independent fixture pass**, not on review — see below. |
-| [#244](https://github.com/nuncaeslupus/integral-job-search/pull/244) | bundle → v2.4.23 | mergeable, `make host-gate` exit 0. Closes no task. |
 | [#243](https://github.com/nuncaeslupus/integral-job-search/pull/243) | this handover | closes no task. |
 
-Merge order does not matter — the three touch disjoint files. Only #242 moves the
-board (110 → 111) and only #242 closes an issue.
+[#244](https://github.com/nuncaeslupus/integral-job-search/pull/244) (bundle →
+v2.4.23) **merged**. Only #242 moves the board (110 → 111) and only #242 closes
+an issue.
 
 `arsenal/claims/t-fdc8e19f` is held by this session. Issue #237 now carries
 `arsenal-task: t-fdc8e19f` and the `arsenal:task` label.
