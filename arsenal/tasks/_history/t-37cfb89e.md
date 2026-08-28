@@ -5,6 +5,7 @@ priority: 5
 deps: []
 workspace: SUPPLY
 tags: [v3, m5]
+status: merged
 ---
 
 # T72: Connector health — detect a silently rotted parser
