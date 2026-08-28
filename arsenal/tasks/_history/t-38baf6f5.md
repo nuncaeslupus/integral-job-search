@@ -5,6 +5,7 @@ priority: 5
 deps: [t-fdc8e19f]
 workspace: MATCH
 tags: [v3, m5]
+status: merged
 ---
 
 # T88: Language parity — every supported language must be detected the same, for countries and for languages alike
