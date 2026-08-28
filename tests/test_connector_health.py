@@ -369,6 +369,11 @@ def test_the_real_library_dates_every_probe_it_reports_as_measured() -> None:
         '{"captured_at": "20260828"}',
         '{"captured_at": "28/08/2026"}',
         '{"captured_at": "2026-08-28T12:00:00Z"}',
+        # Review round 2 on #256: `strptime("%Y-%m-%d")` accepts unpadded
+        # components, so the exact-shape claim needed a round-trip to be true.
+        '{"captured_at": "2026-8-28"}',
+        '{"captured_at": "2026-08-8"}',
+        '{"captured_at": "2026-8-8"}',
         '{"captured_at": 20260828}',
         '{"captured_at": null}',
     ],

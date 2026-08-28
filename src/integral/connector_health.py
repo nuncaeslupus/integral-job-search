@@ -270,13 +270,18 @@ def probe_captured_at(package: Path) -> str | None:
         # `strptime` and not `date.fromisoformat`: the latter also accepts
         # `20260828` and other ISO spellings, and this value is read by a human
         # deciding whether a probe is stale. One spelling or none.
-        datetime.strptime(recorded, "%Y-%m-%d")
+        parsed = datetime.strptime(recorded, "%Y-%m-%d")
     except ValueError:
         # Covers the empty string, `unknown`, and `2026-13-45` alike. Every one
         # of them is a capture that does not say when it was taken, and emitting
         # it beside `gate_status: measured` would dress it up as one that does.
         return None
-    return recorded
+    # Round-trip, because `strptime` is not the exact check the format string
+    # looks like: `%m` and `%d` accept an unpadded `2026-8-28` just as happily
+    # as `2026-08-28`. Re-rendering and comparing is what makes "one spelling"
+    # true — asserted by review on #256 after the first attempt claimed it and
+    # did not deliver it.
+    return recorded if parsed.strftime("%Y-%m-%d") == recorded else None
 
 
 def assess_package(
