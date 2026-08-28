@@ -99,6 +99,13 @@ DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
 CONNECTOR_FILENAME = "connector.yaml"
 META_FILENAME = "meta.yaml"
 FIXTURE_DIRNAME = "fixture"
+
+#: The connector's *second* capture of the same query, taken on a later day.
+#: Beside `FIXTURE_DIRNAME` and never inside it: they are two reads at two
+#: times, and one directory was the tautology `connector_health` exists to
+#: avoid. Defined here so the contract and the health check cannot disagree
+#: about what the directory is called.
+PROBE_DIRNAME = "probe"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T32.json"
 
 # A placeholder, not a policy: 90 days is a starting point the owner did not

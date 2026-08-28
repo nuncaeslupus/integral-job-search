@@ -18,16 +18,18 @@ import pytest
 from integral import connector_health
 from integral.connector_health import (
     MAX_PROBE_ATTEMPTS,
-    PROBE_DIRNAME,
+    PROBE_CAPTURE_FILE,
     assess,
+    assess_package,
     default_fetch,
     free_signals,
     measure,
     on_portal_host,
+    probe_captured_at,
     probe_fetch,
     undecoded_entities,
 )
-from integral.connectors import DEFAULT_CONNECTORS_DIR, load_connector
+from integral.connectors import DEFAULT_CONNECTORS_DIR, PROBE_DIRNAME, load_connector
 
 _PACKAGE = DEFAULT_CONNECTORS_DIR / "trabajos_es"
 _CONNECTOR = load_connector(_PACKAGE)
@@ -294,7 +296,7 @@ def test_a_probe_that_is_not_valid_utf8_reads_as_no_probe(tmp_path: Path) -> Non
     """`read_text` raises UnicodeDecodeError, which is a ValueError and not an
     OSError. Catching OSError alone let it escape past `write_evidence`, so a
     corrupt capture produced no evidence at all rather than an unmeasured gate."""
-    probe = tmp_path / connector_health.PROBE_DIRNAME
+    probe = tmp_path / PROBE_DIRNAME
     probe.mkdir()
     (probe / "list.html").write_bytes(b"\xff")
 
@@ -314,3 +316,84 @@ def test_a_malformed_port_is_off_host(url: str) -> None:
 def test_a_valid_explicit_port_is_still_on_host() -> None:
     """The fix above must not make every ported URL off-host."""
     assert connector_health.on_portal_host("https://trabajos.com:443/x", "trabajos.com") is True
+
+
+def _package_with_probe(tmp_path: Path, *, captured: str | None) -> Path:
+    """A connector package whose probe is a real second capture of the baseline."""
+    (tmp_path / "connector.yaml").write_text(
+        (_PACKAGE / "connector.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / "fixture").mkdir()
+    (tmp_path / "fixture" / "list.html").write_text(_LIST_HTML, encoding="utf-8")
+    (tmp_path / PROBE_DIRNAME).mkdir()
+    (tmp_path / PROBE_DIRNAME / "list.html").write_text(_LIST_HTML, encoding="utf-8")
+    if captured is not None:
+        (tmp_path / PROBE_DIRNAME / PROBE_CAPTURE_FILE).write_text(captured, encoding="utf-8")
+    return tmp_path
+
+
+def test_the_evidence_records_when_the_probe_was_captured(tmp_path: Path) -> None:
+    """A committed probe says how current it is, or the verdict cannot be dated."""
+    package = _package_with_probe(tmp_path, captured='{"captured_at": "2026-08-28"}')
+
+    reading = assess_package(package, _CONNECTOR, _SITE)
+
+    assert reading.probed is True
+    assert reading.probe_captured_at == "2026-08-28"
+
+
+def test_the_real_library_dates_every_probe_it_reports_as_measured() -> None:
+    """The committed probe must carry its date, or `measured` cannot be read."""
+    measured = measure()
+
+    if measured["gate_status"] != "measured":
+        pytest.skip("no probe captured in this checkout")
+    dated = [r for r in measured["readings"] if r["probed"]]
+    assert dated, "a measured gate probed something"
+    assert all(r["probe_captured_at"] for r in dated), measured["readings"]
+
+
+@pytest.mark.parametrize(
+    "captured",
+    [
+        None,
+        "not json at all",
+        "{}",
+        '{"captured_at": ""}',
+        "[]",
+    ],
+)
+def test_an_undated_probe_reports_no_date_rather_than_raising(
+    tmp_path: Path, captured: str | None
+) -> None:
+    """Every way of failing to say when is the same answer: it does not say."""
+    package = _package_with_probe(tmp_path, captured=captured)
+
+    assert probe_captured_at(package) is None
+    assert assess_package(package, _CONNECTOR, _SITE).probe_captured_at is None
+
+
+def test_an_unprobed_reading_carries_no_capture_date(tmp_path: Path) -> None:
+    """Dating a rot stage that never ran would claim a read nobody took."""
+    (tmp_path / "connector.yaml").write_text(
+        (_PACKAGE / "connector.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / "fixture").mkdir()
+    (tmp_path / "fixture" / "list.html").write_text(_LIST_HTML, encoding="utf-8")
+    (tmp_path / PROBE_DIRNAME).mkdir()
+    (tmp_path / PROBE_DIRNAME / PROBE_CAPTURE_FILE).write_text(
+        '{"captured_at": "2026-08-28"}', encoding="utf-8"
+    )
+
+    reading = assess_package(tmp_path, _CONNECTOR, _SITE)
+
+    assert reading.probed is False
+    assert reading.probe_captured_at is None
+
+
+def test_the_capture_date_is_read_from_the_file_not_the_filesystem(tmp_path: Path) -> None:
+    """A checkout does not preserve mtimes; a date derived from one would differ
+    per clone and drift `make evidence` on a file nobody edited."""
+    package = _package_with_probe(tmp_path, captured='{"captured_at": "1999-01-01"}')
+
+    assert probe_captured_at(package) == "1999-01-01"
