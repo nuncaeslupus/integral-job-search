@@ -323,6 +323,20 @@ plainly "something with state of its own". So it is **not** proposed here. If it
 is wanted, the out-of-scope line is what has to change first, deliberately, and
 not as a side effect of shipping a degraded mode.
 
+**Whether a stale approval can outlive its evidence — and if so, upstream not
+here.** Review raised this three times and it is worth recording rather than
+closing. Degraded mode's answer is §5.2: the send boundary re-measures, so a
+line no surviving row backs is unapproved and the send refuses. That mirrors
+`record_sent`, which is the strongest thing this document can honestly do.
+What it does **not** establish is that the real tool has no gap: `approval.py`
+never mentions retraction and `retraction.py` never mentions approval, so the
+protection rests entirely on `measure_prepared` finding the line unbacked once
+the row is gone. Whether it does in every case — a retracted row whose text is
+still in the manifest, most obviously — is a question about `approval.py` and
+T46's gate, not about this file. It should be answered by a test there, and
+this note exists so that "the doc says it is fine" is never the reason nobody
+looked.
+
 Three smaller ones:
 
 - **Whether the ephemeral sandbox can give back a real coverage check.** §1 notes
