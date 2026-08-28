@@ -361,6 +361,16 @@ def test_the_real_library_dates_every_probe_it_reports_as_measured() -> None:
         "{}",
         '{"captured_at": ""}',
         "[]",
+        # Review on #256: every non-empty string was accepted, so a capture
+        # saying `unknown` was emitted beside `gate_status: measured` as though
+        # it were a real date — the one thing the field exists to rule out.
+        '{"captured_at": "unknown"}',
+        '{"captured_at": "2026-13-45"}',
+        '{"captured_at": "20260828"}',
+        '{"captured_at": "28/08/2026"}',
+        '{"captured_at": "2026-08-28T12:00:00Z"}',
+        '{"captured_at": 20260828}',
+        '{"captured_at": null}',
     ],
 )
 def test_an_undated_probe_reports_no_date_rather_than_raising(

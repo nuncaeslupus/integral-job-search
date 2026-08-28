@@ -267,8 +267,13 @@ def check_layout(package: Path) -> list[str]:
             )
         else:
             violations.append(f"rule 1: {name} is not part of a connector package")
-    if (package / FIXTURE_DIRNAME).exists() and not (package / FIXTURE_DIRNAME).is_dir():
-        violations.append(f"rule 1: {FIXTURE_DIRNAME} must be a directory")
+    # Both, not just the required one. `probe` became an OPTIONAL_ENTRIES member
+    # and inherited the exemption from "unexpected entry" without inheriting the
+    # type check — so a regular *file* named `probe` passed rule 1 while
+    # `connector_health` expects a directory to read `list.html` out of.
+    for dirname in (FIXTURE_DIRNAME, PROBE_DIRNAME):
+        if (package / dirname).exists() and not (package / dirname).is_dir():
+            violations.append(f"rule 1: {dirname} must be a directory")
     return violations
 
 

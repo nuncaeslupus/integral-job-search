@@ -66,6 +66,7 @@ import re
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -253,7 +254,8 @@ def probe_captured_at(package: Path) -> str | None:
     """When this package's probe was taken, per `probe/captured.json`.
 
     `None` whenever that cannot be answered — the file is absent, unreadable,
-    not JSON, or carries no `captured_at`. Every one of those is "this capture
+    not JSON, carries no `captured_at`, or carries one that is not a `YYYY-MM-DD`
+    date. Every one of those is "this capture
     does not say how current it is", which is what the caller records; none of
     them is a reason to fail the health check, because the date annotates the
     verdict rather than producing it."""
@@ -262,7 +264,19 @@ def probe_captured_at(package: Path) -> str | None:
         recorded = json.loads(raw).get("captured_at")
     except (OSError, UnicodeError, ValueError, AttributeError):
         return None
-    return recorded if isinstance(recorded, str) and recorded else None
+    if not isinstance(recorded, str):
+        return None
+    try:
+        # `strptime` and not `date.fromisoformat`: the latter also accepts
+        # `20260828` and other ISO spellings, and this value is read by a human
+        # deciding whether a probe is stale. One spelling or none.
+        datetime.strptime(recorded, "%Y-%m-%d")
+    except ValueError:
+        # Covers the empty string, `unknown`, and `2026-13-45` alike. Every one
+        # of them is a capture that does not say when it was taken, and emitting
+        # it beside `gate_status: measured` would dress it up as one that does.
+        return None
+    return recorded
 
 
 def assess_package(

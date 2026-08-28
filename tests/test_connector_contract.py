@@ -39,6 +39,7 @@ from integral.connector_contract import (
     write_evidence,
 )
 from integral.connector_shape import measure as shape_measure
+from integral.connectors import PROBE_DIRNAME
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
@@ -601,3 +602,24 @@ def test_no_committed_capture_carries_an_ip_address() -> None:
         if quad.search(path.read_text(encoding="utf-8"))
     }
     assert not offenders, f"recorded pages carry IP addresses: {offenders}"
+
+
+def test_a_probe_that_is_a_regular_file_is_rejected(package: Path) -> None:
+    """Review on #256: `probe` joined OPTIONAL_ENTRIES and inherited the
+    exemption from "unexpected entry" without inheriting `fixture`'s type check,
+    so a regular file named `probe` passed rule 1 — while `connector_health`
+    expects a directory to read `list.html` out of."""
+    shutil.rmtree(package / PROBE_DIRNAME, ignore_errors=True)
+    (package / PROBE_DIRNAME).write_text("not a directory", encoding="utf-8")
+
+    violations = check_package(package).violations
+
+    assert any(PROBE_DIRNAME in v and "directory" in v for v in violations), violations
+
+
+def test_a_package_with_no_probe_at_all_is_still_valid(package: Path) -> None:
+    """Optional means optional: a connector nobody has captured a probe for is
+    reviewable, and `connector_health` reports `unmeasured` rather than broken."""
+    shutil.rmtree(package / PROBE_DIRNAME, ignore_errors=True)
+
+    assert not check_package(package).violations
