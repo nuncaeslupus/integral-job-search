@@ -1305,6 +1305,26 @@ def test_a_targeted_bar_is_not_dragged_to_flag_by_its_own_targetless_pattern() -
     assert len(reading.requirements) == 1, "the targetless duplicate must not survive the scan"
 
 
+def test_an_identically_worded_targetless_bar_elsewhere_still_counts() -> None:
+    """The dedup above is by **span, not by text**. Two sentences can state
+    the exact same words — one inside a targeted bar, one as its own
+    independent targetless bar — and the second is a different sentence, not
+    the first one read twice. A text-only comparison would drop it too and
+    turn a real, separately-stated bar into silence."""
+    text = (
+        "German citizenship is required for this role. "
+        "Separately, citizenship is required for on-site contracts."
+    )
+
+    reading = eligibility.evaluate_text("x", text, C(citizenships=("DE",)))
+
+    # The targeted bar alone would PASS a German candidate; the standalone
+    # second bar's target is unnamed, so it can only ever be FAIL or FLAG —
+    # never a guessed PASS — and worst-verdict-wins reports that.
+    assert reading.verdict == "FLAG"
+    assert len(reading.requirements) == 2, "the second, independent bar must survive the scan"
+
+
 def test_every_new_pattern_has_a_sentence_it_must_not_match() -> None:
     """The negative control T88's own notes require: each ES/CA/targetless
     pattern added for failures 2 and 3 has a sentence that names its subject

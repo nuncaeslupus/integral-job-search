@@ -782,7 +782,7 @@ def _scan(
     dropped entirely (it is not a bar, ambiguous or otherwise); everything
     else becomes a `Requirement`, never a silently dropped match, since a
     dropped match cannot be reasoned about or shown to a reviewer."""
-    found: list[Requirement] = []
+    found: list[tuple[Requirement, int, int]] = []
     for pattern in patterns:
         for match in pattern.finditer(text):
             before, window = _sentence_around(text, match.start(), match.end())
@@ -796,11 +796,15 @@ def _scan(
                     target = None
             ambiguous = bool(_SOFT_RE.search(window))
             found.append(
-                Requirement(
-                    kind=kind,
-                    quote=match.group(0).strip(),
-                    target=target,
-                    ambiguous=ambiguous,
+                (
+                    Requirement(
+                        kind=kind,
+                        quote=match.group(0).strip(),
+                        target=target,
+                        ambiguous=ambiguous,
+                    ),
+                    match.start(),
+                    match.end(),
                 )
             )
     # T88 failure 3: a targetless pattern ("citizenship is required") can
@@ -813,12 +817,22 @@ def _scan(
     # duplicate here, before either reaches `_reading_from_requirements`,
     # leaves the targeted match — the one that actually named something — to
     # speak for the sentence alone.
-    targeted_quotes = [requirement.quote for requirement in found if requirement.target is not None]
+    #
+    # Compared by **span, not by text**. Two matches sharing identical
+    # wording ("citizenship is required" stated twice, once inside a
+    # targeted sentence and once as its own independent bar elsewhere in the
+    # advert) are two different sentences, not one read twice — a text
+    # comparison would drop the second occurrence too and turn a real bar
+    # into silence. Only a targetless match whose own position sits inside a
+    # targeted match's position is the same sentence.
+    targeted_spans = [
+        (start, end) for requirement, start, end in found if requirement.target is not None
+    ]
     return [
         requirement
-        for requirement in found
+        for requirement, start, end in found
         if requirement.target is not None
-        or not any(requirement.quote in quote for quote in targeted_quotes)
+        or not any(t_start <= start and end <= t_end for t_start, t_end in targeted_spans)
     ]
 
 
