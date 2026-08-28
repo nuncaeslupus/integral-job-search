@@ -164,7 +164,7 @@ Update §3 when any of these change:
 
 | what changed in `step-*/SKILL.md` | what §3 copied from it | what to edit |
 |---|---|---|
-| The step list — added, removed, renamed | the stage's line | that line |
+| The step list — added, removed, renamed, **or reordered** | the stage's line, and the numbering | that line, and every line whose number moved |
 | **Required** / **Offered** on a step | which stages are needed | the two lines under the stage list |
 | **Never** block | the prohibitions | "How to behave" |
 | **Stop rule** | the question and episode caps | the cap bullet |
@@ -173,15 +173,21 @@ Update §3 when any of these change:
 | **Outputs** | what each stage reports back | the stage's line |
 | **When declined** | that a stage may be refused | the optional/needed lines |
 | Process spec §6.2 | the privacy and per-use approval bullet | that bullet |
+| `dimensions/*.yaml` | the vocabulary stage 8 reads against, and the three examples in the opening sentence | stage 8's line, and the opening sentence if an example dimension was renamed or removed |
 | The tool's dependencies | the closing line | that line |
 
 The catch-all, for anything the table missed: **if a sentence in §3 was copied
 from a skill, and that sentence changes in the skill, it changes here.** §3 is an
 impression, so it may be shorter than its source — it may never contradict it.
 
-A change to a gate, a threshold, a script, an evidence file or the dimension
-catalogue needs **no** edit here: none of them are reachable from a conversation,
-which is what §1 says.
+A change to a gate, a threshold, a script or an evidence file needs **no** edit
+here: none of them are reachable from a conversation, which is what §1 says.
+
+The dimension catalogue is **not** in that list, though an earlier draft put it
+there. §3 does not enumerate the dimensions, but it does expose the model twice —
+stage 8 reads adverts "against the vocabulary", and the opening sentence names
+three dimensions as examples. Rename or drop one of those three and the prompt
+describes a vocabulary the tool no longer has.
 
 ## 6. What this does not change
 
