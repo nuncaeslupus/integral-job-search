@@ -25,6 +25,10 @@ when it feels finished. You can stop and resume across sessions.
 Requires [Claude Code](https://claude.com/claude-code), Python 3.12+, and
 [uv](https://docs.astral.sh/uv/).
 
+No Claude Code? [docs/simulation-prompt.md](docs/simulation-prompt.md) is a
+prompt that simulates the conversation in a plain Claude chat. It saves nothing
+and measures nothing, and it is not a replacement.
+
 ## Your data stays yours
 
 Nothing you say is written inside this repository. Your profile lives in
