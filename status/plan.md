@@ -397,7 +397,7 @@ listed; every open task appears in exactly one milestone.
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | S3, T6, T35, T30, T34, T37, T36, T38, T40, T48 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T24, T41, T11, T32, T12, T13, S5, T14, T15, T16, T17, T42, T18, T19, T33, T44, D-6, D-7 |
 | **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T7, T8, T27, T5, T9, T10, T39, T21, T28, T49, T50, T20a, T20, D-1, D-2, D-3, D-4, D-8 |
-| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, D-9, T45, T46, S6, T47, T43, T22, T26b, T25, T29, T51, T52, T53, T54, T55, S9, S10, S11, S12 |
+| **M4 — per opportunity** | documents for one advert, and the interview around it | S4, D-9, T45, T46, S6, T47, T43, T22, T26b, T25, T29, T51, T52, T53, T54, T55, S9, S10, S11, S12, D-24 |
 | **M5 — contact with the world** | the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary | T85, T70, T71, T72, T73, T74, T75, T76, T77, T78, T79, T80, T81, T82, T84, T86, T83, D-23 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | S7, T31, S8 |
 

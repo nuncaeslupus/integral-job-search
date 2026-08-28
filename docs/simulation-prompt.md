@@ -45,8 +45,8 @@ work moves to the person.
 | 11 | application | degraded | the text is prose; the send boundary is `approval.py` |
 | 12 | interview_log | faithful | dialogue |
 
-Eight faithful, three degraded, one manual, one split. The losses land exactly
-where compiled code does the work: fetching, extracting, fitting, consenting.
+Eight faithful, four degraded, one manual. The losses land exactly where compiled
+code does the work: fetching, extracting, fitting, consenting.
 
 **And every one of the thirteen loses its gate.** Coverage — "is the artefact
 there?" — is a structural question a reader can answer. The acceptance gates
@@ -106,9 +106,12 @@ How to behave:
 - Never turn stage 4 into a personality quiz. Traits come from episodes.
 - Never write a CV before there is a specific advert to write it for.
 - Never quote a reason I rejected a job to any employer.
-- Everything I tell you is private. Before any sentence of mine goes into an
-  application, show me the whole thing that would be sent and ask about that
-  specific document — never as a standing permission.
+- You cannot keep any of this private, and you must not imply otherwise: this is
+  an ordinary chat, everything I type reaches the chat service, and nothing here
+  is stored on my machine. Say so if I start telling you something sensitive.
+  Separately, before any sentence of mine goes into an application, show me the
+  whole thing that would be sent and ask about that specific document — never as
+  a standing permission.
 
 At the end of every stage, say plainly: what you captured, what is still missing,
 and "unmeasured" — because the real tool checks each stage with a script and you
@@ -135,13 +138,14 @@ verify, before every send, that nothing in a document had lost its backing —
 which is asking a person to be a gate.
 
 **Its own drafting was the evidence.** Twelve review findings over four rounds,
-and the two worst were mechanisms its author invented rather than looked up: a
-row-level approval flag the design had explicitly rejected, and then a safety
-property that does not exist, asserted in a security section and believed for
-three commits. All three of the worst were in the invented state schema. **A
-prompt has no schema to get wrong**, which is most of why it is the safer
-artifact — and a prompt carries its own disclaimer into every session, which
-settings spread across a Project cannot.
+and the three worst were all in that invented state schema: a row-level approval
+flag the design had explicitly rejected, an evidence-folding boundary whose own
+example contradicted itself, and a safety property that does not exist — asserted
+in a security section and believed for three commits. Two of the three were
+mechanisms its author invented rather than looked up. **A prompt has no schema to
+get wrong**, which is most of why it is the safer artifact — and a prompt carries
+its own disclaimer into every session, which settings spread across a Project
+cannot.
 
 That drafting did turn up one real defect, now tracked on its own: a retracted
 episode stays sendable, because `measure_prepared` backs an episode line by
@@ -154,18 +158,30 @@ This file is the one thing to update, and it is **an impression of the step
 skills, never a mirror**. `.claude/skills/step-*/SKILL.md` remain the
 specification; if the two disagree, the skills are right.
 
-Update §3 when any of these change, and nothing else:
+**The rule is by source section, not by topic**, because §3 copies from five
+different parts of a skill and a trigger list written by topic will miss one.
+Update §3 when any of these change:
 
-| change | what to edit |
-|---|---|
-| A step is added, removed, or renamed | its line in the stage list |
-| A step moves between required and offered | the two lines under the stage list |
-| A rule in a skill's **Never** block changes | the "How to behave" bullets |
-| §6.2's disclosure or send rule changes | the privacy bullet |
-| The tool's dependencies change | the closing line |
+| what changed in `step-*/SKILL.md` | what §3 copied from it | what to edit |
+|---|---|---|
+| The step list — added, removed, renamed | the stage's line | that line |
+| **Required** / **Offered** on a step | which stages are needed | the two lines under the stage list |
+| **Never** block | the prohibitions | "How to behave" |
+| **Stop rule** | the question and episode caps | the cap bullet |
+| **Protocol** | say-before-a-silence, one-thing-at-a-time, invite-forward | "How to behave" |
+| **Boundary** | not offering to end the session | the invite-forward bullet |
+| **Outputs** | what each stage reports back | the stage's line |
+| **When declined** | that a stage may be refused | the optional/needed lines |
+| Process spec §6.2 | the privacy and per-use approval bullet | that bullet |
+| The tool's dependencies | the closing line | that line |
 
-A change to a gate, a threshold, a script or the dimension catalogue needs **no**
-edit here: none of them are reachable from a conversation, which is what §1 says.
+The catch-all, for anything the table missed: **if a sentence in §3 was copied
+from a skill, and that sentence changes in the skill, it changes here.** §3 is an
+impression, so it may be shorter than its source — it may never contradict it.
+
+A change to a gate, a threshold, a script, an evidence file or the dimension
+catalogue needs **no** edit here: none of them are reachable from a conversation,
+which is what §1 says.
 
 ## 6. What this does not change
 
