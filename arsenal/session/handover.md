@@ -1,7 +1,9 @@
 # Session handover — 2026-08-28 ~22:30 UTC, interactive, laptop
 
-Board: **116 gates on `main`** (`dfe66a0`), 129 tasks — 115 merged, 10 open, 0
-claimed. `make host-gate` exit 0: ruff clean, mypy clean over 172 files,
+Board: **116 gates on `main`** (`dfe66a0`), 129 tasks — 115 merged, 10 open,
+1 blocked, 1 done, 2 cancelled, 0 claimed. Those sum to 129: `query_status.py`
+counts `blocked` separately from `open`, so an "open + merged" reading of this
+board is short by four. `make host-gate` exit 0: ruff clean, mypy clean over 172 files,
 `evidence: no drift`, `verify-gates: 116 terminal task(s); 116 gate(s) asserted,
 0 carry no fenced gate block`. `query_status.py` reports **no problems**.
 
