@@ -249,18 +249,21 @@ The rules, all from §6.2, step 11 and `record_sent`:
 - **The unit is the payload, not the question.** Not "shall I apply?" but the
   actual contents — which documents, which claims, which episodes, which contact
   details, to whom. What the candidate confirms is *that* payload, by its digest.
-- **Re-measure at the send boundary, never trust the stored approval alone.**
-  This is what keeps a retracted episode from staying sendable, and it is worth
-  understanding rather than copying: approvals are *not* invalidated when
-  evidence is retracted — nothing in `approval.py` mentions retraction, and
-  nothing in `retraction.py` mentions approval. The protection is downstream. At
-  send time the documents are re-measured **as they stand now**, and a line no
-  surviving row backs counts as unapproved — "what an episode looks like after
-  the candidate tidies it out of their story bank". Retract the episode and the
-  line stops being backed, so the send refuses. Degraded mode has no code to run
-  that measurement, so it becomes an explicit step-11 re-read: before recording a
-  send, walk every episode line in the document and confirm a surviving,
-  unretracted, unfolded row still backs it.
+- **Re-read the evidence at the send boundary — and here degraded mode is
+  deliberately stricter than the tool, because the tool has a hole.** An earlier
+  draft of this document claimed a retracted episode stops being sendable. That
+  is false, and the code says so in as many words: `measure_prepared` backs an
+  episode line by `approvals.json` **and nothing else** — *"an episode line is
+  backed by the approval file and nothing else: the store is a thing the
+  candidate edits, and routing an episode's authority through a list position
+  was how reordering a story bank turned into a gate failure."* Retraction never
+  touches `approvals.json`, so the approval survives it, the line stays backed,
+  and `record_sent` proceeds. Approve for `v1`, retract the episode, send `v1`:
+  it goes. See §7 — that is a fail-open in `approval.py`, not in this file.
+  Degraded mode therefore adds the check the tool omits: before recording a send,
+  walk every episode line and confirm a **surviving, unretracted, unfolded** row
+  still backs it. This is the one place this document knowingly departs from the
+  implementation, and it departs toward refusing.
 - **Three refusals at the send boundary**, from `record_sent`: any unapproved
   disclosure refuses; a confirmation that does not name this exact payload
   refuses; an application already recorded as sent refuses, because that record
@@ -323,19 +326,36 @@ plainly "something with state of its own". So it is **not** proposed here. If it
 is wanted, the out-of-scope line is what has to change first, deliberately, and
 not as a side effect of shipping a degraded mode.
 
-**Whether a stale approval can outlive its evidence — and if so, upstream not
-here.** Review raised this three times and it is worth recording rather than
-closing. Degraded mode's answer is §5.2: the send boundary re-measures, so a
-line no surviving row backs is unapproved and the send refuses. That mirrors
-`record_sent`, which is the strongest thing this document can honestly do.
-What it does **not** establish is that the real tool has no gap: `approval.py`
-never mentions retraction and `retraction.py` never mentions approval, so the
-protection rests entirely on `measure_prepared` finding the line unbacked once
-the row is gone. Whether it does in every case — a retracted row whose text is
-still in the manifest, most obviously — is a question about `approval.py` and
-T46's gate, not about this file. It should be answered by a test there, and
-this note exists so that "the doc says it is fine" is never the reason nobody
-looked.
+**A retracted episode stays sendable — a fail-open in `approval.py`, found
+while writing this and not yet fixed.** This is not a degraded-mode question and
+it does not go away if this document is never adopted.
+
+`measure_prepared` backs an episode line by `approvals.json` alone:
+
+```python
+if claim.section == "episodes":
+    if claim.text in approved:      # approvals.json; the evidence log is not consulted
+        backed[(claim.document, claim.text)] += 1
+    continue
+```
+
+Nothing invalidates an approval when its evidence is retracted — `approval.py`
+never mentions retraction, `retraction.py` never mentions approval, and the
+backing check above never reaches the log. So: approve an episode for
+`<offer>/v1`, retract it, then send `v1` — `record_sent` re-measures, finds the
+line backed, and records the send. The retraction does not reach the document.
+
+It is narrow (the window is between approving a version and sending it, which
+`record_sent`'s own docstring acknowledges as real: *"a file can change between
+drafting and sending"*) and it is **fail-open**, which §6.2 weights above
+everything: the check said yes to precisely what it exists to refuse. The
+episode-backed-only-by-approval rule is deliberate and correct for its own
+reason — list positions were unstable — so the fix is not to reinstate a store
+lookup, but to invalidate or re-confirm approvals when a retraction lands.
+
+Owned by **T46**, needs a failing test first. Recorded here rather than fixed
+because it is outside this document's diff, and recorded at all because an
+earlier draft of §5.2 asserted the opposite and was believed for three commits.
 
 Three smaller ones:
 
