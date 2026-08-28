@@ -15,6 +15,7 @@ import urllib.error
 import pytest
 
 from integral.robots import (
+    REFUSAL_FIXTURES,
     USER_AGENT,
     Robots,
     RobotsError,
@@ -25,6 +26,7 @@ from integral.robots import (
     _product_token,
     _request_path,
     measure,
+    measure_browser_recovery,
 )
 
 # Trimmed from the live files on 2026-08-24, keeping the groups that decide the
@@ -89,9 +91,14 @@ def test_a_missing_robots_txt_permits_everything() -> None:
     assert _robots({}).allows("https://nowhere.example/ofertas")
 
 
-@pytest.mark.parametrize("failure", [500, 403, 503])
+@pytest.mark.parametrize("failure", [500, 503])
 def test_an_unreadable_robots_txt_refuses_rather_than_assumes(failure: int) -> None:
-    """An unanswered question is not a yes. Absent rules are not permissive rules."""
+    """An unanswered question is not a yes. Absent rules are not permissive rules.
+
+    403 is excluded here — T71 gives it a browser-agent retry before giving
+    up, covered separately below — but 500 and 503 are not the WAF-refusal
+    case this module carves an exception for, so they still refuse outright.
+    """
 
     def fetch(url: str) -> str:
         raise urllib.error.HTTPError(url, failure, "nope", {}, None)  # type: ignore[arg-type]
@@ -295,3 +302,101 @@ def test_a_browser_style_agent_naming_two_products_is_refused() -> None:
 
     with pytest.raises(RobotsError, match="no product token"):
         _product_token("   ")
+
+
+# ---------------------------------------------------------------------------
+# T71 — a browser-agent retry when the honest agent is refused the policy
+
+
+def test_a_403_on_the_policy_is_retried_with_a_browser_agent() -> None:
+    """A WAF refusing the honest identity on `/robots.txt` itself is not an
+    answer about what the policy says, so it is not read as one."""
+    honest_calls: list[str] = []
+    browser_calls: list[str] = []
+
+    def fetch(url: str) -> str:
+        honest_calls.append(url)
+        raise urllib.error.HTTPError(url, 403, "blocked", {}, None)  # type: ignore[arg-type]
+
+    def browser_fetch(url: str) -> str:
+        browser_calls.append(url)
+        return "User-agent: *\nDisallow: /internal/\n"
+
+    robots = Robots(fetch=fetch, browser_fetch=browser_fetch)
+    assert robots.allows("https://waf.example/ofertas") is True
+
+    assert honest_calls == ["https://waf.example/robots.txt"]
+    assert browser_calls == ["https://waf.example/robots.txt"]
+
+
+def test_only_the_policy_url_is_refetched_never_content() -> None:
+    """Exactly one URL per host is eligible for the browser-agent retry: its
+    `/robots.txt`. This is not a block-evasion hatch, so nothing else — an
+    advert, a listing page — may ever reach `browser_fetch`."""
+    browser_calls: list[str] = []
+
+    def fetch(url: str) -> str:
+        raise urllib.error.HTTPError(url, 403, "blocked", {}, None)  # type: ignore[arg-type]
+
+    def browser_fetch(url: str) -> str:
+        browser_calls.append(url)
+        return "User-agent: *\nAllow: /\n"
+
+    robots = Robots(fetch=fetch, browser_fetch=browser_fetch)
+    for path in ("ofertas", "profesionales/x", "ofertas/y"):
+        robots.allows(f"https://waf.example/{path}")
+
+    # One call total: the retry is cached with the rest of `_groups_for`, and
+    # every call it does make names the policy resource, never a content path.
+    assert browser_calls == ["https://waf.example/robots.txt"]
+
+
+def test_a_recovered_policy_is_obeyed_not_ignored() -> None:
+    """A policy recovered this way is applied like any other — including when
+    it disallows us. Recovering it is not license to read it more loosely."""
+
+    def fetch(url: str) -> str:
+        raise urllib.error.HTTPError(url, 403, "blocked", {}, None)  # type: ignore[arg-type]
+
+    def browser_fetch(url: str) -> str:
+        return "User-agent: *\nDisallow: /profesionales/\n"
+
+    robots = Robots(fetch=fetch, browser_fetch=browser_fetch)
+    assert robots.allows("https://waf.example/ofertas") is True
+    assert robots.allows("https://waf.example/profesionales/x") is False
+
+
+def test_a_403_on_the_policy_and_on_its_retry_still_refuses() -> None:
+    """When the browser agent cannot recover the policy either, this is the
+    same unanswered question T70 already refuses on — not a new leniency."""
+
+    def fetch(url: str) -> str:
+        raise urllib.error.HTTPError(url, 403, "blocked", {}, None)  # type: ignore[arg-type]
+
+    def browser_fetch(url: str) -> str:
+        raise urllib.error.HTTPError(url, 403, "still blocked", {}, None)  # type: ignore[arg-type]
+
+    with pytest.raises(RobotsError):
+        Robots(fetch=fetch, browser_fetch=browser_fetch).allows("https://waf.example/ofertas")
+
+
+def test_the_recovery_gate_does_not_pass_on_an_empty_input_set() -> None:
+    """A count of zero abandonments over nothing evaluated is not a pass —
+    the denominator is asserted, mirroring T70's own gate."""
+    measured = measure_browser_recovery()
+
+    assert measured["robots_policies_abandoned_on_refusal_evaluated"] > 0
+    assert measured["gate_status"] == "measured"
+    assert measured["robots_policies_abandoned_on_refusal"] == 0
+
+    unmeasured = measure_browser_recovery(fixtures=())
+    assert unmeasured["robots_policies_abandoned_on_refusal_evaluated"] == 0
+    assert unmeasured["gate_status"] == "unmeasured"
+
+
+def test_the_refusal_fixtures_cover_recovery_and_its_absence() -> None:
+    """The table has to exercise both outcomes the mechanism can produce, or
+    a gate over only the happy path could not tell a real recovery from one
+    that never had to happen."""
+    assert any(f.browser_robots_txt is None for f in REFUSAL_FIXTURES)
+    assert any(f.browser_robots_txt is not None for f in REFUSAL_FIXTURES)

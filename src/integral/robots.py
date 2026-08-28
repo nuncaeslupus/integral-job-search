@@ -44,6 +44,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T70.json"
+DEFAULT_T71_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T71.json"
 
 # Who we say we are. A contact URL, because a board that wants this to stop
 # needs somewhere to say so — that is the half of politeness a delay cannot do.
@@ -108,6 +109,23 @@ class RobotsError(RuntimeError):
 
 def _read(url: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return str(response.read().decode("utf-8", errors="replace"))
+
+
+# T71: some sites put a WAF in front of everything, so the honest agent above
+# gets a 403 on `/robots.txt` itself — the one document that names the rules
+# it would otherwise be refused for. A generic browser string, not our own,
+# because this is a one-time exception for the policy resource and must not
+# read as a second identity to fetch anything else with.
+_BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+
+def _browser_read(url: str) -> str:
+    request = urllib.request.Request(url, headers={"User-Agent": _BROWSER_USER_AGENT})
     with urllib.request.urlopen(request, timeout=20) as response:
         return str(response.read().decode("utf-8", errors="replace"))
 
@@ -329,24 +347,50 @@ def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
 class Robots:
     """One robots.txt per host, fetched once and remembered."""
 
-    def __init__(self, user_agent: str = USER_AGENT, fetch: Fetch = _read) -> None:
+    def __init__(
+        self,
+        user_agent: str = USER_AGENT,
+        fetch: Fetch = _read,
+        browser_fetch: Fetch = _browser_read,
+    ) -> None:
         self.user_agent = user_agent
         self._fetch = fetch
+        self._browser_fetch = browser_fetch
         self._groups: dict[str, list[_Group]] = {}
 
     def _groups_for(self, url: str) -> list[_Group]:
         parts = urlsplit(url)
         origin = f"{parts.scheme}://{parts.netloc}"
         if origin not in self._groups:
+            robots_url = urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
             try:
-                text = self._fetch(urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", "")))
+                text = self._fetch(robots_url)
             except urllib.error.HTTPError as exc:
-                # 404 is the site saying "no rules", which permits everything.
-                # Anything else — 403, 500, a redirect loop — is an unanswered
-                # question, and an unanswered question is not a yes.
-                if exc.code != 404:
+                if exc.code == 404:
+                    # The site saying "no rules", which permits everything.
+                    text = ""
+                elif exc.code == 403:
+                    # T71: a WAF refusing the honest agent on the policy
+                    # resource itself is not an answer about what the policy
+                    # says, so it is not treated as one. Exactly one URL is
+                    # eligible for this retry — the one already being fetched
+                    # here, `/robots.txt` — and content is never refetched
+                    # this way; a 403 on an advert stays unverified (T74's
+                    # concern). What comes back is then obeyed like any other
+                    # fetched policy, through the same `_parse_groups` and
+                    # `_select_rules` this method already uses for `text` —
+                    # recovering it is not license to read it more loosely.
+                    try:
+                        text = self._browser_fetch(robots_url)
+                    except (urllib.error.HTTPError, OSError) as retry_exc:
+                        raise RobotsError(
+                            f"{origin}/robots.txt returned 403, and the browser-agent "
+                            f"retry could not read it either: {retry_exc}"
+                        ) from retry_exc
+                else:
+                    # 500, a redirect loop, anything else — an unanswered
+                    # question, and an unanswered question is not a yes.
                     raise RobotsError(f"{origin}/robots.txt returned {exc.code}") from exc
-                text = ""
             except OSError as exc:
                 raise RobotsError(f"{origin}/robots.txt could not be read: {exc}") from exc
             self._groups[origin] = _parse_groups(text)
@@ -1054,18 +1098,187 @@ def write_evidence(
     return measured
 
 
-def _main(argv: list[str]) -> int:
-    """Write T70's gate evidence.
+@dataclass(frozen=True)
+class _RefusalFixture:
+    """A 403 on `/robots.txt` and the policy a browser-agent retry recovers.
 
-    The `robots_verdicts_misread == 0` threshold is asserted by
-    `gate_evidence.py` against the committed file, not by this exit code —
-    the same split `integral.extraction` and `integral.ontology_health` use,
-    so a misread fixture is reported here (loudly, on stderr) without halting
-    every other module's `make evidence` regeneration.
+    `browser_robots_txt` is `None` for the one fixture where the retry fails
+    too — the honest failure this mechanism must still produce when there is
+    nothing to recover, kept beside the recoverable cases so both outcomes
+    are exercised by the same table.
     """
-    args = [arg for arg in argv[1:] if not arg.startswith("--")]
-    measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
 
+    name: str
+    origin: str
+    browser_robots_txt: str | None
+    agent: str
+    path: str
+    expected_allowed: bool | None
+
+
+REFUSAL_FIXTURES: tuple[_RefusalFixture, ...] = (
+    _RefusalFixture(
+        name="a_waf_blocks_the_honest_agent_but_the_recovered_policy_still_bars_the_path",
+        origin="https://waf-protected.example",
+        browser_robots_txt="User-agent: *\nDisallow: /internal/\n",
+        agent=USER_AGENT,
+        path="/internal/secret",
+        expected_allowed=False,
+    ),
+    _RefusalFixture(
+        name="the_recovered_policy_permits_the_path_it_says_nothing_about",
+        origin="https://waf-protected.example",
+        browser_robots_txt="User-agent: *\nDisallow: /internal/\n",
+        agent=USER_AGENT,
+        path="/ofertas",
+        expected_allowed=True,
+    ),
+    _RefusalFixture(
+        name="the_recovered_policy_names_our_own_product_token_and_bars_it",
+        origin="https://tightly-waffed.example",
+        browser_robots_txt="User-agent: integral-job-search\nDisallow: /\n",
+        agent=USER_AGENT,
+        path="/ofertas",
+        expected_allowed=False,
+    ),
+    _RefusalFixture(
+        name="the_waf_blocks_the_browser_retry_too_so_nothing_is_recoverable",
+        origin="https://fully-blocked.example",
+        browser_robots_txt=None,
+        agent=USER_AGENT,
+        path="/ofertas",
+        expected_allowed=None,
+    ),
+)
+
+
+def _recovered_verdict(fixture: _RefusalFixture) -> bool | None:
+    """`allows()` after the honest agent is refused, or `None` if the retry
+    could not recover a policy at all — abandonment, not a verdict, and
+    distinct from a recovered `False`."""
+
+    def fetch(url: str) -> str:
+        raise urllib.error.HTTPError(url, 403, "blocked", {}, None)  # type: ignore[arg-type]
+
+    def browser_fetch(url: str) -> str:
+        if fixture.browser_robots_txt is None:
+            raise urllib.error.HTTPError(url, 403, "blocked", {}, None)  # type: ignore[arg-type]
+        return fixture.browser_robots_txt
+
+    robots = Robots(user_agent=fixture.agent, fetch=fetch, browser_fetch=browser_fetch)
+    try:
+        return robots.allows(f"{fixture.origin}{fixture.path}")
+    except RobotsError:
+        return None
+
+
+def measure_browser_recovery(
+    fixtures: tuple[_RefusalFixture, ...] = REFUSAL_FIXTURES,
+) -> dict[str, Any]:
+    """T71's gate: refusals where a browser-agent retry should have recovered
+    the policy (or, for the one unrecoverable fixture, correctly did not) but
+    the code produced some other verdict instead.
+
+    `robots_policies_abandoned_on_refusal_evaluated` is the denominator this
+    measurement is hollow without: a zero abandonment count over zero
+    evaluated refusals is not a pass, it is a check that never ran.
+    """
+    abandoned = [
+        {
+            "name": fixture.name,
+            "origin": fixture.origin,
+            "path": fixture.path,
+            "expected_allowed": fixture.expected_allowed,
+            "actual_allowed": actual,
+        }
+        for fixture in fixtures
+        if (actual := _recovered_verdict(fixture)) != fixture.expected_allowed
+    ]
+    evaluated = len(fixtures)
+    return {
+        "robots_policies_abandoned_on_refusal": len(abandoned),
+        "robots_policies_abandoned_on_refusal_evaluated": evaluated,
+        "gate_status": "measured" if evaluated else "unmeasured",
+        "abandoned_cases": abandoned,
+    }
+
+
+def write_browser_recovery_evidence(
+    evidence: Path = DEFAULT_T71_EVIDENCE_PATH,
+    fixtures: tuple[_RefusalFixture, ...] = REFUSAL_FIXTURES,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T71.json`."""
+    measured = measure_browser_recovery(fixtures)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+_KNOWN_OPTIONS = frozenset({"--browser-recovery"})
+
+
+def _main(argv: list[str]) -> int:
+    """`python -m integral.robots [--browser-recovery] [path]`.
+
+    Bare invocation writes **both** evidence files, T70's and T71's — the
+    same reason `liveness.py` writes D-18 and T74 on a bare run: `make
+    evidence` derives its module list from `^def _main` and runs each module
+    once, with no way to know a module owns more than one gate. Naming
+    `--browser-recovery` still writes T71 alone, so that gate block's own
+    invocation stays precise.
+    """
+    options = [arg for arg in argv[1:] if arg.startswith("--")]
+    unknown = [arg for arg in options if arg not in _KNOWN_OPTIONS]
+    if unknown:
+        print(
+            f"robots: unknown option(s) {' '.join(unknown)} — "
+            f"expected any of {' '.join(sorted(_KNOWN_OPTIONS))}",
+            file=sys.stderr,
+        )
+        return 2
+
+    positional = [arg for arg in argv[1:] if not arg.startswith("-")]
+    if len(positional) > 1:
+        print(
+            f"robots: expected at most one path, got {len(positional)}: {' '.join(positional)}",
+            file=sys.stderr,
+        )
+        return 2
+
+    browser_recovery = "--browser-recovery" in options
+
+    if not browser_recovery and not positional:
+        # Each recursive call carries a positional path (or
+        # `--browser-recovery`) so it lands past this branch rather than
+        # back in it — otherwise a bare `python -m integral.robots` would
+        # recurse into itself forever.
+        recovery_rc = _main([argv[0], "--browser-recovery"])
+        verdicts_rc = _main([argv[0], str(DEFAULT_EVIDENCE_PATH)])
+        return max(recovery_rc, verdicts_rc)
+
+    if browser_recovery:
+        target = Path(positional[0]) if positional else DEFAULT_T71_EVIDENCE_PATH
+        measured = write_browser_recovery_evidence(target)
+        if measured["robots_policies_abandoned_on_refusal"]:
+            print(
+                f"robots_policies_abandoned_on_refusal: "
+                f"{measured['robots_policies_abandoned_on_refusal']} of "
+                f"{measured['robots_policies_abandoned_on_refusal_evaluated']}: "
+                f"{measured['abandoned_cases']}",
+                file=sys.stderr,
+            )
+        print(json.dumps(measured, ensure_ascii=False))
+        if measured["gate_status"] == "unmeasured":
+            return 3
+        return 1 if measured["robots_policies_abandoned_on_refusal"] else 0
+
+    # T70's gate evidence. The `robots_verdicts_misread == 0` threshold is
+    # asserted by `gate_evidence.py` against the committed file, not by this
+    # exit code — the same split `integral.extraction` and
+    # `integral.ontology_health` use, so a misread fixture is reported here
+    # (loudly, on stderr) without halting every other module's `make
+    # evidence` regeneration.
+    measured = write_evidence(Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH)
     if measured["robots_verdicts_misread"]:
         print(
             f"robots_verdicts_misread: {measured['robots_verdicts_misread']} of "
