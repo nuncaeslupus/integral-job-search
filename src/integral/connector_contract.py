@@ -113,6 +113,7 @@ from integral.connectors import (
     DEFAULT_CONNECTORS_DIR,
     FIXTURE_DIRNAME,
     META_FILENAME,
+    PROBE_DIRNAME,
     ConnectorError,
     build_offer,
     connector_packages,
@@ -138,7 +139,12 @@ REQUIRED_ENTRIES = frozenset({CONNECTOR_FILENAME, META_FILENAME, FIXTURE_DIRNAME
 # connector passed the whole check and could not work. The promise is withdrawn
 # rather than implemented: executing contributed code needs process-level
 # isolation, and the allowlist below is admission lint, not a sandbox.
-OPTIONAL_ENTRIES: frozenset[str] = frozenset()
+# `probe/` is the connector's second capture of the same query, taken on a
+# later day and read by `connector_health` to tell a rotted parser from a
+# healthy one. Optional rather than required: a connector is reviewable
+# without one — that check simply reports `unmeasured` until somebody on a
+# permitted surface captures it.
+OPTIONAL_ENTRIES: frozenset[str] = frozenset({PROBE_DIRNAME})
 
 # Named so the refusal can say *why* rather than "unexpected file". A
 # contributor who wrote a `parse.py` did what §5 told them to; they are owed the
@@ -261,8 +267,13 @@ def check_layout(package: Path) -> list[str]:
             )
         else:
             violations.append(f"rule 1: {name} is not part of a connector package")
-    if (package / FIXTURE_DIRNAME).exists() and not (package / FIXTURE_DIRNAME).is_dir():
-        violations.append(f"rule 1: {FIXTURE_DIRNAME} must be a directory")
+    # Both, not just the required one. `probe` became an OPTIONAL_ENTRIES member
+    # and inherited the exemption from "unexpected entry" without inheriting the
+    # type check — so a regular *file* named `probe` passed rule 1 while
+    # `connector_health` expects a directory to read `list.html` out of.
+    for dirname in (FIXTURE_DIRNAME, PROBE_DIRNAME):
+        if (package / dirname).exists() and not (package / dirname).is_dir():
+            violations.append(f"rule 1: {dirname} must be a directory")
     return violations
 
 

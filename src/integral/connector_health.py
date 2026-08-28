@@ -15,15 +15,28 @@ live HTTP request, and it is `[LAPTOP]`-only for exactly that reason.
 **The baseline and the probe must be two different reads, or this module
 measures nothing.** `fixture/list.html` is the baseline: the response that
 URL actually returned the day someone last verified this connector. The
-probe is a *separately captured* current read of the same query, written to
-`probe/list.html` by the permitted `[LAPTOP]` process, and it is
-deliberately absent from this repository. An earlier revision pointed the
-probe at `fixture/list.html` as well — so the production path compared a
-string with itself, `silent_connector_failures` could only ever be 0, and
-the evidence recorded `"gate_status": "measured"` on a module whose entire
-purpose is detecting parser rot. Reading a file twice is not a measurement.
+probe is a *separately captured* read of the same query, taken on a later
+day by the permitted `[LAPTOP]` process and committed to `probe/list.html`
+beside `probe/captured.json`, which records when. An earlier revision
+pointed the probe at `fixture/list.html` as well — so the production path
+compared a string with itself, `silent_connector_failures` could only ever
+be 0, and the evidence recorded `"gate_status": "measured"` on a module
+whose entire purpose is detecting parser rot. Reading a file twice is not a
+measurement; reading two captures taken on two different days is.
 
-When no probe has been captured, the honest report is that the rot stage
+**The capture date is committed, never taken from the filesystem.** A
+checkout does not preserve mtimes, so deriving it there would give every
+clone a different answer and `make evidence` would report drift on a file
+nobody edited. `probe/captured.json` travels with the bytes it describes,
+and refreshing the probe is therefore a deliberate act that shows up in a
+diff — the same rule `tools/annotate_connector_fixture.py` follows.
+
+What this does not buy: nothing forces a refresh. A probe left alone long
+enough certifies a board that may since have rotted, and `probe_captured_at`
+in the evidence is what makes that visible rather than a mechanism that
+prevents it.
+
+When no probe is present, the honest report is that the rot stage
 did not run: the free signals below still audit the recorded evidence, but
 the gate reads `unmeasured` — not a healthy verdict.
 
@@ -52,7 +65,8 @@ import json
 import re
 import sys
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -61,6 +75,7 @@ from integral.connector_coverage import installed_packages
 from integral.connectors import (
     DEFAULT_CONNECTORS_DIR,
     FIXTURE_DIRNAME,
+    PROBE_DIRNAME,
     Connector,
     ConnectorError,
     load_connector,
@@ -81,10 +96,11 @@ _ENTITY_RE = re.compile(r"&(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);")
 #: never more.
 MAX_PROBE_ATTEMPTS = 2
 
-# Where a separately captured current read is looked for, beside — never
-# inside — `FIXTURE_DIRNAME`. Two directories because they are two different
-# reads taken at two different times; one directory was the tautology.
-PROBE_DIRNAME = "probe"
+
+#: Records when the probe beside it was taken. Committed with the capture,
+#: because a checkout does not preserve mtimes and a date derived from one
+#: would differ per clone — drift on a file nobody edited.
+PROBE_CAPTURE_FILE = "captured.json"
 
 
 @dataclass(frozen=True)
@@ -101,6 +117,10 @@ class Reading:
     #: the rot stage did not run for this connector, so `health` rests on the
     #: free signals alone and cannot be read as "not rotted".
     probed: bool = True
+    #: When the probe was taken, from `probe/captured.json`. `None` when no
+    #: probe was read, and also when one was read but records no date — an
+    #: undated capture cannot say how current the verdict is.
+    probe_captured_at: str | None = None
 
 
 def undecoded_entities(values: Iterable[str]) -> list[str]:
@@ -230,6 +250,40 @@ def probe_fetch(package: Path, *, fetch: Callable[[Path], str] = default_fetch) 
     return result
 
 
+def probe_captured_at(package: Path) -> str | None:
+    """When this package's probe was taken, per `probe/captured.json`.
+
+    `None` whenever that cannot be answered — the file is absent, unreadable,
+    not JSON, carries no `captured_at`, or carries one that is not a `YYYY-MM-DD`
+    date. Every one of those is "this capture
+    does not say how current it is", which is what the caller records; none of
+    them is a reason to fail the health check, because the date annotates the
+    verdict rather than producing it."""
+    try:
+        raw = (package / PROBE_DIRNAME / PROBE_CAPTURE_FILE).read_text(encoding="utf-8")
+        recorded = json.loads(raw).get("captured_at")
+    except (OSError, UnicodeError, ValueError, AttributeError):
+        return None
+    if not isinstance(recorded, str):
+        return None
+    try:
+        # `strptime` and not `date.fromisoformat`: the latter also accepts
+        # `20260828` and other ISO spellings, and this value is read by a human
+        # deciding whether a probe is stale. One spelling or none.
+        parsed = datetime.strptime(recorded, "%Y-%m-%d")
+    except ValueError:
+        # Covers the empty string, `unknown`, and `2026-13-45` alike. Every one
+        # of them is a capture that does not say when it was taken, and emitting
+        # it beside `gate_status: measured` would dress it up as one that does.
+        return None
+    # Round-trip, because `strptime` is not the exact check the format string
+    # looks like: `%m` and `%d` accept an unpadded `2026-8-28` just as happily
+    # as `2026-08-28`. Re-rendering and comparing is what makes "one spelling"
+    # true — asserted by review on #256 after the first attempt claimed it and
+    # did not deliver it.
+    return recorded if parsed.strftime("%Y-%m-%d") == recorded else None
+
+
 def assess_package(
     package: Path,
     connector: Connector,
@@ -250,7 +304,12 @@ def assess_package(
     # baseline: that substitution is what made the regression branch dead
     # code in the production path while the evidence still said "measured".
     probe_html = probe_fetch(package, fetch=fetch)
-    return assess(connector, site, baseline_html=baseline_html, probe_html=probe_html)
+    reading = assess(connector, site, baseline_html=baseline_html, probe_html=probe_html)
+    # Only a reading that actually read a probe can carry its date; stamping an
+    # unprobed one would date a rot stage that never ran.
+    if not reading.probed:
+        return reading
+    return replace(reading, probe_captured_at=probe_captured_at(package))
 
 
 def measure(
@@ -313,6 +372,7 @@ def measure(
                 "probe_items": r.probe_items,
                 "reasons": list(r.reasons),
                 "probed": r.probed,
+                "probe_captured_at": r.probe_captured_at,
             }
             for r in readings
         ],

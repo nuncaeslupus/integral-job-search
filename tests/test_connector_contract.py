@@ -39,6 +39,7 @@ from integral.connector_contract import (
     write_evidence,
 )
 from integral.connector_shape import measure as shape_measure
+from integral.connectors import PROBE_DIRNAME
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
@@ -575,23 +576,50 @@ def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status
     assert "could not be read" in measured["violations"][0]
 
 
-def test_no_committed_fixture_carries_an_ip_address() -> None:
+def test_no_committed_capture_carries_an_ip_address() -> None:
     """A recorded page can contain the recording machine's own address.
 
     `trabajos.com` writes one into every response as
     `<!-- IP: 37.18.134.127 - CODPAIS:100 -->`, which is the *client's* address,
-    not the server's — so a fixture saved verbatim publishes the home IP of
-    whoever recorded it, to this repository and to the sources repository it is
-    copied into. Nothing about the connector needs it, and no later deletion
-    reaches a clone, so the check is here rather than in a reviewer's habits.
+    not the server's — so a page saved verbatim publishes the home IP of
+    whoever recorded it, to this repository and to the sources repository
+    `tools/publish_connectors.py` copies the whole package into. Nothing about
+    the connector needs it, and no later deletion reaches a clone, so the check
+    is here rather than in a reviewer's habits.
 
-    Deliberately every fixture and not the one that had it: the next board will
-    write it somewhere else.
+    **Every recorded page in the package, not every fixture.** This scanned
+    `fixture/*.html` alone until `probe/` was committed — and the first probe
+    ever captured carried a live client IP that the fixture's own redaction had
+    already established was not publishable. The guard missed it because it
+    named a directory. The docstring said the next board would write it
+    somewhere else; what actually happened is that the same board wrote it in
+    the next directory over, which is the same mistake one level up.
     """
     quad = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
     offenders = {
         str(path.relative_to(_LIBRARY)): sorted(set(quad.findall(path.read_text(encoding="utf-8"))))
-        for path in sorted(_LIBRARY.rglob("fixture/*.html"))
+        for path in sorted(_LIBRARY.rglob("*.html"))
         if quad.search(path.read_text(encoding="utf-8"))
     }
-    assert not offenders, f"fixtures carry IP addresses: {offenders}"
+    assert not offenders, f"recorded pages carry IP addresses: {offenders}"
+
+
+def test_a_probe_that_is_a_regular_file_is_rejected(package: Path) -> None:
+    """Review on #256: `probe` joined OPTIONAL_ENTRIES and inherited the
+    exemption from "unexpected entry" without inheriting `fixture`'s type check,
+    so a regular file named `probe` passed rule 1 — while `connector_health`
+    expects a directory to read `list.html` out of."""
+    shutil.rmtree(package / PROBE_DIRNAME, ignore_errors=True)
+    (package / PROBE_DIRNAME).write_text("not a directory", encoding="utf-8")
+
+    violations = check_package(package).violations
+
+    assert any(PROBE_DIRNAME in v and "directory" in v for v in violations), violations
+
+
+def test_a_package_with_no_probe_at_all_is_still_valid(package: Path) -> None:
+    """Optional means optional: a connector nobody has captured a probe for is
+    reviewable, and `connector_health` reports `unmeasured` rather than broken."""
+    shutil.rmtree(package / PROBE_DIRNAME, ignore_errors=True)
+
+    assert not check_package(package).violations
