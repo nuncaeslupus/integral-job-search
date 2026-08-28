@@ -1,188 +1,165 @@
-# Session handover — 2026-08-27 ~18:35 UTC, interactive, laptop
+# Session handover — 2026-08-28 ~22:30 UTC, interactive, laptop
 
-Board: **110 gates on `main`**, 124 tasks. `make host-gate` exit 0 on `main`, and
-`verify-gates` reports **110 terminal task(s); 110 gate(s) asserted, 0 carry no
-fenced gate block** — the count alone would not say whether the gate passed or
-whether any terminal task was ungated, which is the whole point of recording it.
+Board: **116 gates on `main`** (`dfe66a0`), 129 tasks — 115 merged, 10 open, 0
+claimed. `make host-gate` exit 0: ruff clean, mypy clean over 172 files,
+`evidence: no drift`, `verify-gates: 116 terminal task(s); 116 gate(s) asserted,
+0 carry no fenced gate block`. `query_status.py` reports **no problems**.
 
-`main` was at `e53ca9c` for the working part of this session; #244 has since
-merged and moved it. Two PRs are open here, and two merged upstream in
-`claude-arsenal` (plus the `v2.4.23` tag).
+The session was asked whether the tool is ready for a live candidate session,
+and to clear whatever needed a laptop or a browser first.
 
-The session was asked to fix whatever could be fixed without a live human/browser
-session, and to stop the routines.
+## Answer: yes, sourcing is ready
 
-## Routines are off
+**T72 merged** ([#256](https://github.com/nuncaeslupus/integral-job-search/pull/256),
+closes #203) and archived ([#257](https://github.com/nuncaeslupus/integral-job-search/pull/257)).
+`trabajos.com` — the only real board — is **verified healthy against live
+markup**: 40 baseline items, 40 probe items, `silent_connector_failures: 0`,
+`gate_status: measured`. Live `robots.txt` re-checked and it matches
+`meta.yaml`'s claim exactly: four disallowed paths, none of them the listing
+read, no AI-agent rule.
 
-One routine was live: **`arsenal orchestrator — hourly tick`**
-(`trig_015sxLyaFivf7aduKX6xQQur`, cron `16 * * * *`, last fired 17:16). It is now
-`enabled: false`. The other 18 in the account are spent one-shot reminders
-(`ended_reason: run_once_fired`).
+The detector is not a tautology — renaming `listado2014` → `listado2099` in the
+probe flips it to `broken` with *"40 row(s) recorded previously, 0 now"*.
 
-**The API has no delete verb** — `enabled: false` is the stop, and it is one
-`RemoteTrigger update` to bring back. Note also that `list` **ignores its cursor**
-and re-serves the same page, so `has_more: true` there is not a promise of more
-rows you can reach.
+## What finished T72, and the design fork behind it
 
-That routine was **self-bound**: `persist_session: true` with
-`persistent_session_id: session_014yfFpB2ofL8TKeY199XQRH`. It did not create a
-session, it woke one — which is forced, because a trigger that creates a session
-stores no MCP connectors and would have no GitHub channel at all. Filed as
-[claude-arsenal#255](https://github.com/nuncaeslupus/claude-arsenal/issues/255):
-the tick's *contract* belongs in `references/orchestrator-tick.md`; only the clock
-is surface-specific. Today that contract exists solely inside a trigger object on
-one account — unversioned, unreviewed, and already drifted between copies.
+The module could only report `measured` on a machine holding an uncommitted
+`probe/list.html`, and it is in `repo_gate --list-evidence-modules` — so
+`make evidence` regenerates it on every clone, CI run and cloud session, where
+the probe is absent and the answer is `unmeasured`. **No committed number could
+satisfy both.** Measured both ways before touching anything.
 
-## Open
+The owner chose: **commit the probe, with `probe/captured.json` recording when
+it was taken.** The date is read from that file and never from mtime — a
+checkout does not preserve mtimes, so deriving it there would give every clone a
+different answer and drift `make evidence` on a file nobody edited. Baseline and
+probe stay two captures from two different days, so the comparison still means
+something; what changed is that *how current is it* is now a date in a diff.
 
-| PR | task | state |
-|---|---|---|
-| [#242](https://github.com/nuncaeslupus/integral-job-search/pull/242) | T86 eligibility vocabulary → closes #237 | head `fcaeccc`. CodeRabbit round 1 answered; round 2 not yet in. **Blocked on the independent fixture pass**, not on review — see below. |
-| [#243](https://github.com/nuncaeslupus/integral-job-search/pull/243) | this handover | closes no task. |
+**What this does not buy, and the docstring says so:** nothing forces a refresh.
+A probe left alone certifies a board that may since have rotted. The rejected
+alternative — `unmeasured` past N days — turns `main` red on a timer for
+everyone until someone with a laptop recaptures.
 
-[#244](https://github.com/nuncaeslupus/integral-job-search/pull/244) (bundle →
-v2.4.23) **merged**. Only #242 moves the board (110 → 111) and only #242 closes
-an issue.
+## The probe leaked a home IP, and the guard could not see it
 
-`arsenal/claims/t-fdc8e19f` is held by this session. Issue #237 now carries
-`arsenal-task: t-fdc8e19f` and the `arsenal:task` label.
+`trabajos.com` writes `<!-- IP: … - CODPAIS:100 -->` into every response, and it
+is the **client's** address. `meta.yaml` already recorded that the fixture was
+redacted for this reason and
+`test_no_committed_fixture_carries_an_ip_address` existed to enforce it — but it
+scanned `fixture/*.html`, so the capture in `probe/` walked past it.
+`tools/publish_connectors.py` `copytree`s the whole package into the **public**
+sources repository. It would have been published.
 
-### T86 — what it fixes
+Redacted in raw bytes; the guard now scans **every recorded page in every
+package**. Its own docstring had argued *"the next board will write it somewhere
+else"* — what happened is the same board wrote it in the next directory over.
 
-`"DE"` against *"must hold German citizenship"* returned FAIL, and `"ES"` against
-the same advert returned FAIL identically: indistinguishable to the code. A false
-FAIL is the invisible direction, because an excluded job is one the candidate
-never sees. A scoped ES/EN/CA table resolves both sides; a term outside it goes to
-FLAG, never FAIL, so coverage is a quality dial rather than a correctness
-precondition. Clearances stay out by decision.
+## Four defects, three review rounds — the second-reader rule again
 
-`_normalize` also **deleted** accented characters rather than folding them, so
-`alemán` became `alemn` — a key matching neither spelling. It folds now.
+CodeRabbit went 🟡 → 🟡 → ⚪ Minimal. Every finding was in code written this
+session, behind a green gate:
 
-Its own gate counts the direction nothing counted: `false_disqualifications`,
-**0 of 15** evaluated, and **10 of 15** with the vocabulary switched off. That
-second number is asserted by a test, so the zero is a measurement rather than a
-tautology — the T72 failure mode, checked for.
+1. A regular file named `probe` passed rule 1 — `probe` joined `OPTIONAL_ENTRIES`
+   and inherited the exemption from "unexpected entry" without inheriting the
+   type check `fixture` has.
+2. Every non-empty string was accepted as a capture date; `{"captured_at":
+   "unknown"}` was emitted beside `gate_status: measured`.
+3. `strptime("%Y-%m-%d")` accepts unpadded components, so `2026-8-28` passed.
+   **The round-2 commit's comment claimed "one spelling or none" and did not
+   deliver it** — a guarantee written into prose without a test. Fixed by
+   round-tripping the parsed date.
 
-### T86 — the review round is the lesson again
+Plus the IP leak, which no reviewer caught — it was found by reading
+`meta.yaml` before committing. All three CodeRabbit fixes were verified RED
+against the previous commit before landing.
 
-CodeRabbit found **two real correctness defects, both in the new code, both false
-disqualifications** — the very failure the gate was written to expose, sitting in
-the gate's own fixtures:
+## Board defects fixed this session
 
-- `_BLOCS["EEA"]` holds country codes, so it never contains the string `"EU"`.
-  Neither containment branch could settle a **bloc-against-bloc** pair, and `EEA`
-  against a bar naming `EU` fell through to a confident FAIL.
-- `held_codes` is a set, so `("ES", "España")` collapses to one code. Comparing
-  its size against the tuple's read that collapse as an unresolved term and
-  downgraded a correct FAIL to FLAG.
+- **#254 reopened.** PR #255 was queue-only but wrote `Closes #254`, so merging
+  closed D-25's own handle while the task sits unstarted.
+- **#253 retitled** to `D-24: A retracted episode stays sendable — approval
+  outlives its evidence`. The protocol fetch drops issue bodies, so the
+  `arsenal-task:` line is unreachable and the board resolves by **title** —
+  which did not match. It resolves now.
+- **T72's task file archived by hand** (#257). `open_task_pr.sh` still cannot
+  open a PR in this repo (`claude-arsenal#256`), so #256 was branched,
+  committed, pushed and opened manually — and nothing performed the archive
+  step. **Check for this after any hand-opened PR.**
 
-Neither case existed in the probe set, so `false_disqualifications` read 0 over
-both gaps. Both are now probes **and** tests; the denominator rose 13 → 15.
+## Plugins updated — the bundle re-vendor is the NEXT session's first job
 
-**The independent fixture pass still has not run.** `CLAUDE.md` requires a session
-other than the implementer to derive adversarial cases from the spec before the
-implementation is opened, and this is squarely that class of code. The nine
-original probes were written by the implementing session. Two review findings
-inside one round is the argument for that rule, not against it. **#242 is blocked
-on that audit, not on review.**
+`claude plugin update` is a **non-interactive CLI** and it works; `/plugin
+update` typed at the model does nothing. All three are now **2.5.0** on disk:
 
-## `open_task_pr.sh` cannot open a PR in this repo
+| plugin | scope | was | now |
+|---|---|---|---|
+| `core@claude-arsenal` | user | 1.1.0 | 2.5.0 |
+| `core@claude-arsenal` | project | 1.1.0 | 2.5.0 |
+| `skill-workshop@claude-arsenal` | user | 1.1.0 | 2.5.0 |
 
-It runs the host gate **twice** — before the archive (line 118) and again after
-(line 495). `arsenal/tasks/` is counted by T55; `_history/` is correctly
-allowlisted, because a ledger is not edited afterwards. So the archive moves the
-count and the two runs demand different committed values:
+Both `core` entries were **`failed to load`** before this — a hook schema error,
+`hooks.SessionStart[0].hooks: expected array, received undefined`. Worth
+confirming that cleared after the restart.
 
-| tree state | `T55.files_scanned` |
-|---|---|
-| task file in `arsenal/tasks/` | 561 |
-| task file in `arsenal/tasks/_history/` | 560 |
+**The vendored bundle is still 2.4.23.** It was deliberately not re-vendored
+here: `.claude/skills/init/scripts/init.py` is the 2.4.23 copy, so running it
+would have vendored 2.4.23 over itself — a no-op, not an upgrade. The upgrade
+needs the restarted session's loaded 2.5.0 skill. The 2.5.0 script is on disk at
+`~/.claude/plugins/cache/claude-arsenal/core/2.5.0/skills/init/scripts/init.py`
+if the restart does not pick it up. That re-vendor is a real diff and wants its
+own gate and PR.
 
-No single committed value passes both. **The `CLAUDE.md` note about fixing this
-with "a second commit on the branch the script left you on" no longer applies** —
-the script now stops *before* committing, so there is no branch to add it to. #242
-was branched, archived, regenerated, committed, pushed and opened by hand.
+## For the live session
 
-Filed as [claude-arsenal#256](https://github.com/nuncaeslupus/claude-arsenal/issues/256)
-with three ordered fix options. The rollback path itself is clean — it restores,
-deletes the archive, and asserts both — so a failed run does not leave the tree
-half-done.
+The owner is the candidate; **test-mode on** was agreed, because D-25's gate
+needs observations carrying provenance and `test-mode` (S11) is the instrument.
+No `profiles/` directory exists yet, so this is the first candidate.
 
-## Upstream: `issue_import.py` crashed on the second issue of every run
+- **Have the CV to hand** — step 1 captures it with provenance.
+- **T20's blind ranking must happen before step 9.** `rank_spearman >= 0.60` is
+  scored against a manual ranking of 20 held-out ads; seeing the tool's ordering
+  first contaminates it. The command exists (T20a built it) and writes `null`
+  for want of the rankings.
+- Expect the reading step to be visibly mediocre: `extraction_macro_f1` is
+  **0.4943** against a 0.75 target, `scored_n: 161`, label floor met at 206.
 
-Protocol step 4b was dead. `importable()` took an unused `known_ids` parameter and
-ran `del known_ids` **inside** its loop: the first issue unbound the name, the
-second raised `UnboundLocalError`. Every gate in `issue_import_test.sh` fed
-exactly one importable issue, which is why it shipped green.
+Four tasks carry `requires: [surface:human]`: **T69, T20, D-23, D-25**.
 
-[claude-arsenal#254](https://github.com/nuncaeslupus/claude-arsenal/pull/254)
-**merged** — parameter removed, a gate added that feeds two and asserts two task
-files, verified to fail against the unfixed copy.
+## The connector system — asked and answered
 
-**It merged without its version bump**, which is the part worth remembering:
-#254's own `version bump` check failed and went unaddressed, so the fix sat on
-`main` untaggable — `make tag` answered `v2.4.22 already published — nothing to
-release`, and every consumer's `check_update.sh` reported the bundle *current*
-while still carrying the crash. A merged fix nobody can install reads exactly
-like no fix at all.
+**Solid, not fast.** The docstrings reason about failure modes that were
+actually hit, not imagined ones: the annotator's output is frozen data so the
+gate cannot recompute both sides and agree with itself; item count sits *inside*
+the T12 F1 so parsing 20 of 40 offers perfectly cannot score well. Three real
+weaknesses, filed here rather than as tasks — the owner chose "go live" over
+queueing them:
 
-Closed out the same session:
-
-| | |
-|---|---|
-| [claude-arsenal#257](https://github.com/nuncaeslupus/claude-arsenal/pull/257) | merged — `make bump` 2.4.22 → 2.4.23, all seven checks green including `version bump` |
-| `make tag` | **`v2.4.23` published** from `main` |
-| [#244](https://github.com/nuncaeslupus/integral-job-search/pull/244) | open — bundle refreshed here, `make host-gate` exit 0 |
-
-Verified from the **vendored** copy after the refresh: three `arsenal:queue`
-issues enumerated in one run, where the second used to raise.
-
-Two facts about refreshing that cost time to establish:
-
-- **`claude-arsenal/` here is not a git subtree**, so `git subtree pull` is not
-  the update path — `check_update.sh` says so and re-vendoring with
-  `init.py --repo-path . --silent` is what works.
-- `init.py` prints a `refreshed: session/handover.md` line that names the
-  **bundle's own template**, not this file. It does not touch this repo's
-  session record — but check the working tree before committing a refresh
-  rather than trusting that sentence.
-
-The plugin cache at `~/.claude/plugins/cache/claude-arsenal/core/` is stale at
-2.0.0. That blocks nothing, because `init.py` vendors from the checkout, but a
-future `/init` run from the cache would write *older* files over the bundle.
-`/plugin update claude-arsenal` is a user action; no session can do it.
-
-## The CI note in `CLAUDE.md` is repo-scoped, not account-wide
-
-`claude-arsenal` is **public** and its CI runs normally — 15–30 s, real runner
-ids, checks passing. `integral-job-search` is **private** and still shows the
-documented signature: 5–6 s, `runner_id: 0`, no runner assigned, red on `main` too.
-So this is private-repo billing, not a broken account, and the note should say so.
-Do not read a green run on the sibling repo as evidence that this one recovered.
-
-## Not imported, and why
-
-`issue_import.py` works now, but an imported task is not finished work here: this
-repo's `plan_v2` gate requires every queue task to carry a `T##`/`D-##` label
-**and** a matching row in `status/plan.md` with a real gate expression. That is a
-scoping act, not a mechanical one.
-
-- **#236** — robots product-token prefix matching (T70 audit case 22). Answerable
-  from RFC 9309, but it is a correctness-critical matcher, so `CLAUDE.md` wants a
-  second session to derive the cases. Left as `arsenal:queue`.
-- **#182** — merge-policy to `after-ci-and-review`. Genuinely blocked until runner
-  minutes return. Writing a plan row and a gate for it now would be speculative.
-
-Both keep the `arsenal:queue` label and neither has a task file.
+1. **Coverage is the ceiling, and it is not a code problem.** One real board.
+   `tecnoempleo` and `remoteok` are `Disallow: /` for ClaudeBot; `weworkremotely`,
+   `remotive`, `getmanfred`, `feinaactiva` and EURES serve listings as JSON APIs
+   or JS apps, so a CSS-selector engine has structurally nothing to select. Four
+   of the five sources the 208-ad corpus came from are unreachable by this
+   design. Breadth needs a second connector *kind*, not better selectors.
+2. **`connectors.py` hand-rolls a CSS engine and a DOM tree** — ~280 of its 1238
+   lines — to keep the T12 gate dependency-free, while lxml and BeautifulSoup are
+   already a dev extra for the annotator. Largest correctness surface in the
+   system, and it exists to avoid a dependency that is already in the file.
+3. The probe freshness model, above.
 
 ## Next
 
-1. **#242**: CodeRabbit round 2, then the independent fixture pass, then merge.
-   Board goes 110 → 111.
-2. **#244**: merge the bundle update. **#243**: this file.
-3. `/plugin update claude-arsenal` when convenient, so the cache stops being
-   three minor versions behind what is vendored.
-4. `task_select.py` returns **T71** (`t-490e52d5`, priority 10, dep T70 merged) —
-   read the robots policy with a browser agent when the honest one is refused.
-   That one needs the live browser session and was deliberately left.
+1. **Re-vendor the bundle to 2.5.0** and open a PR for it (step 0b).
+2. `task_select.py` returns **T73** (`t-52bb1ec0`, priority 10, dep T72 now
+   merged) — a rate-limited run is inconclusive, never broken. Codeable, no
+   human needed. It and T83 were blocked on T72 until today.
+3. The live session itself.
+
+## Loose ends, neither urgent
+
+- Two stale worktrees from an earlier session, **both clean, no uncommitted
+  work**: `/home/ivant/dev/ijs-t87` (`chore/seed-t87`) and
+  `/home/ivant/dev/ijs-t87b` (`task/t-57cd25d8`). Left alone rather than removed.
+- CI is still the documented private-repo billing signature: every job red in
+  5–6 s, `runner_id: 0`. `merge-policy` is `after-review` for exactly this
+  reason; both merges today were on CodeRabbit's verdict, not CI's.
