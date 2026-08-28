@@ -19,7 +19,7 @@ all. Four mechanisms carry the design, and a claude.ai conversation has one:
 | mechanism | where it lives | in a free chat |
 |---|---|---|
 | The thirteen step protocols | `.claude/skills/step-*/SKILL.md` | **prose — pasteable** |
-| The checkpoints | `scripts/run_checkpoint.py`, `src/integral/` | absent — **no repository execution**: the sandbox has no clone, no installed dependencies and no network, so these imports cannot resolve |
+| The checkpoints | `scripts/run_checkpoint.py`, `src/integral/` | absent — **no repository execution**: the sandbox has no clone of this repository, and `integral` is not installable from anywhere (nothing here is published to PyPI, `docs/distribution.md` §7), so `import integral.*` cannot resolve |
 | The candidate store | `$INTEGRAL_HOME/profiles/<handle>/` | absent — **no durable `$INTEGRAL_HOME`**: sandbox storage is per-conversation and does not survive it |
 | The containment hook | `PreToolUse` (S3) | absent — no hooks |
 
@@ -29,10 +29,13 @@ is the conversation (`docs/product-shape.md`), and the conversation survives.
 
 **Two of those rows are narrower than they look.** Claude does have sandboxed
 code execution and file creation, and it is not a paid-only capability, so
-"there is no code here at all" would be wrong. What is missing is specific: the
-checkpoints cannot run because they import `integral.*` from a clone that is not
-there, and the store cannot persist because the sandbox is thrown away with the
-conversation. §7 records what that leaves on the table.
+"there is no code here at all" would be wrong. Nor is the sandbox necessarily
+offline — network access to package managers is a setting, and commonly on, so
+an ordinary dependency can usually be installed. What is missing is specific and
+survives both of those: the checkpoints cannot run because `integral` exists
+only in this repository and is published nowhere, and the store cannot persist
+because the sandbox is thrown away with the conversation. §7 records what that
+leaves on the table.
 
 ## 2. The context tax decides the shape
 
@@ -176,6 +179,7 @@ protecting; everything else here is convenience.
   "traits": {},
   "weights": {},
   "offers": [],
+  "applications": {},
 
   "evidence_tail": [
     { "id": "ev-000041", "recorded_at": "2026-08-28", "step": "constraints",
@@ -209,22 +213,50 @@ Field rules, taken from the code rather than invented:
   already folded into `evidence_digest` can no longer be retracted at all, which
   is the third reason to fold late.
 
-**`disclosure` and the approval it gates.** Every row is `private` on creation
-and stays private; `approved_for_use` is not something a step may set on its own
-initiative. Process spec §6.2 is the rule, and it is narrow: a story-bank
-episode reaches an employer-bound document *only with per-use approval*, and
-approval is "the actual payload — which documents, which claims, which contact
-details, to whom — approved once per application, never as a standing
-permission."
+**`disclosure` stays `private` on every row, always.** This is the one field
+where the obvious design is the wrong one. Nothing in `src/integral/` ever
+writes `approved_for_use` onto an evidence row, and that is deliberate:
+approval is not a property of a remembered sentence, it is a property of *one
+sentence going into one document*. A flag on the row would be exactly the
+standing permission process spec §6.2 forbids — flip it once for an application
+in March and it is still flipped in June, for an employer nobody has mentioned
+yet.
 
-In degraded mode that means exactly one place sets it: **step 11**, and only
-after showing the candidate the finished CV and letter and naming which stored
-claims went into them. The transition is recorded as its own row —
-`kind: "outcome"`, `step: "application"`, naming the offer in `about` and the
-approved rows in `text` — and the approved rows' `disclosure` flips in the same
-update. No other step may write `approved_for_use`; nothing carries it forward
-to the next application. Recounting a failure to the tool is not consent to send
-it to a company.
+So degraded mode mirrors `approval.py` instead. An approval is a separate
+record naming **`(offer_id, version, text)`** — and it names the *text*, never
+a row id and never a position in a list:
+
+```json
+"applications": {
+  "acme-9f3c/v1": {
+    "recipient": "Acme, careers@…",
+    "approved_episode_texts": ["The migration I ran that overran by six weeks."],
+    "payload_digest": "sha256:…",
+    "sent_at": null
+  }
+}
+```
+
+Why the text and not the id: a position in a list the candidate edits is not a
+stable name for a sentence. Inserting an unrelated episode above an approved one
+used to invalidate the approval, and editing one used to leave the old approval
+sitting there — so what is approved is a sentence, and the sentence is what goes
+to the employer.
+
+The rules that follow, all of them from §6.2 and step 11:
+
+- **Only step 11 writes an approval**, and only after showing the candidate the
+  finished CV and letter and naming every stored claim inside them.
+- **The unit is the payload, not the question.** Not "shall I apply?" but the
+  actual contents — which documents, which claims, which episodes, which contact
+  details, to whom — recorded as `payload_digest`. What the candidate confirms is
+  *that* payload.
+- **A new version needs new approvals.** `v2` inherits nothing from `v1`; a
+  regenerated letter is a new thing to consent to.
+- **A new offer inherits nothing at all.** There is no key under which a March
+  approval could be read for a June application, which is what makes "never as a
+  standing permission" a shape rather than a promise.
+- Recounting a failure to the tool is not consent to send it to a company.
 
 **`evidence_tail` plus `evidence_digest` is how the log stays bounded.** The real
 tree keeps `evidence.jsonl` forever and recomputes derived state from it
@@ -277,13 +309,13 @@ not as a side effect of shipping a degraded mode.
 Three smaller ones:
 
 - **Whether the ephemeral sandbox can give back a real coverage check.** §1 notes
-  that code execution exists and only the *repository* is missing. §4's coverage
-  half asks nothing of the repository — it reads keys off the state block and
-  checks a list is empty. A single self-contained validator script, pasted with
-  the step, could therefore compute `coverage_met` instead of the model eyeballing
-  it, which is the one piece of measurement this mode need not have given up. It
-  would still not be a gate. Worth a spike before anyone writes the generator in
-  the next bullet.
+  that code execution exists, dependencies are usually installable, and only
+  *this repository* is missing. §4's coverage half asks nothing of this
+  repository — it reads keys off the state block and checks a list is empty. A
+  single self-contained validator script, pasted with the step, could therefore
+  compute `coverage_met` instead of the model eyeballing it, which is the one
+  piece of measurement this mode need not have given up. It would still not be a
+  gate. Worth a spike before anyone writes the generator in the next bullet.
 - **Whether the parity table in §3 is right.** It was derived by reading all
   thirteen skills and the runtime, but it has not been run end to end with a real
   candidate. It is a claim to test, not a measurement — treat it the way this
