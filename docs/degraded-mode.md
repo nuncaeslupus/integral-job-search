@@ -19,13 +19,20 @@ all. Four mechanisms carry the design, and a claude.ai conversation has one:
 | mechanism | where it lives | in a free chat |
 |---|---|---|
 | The thirteen step protocols | `.claude/skills/step-*/SKILL.md` | **prose — pasteable** |
-| The checkpoints | `scripts/run_checkpoint.py`, `src/integral/` | absent — no execution |
-| The candidate store | `$INTEGRAL_HOME/profiles/<handle>/` | absent — no writable disk |
+| The checkpoints | `scripts/run_checkpoint.py`, `src/integral/` | absent — **no repository execution**: the sandbox has no clone, no installed dependencies and no network, so these imports cannot resolve |
+| The candidate store | `$INTEGRAL_HOME/profiles/<handle>/` | absent — **no durable `$INTEGRAL_HOME`**: sandbox storage is per-conversation and does not survive it |
 | The containment hook | `PreToolUse` (S3) | absent — no hooks |
 
 Only the first is prose, and prose is the half that carries the *manner*. That
 is the whole reason a degraded mode is worth having: the elicitation instrument
 is the conversation (`docs/product-shape.md`), and the conversation survives.
+
+**Two of those rows are narrower than they look.** Claude does have sandboxed
+code execution and file creation, and it is not a paid-only capability, so
+"there is no code here at all" would be wrong. What is missing is specific: the
+checkpoints cannot run because they import `integral.*` from a clone that is not
+there, and the store cannot persist because the sandbox is thrown away with the
+conversation. §7 records what that leaves on the table.
 
 ## 2. The context tax decides the shape
 
@@ -65,7 +72,10 @@ to tell from inside the conversation. **Degraded** means the step happens but
 something load-bearing is estimated rather than computed. **Manual** means the
 work moves to the candidate.
 
-| # | step | | what survives | what is lost | verdict |
+`req` is a **required** step (§2.5 — it cannot be declined); `opt` is an
+**offered** one.
+
+| # | step | req? | what survives | what is lost | verdict |
 |---|---|---|---|---|---|
 | 0 | identify | req | the greeting, the resolution order, the three-attempt cap | the `PreToolUse` containment hook — isolation becomes "one Project per person" | **faithful**, unenforced |
 | 1 | intake | opt | CV upload (free tier takes files), claims-with-provenance, the 12-question cap | provenance is a recorded field, not a validated one | **faithful** |
@@ -131,10 +141,10 @@ what nearly every step needs:
 - `dimensions-lean.json` — the compact digest, ~1,200 tokens;
 - nothing else. **No step skills. No spec. No METHODS.**
 
-Its custom instructions say: *this is a job-search conversation run from a
-written protocol; the candidate will paste one step's protocol and their state
-block at the start of each conversation; never invent a step, never claim a gate
-was measured.*
+Its custom instructions say: *this is a conversation about finding work, run
+from a written protocol; the candidate will paste one step's protocol and their
+state block at the start of each conversation; never invent a step, never claim
+a gate was measured.*
 
 ### 5.2 The state block — a strict subset of the real schema
 
@@ -160,7 +170,7 @@ protecting; everything else here is convenience.
 
   "claimed_facts": { "roles": [], "languages": [] },
   "constraints": {
-    "residence": { "state": "stated", "value": "Barcelona, ES", "ev": "ev-000004" },
+    "residence": { "state": "stated", "value": "Barcelona, ES", "ev": "ev-000041" },
     "pay_floor":  { "state": "unknown" }
   },
   "traits": {},
@@ -168,7 +178,7 @@ protecting; everything else here is convenience.
   "offers": [],
 
   "evidence_tail": [
-    { "id": "ev-000004", "recorded_at": "2026-08-28", "step": "constraints",
+    { "id": "ev-000041", "recorded_at": "2026-08-28", "step": "constraints",
       "kind": "constraint", "dimensions": ["residence"], "text": "Lives in Barcelona.",
       "source": "conversation", "disclosure": "private" }
   ],
@@ -176,15 +186,45 @@ protecting; everything else here is convenience.
 }
 ```
 
+**`folded_before` is exclusive.** Every row with an id below it has been folded
+into `summary` and is gone from `evidence_tail`; every row from it onward is
+present in full. Above: 42 rows recorded, `ev-000001`–`ev-000029` folded,
+`ev-000030`–`ev-000042` retained (one shown).
+
+**Nothing outside `evidence_digest` may cite a folded id.** `constraints.*.ev`,
+and every other back-reference, must name a row still in `evidence_tail` — which
+is why `residence` cites `ev-000041` and not the older row it started from. Fold
+late, and re-point any citation you are about to orphan.
+
 Field rules, taken from the code rather than invented:
 
 - `kind` ∈ `episode` | `statement` | `reaction` | `constraint` | `outcome` | `retraction`
 - `source` ∈ `conversation` | `cv_document` | `offer_reaction` | `interview`
-- `disclosure` ∈ `private` | `approved_for_use` — private by default, and it stays
-  private without a per-use approval (§6.2)
 - constraint `state` ∈ `stated` | `declined` | `unknown` — never blank
 - evidence ids match `^ev-\d{6,}$`
-- a `retraction` row names what it suppresses; nothing else may
+- `retracts` holds **exactly one** evidence id, as a string, and only a
+  `retraction` row may set it — matching `EvidenceRow`, where it is
+  `str | None`. It is never a list and never free text: two retractions are two
+  rows. A reader must drop every retracted row before using the block, and a row
+  already folded into `evidence_digest` can no longer be retracted at all, which
+  is the third reason to fold late.
+
+**`disclosure` and the approval it gates.** Every row is `private` on creation
+and stays private; `approved_for_use` is not something a step may set on its own
+initiative. Process spec §6.2 is the rule, and it is narrow: a story-bank
+episode reaches an employer-bound document *only with per-use approval*, and
+approval is "the actual payload — which documents, which claims, which contact
+details, to whom — approved once per application, never as a standing
+permission."
+
+In degraded mode that means exactly one place sets it: **step 11**, and only
+after showing the candidate the finished CV and letter and naming which stored
+claims went into them. The transition is recorded as its own row —
+`kind: "outcome"`, `step: "application"`, naming the offer in `about` and the
+approved rows in `text` — and the approved rows' `disclosure` flips in the same
+update. No other step may write `approved_for_use`; nothing carries it forward
+to the next application. Recounting a failure to the tool is not consent to send
+it to a company.
 
 **`evidence_tail` plus `evidence_digest` is how the log stays bounded.** The real
 tree keeps `evidence.jsonl` forever and recomputes derived state from it
@@ -197,7 +237,7 @@ row can no longer be cited by id in step 11's traceability.
 
 One conversation per step. It opens with exactly three things:
 
-```
+```text
 [paste: .claude/skills/step-NN-<name>/SKILL.md — minus its Checkpoint and Gate sections]
 [paste: the state block]
 
@@ -234,8 +274,16 @@ plainly "something with state of its own". So it is **not** proposed here. If it
 is wanted, the out-of-scope line is what has to change first, deliberately, and
 not as a side effect of shipping a degraded mode.
 
-Two smaller ones:
+Three smaller ones:
 
+- **Whether the ephemeral sandbox can give back a real coverage check.** §1 notes
+  that code execution exists and only the *repository* is missing. §4's coverage
+  half asks nothing of the repository — it reads keys off the state block and
+  checks a list is empty. A single self-contained validator script, pasted with
+  the step, could therefore compute `coverage_met` instead of the model eyeballing
+  it, which is the one piece of measurement this mode need not have given up. It
+  would still not be a gate. Worth a spike before anyone writes the generator in
+  the next bullet.
 - **Whether the parity table in §3 is right.** It was derived by reading all
   thirteen skills and the runtime, but it has not been run end to end with a real
   candidate. It is a claim to test, not a measurement — treat it the way this
