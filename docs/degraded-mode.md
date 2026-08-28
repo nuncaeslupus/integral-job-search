@@ -222,41 +222,58 @@ standing permission process spec §6.2 forbids — flip it once for an applicati
 in March and it is still flipped in June, for an employer nobody has mentioned
 yet.
 
-So degraded mode mirrors `approval.py` instead. An approval is a separate
-record naming **`(offer_id, version, text)`** — and it names the *text*, never
-a row id and never a position in a list:
+So degraded mode does not invent a representation for this. **`src/integral/approval.py`
+is the authority, and `applications` mirrors its files rather than restating
+them** — three separate records per application, not one map:
 
-```json
-"applications": {
-  "acme-9f3c/v1": {
-    "recipient": "Acme, careers@…",
-    "approved_episode_texts": ["The migration I ran that overran by six weeks."],
-    "payload_digest": "sha256:…",
-    "sent_at": null
-  }
-}
-```
+| real file | holds | in the block |
+|---|---|---|
+| `cv/generated/<offer_id>/v<N>/approvals.json` | `episodes` — each an `(offer_id, version, text)` approval | `applications["<offer_id>/v<N>"].approvals` |
+| `cv/generated/<offer_id>/v<N>/payload.json` | `recipient`, `documents`, `claims`, `episodes`, `contact_details` | `.payload` |
+| `applications/<offer_id>/v<N>.json` | `confirmed_digest`, `sent_at` — written only on send, **immutable** | `.sent` |
 
-Why the text and not the id: a position in a list the candidate edits is not a
-stable name for a sentence. Inserting an unrelated episode above an approved one
-used to invalidate the approval, and editing one used to leave the old approval
-sitting there — so what is approved is a sentence, and the sentence is what goes
-to the employer.
+Copy the field names exactly. The send record's digest is `confirmed_digest`, not
+`payload_digest`; `payload_digest()` is the *function* that computes it from
+`payload.json`. Getting this wrong is not cosmetic — the whole reason the block
+uses real field names is so it converts instead of needing a re-interview.
 
-The rules that follow, all of them from §6.2 and step 11:
+An approval names the **text**, never a row id and never a list position: a
+position in a list the candidate edits is not a stable name for a sentence.
+Inserting an unrelated episode above an approved one used to invalidate the
+approval, and editing one used to leave the old approval sitting there.
+
+The rules, all from §6.2, step 11 and `record_sent`:
 
 - **Only step 11 writes an approval**, and only after showing the candidate the
   finished CV and letter and naming every stored claim inside them.
 - **The unit is the payload, not the question.** Not "shall I apply?" but the
   actual contents — which documents, which claims, which episodes, which contact
-  details, to whom — recorded as `payload_digest`. What the candidate confirms is
-  *that* payload.
+  details, to whom. What the candidate confirms is *that* payload, by its digest.
+- **Re-measure at the send boundary, never trust the stored approval alone.**
+  This is what keeps a retracted episode from staying sendable, and it is worth
+  understanding rather than copying: approvals are *not* invalidated when
+  evidence is retracted — nothing in `approval.py` mentions retraction, and
+  nothing in `retraction.py` mentions approval. The protection is downstream. At
+  send time the documents are re-measured **as they stand now**, and a line no
+  surviving row backs counts as unapproved — "what an episode looks like after
+  the candidate tidies it out of their story bank". Retract the episode and the
+  line stops being backed, so the send refuses. Degraded mode has no code to run
+  that measurement, so it becomes an explicit step-11 re-read: before recording a
+  send, walk every episode line in the document and confirm a surviving,
+  unretracted, unfolded row still backs it.
+- **Three refusals at the send boundary**, from `record_sent`: any unapproved
+  disclosure refuses; a confirmation that does not name this exact payload
+  refuses; an application already recorded as sent refuses, because that record
+  is immutable — it is what the candidate answers questions about later.
 - **A new version needs new approvals.** `v2` inherits nothing from `v1`; a
   regenerated letter is a new thing to consent to.
 - **A new offer inherits nothing at all.** There is no key under which a March
   approval could be read for a June application, which is what makes "never as a
   standing permission" a shape rather than a promise.
 - Recounting a failure to the tool is not consent to send it to a company.
+
+Everything else about this mechanism stays in `approval.py`, deliberately. A doc
+that restates a schema drifts from it; a doc that points at it cannot.
 
 **`evidence_tail` plus `evidence_digest` is how the log stays bounded.** The real
 tree keeps `evidence.jsonl` forever and recomputes derived state from it
