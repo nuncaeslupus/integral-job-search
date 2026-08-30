@@ -878,7 +878,7 @@ JSON_DETAIL_CONNECTOR = """
 site: jsonboard
 locale: en
 version: "1.0.0"
-last_verified: "2026-08-31"
+last_verified: "2026-08-30"
 list:
   url_pattern: "https://jsonboard.test/jobs?page={page}"
   from_json:
