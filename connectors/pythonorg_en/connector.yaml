@@ -84,16 +84,24 @@ list:
     # either: `<title>` is "Python developer, Eleks | Python.org" and
     # `og:title` is "Job: Python developer at Eleks", both compound.
     #
-    # So this selects the enclosing span, whose text is "New Python developer
-    # Eleks" — the company name present but not isolated. The alternative was to
-    # omit `company` entirely, which makes `connector_health.free_signals`
-    # report "company is null on every row" for a board that plainly states the
-    # company: a false rot signal that would drown the true ones. Same
-    # pragmatic call, for the same reason, as `remotive_en` — see the comment on
-    # its `company` field. The upgrade path is a text-node or `nth-of-type`
-    # extension to the selector grammar, not a change here.
-    company:
-      css: "span.listing-company-name"
+    # **No `company`, therefore.** The enclosing span's text is
+    # "New Python developer Eleks" — the badge, the title and the employer run
+    # together — and this selector grammar has no text-node or `nth-of-type`
+    # step to isolate the last part. An earlier revision of this file mapped
+    # that composite anyway and said so in a comment, on the grounds that
+    # omitting the field made `connector_health.free_signals` report "company
+    # is null on every row" and drown the true rot signals in a false one.
+    #
+    # That reason no longer exists: the signal now asks whether a field the
+    # connector *declared* came back empty, so a connector that never claims a
+    # company is not reported broken for lacking one. With the incentive gone,
+    # the honest choice is the plain one — publish no employer rather than the
+    # wrong employer for every listing. `New Python developer Eleks` is not a
+    # company, and a candidate reading it as one is worse off than a candidate
+    # who sees the field is unknown.
+    #
+    # The upgrade path is a text-node or `nth-of-type` extension to the
+    # selector grammar, not a change here.
     # One per listing, inside the `h2`. The board's location strings are free
     # text and often multi-city ("Vilnius / Kaunas / Warsaw, Lithuania/Poland"),
     # which is why this is `location_raw` and no `location_country` is claimed.

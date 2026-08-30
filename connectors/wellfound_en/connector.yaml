@@ -157,7 +157,7 @@ list:
     # people want 201-500 Employees").
     company:
       css: "h2"
-    # ## No `text` on the list — deliberate, and the same choice arbitrown_en made.
+    # ## No `text` on the list — deliberate, and the same choice arbeitnow_en made.
     #
     # A card carries no advert teaser. The only prose in it is the *company's*
     # tagline ("Making reactors people want"), and publishing that as an

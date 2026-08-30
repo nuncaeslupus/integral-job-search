@@ -49,10 +49,15 @@ list:
     # title) on this page. That is a real limitation, not an oversight: it is
     # what keeps `connector_health`'s free-of-charge "company is null on
     # every row" signal meaningful without inventing a value the page does
-    # not cleanly offer. The detail page's `#company-panel` link carries the
-    # company on its own, unambiguous element, and detail fields win on
-    # overlap (`build_offer`) — so the offer's actual `company` is always the
-    # accurate one; this list-page duplicate is never what a candidate sees.
+    # not cleanly offer. The detail page's `span.h2.tw-underline` — the
+    # company's own linked name inside the About panel, and the selector this
+    # file actually declares below — carries the company on its own element,
+    # and detail fields win on overlap (`build_offer`), so the offer's actual
+    # `company` is always the accurate one; this list-page duplicate is never
+    # what a candidate sees. (An earlier revision of this comment named
+    # `#company-panel`. That is the *container*: its text also carries the
+    # blurb and the "Read more" link, so a reader following the old comment
+    # after a restyle would check the wrong handle.)
     title:
       css: "span.remotive-bold"
     company:

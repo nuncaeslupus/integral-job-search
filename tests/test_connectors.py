@@ -1113,3 +1113,45 @@ def test_the_root_path_names_a_document_that_is_itself_the_array() -> None:
     ]
     # …and it is still a miss when the document is not an array.
     assert dig_container({"jobs": []}, compile_path("$")) == []
+
+
+def test_item_alone_beside_from_json_is_refused() -> None:
+    """The gap CodeRabbit found on #259: `item` without `fields` read as "no
+    markup route", so the exclusivity check passed and the declared selector
+    was silently ignored in favour of the JSON one."""
+    both = JSON_DETAIL_CONNECTOR.replace(
+        "  from_json:\n    embedded_in:", '  item: ".card"\n  from_json:\n    embedded_in:', 1
+    )
+    with pytest.raises(ConnectorError, match="exactly one"):
+        parse_connector(both)
+
+
+def test_fields_alone_beside_from_json_is_refused() -> None:
+    both = JSON_DETAIL_CONNECTOR.replace(
+        "  from_json:\n    embedded_in:",
+        '  fields:\n    title:\n      css: "h2.t"\n  from_json:\n    embedded_in:',
+        1,
+    )
+    with pytest.raises(ConnectorError, match="exactly one"):
+        parse_connector(both)
+
+
+def test_the_markup_route_needs_both_halves() -> None:
+    """And `item` alone with no `from_json` at all is not a working page either
+    — it selects containers nothing is read out of."""
+    with pytest.raises(ConnectorError, match="needs both"):
+        parse_connector(
+            """
+site: halfaroute
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+list:
+  url_pattern: "https://halfaroute.test/jobs"
+  item: ".card"
+detail:
+  fields:
+    text:
+      css: "div.body"
+"""
+        )

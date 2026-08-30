@@ -123,7 +123,7 @@ robots_refused:
 # exactly like "no jobs matched". That silent-nothing is the worst outcome
 # available, which is why these are refused rather than shipped hopefully.
   - site: welcometothejungle.com
-    checked: 2026-08-31
+    checked: 2026-08-30
     detail: "robots.txt disallows the search path; never fetched, so nothing is known or claimed about how it renders"
 
 javascript_rendered:
@@ -186,7 +186,7 @@ javascript_rendered:
 
   - site: landing.jobs
     checked: 2026-08-30
-    rechecked: 2026-08-31
+    rechecked: 2026-08-30
     why_it_keeps_being_tried: "publishes gross annual bands, Iberian, remote across the EU — the exact profile a salary-transparency filter wants, so it will be proposed again unless this entry is read"
     evidence: "carries data-react and ng-app; every href is a marketing or category page, zero per-offer links"
     evidence_2026_08_31: >
@@ -236,14 +236,33 @@ edge_blocked:
 # engine*". Recorded here so that closing the gap re-opens those entries instead
 # of leaving them buried as settled refusals.
 #
-# The engine's whole vocabulary is a selector matched against markup
-# (`integral.connectors.compile_selector`). It has no way to say "parse this
-# text node as JSON and take this key". Wherever a board keeps its cleanest data
-# in JSON, the connector must either skip the field or scrape a messier HTML
-# rendering of the same fact.
+# **CLOSED on 2026-08-30.** `integral.connectors` gained a `from_json` block:
+# an optional `embedded_in` selector naming the element whose text is the
+# document (omit it and the response body *is* JSON), a `match` that picks the
+# right document when a page serves several, `items` for the list page's array,
+# and one dotted path per field. So the section stays — it is the record of what
+# each ruling below was really about — but its premise is now historical, and
+# every entry here is a connector somebody can write.
+#
+# What `from_json` still cannot express, and what would reopen this: an array
+# index or a filter inside a path. The grammar is dotted keys plus the literal
+# `$` for a document that is itself the array, and nothing else, so a board that
+# keeps the field you want inside `hasPart[0].offers[2]` is still out of reach.
+# That was a deliberate choice — the same "too small to smuggle anything
+# through" discipline as the selector grammar — and not an oversight to fix
+# without a board that needs it.
+#
+# The original statement, kept because the rulings below were made under it:
+# the engine's whole vocabulary was a selector matched against markup
+# (`integral.connectors.compile_selector`), with no way to say "parse this text
+# node as JSON and take this key", so wherever a board kept its cleanest data in
+# JSON the connector had to skip the field or scrape a messier HTML rendering of
+# the same fact.
 engine_gap_json:
   named: "a declared JSON pointer per field, alongside `css`, in integral.connectors"
   found: 2026-08-30
+  closed: 2026-08-30
+  closed_by: "the `from_json` block — see integral.connectors.JsonSource"
 
   # Two independent routes to the same missing feature, found the same day by
   # different readers — which is why it is worth recording rather than filing as
@@ -302,13 +321,13 @@ engine_gap_json:
 
   reopens_if_closed:
     - "the salary field on tecnoempleo_es, infojobs_es, ticjob_es, builtin_en, jobsacuk_en and wellfound_en — all six left salary unmapped for want of a split, and several have clean JSON-LD sitting in the same page"
-    - "workingnomads.com — ruled out as a shell, but serves /api/exposed_jobs/"
+    - "workingnomads.com — ruled out as a shell, but serves /api/exposed_jobs/ (REOPENED 2026-08-30; connector waits on feat/json-connector-packages for its probe)"
     - "usajobs.gov — see above; its API is public and its listing is not in HTML"
 
   # Boards ruled out *only* by this gap — closing it makes each a connector.
   boards:
     - site: justjoin.it
-      checked: 2026-08-31
+      checked: 2026-08-30
       why_it_was_tried: "salary range is mandatory on every posting — the board's own rule, not a courtesy"
       evidence: >
         1.9 MB served, and the postings really are in it — but as JSON-LD, not as
@@ -318,7 +337,15 @@ engine_gap_json:
         The visible list is client-rendered from that. A CSS-selector engine can
         reach the <script> node but not the structure inside it, so this is
         "unusable by this engine", not "unusable".
-      reopens_if: "the engine grows a JSON path (see this section's header) — justjoin.it is then a one-selector connector and the salary field comes with it"
+      reopened: 2026-08-30
+      reopened_by: >
+        the `from_json` block. justjoin.it is now a two-block connector:
+        `CollectionPage.hasPart` on the listing gives the URLs, and each advert's
+        own `JobPosting` gives title, employer, description and a salary whose
+        `minValue`/`maxValue` are numbers. The package waits on
+        `feat/json-connector-packages` until it can carry a probe — a probe is
+        the *second* capture of the same query, taken on a later day, so the
+        earliest honest one is the day after the connector was written.
       robots: "Allow: /job-offers/ and /job-offer/ both permitted, checked live with this project's own token."
       retest: "curl -sL --compressed -A \"$UA\" 'https://justjoin.it/job-offers/all-locations/python' | grep -c 'href=\"/job-offer/'  # prints 0 today; anything above 0 reopens this"
 
@@ -332,7 +359,7 @@ engine_gap_json:
 # next reader spends a request confirming rather than an afternoon guessing.
 moved_or_gone:
   - site: otta.com
-    checked: 2026-08-31
+    checked: 2026-08-30
     detail: >
       /jobs returns 404. Otta was absorbed into Welcome to the Jungle, whose app
       (app.welcometothejungle.com/jobs) is client-rendered — 44 KB, zero job

@@ -651,12 +651,23 @@ class ListPage(Strict):
 
     @model_validator(mode="after")
     def _exactly_one_route(self) -> ListPage:
-        markup = self.item is not None and bool(self.fields)
-        if markup == (self.from_json is not None):
+        # Two questions, asked separately, because merging them into
+        # `item is not None and bool(fields)` let a file declaring `item`
+        # *alone* beside `from_json` load: that read as "no markup route", the
+        # exclusivity check passed, and `parse_list_page` took the JSON route
+        # and ignored the declared selector without a word.
+        markup_mentioned = self.item is not None or bool(self.fields)
+        if markup_mentioned == (self.from_json is not None):
             raise ValueError(
                 "a list page reads either markup (item + fields) or from_json, and must "
                 "declare exactly one — declaring both leaves it ambiguous which one produced "
                 "a field, and declaring neither is a page that parses to nothing"
+            )
+        if markup_mentioned and not (self.item is not None and self.fields):
+            raise ValueError(
+                "the markup route needs both `item` and `fields` — `item` alone selects "
+                "containers nothing is read out of, and `fields` alone has no container "
+                "to read them from"
             )
         return self
 

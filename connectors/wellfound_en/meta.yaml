@@ -75,10 +75,22 @@ fixture:
   # deliberately, because `id="__next"` is on the real page too and this board is
   # server-rendered *despite* it.
   bodies: excerpted
-  # Grepped both captures for an IPv4 literal. The only hit is
+  # Grepped both captures for an IPv4 literal. The only hit was
   # `51.255.924.668`, which is not an address — it is a run of SVG path
   # coordinates (`c.51.255.924.668 1.18 1.179`) inside an inline icon, and 924
-  # and 668 are not octets. So nothing was redacted here because there was
-  # nothing to redact: unlike trabajos.com, Wellfound writes no client IP into
-  # its responses.
+  # and 668 are not octets. Wellfound writes no client IP into its responses,
+  # unlike trabajos.com.
+  #
+  # **The icon was removed from `fixture/detail.html` anyway**, and the file
+  # carries a comment saying so. The repository's committed-IP guard is a
+  # deliberately broad regex: it cannot tell path coordinates from an address,
+  # and the right answer to a broad privacy check tripping on a decoration is
+  # to drop the decoration, not to narrow the check. So this capture is not
+  # byte-identical to what the server sent, and a borrower judging whether it
+  # is faithful should know that from this file rather than from a comment
+  # buried in the markup.
+  #
+  # `client_ip: redacted` is the vocabulary's word for "no client IP is present
+  # in what is committed". It is the same value whether one was removed or none
+  # was ever there; here, none was ever there.
   client_ip: redacted
