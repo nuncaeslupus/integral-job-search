@@ -140,7 +140,7 @@ javascript_rendered:
     detail_pages_render: true
     detail_note: "individual /ofertas-empleo/<id>/<slug> pages are fully SSR'd, salary band included — but a connector needs a list surface and there is none"
     robots: "Allow: / with no AI-agent group. Robots was never the obstacle here."
-    retest: "curl -sL --compressed -A \"$UA\" https://www.getmanfred.com/ofertas-empleo | grep -c 'href=\"/ofertas-empleo/[0-9]'  # prints 0 today; anything above 0 reopens this"
+    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://www.getmanfred.com/ofertas-empleo | grep -c 'href=\"/ofertas-empleo/[0-9]'  # prints 0 today; anything above 0 reopens this"
 
   - site: usajobs.gov
     checked: 2026-08-30
@@ -162,7 +162,7 @@ javascript_rendered:
       data.usajobs.gov offers the rows as JSON. Deliberately NOT used: this engine
       matches CSS selectors against markup, so a connector pointed at JSON is the
       same silent-nothing with extra steps.
-    retest: "curl -sL --compressed -A \"$UA\" 'https://www.usajobs.gov/Search/Results?k=python' | grep -c 'id=\"search-results\"></div>'  # prints 1 today"
+    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" 'https://www.usajobs.gov/Search/Results?k=python' | grep -c 'id=\"search-results\"></div>'  # prints 1 today"
 
   - site: idealist.org
     checked: 2026-08-30
@@ -171,13 +171,13 @@ javascript_rendered:
       (/en/jobs?q=Attorney and similar); zero per-offer hrefs. The 67k characters
       that text_content() returns are styled-components CSS, not adverts — a
       reminder that a large visible-text count is not evidence of content.
-    retest: "curl -sL --compressed -A \"$UA\" https://www.idealist.org/en/jobs | grep -coE 'href=\"/en/jobs/[a-z0-9-]{10,}\"'  # prints 0 today"
+    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://www.idealist.org/en/jobs | grep -coE 'href=\"/en/jobs/[a-z0-9-]{10,}\"'  # prints 0 today"
 
   - site: remoteok.com
     checked: 2026-08-30
     evidence: "the table holds <tr class=\"placeholder job\"> rows — literal placeholders, filled client-side. No advert text in the served bytes."
     robots: "names ClaudeBot with Disallow: / — which does NOT bind us; this ruling is about rendering, not policy"
-    retest: "curl -sL --compressed -A \"$UA\" https://remoteok.com/remote-dev-jobs | grep -c 'placeholder job'  # non-zero today"
+    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://remoteok.com/remote-dev-jobs | grep -c 'placeholder job'  # non-zero today"
 
   - site: feinaactiva.gencat.cat
     checked: 2026-08-30
@@ -189,7 +189,7 @@ javascript_rendered:
     rechecked: 2026-08-30
     why_it_keeps_being_tried: "publishes gross annual bands, Iberian, remote across the EU — the exact profile a salary-transparency filter wants, so it will be proposed again unless this entry is read"
     evidence: "carries data-react and ng-app; every href is a marketing or category page, zero per-offer links"
-    evidence_2026_08_31: >
+    evidence_2026_08_30: >
       Re-checked on the theory that a tag page might be server-rendered where the
       search page is not. It is not: /jobs?q=python and /jobs/for/python both
       serve ~158 KB with zero anchors matching href="/jobs/<digits>", and the
@@ -197,7 +197,7 @@ javascript_rendered:
       served is the search shell — filter form, currency selector, experience
       dropdown — and the results arrive later over the wire.
     robots: "Allow. Robots was never the obstacle."
-    retest: "curl -sL --compressed -A \"$UA\" https://landing.jobs/jobs/for/python | grep -cE 'href=\"/jobs/[0-9]+'  # prints 0 today; anything above 0 reopens this"
+    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://landing.jobs/jobs/for/python | grep -cE 'href=\"/jobs/[0-9]+'  # prints 0 today; anything above 0 reopens this"
 
 # ---------------------------------------------------------------------------
 # Ruled out because the EDGE refuses the tool. Not a robots decision and not a
@@ -210,12 +210,12 @@ edge_blocked:
     checked: 2026-08-30
     status: 403
     note: "robots allows the path; the block is at the CDN"
-    retest: "curl -sL --compressed -A \"$UA\" -o /dev/null -w '%{http_code}\\n' 'https://www.indeed.com/jobs?q=python&l=Remote'"
+    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" -o /dev/null -w '%{http_code}\\n' 'https://www.indeed.com/jobs?q=python&l=Remote'"
 
   - site: monster.com
     checked: 2026-08-30
     status: 403
-    retest: "curl -sL --compressed -A \"$UA\" -o /dev/null -w '%{http_code}\\n' 'https://www.monster.com/jobs/search?q=python'"
+    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" -o /dev/null -w '%{http_code}\\n' 'https://www.monster.com/jobs/search?q=python'"
 
   - site: careerbuilder.com
     checked: 2026-08-30
@@ -347,7 +347,7 @@ engine_gap_json:
         the *second* capture of the same query, taken on a later day, so the
         earliest honest one is the day after the connector was written.
       robots: "Allow: /job-offers/ and /job-offer/ both permitted, checked live with this project's own token."
-      retest: "curl -sL --compressed -A \"$UA\" 'https://justjoin.it/job-offers/all-locations/python' | grep -c 'href=\"/job-offer/'  # prints 0 today; anything above 0 reopens this"
+      retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" 'https://justjoin.it/job-offers/all-locations/python' | grep -c 'href=\"/job-offer/'  # prints 0 today; anything above 0 reopens this"
 
 # ---------------------------------------------------------------------------
 # Ruled out because their robots.txt itself could not be read. An unanswered
@@ -366,7 +366,7 @@ moved_or_gone:
       anchors, no JobPosting — and whose search path this project's agent is
       disallowed from anyway. Both halves are dead ends; robots.txt closes one
       and rendering closes the other.
-    retest: "curl -sIL -A \"$UA\" https://otta.com/jobs | head -1  # 404 today"
+    retest: "curl -sIL -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://otta.com/jobs | head -1  # 404 today"
 
 policy_unreadable:
   - site: simplyhired.com

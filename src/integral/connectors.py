@@ -321,6 +321,25 @@ class Node:
         pieces = [piece for piece in self._iter_text() if piece.strip()]
         return " ".join(" ".join(piece.split()) for piece in pieces).strip()
 
+    def raw_text(self) -> str:
+        """Every text piece beneath this node, concatenated unchanged.
+
+        `text_content` is for prose read out of markup, where collapsing runs
+        of whitespace is what a reader means by "the text". This is for a node
+        whose text is a *document* — a `<script>` holding JSON — where
+        collapsing is corruption: whitespace between JSON tokens does not
+        matter, but whitespace inside a string value does, and an advert body
+        is a string value. `Offer.text` is required to be what the board
+        published (T11 keeps it byte-for-byte because extraction evidence spans
+        are offsets into it), so a description written with a double space must
+        still have it after the round trip.
+
+        Caught by review on the PR that introduced the JSON route: the first
+        implementation read these documents through `text_content` and silently
+        reflowed every advert body it parsed.
+        """
+        return "".join(self._iter_text())
+
     def _iter_text(self) -> Iterator[str]:
         for child in self.children:
             if isinstance(child, str):
@@ -559,7 +578,7 @@ def _json_documents(text: str, source: JsonSource) -> list[Any]:
     else:
         root = parse_html(text)
         selector = compile_selector(source.embedded_in)
-        candidates = [node.text_content() for node in select_all(root, selector)]
+        candidates = [node.raw_text() for node in select_all(root, selector)]
 
     documents: list[Any] = []
     for candidate in candidates:

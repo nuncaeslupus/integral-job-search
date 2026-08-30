@@ -1155,3 +1155,36 @@ detail:
       css: "div.body"
 """
         )
+
+
+def test_an_embedded_document_is_read_unchanged() -> None:
+    """`text_content` collapses runs of whitespace, which is right for prose
+    read out of markup and wrong for a `<script>` holding JSON: whitespace
+    between tokens does not matter, whitespace *inside a string value* does,
+    and an advert body is a string value.
+
+    Caught by review on the PR that introduced this route — the first
+    implementation reflowed every body it parsed.
+    """
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    body = "Line one.\n\nLine  two with  double  spaces, and a trailing run.   "
+    posting = json.dumps({"@type": "JobPosting", "title": "T", "description": body})
+    record = parse_detail_page(connector, _ld(posting))
+    assert record["text"] == body
+
+
+def test_raw_text_concatenates_and_text_content_still_collapses() -> None:
+    node = parse_html("<div><span>a  b</span>\n<span>c   d</span></div>")
+    div = select_first(node, compile_selector("div"))
+    assert div is not None
+    assert div.raw_text() == "a  b\nc   d"
+    assert div.text_content() == "a b c d"
+
+
+def test_an_ampersand_in_an_embedded_document_survives() -> None:
+    """HTMLParser treats `script` as CDATA, so `&amp;` inside the JSON is not
+    decoded on the way in and `json.loads` sees what the board sent."""
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    posting = json.dumps({"@type": "JobPosting", "title": "T", "description": "R&amp;D at AT&T"})
+    record = parse_detail_page(connector, _ld(posting))
+    assert record["text"] == "R&amp;D at AT&T"
