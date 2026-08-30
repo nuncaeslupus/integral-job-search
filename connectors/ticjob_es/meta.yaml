@@ -1,0 +1,80 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: ticjob.es
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above. https://ticjob.es/robots.txt is 144
+# bytes and was read in full:
+#
+#     User-Agent: *
+#     Disallow: /*/legal
+#     Disallow: /*/disclaimer
+#     Disallow: /*/privacy
+#     Disallow: /*/online-cv
+#
+#     Sitemap: https://www.ticjob.es/sitemap.xml
+#
+# That is the whole file, read to the last line. One `User-Agent` group, four
+# disallowed paths, no `Crawl-delay`, no group naming any product token at all.
+#
+# The verdict is the matcher's, not a grep's — a grep is the wrong instrument
+# here twice over. It can miss a `Disallow` buried at the bottom of the `*`
+# group (a sibling agent refused euraxess.ec.europa.eu on exactly that today),
+# and it can refuse a board over a group that does not apply to us: RFC 9309
+# matches a crawler to the group for *its own* product token, and this tool
+# fetches as `integral.robots.USER_AGENT` — `integral-job-search/0.1
+# (+https://github.com/nuncaeslupus/integral-job-search)` — so a `ClaudeBot`
+# group is not our group. What was actually run, on 2026-08-30:
+#
+#     Robots().allows("https://ticjob.es/esp/busqueda")            -> True
+#     Robots().allows("https://ticjob.es/esp/trabajo/…/70644")     -> True
+#     Robots().allows("https://ticjob.es/esp/online-cv")           -> False
+#     Robots().delay("https://ticjob.es/esp/busqueda", 1.0)        -> 1.0
+#
+# The third line is the control: the matcher refuses a path this file really
+# does disallow, so the two `True`s are a reading of this board rather than a
+# default. `integral.robots` re-asks the same question on every live fetch.
+#
+# For the record, since it comes up on every Spanish board: tecnoempleo.com and
+# remoteok.com carry a blanket `Disallow: /` against ClaudeBot, and infojobs.net
+# the same. That is not by itself a refusal for this tool — iberempleos.es
+# disallows `claudebot` while leaving `*` open, and adjudicates ALLOW — but
+# ticjob.es has no such group at all, which is the cleanest property a
+# redistributed connector can have.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — the board's own unfiltered search page and one
+# offer from it, fetched on the date below. Never an advert a candidate was
+# reading: the set of ads a person opens carries their field, level, city and
+# the fact that they are looking, and a fixture in a public repository carries
+# that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted twice over, and in raw bytes both times. First the capture was cut
+  # to three `<li>` offer cards inside a minimal shell — the kept spans are
+  # byte-identical to what the server sent, and the surrounding stylesheet and
+  # script blocks are gone. Then `tools/excerpt_fixture.py` truncated the advert
+  # bodies. That second pass matters more here than it did for `trabajos_es`:
+  # this board renders the *whole* advert into its listing card, not a teaser, so
+  # an unexcerpted capture would republish complete adverts. They are the board's
+  # content, not ours; the connector is what belongs in this repository.
+  #
+  # `probe/list.html` is a second, later read and was cut the same way, for the
+  # same reason — the guard that only `fixture/` gets excerpted is a property of
+  # the tool, not a licence for the probe to carry full bodies.
+  bodies: excerpted
+  # Checked and there was nothing to redact: neither capture contains an IPv4
+  # literal or anything session-shaped. `trabajos.com` writes the *client's*
+  # address into every response as an HTML comment; ticjob.es does not, so this
+  # key records a negative finding rather than an edit.
+  # `tests/test_connector_contract.py` re-checks it for every recorded page in
+  # the library anyway.
+  client_ip: redacted

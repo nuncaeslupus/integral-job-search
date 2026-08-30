@@ -1,10 +1,100 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 1,
-  "silent_connector_failures_evaluated": 1,
-  "connector_runs_probed": 1,
+  "connector_runs_evaluated": 12,
+  "silent_connector_failures_evaluated": 12,
+  "connector_runs_probed": 12,
   "gate_status": "measured",
   "readings": [
+    {
+      "connector": "arbeitnow",
+      "site": "arbeitnow.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 6,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "builtin",
+      "site": "builtin.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "infojobs",
+      "site": "infojobs.net",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "jobfluent",
+      "site": "jobfluent.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "jobsacuk",
+      "site": "jobs.ac.uk",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 25,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "pythonorg",
+      "site": "python.org",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 25,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "remotive",
+      "site": "remotive.com",
+      "health": "healthy",
+      "baseline_items": 2,
+      "probe_items": 18,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "tecnoempleo",
+      "site": "tecnoempleo.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "ticjob",
+      "site": "ticjob.es",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
     {
       "connector": "trabajos",
       "site": "trabajos.com",
@@ -14,6 +104,26 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-28"
+    },
+    {
+      "connector": "wellfound",
+      "site": "wellfound.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "weworkremotely",
+      "site": "weworkremotely.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 25,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-08-30"
     }
   ]
 }

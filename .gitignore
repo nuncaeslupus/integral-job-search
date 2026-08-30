@@ -263,3 +263,7 @@ arsenal/session/host_branch
 
 arsenal/session/rescue_refs
 corpus/blind-ranking.html
+
+# Scratch scripts and fetch caches for a single session. CLAUDE.md sanctions
+# `tmp/` as a working directory whose contents do not belong to the repo.
+tmp/

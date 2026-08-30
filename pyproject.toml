@@ -98,6 +98,10 @@ show_error_codes = true
 # Excluded rather than weakening the flags for src/, which is what strict is for.
 exclude = [
     "^tools/",
+    # Scratch scripts for a single session, gitignored and never imported by
+    # anything under src/. ruff already skips them via .gitignore; mypy does
+    # not read .gitignore, so it is named here.
+    "^tmp/",
     "^\\.claude/skills/",
     "^claude-arsenal/bin/",
     "^claude-arsenal/scripts/",

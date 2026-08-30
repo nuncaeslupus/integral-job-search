@@ -418,6 +418,174 @@ class FieldSelector(Strict):
         return css
 
 
+# ---------------------------------------------------------------------------
+# the JSON path vocabulary — the second, smaller grammar
+#
+# Several boards keep their cleanest data in JSON and render a messier HTML
+# view of the same facts (`connectors/ruled-out.yaml`, `engine_gap_json`).
+# justjoin.it is the extreme case: its listing carries no advert markup at all,
+# and each advert's own page carries a schema.org `JobPosting` with `minValue`
+# and `maxValue` as *numbers*.
+#
+# That last part is why this exists and is not merely a convenience. The
+# recurring hazard in this library is `build_offer` constructing
+# `Salary(stated=True)` out of strings `_as_float` cannot read — six HTML
+# connectors leave salary unmapped for exactly that reason. A JSON number needs
+# no splitting, so the field it produces is either a real figure or nothing.
+
+#: A dotted path of object keys. No indices, no wildcards, no filters, no
+#: expression syntax — the same "too small to smuggle anything through"
+#: discipline as `SimpleSelector`, and for the same reason. A path that wants
+#: an array element is a path this library declines to describe.
+JSON_PATH = re.compile(r"^[A-Za-z_@][\w@-]*(?:\.[A-Za-z_@][\w@-]*)*$")
+
+#: The one path that is not a key: the document itself. An API whose response
+#: *is* the array of adverts — workingnomads, remoteok — has no key to name, and
+#: `items: "$"` says so out loud rather than by leaving the field blank, which
+#: is what a typo looks like. It cannot collide with a real key: `JSON_PATH`
+#: requires a letter, an underscore or an `@` first.
+JSON_ROOT = "$"
+
+
+def compile_path(path: str) -> tuple[str, ...]:
+    """`"baseSalary.value.minValue"` → `("baseSalary", "value", "minValue")`.
+
+    Refused by consuming the whole string against `JSON_PATH`, never by
+    `eval`, `jsonpath` or any other evaluator.
+    """
+    if path == JSON_ROOT:
+        return ()
+    if not JSON_PATH.match(path):
+        raise ConnectorError(f"unsupported JSON path: {path!r}")
+    return tuple(path.split("."))
+
+
+def dig(document: Any, path: tuple[str, ...]) -> str | None:
+    """Follow `path` through nested objects and return the scalar at the end.
+
+    `None` for anything else — a missing key, a `null`, or a path that lands on
+    an object or an array. **Landing on a container is treated as a miss, not
+    as a value**: `str({...})` would hand `build_offer` a Python repr as though
+    the board had published it, and for a salary key that is the difference
+    between "no figure" and `Salary(stated=True)` carrying `"{'@type': ...}"`.
+    A `bool` is likewise not a value here; JSON's `true` is not a wage, a title
+    or a body.
+    """
+    node: Any = document
+    for key in path:
+        if not isinstance(node, dict) or key not in node:
+            return None
+        node = node[key]
+    if isinstance(node, bool) or not isinstance(node, (str, int, float)):
+        return None
+    return str(node)
+
+
+def dig_container(document: Any, path: tuple[str, ...]) -> list[Any]:
+    """The array `path` names, or an empty list.
+
+    Deliberately the opposite acceptance to `dig`: here a scalar is the miss
+    and the array is the value. An empty list for a path that does not lead to
+    one — a list page that parses to nothing is what `collect_listing` already
+    reports as a staleness signal, and inventing a single-element list out of
+    whatever was found would hide exactly that.
+    """
+    node: Any = document
+    for key in path:
+        if not isinstance(node, dict) or key not in node:
+            return []
+        node = node[key]
+    return node if isinstance(node, list) else []
+
+
+class JsonSource(Strict):
+    """Fields read out of a JSON document instead of out of markup.
+
+    `embedded_in` names the element whose text is that document — for
+    schema.org data, `script[type="application/ld+json"]`. Omitting it says the
+    response body *is* JSON (a board's own endpoint), which is the simpler
+    case and the one this library would rather have.
+    """
+
+    embedded_in: str | None = None
+    #: Which document, when a page carries several. Every pair must match, by
+    #: equality, at the top level — `{"@type": "JobPosting"}` picks the advert
+    #: out of a page that also serves a `BreadcrumbList`.
+    match: dict[str, str] = Field(default_factory=dict)
+    #: List pages only: the path to the array of items. Omitted on a detail
+    #: page, where the document *is* the one record.
+    items: str | None = None
+    fields: dict[str, str] = Field(min_length=1)
+
+    @field_validator("embedded_in")
+    @classmethod
+    def _host_selector_compiles(cls, css: str | None) -> str | None:
+        if css is not None:
+            try:
+                compile_selector(css)
+            except ConnectorError as exc:
+                raise ValueError(str(exc)) from exc
+        return css
+
+    @field_validator("items")
+    @classmethod
+    def _items_path_compiles(cls, path: str | None) -> str | None:
+        if path is not None:
+            try:
+                compile_path(path)
+            except ConnectorError as exc:
+                raise ValueError(str(exc)) from exc
+        return path
+
+    @field_validator("fields")
+    @classmethod
+    def _field_paths_compile(cls, fields: dict[str, str]) -> dict[str, str]:
+        for name, path in fields.items():
+            try:
+                compile_path(path)
+            except ConnectorError as exc:
+                raise ValueError(f"{name}: {exc}") from exc
+        return fields
+
+
+def _json_documents(text: str, source: JsonSource) -> list[Any]:
+    """Every JSON document on the page that `source` describes.
+
+    `json.loads` and nothing else — no `eval`, no `ast.literal_eval`, no
+    YAML loader that would accept a Python tag.
+    """
+    if source.embedded_in is None:
+        candidates = [text]
+    else:
+        root = parse_html(text)
+        selector = compile_selector(source.embedded_in)
+        candidates = [node.text_content() for node in select_all(root, selector)]
+
+    documents: list[Any] = []
+    for candidate in candidates:
+        try:
+            document = json.loads(candidate)
+        except (ValueError, TypeError):
+            # A page may carry several `ld+json` blocks and one of them may be
+            # broken; that is not a reason to lose the others.
+            continue
+        if all(
+            isinstance(document, dict) and str(document.get(key)) == value
+            for key, value in source.match.items()
+        ):
+            documents.append(document)
+    return documents
+
+
+def _json_record(document: Any, source: JsonSource) -> dict[str, str]:
+    record: dict[str, str] = {}
+    for name, path in source.fields.items():
+        value = dig(document, compile_path(path))
+        if value is not None and value != "":
+            record[name] = value
+    return record
+
+
 class Pagination(Strict):
     """How a listing continues past its first page. Stored as data for a
     fetcher (T12) to walk — this module never issues a request."""
@@ -462,17 +630,57 @@ class ListPage(Strict):
 
     url_pattern: str = Field(min_length=1)
     pagination: Pagination = Field(default_factory=Pagination)
-    item: str = Field(min_length=1)
-    fields: dict[str, FieldSelector] = Field(min_length=1)
+    #: Markup route. Required unless `json` is given instead.
+    item: str | None = Field(default=None, min_length=1)
+    fields: dict[str, FieldSelector] = Field(default_factory=dict)
+    #: JSON route — for a board whose listing carries no advert markup at all.
+    #: Named `from_json` rather than `json` because `json` is an attribute
+    #: pydantic's `BaseModel` already defines.
+    from_json: JsonSource | None = None
 
     @field_validator("item")
     @classmethod
-    def _item_selector_compiles(cls, item: str) -> str:
+    def _item_selector_compiles(cls, item: str | None) -> str | None:
+        if item is None:
+            return None
         try:
             compile_selector(item)
         except ConnectorError as exc:
             raise ValueError(str(exc)) from exc
         return item
+
+    @model_validator(mode="after")
+    def _exactly_one_route(self) -> ListPage:
+        markup = self.item is not None and bool(self.fields)
+        if markup == (self.from_json is not None):
+            raise ValueError(
+                "a list page reads either markup (item + fields) or from_json, and must "
+                "declare exactly one — declaring both leaves it ambiguous which one produced "
+                "a field, and declaring neither is a page that parses to nothing"
+            )
+        return self
+
+    @field_validator("from_json")
+    @classmethod
+    def _list_json_names_its_items(cls, source: JsonSource | None) -> JsonSource | None:
+        if source is not None and source.items is None:
+            raise ValueError(
+                "list.from_json.items is required — a list page is an array of records"
+            )
+        return source
+
+    @field_validator("from_json")
+    @classmethod
+    def _json_field_names_are_in_the_closed_vocabulary(
+        cls, source: JsonSource | None
+    ) -> JsonSource | None:
+        if source is not None:
+            unknown = sorted(set(source.fields) - LIST_FIELD_NAMES)
+            if unknown:
+                raise ValueError(
+                    f"list field name(s) not in the allowed vocabulary: {', '.join(unknown)}"
+                )
+        return source
 
     @field_validator("fields")
     @classmethod
@@ -506,7 +714,8 @@ class ListPage(Strict):
 class DetailPage(Strict):
     """The single-ad page reached from a list item's `detail_url`."""
 
-    fields: dict[str, FieldSelector] = Field(min_length=1)
+    fields: dict[str, FieldSelector] = Field(default_factory=dict)
+    from_json: JsonSource | None = None
 
     @field_validator("fields")
     @classmethod
@@ -519,6 +728,33 @@ class DetailPage(Strict):
                 f"detail field name(s) not in the allowed vocabulary: {', '.join(unknown)}"
             )
         return fields
+
+    @field_validator("from_json")
+    @classmethod
+    def _json_field_names_are_in_the_closed_vocabulary(
+        cls, source: JsonSource | None
+    ) -> JsonSource | None:
+        if source is not None:
+            unknown = sorted(set(source.fields) - ALLOWED_OFFER_FIELDS)
+            if unknown:
+                raise ValueError(
+                    f"detail field name(s) not in the allowed vocabulary: {', '.join(unknown)}"
+                )
+            if source.items is not None:
+                raise ValueError(
+                    "detail.from_json.items is not allowed — a detail page is one record, "
+                    "not an array"
+                )
+        return source
+
+    @model_validator(mode="after")
+    def _exactly_one_route(self) -> DetailPage:
+        if bool(self.fields) == (self.from_json is not None):
+            raise ValueError(
+                "a detail page reads either markup (fields) or from_json, and must declare "
+                "exactly one"
+            )
+        return self
 
 
 class Connector(Strict):
@@ -561,8 +797,13 @@ class Connector(Strict):
         # against whatever fixture happened to be run first — reject it here
         # instead, where every connector is checked the same way regardless of
         # which page anyone remembers to test.
-        list_has_text = "text" in self.list.fields
-        detail_has_text = self.detail is not None and "text" in self.detail.fields
+        list_has_text = "text" in self.list.fields or (
+            self.list.from_json is not None and "text" in self.list.from_json.fields
+        )
+        detail_has_text = self.detail is not None and (
+            "text" in self.detail.fields
+            or (self.detail.from_json is not None and "text" in self.detail.from_json.fields)
+        )
         if not (list_has_text or detail_has_text):
             raise ValueError("no selector produces 'text' — nothing here for the offer body")
         return self
@@ -737,6 +978,16 @@ def parse_list_page(connector: Connector, html: str) -> list[dict[str, str]]:
     connector-supplied string except by matching it against the closed
     selector grammar compiled at load time.
     """
+    if connector.list.from_json is not None:
+        source = connector.list.from_json
+        rows: list[dict[str, str]] = []
+        for document in _json_documents(html, source):
+            for item in dig_container(document, compile_path(source.items or "")):
+                rows.append(_json_record(item, source))
+        return rows
+
+    if connector.list.item is None:  # pragma: no cover - ListPage._exactly_one_route
+        raise ConnectorError("list page declares neither an item selector nor a from_json source")
     root = parse_html(html)
     item_selector = compile_selector(connector.list.item)
     compiled_fields = {name: compile_selector(fs.css) for name, fs in connector.list.fields.items()}
@@ -755,6 +1006,11 @@ def parse_detail_page(connector: Connector, html: str) -> dict[str, str]:
     """Every field of `connector.detail` found on one ad's own page."""
     if connector.detail is None:
         return {}
+    if connector.detail.from_json is not None:
+        documents = _json_documents(html, connector.detail.from_json)
+        # First match wins, as `select_first` does for markup — a page carrying
+        # two `JobPosting` blocks is describing one advert twice.
+        return _json_record(documents[0], connector.detail.from_json) if documents else {}
     root = parse_html(html)
     record: dict[str, str] = {}
     for name, field_selector in connector.detail.fields.items():

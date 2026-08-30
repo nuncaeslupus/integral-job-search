@@ -1,0 +1,52 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: python.org
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked with this repo's own audited matcher on the day above, not by eye:
+#
+#     from integral.robots import Robots, USER_AGENT
+#     Robots().allows("https://www.python.org/jobs/")      -> True
+#     Robots().allows("https://www.python.org/jobs/1234/") -> True
+#     Robots().delay("https://www.python.org/jobs/", 1.0)  -> 1.0
+#
+# https://www.python.org/robots.txt carries **no AI-agent group at all** — no
+# ClaudeBot, GPTBot, CCBot or anthropic-* rule — so `integral-job-search/0.1`
+# falls into `User-agent: *`, which disallows exactly two paths,
+# `/~guido/orlijn/` and `/webstats/`. Neither is read here. The file's other
+# groups name HTTrack, puf, MSIECrawler, Krugle and Nutch.
+#
+# `country: GLOBAL` because the board is not a national one: the 31 postings
+# live on 2026-08-30 spanned Poland, Lithuania, the USA, remote-worldwide and
+# more. Filtering to a candidate's own market is the caller's job, not this
+# connector's.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — the first page of the listing and one posting from
+# it, fetched on the date below with `curl --compressed` (the board serves gzip;
+# see connector.yaml). Never an advert a candidate was reading: the set of ads a
+# person opens carries their field, level, city and the fact that they are
+# looking, and a fixture in a public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted before committing (`tools/excerpt_fixture.py`). A fixture proves
+  # the connector finds the right fields in real markup; it does not need to
+  # carry a whole advert to do that, and the advert body is the board's content,
+  # not ours. `list.html` keeps the first three `<li>` listings and
+  # `detail.html` the one `<article class="text">`, each as a byte-identical
+  # slice of the served response inside a minimal shell — no re-serialisation,
+  # so whatever the server got wrong is preserved. Stylesheet and script blocks
+  # fall outside both slices and are absent for that reason.
+  bodies: excerpted
+  # python.org writes no client address into its responses — unlike
+  # trabajos.com's `<!-- IP: … -->` — so there was nothing to redact. Checked:
+  # no dotted quad appears in either fixture or in `probe/list.html`.
+  client_ip: redacted

@@ -1,0 +1,154 @@
+# Arbeitnow — English-language and visa-sponsorship jobs across Europe, most of
+# them in Germany. Fetched live and read by hand on 2026-08-30; every claim
+# below was checked against those bytes, not inferred from the site's design.
+#
+# `robots.txt` (fetched live, same date, in full — it is four lines):
+#
+#     User-agent: *
+#     Disallow:
+#     Disallow: /*?__hstc
+#     Disallow: /jobs/companies/*/apply
+#
+# One group, `*`, and no rule anywhere naming an agent — no `ClaudeBot`,
+# `Claude-User`, `Claude-SearchBot`, `anthropic`, `GPTBot`, `CCBot` or
+# `Bytespider` (grepped, all absent). The bare `Disallow:` allows everything;
+# the two exceptions are a HubSpot tracking query string and the *apply* form
+# under a company page. This connector reads `/english-speaking-jobs` (with
+# `?page=N`) and `/jobs/companies/<company>/<slug>` — neither is `…/apply`, and neither
+# carries `?__hstc`. So it is not one of the boards `trabajos_es/connector.yaml`
+# rules out for a blanket `Disallow: /` against AI agents.
+#
+# **Server-rendered, checked not assumed.** The page's own hydration script
+# says `// SSR: DOM already rendered by Blade`, and the tree bears it out: a
+# raw `curl` of the listing returns its `<li data-slug=…>` elements and this
+# repo's parser finds every one of them without any JavaScript (50 on `/`,
+# 35 on the scoped listing this connector uses). The raw bytes carry the string
+# `data-slug=` twice per row, but half of those are inside a `<script>` block
+# holding a JSON-escaped copy of the same markup for the JS pager;
+# `html.parser` keeps script content as text, so the duplicate cannot be
+# selected and the count is the same either way (measured both ways,
+# 2026-08-30).
+#
+# **`https://www.arbeitnow.com/api/job-board-api` is deliberately not used.**
+# It is JSON, and this engine matches CSS selectors against markup: pointing a
+# connector at it would select nothing, silently. The HTML listing is the only
+# surface this format can honestly read.
+site: arbeitnow
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings and ad bodies are public; no account, no session.
+auth: none
+
+list:
+  # Three listing URLs were tried on 2026-08-30:
+  #   * `/remote-jobs` — 301, not a page to point at;
+  #   * `/` — 200, 50 rows, and the obvious choice until the ads were read:
+  #     five of the first six detail pages declare `lang=de` on their
+  #     `itemprop="description"` element, i.e. the board's front page is mostly
+  #     German-language advertising;
+  #   * `/english-speaking-jobs` — 200, 35 rows, identical markup and identical
+  #     `?page=N` pager, and all five sampled detail pages declare `lang=en`.
+  # The third is what this connector reads, and the reason is `locale: en`
+  # below: `build_offer` copies the connector's locale straight into
+  # `Offer.language`, which records what the advert is *written in*. Pointed at
+  # `/`, this connector would stamp `en` on German adverts — an invented value,
+  # and `Language` (en/es/ca) has no `de` to correct it with. Scoping the
+  # listing is what makes the field true rather than merely permitted.
+  #
+  # The pager writes `?page=N` into the href of every page link
+  # (`<a href="…/english-speaking-jobs?page=2" data-page-number="2">`), which is
+  # exactly what `mode: query_param` expresses — unlike trabajos.com's offset
+  # paging, nothing here has to be guessed at.
+  url_pattern: "https://www.arbeitnow.com/english-speaking-jobs?page={page}"
+  pagination:
+    mode: query_param
+    param: page
+    # The site's own pager numbers from 1 and reported `last_page` 106 for this
+    # listing on 2026-08-30. `?page=1` was fetched and returns the same 200 OK
+    # first page, so starting at 1 costs no special case. 3 pages, not 106:
+    # this is a connector, not a crawl of the whole board.
+    start: 1
+    max_pages: 3
+  # `li[data-slug]` — an attribute, not a class, and that is the point. The
+  # page is Tailwind-styled, so its classes (`list-none hover:shadow-sm border
+  # rounded-md`) are presentation and would over-match the moment anything else
+  # on the page wants a bordered card. `data-slug` is the ad's own identifier,
+  # put there by the board for its own JS, and it is carried by nothing else.
+  # Counted on the live page, 2026-08-30: exactly 35 matches on this listing
+  # (50 on `/`, 50 on `/?page=3`), and every one of them is a real posting — no
+  # banner, no promo card, none of the phantom extra `remotive_en` documents
+  # for a one-class selector.
+  item: "li[data-slug]"
+  fields:
+    # Absolute, and always on www.arbeitnow.com — checked over all 35 rows.
+    # `connector_health.on_portal_host` compares against `meta.yaml`'s site
+    # (`arbeitnow.com`) and accepts a subdomain, so `www.` is on-host and the
+    # "detail_url does not point at the portal" signal stays quiet.
+    # The sibling `div[data-link]` carries the same URL; the anchor's own
+    # `href` is preferred because it is what a reader without JS follows.
+    detail_url:
+      css: "a[data-job-item-link]"
+      attr: href
+    # schema.org microdata, not a styling class: the board marks the posting's
+    # `<h3>` with `itemprop="title"`. Its only other content is a decorative
+    # svg and an empty applied-status span, so `text_content()` is the title
+    # alone. Non-null on all 35 rows.
+    title:
+      css: "[itemprop=\"title\"]"
+    # Also microdata, and — unlike `remotive_en`, where title and company sit
+    # in two indistinguishable `span.remotive-bold` siblings and both fields
+    # had to resolve to the title — arbeitnow gives the company its own
+    # element. So no duplication is needed here and
+    # `connector_health.free_signals`'s "company is null on every row" stays a
+    # meaningful signal rather than one this connector defeats by accident.
+    # Non-null on all 35 rows.
+    company:
+      css: "a[itemprop=\"hiringOrganization\"]"
+    # The one field with no semantic handle: the city sits in a bare
+    # `<span class="text-gray-600">` with no itemprop and no data attribute,
+    # and the accompanying pin svg is `aria-hidden`. So this IS a Tailwind
+    # utility class, with the fragility that implies — recorded here rather
+    # than hidden. What was measured on 2026-08-30 makes it safe *today*:
+    # every item carries exactly two such spans (the sm:hidden mobile copy and
+    # the desktop one) holding the identical string, or zero of them when the
+    # ad names no location — 34 items with 2, 1 item with 0, and never a third
+    # element in between that first-match-wins could pick up instead. The
+    # `text-gray-600` on the "posted 2 weeks ago" line is on a `<p>`, not a
+    # `<span>`, which is why the tag is written out. If the board restyles,
+    # this is the first field to check.
+    location_raw:
+      css: "span.text-gray-600"
+    # No `text` here on purpose: a list row carries no teaser or description —
+    # only the title, company, city, a relative post date and category
+    # buttons. The body comes from the detail page below, which is what makes
+    # that block mandatory rather than optional for this board.
+
+# Declared because it was fetched and read, not because a detail page exists.
+# `/jobs/companies/terraquantum/senior-tensor-ai-scientist-288861` — the first
+# row of the recorded listing — returned 200 and ~225 KB of server-rendered
+# HTML on 2026-08-30, with the whole ad body already in the markup;
+# `fixture/detail.html` is that response. Eleven further detail pages were
+# fetched the same day (six from `/`, five from this listing) and every one
+# rendered its body server-side, so this is the board's behaviour rather than
+# one lucky page.
+detail:
+  fields:
+    # `h1`, not the bare `[itemprop="title"]` used on the list: the detail page
+    # repeats the same microdata on each of its eight "similar jobs" cards
+    # (9 occurrences in total). Exactly one of them is an `<h1>`, and it is
+    # this ad's own — the tag is what disambiguates, since this selector
+    # language has no way to say "not inside the sidebar".
+    title:
+      css: "h1[itemprop=\"title\"]"
+    # `hiringOrganization` likewise appears 9 times, and here the tag does not
+    # separate them — but document order does: the ad's own company link sits
+    # immediately after the h1, and every similar-jobs card comes later in the
+    # page. `select_first` takes it, verified against the live page.
+    company:
+      css: "[itemprop=\"hiringOrganization\"]"
+    # Unique on the page — one `itemprop="description"` — and it holds the
+    # whole advert. Detail fields win over list fields in `build_offer`, so
+    # this is what a candidate actually reads.
+    text:
+      css: "[itemprop=\"description\"]"

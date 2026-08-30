@@ -1,0 +1,84 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: wellfound.com
+# GLOBAL, not US, and this was measured rather than inferred from "Wellfound is
+# the US startup board". `connector_coverage` matches country by *equality*, so
+# claiming US would be a claim about every row. Tallying the location string of
+# all 74 adverts across `/role/r/python-developer` pages 1-3 on 2026-08-30 gave:
+# United States 16, "Everywhere" 10, India 10 (incl. Bengaluru, Bangalore Urban,
+# Pune), New York City 4, San Francisco 2, Chicago 2, Canada 2, and one each of
+# Warsaw, Scotland, Phoenix, Washington DC, Alexandria, Arlington, Santa Clara.
+# These are remote listings and a large minority of them hire outside the US, so
+# US would claim a scope narrower than the rows actually carry.
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+# Must equal connector.yaml's — `assess_staleness` reads the connector's copy,
+# and the contract refuses a package where the two disagree.
+last_verified: "2026-08-30"
+
+# Checked with this repo's own audited matcher (`integral.robots`), not a grep,
+# on the date above. `https://wellfound.com/robots.txt` is a single
+# `User-agent: *` group — no `Crawl-delay`, and no group naming any AI agent, so
+# RFC 9309 fallback puts this tool in `*`. That group is not permissive: it
+# carries 28 `Disallow` lines and they were read to the last one.
+#
+# This connector reads `/role/r/python-developer?page=N` and
+# `/jobs/<id>-<slug>`. Both return True from `Robots().allows()`. Five paths the
+# `*` group does disallow were checked as negative controls and all returned
+# False — `/search`, `/jobs/applications`, `/_jobs/foo`, `/u/someone`, and
+# `/role/r/python-developer?role=x` (the `Disallow: /*?role=*` rule) — so the
+# True answers come from a matcher that discriminates, not one that says yes to
+# everything. No URL the matcher refused was ever fetched. `Robots().delay()`
+# returns the caller's default of 1.0 s; live fetches were spaced 2 s apart.
+#
+# Note that `Disallow: /jobs/applications` and `/jobs/signup` are prefixes of
+# two specific paths, not of the `/jobs/` tree — the advert detail shape
+# `/jobs/<id>-<slug>` is allowed, which is why a detail block exists at all.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — the first three company cards of
+# `/role/r/python-developer` (page 1) and the advert the first of them links to,
+# taken on the date below. Never an advert a candidate was reading: the set of
+# ads a person opens carries their field, level, city and the fact that they are
+# looking, and a fixture in a public repository carries that forever.
+#
+# `probe/list.html` is a *different* read: page 2 of the same listing, whose
+# `/jobs/` hrefs share exactly zero entries with page 1 (measured). So the rot
+# stage compares genuinely different content rather than near-identical bytes.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted before committing — the live listing is 378 KB and the advert page
+  # 43 KB, both far too big to commit whole.
+  #
+  # `tools/excerpt_fixture.py` could not do it here. It locates the advert body
+  # by the *first class* named in the connector's `text` selector, and this
+  # connector's body selector is `#job-description` — an id, naming no class at
+  # all. So the same rule was applied by hand, with the same discipline: every
+  # cut is made in the raw bytes at a tag boundary, by depth-counting `<div>`
+  # tokens, and everything kept is byte-identical to what the server sent.
+  # Nothing was parsed and re-serialised, because that would repair markup the
+  # fixture exists to preserve.
+  #
+  # What was kept: three whole company cards from the listing, and the whole
+  # `data-test="JobListing"` block from the advert page, with the advert body
+  # itself cut to its first three `<p>` elements followed by the same truncation
+  # marker `tools/excerpt_fixture.py` writes. What was dropped: the site chrome,
+  # the search form, the stylesheets, the analytics and the Cloudflare scripts,
+  # the pager, the sidebar and the "similar jobs" strip. The retained elements
+  # are wrapped in a minimal `<html><body><div id="__next">` shell — kept
+  # deliberately, because `id="__next"` is on the real page too and this board is
+  # server-rendered *despite* it.
+  bodies: excerpted
+  # Grepped both captures for an IPv4 literal. The only hit is
+  # `51.255.924.668`, which is not an address — it is a run of SVG path
+  # coordinates (`c.51.255.924.668 1.18 1.179`) inside an inline icon, and 924
+  # and 668 are not octets. So nothing was redacted here because there was
+  # nothing to redact: unlike trabajos.com, Wellfound writes no client IP into
+  # its responses.
+  client_ip: redacted

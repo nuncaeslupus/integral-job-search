@@ -1,0 +1,180 @@
+# jobs.ac.uk — UK and international academic / research jobs.
+#
+# Why this board. It is the reference listing for university, research-institute
+# and academic-adjacent posts in the UK, and it carries a large international
+# tail (the second card in the committed fixture is the University of Macau) —
+# so one connector reaches a market none of the other packages in this library
+# covers. It is also, unusually, server-rendered: everything a candidate sees on
+# a result card is in the bytes the server sends, no JavaScript required.
+#
+# robots.txt, fetched live 2026-08-30 and read to its last line. The whole file
+# is six lines:
+#
+#     User-agent: *
+#
+#     Disallow: /job/feedback/
+#     Disallow: /enhanced/fp/
+#
+#     Sitemap: https://www.jobs.ac.uk/sitemapindex.xml
+#
+# There is no AI-agent group at all — no ClaudeBot, GPTBot, CCBot or anthropic-*
+# entry — so this tool matches the `*` group, as it does everywhere. Checked with
+# this repo's own audited matcher (`integral.robots`), not by eye, for every URL
+# shape this connector reads:
+#
+#     allows("https://www.jobs.ac.uk/robots.txt")                     True
+#     allows("https://www.jobs.ac.uk/search/computer-science")         True
+#     allows("https://www.jobs.ac.uk/job/DST601/research-assistant")   True
+#     delay(...)                                                       1.0 (no
+#                                                                      Crawl-delay
+#                                                                      declared;
+#                                                                      the caller's
+#                                                                      own default)
+#
+# and, as a control that the matcher is not simply saying yes to everything,
+# the two paths the file does disallow both come back False:
+#
+#     allows("https://www.jobs.ac.uk/job/feedback/")                  False
+#     allows("https://www.jobs.ac.uk/enhanced/fp/x")                  False
+#
+# Neither disallowed prefix is anywhere near what this connector reads.
+site: jobsacuk
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings and adverts are both public; reading either needs no account. The
+# only thing behind a login on this board is saving a job to a profile, which
+# this connector does not touch.
+auth: none
+
+list:
+  # One discipline's search page. Server-rendered: fetched live 2026-08-30 it
+  # returned HTTP 200 and ~317 KB of HTML carrying all 25 results, matching 25
+  # distinct `/job/<ID>/…` hrefs.
+  url_pattern: "https://www.jobs.ac.uk/search/computer-science"
+  pagination:
+    # ponytail: one page, deliberately, and for two independent reasons — either
+    # alone would be enough.
+    #
+    # 1. The board pages by *offset*, not by page number. Its own "Next" link on
+    #    page 1 (read out of the fetched HTML, not guessed) is
+    #    `/search/?sortOrder=1&pageSize=25&startIndex=26&academicDisciplineFacet
+    #    %5B0%5D=computer-sciences&subDisciplineFacet%5B0%5D=computer-science` —
+    #    `startIndex` moves 1 → 26 → 51, a stride of 25. `Pagination` can only
+    #    emit consecutive integers (`start + offset`), so a stride of 25 is not
+    #    expressible in this schema at all; declaring `query_param` with
+    #    `param: startIndex` would fetch offsets 1, 2, 3 — overlapping windows of
+    #    the same first page. `trabajos_es` records the identical decision for a
+    #    board with a stride of 40. A `step:` field on `Pagination` is the upgrade
+    #    path if crawl depth ever matters.
+    # 2. That `/search/?…` URL does not serve markup to this tool anyway. Fetched
+    #    once, live, 2026-08-30: HTTP 200, but 2,832 bytes of a JavaScript
+    #    challenge interstitial (a packed `eval(function(p,a,c,k,e,d)…)` that
+    #    sets a cookie via XHR), with zero result elements in it. The first page
+    #    of `/search/<discipline>` is served as plain HTML; the paginated form is
+    #    not. Fetched once and not retried.
+    mode: none
+    max_pages: 1
+  # The item container. `div.j-search-result__result` occurs exactly 25 times on
+  # the fetched page, one per result, matching the 25 distinct `/job/` hrefs.
+  #
+  # Counted, not assumed, and the count is the whole reason this selector is one
+  # class and not two: the *literal* class attribute `j-search-result__result
+  # ie-border-left` appears only 19 times, because the 6 featured results carry
+  # `j-search-result__result--highlighted` as well. This grammar matches a class
+  # list as a **subset**, so the single-class selector picks up all 25 while a
+  # copy of either literal attribute would silently drop 6 or 19 rows. The
+  # opposite trap — `remotive_en`'s, where one class over-matched a non-listing
+  # banner and produced a blank extra "listing" — was checked for here and does
+  # not occur: all 25 matches are inside `#job-listings` and every one of them
+  # yields a title, an employer and a `/job/` href.
+  item: ".j-search-result__result"
+  fields:
+    # The job-title anchor is the FIRST anchor inside the card — verified over
+    # all 25 items on the live page: `select_first(item, "a")` returned an href
+    # starting `/job/` for every one, 0 exceptions. There is no logo link and no
+    # save-job control before it; the save-job `a.save-job-toggle` sits later, in
+    # the sibling `.j-search-result__date-logos` column, so first-match-wins
+    # reaches the title anchor and not it. A bare `a` is therefore correct today,
+    # and it is also the only option: the title anchor carries no class and no
+    # distinguishing attribute of its own.
+    detail_url:
+      css: "a"
+      attr: href
+    title:
+      css: "a"
+    # The hiring institution, on its own semantic element (`<div
+    # class="j-search-result__employer"><b>University of Oxford</b></div>`), 25×
+    # on the page. This is the field `connector_health.free_signals()` watches —
+    # "company is null on every row" is its cheapest silent-failure signal — and
+    # this board gives it cleanly, which most do not.
+    company:
+      css: ".j-search-result__employer"
+    # The card's whole text block: title, department, employer, location line,
+    # salary line and date placed. It is not a teaser the board wrote — this
+    # board publishes no summary sentence on the result card — but it is real
+    # content, it is never empty (`build_offer` refuses an offer without one),
+    # and the detail page's `#job-description` overrides it whenever the detail
+    # fetch succeeds. Same role as `trabajos_es`'s `div.doextended`.
+    text:
+      css: ".j-search-result__text"
+    #
+    # DELIBERATELY ABSENT: location_raw, salary_min, salary_max, salary_currency,
+    # salary_period.
+    #
+    # The board does publish both on the result card, and it was worth wanting.
+    # It does not publish either in a form this grammar can address:
+    #
+    #   location   `<div>Location:\n            Oxford\n        </div>` — an
+    #              element with no class, no id and no attribute. This grammar
+    #              has no combinators and no :nth-child, so there is no selector
+    #              that reaches the 4th div of the card without also matching the
+    #              1st. `div` first-match-wins returns `.j-search-result__text`
+    #              itself, i.e. the entire card, which as `location_raw` would be
+    #              flatly wrong. The detail page is no better: it puts the
+    #              location in an unclassed `<td>` of an unclassed `<table>`
+    #              (`<th class="j-advert-details__table-header">Location:</th>
+    #              <td>Oxford</td>`), and the only addressable ancestor,
+    #              `.j-advert-details__first-col`, has the text content
+    #              "Location: Oxford Salary: £35,681 to £39,424 per annum Hours:
+    #              Part Time Contract Type: Fixed-Term/Contract" — four fields
+    #              in one string.
+    #
+    #   salary     `.j-search-result__info` is addressable (25× on the page) but
+    #              its text content is one string carrying the label and the
+    #              whole band: "Salary: £35,681 to £39,424 per annum", or, on the
+    #              Macau card, "Salary: £87,465.51 to £127,834.20 A taxable
+    #              annual remuneration". `salary_min` and `salary_max` are two
+    #              separate fields and `_as_float` refuses a string like that
+    #              (returns None), so mapping the band to either would store
+    #              nothing useful at best; mapping it to `salary_min` in the hope
+    #              the parser copes would be a confidently wrong number feeding
+    #              straight into ranking. There is no `salary_raw` in
+    #              `ALLOWED_OFFER_FIELDS` to park the unsplit string in.
+    #
+    # So neither is declared. An absent field is a known gap; a wrong number is a
+    # ranking that lies. The upgrade path for both is the same and is in the
+    # engine, not here: a `text_before`/`strip_label` or an index on
+    # `FieldSelector` would make the card's label-plus-value shape addressable.
+    # Both values are still in the offer's `text`, where a reader can see them.
+
+detail:
+  # Proven, not merely declared: `https://www.jobs.ac.uk/job/DST601/research-
+  # assistant` was fetched live 2026-08-30 (HTTP 200, 72,430 bytes) and is
+  # server-rendered — the h1, the employer and the full advert body are all in
+  # the served HTML. `fixture/detail.html` is that response, excerpted.
+  fields:
+    # The advert's own title, without the board's search-card framing.
+    title:
+      css: "h1.j-advert__title"
+    # The employer heading, `<h3 class="j-advert__employer"><b><span>University
+    # of Oxford</span></b></h3>`. Unique on the page.
+    company:
+      css: "h3.j-advert__employer"
+    # The full advert. `#job-description` is an id, so it cannot collide with
+    # anything, and it is the only element on the page holding the body — 2,770
+    # characters of it on the recorded advert, against the ~180 the card's
+    # summary block carries. Detail fields win over list fields on overlap
+    # (`build_offer`), so this is the body a candidate actually reads.
+    text:
+      css: "#job-description"

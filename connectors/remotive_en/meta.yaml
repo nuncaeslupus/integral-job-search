@@ -1,0 +1,32 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: remotive.com
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above: https://remotive.com/robots.txt
+# carries only `User-agent: *` groups — no rule names any AI agent, unlike
+# tecnoempleo.com/remoteok.com. It disallows `/api/*`, `/jobs/*` and several
+# other paths; this connector reads only `/remote-jobs` and
+# `/remote-jobs/<category>/<slug>`, neither of which is disallowed.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — the front page of the listing and one posting
+# from it, taken on the date below. Never an advert a candidate was reading:
+# the set of ads a person opens carries their field, level, city and the fact
+# that they are looking, and a fixture in a public repository carries that
+# forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted before committing (`tools/excerpt_fixture.py`). A fixture proves
+  # the connector finds the right fields in real markup; it does not need a
+  # whole advert body to do that.
+  bodies: excerpted
+  client_ip: redacted

@@ -1,0 +1,162 @@
+# TicJob.es — the library's first Spanish *IT* board.
+#
+# Why this one. `trabajos_es` is a general Spanish board pointed at a
+# customer-service category; nothing here read a technology listing in Spanish.
+# ticjob.es is an IT-only board (its whole taxonomy is roles like "Programador",
+# "Backend", "Consultor SAP"), it serves its listings server-rendered, and its
+# robots.txt names no AI agent at all.
+#
+# Checked on 2026-08-30:
+#
+#   https://ticjob.es/robots.txt   Read to the last line — the whole file is
+#                                  144 bytes. One `User-Agent: *` group with
+#                                  four disallowed paths: `/*/legal`,
+#                                  `/*/disclaimer`, `/*/privacy`,
+#                                  `/*/online-cv`. Adjudicated with the matcher
+#                                  this repo actually fetches through rather
+#                                  than by eye — `integral.robots.Robots` under
+#                                  `USER_AGENT` `integral-job-search/0.1`:
+#                                  `/esp/busqueda` ALLOW, `/esp/trabajo/…`
+#                                  ALLOW, and `/esp/online-cv` REFUSED, which
+#                                  is the positive control that it is reading
+#                                  this board's file and not defaulting to yes.
+#                                  `delay()` returns 1.0 — the file states no
+#                                  `Crawl-delay`, so no slower rate is asked
+#                                  for. (`https://www.ticjob.es/robots.txt`
+#                                  301s to this one; the site is canonically
+#                                  non-www, which is why every URL here is.)
+#   /esp/ofertas-empleo            404 — not the listing path, despite the name.
+#   /esp/busqueda                  200, ~766 KB, and the listings are IN the
+#                                  markup: no `id="root"`, no `id="__next"`, no
+#                                  `__NUXT__`, no `ng-app`, no `data-react`
+#                                  anywhere in the response, and 20 distinct
+#                                  per-offer `/trabajo/<slug>/<id>` hrefs. This
+#                                  is what ruled getmanfred and feinaactiva out
+#                                  and it is what ticjob passes.
+#
+# donempleo.com was the fallback and was not needed; its robots.txt is also
+# permissive (`User-agent: *` / bare `Disallow:`), so it stays available.
+site: ticjob
+locale: es
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings and full advert bodies are both public — no account, no paywall.
+# Verified by fetching both a list page and a detail page unauthenticated.
+auth: none
+
+list:
+  # The board's own unfiltered search. Reached with no query string at all, it
+  # returns the whole live board newest-first — on 2026-08-30 that was 20 rows
+  # on page 1 and a page 2, against 40 `/esp/trabajo/` URLs in
+  # https://ticjob.es/esp/sitemap.xml (the `/sitemap.xml` at the root is an
+  # index over the cat/eng/esp trees), so one page is half the board rather
+  # than a narrow slice of it. Deliberately not a category URL: this board is
+  # IT-only already, so a category would narrow it for no gain, and the
+  # candidate this library serves is a Python developer whose matching roles
+  # sit under several of ticjob's own role tags at once.
+  url_pattern: "https://ticjob.es/esp/busqueda"
+  pagination:
+    # ponytail: one page, and the markup is why. `#search-result-pagination`
+    # renders its page links as `<a id="page_2" href="javascript:;">` and a
+    # jQuery handler posts `refreshResults({"page": 2})` — there is no second
+    # *URL* anywhere on the page to describe. `Pagination` can only express a
+    # query parameter or a path segment, so any value here would be a guess
+    # about an endpoint the markup never names. `mode: none` states what this
+    # connector actually reaches. Upgrade path if depth ever matters: find the
+    # AJAX endpoint that handler posts to and give `Pagination` a mode for it.
+    mode: none
+    max_pages: 1
+  # One `div.job-card` per offer. Counted, not assumed: 20 matches on the
+  # 2026-08-30 capture, against 20 `<div class="job-card" data-url=` attributes
+  # and 20 distinct per-offer hrefs on the same page, and all 20 rows came back
+  # with every declared field non-empty — so there is no blank extra row of the
+  # kind `remotive_en` hit when a one-class selector also caught a banner div.
+  # The offers are wrapped in `li.noremote` (12) and `li.remoteJobOn` (8);
+  # that split is 20 too, but it needs two selectors and this grammar has no
+  # union, so the card is the item and "remote" is read off `location_raw`.
+  # `.job-card` is a subset match and the siblings around it are `job-card-body`,
+  # `job-card-header`, `job-card-info` and so on — different class *tokens*,
+  # not supersets of this one, so none of them is matched.
+  item: "div.job-card"
+  fields:
+    # No class on the card's title anchor, so this is positional: the first
+    # `<a href>` inside a card. Verified rather than assumed — all 20 cards on
+    # the 2026-08-30 capture returned a `/trabajo/<slug>/<id>` URL here, and
+    # the anchors that could compete (the company logo and the company name)
+    # both sit later in the card, in `job-card-body`. Absolute, on
+    # `ticjob.es`, so `connector_health.on_portal_host` is satisfied without
+    # the relative-URL exemption. The board writes these with a `/busqueda/`
+    # segment (`/esp/busqueda/trabajo/…`) which 301s to `/esp/trabajo/…`;
+    # both were fetched and both return the same 74 KB page.
+    detail_url:
+      css: "a[href]"
+      attr: href
+    # `h2.job-title` and not the anchor's own text: the anchor also wraps a
+    # `span.hybridJobLabel` ("Híbrido"/"Remoto"), so taking the anchor would
+    # glue the work-mode badge onto every hybrid job's title.
+    title:
+      css: "h2.job-title"
+    # The wrapper div rather than the bare `h3` inside it — same text, but a
+    # named element instead of a heading level that a restyle can renumber.
+    # Non-empty on all 20 rows, which is the `free_signals` "company is null
+    # on every row" check answered with a count.
+    company:
+      css: ".job-card-label-header"
+    # `<div class="job-card-label location-field"><p title="Cataluña">…`.
+    # Free text as the board writes it: a region ("Cataluña", "Galicia"), a
+    # city ("Madrid"), a region plus qualifier ("Cataluña, Otro"), or the
+    # literal "Remoto". Left raw and not mapped to `location_remote` — that
+    # would be this connector deciding what "Remoto" means about an advert
+    # rather than reporting what the advert says.
+    #
+    # Entity decoding checked here specifically, because this is where the
+    # board writes them: the raw bytes are `Catalu&ntilde;a` and the parsed
+    # value is `Cataluña`. `parse_html` runs `HTMLParser(convert_charrefs=True)`
+    # so this is structural, but it was read off a real row rather than
+    # inferred from the flag.
+    location_raw:
+      css: ".location-field"
+    # The card carries the *whole* advert body, not a teaser — up to ~4.5 K
+    # characters on the 2026-08-30 capture — so this alone yields a valid
+    # offer even when the detail page is unreachable. The detail block below
+    # overrides it when both are present.
+    text:
+      css: ".job-description"
+    #
+    # NOT declared, on purpose: salary. Six of the twenty cards carry
+    # `<div class='job-card-label salary-field '>`, and its content is either
+    # the sentinel `0` (meaning "not stated") or a single band string like
+    # `54.000 - 60.000` with no currency and no period. This grammar cannot
+    # split a band, and `build_offer` would coerce it through `_as_float` and
+    # set `Salary.stated=True` — so mapping it to `salary_min` would publish
+    # "the employer stated €0" for three quarters of the board and a
+    # mis-parsed lower bound for the rest. An unstated salary is the honest
+    # record; the band survives inside `text` for anyone reading the advert.
+
+detail:
+  # Proven, not declared: https://ticjob.es/esp/trabajo/… renders server-side.
+  # Five different offers (70491, 70123, 70666, 70656, 70644) were fetched on
+  # 2026-08-30 and each returned exactly one `h1#job-title` and exactly one
+  # `div.h2_desc`, so neither selector is a one-page accident.
+  fields:
+    title:
+      css: "h1#job-title"
+    # `.h2_desc` is the XSL template's body wrapper and carries the advert's
+    # `<p>`/`<ul>` structure. Known fragility, stated because it is real: the
+    # surrounding comment names the template that produced it
+    # (`JobOffer_Standard_v4.xsl`), so an advert rendered by a different
+    # template could wrap its body in a different class. `#html-frame-section`
+    # is the more stable ancestor and yields the same text — it is not used
+    # only because `tools/excerpt_fixture.py` locates its spans by class, and
+    # an id gives it nothing to find. If a future capture shows a body this
+    # misses, move to the id and excerpt that fixture by hand.
+    #
+    # `company` is deliberately absent here so the list page's value survives
+    # `build_offer`'s detail-wins-on-overlap merge. Measured, not feared: the
+    # detail page for offer 70491 (ISS Profesionalia) carries four
+    # `.job-card-info` blocks and every one of them belongs to the "similar
+    # jobs" strip — Andersen Lab, Grupo Digital ×3 — so a company selector here
+    # would take first-match-wins and name the wrong employer. Its four `h3`s
+    # are footer headings, which is no better.
+    text:
+      css: ".h2_desc"

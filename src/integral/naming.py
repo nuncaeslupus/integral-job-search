@@ -133,7 +133,26 @@ def _tracked_files(repo_root: Path) -> tuple[Path, ...]:
     return tuple(repo_root / name for name in names)
 
 
+#: A connector's recorded capture of somebody else's page. Exempt for a reason
+#: the allowlist above does not cover: these are **evidence**, not documents
+#: this repository authors. Remotive serves a stylesheet called
+#: `job-search.css` and a blog tag `/job-search-tips/`; editing a capture so it
+#: stops saying so would falsify the very thing the fixture exists to prove,
+#: and the rename this gate polices has nothing to do with what a third party
+#: names its own URLs. Matched on the path segment rather than by directory
+#: prefix so it covers every package without listing them.
+_CAPTURE_SEGMENTS = ("/fixture/", "/probe/")
+
+
+def _is_a_recorded_capture(relative: str) -> bool:
+    return relative.startswith("connectors/") and any(
+        segment in f"/{relative}" for segment in _CAPTURE_SEGMENTS
+    )
+
+
 def _is_allowlisted(relative: str) -> bool:
+    if _is_a_recorded_capture(relative):
+        return True
     return any(relative == entry or relative.startswith(entry) for entry in ALLOWLIST)
 
 

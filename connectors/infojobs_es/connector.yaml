@@ -1,0 +1,252 @@
+# InfoJobs (infojobs.net) — the largest general job board in Spain, and the
+# first connector here pointed at a *general* board rather than a tech niche.
+# trabajos.com and ticjob.es both skew narrow; this one carries the whole
+# labour market, which is what a candidate outside IT actually needs.
+#
+# Everything below was checked against live responses on 2026-08-30 with the
+# tool's own user agent
+# (`integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)`).
+# Where a line says "measured", a command was run and its output read; where it
+# says "assumed", it was not. Nothing here is inferred from the markup alone —
+# every selector below was executed against the fetched page and its result
+# counted, because reading class names off a page is exactly how the two traps
+# in the "item" note went unnoticed on other boards.
+#
+# ---------------------------------------------------------------------------
+# robots.txt — why the ClaudeBot ban does not bind this tool
+# ---------------------------------------------------------------------------
+# https://www.infojobs.net/robots.txt ends with a long tail of blanket bans:
+# `ClaudeBot`, `Claude-SearchBot`, `Claude-User`, `GPTBot`, `OAI-SearchBot`,
+# `CCBot`, `Google-Extended`, `PerplexityBot`, `Bytespider`, `Meta-External*`
+# and others each get their own group with `Disallow: /`.
+#
+# **None of those groups is ours.** Under RFC 9309 §2.2.1 a crawler obeys the
+# group matching its own product token and, finding none, falls back to
+# `User-agent: *`. This tool's token is `integral-job-search`, which the file
+# never names, so the `*` group is the one that binds — and that is the group
+# the checks below were run against. The banned tokens above are bulk
+# training/answer-engine crawlers; a connector run is a candidate-initiated
+# search on behalf of one person, which is the distinction those bans draw.
+# This paragraph exists because the next reader will see "ClaudeBot:
+# Disallow: /" and re-derive a refusal that does not apply.
+#
+# Measured 2026-08-30 with the repo's own audited matcher (`integral.robots`,
+# T70) — never a grep of the file:
+#
+#   ALLOW  /ofertas-trabajo/barcelona/informatica-telecomunicaciones  (this list URL)
+#   ALLOW  /ofertas-trabajo/barcelona
+#   ALLOW  /barcelona/<slug>/of-i<id>                     (a real detail URL)
+#   DENY   /ver-oferta.xhtml          ← negative control, `*` group
+#   DENY   /ofertas_lista.cfm         ← negative control, `*` group
+#   DENY   /react, /webapp/x, /foo.prf ← negative controls, second `*` group
+#
+# The negative controls matter: without one, a `True` verdict is
+# indistinguishable from a matcher that says yes to everything. The file
+# carries **two** separate `User-agent: *` groups (a second one near the
+# bottom adds `Disallow: /react`, `/webapp`, `/*.prf$`); both were read to the
+# last line and both are honoured by the matcher above.
+#
+# Crawl-delay: the `*` group states none. `r.delay(<list url>, 1.0)` returns
+# the caller's 1.0 s default, so no site-imposed delay has to be honoured
+# beyond the tool's own.
+#
+# ---------------------------------------------------------------------------
+# One robots rule that a future fetcher MUST respect
+# ---------------------------------------------------------------------------
+# The `*` group contains `Disallow: /*applicationOrigin=*`, and **every**
+# offer link the listing emits carries `?applicationOrigin=search-new&page=1
+# &sortBy=PUBLICATION_DATE`. So `detail_url` below, as scraped, is a URL our
+# own matcher REFUSES (measured: False), while the same path with the query
+# stripped is allowed (measured: True). The board adds those parameters for
+# its own analytics; they are not part of the advert's address.
+#
+# Nothing fetches `detail_url` today — this connector declares no `detail`
+# block (see below), and fetching is T12's, which is not wired to it. It is
+# mapped because it is the advert's location: `check_package` uses it as the
+# offer's `url`, `connector_health.free_signals` checks it is on-host, and a
+# candidate needs a link to apply. **Any fetcher that later follows it must
+# strip the query string first.** The declarative schema has no facility to do
+# that, which is why it is written here rather than expressed.
+site: infojobs
+locale: es
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings and full advert bodies are served to an anonymous client; only
+# applying needs an account, and this connector never applies.
+auth: none
+
+list:
+  # Barcelona scoped to informática y telecomunicaciones. The generic
+  # `/ofertas-trabajo/barcelona` works identically (measured: 200, same
+  # markup, 5 cards) but returns the whole market — promoter and retail ads
+  # first. This scoped URL reported "334 ofertas" against the generic page's
+  # "9,471", and its five cards were all IT roles, so it is the better
+  # default; the generic form is what `probe/` captured, which is why the two
+  # carry entirely different adverts.
+  url_pattern: "https://www.infojobs.net/ofertas-trabajo/barcelona/informatica-telecomunicaciones"
+
+  # ponytail: `mode: none`, and this one is not a schema limitation — it is a
+  # correctness refusal, which is a different and more important thing.
+  #
+  # `?page=2` and `?page=3` are well-formed and return HTTP 200 with five
+  # cards each, so a connector that declared `query_param: page` would look
+  # like it worked. It does not: the paginated request **silently drops the
+  # location scope**. Measured 2026-08-30 on `/ofertas-trabajo/barcelona`:
+  #
+  #   page 1  <h1 id="main-heading">9,471 ofertas en Barcelona</h1>
+  #           → Barcelona, Gavà, Cornellà, Santpedor          (all in scope)
+  #   page 2  <h1 id="main-heading">56,205 ofertas en todas las ubicaciones</h1>
+  #           → Egüés, Pamplona, Borox, Zaratamo, Villanueva de la Cañada
+  #   page 3  same heading → Madrid, Palma de Mallorca, Marbella, Sacedón
+  #
+  # A Barcelona search returning Marbella adverts is worse than a short one:
+  # the rows are plausible, on-host, fully populated, and wrong, so nothing
+  # downstream can tell. Declaring `none` costs depth and keeps the results
+  # honest. The upgrade path is a URL form that carries its scope into page 2
+  # — if one is found, this becomes `query_param: page` and `max_pages` rises.
+  pagination:
+    mode: none
+    max_pages: 1
+
+  # `div.ij-OfferCardContent` — one per real advert. Chosen by counting, not
+  # by reading the markup, and the count is the reason:
+  #
+  #   li.ij-OfferList-offerCardItem                   → 10  ← WRONG
+  #   li.ij-OfferList-offerCardItem.sui-PrimitiveLinkBox →  5
+  #   div.ij-OfferCardContent                         →  5  ← chosen
+  #   a.ij-OfferCardContent-description-link          →  5  (distinct hrefs: 5)
+  #
+  # The obvious `li` selector is the promo-banner trap. Printing what it
+  # actually returns shows five real adverts and five impostors: four blank
+  # `<li>` (text `''`) and one carrying `'Ver ofertas Ver ofertas Ver ofertas
+  # Ver ofertas'` — an inline "browse more" panel. Those five would have
+  # become blank rows that `build_offer` rejects for an empty `text`, i.e. a
+  # 50% loss reported as nothing at all.
+  #
+  # Cross-checked against the distinct per-offer hrefs: 5 cards, 5 distinct
+  # `/of-i<id>` links, no duplicates. The mobile/desktop double-render trap
+  # seen on other boards does **not** occur here — if it did the href count
+  # would be 5 distinct out of 10 nodes, and it is 5 out of 5.
+  #
+  # Verified at 5 on three separately fetched pages (Barcelona generic,
+  # Barcelona+IT, and `?page=2`).
+  item: "div.ij-OfferCardContent"
+
+  fields:
+    # The advert's own link. Protocol-relative (`//www.infojobs.net/...`) as
+    # the board emits it, and carrying the `applicationOrigin` query string —
+    # see the robots note at the top of this file before following it.
+    # `connector_health.on_portal_host` resolves the host correctly from the
+    # protocol-relative form (measured: netloc parses, `www.infojobs.net`
+    # ends with `.infojobs.net`, so `free_signals` returns no off-host row).
+    detail_url:
+      css: "a.ij-OfferCardContent-description-link"
+      attr: href
+
+    # Same anchor, its text rather than its href — one selector serving two
+    # fields, so the two can never drift apart.
+    #
+    # The enclosing `h2.ij-OfferCardContent-description-title` is equally
+    # clean and would work as well: measured on the two "Destacada"
+    # (sponsored) cards of the generic Barcelona page, `h2` and the anchor
+    # return the same bare title. What is NOT safe is the level above —
+    # `div.ij-OfferCardContent-description-head-left` returns
+    # 'Destacada Ideal ESTUDIANTES!! …  On Fire', i.e. the sponsorship badge
+    # and the company glued to the title. Recorded because that container is
+    # the one a reader reaches for when the anchor looks too specific.
+    title:
+      css: "a.ij-OfferCardContent-description-link"
+
+    # The employer, from the `<h3>` subtitle link. Populated on all 15 rows
+    # across the three fetched pages — `free_signals` flags "company is null
+    # on every row" and this board never triggers it.
+    #
+    # Entity decoding confirmed on real rows rather than trusted: `parse_html`
+    # uses `convert_charrefs=True`, and the parsed values include
+    # `FAÇANA VERTICAL S.L.`, `JARDILAND ESPAÑA`, `Cornellà de Llobregat`,
+    # `Egüés`, `Pamplona/Iruña` and `Villanueva de la Cañada` — all decoded,
+    # none carrying a raw `&ntilde;`-style reference.
+    company:
+      css: "a.ij-OfferCardContent-description-subtitle-link"
+
+    # The city. The card's first `<ul>` has three `<li>` — location, work
+    # mode ("Presencial"/"Híbrido"), and publication age — and only the
+    # location `<li>` wraps its text in this `-truncate` span, so
+    # first-match-wins lands on the city rather than on "Híbrido". Measured
+    # across all 15 rows: every one returned a place name, none returned a
+    # work mode or a date.
+    location_raw:
+      css: "span.ij-OfferCardContent-description-list-item-truncate"
+
+    # The advert body — and on this board it is the **whole** body, not a
+    # teaser. Measured against the ad's own detail page for two adverts:
+    # 1879 chars on both list and detail (byte-identical), and 2651 vs 2659
+    # for the second. That measurement is the reason there is no `detail`
+    # block below; see the note after this section.
+    text:
+      css: "p.ij-OfferCardContent-description-description"
+
+    # ------------------------------------------------------------------
+    # salary_min / salary_max / salary_currency / salary_period: DELIBERATELY
+    # ABSENT. This is the one field on this board that can do real harm.
+    # ------------------------------------------------------------------
+    # The card does carry pay, in `span.ij-OfferCardContent-description-salary-info`,
+    # and the temptation is to map it to `salary_min`. Measured values:
+    #
+    #   "44.000 € - 50.000 € Bruto/año"
+    #   "26.000 € - 30.000 € Bruto/año"
+    #
+    # That is a *range*, a currency and a period in one unsplittable string,
+    # in one element. The schema has no selector that can cut it — there is no
+    # separate `minValue`/`maxValue` markup to point at, and the grammar has
+    # no combinators or text operations. Mapping it would hand `_as_float`
+    # `"44.000 € - 50.000 € Bruto/año"`, which returns `None` (it refuses
+    # anything it cannot resolve unambiguously) — while `build_offer` would
+    # still construct `Salary(min=None, max=None, stated=True)`. The offer
+    # would then claim the employer stated a salary and record no number: a
+    # lie the ranking reads, and one nothing downstream can detect.
+    #
+    # An absent salary is honest and ranks neutrally; a wrong one is silent
+    # and permanent. So no salary field is mapped.
+    #
+    # Checked for the structured escape hatch and it is not there: the detail
+    # pages carry **no** schema.org `JobPosting` — zero `application/ld+json`
+    # blocks, zero `itemprop` attributes, zero occurrences of the string
+    # `JobPosting` (measured on two adverts). There is nothing structured to
+    # read the range out of. The upgrade path is a `split`/`regex` facility on
+    # `FieldSelector`, or the board emitting microdata; not this file.
+
+# ---------------------------------------------------------------------------
+# No `detail:` block — measured, not skipped
+# ---------------------------------------------------------------------------
+# `detail` is `DetailPage | None`, and omitting it is a decision this board
+# earns. The detail pages ARE server-rendered (both fetched adverts returned
+# 200 with a real `<h1>` and a full body in the markup), and working
+# selectors were found and verified on two different adverts:
+#
+#   h1                                            → 1 node, clean title
+#   .ij-OfferDetailHeader-companyLogo-companyName → 1 node, "Arestes" / "MYTIC INNOVA S.L."
+#   div.ij-EnrichedTextArea-paragraph             → 1 node, the full body
+#
+# They are omitted anyway, because they add nothing:
+#
+#   * body    — identical to the list card's (1879 = 1879 chars on advert one;
+#               2651 vs 2659 on advert two, an 8-char whitespace difference)
+#   * company — byte-identical on both adverts
+#   * title   — identical on both adverts
+#
+# So a detail block would spend one fetch per advert to re-read fields the
+# listing already gave, and — worse — would make something follow
+# `detail_url`, which as emitted is robots-disallowed (the `applicationOrigin`
+# rule at the top of this file). Declaring it would also oblige a
+# `fixture/detail.html`, ~1 MB of a stranger's advert committed to a public
+# repository, for no field gained.
+#
+# The trap that would have bitten a careless detail block is recorded here so
+# the next reader does not walk into it: the detail page renders a
+# "recommended offers" strip using `ij-OfferCardContent2-*` classes — two of
+# them, belonging to *other* employers. `.ij-OfferCardContent2-companyName`
+# matches 2 nodes and first-match-wins would have named the wrong company.
+# `.ij-OfferDetailHeader-companyLogo-companyName` matches exactly 1 and is the
+# correct one; it is written down in case a future field makes the block worth
+# declaring after all.

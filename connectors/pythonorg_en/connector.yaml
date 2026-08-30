@@ -1,0 +1,126 @@
+# The Python Job Board — python.org/jobs. The single most on-target source in
+# this library for a Python developer: every posting on it is a Python role by
+# construction, so there is no "is this actually Python?" filtering to do
+# afterwards.
+#
+# **Fetching gotcha, recorded because it cost a session real time:** the board
+# serves `Content-Encoding: gzip` and does so even when the client did not ask
+# nicely. `curl -sL https://www.python.org/jobs/` returns ~12 KB of binary and
+# every selector matches nothing; `curl -sL --compressed` returns ~69 KB of
+# clean HTML. Anything fetching this connector must decode the response body
+# before handing it to the interpreter.
+#
+# robots.txt, fetched live 2026-08-30 and checked with this repo's own audited
+# matcher (`integral.robots.Robots`, user agent `integral-job-search/0.1`, which
+# falls into the `User-agent: *` group): `allows('https://www.python.org/jobs/')`
+# and `allows('https://www.python.org/jobs/1234/')` both return True, crawl
+# delay 1.0s. There is no AI-agent group on the file at all — no ClaudeBot,
+# GPTBot, CCBot or anthropic-* rule. `*` disallows exactly `/~guido/orlijn/` and
+# `/webstats/`; the other groups name HTTrack, puf, MSIECrawler, Krugle and
+# Nutch, none of which is us.
+site: pythonorg
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings are public; reading them needs no account. Posting one does, which is
+# not something this connector does.
+auth: none
+
+list:
+  # Paged by a plain `?page=N` query parameter with consecutive integers
+  # starting at 1 — the exact shape `Pagination` can express. Verified live on
+  # 2026-08-30: the page's own pager emits `href="?page=1"` and `href="?page=2"`
+  # and nothing else, `?page=2` returns HTTP 200 with 6 listings, and 25 + 6 =
+  # 31 matches the board's own "31 jobs on the Python Job Board" heading. So
+  # `max_pages: 2` is the whole board today, not a guess. Kept modest rather
+  # than raised speculatively: an over-large value spends requests on 200-with-
+  # zero-listings pages against a board whose robots.txt asks for a 1s delay.
+  url_pattern: "https://www.python.org/jobs/?page={page}"
+  pagination:
+    mode: query_param
+    param: page
+    start: 1
+    max_pages: 2
+  # Counted, not eyeballed: `h2.listing-company` occurs exactly 25 times on the
+  # live first page, matching the 25 `href="/jobs/<id>/"` links on it. This is
+  # the board's own semantic class name, not a layout utility, so it should
+  # survive a restyle better than the grid around it.
+  #
+  # It is *not* the natural item container — that is the bare `<li>` wrapping
+  # it, which also carries the sibling `span.listing-job-type`,
+  # `span.listing-posted` and `span.listing-company-category`. But the `<li>`
+  # has no class or attribute of any kind, and this grammar has no descendant
+  # combinator, so `li` as an item selector would also match the 47 `li.tier-2`
+  # navigation entries and every other list item on the page (the remotive_en
+  # trap: a too-loose item selector inventing blank "listings"). Selecting the
+  # `h2` instead is the price: everything outside it — the teaser, the posted
+  # date, the category — is unreachable from the list page. See `text` below.
+  item: "h2.listing-company"
+  fields:
+    # First `a` in document order inside the `h2` is the title link. Checked by
+    # parsing rather than by reading the markup: the only other anchor under the
+    # `h2` is the location link inside `span.listing-location`, which comes
+    # after it, and `span.listing-new` ("New", present on some rows) is a span,
+    # not an anchor, so it never displaces the first match.
+    detail_url:
+      css: "a"
+      attr: href
+    title:
+      css: "a"
+    # A real limitation, stated rather than papered over. The board writes the
+    # company as a **bare text node** after a `<br/>` inside
+    # `span.listing-company-name`:
+    #
+    #     <span class="listing-company-name">
+    #       <span class="listing-new">New</span>
+    #       <a href="/jobs/8129/">Python developer</a><br/>
+    #       Eleks
+    #     </span>
+    #
+    # No element wraps "Eleks" — on the list page or on the detail page, where
+    # the same text sits loose inside `span.company-name` — and this grammar
+    # addresses elements, never text nodes, so no selector anywhere on this
+    # board returns the company on its own. The detail page cannot rescue it
+    # either: `<title>` is "Python developer, Eleks | Python.org" and
+    # `og:title` is "Job: Python developer at Eleks", both compound.
+    #
+    # So this selects the enclosing span, whose text is "New Python developer
+    # Eleks" — the company name present but not isolated. The alternative was to
+    # omit `company` entirely, which makes `connector_health.free_signals`
+    # report "company is null on every row" for a board that plainly states the
+    # company: a false rot signal that would drown the true ones. Same
+    # pragmatic call, for the same reason, as `remotive_en` — see the comment on
+    # its `company` field. The upgrade path is a text-node or `nth-of-type`
+    # extension to the selector grammar, not a change here.
+    company:
+      css: "span.listing-company-name"
+    # One per listing, inside the `h2`. The board's location strings are free
+    # text and often multi-city ("Vilnius / Kaunas / Warsaw, Lithuania/Poland"),
+    # which is why this is `location_raw` and no `location_country` is claimed.
+    location_raw:
+      css: "span.listing-location"
+    # No `text` here, deliberately. The list page's only teaser is the job-type
+    # and posted-date line, and both are siblings of the `h2` this connector
+    # uses as its item container — unreachable, per the `item` comment above.
+    # `Connector` requires *some* selector to produce `text`, and the detail
+    # block below does; the consequence is that this connector cannot produce an
+    # offer from the list page alone, so a fetcher must follow `detail_url`.
+    # `trabajos_es` carries a list-page teaser as a fallback for exactly that
+    # case and this cannot; `remotive_en` is in the same position.
+
+detail:
+  # Proven, not assumed: `/jobs/8129/` was fetched live on 2026-08-30 and is
+  # server-rendered Django HTML — `fixture/detail.html` is a raw slice of it.
+  fields:
+    # The whole advert body: job title, description, restrictions,
+    # requirements, about-the-company and contact block, all inside one
+    # `div.job-description`. Nothing else on the page carries that class.
+    text:
+      css: "div.job-description"
+    # No `title` or `company` here on purpose. Detail fields win over list
+    # fields on overlap in `build_offer`, and every candidate on this page is
+    # *worse* than what the list already gives: the detail `h1.listing-company`
+    # and `span.company-name` both fold the title, the "New" badge and the
+    # company into one string, whereas the list page's title anchor is the clean
+    # title. Declaring them would actively degrade the offer.
+    # `location_raw` is likewise identical on both pages, so it is not repeated.

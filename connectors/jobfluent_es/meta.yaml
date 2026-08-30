@@ -1,0 +1,79 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: jobfluent.com
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+# Must equal `connector.yaml`'s `last_verified` — `assess_staleness` reads the
+# connector's copy, so a flattering date here would be a lie a borrower could
+# not detect.
+last_verified: "2026-08-30"
+
+# Checked live on the date above, with this tool's own user agent, and the
+# verdict taken from `integral.robots.Robots` (the repo's audited RFC 9309
+# matcher) rather than from reading the file by eye.
+#
+# https://www.jobfluent.com/robots.txt disallows `/` for five named crawlers —
+# GPTBot, ChatGPT-User, ClaudeBot, CCBot, Bytespider — and then opens a
+# `User-agent: *` group with fifteen specific disallowed prefixes. **None of
+# those five is this tool.** Under RFC 9309 §2.2.1 a crawler obeys the group
+# matching its own product token and falls back to `*`; ours is
+# `integral-job-search`, so the `*` group is the one that binds us. Those five
+# entries are aimed at bulk AI-training crawls, which is a different activity
+# from a candidate searching for their own next job — some boards spell that
+# distinction out in their own file (academictransfer.com permits "AI
+# assistants … for search/reference answers" in the same file that disallows
+# ClaudeBot).
+#
+# `Robots.allows()` returned True for the listing, for `?page=1` and `?page=2`,
+# for an ad page, and for a company page; `Robots.delay(..., 1.0)` returned 1.0
+# — the file states no `Crawl-delay`, so there is no site-imposed rate above
+# the caller's own default to honour.
+#
+# The disallowed `*` prefixes are `/login`, `/subscribe`, `/subscriptions*`,
+# `/offer_subscriptions*`, `/offer_subscriptions/new`, `/log_search`, `/track`,
+# `/404`, `/sessions*`, `/api/*` and the `/*/external…`/`/*/details_login$`/
+# `/*/report-filled$` application endpoints. This connector reads none of them.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose on the date below — a Barcelona tech listing and one
+# ad reached from it, fetched to build this connector. Never an advert a
+# candidate was reading: the set of ads a person opens carries their field,
+# level, city and the fact that they are looking, and a fixture in a public
+# repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted before committing, by hand in the raw bytes.
+  #
+  # `tools/excerpt_fixture.py` could not do it here and was not run: it locates
+  # the body by regexing `<div class="<first-class-in-the-selector>"` for an
+  # *exact* class attribute, and this connector's body element is
+  # `<div class="offer-description hide-desc-false">` — two classes, so the
+  # pattern never matches and the tool would have reported zero excerpts on an
+  # untouched file. The same rule was applied by hand instead: the advert body
+  # is cut to its leading elements on a tag boundary and marked with an HTML
+  # comment, and every byte outside that one span is exactly what the server
+  # sent — no parse-and-reserialise anywhere, so the fixture still carries the
+  # server's own imperfect markup, which is the thing it exists to prove the
+  # connector survives.
+  #
+  # The list fixture needed no body excerpting at all: JobFluent's cards carry
+  # no advert text, only a heading, a salary band, a date and label links.
+  #
+  # What was dropped rather than truncated, in both files: stylesheets, scripts,
+  # the site chrome, the filter sidebar, the "related offers" strip — and, on
+  # the detail page, the whole application form. That form carries a Rails
+  # `authenticity_token`, i.e. a live session credential of whoever recorded the
+  # capture, and it is excluded rather than redacted. The build asserts the
+  # string `authenticity_token` is absent from the committed file, alongside the
+  # repo-wide fixture check that refuses any IPv4 literal.
+  bodies: excerpted
+  # JobFluent writes no client address into its responses (trabajos.com does).
+  # Nothing needed replacing; the assertion above is what makes that a checked
+  # statement rather than an assumption.
+  client_ip: redacted

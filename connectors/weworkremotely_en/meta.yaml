@@ -1,0 +1,49 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: weworkremotely.com
+# Not a country code: the board is remote-only and its `<region>` values are
+# "Anywhere in the World", "North America Only", "Remote" and the occasional
+# bare city. There is no single market this covers, which is what GLOBAL says —
+# the same answer `remotive_en` gives for the same reason.
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+# Must equal connector.yaml's — `check_meta` refuses a package whose
+# borrower-facing date is the flattering one, and `assess_staleness` reads the
+# connector's copy.
+last_verified: "2026-08-30"
+
+# Checked live on the date above, not assumed:
+# https://weworkremotely.com/robots.txt returned 200 with a single
+# `User-agent: *` group — `Allow: /`, plus `Disallow:` on `/admin/`,
+# `/account/`, `/job-seekers/account/`, `/job-seekers/profile/`,
+# `/manage-company/`, `/*edit?token=/` and `/*cancel?token=/`. The file names
+# no AI agent at all (no ClaudeBot, GPTBot, CCBot or anthropic-* group). This
+# connector reads exactly two paths — `/categories/remote-programming-jobs.rss`
+# and `/remote-jobs/<slug>` — and neither is matched by any Disallow prefix.
+# Both are served to anyone: no account, no key, no cookie, and nothing here
+# steps around a challenge or a paywall.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — three items off the front of the category feed,
+# and one detail page reached from the first of them, taken on the date below.
+# Never an advert a candidate was reading: the set of ads a person opens
+# carries their field, level, city and the fact that they are looking, and a
+# fixture in a public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted before committing. `tools/excerpt_fixture.py` could not be run on
+  # this package — its plan starts from the *list* text selector's class name,
+  # and this connector's list text selector is the bare RSS tag `description`,
+  # which names no class, so the tool exits before reaching detail.html. Both
+  # files were therefore truncated by the same rule the tool applies (keep
+  # whole `<p>` children up to ~300 visible characters, then a marker) and, as
+  # the tool insists, **in the raw bytes**: nothing was re-serialised, so every
+  # byte outside a truncated body is what the server sent.
+  bodies: excerpted
+  client_ip: redacted

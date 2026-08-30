@@ -1,0 +1,78 @@
+# Remotive — the second connector in this library pointed at a real board,
+# and a correction to a claim the first one (`trabajos_es`) made about it.
+#
+# `trabajos_es/connector.yaml` lists remotive among the boards ruled out
+# because "their listings are not in the served HTML: they are JSON APIs or
+# JavaScript applications... There is nothing on the page for a selector to
+# find." That was checked on 2026-08-23 and was true of `/api/remote-jobs`
+# (a JSON endpoint, and one `robots.txt` disallows outright — see below). It
+# is no longer true of the HTML listing pages themselves: fetched live on
+# 2026-08-30, `/remote-jobs` and an individual `/remote-jobs/<slug>` page are
+# both server-rendered, with stable semantic-ish class names
+# (`job-tile`, `job-tile-title`, `h1.h1`, `#company-panel`) a selector can
+# read. Boards change; `last_verified` below is what makes that checkable
+# again next time, not a promise this stays true.
+#
+# `robots.txt` (checked live, same date) carries only `User-agent: *` groups —
+# no rule names any AI agent, unlike tecnoempleo.com/remoteok.com. It disallows
+# several paths, `/api/*` and `/jobs/*` among them; neither this connector's
+# list URL (`/remote-jobs`) nor its detail URLs (`/remote-jobs/<category>/
+# <slug>`) start with either disallowed prefix.
+site: remotive
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings are public; reading them needs no account.
+auth: none
+
+list:
+  # ponytail: one page, deliberately. The list page shows its current batch
+  # of postings with no page-number parameter in the URL the site itself
+  # uses — `mode: none` says that plainly rather than guessing at a query
+  # string nobody has seen this board accept.
+  url_pattern: "https://remotive.com/remote-jobs"
+  pagination:
+    mode: none
+    max_pages: 1
+  # Two classes, not one: `.job-tile` alone also matches a non-listing banner
+  # block the page renders above the real items (no `remotive-bg-sand-light`
+  # on that one) — a single-class selector over-matches it as a 39th, blank
+  # "listing". Both classes together are exactly the per-posting card.
+  item: ".job-tile.remotive-bg-sand-light"
+  fields:
+    detail_url:
+      css: "a.remotive-url-visit"
+      attr: href
+    # The title and the company sit in two `span.remotive-bold` siblings with
+    # no distinguishing class between them, and this selector language has no
+    # nth-of-type — so both fields resolve to the same first match (the
+    # title) on this page. That is a real limitation, not an oversight: it is
+    # what keeps `connector_health`'s free-of-charge "company is null on
+    # every row" signal meaningful without inventing a value the page does
+    # not cleanly offer. The detail page's `#company-panel` link carries the
+    # company on its own, unambiguous element, and detail fields win on
+    # overlap (`build_offer`) — so the offer's actual `company` is always the
+    # accurate one; this list-page duplicate is never what a candidate sees.
+    title:
+      css: "span.remotive-bold"
+    company:
+      css: "span.remotive-bold"
+
+detail:
+  fields:
+    # The visible h1 carries the board's own "[Hiring] <title> @<company>"
+    # framing verbatim — kept as the board wrote it rather than split by a
+    # guess at where the title ends and the company begins.
+    title:
+      css: "h1.h1"
+    # `.h2.tw-underline` is the company's own name, linked to its Remotive
+    # profile inside the "About The Company" panel — a different class pair
+    # from the panel's own "About The Company" heading (`.h2.remotive-text-
+    # bigger`), so the two never collide under this selector language's
+    # match-all-listed-classes rule.
+    company:
+      css: "span.h2.tw-underline"
+    # The posting body sits in the one `.left` column of the two-column
+    # detail layout; nothing else on the page carries that class.
+    text:
+      css: "div.left"
