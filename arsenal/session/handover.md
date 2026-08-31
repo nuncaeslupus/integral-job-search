@@ -5,10 +5,17 @@ strict mypy over 172 files, 1878 tests, `evidence: no drift`,
 `verify-gates: 116 terminal task(s); 116 gate(s) asserted, 0 carry no fenced
 gate block`.
 
-This was a **live candidate session** — a real person, in Spanish, looking for
-Python work in Barcelona — with the owner stepping out of character to direct
-connector work. Everything below came out of that: the library grew because the
-search kept failing for reasons the candidate could name.
+This was a **live candidate session**, with the owner stepping out of character
+to direct connector work. Everything below came out of that: the library grew
+because the search kept failing for reasons the candidate could name, and each
+round was built to answer the last one's failure.
+
+Nothing identifying the candidate is recorded here. That is not discretion, it
+is the rule — identity, history and stated constraints live in the local profile
+store, and a document committed to a public repository keeps whatever it says
+forever. An earlier draft of this file named the person, their last employer and
+when they were laid off; **caught by review on the PR that added it**, which is
+the argument for having the rule rather than the judgement.
 
 ## What landed
 
@@ -81,31 +88,40 @@ Whoever does it should read schema.org's `JobPosting` and the module docstring
 **first**, derive cases from that text before opening the implementation, and
 weight fail-open over fail-closed.
 
-## What the candidate session learned, since it drove all of the above
+## What the searches measured, since it drove all of the above
 
-Ivan Marcos — Barcelona, Python, laid off from Flanks in May. Constraints
-recorded across `ev-000003`…`ev-000050`. Four searches ran, each narrowed by
-what the previous one surfaced:
+**No candidate detail belongs in this file** — identity, history and stated
+constraints live in the local profile store, and a document committed to a
+public repository keeps whatever it says forever. What follows is about the
+*tool*, and every figure is a count over adverts.
 
-1. **Spain, 535 adverts.** 78 survivors. Only 2 published a salary.
-2. **Foreign boards, 875.** 29 survivors, 15 opened, **1** reachable. Of the 15,
-   four said contractor/B2B outright and one said full-time — the pay premium
-   abroad is mostly denominated in *autónomo*, which he refuses.
-3. **"Agentic Python", 1005.** He named the shape himself, and added the rule
-   that governs everything after: **an advert with no salary, and no cheap way
-   to approximate one, is not shown.** It removed 13 of 17 survivors.
-4. **JSON sources + US, 2755.** 28 survivors, 9 priced.
+Four searches ran, each narrowed by what the previous one surfaced:
 
-Measured, not asserted, over everything harvested: **USD adverts carrying a
-band, median $125,000–$160,000, and 117 of 213 are US/Canada-restricted.**
-EUR: 4 adverts, median €61,654–€94,205. He was right that the US pays more, and
-the constraint that bites is payroll, not pay.
+| round | scope | harvested | survivors | priced |
+|---|---|---|---|---|
+| 1 | Spanish boards | 535 | 78 | 2 |
+| 2 | foreign boards | 875 | 29 | 1 reachable |
+| 3 | "agentic Python" | 1005 | 17 | 4 |
+| 4 | JSON sources + US | 2755 | 28 | 9 |
 
-Two filter defects found by reading results rather than code: a gambling veto
-that misses slot-machine firms because their adverts never say "casino", and a
-`deel` entry in the cárnica name list that was filtering out **Deel's own**
-Analytics Engineer post — a payroll platform is not a body shop, and that post
-is one of very few foreign roles saying *Spain*, *Full-time* and a figure.
+Three findings worth keeping:
+
+- **Salary silence is the binding constraint, not salary level.** Round 3 added
+  the rule that an advert with no salary, and no cheap way to approximate one,
+  is not shown. It removed 13 of 17 survivors. The approximation ladder that
+  earned its keep: the advert, the board's own salary field, the same advert on
+  another board, another advert from the same employer — reported with *which*
+  answered, because a figure from a sibling advert is a weaker claim.
+- **Measured, not asserted: 213 USD adverts carrying a band, median
+  $125,000–$160,000, and 117 of 213 are US/Canada-restricted.** EUR: 4 adverts,
+  median €61,654–€94,205. The US pays more and mostly cannot pay *here* — of
+  fifteen foreign adverts opened in round 2, four said contractor/B2B outright
+  and one said full-time.
+- **Two filter defects, both found by reading results rather than code.** A
+  gambling veto that misses slot-machine firms because their adverts never say
+  "casino", and a body-shop name list that had swallowed a payroll *platform* —
+  a company whose product is employment is not a company that rents engineers
+  out, and the entry was filtering out that firm's own engineering post.
 
 ## Ready for the next session
 
