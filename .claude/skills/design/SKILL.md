@@ -2,6 +2,7 @@
 name: design
 description: When the user is defining the technical solution after discovery — contracts, task split, risk register, sequencing. Owns scripts — validate_plan. Do NOT use for problem investigation (see specify), implementation (see execution), or PR review (see review).
 metadata:
+  section: workflow
   type: workflow
 ---
 
@@ -101,6 +102,10 @@ the spec's, and its export is named `<project>-plan-notes-<date>.md`.
 When a returned export arrives — a path in `~/Downloads`, an upload, a paste — move it
 into the plan's directory beside the reader and commit it. The annotations are the
 sign-off record for this plan; left in Downloads they are gone by the next session.
+
+Full rules — which documents need one, the naming, and why the work that
+consumes the document waits for the annotations:
+`claude-arsenal:core:init § references/annotatable-reader.md`.
 
 ---
 
