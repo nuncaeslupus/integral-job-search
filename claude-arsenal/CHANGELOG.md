@@ -18,6 +18,89 @@ being a changelog nobody reads.
 
 Format: `## [X.Y.Z] - YYYY-MM-DD`, newest first, plain bullets below.
 
+## [3.0.0] - 2026-08-31
+
+### Changed — action required
+
+- **`queue-add`'s `new_task.py` is now `create_task.py`.** `create` is the
+  canonical script verb; `new` was the last script outside that vocabulary.
+  `/init` prunes files it no longer ships, so updating renames it for you and
+  the skill's own docs move with it — but **anything of yours that calls
+  `new_task.py` by path needs the new name**. That break is the whole reason
+  this is a major.
+
+### Changed
+
+- **`init.py --quiet` and `analyze_mutmut.py --limit`** are the canonical
+  spellings of what shipped as `--silent` and `--max`. **Both old spellings
+  keep working**, so no existing invocation breaks; the canonical name is
+  simply the one the help text leads with now.
+- `init.py --repo-path` stays as it is, and the argument canon now says so.
+  The flag looked like a duplicate of the canonical `--root`, but `init.py`
+  already uses `--root` for the *workspace* root it creates, while
+  `--repo-path` is the *host repository* it installs into. Collapsing them
+  would have merged two concepts under one flag rather than removed a synonym.
+
+### Fixed
+
+- **A comment could hide a flag from the argument-canon check.** The check read
+  argparse with a pattern that allowed only whitespace between `add_argument(`
+  and the option string, so a comment line above a flag made the whole call
+  invisible — the flag was not approved, it was unseen, and an unseen flag and a
+  clean report look identical. Found while adding a comment above a flag being
+  migrated, which silently removed it from the check in the same change that
+  claimed to fix it.
+
+### Internal
+
+- The skill library reports **zero** validator warnings, and `make validate` /
+  `make audit` now block on warnings rather than only on failures, so the count
+  cannot drift back up unnoticed. `SKILL_SEVERITY=fail` restores the old
+  behaviour while iterating locally.
+
+## [2.16.3] - 2026-08-31
+
+### Fixed
+- The skill validator read a line like ```` ```inline `code` mention ```` as
+  opening a fenced block. CommonMark says a backtick fence's info string may
+  not contain a backtick, so that line is prose — usually an inline code span
+  that happens to start a line. Treating it as a fence failed `body.fences` on
+  valid markdown and made the voice and secret checks stop reading everything
+  after it. Tilde fences have no such rule and are unaffected.
+
+## [2.16.2] - 2026-08-31
+
+### Fixed
+- Sixteen fenced code blocks across the library opened without a language tag,
+  so they rendered without syntax highlighting and tripped `markdownlint`
+  MD040. All are tagged, and the validator now reports untagged fences itself
+  (`body.fence-language`, `references.fence-language`) so they cannot drift
+  back one review at a time.
+- `review` had no runnable example anywhere in its body — the `gate-check`
+  invocation it depends on was buried in prose. It is a `bash` block now, which
+  is what the rest of the library does with a command.
+- `github` asserted a reply rule in capitals instead of saying why it exists.
+  The reason was already one clause away: a fix without a reply leaves the
+  thread unresolved, so the next pass re-reads a comment already handled.
+
+## [2.16.1] - 2026-08-31
+
+### Fixed
+- The skill validator no longer warns on the `har` and `init` skills' own
+  argument vocabulary. Twenty-eight domain flags — `--endpoints`, `--css`,
+  `--secrets`, `--sections` and the rest — join the argument canon, which is
+  what that canon is for: it exists to stop two skills spelling the same
+  concept differently, not to object to a skill having nouns of its own.
+- `session-end`'s example PR table used `#42`/`#43`/`#44`, which read as real
+  references. They are now `#NNN`, so nobody follows an example into a PR that
+  does not exist.
+
+Running the validator with `--severity warn` across the library now reports 4
+warnings rather than 38. The four left are real and known: `--silent`,
+`--repo-path` and `--max` duplicate canonical flags, and `new_task.py` uses a
+non-canonical verb. Fixing those changes a vendored interface, so they get a
+deliberate pass with aliases rather than a rename in passing.
+
 ## [2.16.0] - 2026-08-31
 
 - **`compare_har.py` completes the toolkit: what changed between two captures.**
