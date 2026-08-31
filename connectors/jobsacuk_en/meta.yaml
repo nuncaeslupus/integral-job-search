@@ -1,0 +1,66 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: jobs.ac.uk
+# GB, not GLOBAL, and the choice is not cosmetic: `connector_coverage` matches a
+# candidate's market against this string by **equality** (upper-cased), so a
+# candidate asking about GB finds a GLOBAL package only by accident of nobody
+# asking. jobs.ac.uk is the UK academic listing — its own domain says so — and
+# that is the market it is here to cover. It does carry a substantial
+# international tail (of the three adverts in the committed fixture, one is the
+# University of Macau), and those postings are reachable through this connector;
+# they are simply not what the country field is claiming. If a second market ever
+# wants this board deliberately, the answer is a second package pointed at the
+# discipline search for that market, not a widening of this line.
+country: GB
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above, with this repo's own audited matcher
+# (`integral.robots`) rather than by eye — and the file was read to its last
+# line, because the rule that rules a board out is as likely to be at the bottom
+# as the top. https://www.jobs.ac.uk/robots.txt is six lines: one `User-agent: *`
+# group disallowing `/job/feedback/` and `/enhanced/fp/`, and a sitemap. No
+# AI-agent group exists at all — nothing names ClaudeBot, GPTBot, CCBot or any
+# anthropic-* token — so this tool matches the `*` group under its own identity,
+# `integral-job-search/0.1`.
+#
+# Every URL shape this connector reads was put to the matcher: the listing
+# (`/search/computer-science`) and a real advert (`/job/DST601/research-assistant`)
+# both return True, and the two disallowed prefixes both return False, which is
+# what shows the True answers mean something. No Crawl-delay is declared, so the
+# caller's own default stands.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — three results from one discipline listing, and the
+# advert the first of them links to, taken on the date below. Never an advert a
+# candidate was reading: the set of ads a person opens carries their field,
+# level, city and the fact that they are looking, and a fixture in a public
+# repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted before committing. The listing page the server sent is ~317 KB,
+  # almost all of it the faceted filter sidebar, stylesheets and scripts; what is
+  # committed is three `.j-search-result__result` blocks lifted **in raw bytes**
+  # out of that response and dropped into a minimal HTML shell. The advert body
+  # in `detail.html` is cut to its leading `<p>` elements on an element boundary,
+  # again in raw bytes, with a marker paragraph in place of the rest.
+  #
+  # Raw bytes, never a parse-and-reserialise, for the reason
+  # `tools/excerpt_fixture.py` gives: round-tripping would repair whatever the
+  # server got wrong, and repaired markup is exactly what a fixture must not be.
+  # Everything inside the kept spans is byte-identical to what the server sent —
+  # including the unclosed `<img/>` habits and the stray whitespace that make
+  # this real markup rather than a reconstruction.
+  bodies: excerpted
+  # Nothing resembling a client address or a session token is present: the
+  # recorded bytes were grepped for an IPv4 literal (0 hits in both files) before
+  # committing, the same check `tests/test_connector_contract.py` applies to every
+  # package. This board writes no `<!-- IP: … -->` comment of the kind trabajos.com
+  # does, so there was nothing to redact.
+  client_ip: redacted

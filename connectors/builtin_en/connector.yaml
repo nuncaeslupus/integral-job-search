@@ -1,0 +1,252 @@
+# Built In (builtin.com) — a large US tech job board covering the major US
+# metros plus remote. Fetched live and read by hand on 2026-08-30 with this
+# tool's own User-Agent; every count and every claim below was measured against
+# those bytes. Where something was *not* measured it says so.
+#
+# ## robots.txt — checked with the repo's own audited matcher, never grepped
+#
+# `https://builtin.com/robots.txt` is 305 lines and was read to its last line.
+# It carries a `*` group and four named LLM-bot groups (`OAI-SearchBot`,
+# `GPTBot`, `ChatGPT-User`, `PerplexityBot`), each of which is `Disallow: /`
+# with an allow-list that, as it happens, re-permits `/jobs*` and `/job/*`
+# anyway. Under RFC 9309 a crawler matches the group for its own product token
+# and otherwise falls back to `*`; this tool's token is
+# `integral-job-search/0.1`, which none of those groups names, so `*` is the
+# group that binds us — and the named groups would permit these paths even if
+# it were one of them.
+#
+# The `*` group's traps, all of them live and all of them checked with
+# `integral.robots.Robots.allows` on 2026-08-30:
+#
+#   * `Disallow: *?page=` — a blanket ban on every paginated URL on the site,
+#     sitting near the bottom of the file. It is immediately followed by
+#     `Allow: /jobs*?page=`, which is longer and therefore wins for this
+#     connector's URLs. Measured both sides: `/jobs/remote?page=2` → ALLOW,
+#     `/articles?page=2` → DENY. Without that one `Allow:` line this connector
+#     would have to be `pagination.mode: none`.
+#   * `Disallow: /jobs*seattle`, `…san-francisco`, `…boston`, `…austin`,
+#     `…colorado`, `…los-angeles`, `…chicago`, `…new-york-city` — the eight
+#     metro-scoped listings are banned. `/jobs/seattle` → DENY, verified.
+#     That is why this connector reads the *remote* listing and not a metro
+#     one, and it is a hard constraint, not a preference.
+#   * ~40 `Disallow: /jobs/*<industry>` lines (`insurance`, `retail`,
+#     `payments`, `mid-level`, …). `/jobs/insurance` → DENY, verified.
+#     `/jobs/remote` collides with none of them (checked character by
+#     character against every pattern, and confirmed by the matcher).
+#   * `Disallow: /search`, `/apply/`, `/admin/`, `/taxonomy/`,
+#     `/jobs*?search=` — none of which this connector touches.
+#
+# Negative controls, so the ALLOW verdicts above mean something rather than
+# coming from a matcher that says yes to everything — eight paths the `*` group
+# actually disallows, all of them returning False: `/search`, `/admin/x`,
+# `/apply/123`, `/jobs?search=python`, `/jobs/seattle`, `/jobs/insurance`,
+# `/articles?page=2`, `/taxonomy/term/1`.
+#
+# `Crawl-delay` appears nowhere in the file; `Robots.delay(..., 1.0)` returns
+# the 1.0 default, so no extra pacing is owed and none is recorded here. Every
+# fetch made while building this connector was spaced ~1-2 s by hand anyway.
+#
+# ## Server-rendered — checked, not assumed
+#
+# A raw `curl` with this tool's UA returns the whole listing already in the
+# markup: `/jobs/remote` is 200 and ~318 KB, and this repo's parser finds all
+# 21 job cards in it without any JavaScript. The JS-shell markers were grepped
+# for and are all absent: `id="root"`, `id="__next"`, `__NUXT__`, `ng-app` —
+# zero occurrences on the listing and on all four detail pages sampled. (The
+# page does load Alpine.js, but only to run the collapse/expand widgets over
+# markup the server already sent; `x-data`/`x-ref` attributes are on elements
+# whose content is present in the raw bytes.)
+site: builtin
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings and ad bodies are public — no account, no session, no cookie was
+# sent by any of the fetches above.
+auth: none
+
+list:
+  # Four listing URLs were fetched on 2026-08-30, all 200, all server-rendered:
+  #
+  #   * `/jobs`                — 24 rows, ~381 KB. The unscoped board.
+  #   * `/jobs/dev-engineering`— 25 rows, ~360 KB. Engineering-scoped.
+  #   * `/jobs/remote`         — 21 rows, ~318 KB. <h1> "Top Remote Tech Jobs",
+  #                              <title> "Best Remote Tech Jobs 2026".
+  #   * `/jobs/remote?page=2`  — 10 rows; `?page=3` — 10 rows.
+  #
+  # `/jobs/remote` is the one this connector reads. The candidate this repo
+  # serves wants fully remote work, and this is the board's own remote filter —
+  # measured over 90 rows across five pages, every row's work-arrangement badge
+  # is one of `Remote or Hybrid` (37), `Hybrid` (29), `In-Office` (14),
+  # `In-Office or Remote` (7), `Remote` (3).
+  #
+  # **Known limitation, stated rather than hidden:** that distribution shows the
+  # board's "remote" listing is *not* fully-remote-only — 43 of those 90 rows
+  # are `Hybrid` or `In-Office`. It is still a much better prior than `/jobs`,
+  # and `location_remote` below carries the badge verbatim so a downstream
+  # filter can be exact where this URL cannot be. What was NOT found is a
+  # stricter URL: no `?remote=true`-style parameter was discovered, and one was
+  # not guessed at.
+  url_pattern: "https://builtin.com/jobs/remote?page={page}"
+  pagination:
+    # Measured, not assumed. All three URLs were fetched on 2026-08-30 and the
+    # sets of `/job/…` hrefs they return are pairwise disjoint (21 / 10 / 10
+    # rows; |p1∩p2| = |p2∩p3| = |p1∩p3| = 0), so this really is consecutive
+    # integer paging and not the same page three times.
+    #
+    # `?page=1` was fetched explicitly and returns the same 21 rows as the
+    # bare `/jobs/remote` — identical href set — so starting at 1 costs no
+    # special case and the URL pattern needs no unparameterised variant.
+    #
+    # Page 1 returns 21 rows and later pages 10; that asymmetry is the board's,
+    # recorded here because a reader counting rows will otherwise think
+    # something is broken.
+    mode: query_param
+    param: page
+    start: 1
+    # 3 pages, ~41 rows. This is a candidate's search, not a crawl of the board.
+    max_pages: 3
+  # `[data-id="job-card"]` — an attribute the board puts there for its own
+  # click-tracking JS, not a styling hook. Built In is Bootstrap/utility-class
+  # styled (`p-md`, `rounded-3`, `d-flex`, `fs-xl`), so every class on the card
+  # is presentation and would over-match the moment anything else on the page
+  # wants a white rounded box.
+  #
+  # Counted with this repo's parser, 2026-08-30: 21 matches on `/jobs/remote`,
+  # 10 on `?page=2`, 10 on `?page=3` — and on page 1 the count equals the 21
+  # *distinct* `href="/job/…"` links in the raw bytes exactly. So there is no
+  # promo banner caught as a blank extra listing (the `remotive_en` /
+  # `jobfluent_es` trap) and no mobile+desktop duplicate of each card (the
+  # other `jobfluent_es` trap): every field selector below returns exactly ONE
+  # node per item, verified per-card across all 21 rows, never 0 and never 2.
+  #
+  # Note the sibling attribute `data-job-id`, which also yields exactly 21 —
+  # but it sits on the *collapsed detail drawer* inside each card, not the card
+  # itself, so selecting it would scope every field to the drawer and lose the
+  # title and company entirely. Checked, and rejected for that reason.
+  item: "[data-id=\"job-card\"]"
+  fields:
+    # The title anchor carries the detail href. Relative (`/job/<slug>/<id>`)
+    # on every one of the 41 rows read; `connector_health.on_portal_host`
+    # treats a relative URL as on-portal by definition, so the "detail_url does
+    # not point at the portal" signal stays meaningful rather than being
+    # defeated here. The same anchor also carries `data-alias` with the
+    # identical path; `href` is preferred because it is what a reader without
+    # JavaScript follows.
+    detail_url:
+      css: "a[data-id=\"job-card-title\"]"
+      attr: href
+    # Same node, its text. The anchor's only content is the title string —
+    # no icon, no badge — so `text_content()` is the title alone. Non-null on
+    # all 41 rows read.
+    title:
+      css: "a[data-id=\"job-card-title\"]"
+    # Built In gives the employer its own tracked anchor, so — unlike
+    # `remotive_en`, where title and company sit in indistinguishable siblings —
+    # no duplication is needed and `free_signals`'s "company is null on every
+    # row" stays a signal this connector does not accidentally defeat.
+    # Non-null on all 41 rows.
+    company:
+      css: "a[data-id=\"company-title\"]"
+    # Built In writes its own ~500-character summary of each advert into the
+    # card ("Summary Generated by Built In" is printed under the same text on
+    # the detail page). This is the one list field with no semantic handle —
+    # four Bootstrap utility classes — so its fragility is recorded rather than
+    # hidden, exactly as `arbeitnow_en` records `span.text-gray-600`.
+    #
+    # What makes it safe *today*: the four-class combination returns exactly 1
+    # node in every one of the 41 cards read (counted per card: all ones, no
+    # zeros, no twos), so first-match-wins has nothing to pick wrongly. The
+    # detail block below overrides it with the real advert body wherever the
+    # detail page is fetched; this exists so a listing-only run still produces
+    # a valid offer, which `build_offer` requires (`text` is mandatory).
+    # If the board restyles, this is the first field to check.
+    text:
+      css: ".fs-sm.fw-regular.mb-md.text-gray-04"
+    # The work-arrangement badge. Also a utility-class selector, and also
+    # measured rather than trusted: across 90 rows on five different pages the
+    # FIRST `.font-barlow.text-gray-04` inside a card was, without exception,
+    # one of five work-arrangement strings — `Remote or Hybrid`, `Hybrid`,
+    # `In-Office`, `In-Office or Remote`, `Remote`. Never a city, never a
+    # salary, never a seniority. Since this grammar has no ":nth-child" and
+    # first-match-wins is document order, that measurement IS the correctness
+    # argument for the field, and it is why the count was taken over five pages
+    # rather than one.
+    #
+    # `Location.remote` is free text by design ("different connectors will
+    # describe remote work in different vocabularies"), so the badge is carried
+    # verbatim rather than coerced to a boolean this connector cannot justify.
+    location_remote:
+      css: ".font-barlow.text-gray-04"
+    # ── NOT mapped, deliberately ──────────────────────────────────────────
+    #
+    # `location_raw`: the card shows either a city ("California, USA") or a
+    # count ("10 Locations") in the *second* `.font-barlow.text-gray-04` span,
+    # with the real list of cities hidden in a `data-bs-title` attribute as
+    # HTML-escaped markup. This grammar cannot say "the second one", and
+    # "10 Locations" is not a location. Left absent rather than filled with a
+    # value that is wrong for roughly half the rows.
+    #
+    # `salary_min` / `salary_max` / `salary_currency` / `salary_period`:
+    # Built In does publish a range on most cards, and it is genuinely
+    # valuable — which is exactly why it is left out. The range is ONE
+    # unsplittable string in ONE element: `45K-85K Annually`, `94K-176K
+    # Annually`, `27K-41K Hourly`. There are no separate min/max elements, no
+    # schema.org `JobPosting` microdata and no `application/ld+json` block on
+    # either the listing or any of the four detail pages fetched (grepped:
+    # zero `itemprop=` and zero `ld+json` on all of them).
+    #
+    # `_as_float("45K-85K Annually")` returns `None` — it refuses anything that
+    # does not reduce to digits — while `build_offer` would still construct
+    # `Salary(min=None, max=None, stated=True)` the moment any `salary_*` key
+    # is present. That is an advert claiming a salary it never stated, and the
+    # ranking reads it. A wrong number is worse than an absent one, so nothing
+    # here is mapped. The `K` suffix could be expanded — but not by a selector,
+    # and this format runs no code (D-10). If it is ever wanted, it belongs in
+    # `build_offer`'s coercion, where every connector gets it and it can be
+    # tested; not smuggled in here.
+
+# Declared because it was fetched and read on four different adverts from four
+# different employers, not because a detail page exists. All four returned 200
+# and ~20-22 KB of server-rendered HTML on 2026-08-30, with the whole advert
+# body already in the raw bytes:
+#
+#   /job/licensed-inside-sales-representative-inbound-remote/10925010  (Liberty Mutual)
+#   /job/consultant-advanced-analytics-embedded-channel/10924566       (Liberty Mutual)
+#   /job/vp-coupa-pay-success-11471/10923156                           (Coupa)
+#   /job/administrative-compensation-specialist/10922146               (General Motors)
+#
+# `fixture/detail.html` is an excerpt of the third — deliberately a *different*
+# employer from anything in `fixture/list.html`, so a selector that silently
+# picked up the listing's employer could not pass unnoticed.
+detail:
+  fields:
+    # Exactly one `<h1>` on each of the four pages, and it is this advert's own
+    # title every time. No sidebar or "similar jobs" card uses `h1`.
+    title:
+      css: "h1"
+    # The bare tag `h2` also resolves to the right employer by document order,
+    # but there are 15 `<h2>`s on the page ("Skills Required", "What We Do", …)
+    # and relying on the first of fifteen being right is one restyle away from
+    # naming a section heading as the employer. `.text-pretty-blue.m-0` narrows
+    # it to 5 nodes — and on all four pages every one of those five is the same
+    # correct employer string, so first-match-wins cannot pick a wrong one.
+    # This is the `ticjob` "similar jobs strip named the wrong employer" trap,
+    # checked for and not present: Built In repeats the *hiring* company, never
+    # another one, in this class.
+    company:
+      css: "h2.text-pretty-blue.m-0"
+    # The advert body. `.html-parsed-content` is the one semantic class on the
+    # page — the board's own name for server-rendered advert HTML — and it is
+    # unique: exactly 1 match on each of the four pages, holding 5.5-7.9 KB of
+    # text. Detail fields win over list fields in `build_offer`, so this is
+    # what the candidate actually reads, replacing the ~500-character summary.
+    #
+    # `[x-ref]` was tried first and rejected: it matches 5 nodes (the body, a
+    # resume-upload panel, a hidden `<input>`, two carousels) and only document
+    # order puts the body first — the same shape as the `<meta itemprop>` trap
+    # a sibling hit today. `.html-parsed-content` needs no ordering argument.
+    text:
+      css: ".html-parsed-content"
+    # No `salary_*` here either, for the reason given above: the detail page
+    # states the range as the same single string ("45K-85K Annually") in a
+    # utility-classed span, with no microdata anywhere on the page.

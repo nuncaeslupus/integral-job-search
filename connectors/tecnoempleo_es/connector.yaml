@@ -1,0 +1,261 @@
+# Tecnoempleo — Spain's largest dedicated IT job board (452 open Python ads on
+# the day this was recorded). Server-rendered listings, no JS shell.
+#
+# ---------------------------------------------------------------------------
+# RETRACTION: `connectors/trabajos_es/connector.yaml` rules this board out. It
+# is wrong, and this header is the correction (the same shape
+# `connectors/remotive_en/connector.yaml` uses to correct that file's stale
+# claim about Remotive). That file is not edited from here — it is another
+# package, and a connector correcting a neighbour in place is how two sessions
+# collide.
+#
+# What it says:
+#
+#     tecnoempleo.com   robots.txt names `ClaudeBot`, `Claude`, `anthropic-ai`,
+#                       `Claude-Web`, `Claude-SearchBot` and `AnthropicBot` with
+#                       `Disallow: /`. `meta.yaml` here has to assert
+#                       `robots_txt: respected`; against that board it would be a
+#                       false statement.
+#
+# What is actually true. The six groups it lists are real — they are still in
+# https://www.tecnoempleo.com/robots.txt, re-read 2026-08-30, alongside `GPTBot`,
+# `yacybot` and `emsi_bot`. But **none of them is us.** RFC 9309 §2.2.1: a
+# crawler matches the group whose product token is its own, and falls back to
+# `User-agent: *` when no group names it. `integral.robots.USER_AGENT` is
+# `integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)`,
+# whose product token is `integral-job-search`. No group names it, so the `*`
+# group binds — and the `*` group allows every path this connector reads. The
+# earlier note applied a rule about *who is asking* to a party it does not ask
+# about, which is the one thing a per-agent group is designed not to do.
+# It is also the right answer on the merits: those groups ban bulk AI-training
+# crawls, and this is one candidate's own search, one page at a time.
+#
+# The claim was not re-derived by reading robots.txt with human eyes — that is a
+# grep, and a grep is what produced the wrong answer the first time. It is the
+# verdict of the repo's own audited matcher (T70), run 2026-08-30:
+#
+#   ALLOW  https://www.tecnoempleo.com/ofertas-trabajo/?te=python      delay 1.0
+#   ALLOW  https://www.tecnoempleo.com/ofertas-trabajo/                delay 1.0
+#   ALLOW  https://www.tecnoempleo.com/ofertas-trabajo/barcelona/      delay 1.0
+#   ALLOW  https://www.tecnoempleo.com/programador-python-arelance/apis-databricks/rf-f0eb...
+#
+# and — the part that makes those four mean anything — four paths the `*` group
+# really does disallow, shown being refused by the same call:
+#
+#   DENY   https://www.tecnoempleo.com/profesionales/          (Disallow: /profesionales/)
+#   DENY   https://www.tecnoempleo.com/imagenes/logo.png       (Disallow: /imagenes/)
+#   DENY   https://www.tecnoempleo.com/accesoempresa.php       (Disallow: /accesoempresa.php)
+#   DENY   https://www.tecnoempleo.com/alertas-empleo-rss.php  (Disallow: /alertas-empleo-rss.php)
+#
+# A matcher that returns True for everything would have returned True for those
+# too. The `*` group was read to its last line: eighteen `Disallow:` rules, none
+# of which is a prefix of `/ofertas-trabajo/` or of the per-offer path shape.
+# No `Crawl-delay` applies to us (the only one in the file is Bingbot's, 5s), so
+# the fetcher's own 1.0s default stands.
+# ---------------------------------------------------------------------------
+site: tecnoempleo
+locale: es
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings and full ad bodies are served to an anonymous client. No account, no
+# paywall, no cookie wall — verified by fetching with the tool's own UA and
+# nothing else (no cookie jar, no referer) and getting the complete ad text.
+auth: none
+
+list:
+  # The per-technology search. `?te=<term>` is the board's own filter parameter;
+  # `/ofertas-trabajo/` unfiltered and `/ofertas-trabajo/barcelona/` (a
+  # province path segment) both return 200 with the *same* card markup, so this
+  # connector's selectors work against any of the three. This one is pinned
+  # because a connector is a saved query, and an unfiltered national feed of
+  # every IT vacancy is 30 rows of noise per page.
+  url_pattern: "https://www.tecnoempleo.com/ofertas-trabajo/?te=python&pagina={page}"
+  pagination:
+    # Measured, not assumed, on 2026-08-30: pages 1, 2 and 3 were fetched and
+    # their per-offer references compared. 30 / 30 / 30 cards, and the three
+    # reference sets are pairwise **disjoint** — 0 shared offers between any
+    # pair — so `pagina` really is a page index and not an offset in disguise.
+    # `?pagina=1` returns byte-for-byte the same 30 references as the
+    # unparameterised URL, which is what lets `start: 1` be correct rather
+    # than off by one. Consecutive integers, so `Pagination` can express it
+    # exactly — unlike trabajos.com's `&DESDE=41` stride of 40, which is why
+    # that connector had to declare `mode: none`.
+    mode: query_param
+    param: pagina
+    start: 1
+    # Three, because three is what was fetched and checked. The board reports
+    # 452 matches (16 pages) and nothing stops a fetcher going deeper; this is
+    # the depth with evidence behind it.
+    max_pages: 3
+  # One offer per `div.p-3.border.rounded.mb-3.bg-white`. These are Bootstrap
+  # utility classes, not semantic names — the weakest part of this connector,
+  # and chosen only because the board gives the card no id, no data-attribute
+  # and no semantic class to hold on to. A restyle breaks it; `connector_health`
+  # is what notices.
+  #
+  # Counted, not eyeballed, because a one-class selector catching a promo banner
+  # is the failure two sibling connectors shipped: on all five pages fetched
+  # (`?te=python` pages 1-3, unfiltered, and Barcelona) this selector returns
+  # **exactly 30** nodes, and every one of the 30 contains exactly one title
+  # link. Cross-checked against `/rf-<hex>` references found by regex in the raw
+  # bytes: 30 distinct on four of the five pages. Page 2 has 30 cards but 29
+  # distinct references — the board itself repeats one offer on that page. That
+  # is board-side duplication, not an over-broad selector, and dedup is the
+  # sourcing step's job (offers carry a content-hashed id).
+  #
+  # The other sibling trap — every card rendered twice, mobile and desktop —
+  # does not happen here: 30 cards for 30 offers, not 60. The board renders one
+  # card and switches *fields within it* by breakpoint class, which is a real
+  # hazard and is handled field by field below.
+  item: "div.p-3.border.rounded.mb-3.bg-white"
+  fields:
+    # The offer link. Note the URL shape: `/<job-slug>-<company-slug>/<tech-slug>/rf-<hex20>`,
+    # with no `/oferta/` or `/ofertas-trabajo/` prefix and no trailing slash — a
+    # pattern-guess that assumes a path prefix finds zero links on this board.
+    # Absolute in the served markup, so no base-URL join is needed.
+    detail_url:
+      css: "a.font-weight-bold.text-cyan-700"
+      attr: href
+    # Same anchor, its text. Exactly one per card on all 150 cards checked, so
+    # first-match-wins is not doing any silent choosing here.
+    title:
+      css: "a.font-weight-bold.text-cyan-700"
+    # The employer's own board page link. Present on 26 of 30 cards; the other
+    # four are aggregator-fed postings (`-appcast` in the slug) that the board
+    # publishes without an employer profile, and their markup simply has no
+    # anchor rather than an empty one — so `_extract` returns None and the key
+    # is omitted, not set to "". `free_signals()` flags "company is null on
+    # *every* row"; 26/30 is well clear of that, and the detail block below
+    # recovers nothing extra for those four because their detail pages are
+    # equally anonymous. Documented rather than papered over: for those four
+    # offers the employer is genuinely not published here. Over the full live
+    # run — 90 rows, 3 pages, 2026-08-30 — 73 of 90 carried a company, and
+    # `free_signals()` returned `[]` on the live rows, the fixture and the probe
+    # alike (no null-company sweep, no undecoded entity, no off-host link).
+    #
+    # `.text-primary.link-muted` alone matches 58 nodes document-wide (the
+    # footer's "TOP empleo" links carry it too) — harmless, because a field
+    # selector only ever searches *within* one item node, where there is at
+    # most one.
+    company:
+      css: "a.text-primary.link-muted"
+    # The bare place name. This is the one selector that looks reckless and is
+    # not: each card contains exactly **two** `<b>` elements, one in the
+    # mobile-only line and one in the desktop-only right column, and they carry
+    # the *same* string — checked on all 30 cards of page 1, where the two
+    # values were identical every time ("Madrid", "Barcelona", "Málaga",
+    # "100% remoto", …). First-match-wins therefore cannot pick the wrong copy,
+    # which is precisely the mobile/desktop trap that bit a sibling.
+    #
+    # Why not the enclosing span: both copies wrap the place name in a line that
+    # also carries the posting date and, when present, the salary band —
+    # "Málaga (Híbrido) - 28/08/2026 30.000€ - 36.000€ b/a". `<b>` is the only
+    # element on the card holding the location and nothing else. The cost is
+    # that the work-mode qualifier "(Híbrido)" sits *outside* the `<b>` and is
+    # lost; the detail page's badge (below) carries it and wins on overlap.
+    # `location_remote` is deliberately unmapped: "100% remoto" arrives here as
+    # the location string, and there is no separate element saying yes/no that a
+    # selector could read without inventing the answer.
+    #
+    # Measured limitation, live over 90 rows (3 pages) on 2026-08-30: **2 rows
+    # carry no `<b>` at all** and so produce no `location_raw`. Both are
+    # multi-country aggregator postings the board declines to pin to a place.
+    # The key is then simply absent (never ""), so `build_offer` leaves
+    # `location=None` rather than asserting an empty one — and the detail badge
+    # below fills it in anyway: that Analytics Engineer row resolves to "España"
+    # once the detail page is read.
+    location_raw:
+      css: "b"
+    # The board's own teaser — it truncates the ad to ~200 characters with an
+    # ellipsis before serving the list, so this is short by the *board's*
+    # choice, not ours. Trailing skill badges ("Python", "FastAPI") come along
+    # inside the same span; they are real ad content and kept.
+    # `build_offer` refuses an offer with no text, so this is what guarantees
+    # a list-only parse still yields one. The detail body overrides it.
+    text:
+      css: "span.hidden-md-down.text-gray-800"
+
+# Verified on three different adverts fetched 2026-08-30 — an employer-branded
+# one (Arelance) and two anonymised aggregator ones (GFT, and a Barcelona role)
+# — because "first match wins" only means something once you know how many
+# matches there are. Every selector below returned exactly 0 or 1 node on each
+# of the three. The sibling failure this guards against is ticjob's, where a
+# "similar jobs" strip put four employer blocks on the page and first-match
+# named the wrong company: this board has no such strip in the served markup.
+detail:
+  fields:
+    # `itemprop="title"` — the board's own microdata, one per page, and a
+    # semantic hook far more durable than the `h3`/`h5-xs` utility classes
+    # beside it. (Bare `h1` also returns exactly one node here; the itemprop
+    # is preferred for being a promise rather than a coincidence.)
+    title:
+      css: "h1[itemprop=\"title\"]"
+    # NOT `span[itemprop="name"]`. That looks like the obvious microdata answer
+    # and is a trap: the breadcrumb above the fold is also an `itemprop="name"`
+    # span and it comes **first in document order**, so first-match-wins returns
+    # the *job title* as the company. Measured — 2 matches per page, the first
+    # being the breadcrumb. The employer link's `fs--18` size class is what
+    # separates it from the 30-odd other `.text-primary.link-muted` anchors on
+    # the page, and it returned exactly 1 on the branded advert and 0 on both
+    # anonymised ones (key omitted, list value kept — see `company` above).
+    company:
+      css: "a.text-primary.link-muted.fs--18"
+    # The header badge: "Málaga (Híbrido)", "Barcelona (Híbrido)",
+    # "Madrid - España". One per page on all three. Richer than the list's bare
+    # `<b>` because it keeps the work-mode qualifier, and detail wins on
+    # overlap, so this is the value that reaches the offer.
+    location_raw:
+      css: "span.badge.bg-secondary-soft"
+    # The full ad body, ~2-4 KB of it. NOT `div[itemprop="description"]`, which
+    # is the enclosing block and would prepend its own `<h2>` heading text
+    # ("Descripción de la oferta de empleo") to every single body — polluting
+    # the text and, since the offer id is a content hash of that text, the id
+    # too. This inner div is the body alone; one per page on all three.
+    text:
+      css: "div.fs--16.text-gray-800"
+
+# ---------------------------------------------------------------------------
+# SALARY: deliberately unmapped, on both pages. This is the decision most worth
+# reading, because the board publishes salary bands prominently and mapping
+# them would be actively harmful — a wrong number is worse than an absent one,
+# since `Salary(stated=True)` tells the ranking the employer made a claim.
+#
+# Three routes exist and all three are refused:
+#
+# 1. The **list** card. "30.000€ - 36.000€ b/a" is concatenated into the same
+#    text node as the location and the date: "Málaga (Híbrido) - 28/08/2026
+#    30.000€ - 36.000€ b/a". No element holds the number alone. This grammar
+#    has no way to split a string, and `_as_float` on that whole run returns
+#    None — while `build_offer` would still set `stated=True`. That is an
+#    advert claiming a salary it never stated: exactly the defect a sibling
+#    shipped from jobfluent's "45.000 € - 55.000 €".
+#
+# 2. The **detail** page's "Otros detalles" list. It does render the band in its
+#    own span — `<span class="float-end">30.000 &euro;&nbsp;-&nbsp;36.000 &euro;
+#    Bruto/año</span>` — but (a) it is still one unsplittable string carrying
+#    both bounds, the currency and the period, and (b) that span is the third of
+#    several `span.float-end` in the same list, identical in class to the ones
+#    holding "Experiencia" and "Indefinido". First-match-wins would return the
+#    experience level as the salary. Not addressable by this grammar at all.
+#
+# 3. The **JSON-LD**. The detail page does carry a schema.org `JobPosting` in a
+#    `<script type="application/ld+json">`, and its `baseSalary` is genuinely
+#    clean and structured — verified on the Arelance advert:
+#      {"@type":"MonetaryAmount","currency":"EUR",
+#       "value":{"minValue":30000,"maxValue":36000,"unitText":"YEAR"}}
+#    This is the shape that made jobfluent's microdata worth having. Here it is
+#    unreachable: it is **JSON inside one text node**, not separate elements
+#    with their own `itemprop`s. A selector on that script tag yields the entire
+#    JSON document as one string, and mapping that to `salary_min` gives
+#    `_as_float` a 2 KB blob — None, with `stated=True`. The upgrade path is a
+#    JSON-LD extraction step in `integral.connectors` (a declared JSON pointer
+#    per field, still data and still not executed); until that exists, this
+#    board's salary is not expressible and is therefore left out.
+#    Two of the three adverts checked had no `baseSalary` key at all, so even
+#    with that feature this stays optional.
+#
+# `salary_currency` and `salary_period` are also left out: setting either alone
+# is enough to make `build_offer` construct a `Salary(stated=True)` with no
+# numbers in it, which asserts the employer stated a salary while carrying none.
+# The band is not lost to a reader — it is in the ad body, which `text` carries.
+# ---------------------------------------------------------------------------

@@ -1,0 +1,231 @@
+# JobFluent — a Barcelona-first board for startup and tech roles, and the first
+# connector in this library pointed at a *tech* listing in Spanish. The one
+# Spanish connector before it (`trabajos_es`) reads a customer-service category;
+# the candidate this repo serves is a Barcelona Python developer, so nothing in
+# the library was pointed at their market until this file.
+#
+# ## robots.txt — checked live on 2026-08-30, and the check that matters is
+# ## the repo's own matcher, not a grep
+#
+# https://www.jobfluent.com/robots.txt names five crawlers with `Disallow: /` —
+# `GPTBot`, `ChatGPT-User`, `ClaudeBot`, `CCBot`, `Bytespider` — and then an
+# open `User-agent: *` group that disallows fifteen specific paths.
+#
+# **`ClaudeBot` does not bind this tool.** RFC 9309 §2.2.1: a crawler matches
+# the group whose product token is its own, and falls back to `*` when no group
+# names it. `integral.robots.USER_AGENT` is
+# `integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)`,
+# whose product token is `integral-job-search` — not `ClaudeBot`, which is
+# Anthropic's own crawler and a different agent entirely. Those five entries
+# target bulk AI-training crawls; this connector is a candidate-initiated read
+# of a public listing. Recorded here because an earlier pass at this site
+# refused it on a grep of that word, and the refusal would otherwise be
+# rediscovered every time somebody opens the file.
+#
+# That reasoning is not the authority — `integral.robots.Robots` is, and it was
+# run against every URL shape below on 2026-08-30:
+#
+#   /es/empleos-barcelona                      allows=True   delay=1.0
+#   /es/empleos-barcelona?page=2               allows=True   delay=1.0
+#   /es/empleos-barcelona?page=1               allows=True   delay=1.0
+#   /es/empleos/<slug>-barcelona-<id>?result=N allows=True   delay=1.0
+#   /es/empresa/<slug>                         allows=True   delay=1.0
+#
+# The whole `*` group was read to its last line (a sibling connector was
+# correctly refused today by a `Disallow:` sitting at the very bottom of one).
+# The fifteen disallowed prefixes are `/login`, `/subscribe`, `/subscriptions*`,
+# `/offer_subscriptions*`, `/log_search`, `/track`, `/404`, `/sessions*`,
+# `/api/*`, and five `/*/external…`-style application endpoints. None is a path
+# this connector reads: the listing, the paged listing and the ad pages are all
+# outside them. `delay()` returns the caller's own default (1.0) — the file
+# states no `Crawl-delay`, so there is nothing extra to honour.
+#
+# Fetched with the tool's own UA (not curl's default, not a browser's) on
+# 2026-08-30: list page HTTP 200 / 126,050 bytes; `?page=2` 200 / 125,240;
+# `?page=3` 200 / 119,095; three ad pages 200 / ~74,000 each. Server-rendered
+# throughout — the listings and the ad bodies are in the served HTML, not
+# assembled by JavaScript afterwards.
+site: jobfluent
+locale: es
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings and ad pages are public; reading either needs no account. An account
+# is only needed to *apply*, and those endpoints are the `/*/external…` ones
+# robots.txt disallows and this connector never touches.
+auth: none
+
+list:
+  # Real pagination, for once: `<link rel="next">` in the head points at
+  # `?page=2`, page 2's points at `?page=3`, and each returns a distinct set of
+  # 25 cards (all three fetched 2026-08-30). Consecutive integers from 1 is
+  # exactly what `Pagination` can express, unlike `trabajos_es`'s stride-of-40
+  # offset paging — so this one is declared rather than flattened to
+  # `mode: none`. `max_pages: 3` is a floor somebody measured, not a guess:
+  # pages 1-3 were fetched and each yielded 25 offers. Raise it after fetching
+  # the pages you raise it to.
+  url_pattern: "https://www.jobfluent.com/es/empleos-barcelona?page={page}"
+  pagination:
+    mode: query_param
+    param: page
+    start: 1
+    max_pages: 3
+  # 25 per page, and the choice between two near-identical selectors matters:
+  #
+  #   div.row.offer-row          26 on the live page
+  #   div.panel-body.offer-body  25 on the live page
+  #
+  # The extra `offer-row` is JobFluent's own Telegram-channel promo, rendered
+  # between the 4th and 5th ad inside `div.panel.panel-default.offer.ad` with a
+  # plain `div.panel-body` — no `offer-body`. It has a logo, a `row offer-row`
+  # and a link, so a selector on `offer-row` picks it up as a 26th, contentless
+  # "listing": exactly the failure `remotive_en` documents for `.job-tile`.
+  # `fixture/list.html` keeps that banner in place, between the 2nd and 3rd
+  # card, so the fixture proves this selector skips it rather than asserting it.
+  item: "div.panel-body.offer-body"
+  fields:
+    # Relative (`/es/empleos/<slug>-barcelona-<id>?result=N`), which
+    # `connector_health.on_portal_host` treats as on-host by definition — a
+    # scheme-less, netloc-less URL is the portal's own. The `?result=N` tail is
+    # the card's position in *this* search; it is carried through rather than
+    # stripped, because this grammar has no rewrite step and a hand-trimmed URL
+    # would be a value the page never emitted. The page also repeats the same
+    # path in `div.offer-col.offer[data-url]`; the anchor is preferred as the
+    # link a human would actually follow.
+    detail_url:
+      css: "a.text-dark.text-no-decor"
+      attr: href
+    # The card's `h3` is a single text node reading "<title> en <company>" —
+    # one element, no separator this grammar can cut on. Kept whole rather than
+    # guessed at, the same call `remotive_en` makes for its `[Hiring] … @…`
+    # heading. The detail page splits the two cleanly into
+    # `[itemprop="title"]` and `[itemprop="hiringOrganization"]`, and detail
+    # fields win on overlap in `build_offer`, so an offer collected with the
+    # detail page never shows this merged string.
+    title:
+      css: "h3.offer-title"
+    # The one place the list markup states the employer on its own: the logo's
+    # `alt`, which is the company name plus a literal " logo" suffix
+    # ("SDLI - Innovation Agency logo"). Verbatim from the page, and this
+    # grammar cannot strip the suffix — so it is a deliberately imperfect
+    # *fallback*, overridden by the detail page's clean value whenever the ad
+    # itself is fetched.
+    #
+    # Why not leave it out. `connector_health.free_signals` reports "company is
+    # null on every row" as a rot signal, and a connector that never fills the
+    # field burns that signal permanently: it would read broken on the day it
+    # shipped and could never report anything else. The alternatives were worse
+    # — `a.offer-logo[href]` is a URL slug, its `title` attribute is a whole
+    # Spanish sentence, and the `h3` is the merged title above.
+    company:
+      css: "img"
+      attr: alt
+    # `div.offer-col.offer` is the card's text column: heading, salary band,
+    # posted-date, category, industry and skill labels. Deliberately NOT the
+    # item node's own text.
+    #
+    # **The responsive-duplicate trap.** Each card renders its label strip
+    # twice: `div.row.font-0.hidden-xs` (desktop) *inside* the offer-row, and
+    # `div.row.visible-xs` (mobile) as a sibling of it, with byte-identical
+    # content. Anything selecting the whole card would emit every skill twice.
+    # `.offer-col.offer` contains the desktop copy only, so the duplicate never
+    # reaches the body. (Verified by printing what this selector returns on the
+    # live page, not by reading the markup: the labels appear once.)
+    #
+    # This is a teaser, not the advert — the list page carries no ad body at
+    # all. The detail page's `text` replaces it whenever the ad is fetched; it
+    # is here so a list-only run still produces the non-empty `text`
+    # `build_offer` requires.
+    text:
+      css: "div.offer-col.offer"
+    # No `location_raw` here on purpose. The card states no location anywhere —
+    # the URL says `empleos-barcelona`, but a URL is not a field, and writing
+    # "Barcelona" in as a constant would put a fact in the record that no page
+    # asserted (and this schema has no vocabulary for a constant anyway). The
+    # detail page states it properly, in microdata; see below.
+    #
+    # No `salary_*` here either, and this is the expensive one to get wrong.
+    # `span.salary` carries the whole band as ONE string — "45.000 € - 55.000 €"
+    # — and nothing in this grammar can split it. Mapping it to `salary_min`
+    # would hand `_as_float` a string with a dash and two euro signs; that
+    # returns `None`, so `Salary(stated=True)` would be recorded with no
+    # numbers at all: an advert claiming to state a salary it does not.
+    # The detail page publishes min and max as separate schema.org elements,
+    # which is where the numbers actually come from.
+
+# Proven, not merely declared: `fixture/detail.html` is a real ad page and every
+# selector below matched something in it (`check_fixture` refuses a detail block
+# whose selectors match nothing). Fetched 2026-08-30, HTTP 200, server-rendered.
+#
+# The ad pages carry schema.org `JobPosting` microdata, which is a far better
+# thing to select on than a Bootstrap class: `itemprop` names are the *site's
+# contract with search engines*, so they survive restyles that would break
+# `.col-sm-8` and friends. Every attribute selector below is a single match on
+# the live page — checked on three different ads (one with a salary band, two
+# without) on 2026-08-30.
+detail:
+  fields:
+    # Title alone, without the " en <company>" the list heading merges in.
+    title:
+      css: "[itemprop=\"title\"]"
+    # The `hiringOrganization` span wraps a single `[itemprop="name"]` child, so
+    # its text content IS the company. Selecting `[itemprop="name"]` directly
+    # would NOT work: the first match in document order is a `<meta itemprop=
+    # "name" content="JobFluent">` in the head — the *board's* name, and one
+    # with no text content at all, so the field would silently come back empty.
+    # Checked, not assumed.
+    company:
+      css: "span[itemprop=\"hiringOrganization\"]"
+    # The full ad body. `[itemprop="description"]` is tempting and wrong for the
+    # same reason as `name` above — the head carries a `<meta itemprop=
+    # "description">` summary that wins on document order and yields no text.
+    # `div.offer-description` is unique and in the body.
+    text:
+      css: "div.offer-description"
+    # Microdata, inside the `h1`: "<title> en <addressLocality> o en remoto".
+    # This is the element that actually asserts the city.
+    location_raw:
+      css: "[itemprop=\"addressLocality\"]"
+    # A `<meta>`, so the value is in `content`, not in any text node.
+    location_country:
+      css: "meta[itemprop=\"addressCountry\"]"
+      attr: content
+    # The board's own workplace vocabulary — "En remoto" / "En sede" — read from
+    # the "Lugar de trabajo" row. `Location.remote` is free text precisely so a
+    # connector can pass a board's wording through instead of guessing at an
+    # enum.
+    #
+    # Known ceiling: `b.text-pale` is a styling class, not a semantic one, and
+    # the page has three of them — workplace, then "Horas" (Full-Time), then
+    # "Prácticas" (false). First-match-wins gets the workplace because that row
+    # is rendered first. Confirmed on all three ads fetched 2026-08-30, but it
+    # rests on document order rather than on a name, so it is the first field
+    # here to check if this connector ever starts reporting "Full-Time" as a
+    # remote mode. There is no `itemprop` on that row to use instead.
+    location_remote:
+      css: "b.text-pale"
+    # The band, as two separate elements — which is what makes it safe to
+    # record at all. `<span itemprop="minValue">45.000 </span>` and its
+    # `maxValue` sibling each hold one number in the continental convention;
+    # `_as_float` reads "45.000" as 45000.0 (one separator, exactly three
+    # digits after it → thousands), which is why they can be mapped and the
+    # list page's single "45.000 € - 55.000 €" string cannot.
+    #
+    # All four salary fields live inside the same conditionally-rendered
+    # `[itemprop="baseSalary"]` block, so an ad with no published band matches
+    # none of them and `build_offer` constructs no `Salary` at all — rather
+    # than a `stated=True` with empty numbers. Verified on two ads without a
+    # band (2026-08-30): zero matches for each of the four.
+    salary_min:
+      css: "span[itemprop=\"minValue\"]"
+    salary_max:
+      css: "span[itemprop=\"maxValue\"]"
+    # `<meta itemprop="currency" content="EUR">` — attribute, not text.
+    salary_currency:
+      css: "meta[itemprop=\"currency\"]"
+      attr: content
+    # `<meta itemprop="unitText" content="YEAR">` — schema.org's own period
+    # vocabulary, passed through as the site states it. `Salary.period` is free
+    # text, so no mapping to some other spelling is invented here.
+    salary_period:
+      css: "meta[itemprop=\"unitText\"]"
+      attr: content

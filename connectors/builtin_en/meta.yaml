@@ -1,0 +1,97 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: builtin.com
+# `US`, not `GLOBAL`, and the difference matters: `connector_coverage` matches
+# country by **equality**, so a connector filed as GLOBAL does not answer
+# "what covers the US". Built In is a US board and the rows say so — every
+# location string read on 2026-08-30 ends in `USA` ("Miami, FL, USA",
+# "Boise, ID, USA", "California, USA", "Garland, TX, USA"), across all four
+# detail pages and the location tooltips of the 41 listing rows. Not one row
+# named a country other than the United States. `remotive_en` and
+# `arbeitnow_en` are GLOBAL because their rows genuinely span countries; these
+# do not, and claiming GLOBAL here would overstate the connector's reach.
+# The remote scope of the listing is about *where the work happens*, not about
+# where the employer is — which is what this field records.
+country: US
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked in full on the date above, with this tool's own User-Agent
+# (`integral-job-search/0.1`): https://builtin.com/robots.txt is 305 lines.
+# The verdicts below come from this repo's own audited matcher
+# (`integral.robots.Robots.allows`, T70) — never from a grep of the file.
+#
+# The file has a `*` group plus four LLM-bot groups (OAI-SearchBot, GPTBot,
+# ChatGPT-User, PerplexityBot). Under RFC 9309 a crawler matches the group for
+# its own product token and otherwise falls back to `*`; this tool's token is
+# named by none of them, so `*` binds us — and in any case each of those four
+# groups explicitly re-allows `/jobs*` and `/job/*` after its `Disallow: /`.
+#
+# ALLOW: /jobs/remote, /jobs/remote?page=2, /jobs/remote?page=3, /jobs,
+#        /jobs?page=2, /jobs/dev-engineering, and both sampled /job/<slug>/<id>
+#        detail pages.
+# DENY (negative controls, so the ALLOW list above is evidence rather than a
+#        matcher that says yes to everything): /search, /admin/x, /apply/123,
+#        /jobs?search=python, /jobs/seattle, /jobs/insurance, /articles?page=2,
+#        /taxonomy/term/1.
+#
+# Two of those DENYs are load-bearing for this connector's design, not
+# decoration. `Disallow: *?page=` bans pagination site-wide and is only undone
+# for us by the longer `Allow: /jobs*?page=` — which is why /jobs/remote?page=2
+# is ALLOW while /articles?page=2 is DENY. And `Disallow: /jobs*seattle` (plus
+# seven more metros) bans every metro-scoped listing, which is why this
+# connector reads the remote listing rather than a city one.
+#
+# No `Crawl-delay` anywhere in the file: `Robots.delay(url, 1.0)` returns 1.0,
+# the default, so no extra pacing is owed. Fetches taken while building this
+# were spaced ~1-2 s regardless.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — the first three rows of
+# `https://builtin.com/jobs/remote` and one advert reached from `?page=2`,
+# taken on the date below. Never an advert a candidate was reading: the set of
+# ads a person opens carries their field, level, city and the fact that they
+# are looking, and a fixture in a public repository carries that forever.
+#
+# `probe/list.html` is a capture of `?page=2` rather than a second read of the
+# fixture's own URL. Measured before committing: the href sets of page 1 and
+# page 2 are disjoint, so the rot stage compares genuinely different content
+# instead of near-identical bytes. `probe/captured.json` records its date.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted before committing. `tools/excerpt_fixture.py` could not do it
+  # here — it locates the body by the first *class* named in the `text`
+  # selector, and it looks for a `<div class="…">` whose class attribute begins
+  # with that class, which neither `.fs-sm.fw-regular.mb-md.text-gray-04` (a
+  # four-class subset match) nor the detail block's `.html-parsed-content`
+  # (which is the *last* class on its element) satisfies. So the same rule was
+  # applied by hand and with the same discipline: every cut is made in the raw
+  # bytes, at a tag boundary, and everything kept is byte-identical to what the
+  # server sent. Nothing was parsed and re-serialised, because that would
+  # repair markup the fixture exists to preserve.
+  #
+  # The live listing is ~318 KB; what is committed is three job cards lifted
+  # whole (byte-exact, balanced `<div>` slices) into a minimal `<html><body>`
+  # shell, with everything else — head, stylesheets, scripts, header, sidebar,
+  # footer and the other 18 cards — dropped. `fixture/detail.html` is three
+  # byte-exact slices of one 20 KB advert page: the employer heading anchor,
+  # the `<h1>`, and the body div. Built In's own generated summary in each card
+  # is cut to a 160-character leading excerpt and the advert body to 400
+  # characters, each closed by the shared truncation marker
+  # `<p>[fixture excerpt — body truncated, see meta.yaml]</p>` that
+  # `tools/excerpt_fixture.py` uses — the advert text is the board's content,
+  # not ours, and the fixture only has to prove the selectors find the right
+  # fields.
+  bodies: excerpted
+  # Grepped the committed bytes of `fixture/list.html`, `fixture/detail.html`
+  # and `probe/list.html` for an IPv4 literal on 2026-08-30: **none found**, so
+  # nothing was removed. Built In writes no client IP into its responses,
+  # unlike trabajos.com. This field records the check, not a redaction that
+  # happened.
+  client_ip: redacted

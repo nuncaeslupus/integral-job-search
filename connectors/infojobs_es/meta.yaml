@@ -1,0 +1,88 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+#
+# `site` here is the **domain**, while `connector.yaml`'s `site` is the short
+# id the package directory is named from (`infojobs` + `_es`). The two are
+# deliberately different values: `connector_health.on_portal_host` checks each
+# scraped `detail_url` against this one, and `www.infojobs.net` only ends with
+# `.infojobs.net`, never with `.infojobs`.
+site: infojobs.net
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked with the repo's own audited matcher (`integral.robots`, T70) on the
+# date above, never by grepping the file. https://www.infojobs.net/robots.txt
+# names `ClaudeBot`, `GPTBot`, `CCBot`, `PerplexityBot`, `Google-Extended` and
+# a dozen other bulk crawlers with `Disallow: /` — **and none of those groups
+# is this tool's**. Under RFC 9309 §2.2.1 a crawler obeys the group matching
+# its own product token, and falls back to `User-agent: *` when the file names
+# none; this tool sends `integral-job-search/0.1`, which the file never
+# mentions, so `*` is the binding group. `connector.yaml` carries the full
+# reasoning and the measurements, including the negative controls
+# (`/ver-oferta.xhtml`, `/ofertas_lista.cfm`, `/react`, `/webapp`, `*.prf`)
+# that the matcher correctly refuses — a permit with no refusal beside it says
+# nothing.
+#
+# The file has two separate `User-agent: *` groups; both were read to the last
+# line. Neither disallows a path this connector reads. The `*` group sets no
+# Crawl-delay, so the tool's own 1.0 s default stands.
+#
+# One live rule this connector cannot express and a fetcher must honour:
+# `Disallow: /*applicationOrigin=*` matches every offer link the listing
+# emits. `detail_url` is recorded as the board writes it, and nothing follows
+# it today (no `detail` block is declared, and fetching is not wired to it) —
+# see `connector.yaml` before that changes.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — two search listings taken on the date below,
+# never an advert a candidate was reading: the set of ads a person opens
+# carries their field, level, city and the fact that they are looking, and a
+# fixture in a public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+
+  # Excerpted, and by hand rather than with `tools/excerpt_fixture.py`. The
+  # tool was run against this package and reported
+  # `{'list_teasers_excerpted': 0}`, leaving the file byte-for-byte unchanged.
+  # The reason is in its `_spans()`, which locates bodies with the literal
+  # pattern `<div class="<first-class-of-the-text-selector>"`, and this
+  # connector's bodies fail it twice over: the element is a `<p>`, not a
+  # `<div>`, and its class attribute holds five classes
+  # (`ij-BaseTypography ij-Text ij-Text-body1
+  # ij-OfferCardContent-description-description …`) where the pattern requires
+  # the attribute to be that one class alone. Neither is something a
+  # connector can change — it is the board's markup.
+  #
+  # So the tool's own rule was applied in the raw bytes instead, exactly as it
+  # documents: the edit is made on tag boundaries, never by parsing and
+  # re-serialising, so the committed markup still carries whatever the server
+  # got wrong and the repo's repair-free parser is still tested against it.
+  # The cut is 220 characters rather than the tool's own limit, and ends with
+  # `…` rather than the tool's ` ...`; this board's list bodies are full
+  # advert texts (see `connector.yaml`), not the truncated teasers the tool's
+  # ellipsis convention was written for.
+  #
+  # What was cut, from a 1.29 MB response down to ~17 KB:
+  #   * everything outside the results `<ul class="… ij-OfferList">` — header,
+  #     filter sidebar, footer, SEO tag clouds, and ~1.06 MB of `<script>`;
+  #   * all but the first three advert cards;
+  #   * each advert body truncated to a 220-character leading excerpt with a
+  #     trailing `…`, cut so it can never end inside a tag or a character
+  #     reference.
+  # The `<html>`/`<head>`/`<body>` shell and the closing `</ul>` are the only
+  # synthesised bytes; every card is byte-identical to the response.
+  bodies: excerpted
+
+  # No redaction was needed and none was performed. trabajos.com writes the
+  # recording client's IP into an HTML comment; InfoJobs does not. Both
+  # committed files were grepped for an IPv4 literal and neither contains one,
+  # so this key records an absence that was checked, not an edit that was
+  # made.
+  client_ip: redacted

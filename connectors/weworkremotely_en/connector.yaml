@@ -1,0 +1,192 @@
+# We Work Remotely — the listing is read through the board's own RSS feed, the
+# advert body through the ordinary HTML detail page.
+#
+# ## Why the feed for the listing
+#
+# Everything below was fetched live from this laptop on 2026-08-30 with a
+# plain `curl` and the user agent `Mozilla/5.0 (compatible;
+# integral-job-search/1.0)`; the dates in `last_verified` are what make it
+# checkable again rather than a promise it stays true.
+#
+#   * `https://weworkremotely.com/categories/remote-programming-jobs.rss`
+#     answers 200, `content-type: application/rss+xml; charset=utf-8`, with 25
+#     `<item>` elements (~167 kB). One request, no redirect, and the whole
+#     advert body arrives inside each `<description>`.
+#   * The HTML equivalent is reachable but is not the same query: asking for
+#     `/categories/remote-programming-jobs` with `Accept: text/html` answers
+#     **302** to `/categories/remote-full-stack-programming-jobs` — a narrower
+#     category than the one that was asked for — and 233 kB of application
+#     markup. A connector whose declared URL silently becomes a different
+#     category's URL is a connector that lies about what it searched.
+#
+# So the feed is not a workaround here, it is the better surface: it answers
+# the question that was asked, it is two orders of magnitude smaller, and its
+# document model (`item`/`title`/`region`/`guid`) is far less likely to move
+# under a restyle than a hashed BEM class is.
+#
+# A note for whoever reads this next, because it cost a session: an earlier
+# survey recorded that WWR's HTML pages were behind a Cloudflare challenge
+# (403, `cf-mitigated: challenge`). **That did not reproduce on 2026-08-30**
+# from this laptop with the UA above — the category page answered 200/302 as
+# described, and an individual `/remote-jobs/<slug>` page answered 200 with
+# 88 kB of real, server-rendered advert markup. Challenge behaviour is
+# per-client and per-day; do not treat either observation as permanent.
+#
+# ## robots.txt — checked, not assumed
+#
+# https://weworkremotely.com/robots.txt fetched live 2026-08-30 (200,
+# `last-modified: Fri, 31 Jul 2026 18:35:35 GMT`). It contains exactly one
+# group, `User-agent: *`, with `Allow: /` and seven `Disallow:` prefixes:
+# `/admin/`, `/account/`, `/job-seekers/account/`, `/job-seekers/profile/`,
+# `/manage-company/`, `/*edit?token=/`, `/*cancel?token=/`. **No rule names any
+# AI agent** — there is no ClaudeBot, GPTBot, CCBot or anthropic-* group in the
+# file at all, unlike tecnoempleo.com/remoteok.com. Neither `/categories/…rss`
+# nor `/remote-jobs/<slug>` is matched by any of those prefixes, so both URLs
+# this connector reads fall under `Allow: /`.
+#
+# ## An XML feed through an HTML parser
+#
+# `connectors.py` parses with `html.parser`, which handles this feed correctly
+# (verified: 25 `item` nodes, each carrying its own `title`/`region`/`category`/
+# `description`/`guid`). Two behaviours of that parser are load-bearing and are
+# called out where they bite: `link` is an HTML **void** element, and
+# `convert_charrefs=True` decodes `&amp;`/`&lt;` in text on the way in.
+site: weworkremotely
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Both URLs are public; reading them needs no account, no key and no cookie.
+auth: none
+
+list:
+  # One category per URL. `remote-programming-jobs` is the one this connector
+  # points at; the board's other categories are sibling URLs, not pages of it.
+  url_pattern: "https://weworkremotely.com/categories/remote-programming-jobs.rss"
+  pagination:
+    # Structurally true, not a placeholder left at its default: the feed URL
+    # accepts no page query parameter and no page path segment — it serves the
+    # current batch (25 items on 2026-08-30) and stops. There is no second page
+    # whose URL this connector could describe, so `mode: none` states that and
+    # `max_pages: 1` follows from it.
+    mode: none
+    max_pages: 1
+  # A bare tag name, which the grammar allows. Checked for over-matching rather
+  # than assumed: a tag census over the whole parsed feed on 2026-08-30 counted
+  # `item` exactly 25 times against 25 adverts. The `<channel>` wrapper uses
+  # `title`/`link`/`description`/`language`/`ttl` and no `item`, so there is no
+  # non-advert node for this selector to pick up. (`title`, `link` and
+  # `description` each count 26 — the channel's own copy plus one per item —
+  # which does not reach the field selectors below: those are matched against
+  # the descendants of an item node, never against the document.)
+  item: "item"
+  fields:
+    # `<guid>`, deliberately, even though `<link>` is the semantically obvious
+    # choice. This is forced, not preferred.
+    #
+    # `link` is in `connectors.py`'s `_VOID_TAGS` — correctly, since `<link>`
+    # is void in HTML. So `_TreeBuilder` never pushes it, `</link>` pops
+    # nothing, and the URL lands as a *sibling* text node of the item instead
+    # of as the element's content: `select_first(item, 'link').text_content()`
+    # returns the empty string and `_extract` turns that into `None`. Measured
+    # against the live feed, 2026-08-30.
+    #
+    # `<guid>` is a real, non-void element carrying the identical string. Across
+    # all 25 items of that capture every `<guid>` equalled its item's `<link>`
+    # exactly, and all 25 begin `https://weworkremotely.com/remote-jobs/` —
+    # which is also what keeps `connector_health.on_portal_host` quiet. Taken as
+    # text and not via `attr:`, because the URL is the element's content: the
+    # feed writes `<guid>` bare, with no `isPermaLink` attribute to read.
+    detail_url:
+      css: "guid"
+    # The feed's `<title>` bundles two facts into one string,
+    # `"<Company>: <Job title>"` — all 25 items carried the `": "` separator on
+    # 2026-08-30. This selector language has no way to split a string: no
+    # regex, no substring, by design ("there is no field here for a template, a
+    # regex substitution, or anything else that would need to run
+    # connector-supplied code", connectors.py). So what this yields is the
+    # board's whole string, company prefix included — a real limitation of the
+    # list page, and not one to paper over by inventing a split.
+    #
+    # It is also not what a candidate ends up seeing: the detail page below
+    # carries the bare job title in its `<h1>`, and detail fields win on
+    # overlap in `build_offer`.
+    title:
+      css: "title"
+    # The same element again — the list page cannot do better, and this is the
+    # same pragmatic answer `remotive_en` documents.
+    #
+    # There is no company element in this feed. The complete element census of
+    # an item is `title`, `region`, `category`, `description`, `pubDate`,
+    # `guid`, `link`, and on some items a `media:content` logo (whose colon a
+    # tag token cannot express in any case). The `<description>` bodies do
+    # carry a `Headquarters:` line, but the description arrives HTML-*escaped*
+    # (`&lt;p&gt;`), so after `convert_charrefs` it is one flat text node with
+    # no inner elements left to select. Checked, not assumed.
+    #
+    # Two things make the duplicate the right call rather than a shrug. First,
+    # it is corrected downstream: the detail page's company panel carries the
+    # bare company name on its own element, and detail fields win on overlap —
+    # so `Offer.company` is always the accurate one and this value is never
+    # what a candidate reads. Second, omitting `company` here would not be a
+    # quiet abstention: `connector_health.free_signals` reports "company is
+    # null on every row" over the *list* rows, `measure()` would count this
+    # connector as a `silent_connector_failure` on every run, and the host gate
+    # would go red reporting parser rot on a feed that has never carried the
+    # field.
+    company:
+      css: "title"
+    # The feed's own audience field. Five distinct shapes in the 2026-08-30
+    # capture: "Anywhere in the World", "North America Only", "Remote", and two
+    # bare cities ("Buenos Aires", "Medellin"). Left raw, which is what
+    # `location_raw` is for. `location_country` and `location_remote` are
+    # deliberately absent: this one string is neither of them, and there is no
+    # selector-level way to derive them from it.
+    location_raw:
+      css: "region"
+    # The advert body, and on this board the *whole* body rather than a teaser —
+    # the feed inlines the full advert, ending in the board's own "To apply:"
+    # link. `build_offer` refuses a blank body, so this was checked rather than
+    # hoped for: all 25 items of the live capture yielded a non-empty
+    # `description`, the shortest 1,525 characters.
+    #
+    # The body arrives HTML-escaped inside the XML and `convert_charrefs=True`
+    # decodes it on the way in, so `text_content()` returns readable prose with
+    # the advert's own `<p>`/`<strong>` tags visible as literal text. That is
+    # the feed's shape, not something added here.
+    #
+    # In `fixture/list.html` these bodies are truncated — see `meta.yaml`'s
+    # `fixture.bodies: excerpted`. `probe/list.html` is the untruncated capture,
+    # because the rot stage has to compare against what the server actually
+    # serves.
+    text:
+      css: "description"
+
+# Every `detail_url` above points at `https://weworkremotely.com/remote-jobs/
+# <slug>`. Those pages answered 200 with ~88 kB of server-rendered markup on
+# 2026-08-30, and `fixture/detail.html` is one of them, recorded — so these
+# selectors are demonstrated rather than declared (`check_fixture` refuses the
+# latter, rightly: "a declared selector with no recorded response is unproven").
+#
+# All three were confirmed on **two** different adverts that day — the Toptal
+# posting recorded in the fixture and `sticker-mule-software-engineer-3` — so
+# they are the page's template, not one advert's accident. Each matched exactly
+# once on both.
+detail:
+  fields:
+    # The bare job title, without the `"<Company>: "` prefix the feed's own
+    # title carries. This is the field that makes the list page's bundled
+    # string harmless.
+    title:
+      css: "h1.lis-container__header__hero__company-info__title"
+    # The company panel's own title element in the sidebar — "Toptal",
+    # "Sticker Mule" — the bare name and nothing else. Note the enclosing
+    # `…__companyDetails__info` would also have matched but drags in the panel's
+    # "View company" link and "Jobs posted: 190" counter; the `__title` child is
+    # the name alone.
+    company:
+      css: "div.lis-container__job__sidebar__companyDetails__info__title"
+    # The advert body column. One match on the page; the "Related Jobs" cards
+    # below it carry `new-listing__*` classes and never this one, so the
+    # neighbouring adverts cannot leak into this offer's text.
+    text:
+      css: "div.lis-container__job__content__description"

@@ -1,0 +1,245 @@
+# Wellfound (wellfound.com, formerly AngelList Talent) — the US startup job
+# board. Fetched live and read by hand on 2026-08-30 with this tool's own
+# user agent; every count and every claim below is from those bytes, not from
+# the site's design or from memory.
+#
+# ## robots.txt — checked with this repo's own matcher, never grepped
+#
+# `https://wellfound.com/robots.txt` (fetched live, same date, 370 bytes) has
+# exactly one group, `User-agent: *`, with no `Crawl-delay` and no group for
+# any AI agent (no ClaudeBot, GPTBot, CCBot, Bytespider — the file names no
+# agent at all). Under RFC 9309 this tool falls back to `*`, and the `*` group
+# here is NOT permissive: it carries 28 `Disallow` lines, read to the last one.
+#
+# Verdicts from `integral.robots.Robots().allows()` on 2026-08-30 — the audited
+# T70 matcher, which is the only test that counts here:
+#
+#     True   /role/r/software-engineer          (a list page)
+#     True   /role/r/python-developer           (the list page this connector reads)
+#     True   /role/r/python-developer?page=2    (the pager this connector walks)
+#     True   /jobs/4550780-python-developer     (the detail shape, so the block below is allowed)
+#     True   /jobs/3480407-senior-ai-engineer
+#     False  /search                            ← negative control, `Disallow: /search`
+#     False  /jobs/applications                 ← negative control, `Disallow: /jobs/applications`
+#     False  /_jobs/foo                         ← negative control, `Disallow: /_jobs/`
+#     False  /u/someone                         ← negative control, `Disallow: /u/`
+#     False  /role/r/python-developer?role=x    ← negative control, `Disallow: /*?role=*`
+#
+# The five False answers are the point: they show the matcher is discriminating
+# rather than saying yes to everything, so the five True answers mean something.
+# `Robots().delay(...)` returns the caller's default (1.0) — the file declares
+# no `Crawl-delay`, so nothing above 1 s/request has to be honoured. Live
+# fetches for this connector were spaced 2 s apart anyway.
+#
+# Note the near-miss: `Disallow: /jobs/applications` and `/jobs/signup` are
+# path *prefixes*, not the whole `/jobs/` tree — `/jobs/<id>-<slug>` is a
+# different prefix and is allowed. And `Disallow: /*?role=*` bites any query
+# string carrying `role=`, which is why the pager below uses `page=` and why no
+# URL here is ever built with a `role` parameter.
+#
+# ## Server-rendered, DESPITE `id="__next"`
+#
+# This page is a Next.js app and carries the `id="__next"` marker that usually
+# means "a shell, hydrated by JavaScript". Here it does not: a raw `curl` with
+# this tool's UA returns 200 and 378 KB whose bytes already contain the advert
+# titles, the company names, the compensation strings and 23 distinct
+# `href="/jobs/<id>-<slug>"` links. Checked the way a shell is ruled out —
+# does *advert title text* appear in the served bytes — and it does. This
+# repo's own parser finds every card without any JavaScript. Recorded here
+# because the marker will otherwise make the next reader assume this board was
+# ruled out like the real shells were.
+site: wellfound
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listing pages and advert bodies are served in full to an anonymous client;
+# no account, no session, nothing behind a login was read.
+auth: none
+
+list:
+  # URL shapes tried on 2026-08-30, with what each returned:
+  #   * `/role/r/software-engineer`        → 200, 657 KB, 20 company cards, 43 adverts
+  #   * `/role/r/python-developer`         → 200, 378 KB, 20 company cards, 23 adverts
+  #   * `/role/r/python-developer?page=2`  → 200, 528 KB, 20 cards, 31 adverts, 0 shared with page 1
+  #   * `/role/r/python-developer?page=3`  → 200, 474 KB, 20 cards
+  #   * `/role/remote/software-engineer`   → 404
+  #   * `/role/l/software-engineer/remote` → 303 to `/role/software-engineer` (no such scoped page)
+  #
+  # `/role/r/<role>` is the *remote* listing — the served `<title>` is
+  # "Remote Python Developer Jobs in 2026 | Wellfound" and the `<h1>` reads
+  # "Remote Python Developer Jobs". So this one URL already answers both of
+  # this repo's candidate's constraints (Python, fully remote) without a query
+  # string — which matters, because `Disallow: /*?role=*` would have blocked the
+  # obvious query-string way of scoping it. A generic `/role/r/software-engineer`
+  # was available and was deliberately not chosen: it returns the same markup but
+  # a much broader set of roles, and it groups worse (see `item` below).
+  url_pattern: "https://wellfound.com/role/r/python-developer?page={page}"
+  pagination:
+    # Measured, not assumed. The page's own header says "Page 1 of 13 / 342
+    # results total", and `?page=2` and `?page=3` were both fetched: each
+    # returned 200 with 20 cards, and the set of `/jobs/` hrefs on page 2 shares
+    # exactly 0 entries with page 1 (measured with `comm`). Consecutive integers
+    # from 1 is therefore literally how this board pages, which is what
+    # `mode: query_param` can express. `?page=1` was fetched too and returns the
+    # same 200 OK first page as the bare URL — the same 20 cards, in the same
+    # order — so starting at 1 costs no special case. 3 pages, not 13 — this is
+    # a connector, not a crawl of the board.
+    mode: query_param
+    param: page
+    start: 1
+    max_pages: 3
+  # ## The item unit: a COMPANY CARD, not an advert. This is the hard call.
+  #
+  # Wellfound groups its results by employer: one bordered card per company,
+  # carrying a `data-testid="startup-header"` block (logo, company name, blurb,
+  # headcount) followed by one row per open role. Measured on 2026-08-30:
+  #
+  #     /role/r/python-developer  page 1 → 20 cards, 23 adverts, 2 cards multi-role
+  #     /role/r/python-developer  page 2 → 20 cards, 31 adverts, 7 cards multi-role
+  #     /role/r/software-engineer page 1 → 20 cards, 43 adverts, 13 cards multi-role
+  #
+  # There IS a per-advert container — `div.items-end.justify-between.rounded-2xl.px-2.py-2`,
+  # which returns exactly 43 nodes on the software-engineer page, matching the 43
+  # distinct hrefs. It was tried and rejected, because the company name is not
+  # inside it: it sits in the card header, a *sibling* of the role rows, and this
+  # selector grammar has no descendant or parent combinator to reach across.
+  # Choosing it would set `company: null` on every single row, which
+  # `connector_health.free_signals` reports as "company is null on every row" —
+  # a permanent `broken` verdict from the rot stage on every run, which destroys
+  # the signal that check exists to give.
+  #
+  # So the card is the item and each card yields its own top-listed role. The
+  # cost is real and is stated rather than hidden: on `/role/r/python-developer`
+  # page 1 this emits 20 of the 23 adverts (87%); on page 2, 20 of 31 (65%); on
+  # the broader `/role/r/software-engineer` it would be 20 of 43 (47%). The
+  # skipped roles are always *additional* roles at a company already emitted,
+  # never a company that goes unseen — and choosing the Python listing rather
+  # than the generic engineering one is partly why: it groups far less.
+  # Wellfound orders roles within a card by its own relevance, so the one kept
+  # is the one the board itself ranks first.
+  #
+  # Selector: `div.mb-6.w-full.rounded`. Three of the card's six Tailwind
+  # utility classes; a subset match, so a restyle that only *adds* a class still
+  # works. These ARE utility classes, with everything that implies — but they
+  # are not hashed build artefacts (the page also carries `styles_resultsList__Q46cW`
+  # and `styles_description__xjvTf`, which change on every deploy and are used
+  # nowhere in this file). Nothing better exists on this page: the card has no
+  # id, no `data-*` attribute and no microdata. Counted on four live pages
+  # (python p1/p2/p3, software-engineer p1): exactly 20 matches on each, every
+  # one of them a real company card containing at least one advert link — no
+  # promo banner, no blank extra listing, and no mobile/desktop duplicate pair.
+  # If the board restyles, this is the first selector to check.
+  item: "div.mb-6.w-full.rounded"
+  fields:
+    # The advert's own anchor, first in document order inside the card — i.e.
+    # the card's top-listed role, per the note above. `text-brand-burgandy` is
+    # Wellfound's brand colour utility and it is carried by nothing else inside
+    # a card (verified: 3 matches in a 3-role card, one per role, and 1 in a
+    # single-role card). Href is relative (`/jobs/4550780-python-developer`);
+    # `connector_health.on_portal_host` treats a scheme-less, netloc-less URL as
+    # implicitly on the portal's host, so this raises no off-host signal.
+    # Non-null on all 80 rows measured across the four pages.
+    detail_url:
+      css: "a.text-brand-burgandy"
+      attr: href
+    # Same element, its text. The anchor's only content is the role name — the
+    # "Full-time" pill is a sibling `<span>`, not a child — so `text_content()`
+    # is the title alone. Non-null on all 80 rows.
+    title:
+      css: "a.text-brand-burgandy"
+    # A tag selector, and that is the most robust thing available here: each
+    # card contains exactly one `<h2>` and it is the company name (measured on
+    # all 80 cards across the four pages — 0 null, 0 with more than one h2).
+    # Preferred over `a.text-neutral-1000`, which also resolves to the company
+    # link, because a bare tag cannot be broken by a Tailwind palette rename;
+    # and over `[data-testid="startup-header"]`, whose `text_content()` swallows
+    # the tagline and headcount too ("Oklo Actively Hiring Making reactors
+    # people want 201-500 Employees").
+    company:
+      css: "h2"
+    # ## No `text` on the list — deliberate, and the same choice arbeitnow_en made.
+    #
+    # A card carries no advert teaser. The only prose in it is the *company's*
+    # tagline ("Making reactors people want"), and publishing that as an
+    # advert body would be a fabricated offer. `build_offer` refuses an offer
+    # with no `text`, so the body must come from the detail page below — which
+    # is what makes that block mandatory for this board rather than optional.
+    #
+    # ## No `location_raw` on the list — measured trap, not caution.
+    #
+    # The card's compensation and location strings are two `<span class="pl-1
+    # text-xs">` siblings with identical classes, distinguishable only by
+    # document order. First-match-wins therefore picks compensation *when the
+    # role states one* and location when it does not — measured on
+    # `/role/r/software-engineer` 2026-08-30, where 38 of 43 roles state
+    # compensation and 5 do not, so the selector would silently write
+    # "$200k – $250k" into `location_raw` for most rows and "Remote only •
+    # Canada" for the rest. The detail block below carries a location that is
+    # unambiguously a location.
+    #
+    # ## No salary anywhere — see the detail block for the measurement.
+
+# Declared because it was fetched, read and verified on three different
+# adverts, not because a detail page exists. `/jobs/4550780-python-developer`
+# (200, 43 KB), `/jobs/4617952-software-engineer-applied-ai-ml` (200, 84 KB)
+# and `/jobs/4573087-founding-customer-success-engineer` (200, 65 KB) were all
+# fetched on 2026-08-30, all server-rendered with the whole advert body in the
+# markup, and both selectors below matched on all three.
+# `fixture/detail.html` is the first of them.
+detail:
+  fields:
+    # A real `id`, on the element holding the advert body and nothing else —
+    # the one genuinely stable handle on this whole board. Exactly one match on
+    # each of the three adverts. Note the same element also carries
+    # `styles_description__xjvTf`, a hashed CSS-module class that will change on
+    # the next deploy; the id is used precisely so that does not matter.
+    #
+    # Detail fields win over list fields in `build_offer`, and this is the field
+    # that makes an offer valid at all.
+    text:
+      css: "#job-description"
+    # The place name under the advert's "Job Location" panel, or — for a
+    # remote-only role with no office — under "Hires remotely in". Measured on
+    # the three adverts above: "Santa Clara", "Phoenix", "Canada". Always a
+    # place, never a salary or a title, which is the property the list-page
+    # location span could not offer.
+    #
+    # This is the one field here resting on a bare Tailwind utility chain, and
+    # it is the most fragile thing in this file — recorded rather than hidden.
+    # Its failure mode is benign in the usual case: a palette rename makes it
+    # match nothing and the field is simply absent. The bad case is a restyle
+    # that gives these four classes to some other link on the page, so if the
+    # board restyles, check this second (after `list.item`). It is not
+    # load-bearing: `/role/r/` is already the remote listing, so this only adds
+    # the city.
+    location_raw:
+      css: "a.font-normal.text-black.text-sm.underline"
+    # ## No salary_min / salary_max / salary_currency / salary_period. On purpose.
+    #
+    # Wellfound publishes compensation prominently and it would be the single
+    # most valuable thing to map — which is exactly why getting it wrong here
+    # would do the most harm. It is not mappable. Both the list card and the
+    # detail header write it as ONE string:
+    #
+    #     "$200k – $250k"                 (detail header <li>, advert 4617952)
+    #     "$70k – $76k • No equity"       (list card span, advert 4550780)
+    #
+    # One element, so min and max cannot be separated; `$` and `k` and a U+2013
+    # en dash, none of which `_as_float` parses. Mapping that string to
+    # `salary_min` returns `None` from `_as_float` while `build_offer` still
+    # constructs `Salary(stated=True)` — an offer that claims the employer
+    # stated a salary and carries no number. That is strictly worse than no
+    # salary at all, because ranking reads the field. So it is omitted, and the
+    # figures stay where they are honest: inside `text`, which a reader sees.
+    #
+    # The trailing "• No equity" is a second reason. `ALLOWED_OFFER_FIELDS` has
+    # no vocabulary for equity, and there is no salary field it could be
+    # smuggled into without misstating what the employer said.
+    #
+    # ## No `company` on the detail page either — it would overwrite a good value.
+    #
+    # Detail fields win on overlap. The detail page's company handle is
+    # `[data-testid="startup-header"]`, whose text is "Oklo Actively Hiring
+    # Making reactors people want 201-500 Employees" — so declaring it would
+    # replace the list's clean "Oklo" with that. The list value is already
+    # correct on every row; nothing here improves it.

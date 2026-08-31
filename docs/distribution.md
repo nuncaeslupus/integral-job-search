@@ -212,8 +212,43 @@ the user's directory, never the clone — and its fixture test is run locally
 **before** its first use. A connector that has gone stale fails there, and the
 tool offers to repair it, which is the same work as writing one.
 
-**Going out.** Having written or repaired a connector, the tool offers to
-contribute it. The offer states plainly, before anything is sent:
+**Going out — and when.** Having written or repaired a connector, the tool
+offers to contribute it. *Offers*, not immediately: the moment matters as much
+as the wording, and the two rules below decide it.
+
+**Never during a step.** A candidate opened this to find work. A contribution
+prompt in the middle of sourcing or ranking interrupts their search to serve the
+project, which inverts whose session it is. The offer belongs at a session
+boundary — after the search work of that session is done — and nowhere else.
+
+**Not on the run that wrote it.** A freshly written connector has been proven
+against exactly one capture, taken minutes ago. Its fixture and its probe are
+the same day, so the rot stage (T72) has nothing to compare across time and
+`connector_health` cannot yet distinguish "works" from "worked once". Every
+connector written on 2026-08-30 carried that caveat in its own `meta.yaml`, in
+the contributors' own words: *"the probe has no elapsed time behind it yet —
+that only gets teeth at the next refresh."* Publishing at that point asks
+someone to put their name on something nobody has shown survives a day.
+
+So the condition is: **the connector has produced offers in a later session than
+the one that wrote it** — a second run, against markup the site has had a chance
+to change, with its probe refreshed. That is the first moment the library learns
+anything from the contribution that it did not already assume.
+
+In the meantime it lives in `$INTEGRAL_HOME/connectors/<site>_<locale>/`,
+complete and fully in use. **Nothing is withheld pending a decision to share**:
+the candidate's own searches read it exactly as they read a borrowed one, and a
+connector never contributed is not a lesser connector. If they later accept and
+have no GitHub account, the prepared bundle waits in
+`$INTEGRAL_HOME/outbox/<site>/` (see the three options below) — which is also
+where it sits if they simply never decide.
+
+**Asked once, per connector, ever.** A decline is recorded against that
+connector and the question does not return — not next session, not after the
+connector proves itself again. See "Declining is a complete, correct outcome"
+below; this is the mechanism that makes that promise true rather than polite.
+
+The offer states plainly, before anything is sent:
 
 - exactly which files would go (the connector, the sampled fixture, the metadata);
 - that the contribution is public and carries their GitHub username;

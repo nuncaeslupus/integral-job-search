@@ -412,3 +412,27 @@ def test_the_capture_date_is_read_from_the_file_not_the_filesystem(tmp_path: Pat
     package = _package_with_probe(tmp_path, captured='{"captured_at": "1999-01-01"}')
 
     assert probe_captured_at(package) == "1999-01-01"
+
+
+def test_a_listing_that_never_claimed_a_company_is_not_reported_broken_for_lacking_one() -> None:
+    """justjoin.it's listing document is an index of URLs: title, employer and
+    salary are all on each advert's own page. Flagging that as rot means a
+    permanent red on a connector that is working exactly as written."""
+    items = [
+        {"detail_url": f"https://{_SITE}/job/1"},
+        {"detail_url": f"https://{_SITE}/job/2"},
+    ]
+    assert free_signals(items, _SITE, frozenset({"detail_url"})) == []
+
+
+def test_a_listing_that_claims_a_company_and_returns_none_is_still_reported_broken() -> None:
+    """The case the signal was built for, unchanged."""
+    items = [{"detail_url": f"https://{_SITE}/job/1", "title": "Dev"}]
+    assert free_signals(items, _SITE, frozenset({"detail_url", "title", "company"})) == [
+        "company is null on every row"
+    ]
+
+
+def test_not_saying_what_was_declared_keeps_the_blunt_check() -> None:
+    items = [{"title": "Dev"}]
+    assert free_signals(items, _SITE) == ["company is null on every row"]

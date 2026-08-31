@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from integral import naming
 from integral.naming import (
     ALLOWLIST,
     DISTRIBUTION_NAME,
@@ -168,3 +169,16 @@ def _commit(root: Path, relative: str, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "add", relative], check=True)
+
+
+def test_a_recorded_capture_is_evidence_and_is_never_swept() -> None:
+    """A connector fixture is somebody else's page, recorded. Remotive serves a
+    `job-search.css` and a `/job-search-tips/` blog tag; editing a capture so it
+    stops saying so would falsify what the fixture exists to prove, and this
+    rename has nothing to do with what a third party names its own URLs."""
+    assert naming._is_allowlisted("connectors/remotive_en/probe/list.html")
+    assert naming._is_allowlisted("connectors/remotive_en/fixture/detail.html")
+    # …and the connector's own files are still swept, because those are ours.
+    assert not naming._is_allowlisted("connectors/remotive_en/connector.yaml")
+    assert not naming._is_allowlisted("connectors/remotive_en/meta.yaml")
+    assert not naming._is_allowlisted("docs/fixture/notes.md")

@@ -1,8 +1,8 @@
 {
   "undisclosed_connectorless_sourcing": 0,
-  "situations_probed": 2,
-  "connectors_installed": 2,
-  "connectors_usable": 1,
+  "situations_probed": 5,
+  "connectors_installed": 13,
+  "connectors_usable": 12,
   "rule_declared_in_step_spec": true,
   "shortfalls": [],
   "readings": [
@@ -10,11 +10,58 @@
       "market": "ES",
       "connectorless": false,
       "usable": [
+        "infojobs_es",
+        "jobfluent_es",
+        "tecnoempleo_es",
+        "ticjob_es",
         "trabajos_es"
       ],
       "example_only": [
         "examplejobs_es"
       ],
+      "unreadable": [],
+      "disclosed": true,
+      "discloses": null,
+      "counts": false,
+      "reasons": []
+    },
+    {
+      "market": "GB",
+      "connectorless": false,
+      "usable": [
+        "jobsacuk_en"
+      ],
+      "example_only": [],
+      "unreadable": [],
+      "disclosed": true,
+      "discloses": null,
+      "counts": false,
+      "reasons": []
+    },
+    {
+      "market": "GLOBAL",
+      "connectorless": false,
+      "usable": [
+        "arbeitnow_en",
+        "pythonorg_en",
+        "remotive_en",
+        "wellfound_en",
+        "weworkremotely_en"
+      ],
+      "example_only": [],
+      "unreadable": [],
+      "disclosed": true,
+      "discloses": null,
+      "counts": false,
+      "reasons": []
+    },
+    {
+      "market": "US",
+      "connectorless": false,
+      "usable": [
+        "builtin_en"
+      ],
+      "example_only": [],
       "unreadable": [],
       "disclosed": true,
       "discloses": null,

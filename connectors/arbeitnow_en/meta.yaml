@@ -1,0 +1,61 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: arbeitnow.com
+# The board is Berlin-run and mostly German postings, but it exists to carry
+# English-language and visa-sponsorship roles across Europe and its listings
+# span several countries — so GLOBAL, like remotive, rather than DE, which
+# would claim a scope narrower than the pages actually return.
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above: https://www.arbeitnow.com/robots.txt
+# is four lines — `User-agent: *`, a bare `Disallow:` (which allows
+# everything), `Disallow: /*?__hstc` and `Disallow: /jobs/companies/*/apply`.
+# No group names any AI agent: ClaudeBot, Claude-User, Claude-SearchBot,
+# anthropic, GPTBot, CCBot and Bytespider are all absent from the file. This
+# connector reads `/?page=N` and `/jobs/companies/<company>/<slug>`; neither
+# ends in `/apply` nor carries the `__hstc` query string, so neither is
+# disallowed. The site's JSON endpoint (`/api/job-board-api`) is not read at
+# all — this format cannot parse JSON, and pointing at it would select nothing.
+#
+# `country: GLOBAL` above is the listing's scope, not a guess: the recorded
+# rows name Munich, Braunschweig, Berlin and no location at all, and the board
+# markets itself for visa-sponsorship and relocation across Europe.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — the first three rows of
+# `/english-speaking-jobs?page=1` and the posting the first of them links to,
+# taken on the date below. Never an advert a candidate was reading: the set of
+# ads a person opens carries their field, level, city and the fact that they
+# are looking, and a fixture in a public repository carries that forever.
+#
+# `probe/list.html` is a *second* read of that same URL, made minutes later —
+# a separate response, not a copy of the fixture, which is what
+# `connector_health` requires of it. Being same-day it can only show that the
+# parser still matches; a refresh on a later day is what turns it into a rot
+# signal, and `probe/captured.json` is what makes the age of it visible.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Excerpted before committing. `tools/excerpt_fixture.py` could not do it
+  # here — it locates the body by the first *class* named in the `text`
+  # selector, and this connector's body selector is `[itemprop="description"]`,
+  # which names no class — so the same rule was applied by hand and with the
+  # same discipline: the cut is made in the raw bytes, at a tag boundary, and
+  # everything kept is byte-identical to what the server sent. Nothing was
+  # parsed and re-serialised, because that would repair markup the fixture
+  # exists to preserve. The advert body is cut to a leading excerpt closed by
+  # the usual truncation marker; the page's Tailwind stylesheet, analytics and
+  # the JSON-escaped duplicate of the listing that the site's JS pager carries
+  # in a <script> block are dropped entirely, and the retained elements are
+  # wrapped in a minimal <html><body> shell.
+  bodies: excerpted
+  # Nothing to redact: unlike trabajos.com, arbeitnow writes no client IP into
+  # the response. Grepped for an IPv4 literal across both captures — none.
+  client_ip: redacted

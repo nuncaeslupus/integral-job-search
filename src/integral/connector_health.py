@@ -164,11 +164,35 @@ def on_portal_host(url: str, site: str) -> bool:
     return host == bare or host.endswith("." + bare)
 
 
-def free_signals(items: list[dict[str, str]], site: str) -> list[str]:
+def free_signals(
+    items: list[dict[str, str]], site: str, declared: frozenset[str] | None = None
+) -> list[str]:
     """The signals T72 names, computed over rows already in hand — no
-    request spent to compute any of them."""
+    request spent to compute any of them.
+
+    `declared` is the set of field names the connector's *list page* claims to
+    produce. The null-company signal asks whether a claim came out empty, and
+    a connector that never claimed a company on its listing has not failed to
+    deliver one: justjoin.it's listing document is an index of URLs and
+    nothing else, with title, employer and salary all on each advert's own
+    page. Before this argument existed, such a connector read `broken` on the
+    day it was written and every day after — a permanent red that says nothing
+    about rot, which is the failure mode that makes people stop reading a
+    signal.
+
+    Passing `None` keeps the old behaviour of asking regardless, so a caller
+    that does not know what was declared still gets the blunt version.
+
+    The trade-off, stated rather than discovered later: an author *could*
+    silence this by dropping `company` from the list declaration. They would
+    then have no company on any row, which the ranking shows as unknown — a
+    visible hole, not a quiet one. A connector that keeps the claim and
+    returns nulls is still flagged, which is the case this signal was built
+    for.
+    """
     reasons: list[str] = []
-    if items and all(not item.get("company") for item in items):
+    claims_company = declared is None or "company" in declared
+    if claims_company and items and all(not item.get("company") for item in items):
         reasons.append("company is null on every row")
     bad_titles = undecoded_entities(item["title"] for item in items if item.get("title"))
     if bad_titles:
@@ -201,7 +225,12 @@ def assess(
     probed = probe_html is not None
     probe_items = parse_list_page(connector, probe_html) if probe_html is not None else []
 
-    reasons = free_signals(probe_items if probed else baseline_items, site)
+    declared = frozenset(
+        connector.list.fields
+        if connector.list.from_json is None
+        else connector.list.from_json.fields
+    )
+    reasons = free_signals(probe_items if probed else baseline_items, site, declared)
     if probed and baseline_items and not probe_items:
         reasons.append(
             f"{len(baseline_items)} row(s) recorded previously, 0 now — the parser no "

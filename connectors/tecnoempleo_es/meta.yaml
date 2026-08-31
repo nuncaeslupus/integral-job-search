@@ -1,0 +1,81 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: tecnoempleo.com
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+# Must equal connector.yaml's `last_verified`. Both are the day every URL,
+# selector and count in this package was measured on the live board.
+last_verified: "2026-08-30"
+
+policy:
+  # Listings and full ad bodies are served to an anonymous client: fetched with
+  # the tool's own UA, no cookie jar and no referer, and the complete ad text
+  # came back. HTTP 200 on all five list URL shapes tried and all three adverts.
+  listings: public
+  # Asserted on the strength of the repo's own audited matcher (T70), not a
+  # reading of the file — run 2026-08-30, with negative controls. The long
+  # retraction in `connector.yaml`'s header is the argument; the short version:
+  # tecnoempleo.com bans six Anthropic product tokens plus GPTBot, none of which
+  # is `integral-job-search`, so RFC 9309 puts us in the `User-agent: *` group,
+  # which allows every path this connector reads. No `Crawl-delay` applies to
+  # us; `delay()` returns the caller's 1.0s default.
+  #
+  # `connectors/trabajos_es/connector.yaml` still records this board as ruled
+  # out for the opposite reason. That note is retracted — see this package's
+  # `connector.yaml`. It is not edited from here: it belongs to another package
+  # and correcting a neighbour in place is how two sessions collide.
+  robots_txt: respected
+  authentication: none
+
+fixture:
+  # Sampled for this purpose on the date below — three consecutive cards from
+  # the `?te=python` results, and one advert reached from them. Never an advert
+  # a candidate was reading: the set of ads a person opens carries their field,
+  # level, city and the fact that they are looking, and a fixture in a public
+  # repository carries that forever.
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Every byte between the tags below is exactly what the server sent. The edits
+  # are cuts and one wrapper, made in the **raw bytes** — the files were never
+  # parsed and re-serialised, which would repair markup the fixture exists to
+  # preserve. `tools/excerpt_fixture.py` was not usable here: it locates ad
+  # bodies by the first class of the `text` selector, and this connector's list
+  # `text` selector (`span.hidden-md-down.text-gray-800`) selects the board's
+  # own already-truncated teaser rather than a body needing a cut. Trimmed by
+  # hand on tag boundaries by the same rule, as three sibling packages recorded
+  # doing today.
+  #
+  # `fixture/list.html` — cards 3, 4 and 5 of page 1, sliced whole from their
+  # `<a name="rf-…">` anchor to the next, dropped into a minimal shell carrying
+  # the response's real `<html lang>` and `<title>`. Header, nav, filter
+  # sidebar, pagination, footer, every `<script>` and every `<style>` are gone.
+  # No body was cut: the board serves the list teaser pre-truncated to ~200
+  # characters with its own ellipsis, so what is here is the board's excerpt,
+  # not ours. 157 KB served -> 7 KB committed.
+  #
+  # `fixture/detail.html` — the Arelance advert (`rf-f0eb1842…`, the first card
+  # in list.html, so the two files describe one offer). Sliced from the main
+  # content column to the start of the "Otros detalles" block, same minimal
+  # shell. One structural character sequence was *added*: a single `</div>`
+  # closing the column div, whose original partner lives past the cut. The ad
+  # body is cut to a leading excerpt — 2,262 -> 779 characters, at a `<br/>`
+  # boundary, marked `[…]` — because a fixture proves the connector finds the
+  # right fields in real markup and does not need whole adverts to do it; this
+  # library is a public collection of crawlers, and the adverts are the board's
+  # content, not ours. 16 KB served -> 3 KB committed.
+  bodies: excerpted
+  # No redaction was needed and none was performed. tecnoempleo.com does not
+  # write the client's address into its responses — unlike trabajos.com, which
+  # emits `<!-- IP: … -->` and forced a real redaction there. All four committed
+  # HTML files were grepped for an IPv4 literal and **no match was found**, so
+  # this key records "nothing to redact", not "something was removed".
+  client_ip: redacted
+
+# `probe/list.html` is the second read the rot stage compares against, and it is
+# deliberately a *different query*: page 2 of the same search
+# (`&pagina=2`), captured the same day. Its three offers share **zero**
+# references with the fixture's three, so `connector_health` compares real
+# content rather than near-identical bytes — the tautology that directory exists
+# to avoid. Same excerpting rule, same minimal shell.

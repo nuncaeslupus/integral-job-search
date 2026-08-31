@@ -31,7 +31,10 @@ from integral.connectors import (
     build_offer,
     build_search_offer,
     collect_listing,
+    compile_path,
     compile_selector,
+    dig,
+    dig_container,
     load_connector,
     parse_connector,
     parse_detail_page,
@@ -831,3 +834,357 @@ def test_metadata_alone_is_not_coverage(tmp_path: Path) -> None:
     (misnamed / "meta.yaml").write_text(_meta(), encoding="utf-8")
     (misnamed / "connector.yaml").write_text(_connector_yaml("otherboard_en"), encoding="utf-8")
     assert not connector_coverage.assess_coverage("ES", directory=tmp_path / "misnamed").covered
+
+
+# ---------------------------------------------------------------------------
+# the JSON route
+#
+# Several boards keep their cleanest data in JSON and render a messier HTML view
+# of the same facts. These tests are written against schema.org's `JobPosting`
+# shape — the thing actually on the page — and they lean on the *fail-open*
+# side, because a path that quietly resolves to the wrong node is worse than one
+# that resolves to nothing: `build_offer` turns any salary key into
+# `Salary(stated=True)`.
+
+JOB_POSTING = json.dumps(
+    {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "Mid Data Platform Engineer",
+        "description": "We build data pipelines.",
+        "employmentType": "FULL_TIME",
+        "baseSalary": {
+            "@type": "MonetaryAmount",
+            "currency": "PLN",
+            "value": {"@type": "QuantitativeValue", "unitText": "MONTH", "minValue": 15000,
+                      "maxValue": 21500},
+        },
+        "hiringOrganization": {"@type": "Organization", "name": "QED.ai"},
+        "jobLocation": {"@type": "Place",
+                        "address": {"@type": "PostalAddress", "addressCountry": "PL",
+                                    "addressLocality": "Warszawa"}},
+    }
+)
+BREADCRUMBS = json.dumps({"@context": "https://schema.org", "@type": "BreadcrumbList",
+                          "itemListElement": [{"name": "Python"}]})
+
+
+def _ld(*blocks: str) -> str:
+    body = "".join(f'<script type="application/ld+json">{b}</script>' for b in blocks)
+    return f"<html><head>{body}</head><body><p>rendered later</p></body></html>"
+
+
+JSON_DETAIL_CONNECTOR = """
+site: jsonboard
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+list:
+  url_pattern: "https://jsonboard.test/jobs?page={page}"
+  from_json:
+    embedded_in: 'script[type="application/ld+json"]'
+    match:
+      "@type": CollectionPage
+    items: hasPart
+    fields:
+      detail_url: url
+detail:
+  from_json:
+    embedded_in: 'script[type="application/ld+json"]'
+    match:
+      "@type": JobPosting
+    fields:
+      title: title
+      text: description
+      company: hiringOrganization.name
+      salary_min: baseSalary.value.minValue
+      salary_max: baseSalary.value.maxValue
+      salary_currency: baseSalary.currency
+      salary_period: baseSalary.value.unitText
+      location_raw: jobLocation.address.addressLocality
+      location_country: jobLocation.address.addressCountry
+"""
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "title",
+        "baseSalary.value.minValue",
+        "hiringOrganization.name",
+        "@type",
+        "a-b.c_d",
+    ],
+)
+def test_a_json_path_of_plain_dotted_keys_compiles(path: str) -> None:
+    assert compile_path(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "",
+        "a[0]",
+        "a.*",
+        "a..b",
+        "a.",
+        ".a",
+        "a b",
+        "a['b']",
+        "$.a",
+        "a/b",
+        "__class__.__mro__",
+        "a()",
+    ],
+)
+def test_a_json_path_outside_the_grammar_is_refused(path: str) -> None:
+    """The same 'too small to smuggle anything through' rule as the selector
+    grammar: refusal is a whole-string match, never an evaluator."""
+    if path == "__class__.__mro__":
+        # It matches the grammar's shape, and that is fine — it is looked up as
+        # two ordinary dict keys and finds nothing. Nothing is ever `getattr`ed.
+        assert dig({"a": 1}, compile_path(path)) is None
+        return
+    with pytest.raises(ConnectorError):
+        compile_path(path)
+
+
+def test_dig_returns_the_scalar_at_the_end_of_the_path() -> None:
+    document = json.loads(JOB_POSTING)
+    assert dig(document, compile_path("title")) == "Mid Data Platform Engineer"
+    assert dig(document, compile_path("baseSalary.value.minValue")) == "15000"
+    assert dig(document, compile_path("hiringOrganization.name")) == "QED.ai"
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["baseSalary", "baseSalary.value", "hiringOrganization", "jobLocation.address", "missing",
+     "baseSalary.missing.minValue"],
+)
+def test_dig_treats_a_container_or_a_miss_as_no_value(path: str) -> None:
+    """Landing on an object must read as *absent*, not as `str({...})`.
+
+    This is the fail-open case the whole route is shaped around: a salary key
+    holding a Python repr still makes `build_offer` construct
+    `Salary(stated=True)`, so the candidate is told the employer stated a wage
+    when nobody stated anything.
+    """
+    assert dig(json.loads(JOB_POSTING), compile_path(path)) is None
+
+
+def test_dig_refuses_a_boolean() -> None:
+    """JSON's `true` is not a title, a body or a wage."""
+    assert dig({"remote": True}, compile_path("remote")) is None
+    assert dig({"n": 0}, compile_path("n")) == "0"
+
+
+def test_dig_container_wants_an_array_and_a_scalar_is_the_miss() -> None:
+    assert dig_container({"hasPart": [{"url": "/a"}]}, compile_path("hasPart")) == [{"url": "/a"}]
+    assert dig_container({"hasPart": "not a list"}, compile_path("hasPart")) == []
+    assert dig_container({}, compile_path("hasPart")) == []
+
+
+def test_a_json_list_page_reads_its_items_out_of_the_embedded_document() -> None:
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    page = _ld(
+        BREADCRUMBS,
+        json.dumps({"@type": "CollectionPage",
+                    "hasPart": [{"url": "https://jsonboard.test/job/1"},
+                                {"url": "https://jsonboard.test/job/2"}]}),
+    )
+    assert parse_list_page(connector, page) == [
+        {"detail_url": "https://jsonboard.test/job/1"},
+        {"detail_url": "https://jsonboard.test/job/2"},
+    ]
+
+
+def test_match_picks_the_right_document_when_a_page_carries_several() -> None:
+    """A page serving a BreadcrumbList beside its JobPosting must not have the
+    breadcrumbs read as the advert."""
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    record = parse_detail_page(connector, _ld(BREADCRUMBS, JOB_POSTING))
+    assert record["title"] == "Mid Data Platform Engineer"
+    assert record["company"] == "QED.ai"
+
+
+def test_one_broken_json_block_does_not_lose_the_others() -> None:
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    record = parse_detail_page(connector, _ld("{not json,", JOB_POSTING))
+    assert record["title"] == "Mid Data Platform Engineer"
+
+
+def test_a_json_salary_reaches_the_offer_as_real_numbers() -> None:
+    """The point of the route: `minValue` is a number, so nothing has to be
+    split out of a string, and `Salary` carries figures rather than a `stated`
+    flag with nothing behind it."""
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    offer = build_offer(
+        connector,
+        detail_fields=parse_detail_page(connector, _ld(JOB_POSTING)),
+        url="https://jsonboard.test/job/1",
+    )
+    assert offer.salary is not None
+    assert (offer.salary.min, offer.salary.max) == (15000.0, 21500.0)
+    assert (offer.salary.currency, offer.salary.period) == ("PLN", "MONTH")
+    assert offer.salary.stated is True
+
+
+def test_a_salary_path_that_lands_on_the_object_produces_no_salary_at_all() -> None:
+    """Rather than `Salary(stated=True, min=None, max=None)` — the failure this
+    library has already hit six times with unsplittable HTML strings."""
+    connector = parse_connector(
+        JSON_DETAIL_CONNECTOR.replace(
+            "salary_min: baseSalary.value.minValue", "salary_min: baseSalary"
+        )
+        .replace("      salary_max: baseSalary.value.maxValue\n", "")
+        .replace("      salary_currency: baseSalary.currency\n", "")
+        .replace("      salary_period: baseSalary.value.unitText\n", "")
+    )
+    offer = build_offer(
+        connector,
+        detail_fields=parse_detail_page(connector, _ld(JOB_POSTING)),
+        url="https://jsonboard.test/job/1",
+    )
+    assert offer.salary is None
+
+
+def test_a_json_document_is_never_evaluated() -> None:
+    """`json.loads` cannot construct an object, so a string that looks like code
+    stays a string. The YAML loader's `!!python/…` route is closed the same way
+    (`yaml.safe_load`) — this is the JSON half of the same promise."""
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    hostile = json.dumps({"@type": "JobPosting", "title": "__import__('os').system('id')",
+                          "description": "body"})
+    record = parse_detail_page(connector, _ld(hostile))
+    assert record["title"] == "__import__('os').system('id')"
+
+
+def test_a_page_that_declares_both_routes_is_refused() -> None:
+    both = JSON_DETAIL_CONNECTOR.replace(
+        '  from_json:\n    embedded_in: \'script[type="application/ld+json"]\'\n'
+        '    match:\n      "@type": CollectionPage\n    items: hasPart\n'
+        "    fields:\n      detail_url: url\n",
+        '  item: ".card"\n  fields:\n    detail_url:\n      css: "a.link"\n      attr: href\n'
+        '  from_json:\n    embedded_in: \'script[type="application/ld+json"]\'\n'
+        '    match:\n      "@type": CollectionPage\n    items: hasPart\n'
+        "    fields:\n      detail_url: url\n",
+    )
+    with pytest.raises(ConnectorError, match="exactly one"):
+        parse_connector(both)
+
+
+def test_a_list_page_json_source_must_name_its_items() -> None:
+    with pytest.raises(ConnectorError, match="items is required"):
+        parse_connector(JSON_DETAIL_CONNECTOR.replace("    items: hasPart\n", "", 1))
+
+
+def test_a_detail_page_json_source_may_not_name_items() -> None:
+    with pytest.raises(ConnectorError, match="items is not allowed"):
+        parse_connector(
+            JSON_DETAIL_CONNECTOR.replace(
+                '    match:\n      "@type": JobPosting\n',
+                '    match:\n      "@type": JobPosting\n    items: results\n',
+            )
+        )
+
+
+def test_a_json_field_outside_the_offer_vocabulary_is_refused() -> None:
+    with pytest.raises(ConnectorError, match="api_key"):
+        parse_connector(JSON_DETAIL_CONNECTOR.replace("      title: title\n",
+                                                      "      api_key: token\n      title: title\n"))
+
+
+def test_a_json_host_selector_outside_the_grammar_is_refused() -> None:
+    with pytest.raises(ConnectorError):
+        parse_connector(
+            JSON_DETAIL_CONNECTOR.replace(
+                "embedded_in: 'script[type=\"application/ld+json\"]'",
+                'embedded_in: "head > script"',
+            )
+        )
+
+
+def test_the_root_path_names_a_document_that_is_itself_the_array() -> None:
+    """An API whose response *is* the list of adverts has no key to name."""
+    assert compile_path("$") == ()
+    assert dig_container([{"url": "/a"}, {"url": "/b"}], compile_path("$")) == [
+        {"url": "/a"},
+        {"url": "/b"},
+    ]
+    # …and it is still a miss when the document is not an array.
+    assert dig_container({"jobs": []}, compile_path("$")) == []
+
+
+def test_item_alone_beside_from_json_is_refused() -> None:
+    """The gap CodeRabbit found on #259: `item` without `fields` read as "no
+    markup route", so the exclusivity check passed and the declared selector
+    was silently ignored in favour of the JSON one."""
+    both = JSON_DETAIL_CONNECTOR.replace(
+        "  from_json:\n    embedded_in:", '  item: ".card"\n  from_json:\n    embedded_in:', 1
+    )
+    with pytest.raises(ConnectorError, match="exactly one"):
+        parse_connector(both)
+
+
+def test_fields_alone_beside_from_json_is_refused() -> None:
+    both = JSON_DETAIL_CONNECTOR.replace(
+        "  from_json:\n    embedded_in:",
+        '  fields:\n    title:\n      css: "h2.t"\n  from_json:\n    embedded_in:',
+        1,
+    )
+    with pytest.raises(ConnectorError, match="exactly one"):
+        parse_connector(both)
+
+
+def test_the_markup_route_needs_both_halves() -> None:
+    """And `item` alone with no `from_json` at all is not a working page either
+    — it selects containers nothing is read out of."""
+    with pytest.raises(ConnectorError, match="needs both"):
+        parse_connector(
+            """
+site: halfaroute
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+list:
+  url_pattern: "https://halfaroute.test/jobs"
+  item: ".card"
+detail:
+  fields:
+    text:
+      css: "div.body"
+"""
+        )
+
+
+def test_an_embedded_document_is_read_unchanged() -> None:
+    """`text_content` collapses runs of whitespace, which is right for prose
+    read out of markup and wrong for a `<script>` holding JSON: whitespace
+    between tokens does not matter, whitespace *inside a string value* does,
+    and an advert body is a string value.
+
+    Caught by review on the PR that introduced this route — the first
+    implementation reflowed every body it parsed.
+    """
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    body = "Line one.\n\nLine  two with  double  spaces, and a trailing run.   "
+    posting = json.dumps({"@type": "JobPosting", "title": "T", "description": body})
+    record = parse_detail_page(connector, _ld(posting))
+    assert record["text"] == body
+
+
+def test_raw_text_concatenates_and_text_content_still_collapses() -> None:
+    node = parse_html("<div><span>a  b</span>\n<span>c   d</span></div>")
+    div = select_first(node, compile_selector("div"))
+    assert div is not None
+    assert div.raw_text() == "a  b\nc   d"
+    assert div.text_content() == "a b c d"
+
+
+def test_an_ampersand_in_an_embedded_document_survives() -> None:
+    """HTMLParser treats `script` as CDATA, so `&amp;` inside the JSON is not
+    decoded on the way in and `json.loads` sees what the board sent."""
+    connector = parse_connector(JSON_DETAIL_CONNECTOR)
+    posting = json.dumps({"@type": "JobPosting", "title": "T", "description": "R&amp;D at AT&T"})
+    record = parse_detail_page(connector, _ld(posting))
+    assert record["text"] == "R&amp;D at AT&T"
