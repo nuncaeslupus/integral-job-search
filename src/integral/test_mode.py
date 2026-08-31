@@ -571,7 +571,7 @@ class TaskSpec:
     Returned rather than executed on purpose. "Seed only what the owner
     confirmed" is a property of what this function returns for a given
     confirmed set, which is testable; a function that shells out to
-    `new_task.py` can only be tested by watching what it did.
+    `create_task.py` can only be tested by watching what it did.
     """
 
     title: str
@@ -581,7 +581,7 @@ class TaskSpec:
     body: str
 
     def command(self) -> list[str]:
-        """The invocation, with the body — `new_task.py --body` defaults empty.
+        """The invocation, with the body — `create_task.py --body` defaults empty.
 
         Printing only `--title` would seed a task carrying a truncated one-line
         summary and nothing else, losing the note's full text and the step it
@@ -590,7 +590,7 @@ class TaskSpec:
         """
         return [
             "python3",
-            ".claude/skills/queue-add/scripts/new_task.py",
+            ".claude/skills/queue-add/scripts/create_task.py",
             "--title",
             self.title,
             "--body",

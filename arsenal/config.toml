@@ -87,3 +87,8 @@ session-end = "handoff"
 # own measurement is asserted against.
 listing-budget = 11000
 queue-automation = true
+
+[skills]
+extract = true
+python = true
+workflow = true

@@ -82,7 +82,7 @@ Required, not optional. A note captured and never surfaced is the failure this w
 
 1. Print the full list — `query_notes.py --id <session-id>`.
 2. Ask which notes should be addressed. Ask; do not choose.
-3. Seed only those — `query_notes.py --id <session-id> --seed 1,3` prints one `new_task.py` invocation per confirmed note. Run them yourself after reading them.
+3. Seed only those — `query_notes.py --id <session-id> --seed 1,3` prints one `create_task.py` invocation per confirmed note. Run them yourself after reading them.
 
 **Never:**
 
