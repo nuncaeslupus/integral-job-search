@@ -454,6 +454,13 @@ def build_html(parts: list[tuple[str, dict]], title: str, gen_date: str, seed_no
 
 def build_markdown(parts: list[tuple[str, dict]], title: str, gen_date: str, seed_notes: dict | None = None,
                    single_label: str = "Specification") -> str:
+    """Render the annotated Markdown edition: the document, with a note slot per section.
+
+    The counterpart to the HTML reader, for a reviewer who would rather annotate
+    in an editor than a browser. `seed_notes` re-seeds slots from a previous
+    export, keyed by DOM id, so a rebuilt reader does not discard the notes
+    someone already wrote against an earlier revision.
+    """
     seed_notes = seed_notes or {}
     out = [f"# {title} — {single_label} (annotated edition)", ""]
     out.append(
@@ -472,6 +479,12 @@ def build_markdown(parts: list[tuple[str, dict]], title: str, gen_date: str, see
             out.append(f"{hashes} {it['label']}")
             out.append("")
             out.append(it["raw_body"])
+            out.append("")
+            # A section whose body ends in a blockquote would sit one blank line
+            # above the note blockquote, which markdownlint reads as one quote
+            # broken in half (MD028) rather than two. An HTML comment separates
+            # them for the linter and renders as nothing.
+            out.append("<!-- -->")
             out.append("")
             out.append(f"> **✎ Notes** · `{it['key']}`")
             note_text = seed_notes.get(it["domid"], "").strip()
@@ -627,7 +640,7 @@ JS = r"""
     try{
       if(t.value.trim()===''){localStorage.removeItem(k);}else{localStorage.setItem(k,t.value);}
       dirty=true;setState('✓ Saved '+nowStamp(),'ok');
-    }catch(e){lsOK=false;document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
+    }catch(e){dirty=true;lsOK=false;document.getElementById('warnbar').style.display='block';setState(WARN,'warn');}
   }
   var SEED=(typeof SPEC_SEED_NOTES!=='undefined')?SPEC_SEED_NOTES:{};
   tas.forEach(function(t){
@@ -692,8 +705,10 @@ JS = r"""
     var r=buildExport();
     if(r.n===0){toast('No notes yet — add some first.');return;}
     var name='__DOC_SLUG__-notes-'+today()+'.md';
-    download(name,r.text);openModal(r.text);
+    var saved=download(name,r.text);openModal(r.text);
     if(navigator.clipboard){navigator.clipboard.writeText(r.text).then(function(){},function(){});}
+    if(!saved){setState('⚠ Download blocked — copy the notes from this box','warn');
+               toast('Download blocked — copy the notes before leaving');return;}
     dirty=false;setState('✓ Backup saved '+nowStamp(),'ok');
     toast('Exported '+r.n+' note'+(r.n===1?'':'s'));
   });
