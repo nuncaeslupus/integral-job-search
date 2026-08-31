@@ -1,0 +1,27 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: workingnomads.com
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above: https://www.workingnomads.com/robots.txt
+# was read with this project's own agent token. `/api/exposed_jobs/` is not
+# disallowed and no rule names this token or any AI agent.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — one API response, taken on the date below. Never an
+# advert a candidate was reading.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # `fixture/list.html` holds JSON, not markup — the filename is the contract's.
+  # Excerpted: 3 of the 43 returned records, each `description` cut to its first
+  # 600 characters with the cut marked in the text.
+  bodies: excerpted
+  client_ip: redacted

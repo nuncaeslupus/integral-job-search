@@ -1,0 +1,32 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: himalayas.app
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above: https://himalayas.app/robots.txt was
+# read with this project's own agent token. `/jobs/api` is not disallowed and
+# no rule names this token or any AI agent.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — one API response, taken on the date below. Never an
+# advert a candidate was reading: the set of ads a person opens carries their
+# field, level, city and the fact that they are looking, and a fixture in a
+# public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # `fixture/list.html` holds JSON, not markup. The name is the contract's
+  # (`check_fixture` looks for exactly that file) and renaming it here would
+  # only make the package fail a check it passes. Excerpted twice, both noted
+  # rather than left to be noticed: 3 of the 20 returned records, and each
+  # `description` cut to its first 600 characters with the cut marked in the
+  # text.
+  bodies: excerpted
+  client_ip: redacted

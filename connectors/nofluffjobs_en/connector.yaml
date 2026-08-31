@@ -1,0 +1,64 @@
+# No Fluff Jobs — the first connector in this library chosen for a *policy* of
+# the board rather than for its stock: every posting carries a salary range,
+# because the site refuses adverts without one. That is what a candidate who
+# will not read an advert that hides its pay actually needs, and it is why this
+# one is here even though it costs a field (see `detail_url` below).
+#
+# `robots.txt` was read live on 2026-08-30 with this project's own agent token.
+# It carries `User-agent: *` groups only; neither `/Python` nor the `?page=`
+# form is disallowed.
+#
+# KNOWN GAP — no per-advert link. The listing card *is* the `<a>`:
+#
+#     <a class="posting-list-item" href="/job/python-developer-regular-scalo…">
+#       <aside class="tw-w-full"> …title, salary, company, city… </aside>
+#     </a>
+#
+# `select_first` searches an item's *descendants*, so the item's own `href` is
+# unreachable — `parse_list_page` hands each field selector the card node and
+# the card node never matches itself. There is no inner anchor to fall back on
+# (checked: the card's descendants are div/aside/h3/h4/span/svg and nothing
+# else). So this connector reports what the board says about a job without
+# saying where to read it, which is a real limitation and not an oversight;
+# `connector_health`'s off-host-`detail_url` signal has nothing to check here.
+# The fix belongs in the engine, not in a cleverer selector.
+site: nofluffjobs
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings are public; reading them needs no account.
+auth: none
+
+list:
+  # `?page=2` returns pages one *and* two — the site renders its infinite
+  # scroll cumulatively rather than as discrete pages. Duplicates across pages
+  # are therefore expected and are the caller's to fold, which is cheap; the
+  # alternative, one page only, throws away most of the board.
+  url_pattern: "https://nofluffjobs.com/Python?page={page}"
+  pagination:
+    mode: query_param
+    param: page
+    start: 1
+    max_pages: 3
+  item: "a.posting-list-item"
+  fields:
+    title:
+      css: "h3.posting-title__position"
+    company:
+      css: "h4.company-name"
+    location_raw:
+      css: "nfj-posting-item-city"
+    # The card's own wrapper, which is the only body this board offers on a
+    # listing page: title, salary range, tech tags, employer and city. It is a
+    # summary and not an advert — but `Offer` refuses a blank body, and a
+    # summary the board actually published beats a body invented to fill it.
+    text:
+      css: "aside.tw-w-full"
+
+# No `salary_min`/`salary_max` on purpose. The board prints the range as one
+# string — "105 – 115 PLN / h", "20 000 – 26 000 PLN / mth" — and `_as_float`
+# returns `None` on both halves, while `build_offer` would still construct
+# `Salary(stated=True)` because a salary key is present. A salary that claims to
+# be stated and carries no numbers is worse than no salary at all: the ranking
+# reads `stated` and the candidate reads nothing. The range stays inside `text`,
+# where it is true.
