@@ -84,6 +84,7 @@ from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import quote
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -466,6 +467,36 @@ JSON_PATH = re.compile(r"^[A-Za-z_@][\w@-]*(?:\.[A-Za-z_@][\w@-]*)*$")
 JSON_ROOT = "$"
 
 
+#: A `{...}` slot in `detail_url_template`. Only the brace pair is matched
+#: here; whatever is inside it must still satisfy `JSON_PATH` via
+#: `compile_path`, so the template borrows the same grammar as every other
+#: path in a connector rather than introducing a second one.
+URL_TEMPLATE_SLOT = re.compile(r"\{([^{}]*)\}")
+
+
+def compile_url_template(template: str) -> tuple[tuple[str, ...], ...]:
+    """The paths a `detail_url_template` reads, refusing anything else.
+
+    Two separate refusals, because they fail differently. A slot whose
+    contents are not a `JSON_PATH` is a typo the author should see at load
+    time. A brace left over after every slot is removed is the dangerous one:
+    `str.format` over a template this module did not fully parse is an
+    attribute-traversal surface (`{0.__class__.__init__.__globals__}`), and
+    the way to close it is to refuse the character rather than to promise
+    never to call `format`. `url_pattern` already takes exactly this posture
+    toward `{page}`.
+    """
+    paths = tuple(compile_path(slot) for slot in URL_TEMPLATE_SLOT.findall(template))
+    residue = URL_TEMPLATE_SLOT.sub("", template)
+    if "{" in residue or "}" in residue:
+        raise ConnectorError(f"unbalanced or nested braces in detail_url_template: {template!r}")
+    if not paths:
+        raise ConnectorError(
+            f"detail_url_template names no field, so every row would get the same URL: {template!r}"
+        )
+    return paths
+
+
 def compile_path(path: str) -> tuple[str, ...]:
     """`"baseSalary.value.minValue"` → `("baseSalary", "value", "minValue")`.
 
@@ -517,6 +548,39 @@ def dig_container(document: Any, path: tuple[str, ...]) -> list[Any]:
     return node if isinstance(node, list) else []
 
 
+def _templated_url(document: Any, template: str) -> str | None:
+    """`detail_url_template` with this record's own values substituted.
+
+    **Every substituted value is `quote`d with `safe=""`.** The template's
+    scheme and host are written in the connector file, which is reviewed; the
+    values come from a remote response, which is not. Escaping every reserved
+    character means a value can only ever land as one opaque segment — a
+    `slug` of `"//elsewhere.example/x"` becomes `%2F%2Felsewhere.example%2Fx`
+    and stays under the host the file names, rather than becoming a
+    protocol-relative URL pointing somewhere else. `connector_health`'s
+    off-host signal checks the result as well; this is the half that makes the
+    check unnecessary rather than merely present.
+
+    A record missing any named field yields `None` — no `detail_url` for that
+    row, which `build_offer` handles — rather than a URL with a hole in it. A
+    wrong detail URL is worse than an absent one on any board that answers 200
+    to an unknown id, and getmanfred, the board this was written for, is one:
+    a made-up offer id returns a page whose `pageProps` carries no offer at
+    all, so a broken link there looks exactly like a successful fetch.
+    """
+    parts: list[str] = []
+    last = 0
+    for match in URL_TEMPLATE_SLOT.finditer(template):
+        value = dig(document, compile_path(match.group(1)))
+        if value is None:
+            return None
+        parts.append(template[last : match.start()])
+        parts.append(quote(value, safe=""))
+        last = match.end()
+    parts.append(template[last:])
+    return "".join(parts)
+
+
 class JsonSource(Strict):
     """Fields read out of a JSON document instead of out of markup.
 
@@ -534,6 +598,12 @@ class JsonSource(Strict):
     #: List pages only: the path to the array of items. Omitted on a detail
     #: page, where the document *is* the one record.
     items: str | None = None
+    #: List pages only: build `detail_url` out of the record's own fields,
+    #: for a board that publishes an id and a slug where a URL would do.
+    #: `"https://example.com/jobs/{id}/{slug}"`. The alternative is to map
+    #: `detail_url` in `fields` from a path the response already carries,
+    #: which is the simpler case and the one to prefer when it exists.
+    detail_url_template: str | None = None
     fields: dict[str, str] = Field(min_length=1)
 
     @field_validator("embedded_in")
@@ -555,6 +625,16 @@ class JsonSource(Strict):
             except ConnectorError as exc:
                 raise ValueError(str(exc)) from exc
         return path
+
+    @field_validator("detail_url_template")
+    @classmethod
+    def _url_template_compiles(cls, template: str | None) -> str | None:
+        if template is not None:
+            try:
+                compile_url_template(template)
+            except ConnectorError as exc:
+                raise ValueError(str(exc)) from exc
+        return template
 
     @field_validator("fields")
     @classmethod
@@ -602,6 +682,10 @@ def _json_record(document: Any, source: JsonSource) -> dict[str, str]:
         value = dig(document, compile_path(path))
         if value is not None and value != "":
             record[name] = value
+    if source.detail_url_template is not None:
+        url = _templated_url(document, source.detail_url_template)
+        if url is not None:
+            record["detail_url"] = url
     return record
 
 
@@ -712,6 +796,25 @@ class ListPage(Strict):
                 )
         return source
 
+    @field_validator("from_json")
+    @classmethod
+    def _one_answer_for_detail_url(cls, source: JsonSource | None) -> JsonSource | None:
+        # `_json_record` writes the template's result last, so declaring both
+        # would silently discard the mapped path. Refuse rather than pick: a
+        # file saying two things about one field is a file whose author
+        # believed one of them.
+        if (
+            source is not None
+            and source.detail_url_template is not None
+            and "detail_url" in source.fields
+        ):
+            raise ValueError(
+                "list.from_json declares both a detail_url field and a "
+                "detail_url_template — keep whichever is true of the response and "
+                "delete the other"
+            )
+        return source
+
     @field_validator("fields")
     @classmethod
     def _field_names_are_in_the_closed_vocabulary(
@@ -774,6 +877,12 @@ class DetailPage(Strict):
                 raise ValueError(
                     "detail.from_json.items is not allowed — a detail page is one record, "
                     "not an array"
+                )
+            if source.detail_url_template is not None:
+                raise ValueError(
+                    "detail.from_json.detail_url_template is not allowed — the detail page is "
+                    "the page this would link to, and `detail_url` is not in the detail "
+                    "vocabulary anyway"
                 )
         return source
 
@@ -1158,6 +1267,37 @@ def _as_float(value: str | None) -> float | None:
         return None
 
 
+def _as_wage(value: str | None) -> float | None:
+    """`_as_float`, except that a figure of zero or less is not a wage.
+
+    A board with nothing to publish does not always omit the field.
+    getmanfred's list API sends `salaryFrom: 0` on 9 of its 21 live offers,
+    beside a real `salaryTo`; the zero means "no floor stated", never "this
+    job pays nothing". Passed through, it becomes
+    `Salary(min=0.0, stated=True)` — a figure the advert never gave, on the
+    one dimension the whole ranking turns on, and it sorts the offer to the
+    bottom of the list as the worst-paid job on the board.
+
+    This is deliberately NOT inside `_as_float`, whose job is to read a number
+    out of two decimal conventions and which is used for that alone. "Zero is
+    not a wage" is a fact about salaries, not about number formats, and it
+    belongs at the one call site that is building a `Salary`.
+
+    Negatives go the same way, for the same reason and at no extra cost:
+    `_as_float` preserves a leading sign, and nothing that survives here
+    should be able to claim an advert offered less than nothing.
+
+    A board that publishes a genuine zero — an unpaid internship, a volunteer
+    post — is not served by this, and no board in the survey does: they omit
+    the field. If one ever states it, it will read as "no figure given", which
+    is a smaller error than any of the alternatives here.
+    """
+    parsed = _as_float(value)
+    if parsed is None or parsed <= 0:
+        return None
+    return parsed
+
+
 def build_offer(
     connector: Connector,
     *,
@@ -1188,8 +1328,8 @@ def build_offer(
     salary = None
     if any(k in merged for k in ("salary_min", "salary_max", "salary_currency", "salary_period")):
         salary = Salary(
-            min=_as_float(merged.get("salary_min")),
-            max=_as_float(merged.get("salary_max")),
+            min=_as_wage(merged.get("salary_min")),
+            max=_as_wage(merged.get("salary_max")),
             currency=merged.get("salary_currency"),
             period=merged.get("salary_period"),
             stated=True,

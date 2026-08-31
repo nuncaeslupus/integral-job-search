@@ -856,17 +856,31 @@ JOB_POSTING = json.dumps(
         "baseSalary": {
             "@type": "MonetaryAmount",
             "currency": "PLN",
-            "value": {"@type": "QuantitativeValue", "unitText": "MONTH", "minValue": 15000,
-                      "maxValue": 21500},
+            "value": {
+                "@type": "QuantitativeValue",
+                "unitText": "MONTH",
+                "minValue": 15000,
+                "maxValue": 21500,
+            },
         },
         "hiringOrganization": {"@type": "Organization", "name": "QED.ai"},
-        "jobLocation": {"@type": "Place",
-                        "address": {"@type": "PostalAddress", "addressCountry": "PL",
-                                    "addressLocality": "Warszawa"}},
+        "jobLocation": {
+            "@type": "Place",
+            "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "PL",
+                "addressLocality": "Warszawa",
+            },
+        },
     }
 )
-BREADCRUMBS = json.dumps({"@context": "https://schema.org", "@type": "BreadcrumbList",
-                          "itemListElement": [{"name": "Python"}]})
+BREADCRUMBS = json.dumps(
+    {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [{"name": "Python"}],
+    }
+)
 
 
 def _ld(*blocks: str) -> str:
@@ -958,8 +972,14 @@ def test_dig_returns_the_scalar_at_the_end_of_the_path() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["baseSalary", "baseSalary.value", "hiringOrganization", "jobLocation.address", "missing",
-     "baseSalary.missing.minValue"],
+    [
+        "baseSalary",
+        "baseSalary.value",
+        "hiringOrganization",
+        "jobLocation.address",
+        "missing",
+        "baseSalary.missing.minValue",
+    ],
 )
 def test_dig_treats_a_container_or_a_miss_as_no_value(path: str) -> None:
     """Landing on an object must read as *absent*, not as `str({...})`.
@@ -988,9 +1008,15 @@ def test_a_json_list_page_reads_its_items_out_of_the_embedded_document() -> None
     connector = parse_connector(JSON_DETAIL_CONNECTOR)
     page = _ld(
         BREADCRUMBS,
-        json.dumps({"@type": "CollectionPage",
-                    "hasPart": [{"url": "https://jsonboard.test/job/1"},
-                                {"url": "https://jsonboard.test/job/2"}]}),
+        json.dumps(
+            {
+                "@type": "CollectionPage",
+                "hasPart": [
+                    {"url": "https://jsonboard.test/job/1"},
+                    {"url": "https://jsonboard.test/job/2"},
+                ],
+            }
+        ),
     )
     assert parse_list_page(connector, page) == [
         {"detail_url": "https://jsonboard.test/job/1"},
@@ -1053,19 +1079,20 @@ def test_a_json_document_is_never_evaluated() -> None:
     stays a string. The YAML loader's `!!python/…` route is closed the same way
     (`yaml.safe_load`) — this is the JSON half of the same promise."""
     connector = parse_connector(JSON_DETAIL_CONNECTOR)
-    hostile = json.dumps({"@type": "JobPosting", "title": "__import__('os').system('id')",
-                          "description": "body"})
+    hostile = json.dumps(
+        {"@type": "JobPosting", "title": "__import__('os').system('id')", "description": "body"}
+    )
     record = parse_detail_page(connector, _ld(hostile))
     assert record["title"] == "__import__('os').system('id')"
 
 
 def test_a_page_that_declares_both_routes_is_refused() -> None:
     both = JSON_DETAIL_CONNECTOR.replace(
-        '  from_json:\n    embedded_in: \'script[type="application/ld+json"]\'\n'
+        "  from_json:\n    embedded_in: 'script[type=\"application/ld+json\"]'\n"
         '    match:\n      "@type": CollectionPage\n    items: hasPart\n'
         "    fields:\n      detail_url: url\n",
         '  item: ".card"\n  fields:\n    detail_url:\n      css: "a.link"\n      attr: href\n'
-        '  from_json:\n    embedded_in: \'script[type="application/ld+json"]\'\n'
+        "  from_json:\n    embedded_in: 'script[type=\"application/ld+json\"]'\n"
         '    match:\n      "@type": CollectionPage\n    items: hasPart\n'
         "    fields:\n      detail_url: url\n",
     )
@@ -1090,8 +1117,11 @@ def test_a_detail_page_json_source_may_not_name_items() -> None:
 
 def test_a_json_field_outside_the_offer_vocabulary_is_refused() -> None:
     with pytest.raises(ConnectorError, match="api_key"):
-        parse_connector(JSON_DETAIL_CONNECTOR.replace("      title: title\n",
-                                                      "      api_key: token\n      title: title\n"))
+        parse_connector(
+            JSON_DETAIL_CONNECTOR.replace(
+                "      title: title\n", "      api_key: token\n      title: title\n"
+            )
+        )
 
 
 def test_a_json_host_selector_outside_the_grammar_is_refused() -> None:
@@ -1188,3 +1218,180 @@ def test_an_ampersand_in_an_embedded_document_survives() -> None:
     posting = json.dumps({"@type": "JobPosting", "title": "T", "description": "R&amp;D at AT&T"})
     record = parse_detail_page(connector, _ld(posting))
     assert record["text"] == "R&amp;D at AT&T"
+
+
+# ---------------------------------------------------------------------------
+# `detail_url_template` — a board that publishes an id and a slug, not a URL.
+#
+# The adversarial half of this coverage (percent-encoding equivalence, host
+# escape, every shape of malformed template) is owed to a session other than
+# the one that wrote the builder, per CLAUDE.md's "fixtures for a
+# correctness-critical gate are written by a second session". What is here is
+# the implementer's own reading, which is exactly what that rule says is not
+# sufficient on its own.
+
+TEMPLATE_CONNECTOR = """
+site: templateboard
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-01"
+list:
+  url_pattern: "https://templateboard.test/api/jobs"
+  from_json:
+    items: "$"
+    detail_url_template: "https://templateboard.test/jobs/{id}/{slug}"
+    fields:
+      title: position
+detail:
+  from_json:
+    fields:
+      text: description
+"""
+
+
+def test_a_detail_url_is_composed_from_the_records_own_fields() -> None:
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    body = json.dumps([{"id": 8451, "slug": "senior-python-engineer", "position": "Senior Python"}])
+    (row,) = parse_list_page(connector, body)
+    assert row["detail_url"] == "https://templateboard.test/jobs/8451/senior-python-engineer"
+
+
+def test_a_substituted_value_cannot_leave_the_host_the_template_names() -> None:
+    """The template is reviewed; the values are a remote response and are not.
+
+    `quote(..., safe="")` is what keeps a value one opaque segment, so a slug
+    of `//elsewhere/x` becomes a path component rather than the authority of a
+    protocol-relative URL.
+    """
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    body = json.dumps([{"id": 1, "slug": "//elsewhere.test/x?a=b#c", "position": "P"}])
+    (row,) = parse_list_page(connector, body)
+    assert row["detail_url"] == (
+        "https://templateboard.test/jobs/1/%2F%2Felsewhere.test%2Fx%3Fa%3Db%23c"
+    )
+    assert row["detail_url"].startswith("https://templateboard.test/jobs/")
+
+
+def test_a_record_missing_a_named_field_gets_no_detail_url_rather_than_a_broken_one() -> None:
+    """A URL with a hole in it is worse than none on any board that answers 200
+    to an unknown id — getmanfred, the board this was written for, renders a
+    page with no offer in it rather than a 404."""
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    body = json.dumps([{"id": 7, "position": "P"}])
+    (row,) = parse_list_page(connector, body)
+    assert "detail_url" not in row
+    assert row["title"] == "P"
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "https://b.test/jobs/{0.__class__}",
+        "https://b.test/jobs/{}",
+        "https://b.test/jobs/{id}{",
+        "https://b.test/jobs/{{id}}",
+        "https://b.test/jobs/every-row-the-same",
+    ],
+)
+def test_a_template_outside_the_grammar_is_refused_at_load(template: str) -> None:
+    text = TEMPLATE_CONNECTOR.replace(
+        'detail_url_template: "https://templateboard.test/jobs/{id}/{slug}"',
+        f'detail_url_template: "{template}"',
+    )
+    with pytest.raises(ConnectorError):
+        parse_connector(text)
+
+
+def test_a_list_may_not_both_map_and_compose_its_detail_url() -> None:
+    text = TEMPLATE_CONNECTOR.replace(
+        "      title: position",
+        "      title: position\n      detail_url: link",
+    )
+    with pytest.raises(ConnectorError, match="detail_url_template"):
+        parse_connector(text)
+
+
+def test_a_detail_page_may_not_carry_a_detail_url_template() -> None:
+    detail_block = "  from_json:\n    fields:\n      text: description"
+    with_template = (
+        '  from_json:\n    detail_url_template: "https://b.test/{id}"'
+        "\n    fields:\n      text: description"
+    )
+    text = TEMPLATE_CONNECTOR.replace(detail_block, with_template)
+    with pytest.raises(ConnectorError, match="detail_url_template"):
+        parse_connector(text)
+
+
+# ---------------------------------------------------------------------------
+# Zero is not a wage.
+
+
+@pytest.mark.parametrize("figure", ["0", "0.0", "-1", "-50000"])
+def test_a_salary_figure_of_zero_or_less_is_absent_rather_than_stated(figure: str) -> None:
+    """getmanfred's list API sends `salaryFrom: 0` on ten of twenty-one live
+    offers beside a real `salaryTo`. Zero there means "no floor stated"; passed
+    through it would rank the offer as the worst-paid job on the board."""
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    offer = build_offer(
+        connector,
+        list_fields={"salary_min": figure, "salary_max": "65000", "salary_currency": "EUR"},
+        detail_fields={"text": "A body long enough to be an advert." * 3},
+    )
+    assert offer.salary is not None
+    assert offer.salary.min is None
+    assert offer.salary.max == 65000.0
+    assert offer.salary.stated is True
+
+
+def test_a_real_floor_still_survives() -> None:
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    offer = build_offer(
+        connector,
+        list_fields={"salary_min": "50000", "salary_max": "60000"},
+        detail_fields={"text": "A body long enough to be an advert." * 3},
+    )
+    assert offer.salary is not None
+    assert (offer.salary.min, offer.salary.max) == (50000.0, 60000.0)
+
+
+def test_getmanfreds_thousands_scale_salary_never_reaches_the_offer() -> None:
+    """The board publishes the same band twice, in two units.
+
+    `offer.salaryMin`/`salaryMax` on a Manfred advert page are `50` and `60`
+    where its list API says `50000` and `60000`. `build_offer` lets detail win
+    on overlap, so a connector mapping the detail figures would publish a
+    fifty-euro job and pass every gate — nothing in the schema knows what a
+    euro is.
+
+    The package's answer is to declare no salary on the detail route at all, so
+    the only figures for this board are the ones already in euros. The fixture
+    keeps `salaryMin`/`salaryMax` on purpose; this is the test that could not
+    exist without them.
+    """
+    package = _CONNECTOR_LIBRARY / "getmanfred_es"
+    connector = load_connector(package / "connector.yaml")
+    detail_bytes = (package / "fixture" / "detail.html").read_text(encoding="utf-8")
+    assert '"salaryMin": 50' in detail_bytes and '"salaryMax": 60' in detail_bytes
+
+    detail = parse_detail_page(connector, detail_bytes)
+    assert not any(name.startswith("salary") for name in detail)
+
+    rows = parse_list_page(
+        connector, (package / "fixture" / "list.html").read_text(encoding="utf-8")
+    )
+    row = next(r for r in rows if r["salary_min"] != "0")
+    offer = build_offer(connector, list_fields=row, detail_fields=detail, url=row["detail_url"])
+    assert offer.salary is not None
+    assert offer.salary.min is not None and offer.salary.min >= 1000
+    assert offer.salary.max is not None and offer.salary.max >= 1000
+
+
+def test_getmanfreds_detail_urls_are_composed_and_stay_on_the_portal() -> None:
+    package = _CONNECTOR_LIBRARY / "getmanfred_es"
+    connector = load_connector(package / "connector.yaml")
+    rows = parse_list_page(
+        connector, (package / "fixture" / "list.html").read_text(encoding="utf-8")
+    )
+    assert rows
+    for row in rows:
+        assert row["detail_url"].startswith("https://www.getmanfred.com/ofertas-empleo/")

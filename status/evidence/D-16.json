@@ -1,8 +1,8 @@
 {
   "undisclosed_connectorless_sourcing": 0,
   "situations_probed": 5,
-  "connectors_installed": 13,
-  "connectors_usable": 12,
+  "connectors_installed": 14,
+  "connectors_usable": 13,
   "rule_declared_in_step_spec": true,
   "shortfalls": [],
   "readings": [
@@ -10,6 +10,7 @@
       "market": "ES",
       "connectorless": false,
       "usable": [
+        "getmanfred_es",
         "infojobs_es",
         "jobfluent_es",
         "tecnoempleo_es",

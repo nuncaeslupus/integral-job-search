@@ -1,0 +1,65 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: getmanfred.com
+# Spain. Not GLOBAL: the board is Madrid-run, advertises in Spanish, and the
+# offers name Spanish employers or explicitly Spain-eligible remote roles.
+# Several are remote across Europe, which is a property of individual adverts
+# rather than of the listing's scope.
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+last_verified: "2026-09-01"
+
+# Checked, not assumed, on the date above. https://www.getmanfred.com/robots.txt
+# is nine lines, four of them comments: a single `User-agent: *` group whose
+# only rule is `Allow: /`, a `Host:` line and two `Sitemap:` lines. No path is
+# disallowed and no group names any agent — ClaudeBot, Claude-User,
+# Claude-SearchBot, anthropic, GPTBot, CCBot and Bytespider are all absent.
+#
+# Both surfaces this connector touches were checked individually and AFTER the
+# capture that found them, not only before: `/api/v2/public/offers` and
+# `/ofertas-empleo/<id>/<slug>`. That ordering is deliberate — a capture
+# reveals a URL the survey never visited, and robots speaks about paths.
+# remoteok.com was corrected and un-corrected in one day on exactly this point.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose on the date below, never from an advert a candidate
+# was reading: the set of ads a person opens carries their field, level, city
+# and the fact that they are looking, and a fixture in a public repository
+# carries that forever.
+#
+# `fixture/list.html` holds JSON, not HTML, and the extension is the slot this
+# repo's tooling reads rather than a claim about the format — `connect_portal`,
+# `connector_health` and `excerpt_fixture` all address `fixture/list.html` by
+# name. The same convention is used by the other `from_json` packages.
+fixture:
+  provenance: sampled
+  recorded: "2026-09-01"
+  # Two different cuts, because the two files are different shapes.
+  #
+  # `list.html` is the API response truncated to its first three records. The
+  # cut is made in the raw bytes at a top-level record boundary and the
+  # closing bracket re-added; every retained byte is what the server sent.
+  #
+  # `detail.html` could not be cut that way. The advert lives in a single
+  # `__NEXT_DATA__` script of 121 KB inside a 420 KB page, and there is no
+  # boundary inside it to cut at — so the JSON was re-serialised with whole
+  # keys dropped. No retained VALUE was altered: `requirementsIntro`, `title`,
+  # `company`, `slug` and the two salary numbers are byte-identical to the
+  # response, and the surrounding page is a minimal html/body shell. Recorded
+  # here because "re-serialised" is a weaker guarantee than "byte-identical"
+  # and the difference should not have to be discovered by reading the file.
+  bodies: excerpted
+  # `salaryMin: 50` and `salaryMax: 60` are kept in the detail fixture ON
+  # PURPOSE. They are the thousands-scale figures the connector must not read,
+  # and a fixture that dropped them could not prove it doesn't.
+  #
+  # Nothing to redact: neither response carries a client IP, a session token or
+  # a personal name. Grepped both for an IPv4 literal — none. The scout's name
+  # and work address that appear on the live detail page are in
+  # `heroSectionData.companyScout*`, which is not among the keys kept.
+  client_ip: redacted

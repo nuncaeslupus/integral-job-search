@@ -1,8 +1,8 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 12,
-  "silent_connector_failures_evaluated": 12,
-  "connector_runs_probed": 12,
+  "connector_runs_evaluated": 13,
+  "silent_connector_failures_evaluated": 13,
+  "connector_runs_probed": 13,
   "gate_status": "measured",
   "readings": [
     {
@@ -24,6 +24,16 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30"
+    },
+    {
+      "connector": "getmanfred",
+      "site": "getmanfred.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-01"
     },
     {
       "connector": "infojobs",
