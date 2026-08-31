@@ -1,167 +1,130 @@
-# Session handover — 2026-08-28 ~22:30 UTC, interactive, laptop
+# Session handover — 2026-08-30 ~23:55 UTC, interactive, laptop
 
-Board: **116 gates on `main`** (`dfe66a0`), 129 tasks — 115 merged, 10 open,
-1 blocked, 1 done, 2 cancelled, 0 claimed. Those sum to 129: `query_status.py`
-counts `blocked` separately from `open`, so an "open + merged" reading of this
-board is short by four. `make host-gate` exit 0: ruff clean, mypy clean over 172 files,
-`evidence: no drift`, `verify-gates: 116 terminal task(s); 116 gate(s) asserted,
-0 carry no fenced gate block`. `query_status.py` reports **no problems**.
+Board: **116 gates on `main`** (`eb4e9a0`). `make host-gate` exit 0: ruff clean,
+strict mypy over 172 files, 1878 tests, `evidence: no drift`,
+`verify-gates: 116 terminal task(s); 116 gate(s) asserted, 0 carry no fenced
+gate block`.
 
-The session was asked whether the tool is ready for a live candidate session,
-and to clear whatever needed a laptop or a browser first.
+This was a **live candidate session**, with the owner stepping out of character
+to direct connector work. Everything below came out of that: the library grew
+because the search kept failing for reasons the candidate could name, and each
+round was built to answer the last one's failure.
 
-## Answer: yes, sourcing is ready
+Nothing identifying the candidate is recorded here. That is not discretion, it
+is the rule — identity, history and stated constraints live in the local profile
+store, and a document committed to a public repository keeps whatever it says
+forever. An earlier draft of this file named the person, their last employer and
+when they were laid off; **caught by review on the PR that added it**, which is
+the argument for having the rule rather than the judgement.
 
-**T72 merged** ([#256](https://github.com/nuncaeslupus/integral-job-search/pull/256),
-closes #203) and archived ([#257](https://github.com/nuncaeslupus/integral-job-search/pull/257)).
-`trabajos.com` — the only real board — is **verified healthy against live
-markup**: 40 baseline items, 40 probe items, `silent_connector_failures: 0`,
-`gate_status: measured`. Live `robots.txt` re-checked and it matches
-`meta.yaml`'s claim exactly: four disallowed paths, none of them the listing
-read, no AI-agent rule.
+## What landed
 
-The detector is not a tautology — renaming `listado2014` → `listado2099` in the
-probe flips it to `broken` with *"40 row(s) recorded previously, 0 now"*.
+**[#259](https://github.com/nuncaeslupus/integral-job-search/pull/259) —
+connectors can read JSON, and eleven new packages.** Merged.
 
-## What finished T72, and the design fork behind it
+`integral.connectors` gained a `from_json` block, alternative to `item`/`fields`
+and never alongside it: an optional `embedded_in` selector naming the element
+whose text is the document (omit it and the response body *is* JSON), a `match`
+that picks the right document when a page serves several, `items` for the list
+page's array, and one dotted path per field. The path grammar is as small as
+the selector grammar — dotted keys, no indices, no wildcards, no filters, plus
+the literal `$` for a document that is itself the array. `json.loads` is the
+only parser and nothing is evaluated.
 
-The module could only report `measured` on a machine holding an uncommitted
-`probe/list.html`, and it is in `repo_gate --list-evidence-modules` — so
-`make evidence` regenerates it on every clone, CI run and cloud session, where
-the probe is absent and the answer is `unmeasured`. **No committed number could
-satisfy both.** Measured both ways before touching anything.
+The reason it was worth building is `Salary`. `build_offer` turns any salary key
+into `Salary(stated=True)`, and **six** HTML connectors here leave salary
+deliberately unmapped because their board prints it as one unsplittable string.
+A JSON number needs no splitting. `dig` is written to match: a path landing on
+an object or an array counts as *no value*, never `str({...})`.
 
-The owner chose: **commit the probe, with `probe/captured.json` recording when
-it was taken.** The date is read from that file and never from mtime — a
-checkout does not preserve mtimes, so deriving it there would give every clone a
-different answer and drift `make evidence` on a file nobody edited. Baseline and
-probe stay two captures from two different days, so the comparison still means
-something; what changed is that *how current is it* is now a date in a diff.
+Eleven packages shipped with it: `arbeitnow_en`, `builtin_en`, `infojobs_es`,
+`jobfluent_es`, `jobsacuk_en`, `pythonorg_en`, `remotive_en`, `tecnoempleo_es`,
+`ticjob_es`, `wellfound_en`, `weworkremotely_en`. The library was two packages
+before today.
 
-**What this does not buy, and the docstring says so:** nothing forces a refresh.
-A probe left alone certifies a board that may since have rotted. The rejected
-alternative — `unmeasured` past N days — turns `main` red on a timer for
-everyone until someone with a laptop recaptures.
+Two smaller changes rode along, both forced by the above:
 
-## The probe leaked a home IP, and the guard could not see it
+- `connector_health.free_signals` now asks whether a field the connector
+  **declared** came back empty. justjoin.it's listing is an index of URLs, so
+  "company is null on every row" marked it broken on the day it was written.
+- T55's old-name sweep exempts `connectors/*/fixture/` and `connectors/*/probe/`.
+  Remotive serves a stylesheet and a blog tag whose own URLs happen to contain
+  this repository's former name; editing a capture so it stops saying so would
+  falsify what the fixture proves. (Quoting those two URLs here would trip the
+  same sweep on this file, which is the exemption's argument in miniature.)
 
-`trabajos.com` writes `<!-- IP: … - CODPAIS:100 -->` into every response, and it
-is the **client's** address. `meta.yaml` already recorded that the fixture was
-redacted for this reason and
-`test_no_committed_fixture_carries_an_ip_address` existed to enforce it — but it
-scanned `fixture/*.html`, so the capture in `probe/` walked past it.
-`tools/publish_connectors.py` `copytree`s the whole package into the **public**
-sources repository. It would have been published.
+## What is open
 
-Redacted in raw bytes; the guard now scans **every recorded page in every
-package**. Its own docstring had argued *"the next board will write it somewhere
-else"* — what happened is the same board wrote it in the next directory over.
+**[#260](https://github.com/nuncaeslupus/integral-job-search/pull/260) — four
+JSON-reading packages. Draft, and the draft is the point.**
 
-## Four defects, three review rounds — the second-reader rule again
+`himalayas_en`, `justjoin_en`, `nofluffjobs_en`, `workingnomads_en`. All four
+pass `check_package` with no violations. They are not merged because
+`connector_health`'s gate reads `measured` only when **every** connector has a
+probe, and a probe is the *second* capture of the same query taken on a **later
+day**. A package written today cannot carry one, so merging it parks T72's gate
+and `verify_gates` then reports T72 as a merged task that cannot show its
+measurement.
 
-CodeRabbit went 🟡 → 🟡 → ⚪ Minimal. Every finding was in code written this
-session, behind a green gate:
+**To finish it: capture the four probes, `make evidence`, mark ready.** Nothing
+else about the branch should need to change.
 
-1. A regular file named `probe` passed rule 1 — `probe` joined `OPTIONAL_ENTRIES`
-   and inherited the exemption from "unexpected entry" without inheriting the
-   type check `fixture` has.
-2. Every non-empty string was accepted as a capture date; `{"captured_at":
-   "unknown"}` was emitted beside `gate_status: measured`.
-3. `strptime("%Y-%m-%d")` accepts unpadded components, so `2026-8-28` passed.
-   **The round-2 commit's comment claimed "one spelling or none" and did not
-   deliver it** — a guarantee written into prose without a test. Fixed by
-   round-tripping the parsed date.
+### Owed first — an independent adversarial pass on `dig` / `compile_path`
 
-Plus the IP leak, which no reviewer caught — it was found by reading
-`meta.yaml` before committing. All three CodeRabbit fixes were verified RED
-against the previous commit before landing.
+CLAUDE.md requires fixtures for a correctness-critical gate to be written by a
+session **other than the implementer**, and a JSON path resolver is exactly the
+parser family that rule names. #259 was safe to merge without it because no
+connector on that branch used `from_json`. **The four on #260 do**, so the audit
+blocks that branch, not the engine.
 
-## Board defects fixed this session
+The argument for it was already made once, on #259: review found that
+`_json_documents` read embedded documents through `Node.text_content()`, which
+collapses runs of whitespace *inside* JSON string values — silently reflowing
+every advert body the route parsed, and shifting every extraction offset past
+the first collapsed run. `Node.raw_text()` fixes it. That was a fail-open bug
+behind a green gate, found by a second reader, which is the whole thesis.
 
-- **#254 reopened.** PR #255 was queue-only but wrote `Closes #254`, so merging
-  closed D-25's own handle while the task sits unstarted.
-- **#253 retitled** to `D-24: A retracted episode stays sendable — approval
-  outlives its evidence`. The protocol fetch drops issue bodies, so the
-  `arsenal-task:` line is unreachable and the board resolves by **title** —
-  which did not match. It resolves now.
-- **T72's task file archived by hand** (#257). `open_task_pr.sh` still cannot
-  open a PR in this repo (`claude-arsenal#256`), so #256 was branched,
-  committed, pushed and opened manually — and nothing performed the archive
-  step. **Check for this after any hand-opened PR.**
+Whoever does it should read schema.org's `JobPosting` and the module docstring
+**first**, derive cases from that text before opening the implementation, and
+weight fail-open over fail-closed.
 
-## Plugins updated — the bundle re-vendor is the NEXT session's first job
+## What the searches measured, since it drove all of the above
 
-`claude plugin update` is a **non-interactive CLI** and it works; `/plugin
-update` typed at the model does nothing. All three are now **2.5.0** on disk:
+**No candidate detail belongs in this file** — identity, history and stated
+constraints live in the local profile store, and a document committed to a
+public repository keeps whatever it says forever. What follows is about the
+*tool*, and every figure is a count over adverts.
 
-| plugin | scope | was | now |
-|---|---|---|---|
-| `core@claude-arsenal` | user | 1.1.0 | 2.5.0 |
-| `core@claude-arsenal` | project | 1.1.0 | 2.5.0 |
-| `skill-workshop@claude-arsenal` | user | 1.1.0 | 2.5.0 |
+Four searches ran, each narrowed by what the previous one surfaced:
 
-Both `core` entries were **`failed to load`** before this — a hook schema error,
-`hooks.SessionStart[0].hooks: expected array, received undefined`. Worth
-confirming that cleared after the restart.
+| round | scope | harvested | survivors | priced |
+|---|---|---|---|---|
+| 1 | Spanish boards | 535 | 78 | 2 |
+| 2 | foreign boards | 875 | 29 | 1 reachable |
+| 3 | "agentic Python" | 1005 | 17 | 4 |
+| 4 | JSON sources + US | 2755 | 28 | 9 |
 
-**The vendored bundle is still 2.4.23.** It was deliberately not re-vendored
-here: `.claude/skills/init/scripts/init.py` is the 2.4.23 copy, so running it
-would have vendored 2.4.23 over itself — a no-op, not an upgrade. The upgrade
-needs the restarted session's loaded 2.5.0 skill. The 2.5.0 script is on disk at
-`~/.claude/plugins/cache/claude-arsenal/core/2.5.0/skills/init/scripts/init.py`
-if the restart does not pick it up. That re-vendor is a real diff and wants its
-own gate and PR.
+Three findings worth keeping:
 
-## For the live session
+- **Salary silence is the binding constraint, not salary level.** Round 3 added
+  the rule that an advert with no salary, and no cheap way to approximate one,
+  is not shown. It removed 13 of 17 survivors. The approximation ladder that
+  earned its keep: the advert, the board's own salary field, the same advert on
+  another board, another advert from the same employer — reported with *which*
+  answered, because a figure from a sibling advert is a weaker claim.
+- **Measured, not asserted: 213 USD adverts carrying a band, median
+  $125,000–$160,000, and 117 of 213 are US/Canada-restricted.** EUR: 4 adverts,
+  median €61,654–€94,205. The US pays more and mostly cannot pay *here* — of
+  fifteen foreign adverts opened in round 2, four said contractor/B2B outright
+  and one said full-time.
+- **Two filter defects, both found by reading results rather than code.** A
+  gambling veto that misses slot-machine firms because their adverts never say
+  "casino", and a body-shop name list that had swallowed a payroll *platform* —
+  a company whose product is employment is not a company that rents engineers
+  out, and the entry was filtering out that firm's own engineering post.
 
-The owner is the candidate; **test-mode on** was agreed, because D-25's gate
-needs observations carrying provenance and `test-mode` (S11) is the instrument.
-No `profiles/` directory exists yet, so this is the first candidate.
+## Ready for the next session
 
-- **Have the CV to hand** — step 1 captures it with provenance.
-- **T20's blind ranking must happen before step 9.** `rank_spearman >= 0.60` is
-  scored against a manual ranking of 20 held-out ads; seeing the tool's ordering
-  first contaminates it. The command exists (T20a built it) and writes `null`
-  for want of the rankings.
-- Expect the reading step to be visibly mediocre: `extraction_macro_f1` is
-  **0.4943** against a 0.75 target, `scored_n: 161`, label floor met at 206.
-
-Four tasks carry `requires: [surface:human]`: **T69, T20, D-23, D-25**.
-
-## The connector system — asked and answered
-
-**Solid, not fast.** The docstrings reason about failure modes that were
-actually hit, not imagined ones: the annotator's output is frozen data so the
-gate cannot recompute both sides and agree with itself; item count sits *inside*
-the T12 F1 so parsing 20 of 40 offers perfectly cannot score well. Three real
-weaknesses, filed here rather than as tasks — the owner chose "go live" over
-queueing them:
-
-1. **Coverage is the ceiling, and it is not a code problem.** One real board.
-   `tecnoempleo` and `remoteok` are `Disallow: /` for ClaudeBot; `weworkremotely`,
-   `remotive`, `getmanfred`, `feinaactiva` and EURES serve listings as JSON APIs
-   or JS apps, so a CSS-selector engine has structurally nothing to select. Four
-   of the five sources the 208-ad corpus came from are unreachable by this
-   design. Breadth needs a second connector *kind*, not better selectors.
-2. **`connectors.py` hand-rolls a CSS engine and a DOM tree** — ~280 of its 1238
-   lines — to keep the T12 gate dependency-free, while lxml and BeautifulSoup are
-   already a dev extra for the annotator. Largest correctness surface in the
-   system, and it exists to avoid a dependency that is already in the file.
-3. The probe freshness model, above.
-
-## Next
-
-1. **Re-vendor the bundle to 2.5.0** and open a PR for it (step 0b).
-2. `task_select.py` returns **T73** (`t-52bb1ec0`, priority 10, dep T72 now
-   merged) — a rate-limited run is inconclusive, never broken. Codeable, no
-   human needed. It and T83 were blocked on T72 until today.
-3. The live session itself.
-
-## Loose ends, neither urgent
-
-- Two stale worktrees from an earlier session, **both clean, no uncommitted
-  work**: `/home/ivant/dev/ijs-t87` (`chore/seed-t87`) and
-  `/home/ivant/dev/ijs-t87b` (`task/t-57cd25d8`). Left alone rather than removed.
-- CI is still the documented private-repo billing signature: every job red in
-  5–6 s, `runner_id: 0`. `merge-policy` is `after-review` for exactly this
-  reason; both merges today were on CodeRabbit's verdict, not CI's.
+`arsenal/tasks/` untouched; no task was claimed and none released. The
+connector work above was not a queued task and did not pretend to be one — if it
+should become one, seed it from #260 rather than from this file.
