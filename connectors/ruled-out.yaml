@@ -38,6 +38,26 @@
 #    Always run a NEGATIVE CONTROL: show some path returning False, or a True
 #    answer is indistinguishable from a matcher that says yes to everything.
 #
+#    `restated_for_every_named_agent` — the one case where a True is not
+#    enough. A path the `*` group does not reach, but which the SAME file
+#    disallows for every named AI agent it lists, is not fetched, and the board
+#    goes to `policy_refused` rather than to `robots_refused`.
+#
+#    This does not contradict the paragraph above it; the two are about
+#    different things. "A ClaudeBot group does not bind this tool" answers a
+#    BLANKET ban on a whole site, aimed at bulk training crawls. This answers a
+#    SPECIFIC path the operator closed to everyone they could think of, usually
+#    with a plain-language caption saying what it is. remoteok.com captioned it
+#    `# AJAX endpoints`, then listed the same two Disallows again for eleven
+#    named agents. Taking that path because our product token is not on the list
+#    is reading a permission out of an omission.
+#
+#    The bar is high on purpose, so this stays a rule and not a mood: the same
+#    path, disallowed in the same file, for EVERY named agent — not one, not a
+#    Claude-shaped subset. One board meets it today. Anything ruled out this way
+#    records the matcher's True, a second parser agreeing, and the operator's
+#    own words, so the judgement can be overturned by argument.
+#
 # 2. SERVER-RENDERED OR NOT. Counting hrefs is unreliable — a wrong URL pattern
 #    looks exactly like an empty page (it fooled the first survey on infojobs,
 #    tecnoempleo and usajobs alike). The reliable test is: **take a real advert
@@ -73,8 +93,8 @@
 #    on the strength of `/?tags=dev&action=get_jobs`, and that path is the
 #    subject of a `Disallow` line in the board's own robots.txt under the
 #    heading `# AJAX endpoints`. Two of the three corrections survived the
-#    follow-up; remoteok.com is now in `robots_refused` and its entry records
-#    what the shortcut cost.
+#    follow-up; remoteok.com is now in `policy_refused` — allowed by robots,
+#    refused by us — and its entry records what the shortcut cost.
 #
 #    The order is not decorative. Test 1 before the capture asks "may I read
 #    this page"; test 1 after it asks "may I read the thing the page reads",
@@ -261,52 +281,6 @@ robots_refused:
     rule: "the `*` group disallows the embedded job-board path"
     note: "per-employer ATS board rather than a job board; low value even if it opened"
 
-  - site: remoteok.com
-    checked: 2026-08-31
-    was_in: "corrected, for about six hours on 2026-08-31, before test 1 was re-run against the endpoint the capture found"
-    rule: >
-      `Disallow: /*?action=get_jobs` and `Disallow: /?tags`, under the heading
-      `# AJAX endpoints`, in the board's own robots.txt.
-    detail: >
-      The capture was right about the mechanism and the correction drawn from it
-      was wrong. remoteok.com serves a shell: `/remote-dev-jobs` is 59,681 bytes
-      with zero `<tr data-slug>` rows, and the 50 rows of ordinary markup arrive
-      only from `/?tags=dev&action=get_jobs&premium=0&offset=`. That endpoint is
-      the subject of the two Disallow lines above, so the board's only advert
-      surface is the one path it asks crawlers not to take.
-
-      **The repo matcher returns True for it, and that is not a defect.** Nor is
-      it a loophole to use. Read the file and the reason is plain: those Disallow
-      lines sit after `User-agent: AhrefsBot / Disallow: /`, so under RFC 9309 a
-      group ends at the next user-agent line and they belong to AhrefsBot rather
-      than to `*`. Python's stdlib `urllib.robotparser` agrees with our matcher
-      on all three URLs, which is the negative control this file asks for: two
-      independent parsers, same verdict, so the True is the file's meaning and
-      not our bug. The operator's *intent* is unmistakable all the same — they
-      captioned the block `# AJAX endpoints`, and the file's own AI/LLM section
-      restates `Disallow: /*?action=get_jobs` and `Disallow: /?tags` verbatim
-      for GPTBot, ClaudeBot, anthropic-ai, Claude-Web, PerplexityBot and six
-      others. A board that writes the same refusal twice has said it twice.
-
-      Reading a site's only content surface through a stray blank line, against
-      a restriction restated for every AI agent the operator could name, is not
-      a permission this ledger will record as one. Ruled out on policy, with the
-      mechanism written down so the next reader can disagree with the judgement
-      rather than have to re-derive the facts.
-    also: >
-      Independently disqualifying even if the robots question went the other
-      way: the ld+json in those rows is fabricated. 48 of the 50 JobPosting
-      blocks carry the identical band `USD 80000-150000 YEAR`, including a Vertu
-      Motors vehicle progressor in Dunfermline whose own description states a
-      basic salary of GBP 28,000. RemoteOK stamps a house estimate into
-      schema.org `baseSalary` for every advert that does not state one, and does
-      not mark it as an estimate. See the `salary` note in `engine_gap_json` —
-      a connector reading `baseSalary` without checking the spread across rows
-      would have published 48 invented bands.
-    retest: >
-      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)"
-      https://remoteok.com/robots.txt | grep -n 'action=get_jobs'   # 3 lines today, one of them in the AI/LLM group
-
 # ---------------------------------------------------------------------------
 # Ruled out because the LISTING is client-injected. Detail pages sometimes
 # render — that is not enough. `check_fixture` requires `fixture/list.html` to
@@ -329,7 +303,7 @@ javascript_rendered:
   # TWO of the six ended up in `corrected`, not three: remoteok.com went there
   # and came back out the same day, because the endpoint the capture revealed is
   # one the board's robots.txt names under `# AJAX endpoints`. It is in
-  # `robots_refused` now. The correction was undone by the step that had been
+  # `policy_refused` now. The correction was undone by the step that had been
   # left out — re-running test 1 against the newly found URL — which is why test
   # 3 in the header ends with that step spelled out.
   #
@@ -579,6 +553,69 @@ moved_or_gone:
       disallowed from anyway. Both halves are dead ends; robots.txt closes one
       and rendering closes the other.
     retest: "curl -sIL -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://otta.com/jobs | head -1  # 404 today"
+
+# Ruled out by OUR policy, not by the board's robots.txt. Everything here is
+# mechanically ALLOWED — the matcher says True and a second parser agrees — and
+# is not fetched anyway. Kept apart from `robots_refused` on purpose: collapsing
+# the two would let a judgement call be read later as a measurement, which is
+# the one thing this file exists to prevent.
+#
+# The rule being applied is named in the header as
+# `restated_for_every_named_agent`. Each entry must show the matcher's True, a
+# second parser agreeing, and the text the operator wrote — so the judgement can
+# be overturned by argument rather than only by re-doing the work.
+policy_refused:
+  - site: remoteok.com
+    checked: 2026-08-31
+    was_in: "corrected, for about six hours on 2026-08-31, before test 1 was re-run against the endpoint the capture found"
+    verdict: >
+      Allowed by robots and not fetched anyway. This is OUR policy, applied under
+      the `restated_for_every_named_agent` rule in the header; robots.txt does
+      not refuse it and this entry does not claim it does.
+    rule_cited: >
+      `Disallow: /*?action=get_jobs` and `Disallow: /?tags`, under the heading
+      `# AJAX endpoints`, and restated verbatim in the file's AI/LLM group.
+    detail: >
+      The capture was right about the mechanism and the correction drawn from it
+      was wrong. remoteok.com serves a shell: `/remote-dev-jobs` is 59,681 bytes
+      with zero `<tr data-slug>` rows, and the 50 rows of ordinary markup arrive
+      only from `/?tags=dev&action=get_jobs&premium=0&offset=`. That endpoint is
+      the subject of the two Disallow lines above, so the board's only advert
+      surface is the one path it asks crawlers not to take.
+
+      **The repo matcher returns True for it, and that is not a defect.** Nor is
+      it a loophole to use. Read the file and the reason is plain: those Disallow
+      lines sit after `User-agent: AhrefsBot / Disallow: /`, so under RFC 9309 a
+      group ends at the next user-agent line and they belong to AhrefsBot rather
+      than to `*`. Python's stdlib `urllib.robotparser` agrees with our matcher
+      on all three URLs, which is the negative control this file asks for: two
+      independent parsers, same verdict, so the True is the file's meaning and
+      not our bug. The operator's *intent* is unmistakable all the same — they
+      captioned the block `# AJAX endpoints`, and the file's own AI/LLM section
+      restates `Disallow: /*?action=get_jobs` and `Disallow: /?tags` verbatim
+      for GPTBot, ClaudeBot, anthropic-ai, Claude-Web, PerplexityBot and six
+      others. A board that writes the same refusal twice has said it twice.
+
+      Reading a site's only content surface through a stray blank line, against
+      a restriction restated for every AI agent the operator could name, is not
+      a permission this ledger will record as one. The mechanism is written down
+      so the next reader can disagree with the judgement rather than have to
+      re-derive the facts — and so that a later fix to remoteok's robots.txt,
+      in either direction, is visibly the thing that changes the answer.
+    also: >
+      Independently disqualifying even if the robots question went the other
+      way: the ld+json in those rows is fabricated. 48 of the 50 JobPosting
+      blocks carry the identical band `USD 80000-150000 YEAR`, including a Vertu
+      Motors vehicle progressor in Dunfermline whose own description states a
+      basic salary of GBP 28,000. RemoteOK stamps a house estimate into
+      schema.org `baseSalary` for every advert that does not state one, and does
+      not mark it as an estimate. See the `salary` note in `engine_gap_json` —
+      a connector reading `baseSalary` without checking the spread across rows
+      would have published 48 invented bands.
+    retest: >
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)"
+      https://remoteok.com/robots.txt | grep -n 'action=get_jobs'   # 3 lines today, one of them in the AI/LLM group
+
 
 policy_unreadable:
   - site: simplyhired.com
