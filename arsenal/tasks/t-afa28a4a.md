@@ -9,7 +9,7 @@ workspace: BACKEND
 Imported from issue #236 — case 22 of the round-2 independent T70 audit, the one
 case of 33 deliberately **not** committed as a fixture.
 
-```
+```text
 User-agent: Bot
 Disallow: /private
 ```
@@ -40,9 +40,15 @@ is a different question and gets its own fixture with its own citation.
 ## Acceptance gate
 
 ```bash
-uv run --extra dev pytest tests/test_robots.py -q -k "product_token"
+uv run --extra dev pytest tests/test_robots.py -q
 uv run --extra dev python -m integral.robots
 ```
+
+No `-k`. A selector that matches nothing exits 5, so the gate fails rather than
+passing vacuously — but it would go on failing after the work was done, because
+none of the three names below contains the substring a `-k "product_token"`
+filter would have looked for. A gate that can never pass is the same defect as
+one that always does, read from the other side.
 
 - `test_a_file_token_shorter_than_the_crawler_token_matches_per_rfc_9309`
   (or `..._does_not_match_...` — the name records the verdict the spec gave)
