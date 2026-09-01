@@ -210,14 +210,15 @@ Three more costs, each measured here:
 
 ## Known environment state
 
-**GitHub Actions is out of runner minutes until the next billing period** (noted
-2026-08-19). Every job fails in 3–5 seconds with `runner_id: 0` and an empty
-`runner_name` — no runner is ever assigned — on `main` as much as any branch, so it
-is not caused by any diff. Do not treat a red CI here as a signal about the code,
-and do not push speculative fixes for it. Diagnose once: `runner_id: 0` plus a
-sub-5-second duration means this. Remove this section once runs show real durations.
+**GitHub Actions has runner minutes again** (measured 2026-09-01: runs complete in
+~56 seconds with real conclusions). From 2026-08-19 until then every job failed in
+3–5 seconds with `runner_id: 0`, and this section told sessions that a red CI here
+said nothing about the code. That was true, and it cost something: the first run
+with a real conclusion found a job that had been failing since #123 for its own
+reasons, invisible for as long as everything failed. **A red CI is a signal
+again.** Read it.
 
-**Run the gate locally instead.** These are what CI would run, and all four must
+**Run the gate locally as well.** These are what CI runs, and all four must
 pass before a merge:
 
 ```bash
