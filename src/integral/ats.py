@@ -99,7 +99,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from integral.cv_store import CVMaster, SourcedText, write_master
+from integral.cv_store import (
+    DOCUMENT_FIELD_PATTERNS,
+    CVMaster,
+    SourcedText,
+    write_master,
+)
 from integral.generate import _FIXTURE_ASKS, DEFAULT_FIXTURE_MASTER, _holds, _mentions, generate
 from integral.identity import ProfileStore, create_profile
 
@@ -110,12 +115,12 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T80.json"
 # a reviewer sees, not a value quietly added to a set somewhere.
 REQUIRED_TEXT_LAYER_FIELDS: tuple[str, ...] = ("contact_email",)
 
-# Whole-token, not a bare substring, so a fixture that mentions "@example" in
-# passing is not itself proof of anything — the pattern has to look like an
-# address.
-_FIELD_PATTERNS: dict[str, re.Pattern[str]] = {
-    "contact_email": re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+\.[A-Za-z]{2,}(?![\w.+-])"),
-}
+# How each field is recognised comes from `integral.cv_store`, which needs the
+# same recogniser for the opposite direction — whether a CV the candidate
+# supplied yielded the field (T97). Two copies of one regex is two answers to
+# "is there an address in this text", and the pair drifts the first time either
+# is tightened. What stays here is the *contract*: which of them a document
+# this project sends must carry.
 
 # What a broken text layer looks like to a parser, not to a human looking at
 # the rendered page: a replacement character where a glyph could not be
@@ -159,7 +164,9 @@ def check_document(path: Path) -> dict[str, Any]:
     """One document's violations of the text-layer contract, `path` read fresh."""
     text = text_layer(path)
     missing_fields = tuple(
-        field for field in REQUIRED_TEXT_LAYER_FIELDS if not _FIELD_PATTERNS[field].search(text)
+        field
+        for field in REQUIRED_TEXT_LAYER_FIELDS
+        if not DOCUMENT_FIELD_PATTERNS[field].search(text)
     )
     corruption_markers = tuple(sorted(set(_CORRUPTION_RE.findall(text))))
 
