@@ -4,6 +4,7 @@ title: "T101: A CI job can name a Makefile target that does not exist"
 priority: 5
 tags: [CI]
 workspace: BACKEND
+status: merged
 ---
 
 Imported from issue #269. **Its steps 1 and 3 are already done** — PR #267 deleted

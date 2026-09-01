@@ -36,5 +36,8 @@
       "reached_by_aggregate": true,
       "reasons": []
     }
-  ]
+  ],
+  "ci_targets_missing_from_makefile": 0,
+  "ci_targets_missing_from_makefile_evaluated": 4,
+  "ci_targets_missing": []
 }
