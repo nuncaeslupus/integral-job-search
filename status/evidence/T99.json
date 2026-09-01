@@ -1,0 +1,12 @@
+{
+  "policy_refusals_without_an_owner_decision": 0,
+  "policy_refusals_without_an_owner_decision_evaluated": 7,
+  "policy_refusals_checked": 7,
+  "live_refusals": 1,
+  "controls_checked": 6,
+  "gate_status": "measured",
+  "sites": [
+    "remoteok.com"
+  ],
+  "violations": []
+}
