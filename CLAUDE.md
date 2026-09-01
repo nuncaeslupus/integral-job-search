@@ -241,7 +241,7 @@ against the vendored v3.2.0 script:
 The v3.1.14 changelog states the gate "now runs once, over the archived tree",
 and that the failure message advising you to account for `_history/` "is gone".
 Both `bash -c "${host_gate}"` calls are still there and that sentence is still at
-`:636` (`claude-arsenal#335`). **Do not trust the entry over the file** — this one
+`:636` (`claude-arsenal#336`). **Do not trust the entry over the file** — this one
 was believed here for the length of one pull request.
 
 So: **open the PR by hand** (`gh pr create`), and archive the task file yourself
