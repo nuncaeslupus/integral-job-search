@@ -765,6 +765,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-52bb1ec0",
+      "key": "rate_limited_runs_reported_as_broken",
+      "evidence": "status/evidence/T73.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-570404b2",
       "key": "standing_scope_decisions_not_resurfaced",
       "evidence": "status/evidence/T67.json",
