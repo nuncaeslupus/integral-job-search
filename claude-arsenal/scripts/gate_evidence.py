@@ -45,6 +45,7 @@ repo, which only these declarations know.
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -162,6 +163,15 @@ def main() -> None:
     if not m:
         _fail("gate block present but has no '<metric> <op> <threshold>' line", 2)
     op, threshold = m.group(1), float(m.group(2))
+    # `GATE_RE` accepts an exponent, so `<= 1e999` overflows to inf here and
+    # every finite measurement satisfies it. Unfailable from the threshold side
+    # is the same hole as unfailable from the measurement side, checked below.
+    if not math.isfinite(threshold):
+        _fail(
+            f"gate threshold {m.group(2)!r} is not a finite number — "
+            "a gate written against it cannot be failed",
+            2,
+        )
 
     evidence = fields.get("evidence")
     key = fields.get("key")
@@ -193,6 +203,18 @@ def main() -> None:
     if isinstance(raw_measured, bool) or not isinstance(raw_measured, int | float):
         _fail(f"evidence value at {key!r} is not numeric: {raw_measured!r}", 2)
     measured = float(raw_measured)
+    # `json.loads` accepts the JavaScript spellings `NaN`, `Infinity` and
+    # `-Infinity`, and both are `float` — so they cleared the type check above
+    # and reached the comparison, where they are the wrong kind of wrong: `NaN`
+    # passes every `!=` gate (it compares unequal to everything, itself
+    # included) and `Infinity` passes every directional one. A gate that cannot
+    # be failed is not a gate. The threshold side is guarded where it is parsed.
+    if not math.isfinite(measured):
+        _fail(
+            f"evidence value at {key!r} is {raw_measured!r}, which is not a finite number — "
+            "a gate cannot be scored against it",
+            2,
+        )
 
     if OPS[op](measured, threshold):
         print(f"gate_evidence: PASS — {key}={measured} {op} {threshold} ({ev_path})")

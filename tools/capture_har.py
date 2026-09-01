@@ -12,6 +12,15 @@ lines it saves.
 
 ponytail: fresh context every run, no cookie reuse. If a board ever needs a
 logged-in capture, that is the owner's own export, not this.
+
+**Why this survives `.claude/skills/har/scripts/capture_har.py`.** Bundle v3.2.0
+ships that script — same `finally`, same fresh context, plus `--browser` and
+`--executable`, and it is strictly better in every respect but one: its
+`UA_SUFFIX` is the constant `" claude-arsenal-har/1.0"` and no flag overrides it.
+Our identity is `integral.robots.USER_AGENT`, and it is the string this project's
+robots decisions were *made against* — a capture announcing a different agent is
+a capture of a page some board may have served under a rule we never read. Delete
+this file the day upstream takes a `--ua-suffix` (claude-arsenal#334).
 """
 
 from __future__ import annotations

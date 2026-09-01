@@ -2,11 +2,11 @@
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 9606,
+  "description_chars_total": 9608,
   "skills_counted": 32,
-  "headroom_chars": 1394,
+  "headroom_chars": 1392,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 1606,
+  "overage_against_upstream_default": 1608,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
@@ -47,8 +47,8 @@
     },
     {
       "skill": "har",
-      "description_chars": 364,
-      "listing_chars": 371
+      "description_chars": 366,
+      "listing_chars": 373
     },
     {
       "skill": "init",
