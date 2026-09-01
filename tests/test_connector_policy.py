@@ -24,6 +24,7 @@ about remoteok.
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -147,6 +148,26 @@ def test_every_malformed_control_is_caught() -> None:
     has lost the check rather than found a clean ledger."""
     for name, payload in cp.MALFORMED_CONTROLS:
         assert PolicyRefusal.from_mapping(payload).problems(), name
+
+
+def test_a_yaml_timestamp_is_not_a_decided_on_date() -> None:
+    """`datetime` is a `date` subtype, so a YAML timestamp passes an
+    `isinstance` check written for a day. The ledger records the day a call
+    was made, not the minute a file was written."""
+    assert cp._as_date(datetime(2026, 8, 31, 14, 30)) is None
+
+
+def test_an_unpadded_date_is_not_a_decided_on_date() -> None:
+    """`strptime` accepts `2026-8-1`. A ledger read years later holds one
+    spelling of a day, not two."""
+    assert cp._as_date("2026-8-1") is None
+
+
+def test_a_canonical_date_is_read() -> None:
+    """Both spellings the ledger actually uses — PyYAML's parsed `date`, and
+    a quoted ISO string — are the record."""
+    assert cp._as_date(date(2026, 8, 31)) == date(2026, 8, 31)
+    assert cp._as_date(" 2026-08-31 ") == date(2026, 8, 31)
 
 
 def test_the_module_writes_its_evidence(tmp_path: Path) -> None:

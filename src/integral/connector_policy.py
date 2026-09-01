@@ -138,15 +138,27 @@ class PolicyRefusal:
 
 
 def _as_date(value: Any) -> date | None:
-    """A `YYYY-MM-DD` date, or `None`. PyYAML already parses a bare date."""
+    """A canonical `YYYY-MM-DD` date, or `None`. PyYAML parses a bare date.
+
+    Two shapes that look like dates are refused, because this ledger is read
+    years later and a record that is not canonical is not the same record.
+    A `datetime` is a `date` subtype, so a YAML timestamp passes an
+    `isinstance` check written for a day; and `strptime` accepts an unpadded
+    `2026-8-1`. So the timestamp is rejected before the subtype check, and a
+    string is kept only when it round-trips through `date.isoformat()`.
+    """
+    if isinstance(value, datetime):
+        return None
     if isinstance(value, date):
         return value
     if not isinstance(value, str):
         return None
+    trimmed = value.strip()
     try:
-        return datetime.strptime(value.strip(), "%Y-%m-%d").date()
+        parsed = datetime.strptime(trimmed, "%Y-%m-%d").date()
     except ValueError:
         return None
+    return parsed if parsed.isoformat() == trimmed else None
 
 
 def refusals(ledger: Path = DEFAULT_LEDGER_PATH) -> list[PolicyRefusal]:
@@ -198,6 +210,18 @@ MALFORMED_CONTROLS: tuple[tuple[str, dict[str, Any]], ...] = (
         "a row naming no board",
         {"refuses": "access", "robots_verdict": "allowed", "rule_cited": "x",
          "decided_by": "owner", "decided_on": "2026-08-31", "decision": "no"},
+    ),
+    (
+        "a YAML timestamp where the day was the record",
+        {"site": "f.test", "refuses": "access", "robots_verdict": "allowed",
+         "rule_cited": "x", "decided_by": "owner",
+         "decided_on": datetime(2026, 8, 31, 14, 30), "decision": "no"},
+    ),
+    (
+        "an unpadded date that is not what the ledger says it holds",
+        {"site": "g.test", "refuses": "volume", "robots_verdict": "allowed",
+         "rule_cited": "x", "decided_by": "owner", "decided_on": "2026-8-1",
+         "decision": "throttle it"},
     ),
 )
 
