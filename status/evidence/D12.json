@@ -957,6 +957,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-ca02a857",
+      "key": "policy_refusals_without_an_owner_decision",
+      "evidence": "status/evidence/T99.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-cd8dcc16",
       "key": "gate_modules_outside_the_evidence_run",
       "evidence": "status/evidence/T85.json",

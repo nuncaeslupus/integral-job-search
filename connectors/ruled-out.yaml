@@ -15,9 +15,14 @@
 # is stated, so a future reader can run one line and know whether anything
 # changed. A ruling without a retest is a guess with a date on it.
 #
-# Nothing reads this file. `connector_packages()` and `connector_coverage` both
-# filter on `is_dir()`, so a top-level file here is inert and no gate parses it.
-# It is for the next person (or the next Claude) deciding where to spend an hour.
+# `connector_packages()` and `connector_coverage` both filter on `is_dir()`, so
+# nothing in the sourcing path reads this file; it is for the next person (or
+# the next Claude) deciding where to spend an hour. **One gate does read it**:
+# `integral.connector_policy` (T99) parses `policy_refused` and asserts every
+# entry there records whose call it was. Nothing else parses any other section,
+# and this line is the only place that says so — the header used to read
+# "nothing reads this file", which is how the section below came to contradict
+# the rule stated twenty lines down without anything noticing.
 
 # ---------------------------------------------------------------------------
 # The two tests that decide it, so an entry below can be read as shorthand.
@@ -564,14 +569,45 @@ moved_or_gone:
 # `restated_for_every_named_agent`. Each entry must show the matcher's True, a
 # second parser agreeing, and the text the operator wrote — so the judgement can
 # be overturned by argument rather than only by re-doing the work.
+#
+# And each entry must say **whose call it was, when, and whether it refuses
+# volume or access** (T99, `integral.connector_policy`). The first entry here
+# had none of that: it was written by the implementing session on its own
+# reading of the operator's intent, and read a week later exactly like a
+# settled position. Throttling a connector and deleting a board from a
+# candidate's reach are different refusals, and a section that does not say
+# which cannot be argued with.
 policy_refused:
   - site: remoteok.com
     checked: 2026-08-31
+    refuses: volume
+    robots_verdict: allowed
+    decided_by: owner
+    decided_on: 2026-08-31
+    decision: >
+      "It is the user who will use the scraper, not you, and most of them did
+      not allow massive scraping for AI, but they allow it for making some
+      searches. You should be able to build a scraper for this use without any
+      problem."
+
+      The owner's call, stated in session on 2026-08-31 and applied here on
+      2026-09-01. It turns on *who is fetching*: a tool the candidate runs to
+      look at a handful of adverts is not an AI crawler ingesting a board, even
+      where one user agent covers both. The eleven restated Disallow lines are
+      read as what they say they are — a refusal of bulk AI ingestion — so this
+      entry refuses **volume** and not **access**. It was previously an access
+      refusal written on the implementing session's own judgement and never put
+      to the owner; that is the defect T99 records, and it would have been the
+      defect whichever way this resolved.
+
+      This narrows the ledger entry. It does not build a connector, and it is
+      not a finding that remoteok should be read — the shell/AJAX mechanism in
+      `detail` below is unchanged and still the reason nobody has.
     was_in: "corrected, for about six hours on 2026-08-31, before test 1 was re-run against the endpoint the capture found"
     verdict: >
-      Allowed by robots and not fetched anyway. This is OUR policy, applied under
-      the `restated_for_every_named_agent` rule in the header; robots.txt does
-      not refuse it and this entry does not claim it does.
+      Allowed by robots and refused for volume, not access. This is OUR policy,
+      applied under the `restated_for_every_named_agent` rule in the header;
+      robots.txt does not refuse it and this entry does not claim it does.
     rule_cited: >
       `Disallow: /*?action=get_jobs` and `Disallow: /?tags`, under the heading
       `# AJAX endpoints`, and restated verbatim in the file's AI/LLM group.
