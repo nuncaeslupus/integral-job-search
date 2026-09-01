@@ -228,18 +228,28 @@ make evidence       # regenerate every measurement, fail on drift
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
-**`T55.files_scanned` no longer drifts on a task PR — do not add the second
-commit this section used to prescribe.** The cause was real: `open_task_pr.sh`
-ran the host gate, *then* archived the task file into the allowlisted
-`arsenal/tasks/_history/`, so the committed count was measured one file before
-the tree it shipped with (`claude-arsenal#220`). Bundle **v3.1.14** made the gate
-run once, over the archived tree — the only tree whose measurement describes what
-the PR contains. A drift you see now is therefore **yours**, and the old advice
-would bury it under a commit that regenerates whatever the code currently says.
+**`open_task_pr.sh` cannot open a PR in this repo, and bundle v3.2.0 did not fix
+that — it only says it did.** `T55.files_scanned` counts files under
+`arsenal/tasks/` and the archive moves one of them into `_history/`, which the
+count excludes. The script runs the host gate **twice** — once before the archive
+(`open_task_pr.sh:227`) and once after it (`:627`) — so the committed evidence
+would have to hold two different values at once. Measured here on 2026-09-01,
+against the vendored v3.2.0 script:
 
-One consequence to expect: a host-gate failure is reported *after* the branch is
-cut, not before. Nothing is committed, the archive is undone, and the script
-switches back to the branch you started on.
+    pre-archive = 615    post-archive = 614
+
+The v3.1.14 changelog states the gate "now runs once, over the archived tree",
+and that the failure message advising you to account for `_history/` "is gone".
+Both `bash -c "${host_gate}"` calls are still there and that sentence is still at
+`:636` (`claude-arsenal#335`). **Do not trust the entry over the file** — this one
+was believed here for the length of one pull request.
+
+So: **open the PR by hand** (`gh pr create`), and archive the task file yourself
+in the same commit. Every PR since #257 was opened this way.
+
+The repair that is ours rather than upstream's is to make the measurement
+archive-invariant — count `_history/` too, and the number stops depending on
+which side of the move it is taken from. That is **T100**.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
