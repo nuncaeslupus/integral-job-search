@@ -195,17 +195,31 @@ def excluded_terms(query: SearchQuery) -> tuple[str, ...]:
     return tuple(about.partition(":")[2] for about in query.excluded)
 
 
-def _fold(text: str) -> str:
-    """Lowercased, accent-stripped, and with every hyphen spelling collapsed.
+#: Every spelling of the join between two words: the ASCII hyphen, the six
+#: Unicode dashes, the underscore and the slash.
+_SEPARATORS = r"[\u2010-\u2015\-_/]"
+
+
+def _fold(text: str, join: str) -> str:
+    """Lowercased, accent-stripped, with every separator rewritten as `join`.
 
     The candidate said "e-commerce"; adverts say "ecommerce", "E-Commerce" and
     "e-commerce" with a non-breaking hyphen (U+2011). A matcher that only catches the
     candidate's spelling is a filter that reads as not listening in exactly
     the way this task is about.
+
+    `join` is the half review found missing on #285. **Deleting** separators is
+    what makes "ecommerce" match "e-commerce" — and it also turns
+    "fintech-focused scale-up" into "fintechfocused", where the word-boundary
+    lookahead then rejects the needle "fintech" and the gate records a pass
+    over an advert the candidate ruled out. Fail-open, in the one direction
+    this module exists to close. So both foldings are computed and a hit in
+    either is a match: deletion catches the compound spelled as one word,
+    a space catches the compound spelled as two.
     """
     decomposed = unicodedata.normalize("NFKD", text.lower())
     stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return re.sub(r"[\u2010-\u2015\-_/]", "", stripped)
+    return re.sub(_SEPARATORS, join, stripped)
 
 
 def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
@@ -215,11 +229,15 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     deleting roles nobody ruled out — an exclusion that over-reaches is the
     same loss of trust arriving from the other direction.
     """
-    needle = _fold(exclusion.value)
-    if not needle:
-        return False
-    haystack = _fold(f"{candidate.title or ''} {candidate.text}")
-    return re.search(rf"(?<![0-9a-z]){re.escape(needle)}(?![0-9a-z])", haystack) is not None
+    raw = f"{candidate.title or ''} {candidate.text}"
+    for join in ("", " "):
+        needle = _fold(exclusion.value, join)
+        if not needle.strip():
+            continue
+        pattern = rf"(?<![0-9a-z]){re.escape(needle)}(?![0-9a-z])"
+        if re.search(pattern, _fold(raw, join)):
+            return True
+    return False
 
 
 def resurfaced(
@@ -324,6 +342,7 @@ def probe_exclusions() -> dict[str, Any]:
                 "Data Engineer, industria",
                 "Senior Backend Engineer, logistica",
                 "Data Platform Engineer, educacion",
+                "Senior Data Engineer, energia",
             )
         )
     )
@@ -382,15 +401,17 @@ def probe_exclusions() -> dict[str, Any]:
     if set(walked.excluded) != {e.about for e in stated}:
         failures.append(f"accepted: {NEGATIVE_CONTROLS[2]}")
 
-    controls = (demoted, mismatched, named)
     shown = (*honoured, named)
     measured = measure(presentations=shown, exclusions=stated, cycle=4)
-    # The controls went through `resurfaced` too, above. Counting only the
-    # clean run would understate the work by three and put the denominator
-    # below its own floor — and then padding it to clear the floor would be
-    # the dishonest zero this repository's gates exist to catch, committed by
-    # the module that measures listening.
-    checked = len(shown) + len(controls)
+    # The controls went through `resurfaced` too, above, so counting only the
+    # clean run would understate the work actually done. **Distinct**
+    # presentations, though: `named` is in both tuples, and the first version
+    # of this line added the lengths and reported 8 where 7 had been checked —
+    # the floor cleared by a duplicate. That is the padded denominator the
+    # sentence above rules out, written by the module that measures listening,
+    # and it took review on #285 to see it. The fifth honoured presentation is
+    # what meets the floor now, with real work.
+    checked = len({id(p) for p in (*shown, demoted, mismatched, named)})
     measured["restated_exclusions_resurfaced_evaluated"] = checked
     measured["presentations_checked"] = checked
     measured["failures"] = failures + [

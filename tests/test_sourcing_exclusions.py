@@ -175,3 +175,39 @@ def test_the_module_writes_its_evidence(tmp_path: Path) -> None:
 
     assert se._main(["sourcing_exclusions", str(target)]) == 0
     assert target.is_file()
+
+
+def test_a_hyphen_joined_compound_is_still_a_match() -> None:
+    """Found by review on #285, and a fail-open in the one direction that
+    matters. `_fold` deleted separators, so "fintech-focused scale-up" became
+    "fintechfocused" and the word-boundary lookahead rejected "fintech" — the
+    gate recording a pass over an advert the candidate ruled out."""
+    for advert in (
+        "Data Engineer at a fintech-focused scale-up",
+        "Senior Engineer, fintech / payments",
+        "Ingeniero de datos — fintech_ops",
+    ):
+        assert matches(_offer(advert), _FINTECH), advert
+
+
+def test_a_compound_does_not_make_a_longer_word_match() -> None:
+    """The fix widens the matcher, so the over-reach guard is re-asserted:
+    `cloud` must still not find `Cloudflare`, either folding."""
+    cloud = Exclusion(about="stack:cloud", stated_at_cycle=1, words="cloud no")
+
+    assert not matches(_offer("Backend Engineer at Cloudflare"), cloud)
+    assert not matches(_offer("Engineer, soundcloud-adjacent"), cloud)
+    assert matches(_offer("Cloud-native Platform Engineer"), cloud)
+
+
+def test_the_probe_counts_each_presentation_once() -> None:
+    """Found by review on #285. `named` was in both the shown set and the
+    controls, so the denominator reported 8 where 7 had been checked and the
+    floor was cleared by a duplicate — the padded denominator this module's
+    own comment rules out."""
+    measured = se.probe_exclusions()
+
+    assert measured["presentations_checked"] == measured[
+        "restated_exclusions_resurfaced_evaluated"
+    ]
+    assert measured["presentations_checked"] >= se.MINIMUM_PRESENTATIONS
