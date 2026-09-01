@@ -39,3 +39,8 @@ uv run --extra dev python -m integral.presentation
 - `test_an_internal_term_is_introduced_before_it_is_used` — over a named list
   including weights, part-worth, ranking, corpus, connector.
 - `test_a_summary_carries_every_field_a_decision_needs`
+- `test_a_summary_says_whether_a_salary_was_stated_or_estimated` — T92 lets an
+  estimate exist provided it never reads as stated. A summary that prints one
+  number honours the letter of that and breaks it here, at the only place the
+  candidate actually looks.
+- `test_an_estimated_salary_shows_its_basis_in_the_summary`
