@@ -4,12 +4,17 @@
 #   always | after-review | after-ci | after-ci-and-review | never
 #
 # `after-review`, added in claude-arsenal v0.30.0 for this repository's exact
-# situation (claude-arsenal#166). GitHub Actions is out of runner minutes, so
-# every job on every head fails in seconds with no runner ever assigned — CI is
-# not red about the code, it is not reporting at all. `after-ci` against a CI
-# that can only be red is either a block on every merge for the duration or a
-# rule everyone learns to wave through, and the second is what actually
-# happens — including on the day CI starts meaning something again.
+# situation (claude-arsenal#166): GitHub Actions had no runner minutes, so every
+# job on every head failed in seconds with no runner ever assigned — CI was not
+# red about the code, it was not reporting at all. `after-ci` against a CI that
+# can only be red is either a block on every merge for the duration or a rule
+# everyone learns to wave through, and the second is what actually happens.
+#
+# **That premise expired on 2026-09-01** — runs complete in ~56 seconds with real
+# conclusions. The flip to `after-ci-and-review` is T103 and not a one-line edit
+# here, because it depends on T101: the first real conclusion found a job that had
+# been failing on its own account since #123, and making a red check blocking
+# while that class of fault is undetected wedges the repository.
 #
 # This is not a weakened `after-ci-and-review`; it is the other axis. `after-ci`
 # is "the machines agree"; `after-review` is "a reader agrees" — and the reader
@@ -34,7 +39,6 @@
 # which put load-bearing policy in prose that nothing validates, and a local run
 # is not the same assertion as a green CI however identical the commands.
 #
-# When runners return, set `after-ci-and-review`.
 merge-policy = "after-review"
 
 # The repo's own aggregate gate, as a command. Declared for v2.4.0, which reads
@@ -47,7 +51,7 @@ merge-policy = "after-review"
 #     it is what the code measures on the resulting tree.
 #   * `bin/open_task_pr.sh` runs it as a hard precondition, which is the
 #     enforcement point D-22 found missing: the five-command gate `CLAUDE.md`
-#     requires before a merge was enforced by nothing, since Actions is out of
+#     requires before a merge was enforced by nothing, since Actions had no
 #     runner minutes and the helper only ran the task's own payload gate.
 #
 # `make host-gate` and not `make ci`: `integral.repo_gate` asserts that every
@@ -87,6 +91,29 @@ session-end = "handoff"
 # own measurement is asserted against.
 listing-budget = 11000
 queue-automation = true
+
+# What a worker runs in its fresh worktree before the first gate — v3.3.0 reads
+# this key and `bin/host_setup.sh` runs it. A worktree is a checkout: it carries
+# tracked files and nothing an install produces, so `.venv/` is absent and the
+# first `uv run` in each one pays for a full resolve, or fails outright. Naming
+# it here means each worker does that once, deliberately, instead of diagnosing
+# it separately — which is what five of nine workers did in the session upstream
+# took this from.
+#
+# `uv sync` and not `make sync`: the two are the same command today, and this one
+# does not depend on the Makefile being present and correct at the moment the
+# worktree is first entered — which is the moment the whole feature exists to make
+# survivable.
+#
+# `--locked` is the part that is not obvious, and it is here because of how it
+# interacts with `host_setup.sh`. Plain `uv sync` silently re-resolves and rewrites
+# a stale `uv.lock`; `host_setup.sh` then reverts that rewrite, because keeping the
+# install's churn out of the task diff is its whole job. The two are individually
+# right and together produce a worker running against an environment resolved from
+# dependencies recorded nowhere — and the evidence of it deleted in the same breath.
+# `--locked` fails instead, which is the correct answer: a stale lockfile is a
+# commit somebody owes, not something for a worktree to fix on the way past.
+host-setup = "uv sync --extra dev --locked"
 
 [skills]
 extract = true

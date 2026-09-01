@@ -13,7 +13,7 @@ lines it saves.
 ponytail: fresh context every run, no cookie reuse. If a board ever needs a
 logged-in capture, that is the owner's own export, not this.
 
-**Why this survives `.claude/skills/har/scripts/capture_har.py`.** Bundle v3.2.0
+**Why this survives `.claude/skills/har/scripts/capture_har.py`.** Bundle v3.3.0
 ships that script — same `finally`, same fresh context, plus `--browser` and
 `--executable`, and it is strictly better in every respect but one: its
 `UA_SUFFIX` is the constant `" claude-arsenal-har/1.0"` and no flag overrides it.

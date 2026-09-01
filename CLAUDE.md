@@ -229,34 +229,42 @@ make evidence       # regenerate every measurement, fail on drift
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
-**`open_task_pr.sh` cannot open a PR in this repo, and bundle v3.2.0 did not fix
-that — it only says it did.** `T55.files_scanned` counts files under
-`arsenal/tasks/` and the archive moves one of them into `_history/`, which the
-count excludes. The script runs the host gate **twice** — once before the archive
-(`open_task_pr.sh:227`) and once after it (`:627`) — so the committed evidence
-would have to hold two different values at once. Measured here on 2026-09-01,
-against the vendored v3.2.0 script:
+**`open_task_pr.sh` could not open a PR in this repo until bundle v3.3.0, and the
+first fix announced for it was announced without being made.** The fault:
+`T55.files_scanned` counts files under `arsenal/tasks/` and the archive moves one
+of them into `_history/`, which the count excludes. v3.2.0 ran the host gate
+**twice** — once before the archive and once after — so the committed evidence
+would have had to hold two values at once. Measured here on 2026-09-01 against the
+v3.2.0 script:
 
 ```text
 pre-archive = 615    post-archive = 614
 ```
 
-The v3.1.14 changelog states the gate "now runs once, over the archived tree",
-and that the failure message advising you to account for `_history/` "is gone".
-Both `bash -c "${host_gate}"` calls are still there and that sentence is still at
-`:636` (`claude-arsenal#336`). **Do not trust the entry over the file** — this one
-was believed here for the length of one pull request.
+The **v3.1.14** changelog had already stated that the gate "now runs once, over the
+archived tree". Both `bash -c "${host_gate}"` calls were still in the file, and the
+advice it said was gone was still at `:636`. That entry was believed here, and the
+CLAUDE.md section it produced was wrong for the length of one pull request
+(`claude-arsenal#336`, closed on the v3.3.0 measurement).
 
-So: **open the PR by hand** (`gh pr create`), and archive the task file yourself
-in the same commit. Every PR since #257 was opened this way.
+**In v3.3.0 it is real.** The gate is read at `:220` and run once at `:645`, after
+the archive, and the file says why at `:225-238`: the archived tree is the one the
+PR ships, so it is the only tree whose measurement means anything. One
+`bash -c "${host_gate}"` in the script.
 
-The repair that is ours rather than upstream's is that `files_scanned` should
-never have been committed as an exact value. It is a denominator, not a
-measurement — it exists to stop a clean zero resting on an empty scan, and a
-**floor** does that job without moving. (Counting `_history/` instead would make
-the number archive-invariant and immediately break `old_name_references == 0`:
-archived rows legitimately carry the old name, which is why `naming.py:99`
-allowlists that directory.) That is **T100**.
+So the helper is the way to open a task PR again. **It has not yet been exercised
+end to end here** — every PR from #257 to #268 was opened by hand (`gh pr create`,
+archiving the task file in the same commit), and the first task PR after this one is
+what proves the claim. If it fails, that is a finding to file, not a reason to
+re-derive the workaround.
+
+The repair that is ours rather than upstream's outlives the fix, because a
+denominator committed as an exact value drifts on every task PR whichever side of
+the archive measures it. `files_scanned` is not a measurement — it exists to stop a
+clean zero resting on an empty scan, and a **floor** does that job without moving.
+(Counting `_history/` instead would make the number archive-invariant and
+immediately break `old_name_references == 0`: archived rows legitimately carry the
+old name, which is why `naming.py:99` allowlists that directory.) That is **T100**.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
