@@ -1,0 +1,89 @@
+{
+  "rate_limited_runs_reported_as_broken": 0,
+  "rate_limited_runs_reported_as_broken_evaluated": 10,
+  "runs_evaluated": 10,
+  "gate_status": "measured",
+  "reported_as_broken": [],
+  "readings": [
+    {
+      "case": "bare 429",
+      "health": "inconclusive",
+      "rate_limited": "the capture records HTTP 429 — the board refused the read",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "429 with a retry hint",
+      "health": "inconclusive",
+      "rate_limited": "the capture records HTTP 429 — the board refused the read",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "403 from a WAF",
+      "health": "inconclusive",
+      "rate_limited": "the capture records HTTP 403 — the board refused the read",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "503 while the board is down",
+      "health": "inconclusive",
+      "rate_limited": "the capture records HTTP 503 — the board refused the read",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "cloudflare interstitial, served 200",
+      "health": "inconclusive",
+      "rate_limited": "the capture is a challenge page, not a listing ('just a moment')",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "cloudflare block, served 200",
+      "health": "inconclusive",
+      "rate_limited": "the capture is a challenge page, not a listing ('attention required')",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "captcha challenge, served 200",
+      "health": "inconclusive",
+      "rate_limited": "the capture is a challenge page, not a listing ('captcha')",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "incapsula challenge, served 200",
+      "health": "inconclusive",
+      "rate_limited": "the capture is a challenge page, not a listing ('_incapsula_resource')",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "rate-limit notice with no status recorded",
+      "health": "inconclusive",
+      "rate_limited": "the capture is a challenge page, not a listing ('rate limit')",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "unusual-traffic interstitial with no status recorded",
+      "health": "inconclusive",
+      "rate_limited": "the capture is a challenge page, not a listing ('unusual traffic')",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    }
+  ]
+}
