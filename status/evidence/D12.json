@@ -789,6 +789,14 @@
       "status_is_asserted": true
     },
     {
+      "task": "t-61199f84",
+      "key": "archive_sensitive_evidence_keys",
+      "evidence": "status/evidence/T100.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-65ecce18",
       "key": "step_boundaries_offering_an_exit",
       "evidence": "status/evidence/D-15.json",

@@ -252,19 +252,30 @@ the archive, and the file says why at `:225-238`: the archived tree is the one t
 PR ships, so it is the only tree whose measurement means anything. One
 `bash -c "${host_gate}"` in the script.
 
-So the helper is the way to open a task PR again. **It has not yet been exercised
-end to end here** — every PR from #257 to #268 was opened by hand (`gh pr create`,
-archiving the task file in the same commit), and the first task PR after this one is
-what proves the claim. If it fails, that is a finding to file, not a reason to
-re-derive the workaround.
+So the helper is the way to open a task PR again, and **it has now been exercised
+end to end** — #282 (T97) and #283 (T73). Every PR from #257 to #268 was opened by
+hand (`gh pr create`, archiving the task file in the same commit); nothing needs
+to be.
 
-The repair that is ours rather than upstream's outlives the fix, because a
+The repair that is ours rather than upstream's outlived the fix, because a
 denominator committed as an exact value drifts on every task PR whichever side of
 the archive measures it. `files_scanned` is not a measurement — it exists to stop a
 clean zero resting on an empty scan, and a **floor** does that job without moving.
 (Counting `_history/` instead would make the number archive-invariant and
 immediately break `old_name_references == 0`: archived rows legitimately carry the
-old name, which is why `naming.py:99` allowlists that directory.) That is **T100**.
+old name, which is why `naming.py` allowlists that directory.) That was **T100**,
+and it is done: `status/evidence/T55.json` now records `files_scanned_at_least`,
+the floor `naming.MINIMUM_SCANNED` asserts, and never the count of the day.
+
+**So there is no longer a pre-PR workaround, and re-deriving one is the mistake.**
+Between #282 and T100 the sequence was `git mv` the task file into `_history/`,
+`make evidence`, `git mv` it back, `git add` — which left `make host-gate` red on
+the working tree by construction before every task PR, turning the one command this
+file tells sessions to trust into one where red was expected. If a task PR ever
+fails on evidence drift again, the finding is that something *new* is
+archive-sensitive: `status/evidence/T100.json` names it, because
+`archive_sensitive_evidence_keys` compares the whole committed record across a
+simulated archive rather than trusting that one key was the only one.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
