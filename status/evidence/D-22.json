@@ -38,6 +38,11 @@
     }
   ],
   "ci_targets_missing_from_makefile": 0,
-  "ci_targets_missing_from_makefile_evaluated": 4,
-  "ci_targets_missing": []
+  "ci_targets_missing_from_makefile_evaluated": 8,
+  "ci_targets_missing": [],
+  "ci_reader_controls": [
+    "a shell delimiter glued to the target name — `make ghost;`",
+    "`run` as an environment variable name, which is data and not a step"
+  ],
+  "ci_reader_control_failures": []
 }

@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from integral import repo_gate
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -176,6 +178,73 @@ def test_every_target_this_repositorys_ci_runs_exists() -> None:
     # the four `CLAUDE.md` requires before a merge.
     assert measured["ci_targets_missing_from_makefile_evaluated"] >= 4
     assert set(repo_gate.ci_make_targets()) >= {"lint", "test", "evidence", "verify-gates"}
+    # The constructed controls go through the same reader and are counted, so
+    # the denominator moves when the reader regresses and not only when a
+    # workflow does.
+    assert measured["ci_reader_control_failures"] == []
+    assert len(measured["ci_reader_controls"]) == len(repo_gate.CI_READER_CONTROLS)
+    assert measured["ci_targets_missing_from_makefile_evaluated"] == len(
+        repo_gate.ci_make_targets()
+    ) + sum(len(expected) for _, _, expected in repo_gate.CI_READER_CONTROLS)
+
+
+def test_a_delimiter_glued_to_the_target_name_does_not_hide_it(tmp_path: Path) -> None:
+    """Fail-open, and the worse direction. `shlex.split` keeps `ghost;` as one
+    token, `_TARGET_TOKEN_RE` rejects it, and the missing target is never
+    reported — the gate goes green over a broken workflow. Review on #291."""
+    root = _repo(
+        tmp_path,
+        "lint:\n\ttrue\n",
+        "jobs:\n"
+        "  everything:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          make ghost; make phantom && make lint\n"
+        "          make spectre | tee log\n"
+        "          (make wraith)\n",
+    )
+
+    assert repo_gate.ci_make_targets_missing(root) == ["ghost", "phantom", "spectre", "wraith"]
+
+
+def test_run_outside_a_step_is_data_and_not_a_shell_command(tmp_path: Path) -> None:
+    """`run` is a shell command in exactly one place in the Actions schema:
+    `jobs.<job_id>.steps[*].run`. An environment variable called `run` is
+    someone's data, and reading it invents a violation that is not there —
+    `--check` then exits 1 over a valid workflow. Review on #291."""
+    root = _repo(
+        tmp_path,
+        "lint:\n\ttrue\n",
+        "env:\n"
+        "  run: make ghost\n"
+        "jobs:\n"
+        "  build:\n"
+        "    env:\n"
+        "      run: make phantom\n"
+        "    steps:\n"
+        "      - with:\n"
+        "          run: make spectre\n"
+        "      - run: make lint\n",
+    )
+
+    assert repo_gate.ci_make_targets(root / ".github" / "workflows") == ["lint"]
+    assert repo_gate.ci_make_targets_missing(root) == []
+
+
+def test_a_reader_control_the_module_gets_wrong_is_counted_as_a_violation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The controls are not decoration: a reader that misreads one has to make
+    the number this gate asserts is zero move."""
+    monkeypatch.setattr(
+        repo_gate,
+        "CI_READER_CONTROLS",
+        (("a control nothing can satisfy", "jobs:\n  a:\n    steps: []\n", ("ghost",)),),
+    )
+    measured = repo_gate.measure_ci_targets()
+
+    assert measured["ci_targets_missing_from_makefile"] == 1
+    assert "a control nothing can satisfy" in measured["ci_reader_control_failures"][0]
 
 
 def test_a_workflow_naming_an_absent_target_is_reported(tmp_path: Path) -> None:

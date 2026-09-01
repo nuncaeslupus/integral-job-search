@@ -222,7 +222,7 @@ def payload_gate_is_not_the_repo_gate(rules: dict[str, tuple[str, ...]]) -> bool
 _TARGET_TOKEN_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
-def _run_scripts(node: Any) -> list[str]:
+def _run_scripts(document: Any) -> list[str]:
     """Every `run:` script in a parsed workflow document.
 
     Parsed, never matched against the file text. A regex over the text reads
@@ -230,17 +230,25 @@ def _run_scripts(node: Any) -> list[str]:
     Make targets at length — the comment naming `verify-subtree` outlived the
     job that ran it, so a regex would report a violation that is not there.
 
-    The walk is over the whole document rather than `jobs -> steps`, because a
-    `run:` inside a matrix include or a composite action is still a step that
-    has to work.
+    `jobs.<job_id>.steps[*].run` and nowhere else, because that is the one
+    place the Actions schema puts a shell command. The first version of this
+    walked the whole document for any mapping with a string `run`, which reads
+    `jobs.<id>.env.run` — an ordinary environment variable — as a step, and
+    then fails the gate over a `make` in somebody's data (review on #291).
     """
-    if isinstance(node, dict):
-        script = node.get("run")
-        found = [script] if isinstance(script, str) else []
-        return found + [s for value in node.values() for s in _run_scripts(value)]
-    if isinstance(node, list):
-        return [s for item in node for s in _run_scripts(item)]
-    return []
+    if not isinstance(document, dict):
+        return []
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        return []
+    scripts: list[str] = []
+    for job in jobs.values():
+        steps = job.get("steps") if isinstance(job, dict) else None
+        for step in steps if isinstance(steps, list) else []:
+            script = step.get("run") if isinstance(step, dict) else None
+            if isinstance(script, str):
+                scripts.append(script)
+    return scripts
 
 
 def _make_targets_in(script: str) -> list[str]:
@@ -250,14 +258,23 @@ def _make_targets_in(script: str) -> list[str]:
     and `shlex` already knows that a `#` inside quotes does not start a
     comment and that a trailing backslash continues a line.
 
+    `punctuation_chars` rather than `shlex.split`, because that helper keeps
+    `ghost;` as a single token, `_TARGET_TOKEN_RE` then rejects it, and a
+    genuinely missing target goes unreported — the fail-open direction. The
+    lexer emits `;`, `&&` and `|` as tokens of their own, so the target is
+    read and the delimiter ends the invocation (review on #291).
+
     ponytail: reading stops at the first token that is not a target name, so
     `make -C sub thing` contributes nothing rather than reading `sub` as a
     target. Nothing here invokes make that way; teach it options the day one
     does, not before — guessing which options take an argument is how a check
     starts reporting violations that are not there.
     """
+    lexer = shlex.shlex(script, posix=True, punctuation_chars=";&|()")
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
     try:
-        tokens = shlex.split(script, comments=True)
+        tokens = list(lexer)
     except ValueError:
         # An unbalanced quote is a broken step, not a target reference.
         return []
@@ -271,6 +288,40 @@ def _make_targets_in(script: str) -> list[str]:
         else:
             after_make = False
     return targets
+
+
+#: Constructed workflows the reader must get right, read by the same two
+#: functions the live tree goes through. The live tree names four targets and
+#: all four exist, so a denominator counting only those never moves when the
+#: *reader* regresses — and both of these were reader faults found by review on
+#: #291, each fail-open: a real missing target that goes unreported, or a
+#: violation invented out of somebody's data.
+CI_READER_CONTROLS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "a shell delimiter glued to the target name — `make ghost;`",
+        "jobs:\n  a:\n    steps:\n      - run: make ghost; make phantom && make lint\n",
+        ("ghost", "phantom", "lint"),
+    ),
+    (
+        "`run` as an environment variable name, which is data and not a step",
+        "jobs:\n  a:\n    env:\n      run: make ghost\n    steps:\n      - run: make lint\n",
+        ("lint",),
+    ),
+)
+
+
+def _control_readings() -> tuple[int, list[str]]:
+    """`CI_READER_CONTROLS` put through the reader: targets seen, failures."""
+    evaluated = 0
+    failures: list[str] = []
+    for label, document, expected in CI_READER_CONTROLS:
+        read = tuple(
+            t for s in _run_scripts(yaml.safe_load(document)) for t in _make_targets_in(s)
+        )
+        evaluated += len(expected)
+        if read != expected:
+            failures.append(f"accepted: {label} — read {list(read)}, expected {list(expected)}")
+    return evaluated, failures
 
 
 def ci_make_targets(workflows: Path = DEFAULT_WORKFLOWS_DIR) -> list[str]:
@@ -332,10 +383,16 @@ def measure_ci_targets(
             "would rest on having scanned nothing"
         )
     missing = [t for t in named if t not in rules]
+    control_targets, control_failures = _control_readings()
     return {
-        "ci_targets_missing_from_makefile": len(missing),
-        "ci_targets_missing_from_makefile_evaluated": len(named),
+        # A control the reader gets wrong counts as a violation: the number
+        # this gate asserts is zero has to move when the reader breaks, not
+        # only when a workflow does.
+        "ci_targets_missing_from_makefile": len(missing) + len(control_failures),
+        "ci_targets_missing_from_makefile_evaluated": len(named) + control_targets,
         "ci_targets_missing": missing,
+        "ci_reader_controls": [label for label, _, _ in CI_READER_CONTROLS],
+        "ci_reader_control_failures": control_failures,
     }
 
 
@@ -668,6 +725,8 @@ def _main(argv: list[str]) -> int:
             f"a CI step runs `make {target}`, which the Makefile does not define",
             file=sys.stderr,
         )
+    for failure in d22.get("ci_reader_control_failures", []):
+        print(f"the CI reader misread a control: {failure}", file=sys.stderr)
     for module in t85["modules_missing"]:
         print(f"{module} writes evidence but is not reached by `make evidence`", file=sys.stderr)
 
