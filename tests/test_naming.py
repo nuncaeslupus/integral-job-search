@@ -283,3 +283,21 @@ def test_the_file_chosen_for_the_comparison_is_one_the_sweep_actually_scans() ->
     assert naming.measure(archived=frozenset({chosen}))["files_scanned"] == (
         naming.measure()["files_scanned"] - 1
     )
+
+
+def test_main_does_not_pass_when_nothing_could_be_archived(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Found by review on #284, and it is this task's own subject turned on
+    its own exit code: zero sensitive keys over no comparison is zero, so a
+    checkout with no live task file reported success over a check that never
+    ran. Exit 3 — not a pass and not a fail."""
+    _git_init(tmp_path)
+    for n in range(naming.MINIMUM_SCANNED + 1):
+        _commit(tmp_path, f"docs/page-{n}.md", "nothing to archive here\n")
+
+    exit_code = naming._main(["naming", str(tmp_path / "T55.json"), "--repo", str(tmp_path)])
+
+    assert exit_code == 3
+    assert "UNMEASURED" in capsys.readouterr().err
+    assert (tmp_path / "T100.json").is_file()

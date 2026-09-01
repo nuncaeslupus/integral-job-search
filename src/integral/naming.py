@@ -373,11 +373,14 @@ def _main(argv: list[str]) -> int:
     if measured["old_name_references"]:
         return 1
 
-    # T100, beside T55 — one sweep, two questions, two files. Written only
-    # when this repository is the one being measured, for the same reason
-    # `--repo` writes nothing by default: a measurement of some other tree is
-    # not evidence about this one.
-    if own_repo and target is not None:
+    sensitivity: dict[str, Any] | None = None
+    # T100, beside T55 — one sweep, two questions, two files. Written exactly
+    # when T55's own record is: `--repo` supplies no default target, so a
+    # measurement of another tree lands nowhere unless the caller said where.
+    # Gating this on `own_repo` as well made the T100 half unreachable for an
+    # explicit `--repo <tree> <target>`, which is the one shape a test of a
+    # repository with no live task file can take.
+    if target is not None:
         sensitivity = write_archive_sensitivity_evidence(
             target.parent / "T100.json", repo_root
         )
@@ -400,6 +403,19 @@ def _main(argv: list[str]) -> int:
             f"only {measured['files_scanned']} file(s) were scanned (floor "
             f"{MINIMUM_SCANNED}) — zero surviving references over nothing is not a "
             "measurement",
+            file=sys.stderr,
+        )
+        return 3
+    # T100's own denominator, after T55's. Zero sensitive keys over no
+    # comparison is zero, and this task exists because a denominator nobody
+    # asserted let a check report success over work it did not do — so a
+    # checkout that has archived its only task file must not read as a pass
+    # here either. Found by review on #284: the fix reproducing the failure it
+    # fixes, one exit code down.
+    if sensitivity is not None and sensitivity["gate_status"] != "measured":
+        print(
+            "archive_sensitive_evidence_keys: UNMEASURED — no live task file to "
+            "archive, so nothing was compared. Not a pass and not a fail.",
             file=sys.stderr,
         )
         return 3
