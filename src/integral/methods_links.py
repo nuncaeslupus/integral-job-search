@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -197,33 +198,45 @@ BORROWED: tuple[Borrowing, ...] = (
 )
 
 
-def attribution_entries(
+def attribution_rows(
     methods_path: Path = DEFAULT_METHODS_PATH,
-) -> dict[str, dict[str, str]]:
-    """The register's rows, by task id.
+) -> list[tuple[str, dict[str, str]]]:
+    """The register's rows, in document order, **duplicates kept**.
 
     Parsed out of the markdown table rather than kept in this module, because
     a register the gate holds its own copy of is a gate checking itself. The
     prose in `METHODS.md` is the deliverable; this only reads it.
+
+    A list rather than a mapping because keying by task id is exactly what
+    hides the failure: a second row for a task overwrites the first, so a
+    register that contradicts itself reads back as one that agrees, and the
+    gate measures whichever row happened to come last.
     """
     text = methods_path.read_text(encoding="utf-8")
     start = text.find(ATTRIBUTION_HEADING)
     if start < 0:
-        return {}
+        return []
     section = text[start:]
     end = re.search(r"^#{2,3} ", section[len(ATTRIBUTION_HEADING) :], re.MULTILINE)
     if end:
         section = section[: len(ATTRIBUTION_HEADING) + end.start()]
 
-    entries: dict[str, dict[str, str]] = {}
+    rows: list[tuple[str, dict[str, str]]] = []
     for line in section.splitlines():
         if not line.startswith("|"):
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if len(cells) != 4 or not re.fullmatch(r"T\d+", cells[0]):
             continue
-        entries[cells[0]] = {"taken": cells[1], "where": cells[2], "limit": cells[3]}
-    return entries
+        rows.append((cells[0], {"taken": cells[1], "where": cells[2], "limit": cells[3]}))
+    return rows
+
+
+def attribution_entries(
+    methods_path: Path = DEFAULT_METHODS_PATH,
+) -> dict[str, dict[str, str]]:
+    """The register's rows by task id — the lookup, not the evidence."""
+    return dict(attribution_rows(methods_path))
 
 
 def adapted_modules(root: Path = _REPO_ROOT) -> list[str]:
@@ -259,9 +272,16 @@ def measure_attribution(
     here is a *rejection* (upstream's scoring rubric), and a register that
     only ever says "we took this" is how that judgement gets forgotten and the
     rubric re-imported on the strength of the acknowledgement itself.
+
+    Two more read the register from its own side, because §2.9 is a public
+    credit statement and a wrong one is not a formatting slip: a row for a
+    task nobody borrowed credits upstream for work this repository did, and a
+    task carrying two rows makes the register contradict itself while only the
+    last row is ever measured.
     """
     methods_path = methods_path or (root / "docs" / "METHODS.md")
-    entries = attribution_entries(methods_path)
+    rows = attribution_rows(methods_path)
+    entries = dict(rows)
     problems: list[str] = []
 
     for borrowing in borrowed:
@@ -280,6 +300,18 @@ def measure_attribution(
             elif site not in row["where"]:
                 problems.append(f"{borrowing.task}: the register does not name {site}")
 
+    counted = Counter(task for task, _ in rows)
+    unborrowed = sorted(set(counted) - {borrowing.task for borrowing in borrowed})
+    duplicated = sorted(task for task, times in counted.items() if times > 1)
+    problems += [
+        f"{task}: the register credits {UPSTREAM} for a task that was not borrowed"
+        for task in unborrowed
+    ]
+    problems += [
+        f"{task}: the register holds {counted[task]} rows for it, and only the last is read"
+        for task in duplicated
+    ]
+
     registered = {site for borrowing in borrowed for site in borrowing.sites}
     stray = [path for path in adapted_modules(root) if path not in registered]
     problems += [
@@ -292,13 +324,25 @@ def measure_attribution(
         "borrowed_techniques_without_attribution": len(problems),
         # Both names, as every gate in this increment carries: the payload
         # names the first, the `status-key` mechanism was written against the
-        # second.
-        "borrowed_techniques_without_attribution_evaluated": checked,
+        # second. They differ now: the violation count is fed from both ends
+        # of the register, so its denominator is everything that could raise
+        # one — each borrowed technique, and each row of §2.9. Only the
+        # borrowed count drives `gate_status`, which the task file defines as
+        # "how many inputs were actually evaluated" for the borrowed set.
+        "borrowed_techniques_without_attribution_evaluated": checked + len(rows),
         "borrowed_techniques_checked": checked,
         "gate_status": "measured" if checked else "unmeasured",
         "upstream": UPSTREAM,
         "adapted_modules_found": len(adapted_modules(root)),
         "adapted_modules_outside_the_register": stray,
+        # The register's own denominator, beside `adapted_modules_found` and
+        # for the same reason: the two checks below count rows, not borrowed
+        # techniques, so a zero of theirs over a register of none would
+        # otherwise be indistinguishable from a zero over a register that
+        # holds.
+        "attribution_rows_found": len(rows),
+        "register_tasks_outside_the_borrowed_set": unborrowed,
+        "register_tasks_credited_more_than_once": duplicated,
         "violations_attribution": problems,
     }
 

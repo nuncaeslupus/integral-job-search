@@ -253,3 +253,72 @@ def test_the_module_writes_both_records(tmp_path: Path) -> None:
     assert methods_links._main(["methods_links", str(target)]) == 0
     assert target.is_file()
     assert (tmp_path / "T83.json").is_file()
+
+
+def _register(tmp_path: Path, *rows: str) -> Path:
+    """A `METHODS.md` holding nothing but §2.9's table."""
+    path = tmp_path / "METHODS.md"
+    path.write_text(
+        f"{methods_links.ATTRIBUTION_HEADING}\n\n"
+        "| Task | What was taken | Where it lives here | Limits of the borrowing |\n"
+        "|---|---|---|---|\n" + "".join(f"{row}\n" for row in rows),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_a_row_for_a_task_nobody_borrowed_is_a_violation(tmp_path: Path) -> None:
+    """§2.9 is a public credit statement. A row crediting upstream for work
+    this repository did is a false one, and the check that only walks
+    `BORROWED` never reaches it."""
+    methods = _register(
+        tmp_path,
+        "| T70 | a technique | src/integral/robots.py | narrowed |",
+        "| T85 | the evidence run | src/integral/evidence.py | none |",
+    )
+
+    measured = methods_links.measure_attribution(
+        root=tmp_path, methods_path=methods, borrowed=(methods_links.Borrowing("T70", ()),)
+    )
+
+    assert measured["register_tasks_outside_the_borrowed_set"] == ["T85"]
+    assert measured["borrowed_techniques_without_attribution"] == 1
+    assert measured["borrowed_techniques_without_attribution_evaluated"] == 3
+
+
+def test_a_task_credited_by_two_rows_is_a_violation(tmp_path: Path) -> None:
+    """Keyed by task id the second row silently replaces the first, so a
+    register contradicting itself measures as one that agrees — and the row
+    that disagrees is the one nobody reads."""
+    methods = _register(
+        tmp_path,
+        "| T70 | a technique | src/integral/robots.py | narrowed |",
+        "| T70 | something else entirely | src/integral/robots.py | none |",
+    )
+
+    measured = methods_links.measure_attribution(
+        root=tmp_path, methods_path=methods, borrowed=(methods_links.Borrowing("T70", ()),)
+    )
+
+    assert measured["register_tasks_credited_more_than_once"] == ["T70"]
+    assert measured["borrowed_techniques_without_attribution"] == 1
+    assert methods_links.attribution_rows(methods) == [
+        ("T70", {"taken": "a technique", "where": "src/integral/robots.py", "limit": "narrowed"}),
+        (
+            "T70",
+            {
+                "taken": "something else entirely",
+                "where": "src/integral/robots.py",
+                "limit": "none",
+            },
+        ),
+    ]
+
+
+def test_the_committed_register_credits_exactly_the_borrowed_set() -> None:
+    """Both new checks over the real document, with their denominator."""
+    measured = methods_links.measure_attribution()
+
+    assert measured["register_tasks_outside_the_borrowed_set"] == []
+    assert measured["register_tasks_credited_more_than_once"] == []
+    assert measured["attribution_rows_found"] == len(methods_links.BORROWED)
