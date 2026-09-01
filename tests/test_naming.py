@@ -182,3 +182,122 @@ def test_a_recorded_capture_is_evidence_and_is_never_swept() -> None:
     assert not naming._is_allowlisted("connectors/remotive_en/connector.yaml")
     assert not naming._is_allowlisted("connectors/remotive_en/meta.yaml")
     assert not naming._is_allowlisted("docs/fixture/notes.md")
+
+
+# ---------------------------------------------------------------------------
+# T100 — a denominator committed as an exact value.
+#
+# `files_scanned` counts tracked files, `arsenal/tasks/_history/` is
+# allowlisted, and archiving a task file therefore moves the count by one.
+# `open_task_pr.sh` archives the task file and then runs the host gate, so the
+# committed evidence had to hold the value from before the move *and* the
+# value from after it. It could not, and no task PR opened between #257 and
+# #282 without the number being hand-corrected first.
+# ---------------------------------------------------------------------------
+
+
+def test_files_scanned_is_asserted_as_a_floor_not_a_census() -> None:
+    """The record carries a denominator, and it is the floor that was
+    checked rather than the count of the day.
+
+    A census is not a measurement of anything about the code — it moves when
+    any tracked file is added, which is drift with no finding behind it. What
+    the denominator is *for* is stopping a clean zero resting on an empty
+    scan, and a floor does that job without moving.
+    """
+    measured = naming.measure()
+    record = naming.record(measured)
+
+    assert record["files_scanned_at_least"] == naming.MINIMUM_SCANNED
+    # The live count is not lost — it is simply not the thing committed.
+    assert measured["files_scanned"] >= naming.MINIMUM_SCANNED
+    assert "files_scanned" not in record
+
+
+def test_an_empty_scan_still_fails(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """The dishonest-zero guard survives the change — it is the whole reason
+    the denominator exists, and replacing an exact value with a floor must not
+    quietly replace it with nothing."""
+    _git_init(tmp_path)
+    _commit(tmp_path, "claude-arsenal/note.md", "everything here is allowlisted\n")
+
+    exit_code = naming._main(["naming", str(tmp_path / "T55.json"), "--repo", str(tmp_path)])
+
+    assert exit_code == 3
+    assert "floor" in capsys.readouterr().err
+
+
+def test_archiving_a_task_file_does_not_change_any_asserted_value() -> None:
+    """The property the whole task exists for, measured without moving
+    anything: a file under `arsenal/tasks/_history/` is allowlisted, so
+    archiving is exactly "this path stops being scanned"."""
+    live = naming.record(naming.measure())
+    one = naming.first_task_file()
+    assert one is not None
+    archived = naming.record(naming.measure(archived=frozenset({one})))
+
+    assert live == archived
+
+
+def test_a_census_committed_as_an_exact_value_is_reported_sensitive() -> None:
+    """The gate, shown failing. Put the count back and the metric finds it —
+    otherwise `archive_sensitive_evidence_keys == 0` would hold over a record
+    that simply stopped carrying the sensitive key rather than fixing it."""
+    census = dict(naming.record(naming.measure()))
+    census["files_scanned"] = 623
+
+    assert naming.sensitive_keys(census, {**census, "files_scanned": 622}) == ["files_scanned"]
+
+
+def test_the_archive_gate_counts_the_keys_it_compared() -> None:
+    """A zero over nothing compared is the failure this repository's gates are
+    built around. The denominator is asserted here too."""
+    measured = naming.measure_archive_sensitivity()
+
+    assert measured["archive_sensitive_evidence_keys"] == 0
+    assert measured["evidence_keys_compared"] >= len(naming.record(naming.measure()))
+    assert measured["gate_status"] == "measured"
+
+
+def test_the_archive_gate_is_unmeasured_when_there_is_no_task_file_to_archive(
+    tmp_path: Path,
+) -> None:
+    """No task file, nothing to move, nothing proved. Not a pass."""
+    _git_init(tmp_path)
+    _commit(tmp_path, "docs/readme.md", "nothing to archive here\n")
+
+    measured = naming.measure_archive_sensitivity(tmp_path)
+
+    assert measured["evidence_keys_compared"] == 0
+    assert measured["gate_status"] == "unmeasured"
+
+
+def test_the_file_chosen_for_the_comparison_is_one_the_sweep_actually_scans() -> None:
+    """`arsenal/tasks/_migrated-history.md` is allowlisted already, so
+    archiving it moves nothing and the comparison compares a tree with itself
+    — `measured` over a no-op, which is the one thing a gate here may not do."""
+    chosen = naming.first_task_file()
+
+    assert chosen is not None
+    assert not naming._is_allowlisted(chosen)
+    assert naming.measure(archived=frozenset({chosen}))["files_scanned"] == (
+        naming.measure()["files_scanned"] - 1
+    )
+
+
+def test_main_does_not_pass_when_nothing_could_be_archived(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Found by review on #284, and it is this task's own subject turned on
+    its own exit code: zero sensitive keys over no comparison is zero, so a
+    checkout with no live task file reported success over a check that never
+    ran. Exit 3 — not a pass and not a fail."""
+    _git_init(tmp_path)
+    for n in range(naming.MINIMUM_SCANNED + 1):
+        _commit(tmp_path, f"docs/page-{n}.md", "nothing to archive here\n")
+
+    exit_code = naming._main(["naming", str(tmp_path / "T55.json"), "--repo", str(tmp_path)])
+
+    assert exit_code == 3
+    assert "UNMEASURED" in capsys.readouterr().err
+    assert (tmp_path / "T100.json").is_file()
