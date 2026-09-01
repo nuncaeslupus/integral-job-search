@@ -40,7 +40,9 @@ from __future__ import annotations
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from integral.dimensions import methods_anchors
 
@@ -142,6 +144,175 @@ def measure(root: Path = _REPO_ROOT, methods_path: Path | None = None) -> dict[s
     }
 
 
+#: T83. Who the failure-handling layer came from, spelled exactly as the
+#: README and every adapting module spell it — the gate compares these
+#: strings, so one drifting spelling is a finding rather than a formatting
+#: preference.
+UPSTREAM = "MadsLorentzen/ai-job-search"
+UPSTREAM_URL = "https://github.com/MadsLorentzen/ai-job-search"
+UPSTREAM_LICENCE = "MIT, © 2026 Mads Lorentzen"
+
+#: The heading in `docs/METHODS.md` that holds the register.
+ATTRIBUTION_HEADING = "### 2.9 Techniques adapted from `ai-job-search`"
+
+DEFAULT_ATTRIBUTION_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T83.json"
+
+#: A module that says it adapted something. Matched on the sentence the
+#: adapting modules already carry, so a *future* borrowing that adds the line
+#: and forgets the register row is caught by the same check — which is the
+#: half of this task that outlives the fourteen it was written for.
+_ADAPTED_MARKER = re.compile(rf"Adapted from `{re.escape(UPSTREAM)}`")
+
+
+@dataclass(frozen=True)
+class Borrowing:
+    """One technique taken from upstream, and where it landed."""
+
+    task: str
+    #: Repo-relative paths this technique lives in. Checked to exist, because
+    #: a register pointing at a file nobody can open credits upstream for
+    #: nothing and tells a reader nothing.
+    sites: tuple[str, ...]
+
+
+#: What was actually borrowed. T85 is deliberately absent — the evidence run
+#: reaching every module was found here, while validating this increment's own
+#: specification — and so is T83 itself. An over-broad acknowledgement is as
+#: misleading as a missing one.
+BORROWED: tuple[Borrowing, ...] = (
+    Borrowing("T70", ("src/integral/robots.py",)),
+    Borrowing("T71", ("src/integral/robots.py",)),
+    Borrowing("T72", ("src/integral/connector_health.py",)),
+    Borrowing("T73", ("src/integral/connector_health.py",)),
+    Borrowing("T74", ("src/integral/liveness.py",)),
+    Borrowing("T75", ("src/integral/dedup.py",)),
+    Borrowing("T76", ("src/integral/eligibility.py",)),
+    Borrowing("T77", ("src/integral/eligibility.py",)),
+    Borrowing("T78", ("src/integral/offers.py",)),
+    Borrowing("T79", ("src/integral/rank.py",)),
+    Borrowing("T80", ("src/integral/ats.py",)),
+    Borrowing("T81", ("src/integral/ats.py",)),
+    Borrowing("T82", ("src/integral/lifecycle.py",)),
+    Borrowing("T84", (".claude/skills/step-11-application/SKILL.md",)),
+)
+
+
+def attribution_entries(
+    methods_path: Path = DEFAULT_METHODS_PATH,
+) -> dict[str, dict[str, str]]:
+    """The register's rows, by task id.
+
+    Parsed out of the markdown table rather than kept in this module, because
+    a register the gate holds its own copy of is a gate checking itself. The
+    prose in `METHODS.md` is the deliverable; this only reads it.
+    """
+    text = methods_path.read_text(encoding="utf-8")
+    start = text.find(ATTRIBUTION_HEADING)
+    if start < 0:
+        return {}
+    section = text[start:]
+    end = re.search(r"^#{2,3} ", section[len(ATTRIBUTION_HEADING) :], re.MULTILINE)
+    if end:
+        section = section[: len(ATTRIBUTION_HEADING) + end.start()]
+
+    entries: dict[str, dict[str, str]] = {}
+    for line in section.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 4 or not re.fullmatch(r"T\d+", cells[0]):
+            continue
+        entries[cells[0]] = {"taken": cells[1], "where": cells[2], "limit": cells[3]}
+    return entries
+
+
+def adapted_modules(root: Path = _REPO_ROOT) -> list[str]:
+    """Every tracked source file that says it adapted something from upstream."""
+    found: list[str] = []
+    for directory in ("src/integral", ".claude/skills"):
+        base = root / directory
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*")):
+            if path.suffix not in {".py", ".md"} or not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if _ADAPTED_MARKER.search(text):
+                found.append(path.relative_to(root).as_posix())
+    return found
+
+
+def measure_attribution(
+    root: Path = _REPO_ROOT,
+    methods_path: Path | None = None,
+    *,
+    borrowed: tuple[Borrowing, ...] = BORROWED,
+) -> dict[str, Any]:
+    """T83's gate: `borrowed_techniques_without_attribution`.
+
+    Four ways a row fails to be attribution: it is missing; it does not say
+    what was taken; it does not say where the technique lives; or it records
+    no limit. The fourth is not decoration — the borrowing that matters most
+    here is a *rejection* (upstream's scoring rubric), and a register that
+    only ever says "we took this" is how that judgement gets forgotten and the
+    rubric re-imported on the strength of the acknowledgement itself.
+    """
+    methods_path = methods_path or (root / "docs" / "METHODS.md")
+    entries = attribution_entries(methods_path)
+    problems: list[str] = []
+
+    for borrowing in borrowed:
+        row = entries.get(borrowing.task)
+        if row is None:
+            problems.append(
+                f"{borrowing.task}: no row in {methods_path.name} {ATTRIBUTION_HEADING}"
+            )
+            continue
+        for field in ("taken", "where", "limit"):
+            if not row[field].strip() or row[field].strip() in {"-", "\u2014", "TBD"}:
+                problems.append(f"{borrowing.task}: the register records no {field}")
+        for site in borrowing.sites:
+            if not (root / site).exists():
+                problems.append(f"{borrowing.task}: names {site}, which does not exist")
+            elif site not in row["where"]:
+                problems.append(f"{borrowing.task}: the register does not name {site}")
+
+    registered = {site for borrowing in borrowed for site in borrowing.sites}
+    stray = [path for path in adapted_modules(root) if path not in registered]
+    problems += [
+        f"{path}: says it adapted something from {UPSTREAM} and is in no register row"
+        for path in stray
+    ]
+
+    checked = len(borrowed)
+    return {
+        "borrowed_techniques_without_attribution": len(problems),
+        # Both names, as every gate in this increment carries: the payload
+        # names the first, the `status-key` mechanism was written against the
+        # second.
+        "borrowed_techniques_without_attribution_evaluated": checked,
+        "borrowed_techniques_checked": checked,
+        "gate_status": "measured" if checked else "unmeasured",
+        "upstream": UPSTREAM,
+        "adapted_modules_found": len(adapted_modules(root)),
+        "adapted_modules_outside_the_register": stray,
+        "violations_attribution": problems,
+    }
+
+
+def write_attribution_evidence(
+    evidence: Path = DEFAULT_ATTRIBUTION_EVIDENCE_PATH,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T83.json`."""
+    measured = measure_attribution()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, object]:
     measured = measure()
     evidence.parent.mkdir(parents=True, exist_ok=True)
@@ -152,7 +323,14 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, object]:
 def _main(argv: list[str]) -> int:
     """Write T22's gate evidence; exit 1 on any unresolved link."""
     args = [arg for arg in argv[1:] if not arg.startswith("--")]
-    measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
+    target = Path(args[0]) if args else DEFAULT_EVIDENCE_PATH
+    measured = write_evidence(target)
+    # T83's record, beside T22's — one module, two questions of the same
+    # document: whether every method is documented, and whether every
+    # borrowed one says whose it was.
+    attribution = write_attribution_evidence(target.parent / "T83.json")
+    for problem in attribution["violations_attribution"]:
+        print(problem, file=sys.stderr)
 
     violations = measured["violations"]
     assert isinstance(violations, list)

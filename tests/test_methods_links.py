@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from integral import methods_links
 from integral.dimensions import DimensionError
 from integral.methods_links import (
     DEFAULT_METHODS_PATH,
@@ -148,3 +149,107 @@ def test_a_missing_methods_register_is_an_error(tmp_path: Path) -> None:
 
 def test_the_default_register_is_the_committed_one() -> None:
     assert DEFAULT_METHODS_PATH == _REPO_ROOT / "docs" / "METHODS.md"
+
+
+# ---------------------------------------------------------------------------
+# T83 — attribution for the borrowed techniques.
+#
+# Run last, because it records what the other fourteen actually took. MIT
+# requires notice retention for copied code, not attribution for ideas: this
+# is a commitment the owner made, and the gate is what keeps it from being a
+# sentence in a specification nobody re-reads.
+# ---------------------------------------------------------------------------
+
+
+def test_every_borrowed_technique_has_a_methods_entry() -> None:
+    """One entry per technique, in `docs/METHODS.md`'s own register."""
+    measured = methods_links.measure_attribution()
+
+    assert measured["borrowed_techniques_without_attribution"] == 0
+    assert measured["violations_attribution"] == []
+
+
+def test_the_readme_carries_an_acknowledgements_section() -> None:
+    """The acknowledgement a reader arriving at the repository actually sees.
+    A register buried in `docs/` is the register; this is the notice."""
+    readme = (methods_links._REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "## Acknowledgements" in readme
+    assert methods_links.UPSTREAM in readme
+    assert methods_links.UPSTREAM_LICENCE in readme
+
+
+def test_each_entry_names_its_upstream_source() -> None:
+    """An entry recording what was taken and not from whom is not attribution."""
+    entries = methods_links.attribution_entries()
+
+    assert entries
+    for borrowing in methods_links.BORROWED:
+        assert borrowing.task in entries, borrowing.task
+        row = entries[borrowing.task]
+        assert row["taken"].strip()
+        assert row["where"].strip()
+        assert row["limit"].strip() and row["limit"].strip() not in {"-", "—", "TBD"}
+
+
+def test_the_gate_does_not_pass_on_an_empty_input_set(tmp_path: Path) -> None:
+    """A register naming nothing credits nobody, and counts no violations
+    doing it. The denominator is the assertion."""
+    empty = tmp_path / "METHODS.md"
+    empty.write_text("# Nothing here\n", encoding="utf-8")
+
+    # An empty root as well as an empty register: with the real tree, the
+    # modules carrying an `Adapted from` line are genuinely unattributed
+    # against a register naming nothing, and counting them would be right.
+    # The question here is the denominator, so the input set is empty on both
+    # sides.
+    measured = methods_links.measure_attribution(
+        root=tmp_path, methods_path=empty, borrowed=()
+    )
+
+    assert measured["borrowed_techniques_without_attribution"] == 0
+    assert measured["borrowed_techniques_without_attribution_evaluated"] == 0
+    assert measured["borrowed_techniques_checked"] == 0
+    assert measured["gate_status"] == "unmeasured"
+
+
+def test_a_missing_entry_is_counted_rather_than_excused(tmp_path: Path) -> None:
+    """The gate, shown failing — otherwise zero-over-a-register-of-none and
+    zero-over-a-register-that-holds are the same number."""
+    empty = tmp_path / "METHODS.md"
+    empty.write_text("# Nothing here\n", encoding="utf-8")
+
+    measured = methods_links.measure_attribution(methods_path=empty)
+
+    assert measured["borrowed_techniques_without_attribution"] == len(methods_links.BORROWED)
+    assert measured["gate_status"] == "measured"
+
+
+def test_nothing_this_repository_worked_out_itself_is_credited() -> None:
+    """An over-broad acknowledgement is as misleading as a missing one. T85 is
+    the named example: the evidence run reaching every module was found here,
+    while validating this increment's own specification."""
+    credited = {b.task for b in methods_links.BORROWED}
+
+    assert "T85" not in credited
+    assert "T83" not in credited
+
+
+def test_a_module_claiming_to_have_adapted_something_is_in_the_register() -> None:
+    """The half that survives the next borrowing. A file that adds the
+    `Adapted from` line and no register row would otherwise be attributed
+    nowhere, and nothing would notice."""
+    measured = methods_links.measure_attribution()
+
+    assert measured["adapted_modules_outside_the_register"] == []
+    assert measured["adapted_modules_found"] >= 3
+
+
+def test_the_module_writes_both_records(tmp_path: Path) -> None:
+    """T22's file and T83's, beside each other — adding one must not stop the
+    other being read."""
+    target = tmp_path / "T22.json"
+
+    assert methods_links._main(["methods_links", str(target)]) == 0
+    assert target.is_file()
+    assert (tmp_path / "T83.json").is_file()
