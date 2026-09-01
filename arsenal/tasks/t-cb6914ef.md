@@ -56,10 +56,16 @@ premise being retired is *CI does not report*; a policy that makes CI blocking n
 evidence that it reports, not a memory that it started to:
 
 ```bash
-gh run list --branch main --limit 5 \
-    --json conclusion,createdAt,workflowName --jq '
-  [.[] | select(.workflowName == "CI")] as $ci
-  | if ($ci | length) == 0 then error("no CI runs on main")
-    elif ($ci[0].conclusion != "success") then error("latest CI on main: \($ci[0].conclusion)")
-    else "latest CI on main: success at \($ci[0].createdAt)" end'
+gh run list --workflow CI --branch main --limit 1 \
+    --json conclusion,createdAt --jq '
+  if length == 0 then error("no CI runs on main")
+  elif .[0].conclusion != "success" then error("latest CI on main: \(.[0].conclusion)")
+  else "latest CI on main: success at \(.[0].createdAt)" end'
 ```
+
+`--workflow CI` and not a `jq` filter over a mixed list: `--limit` is applied by
+the API *before* anything selects a workflow, so five `arsenal queue` runs
+pushed in quick succession — which is a normal thing to happen on `main` — would
+hide the latest `CI` run and the check would report `no CI runs on main`. A
+precondition that fails for a reason unrelated to its subject gets waved through
+the second time it happens.

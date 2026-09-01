@@ -40,15 +40,33 @@ is a different question and gets its own fixture with its own citation.
 ## Acceptance gate
 
 ```bash
+uv run --extra dev python - <<'PY'
+import subprocess, sys
+REQUIRED = [
+    "test_a_file_token_shorter_than_the_crawler_token_matches_per_rfc_9309",
+    "test_the_reverse_direction_is_asserted_separately",
+    "test_the_case_22_fixture_cites_the_section_it_was_derived_from",
+]
+collected = subprocess.run(
+    ["pytest", "tests/test_robots.py", "--collect-only", "-q"],
+    capture_output=True, text=True,
+).stdout
+missing = [n for n in REQUIRED if n not in collected]
+if missing:
+    sys.exit("not collected: " + ", ".join(missing))
+print("all three collected")
+PY
 uv run --extra dev pytest tests/test_robots.py -q
 uv run --extra dev python -m integral.robots
 ```
 
-No `-k`. A selector that matches nothing exits 5, so the gate fails rather than
-passing vacuously — but it would go on failing after the work was done, because
-none of the three names below contains the substring a `-k "product_token"`
-filter would have looked for. A gate that can never pass is the same defect as
-one that always does, read from the other side.
+The collection check is the gate, and running the module is the confirmation.
+Two ways to write this wrong were tried first. `-k "product_token"` selects none
+of the three names, so it exits 5 for ever — a gate that can never pass, which is
+the same defect as one that always does, read from the other side. Plain `pytest
+tests/test_robots.py` is worse: it is green **today**, over a module in which none
+of the three exists, so it would certify this task before the work started and
+would not notice one of them being deleted afterwards.
 
 - `test_a_file_token_shorter_than_the_crawler_token_matches_per_rfc_9309`
   (or `..._does_not_match_...` — the name records the verdict the spec gave)
