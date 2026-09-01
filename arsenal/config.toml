@@ -100,13 +100,20 @@ queue-automation = true
 # it separately — which is what five of nine workers did in the session upstream
 # took this from.
 #
-# `uv sync --extra dev` and not `make sync`: the two are the same command today,
-# and this one does not depend on the Makefile being present and correct at the
-# moment the worktree is first entered — which is the moment the whole feature
-# exists to make survivable. `uv.lock` is tracked, so the install is
-# reproducible; `host_setup.sh` reverts what the install rewrites in tracked
-# files, so a re-pinned lockfile does not land in the task's diff.
-host-setup = "uv sync --extra dev"
+# `uv sync` and not `make sync`: the two are the same command today, and this one
+# does not depend on the Makefile being present and correct at the moment the
+# worktree is first entered — which is the moment the whole feature exists to make
+# survivable.
+#
+# `--locked` is the part that is not obvious, and it is here because of how it
+# interacts with `host_setup.sh`. Plain `uv sync` silently re-resolves and rewrites
+# a stale `uv.lock`; `host_setup.sh` then reverts that rewrite, because keeping the
+# install's churn out of the task diff is its whole job. The two are individually
+# right and together produce a worker running against an environment resolved from
+# dependencies recorded nowhere — and the evidence of it deleted in the same breath.
+# `--locked` fails instead, which is the correct answer: a stale lockfile is a
+# commit somebody owes, not something for a worktree to fix on the way past.
+host-setup = "uv sync --extra dev --locked"
 
 [skills]
 extract = true
