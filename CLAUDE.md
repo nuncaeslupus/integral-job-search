@@ -247,9 +247,13 @@ was believed here for the length of one pull request.
 So: **open the PR by hand** (`gh pr create`), and archive the task file yourself
 in the same commit. Every PR since #257 was opened this way.
 
-The repair that is ours rather than upstream's is to make the measurement
-archive-invariant — count `_history/` too, and the number stops depending on
-which side of the move it is taken from. That is **T100**.
+The repair that is ours rather than upstream's is that `files_scanned` should
+never have been committed as an exact value. It is a denominator, not a
+measurement — it exists to stop a clean zero resting on an empty scan, and a
+**floor** does that job without moving. (Counting `_history/` instead would make
+the number archive-invariant and immediately break `old_name_references == 0`:
+archived rows legitimately carry the old name, which is why `naming.py:99`
+allowlists that directory.) That is **T100**.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
