@@ -228,17 +228,18 @@ make evidence       # regenerate every measurement, fail on drift
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
-**One drift is not yours: `T55.files_scanned` moves by one on every task PR.**
-`open_task_pr.sh` runs the host gate, *then* archives the task file into the
-allowlisted `arsenal/tasks/_history/`, then commits — so the committed count was
-measured one file before the tree it ships with, and the PR it opens carries the
-stale count.
+**`T55.files_scanned` no longer drifts on a task PR — do not add the second
+commit this section used to prescribe.** The cause was real: `open_task_pr.sh`
+ran the host gate, *then* archived the task file into the allowlisted
+`arsenal/tasks/_history/`, so the committed count was measured one file before
+the tree it shipped with (`claude-arsenal#220`). Bundle **v3.1.14** made the gate
+run once, over the archived tree — the only tree whose measurement describes what
+the PR contains. A drift you see now is therefore **yours**, and the old advice
+would bury it under a commit that regenerates whatever the code currently says.
 
-The script has already committed by the time you see it, so this is a **second
-commit on the branch it left you on**, not an amend: `make host-gate` regenerates
-the number, then `git add -A && git commit && git push` before the review lands.
-The squash merge folds it in. Do not go looking for a cause in the diff
-(`claude-arsenal#220`).
+One consequence to expect: a host-gate failure is reported *after* the branch is
+cut, not before. Nothing is committed, the archive is undone, and the script
+switches back to the branch you started on.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is

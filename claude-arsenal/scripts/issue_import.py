@@ -33,8 +33,9 @@ Four things this deliberately does NOT do:
   with itself.
 * **It does not touch the network.** Task files are local and written here;
   every remote change is printed for the caller to apply over whatever channel
-  the surface has. With no issues to read it does nothing, which is how it
-  degrades when GitHub is unreachable.
+  the surface has — the `arsenal-task:` marker to append, and the label swap
+  that moves the issue onto the board. With no issues to read it does nothing,
+  which is how it degrades when GitHub is unreachable.
 
 Exit: 0 (an empty import is an answer), 2 on unreadable input.
 """
@@ -50,6 +51,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from queue_hooks import TASK_LABEL
 from task_select import load_tasks, task_id_from_issue
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "queue-add" / "scripts"))
@@ -114,7 +116,16 @@ def importable(issues: list[dict[str, Any]], *, label: str) -> list[dict[str, An
 
 
 def render(issue: dict[str, Any], task_id: str) -> str:
-    body = (issue.get("body") or "").strip() or "_(no issue body)_"
+    # `html.unescape` on the body for the same reason it is on the title below:
+    # both fields arrive through the same MCP tool, escaped the same way, and a
+    # task file is data other tools compare against. Left alone, the prose a
+    # human reads to write the real gate spells every apostrophe `&#39;`.
+    #
+    # Decode first, THEN strip: `&nbsp;` and `&#32;` survive a strip as text,
+    # decode to whitespace afterwards, and land in the file as a body that is
+    # blank but truthy — so the `_(no issue body)_` fallback, which exists to
+    # tell a reader there is nothing here, never fires.
+    body = html.unescape(issue.get("body") or "").strip() or "_(no issue body)_"
     return TEMPLATE.format(
         task_id=task_id,
         # Two spellings to undo before this lands in the repo, because a task
@@ -126,7 +137,15 @@ def render(issue: dict[str, Any], task_id: str) -> str:
         # is worse for no gain. The file is written UTF-8 either way.
         title=json.dumps(html.unescape(str(issue.get("title", task_id))), ensure_ascii=False),
         capability=GATE_CAPABILITY,
-        url=issue.get("html_url") or f"issue #{issue.get('number')}",
+        # An autolink, not a bare URL: a task file lands in the consumer's repo
+        # and `markdownlint` flags MD034 on every imported one, forever, since
+        # the template never changes. The `issue #N` fallback stays unwrapped —
+        # angle brackets around non-URL text read as a stray HTML tag.
+        url=(
+            f"<{html_url}>"
+            if (html_url := issue.get("html_url"))
+            else f"issue #{issue.get('number')}"
+        ),
         body=body,
     )
 
@@ -138,6 +157,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--label", default=DEFAULT_IMPORT_LABEL)
     parser.add_argument("--apply", action="store_true", help="write the task files")
     args = parser.parse_args(argv)
+
+    if args.label == TASK_LABEL:
+        # Otherwise `add_label` and `remove_label` below are the same string,
+        # and a caller applying the row faithfully strips the very label
+        # session-start step 2 uses to find the board — leaving the task
+        # invisible again, which is the failure the labels were added to fix.
+        print(
+            f"issue_import: --label {args.label!r} is the board label. An issue already "
+            "carrying it is already a handle; pick the label you file NEW work under "
+            f"(default {DEFAULT_IMPORT_LABEL!r}).",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         payload = json.loads(args.issues.read_text(encoding="utf-8"))
@@ -170,8 +202,31 @@ def main(argv: list[str] | None = None) -> int:
         def new_task_id() -> str:
             return f"t-{secrets.token_hex(4)}"
 
+    # Minted ids are checked against what is already on disk AND against what
+    # this run has already handed out. `new_task_id()` is four random bytes, so
+    # a collision is unlikely rather than impossible — and the consequence is
+    # that `--apply` overwrites an existing task file, which is the one outcome
+    # an importer must never produce. `create_task.py` already resolves this
+    # the same way; when it is not importable the fallback needs the check too.
+    taken = {p.stem for p in args.tasks_dir.rglob("*.md")} if args.tasks_dir.is_dir() else set()
+
+    def mint() -> str | None:
+        for _ in range(64):
+            candidate = new_task_id()
+            if candidate not in taken:
+                taken.add(candidate)
+                return candidate
+        return None
+
     for issue in rows:
-        task_id = new_task_id()
+        task_id = mint()
+        if task_id is None:
+            print(
+                "issue_import: could not mint an unused task id after 64 attempts — "
+                f"stopping before issue #{issue.get('number')} rather than overwriting a task file",
+                file=sys.stderr,
+            )
+            return 1
         path = args.tasks_dir / f"{task_id}.md"
         if args.apply:
             args.tasks_dir.mkdir(parents=True, exist_ok=True)
@@ -187,6 +242,15 @@ def main(argv: list[str] | None = None) -> int:
                     # issue into the task's handle. Without it the import is only
                     # half done: the task file exists and nothing can claim it.
                     "add_to_issue_body": f"`arsenal-task: {task_id}`",
+                    # And the labels, for the same reason. Session-start step 2
+                    # fetches the board by `arsenal:task` specifically, so an
+                    # imported issue left carrying only the import label is
+                    # invisible to it — `handle_sync.py` then reports the task
+                    # as having no handle and proposes a *second* issue, which
+                    # already carries the marker below. Two issues for one task,
+                    # and a board that disagrees with itself.
+                    "add_label": TASK_LABEL,
+                    "remove_label": args.label,
                 },
                 separators=(",", ":"),
             )
