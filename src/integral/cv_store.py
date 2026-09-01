@@ -766,16 +766,175 @@ def _nonblank_spans(text: str) -> list[tuple[int, int, str]]:
     return spans
 
 
+# ---------------------------------------------------------------------------
+# what a document is expected to yield, and what it actually did (T97)
+
+# How a field is recognised in extracted text. It lives here rather than in
+# `integral.ats` because both directions need the same recogniser and only one
+# of the two modules can own it: `ats` already imports this one, so a pattern
+# defined there could never be read here. The *contract* stays split, which is
+# the distinction T97 asks for — `ats.REQUIRED_TEXT_LAYER_FIELDS` says which
+# fields a document this project *sends* must carry; `EXPECTED_DOCUMENT_FIELDS`
+# below says which ones a CV the candidate *supplies* should have yielded. How
+# you find one in text is neither contract, and is written once.
+DOCUMENT_FIELD_PATTERNS: dict[str, re.Pattern[str]] = {
+    # Whole-token, not a bare substring, so a document that mentions
+    # "@example" in passing is not itself proof of an address.
+    "contact_email": re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+\.[A-Za-z]{2,}(?![\w.+-])"),
+    "dated_experience": re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)"),
+}
+
+# Closed on purpose, the same way `ats.REQUIRED_TEXT_LAYER_FIELDS` is: a new
+# expectation is a diff a reviewer sees, not a value quietly added to a set.
+# Two fields, both of which every CV has and neither of which survives a
+# broken text layer — an address to reply to, and a single year anywhere. A
+# document that yields neither was read badly enough that saying so is worth
+# more than the false completeness of staying quiet.
+EXPECTED_DOCUMENT_FIELDS: tuple[str, ...] = ("contact_email", "dated_experience")
+
+
+def unextracted_fields(text: str) -> tuple[str, ...]:
+    """Which of `EXPECTED_DOCUMENT_FIELDS` this extracted text does not carry.
+
+    Absence here is not proof the candidate's document lacks the field — it is
+    proof *this read* did not produce it, which is the thing step 1 has to say
+    out loud instead of carrying on. A scanned CV whose text layer is an image
+    yields nothing and is indistinguishable, from here, from a CV with no
+    contact details; both are worth reporting and neither is worth guessing at.
+    """
+    return tuple(
+        field
+        for field in EXPECTED_DOCUMENT_FIELDS
+        if not DOCUMENT_FIELD_PATTERNS[field].search(text)
+    )
+
+
 @dataclass(frozen=True)
 class ImportResult:
     """What happened importing one document — never an exception for an
     ordinary outcome (missing extractor, unsupported format, empty
-    extraction); see the module docstring."""
+    extraction); see the module docstring.
+
+    `unextracted` is the second half of T97, and it is deliberately not a
+    `status`. A CV that imported but yielded no contact address is still an
+    import — blocks were added, spans are citable, the document is in the
+    store — so demoting it to a failure would make the caller choose between
+    discarding real content and staying quiet about what is missing. It is one
+    outcome with two things to say, and both are said.
+    """
 
     status: Literal["imported", "unavailable", "unsupported", "empty", "corrupt"]
     doc_id: str | None
     blocks_added: int
     detail: str
+    unextracted: tuple[str, ...] = ()
+
+    @property
+    def complete(self) -> bool:
+        """The document arrived as text *and* yielded everything expected."""
+        return self.status == "imported" and not self.unextracted
+
+    def problem(self) -> str | None:
+        """What to tell the candidate, or `None` when there is nothing to say."""
+        if self.status != "imported":
+            return self.detail
+        if self.unextracted:
+            return (
+                f"{self.detail}, but the text it produced yields no "
+                f"{', '.join(self.unextracted)} — the document may be a scan, or the "
+                "field may genuinely not be in it; either way it was not read out of it"
+            )
+        return None
+
+
+# Every import attempt this candidate's tree has seen, successes included.
+# The log is the fix for T97's actual defect: `import_document` has always
+# returned a full account of what happened, and the account died with the call
+# that made it. A caller that did not print it left no trace at all, so a later
+# step — or a later session — had no way to know the profile it was reading was
+# thinner than the document the candidate handed over.
+IMPORT_LOG_PARTS = ("cv", "imports.json")
+
+
+def read_import_log(store: ProfileStore) -> list[dict[str, Any]]:
+    """Every recorded import attempt, oldest first — `[]` before the first one.
+
+    A log that is not a list, or a file that is not readable JSON, reads as
+    empty rather than raising. The log is a record *about* failures; a caller
+    reaching for it is usually in the middle of one, and a corrupt log that
+    takes the whole intake down with it would be this module's own defect
+    reappearing one file over.
+    """
+    if not store.exists(*IMPORT_LOG_PARTS):
+        return []
+    try:
+        payload = store.read_json(*IMPORT_LOG_PARTS)
+    except (OSError, IdentityError):
+        # `read_json` turns a decode error into an `IdentityError` on the way
+        # out (see its docstring), so catching `JSONDecodeError` here would
+        # catch nothing and this function would raise the exact way it says it
+        # does not.
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [record for record in payload if isinstance(record, dict)]
+
+
+def _log_import(store: ProfileStore, path: Path, result: ImportResult) -> None:
+    """Append one attempt to `cv/imports.json`.
+
+    `reported` starts false for every attempt, including the clean ones —
+    "has the candidate been told" is not a question the importer can answer,
+    and a record that starts life claiming it has been reported is the silence
+    this exists to remove, written down.
+    """
+    log = read_import_log(store)
+    log.append(
+        {
+            "file": path.name,
+            "status": result.status,
+            "doc_id": result.doc_id,
+            "blocks_added": result.blocks_added,
+            "unextracted": list(result.unextracted),
+            "detail": result.detail,
+            "problem": result.problem(),
+            "reported": False,
+        }
+    )
+    _atomic_write_json(store, log, *IMPORT_LOG_PARTS)
+
+
+def unreported_read_problems(store: ProfileStore) -> list[str]:
+    """Everything that went wrong reading a document and has not been said yet.
+
+    Cleared by `acknowledge_read_problems`, never by time and never by a later
+    successful import: a candidate whose second upload worked still supplied a
+    first one that did not, and deciding on their behalf that it no longer
+    matters is the same silence in a politer form.
+    """
+    return [
+        f"{record.get('file', '(unnamed)')}: {record['problem']}"
+        for record in read_import_log(store)
+        if record.get("problem") and not record.get("reported")
+    ]
+
+
+def acknowledge_read_problems(store: ProfileStore) -> list[str]:
+    """Record that every outstanding read problem has been put to the
+    candidate, and return the ones that were outstanding.
+
+    Called by the step-1 session *after* it has said them, not before. It is
+    an admission, not a dismissal — the log keeps the record either way, and
+    what changes is only whether step 1 may still be certified over it.
+    """
+    outstanding = unreported_read_problems(store)
+    if not outstanding:
+        return []
+    log = read_import_log(store)
+    for record in log:
+        record["reported"] = True
+    _atomic_write_json(store, log, *IMPORT_LOG_PARTS)
+    return outstanding
 
 
 SUPPORTED_SUFFIXES = (".docx", ".pdf")
@@ -826,30 +985,55 @@ def import_document(store: ProfileStore, path: Path) -> ImportResult:
     practice; the two failure modes that actually corrupt data — id
     collision under concurrency, and a torn write from an interrupted save —
     are closed, and this is named rather than left implicit.
+
+    **Every attempt is recorded, not just the ones that worked** (T97): one
+    entry per call lands in `cv/imports.json`, whatever the outcome, marked
+    unreported until the session says otherwise. The structured result this
+    returns was always complete and always ephemeral — a caller that did not
+    print it left nothing behind, so a CV that failed to read looked, to every
+    later step, exactly like a candidate who never had one. The log is what
+    makes those two distinguishable after the call that could tell them apart
+    has returned.
     """
+    def logged(result: ImportResult) -> ImportResult:
+        """Record the attempt, then hand it back. Every exit from this function
+        goes through here — a `return ImportResult(...)` that skipped it would
+        be exactly the unrecorded outcome T97 is about, and the shape is chosen
+        so that adding one is visibly wrong rather than merely forgotten."""
+        _log_import(store, path, result)
+        return result
+
     suffix = path.suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:
-        return ImportResult(
-            status="unsupported",
-            doc_id=None,
-            blocks_added=0,
-            detail=f"{suffix or '(no extension)'} is not a supported CV format — "
-            f"supply one of {', '.join(SUPPORTED_SUFFIXES)}",
+        return logged(
+            ImportResult(
+                status="unsupported",
+                doc_id=None,
+                blocks_added=0,
+                detail=f"{suffix or '(no extension)'} is not a supported CV format — "
+                f"supply one of {', '.join(SUPPORTED_SUFFIXES)}",
+            )
         )
     try:
         text = _extract_docx_text(path) if suffix == ".docx" else _extract_pdf_text(path)
     except ExtractorUnavailable as exc:
-        return ImportResult(status="unavailable", doc_id=None, blocks_added=0, detail=str(exc))
+        return logged(
+            ImportResult(status="unavailable", doc_id=None, blocks_added=0, detail=str(exc))
+        )
     except CVStoreError as exc:
-        return ImportResult(status="corrupt", doc_id=None, blocks_added=0, detail=str(exc))
+        return logged(
+            ImportResult(status="corrupt", doc_id=None, blocks_added=0, detail=str(exc))
+        )
 
     spans = _nonblank_spans(text)
     if not spans:
-        return ImportResult(
-            status="empty",
-            doc_id=None,
-            blocks_added=0,
-            detail="the document extracted no readable text",
+        return logged(
+            ImportResult(
+                status="empty",
+                doc_id=None,
+                blocks_added=0,
+                detail="the document extracted no readable text",
+            )
         )
 
     doc_id = _reserve_doc_id(store)
@@ -863,11 +1047,14 @@ def import_document(store: ProfileStore, path: Path) -> ImportResult:
     master = load_master(store)
     master = master.model_copy(update={"raw_blocks": (*master.raw_blocks, *blocks)})
     write_master(store, master)
-    return ImportResult(
-        status="imported",
-        doc_id=doc_id,
-        blocks_added=len(blocks),
-        detail=f"{len(blocks)} paragraph(s) imported from {path.name} as {doc_id}",
+    return logged(
+        ImportResult(
+            status="imported",
+            doc_id=doc_id,
+            blocks_added=len(blocks),
+            detail=f"{len(blocks)} paragraph(s) imported from {path.name} as {doc_id}",
+            unextracted=unextracted_fields(text),
+        )
     )
 
 
@@ -1612,6 +1799,171 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+# ---------------------------------------------------------------------------
+# T97: a read that failed and was never mentioned
+
+DEFAULT_T97_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T97.json"
+
+# Five ways a read can go wrong, one clean read, and the acknowledgement path.
+# The floor exists for the reason every floor in this repository exists: zero
+# unreported failures over zero attempted reads is a clean number measured on
+# nothing, and it is the exact shape of the defect being fixed.
+MINIMUM_READ_CHECKS = 10
+
+# A distinctive line standing in for something the candidate wrote, so
+# `import_log_carries_document_text` is answered by looking for it rather than
+# by trusting that nothing puts it there.
+_READ_PROBE_MARKER = "Rebuilt the Q3 reconciliation run after the vendor pulled the API"
+
+
+def probe_read_reporting(root: Path) -> dict[str, Any]:
+    """Drive every way a CV read can fall short and count the ones that stay
+    silent. Backs `write_read_reporting_evidence`; driven directly by
+    `tests/test_intake_cv.py` the same way `probe_intake` is.
+
+    `unreported_cv_read_failures` is a count of *failures the store cannot
+    report*, not of failures. Documents this project cannot read are ordinary
+    — a PDF with no text layer, a format nothing here parses, a candidate's
+    scan — and a gate that drove that number to zero would be demanding an
+    extractor that never loses, which is not a thing. What must be zero is the
+    silence: every read that fell short is nameable, and names its own file,
+    until somebody says so.
+    """
+    import tempfile
+
+    failures: list[str] = []
+    checks = 0
+
+    def check(condition: bool, message: str) -> None:
+        nonlocal checks
+        checks += 1
+        if not condition:
+            failures.append(message)
+
+    identity = create_profile(root, "Probe CV Reads", handle="probe-cv-reads")
+    store = ProfileStore(root, identity.handle)
+
+    with tempfile.TemporaryDirectory(prefix="integral-t97-fixture-") as fixture_dir:
+        fixtures = Path(fixture_dir)
+
+        unsupported = fixtures / "cv.txt"
+        unsupported.write_text("a CV in a format nothing here reads", encoding="utf-8")
+        corrupt = fixtures / "corrupt.docx"
+        corrupt.write_bytes(b"PK\x03\x04 and then nothing that is a zip")
+        blank = fixtures / "blank.docx"
+        blank.write_bytes(_build_minimal_docx(["", "   ", ""]))
+        no_text_layer = fixtures / "scan.pdf"
+        no_text_layer.write_bytes(b"%PDF-1.4\n%no text layer, only the extractor decides\n")
+        partial = fixtures / "partial.docx"
+        partial.write_bytes(
+            _build_minimal_docx(["Núria Bosch — Data Engineer", _READ_PROBE_MARKER])
+        )
+        readable = fixtures / "readable.docx"
+        readable.write_bytes(
+            _build_minimal_docx(
+                [
+                    "Núria Bosch — Data Engineer",
+                    "nuria.bosch@example.invalid",
+                    "2019-2024, Barcelona: built the ingestion layer three teams depend on.",
+                ]
+            )
+        )
+
+        # --- the file not arriving as text at all ---------------------------
+        for path, expected in (
+            (unsupported, "unsupported"),
+            (corrupt, "corrupt"),
+            (blank, "empty"),
+        ):
+            outcome = import_document(store, path)
+            check(
+                outcome.status == expected,
+                f"{path.name} imported as {outcome.status!r}, expected {expected!r}",
+            )
+
+        # Forced deterministically, so the verdict is a fact about this module
+        # rather than about whether `pypdf` happens to be installed here — the
+        # same technique, and the same reason, as `probe_intake`'s.
+        with _pypdf_forced_missing():
+            unavailable = import_document(store, no_text_layer)
+        check(
+            unavailable.status == "unavailable",
+            f"a PDF with no extractor imported as {unavailable.status!r}, expected 'unavailable'",
+        )
+
+        # --- the file arriving, and yielding less than it should ------------
+        partial_result = import_document(store, partial)
+        check(
+            partial_result.status == "imported" and partial_result.blocks_added == 2,
+            f"the partial CV should still have imported: {partial_result}",
+        )
+        check(
+            set(partial_result.unextracted) == set(EXPECTED_DOCUMENT_FIELDS),
+            f"the partial CV named {partial_result.unextracted}, "
+            f"expected all of {EXPECTED_DOCUMENT_FIELDS}",
+        )
+
+        # --- and the clean read, which must produce no complaint ------------
+        clean = import_document(store, readable)
+        check(
+            clean.complete and clean.problem() is None,
+            f"a readable CV was reported as a problem: {clean}",
+        )
+
+        produced = [
+            record for record in read_import_log(store) if record.get("problem") is not None
+        ]
+        reported = unreported_read_problems(store)
+        unreported = [
+            record["file"]
+            for record in produced
+            if not any(line.startswith(f"{record['file']}: ") for line in reported)
+        ]
+        check(
+            not unreported,
+            f"read failures nothing can report: {', '.join(unreported)}",
+        )
+        check(
+            len(read_import_log(store)) == 6,
+            f"the log holds {len(read_import_log(store))} attempts, expected all 6",
+        )
+        check(
+            _READ_PROBE_MARKER not in store.path(*IMPORT_LOG_PARTS).read_text(encoding="utf-8"),
+            "the import log carries the document's own text",
+        )
+
+        cleared = acknowledge_read_problems(store)
+        check(
+            len(cleared) == len(produced) and unreported_read_problems(store) == [],
+            f"acknowledging cleared {len(cleared)} of {len(produced)} problems",
+        )
+        check(
+            all(record["problem"] is not None for record in produced),
+            "acknowledging erased the record of what went wrong",
+        )
+
+    return {
+        "unreported_cv_read_failures": len(unreported),
+        "read_failures_produced": len(produced),
+        "expected_document_fields": list(EXPECTED_DOCUMENT_FIELDS),
+        "checks_run": checks,
+        "failures": failures,
+    }
+
+
+def write_read_reporting_evidence(
+    evidence: Path = DEFAULT_T97_EVIDENCE_PATH,
+) -> dict[str, Any]:
+    """Measure `unreported_cv_read_failures` in a throwaway tree and record it."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="integral-t97-") as tmp:
+        measured = probe_read_reporting(Path(tmp) / "profiles")
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.cv_store [--check] [--write-evidence [PATH]]` -> S4's gate."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1635,9 +1987,16 @@ def _main(argv: list[str]) -> int:
 
         with tempfile.TemporaryDirectory(prefix="integral-s4-") as tmp:
             measured = probe_intake(Path(tmp) / "profiles")
+        with tempfile.TemporaryDirectory(prefix="integral-t97-") as tmp:
+            reads = probe_read_reporting(Path(tmp) / "profiles")
     else:
         measured = write_evidence(Path(args.write_evidence))
+        # T97 rides along on every plain run, the way S12 rides along with
+        # T28: one module, two gates, and no second flag to forget. A custom
+        # --write-evidence PATH only ever redirects S4's file.
+        reads = write_read_reporting_evidence()
     print(json.dumps(measured, ensure_ascii=False))
+    print(json.dumps(reads, ensure_ascii=False))
 
     if measured["checks_run"] < MINIMUM_CHECKS:
         print(
@@ -1654,7 +2013,20 @@ def _main(argv: list[str]) -> int:
         )
         return 3
 
-    violations = list(measured["failures"])
+    if reads["checks_run"] < MINIMUM_READ_CHECKS:
+        print(
+            f"only {reads['checks_run']} read-reporting checks ran (floor "
+            f"{MINIMUM_READ_CHECKS}) — no unreported failures over no attempted reads "
+            "is the defect, not the measurement",
+            file=sys.stderr,
+        )
+        return 3
+
+    violations = list(measured["failures"]) + list(reads["failures"])
+    if reads["unreported_cv_read_failures"] != 0:
+        violations.append(
+            f"unreported_cv_read_failures = {reads['unreported_cv_read_failures']} (want 0)"
+        )
     if measured["intake_field_provenance"] != 1.0:
         violations.append(
             f"intake_field_provenance = {measured['intake_field_provenance']} (want 1.0)"

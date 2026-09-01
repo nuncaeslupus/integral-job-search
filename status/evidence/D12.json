@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 121,
+  "evidence_gates_read": 122,
   "gates_declaring_status_key": 21,
   "unrecordable": [],
   "readings": [
@@ -704,6 +704,14 @@
       "task": "t-296eb71a",
       "key": "evidence_writes_for_a_foreign_library",
       "evidence": "status/evidence/T53.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
+      "task": "t-332d6826",
+      "key": "unreported_cv_read_failures",
+      "evidence": "status/evidence/T97.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false

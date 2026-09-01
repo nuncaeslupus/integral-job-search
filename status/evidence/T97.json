@@ -1,0 +1,10 @@
+{
+  "unreported_cv_read_failures": 0,
+  "read_failures_produced": 5,
+  "expected_document_fields": [
+    "contact_email",
+    "dated_experience"
+  ],
+  "checks_run": 12,
+  "failures": []
+}

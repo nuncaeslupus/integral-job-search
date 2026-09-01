@@ -43,6 +43,32 @@ In this step that sounds like:
 "Thanks for waiting — that's your history in. …"
 ```
 
+**Say what the document did not give you, before moving on.** `import_document` returns
+what happened to the file — it may be a format nothing here reads, a scan with no text
+layer, a corrupt archive, or a document that imported and yielded no contact address
+and no year. Every one of those is ordinary and none of them is a reason to stop. What
+is not allowed is carrying on as though the read succeeded: the candidate then answers
+questions their own CV already answered, and has no way to know why.
+
+Say it in one line, in their language, then continue by conversation for the part the
+document did not cover:
+
+```text
+"That file didn't open here — I'll take it the long way instead, if that's all right."
+"I've got your history, but no email address came out of the file. What's the best one?"
+```
+
+Then record that you said it:
+
+```python
+from integral.cv_store import acknowledge_read_problems, unreported_read_problems
+```
+
+`unreported_read_problems(store)` is the list; `acknowledge_read_problems(store)` marks
+them told. **Until it is called, `run_checkpoint.py` will not report this step covered**
+— that is the enforcement, and it is deliberately reporting rather than repairing (T97).
+Never call it before saying them.
+
 **Never:**
 
 - Never ask here for a legal name, an address, a telephone number, an identity number, a date of birth or a photograph — none improve a *search*. They are collected by step 11, for the document that actually needs them, when it needs them.
@@ -88,9 +114,9 @@ What this skill checks, mechanically, before ending the step: run
 `${CLAUDE_SKILL_DIR}/scripts/run_checkpoint.py --id <handle> [--input-dir <profiles-root>]`,
 this skill's own checkpoint script. It reads the candidate's
 `session/state.json` (T35) and profile tree (T34) and reports whether this step's *machine-visible*
-half of the stop rule is met — every artefact `intake` produces is present, and nothing is
-left outstanding in the recorded position — never by asking the model to eyeball the transcript
-and decide.
+half of the stop rule is met — every artefact `intake` produces is present, nothing is
+left outstanding in the recorded position, and no document read that fell short is still
+unsaid (T97) — never by asking the model to eyeball the transcript and decide.
 
 Exit 0 means that half is satisfied *and* this step's acceptance gate is built, so the run
 may be read as the step having passed. Exit 1 means coverage is not met (still open, or
