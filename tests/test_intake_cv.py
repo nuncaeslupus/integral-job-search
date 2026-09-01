@@ -40,6 +40,7 @@ from integral.cv_store import (
     EXPECTED_DOCUMENT_FIELDS,
     IMPORT_LOG_PARTS,
     MINIMUM_READ_CHECKS,
+    CVStoreError,
     _build_minimal_docx,
     _pypdf_forced_missing,
     acknowledge_read_problems,
@@ -234,15 +235,90 @@ def test_acknowledging_clears_the_problems_and_keeps_the_record(
     assert read_import_log(store)[0]["problem"] is not None
 
 
-def test_a_corrupt_log_reads_as_empty_rather_than_taking_intake_down(
-    store: ProfileStore,
-) -> None:
-    """A caller reaching for this is usually already mid-failure."""
+def test_a_corrupt_log_is_a_problem_rather_than_a_clean_intake(store: ProfileStore) -> None:
+    """The fail-open case, closed. Raised by review on the PR that added this.
+
+    Reading a broken log as `[]` is the right answer to "what does it contain"
+    and the wrong answer to "is there anything to report": the two are
+    indistinguishable from an empty list, and resolving them the same way
+    resolves them in the direction that certifies the step. So the read stays
+    tolerant — a caller reaching for it is usually already mid-failure — and
+    the *question* is asked separately.
+    """
     store.path(*IMPORT_LOG_PARTS).parent.mkdir(parents=True, exist_ok=True)
     store.path(*IMPORT_LOG_PARTS).write_text("{ not json", encoding="utf-8")
 
     assert read_import_log(store) == []
+    problems = unreported_read_problems(store)
+    assert len(problems) == 1
+    assert "could not be read" in problems[0]
+
+    # And it cannot be cleared by writing over it, because that would destroy
+    # the only record of what was attempted.
+    with pytest.raises(CVStoreError, match="cannot be read"):
+        acknowledge_read_problems(store)
+
+
+def test_a_corrupt_log_is_kept_when_the_next_import_starts_a_new_one(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """An import after the corruption preserves the bad file and says so."""
+    store.path(*IMPORT_LOG_PARTS).parent.mkdir(parents=True, exist_ok=True)
+    store.path(*IMPORT_LOG_PARTS).write_text("{ not json", encoding="utf-8")
+
+    import_document(store, _docx(tmp_path, "cv.docx", _READABLE_CV))
+
+    assert store.path("cv", "imports.unreadable.json").read_text(encoding="utf-8") == "{ not json"
+    log = read_import_log(store)
+    assert [record["file"] for record in log] == ["cv/imports.json", "cv.docx"]
+    assert len(unreported_read_problems(store)) == 1
+
+
+def test_acknowledging_one_file_leaves_the_others_outstanding(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Saying one of three is not saying three. Raised by review.
+
+    The all-clearing form stays, because enumerating everything is the
+    ordinary case; what it must not be is the *only* form, or a session that
+    mentions one upload silently clears the record of the other two.
+    """
+    for name in ("first.docx", "second.docx", "third.docx"):
+        import_document(store, _docx(tmp_path, name, ("Núria Bosch",)))
+    assert len(unreported_read_problems(store)) == 3
+
+    cleared = acknowledge_read_problems(store, "second.docx")
+    assert len(cleared) == 1 and cleared[0].startswith("second.docx: ")
+
+    outstanding = unreported_read_problems(store)
+    assert len(outstanding) == 2
+    assert not any(line.startswith("second.docx: ") for line in outstanding)
+
+    assert len(acknowledge_read_problems(store)) == 2
     assert unreported_read_problems(store) == []
+
+
+def test_the_log_does_not_keep_the_directory_the_document_came_from(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """A candidate's home directory is very often their name. Raised by review.
+
+    The extractor quotes the path it was handed, and this log is persisted and
+    printed back. The file name survives — it is the part that says *which*
+    document failed — and the directory does not.
+    """
+    home = tmp_path / "home" / "nuria.bosch" / "Documents"
+    home.mkdir(parents=True)
+    corrupt = home / "cv.docx"
+    corrupt.write_bytes(b"PK\x03\x04 not a zip")
+
+    result = import_document(store, corrupt)
+    assert str(home) in result.detail, "the extractor still says where it looked"
+
+    written = store.path(*IMPORT_LOG_PARTS).read_text(encoding="utf-8")
+    assert "nuria.bosch" not in written
+    assert "cv.docx" in written
+    assert all("nuria.bosch" not in line for line in unreported_read_problems(store))
 
 
 # --- and what it costs the step ---------------------------------------------
@@ -345,13 +421,25 @@ def test_the_import_log_never_carries_the_document_text(
     assert secret not in store.path(*IMPORT_LOG_PARTS).read_text(encoding="utf-8")
 
 
-def test_the_log_survives_a_reader_that_is_not_a_list(store: ProfileStore, tmp_path: Path) -> None:
-    """A hand-edited log that became an object is replaced, not appended to."""
+def test_a_log_that_is_json_but_not_a_list_is_treated_as_unreadable(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Parseable and not a log is the same failure as unparseable.
+
+    A hand-edit that turned the list into an object decodes cleanly, so the
+    `try`/`except` never fires — and a version that only guarded the decode
+    would append to `[]` and drop whatever was in the file.
+    """
     store.path(*IMPORT_LOG_PARTS).parent.mkdir(parents=True, exist_ok=True)
     store.path(*IMPORT_LOG_PARTS).write_text('{"status": "imported"}', encoding="utf-8")
 
     import_document(store, _docx(tmp_path, "cv.docx", _READABLE_CV))
-    assert [record["file"] for record in read_import_log(store)] == ["cv.docx"]
+
+    assert (
+        store.path("cv", "imports.unreadable.json").read_text(encoding="utf-8")
+        == '{"status": "imported"}'
+    )
+    assert [record["file"] for record in read_import_log(store)] == ["cv/imports.json", "cv.docx"]
 
 
 def test_zipfile_is_imported_for_the_fixtures_this_file_builds() -> None:

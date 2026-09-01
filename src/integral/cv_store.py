@@ -860,10 +860,16 @@ def read_import_log(store: ProfileStore) -> list[dict[str, Any]]:
     """Every recorded import attempt, oldest first — `[]` before the first one.
 
     A log that is not a list, or a file that is not readable JSON, reads as
-    empty rather than raising. The log is a record *about* failures; a caller
-    reaching for it is usually in the middle of one, and a corrupt log that
-    takes the whole intake down with it would be this module's own defect
-    reappearing one file over.
+    empty rather than raising: a caller reaching for this is usually already
+    in the middle of a failure, and taking the whole intake down over the
+    diagnostic file would be this module's own defect reappearing one file
+    over.
+
+    **Empty here does not mean "nothing to report".** That would be fail-open,
+    which is the shape of the original defect: a corrupt log would read as a
+    clean intake and step 1 would certify over it. `_log_is_unreadable` is the
+    separate question, `unreported_read_problems` asks it, and a log that
+    cannot be read is itself a problem to say out loud.
     """
     if not store.exists(*IMPORT_LOG_PARTS):
         return []
@@ -880,6 +886,40 @@ def read_import_log(store: ProfileStore) -> list[dict[str, Any]]:
     return [record for record in payload if isinstance(record, dict)]
 
 
+def _log_is_unreadable(store: ProfileStore) -> bool:
+    """Is there a log file that cannot be understood? Absent is not unreadable."""
+    if not store.exists(*IMPORT_LOG_PARTS):
+        return False
+    try:
+        return not isinstance(store.read_json(*IMPORT_LOG_PARTS), list)
+    except (OSError, IdentityError):
+        return True
+
+
+# Where an unreadable log is kept. Never deleted and never overwritten: it is
+# still the only record of what was attempted, and a function whose job is to
+# stop a record being lost may not be the thing that loses one.
+_UNREADABLE_LOG_PARTS = ("cv", "imports.unreadable.json")
+
+_UNREADABLE_LOG_PROBLEM = (
+    "the import log could not be read, so what was attempted before now is "
+    f"unknown; the file it held was kept at {'/'.join(_UNREADABLE_LOG_PARTS)}"
+)
+
+
+def _redacted(detail: str, path: Path) -> str:
+    """`detail` with the document's directory taken out of it.
+
+    An extractor's message quotes the path it was handed, and a candidate's
+    own home directory is very often their name. The log is persisted and the
+    checkpoint prints it, so what survives here is the file name — which is
+    the part that identifies *which* document failed, and the only part the
+    candidate needs to hear back.
+    """
+    parent = str(path.parent)
+    return detail.replace(f"{parent}{os.sep}", "").replace(parent, "")
+
+
 def _log_import(store: ProfileStore, path: Path, result: ImportResult) -> None:
     """Append one attempt to `cv/imports.json`.
 
@@ -887,8 +927,33 @@ def _log_import(store: ProfileStore, path: Path, result: ImportResult) -> None:
     "has the candidate been told" is not a question the importer can answer,
     and a record that starts life claiming it has been reported is the silence
     this exists to remove, written down.
+
+    **The known ceiling: two imports at once can lose a record.** This is a
+    read-modify-write over one file, and the last atomic replace wins. It is
+    the same envelope `import_document` already reasons about and accepts —
+    one candidate, one mostly-interactive session, no second writer in the
+    tree — and the race that actually corrupts data under concurrency, two
+    imports landing on one doc id, is closed separately by `_reserve_doc_id`.
+    An interprocess lock around the read-modify-write is the fix if a second
+    writer ever becomes real; it is named here rather than left implicit.
     """
-    log = read_import_log(store)
+    if _log_is_unreadable(store):
+        store.path(*IMPORT_LOG_PARTS).replace(store.path(*_UNREADABLE_LOG_PARTS))
+        log: list[dict[str, Any]] = [
+            {
+                "file": "/".join(IMPORT_LOG_PARTS),
+                "status": "corrupt",
+                "doc_id": None,
+                "blocks_added": 0,
+                "unextracted": [],
+                "detail": _UNREADABLE_LOG_PROBLEM,
+                "problem": _UNREADABLE_LOG_PROBLEM,
+                "reported": False,
+            }
+        ]
+    else:
+        log = read_import_log(store)
+    problem = result.problem()
     log.append(
         {
             "file": path.name,
@@ -896,8 +961,8 @@ def _log_import(store: ProfileStore, path: Path, result: ImportResult) -> None:
             "doc_id": result.doc_id,
             "blocks_added": result.blocks_added,
             "unextracted": list(result.unextracted),
-            "detail": result.detail,
-            "problem": result.problem(),
+            "detail": _redacted(result.detail, path),
+            "problem": None if problem is None else _redacted(problem, path),
             "reported": False,
         }
     )
@@ -911,30 +976,62 @@ def unreported_read_problems(store: ProfileStore) -> list[str]:
     successful import: a candidate whose second upload worked still supplied a
     first one that did not, and deciding on their behalf that it no longer
     matters is the same silence in a politer form.
+
+    A log that cannot be read is itself the first entry. It has to be: an
+    unreadable log is indistinguishable from a log of failures, and the two
+    may only be told apart by guessing in the direction that certifies the
+    step.
     """
-    return [
+    problems = []
+    if _log_is_unreadable(store):
+        problems.append(f"{'/'.join(IMPORT_LOG_PARTS)}: {_UNREADABLE_LOG_PROBLEM}")
+    problems += [
         f"{record.get('file', '(unnamed)')}: {record['problem']}"
         for record in read_import_log(store)
         if record.get("problem") and not record.get("reported")
     ]
+    return problems
 
 
-def acknowledge_read_problems(store: ProfileStore) -> list[str]:
-    """Record that every outstanding read problem has been put to the
-    candidate, and return the ones that were outstanding.
+def acknowledge_read_problems(store: ProfileStore, *files: str) -> list[str]:
+    """Record that a read problem has been put to the candidate, and return
+    what this call cleared.
 
     Called by the step-1 session *after* it has said them, not before. It is
     an admission, not a dismissal — the log keeps the record either way, and
     what changes is only whether step 1 may still be certified over it.
+
+    **Name the files you actually said.** With no arguments this clears every
+    outstanding problem, which is right when the session enumerated them all
+    and wrong the moment it mentioned one of three; naming them keeps the
+    other two holding the step open until they are said too. The all-form is
+    kept because enumerating everything is the ordinary case and a session
+    that must list two files to clear two problems it just listed is being
+    asked to say the same thing twice.
+
+    Refuses while the log is unreadable, rather than replacing it with a
+    freshly-written one: nothing can honestly report what it cannot read, and
+    rewriting the file here would destroy the only record of what was tried.
     """
-    outstanding = unreported_read_problems(store)
-    if not outstanding:
-        return []
+    if _log_is_unreadable(store):
+        raise CVStoreError(
+            f"{'/'.join(IMPORT_LOG_PARTS)} cannot be read, so there is nothing to "
+            "acknowledge against — repair or move the file first; the next import "
+            f"keeps it at {'/'.join(_UNREADABLE_LOG_PARTS)} and starts a new log"
+        )
+    wanted = set(files)
     log = read_import_log(store)
+    cleared: list[str] = []
     for record in log:
+        if not record.get("problem") or record.get("reported"):
+            continue
+        if wanted and record.get("file") not in wanted:
+            continue
         record["reported"] = True
-    _atomic_write_json(store, log, *IMPORT_LOG_PARTS)
-    return outstanding
+        cleared.append(f"{record.get('file', '(unnamed)')}: {record['problem']}")
+    if cleared:
+        _atomic_write_json(store, log, *IMPORT_LOG_PARTS)
+    return cleared
 
 
 SUPPORTED_SUFFIXES = (".docx", ".pdf")
@@ -1808,7 +1905,7 @@ DEFAULT_T97_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T97.json"
 # The floor exists for the reason every floor in this repository exists: zero
 # unreported failures over zero attempted reads is a clean number measured on
 # nothing, and it is the exact shape of the defect being fixed.
-MINIMUM_READ_CHECKS = 10
+MINIMUM_READ_CHECKS = 14
 
 # A distinctive line standing in for something the candidate wrote, so
 # `import_log_carries_document_text` is answered by looking for it rather than
@@ -1932,14 +2029,45 @@ def probe_read_reporting(root: Path) -> dict[str, Any]:
             "the import log carries the document's own text",
         )
 
+        # Saying one is not saying all: the named form must leave the rest
+        # holding the step open, or a session that mentions one failed upload
+        # silently clears the record of every other.
+        named = produced[0]["file"]
+        cleared_one = acknowledge_read_problems(store, named)
+        check(
+            len(cleared_one) == 1 and len(unreported_read_problems(store)) == len(produced) - 1,
+            f"acknowledging {named} alone cleared {len(cleared_one)} problem(s) and left "
+            f"{len(unreported_read_problems(store))} of {len(produced) - 1} outstanding",
+        )
+
         cleared = acknowledge_read_problems(store)
         check(
-            len(cleared) == len(produced) and unreported_read_problems(store) == [],
-            f"acknowledging cleared {len(cleared)} of {len(produced)} problems",
+            len(cleared) == len(produced) - 1 and unreported_read_problems(store) == [],
+            f"acknowledging cleared {len(cleared)} of the remaining {len(produced) - 1} problems",
         )
         check(
             all(record["problem"] is not None for record in produced),
             "acknowledging erased the record of what went wrong",
+        )
+
+        # A log nothing can read must not read as a clean intake — the
+        # fail-open direction, which is the one that certifies the step.
+        store.path(*IMPORT_LOG_PARTS).write_text("{ not a log", encoding="utf-8")
+        check(
+            len(unreported_read_problems(store)) == 1
+            and "could not be read" in unreported_read_problems(store)[0],
+            "an unreadable import log reported nothing to say",
+        )
+        try:
+            acknowledge_read_problems(store)
+            refused = False
+        except CVStoreError:
+            refused = True
+        check(refused, "an unreadable import log could be acknowledged away")
+        import_document(store, readable)
+        check(
+            store.exists("cv", "imports.unreadable.json"),
+            "the unreadable log was overwritten instead of kept",
         )
 
     return {

@@ -64,10 +64,13 @@ Then record that you said it:
 from integral.cv_store import acknowledge_read_problems, unreported_read_problems
 ```
 
-`unreported_read_problems(store)` is the list; `acknowledge_read_problems(store)` marks
-them told. **Until it is called, `run_checkpoint.py` will not report this step covered**
-— that is the enforcement, and it is deliberately reporting rather than repairing (T97).
-Never call it before saying them.
+`unreported_read_problems(store)` is the list. **Say every entry in it** — a candidate
+told about one of three failed uploads has been told less than they were owed — then
+`acknowledge_read_problems(store, "cv.docx")` marks the ones you named. Passing no file
+name clears all of them at once, which is right only when you enumerated all of them.
+Whatever is left unsaid stays outstanding, and **until it is cleared `run_checkpoint.py`
+will not report this step covered** — that is the enforcement, and it is deliberately
+reporting rather than repairing (T97). Never acknowledge before saying.
 
 **Never:**
 
