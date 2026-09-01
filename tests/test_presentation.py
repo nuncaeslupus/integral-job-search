@@ -146,11 +146,36 @@ def test_a_stated_salary_is_not_shown_as_unknown() -> None:
     assert "42,000 to 52,000" in _card(offer)
 
 
-def test_an_unstated_salary_is_unknown_even_when_a_number_is_present() -> None:
+def test_an_unstated_salary_never_reads_as_stated() -> None:
     """§5.2: `stated` distinguishes absent from zero. An estimate is not a claim
-    the employer made, and a card that shows it as one launders a guess."""
+    the employer made, and a card that shows it as one launders a guess.
+
+    T95 changed *how* that is honoured, not whether. Suppressing the figure to
+    `unknown` kept the guess out of the card by throwing it away, and the
+    summary is the only place the candidate actually looks — so the figure is
+    shown, marked as an estimate, with its basis beside it. What must remain
+    impossible is reading it as something the employer said.
+    """
     offer = _offer(salary=Salary(min=42000.0, currency="EUR", period="year", stated=False))
-    assert "42,000" not in _card(offer)
+    rendered = _card(offer)
+
+    assert "42,000" in rendered
+    assert presentation.ESTIMATED_MARKER in rendered
+    assert presentation.ESTIMATE_BASIS in rendered
+
+
+def test_a_stated_salary_is_not_marked_as_an_estimate() -> None:
+    """The other half: the marker is a claim about *this* figure, so it is as
+    wrong when untrue as its absence is when true."""
+    offer = _offer(salary=Salary(min=42000.0, currency="EUR", period="year", stated=True))
+
+    assert presentation.ESTIMATED_MARKER not in _card(offer)
+
+
+def test_an_unstated_salary_with_no_figure_is_still_unknown() -> None:
+    """The estimate route must not turn a silent advert into a number."""
+    offer = _offer(salary=Salary(currency="EUR", period="year", stated=False))
+
     assert UNKNOWN in _card(offer)
 
 
@@ -407,7 +432,10 @@ def test_the_page_reports_the_excluded_count_even_when_the_list_is_long() -> Non
     silence the section exists to close."""
     ranking, page = presentation._t87_page(limit=1)
 
-    assert "(1 more not shown.)" in page, "the fixture must actually truncate the cards"
+    # T95: chunked, not truncated — the wording changed because the behaviour
+    # did. What this test is about is unchanged: the excluded count is stated
+    # rather than implied by a list the card limit may have cut.
+    assert "1 more, in 1 further group(s)" in page, "the fixture must actually chunk the cards"
     assert f"{presentation.EXCLUDED_HEADING} (2)" in page
     for entry in ranking["excluded"]:
         assert entry["quote"] in page, "an exclusion was cut by the card limit"

@@ -3,6 +3,7 @@ id: t-ee6c9fd2
 title: "T95: What reaches the candidate in one turn: too few adverts, and our vocabulary"
 priority: 10
 tags: [PRESENTATION]
+status: merged
 ---
 
 Three observations about the candidate-facing surface, all from step 5.
@@ -29,10 +30,24 @@ rather than the payload.
 
 ## Acceptance gate
 
+```gate
+internal_terms_used_before_introduction == 0
+evidence: status/evidence/T95.json
+key: internal_terms_used_before_introduction
+status-key: gate_status
+```
+
 ```bash
 uv run --extra dev pytest tests/test_presentation_register.py -q
+uv run --extra dev pytest tests/test_presentation.py -q
 uv run --extra dev python -m integral.presentation
 ```
+
+`tests/test_presentation.py` is in the block because T95 changes behaviour two
+of its tests pinned: an unstated salary is now shown and marked rather than
+suppressed to `unknown`, and the page chunks rather than truncates. Both were
+updated in place with the reason, and running only the new file would hide a
+regression in the old one.
 
 - `test_a_batch_is_chunked_rather_than_truncated` — the cap is per chunk, not per
   turn.
