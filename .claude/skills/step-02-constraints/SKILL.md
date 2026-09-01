@@ -76,7 +76,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"Right — remote or Barcelona, nothing under €45k, and you'd rather not do defence work. That's already enough to search on. Carry on, or shall I show you a first pass now?"
+"Right — remote or Barcelona, nothing under €45k, and you'd rather not do defence work. That's already enough to search on. It'll be a rough list though: I'd carry on to your history first, because the stories are what turn a rough list into a good one. Carry on, or shall I show you a first pass now?"
 ```
 
 Writes `last_activity`.

@@ -1,0 +1,234 @@
+{
+  "steps_offered_without_a_recommendation": 0,
+  "steps_offered_without_a_recommendation_evaluated": 13,
+  "steps_overriding_a_decline": 0,
+  "steps_inviting_open_ended_talk": [
+    "identify",
+    "intake",
+    "history",
+    "reactions"
+  ],
+  "intake_follow_up_rule": true,
+  "intake_artefact_fields": [
+    "software and data",
+    "design and product",
+    "research and academia",
+    "teaching and training",
+    "trades, hospitality, care",
+    "writing, media, music"
+  ],
+  "intake_artefact_fallback": true,
+  "negative_controls_misjudged": 0,
+  "gate_status": "measured",
+  "offenders": [],
+  "readings": [
+    {
+      "step": "identify",
+      "n": 0,
+      "skill_dir": "step-00-identify",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"Hello again, Marcos — last time we were partway through your work history, about three weeks ago. The search is still narrowed onto employers like Acme (you accepted that in cycle 3) and still not widened outside Spain (you refused that). I'd pick your history back up first, because everything I rank with later is read out of it. Pick up there, change any of it, or something else?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": true,
+      "reasons": []
+    },
+    {
+      "step": "intake",
+      "n": 1,
+      "skill_dir": "step-01-intake",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"That's your history down — twelve years, four roles, and the Catalan I nearly missed. Next is what would rule a job out; I'd do that one now, because it's the quickest way to stop me showing you things you'd never take. Shall we?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": true,
+      "reasons": []
+    },
+    {
+      "step": "constraints",
+      "n": 2,
+      "skill_dir": "step-02-constraints",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"Right — remote or Barcelona, nothing under €45k, and you'd rather not do defence work. That's already enough to search on. It'll be a rough list though: I'd carry on to your history first, because the stories are what turn a rough list into a good one. Carry on, or shall I show you a first pass now?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    },
+    {
+      "step": "history",
+      "n": 3,
+      "skill_dir": "step-03-history",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"That's a good bank — seven episodes, and the one about the failed migration will earn its keep the first time someone asks how you handle pressure. Traits next: I'd do it while those episodes are fresh, because it reads them rather than asking you to rate yourself. Carry on?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": true,
+      "reasons": []
+    },
+    {
+      "step": "traits",
+      "n": 4,
+      "skill_dir": "step-04-traits",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"That's what I've got: you like a lot of autonomy, you're happier fixing than launching, and I don't have enough yet on how you take pressure. I'd put some real adverts in front of you next, because that's where this starts paying off — what you say about a concrete job tells me more than any of these scores. Shall I?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    },
+    {
+      "step": "reactions",
+      "n": 5,
+      "skill_dir": "step-05-reactions",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"That's telling. You didn't mention money once, and you flinched at every mention of 'fast-paced'. I'd turn that into weights next, because it's what lets me put a number on a shorter commute instead of guessing. Want to?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": true,
+      "reasons": []
+    },
+    {
+      "step": "preferences",
+      "n": 6,
+      "skill_dir": "step-06-preferences",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"So a shorter commute is worth about €200 a month to you, and remote about €600. Does that sound like you? I'd go and look at real jobs now, because the weights only prove themselves against adverts you can actually take or leave.\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    },
+    {
+      "step": "sourcing",
+      "n": 7,
+      "skill_dir": "step-07-sourcing",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"Fourteen new, six duplicates, and four have closed since last week. I'd look at them ranked rather than as a list, because the order is where the work on your preferences actually shows. Want to see them?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    },
+    {
+      "step": "understanding",
+      "n": 8,
+      "skill_dir": "step-08-understanding",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"Read the fourteen new ones. Three don't say anything about how they work, which is itself worth knowing. I'd go straight to the ranking, because reading fourteen adverts one at a time is what the order is meant to save you. Shall I?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    },
+    {
+      "step": "ranking",
+      "n": 9,
+      "skill_dir": "step-09-ranking",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"Here are the top five. The Girona one is first mostly because they say 'we don't do on-call' outright, which is worth about €400 a month to you. I'd react to a couple of these before anything else, because what you say about them is what moves the order next time. Want to?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    },
+    {
+      "step": "feedback",
+      "n": 10,
+      "skill_dir": "step-10-feedback",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"Noted — agencies out. That dropped three of them and pushed the Girona role to the top. I'd apply to the Girona one next, because it has stayed top through two rounds of your own corrections. Anything else jump out first?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    },
+    {
+      "step": "application",
+      "n": 11,
+      "skill_dir": "step-11-application",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"That's the CV and letter for the Girona role. I've led with the migration work and left out the teaching — say if that's wrong. I'd send it today rather than polish it, because the posting is already a fortnight old. Ready to send, or sit on it?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    },
+    {
+      "step": "interview_log",
+      "n": 12,
+      "skill_dir": "step-12-interview-log",
+      "skill_md_exists": true,
+      "spoken": [
+        "\"Logged. They pushed hard on on-call and you didn't have much — I'd build that into a story before the next one, because the same question comes round and you now know exactly how it lands. How did it feel?\"\n"
+      ],
+      "has_recommendation": true,
+      "has_reason": true,
+      "leaves_the_choice": true,
+      "has_when_declined": true,
+      "coercive_lines": [],
+      "invites_open_ended_talk": false,
+      "reasons": []
+    }
+  ]
+}

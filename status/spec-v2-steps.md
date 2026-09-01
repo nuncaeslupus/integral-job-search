@@ -129,10 +129,11 @@ on a first run; `session/state.json` touched on every run. The candidate sees a
 greeting naming them, the date of their last activity, and the step they stopped
 in.
 
-**Boundary.** *"Hello again, Marcos — last time we were partway through your work
-history, about three weeks ago. Pick up there, or something else?"* Writes
-`last_activity` immediately, before any other step begins, so a session that
-dies in the next minute still records that someone was here.
+**Boundary.** *"Hello again, Marcos — last time we were partway through your
+work history, about three weeks ago. I'd pick that back up first, because
+everything I rank with later is read out of it. Pick up there, or something
+else?"* Writes `last_activity` immediately, before any other step begins, so a
+session that dies in the next minute still records that someone was here.
 
 **Gate.** `cross_user_leaks == 0` — every store operation resolves paths beneath
 the identified handle, proven by pointing one profile's operations at another's
@@ -213,8 +214,9 @@ produced here** — no PDF, no DOCX. A CV written before there is an advert to
 write it for is a worse CV than step 11 produces.
 
 **Boundary.** *"That's your history down — twelve years, four roles, and the
-Catalan I nearly missed. Next is what would rule a job out — the quickest way to
-stop me showing you things you'd never take. Shall we?"* Writes `last_activity`.
+Catalan I nearly missed. Next is what would rule a job out; I'd do that one
+now, because it's the quickest way to stop me showing you things you'd never
+take. Shall we?"* Writes `last_activity`.
 
 **Gate.** `intake_field_provenance == 1.0` — every field in `master.json` names
 where it came from: a document span, or the turn in which it was said. A field
@@ -285,11 +287,12 @@ which nothing filters, and the ranking that follows says so.
 answer. The candidate sees a summary they can correct in place, with unknowns
 listed as unknowns rather than hidden.
 
-**Boundary.** *"Right — remote or Barcelona, nothing under €45k, and you'd rather
-not do defence work. That's already enough to search on. It'll be a rough list
-though: the next few steps are what turn it into a good one. Carry on, or shall
-I show you a first pass now?"* — the shortcut offered honestly, with what it
-costs. Writes `last_activity`.
+**Boundary.** *"Right — remote or Barcelona, nothing under €45k, and you'd
+rather not do defence work. That's already enough to search on. It'll be a
+rough list though: I'd carry on to your history first, because the stories are
+what turn a rough list into a good one. Carry on, or shall I show you a first
+pass now?"* — the shortcut offered honestly, with what it costs. Writes
+`last_activity`.
 
 **Pre-sourcing starts here.** Once country, field and reach are settled, the
 work of reaching sources can begin **in the background while the conversation
@@ -361,10 +364,11 @@ broken. Say that once, in a sentence, and drop it.
 evidences), evidence rows including trait evidence. The candidate sees their own
 episodes written back, in their words.
 
-**Boundary.** *"That's a good bank — seven episodes, and the one about the failed
-migration will earn its keep the first time someone asks how you handle pressure.
-Traits next, which is where those stories turn into something I can match on.
-Carry on?"* Writes `last_activity`.
+**Boundary.** *"That's a good bank — seven episodes, and the one about the
+failed migration will earn its keep the first time someone asks how you handle
+pressure. Traits next: I'd do it while those episodes are fresh, because it
+reads them rather than asking you to rate yourself. Carry on?"* Writes
+`last_activity`.
 
 **Gate.** `story_dimension_linkage == 1.0` — every episode links to at least one
 dimension id, so the bank is queryable rather than a pile of prose. Owner: T8.
@@ -439,10 +443,11 @@ they work, each line traceable to something they said — and phrased so it coul
 survive into a letter if they chose: *"works well under pressure"* is a claim an
 employer understands, `stress_tolerance: 0.72` is not.
 
-**Boundary.** *"That's what I've got: you like a lot of autonomy, you're happier
-fixing than launching, and I don't have enough yet on how you take pressure.
-Next I'll put some real adverts in front of you and see what you make of them —
-that's where this starts paying off."* Writes `last_activity`.
+**Boundary.** *"That's what I've got: you like a lot of autonomy, you're
+happier fixing than launching, and I don't have enough yet on how you take
+pressure. I'd put some real adverts in front of you next, because that's where
+this starts paying off — what you say about a concrete job tells me more than
+any of these scores. Shall I?"* Writes `last_activity`.
 
 **Gate.** `trait_evidence_sufficiency == 1.0` — every trait carries either a
 score backed by ≥2 independent episodes or `insufficient` with its count. A
@@ -507,8 +512,8 @@ The candidate sees the first read of what their reactions imply — the earliest
 point at which the tool tells them something about themselves.
 
 **Boundary.** *"That's telling. You didn't mention money once, and you flinched
-at every mention of 'fast-paced'. Want to turn that into weights? It's what lets
-me put a number on a shorter commute."*
+at every mention of 'fast-paced'. I'd turn that into weights next, because it's
+what lets me put a number on a shorter commute instead of guessing. Want to?"*
 Writes `last_activity`.
 
 **Gate.** `elicitation_eval_overlap == 0` — no advert used to elicit preferences
@@ -569,8 +574,9 @@ terms, in the candidate's currency). The candidate sees an ordered list of what
 each dimension is worth per month.
 
 **Boundary.** *"So a shorter commute is worth about €200 a month to you, and
-remote about €600. Does that sound like you? We can look at real jobs now."*
-Writes `last_activity`.
+remote about €600. Does that sound like you? I'd go and look at real jobs now,
+because the weights only prove themselves against adverts you can actually take
+or leave."* Writes `last_activity`.
 
 **Gate.** `weight_salary_equivalent_roundtrip_error <= 0.01` — converting a
 dimension to currency and back recovers the part-worth within 1%, so the number
@@ -654,7 +660,9 @@ updates, expiry marks on offers no longer live at source. The candidate sees a
 count: what arrived, what duplicated, what expired, what was retired.
 
 **Boundary.** *"Fourteen new, six duplicates, and four have closed since last
-week. Want to see the new ones ranked?"* Writes `last_activity`.
+week. I'd look at them ranked rather than as a list, because the order is where
+the work on your preferences actually shows. Want to see them?"* Writes
+`last_activity`.
 
 **Gate.** `offer_schema_violations == 0`, with `dedup_precision >= 0.95` (T13)
 alongside. Owner: T11. State: `not_implemented`.
@@ -735,9 +743,11 @@ read against *this* candidate's constraints, derived and never shared.
 The candidate sees, per offer, what it was found to say — and what it did not
 say, which is not the same as saying no.
 
-**Boundary.** Usually silent, folded into step 9's presentation. When run alone:
-*"Read the fourteen new ones. Three don't say anything about how they work,
-which is itself worth knowing."* Writes `last_activity`.
+**Boundary.** Usually silent, folded into step 9's presentation. When run
+alone: *"Read the fourteen new ones. Three don't say anything about how they
+work, which is itself worth knowing. I'd go straight to the ranking, because
+reading fourteen adverts one at a time is what the order is meant to save you.
+Shall I?"* Writes `last_activity`.
 
 **Gate.** `extraction_macro_f1 >= 0.75` on the evaluation split, with
 `extraction_negation_recall >= 0.80` (T16) and `ontology_hit_rate >= 0.85`
@@ -806,7 +816,9 @@ its reasons.
 
 **Boundary.** *"Here are the top five. The Girona one is first mostly because
 they say 'we don't do on-call' outright, which is worth about €400 a month to
-you. Want to react to any of these?"* Writes `last_activity`.
+you. I'd react to a couple of these before anything else, because what you say
+about them is what moves the order next time. Want to?"* Writes
+`last_activity`.
 
 **Gate.** `explained_fraction == 1.0` — every ranked offer cites at least one
 verbatim span per contributing dimension, computed over the frontier T18
@@ -871,7 +883,9 @@ changes with `status_changed_at`; a recomputed ranking. The candidate sees the
 re-ordered list and a plain statement of what changed and why.
 
 **Boundary.** *"Noted — agencies out. That dropped three of them and pushed the
-Girona role to the top. Anything else jump out?"* Writes `last_activity`.
+Girona role to the top. I'd apply to the Girona one next, because it has stayed
+top through two rounds of your own corrections. Anything else jump out first?"*
+Writes `last_activity`.
 
 **Gate.** `feedback_traceability == 1.0` — every derived value names the evidence
 rows that produced it, so "the ranking changed because you said X" is checkable
@@ -946,8 +960,9 @@ a manifest of which store entries each claim came from. On send,
 thereafter. Offer status moves to `applied`.
 
 **Boundary.** *"That's the CV and letter for the Girona role. I've led with the
-migration work and left out the teaching — say if that's wrong. Ready to send,
-or sit on it?"* Writes `last_activity`.
+migration work and left out the teaching — say if that's wrong. I'd send it
+today rather than polish it, because the posting is already a fortnight old.
+Ready to send, or sit on it?"* Writes `last_activity`.
 
 **Gate.** `cv_generation_traceability == 1.0` — the fraction of claims in a
 generated document tracing to a specific store entry. Anything less is the tool
@@ -1025,7 +1040,8 @@ The candidate sees, beforehand, what to rehearse; afterwards, what to carry into
 the next one.
 
 **Boundary.** *"Logged. They pushed hard on on-call and you didn't have much —
-worth building that into a story before the next one. How did it feel?"* Writes
+I'd build that into a story before the next one, because the same question
+comes round and you now know exactly how it lands. How did it feel?"* Writes
 `last_activity`.
 
 **Gate.** `interview_lesson_linkage == 1.0` — every logged interview produces at
