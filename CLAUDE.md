@@ -237,7 +237,9 @@ count excludes. The script runs the host gate **twice** — once before the arch
 would have to hold two different values at once. Measured here on 2026-09-01,
 against the vendored v3.2.0 script:
 
-    pre-archive = 615    post-archive = 614
+```text
+pre-archive = 615    post-archive = 614
+```
 
 The v3.1.14 changelog states the gate "now runs once, over the archived tree",
 and that the failure message advising you to account for `_history/` "is gone".
