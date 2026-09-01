@@ -1,130 +1,108 @@
-# Session handover — 2026-08-30 ~23:55 UTC, interactive, laptop
+# Session handover — 2026-09-01 ~18:25 UTC, interactive, laptop
 
-Board: **116 gates on `main`** (`eb4e9a0`). `make host-gate` exit 0: ruff clean,
-strict mypy over 172 files, 1878 tests, `evidence: no drift`,
-`verify-gates: 116 terminal task(s); 116 gate(s) asserted, 0 carry no fenced
-gate block`.
+Board: **119 merged of 144** on `main` (`355b1b7`), 17 open, 5 claimed with a
+PR open. `make host-gate` exit 0 on every branch below.
 
-This was a **live candidate session**, with the owner stepping out of character
-to direct connector work. Everything below came out of that: the library grew
-because the search kept failing for reasons the candidate could name, and each
-round was built to answer the last one's failure.
-
-Nothing identifying the candidate is recorded here. That is not discretion, it
-is the rule — identity, history and stated constraints live in the local profile
-store, and a document committed to a public repository keeps whatever it says
-forever. An earlier draft of this file named the person, their last employer and
-when they were laid off; **caught by review on the PR that added it**, which is
-the argument for having the rule rather than the judgement.
+Nothing identifying the candidate is recorded here, and nothing should be. That
+is the rule rather than discretion: identity, history and stated constraints
+live in the local profile store, and a document in a public repository keeps
+whatever it says forever.
 
 ## What landed
 
-**[#259](https://github.com/nuncaeslupus/integral-job-search/pull/259) —
-connectors can read JSON, and eleven new packages.** Merged.
+| Task | PR | What it fixed |
+|---|---|---|
+| T97 | #282 | Step 1 could not read the CV and carried on. An import log, a partial-read field, and coverage held open until the failure is said out loud |
+| T73 | #283 | A 429 or a block page read as parser rot, so our own rate limiting retired working boards. Third verdict `inconclusive` |
+| T90 | #285 | A stated exclusion reached only the ranking, so a demoted advert still arrived. It reaches the query now, and accumulates |
+| T100 | #284 | `T55.files_scanned` committed as an exact value; the archive moved it, so `open_task_pr.sh` could not open a PR without hand surgery. It is a floor now |
 
-`integral.connectors` gained a `from_json` block, alternative to `item`/`fields`
-and never alongside it: an optional `embedded_in` selector naming the element
-whose text is the document (omit it and the response body *is* JSON), a `match`
-that picks the right document when a page serves several, `items` for the list
-page's array, and one dotted path per field. The path grammar is as small as
-the selector grammar — dotted keys, no indices, no wildcards, no filters, plus
-the literal `$` for a document that is itself the array. `json.loads` is the
-only parser and nothing is evaluated.
+## Open, green, waiting on review
 
-The reason it was worth building is `Salary`. `build_offer` turns any salary key
-into `Salary(stated=True)`, and **six** HTML connectors here leave salary
-deliberately unmapped because their board prints it as one unsplittable string.
-A JSON number needs no splitting. `dig` is written to match: a path landing on
-an object or an array counts as *no value*, never `str({...})`.
+`merge-policy = after-review`, and **CodeRabbit has produced nothing since
+16:16 UTC** — no review and no rate-limit comment, on four PRs, including after
+an explicit `@coderabbitai review`. `references/pr-review-loop.md` says treat
+that as the vendor's clock, check back slowly, and never merge past the policy.
+None of these has had a first review, so none has cleared the bar.
 
-Eleven packages shipped with it: `arbeitnow_en`, `builtin_en`, `infojobs_es`,
-`jobfluent_es`, `jobsacuk_en`, `pythonorg_en`, `remotive_en`, `tecnoempleo_es`,
-`ticjob_es`, `wellfound_en`, `weworkremotely_en`. The library was two packages
-before today.
+| PR | Task | Note |
+|---|---|---|
+| #286 | T83 — attribution register | `docs/METHODS.md` §2.9, fourteen rows, README Acknowledgements |
+| #287 | T96 — monotone dimensions | proved T100: opened with **no workaround at all** |
+| #289 | T99 — policy refusals | **needs the owner's decision, not a review** — see below |
+| #290 | T95 — chunking and register | changes two `test_presentation.py` tests deliberately |
 
-Two smaller changes rode along, both forced by the above:
+## #289 is not waiting on a bot
 
-- `connector_health.free_signals` now asks whether a field the connector
-  **declared** came back empty. justjoin.it's listing is an index of URLs, so
-  "company is null on every row" marked it broken on the day it was written.
-- T55's old-name sweep exempts `connectors/*/fixture/` and `connectors/*/probe/`.
-  Remotive serves a stylesheet and a blog tag whose own URLs happen to contain
-  this repository's former name; editing a capture so it stops saying so would
-  falsify what the fixture proves. (Quoting those two URLs here would trip the
-  same sweep on this file, which is the exemption's argument in miniature.)
+T99's whole diagnosis is that a policy removing boards from a candidate's reach
+was written by the implementing session on its own judgement and never put to
+the owner. Merging it on `after-review` would repeat that exactly.
 
-## What is open
+The owner's position is on record, quoted in the task file, and
+`ruled-out.yaml`'s **own header** already said the same thing two hundred lines
+above the entry contradicting it — *"those bans target bulk training crawls; a
+connector is one candidate's search."* Nothing could see the contradiction
+because the header also said "Nothing reads this file", which was true until
+this PR.
 
-**[#260](https://github.com/nuncaeslupus/integral-job-search/pull/260) — four
-JSON-reading packages. Draft, and the draft is the point.**
+Applied as: the remoteok entry narrowed from **access** to **volume**, recording
+`decided_by: owner`, `decided_on: 2026-08-31`, and the owner's words. It builds
+no connector and is not a finding that remoteok should be read. **If the owner
+reads it the other way, one commit inverts it** — the gate measures the record,
+not the verdict.
 
-`himalayas_en`, `justjoin_en`, `nofluffjobs_en`, `workingnomads_en`. All four
-pass `check_package` with no violations. They are not merged because
-`connector_health`'s gate reads `measured` only when **every** connector has a
-probe, and a probe is the *second* capture of the same query taken on a **later
-day**. A package written today cannot carry one, so merging it parks T72's gate
-and `verify_gates` then reports T72 as a merged task that cannot show its
-measurement.
+## Two findings filed rather than worked around
 
-**To finish it: capture the four probes, `make evidence`, mark ready.** Nothing
-else about the branch should need to change.
+- **#274 (closed by #284)** carries the workaround and its retirement, with
+  three data points: #282, #283 and #286 needed the `git mv` dance; #287 did
+  not.
+- **#288 is open and unclaimed.** Every open task PR goes stale on `D12.json`
+  the moment any other task PR merges — CI checks the *merge* ref and D12 counts
+  gate blocks. It is quadratic in open PRs, restarts the review bot each time,
+  and cost more session time today than any single review finding. Four possible
+  shapes are listed; none is picked, because the choice is about what D12's
+  drift check is for.
 
-### Owed first — an independent adversarial pass on `dig` / `compile_path`
+## Review findings this session — seven, six accepted
 
-CLAUDE.md requires fixtures for a correctness-critical gate to be written by a
-session **other than the implementer**, and a JSON path resolver is exactly the
-parser family that rule names. #259 was safe to merge without it because no
-connector on that branch used `from_json`. **The four on #260 do**, so the audit
-blocks that branch, not the engine.
+Every accepted case was committed as a fixture, never answered only in a
+comment. Denominators rose: 57→60 tests on T73, 13→16 on T90, 23→24 on T100.
 
-The argument for it was already made once, on #259: review found that
-`_json_documents` read embedded documents through `Node.text_content()`, which
-collapses runs of whitespace *inside* JSON string values — silently reflowing
-every advert body the route parsed, and shifting every extraction offset past
-the first collapsed run. `Node.raw_text()` fixes it. That was a fail-open bug
-behind a green gate, found by a second reader, which is the whole thesis.
+Two are worth carrying forward because both are the reviewed task's own subject
+turned on itself:
 
-Whoever does it should read schema.org's `JobPosting` and the module docstring
-**first**, derive cases from that text before opening the implementation, and
-weight fail-open over fail-closed.
+- **T100's `_main` accepted zero sensitive keys without asking whether anything
+  had been compared** — a denominator nobody read, inside the fix for a
+  denominator nobody asserted.
+- **T90's probe counted one presentation twice**, clearing its own floor with
+  the duplicate, three lines below the comment forbidding exactly that.
 
-## What the searches measured, since it drove all of the above
+The one rejected finding claimed `D12.gates_declaring_status_key` disagreed with
+its own array; it was counted from the diff hunk rather than the file. 23 and 23.
 
-**No candidate detail belongs in this file** — identity, history and stated
-constraints live in the local profile store, and a document committed to a
-public repository keeps whatever it says forever. What follows is about the
-*tool*, and every figure is a count over adverts.
+## Known holes, named on the record
 
-Four searches ran, each narrowed by what the previous one surfaced:
+- **T73's block-page markers are English-only** and this library is ES/CA-facing.
+  A Spanish challenge page is a live fail-open. Recorded in `METHODS.md` §2.9's
+  limits column, not just in a PR comment.
+- **#264** (getmanfred connector) and **#260** (four JSON packages) are still
+  draft and still blocked on an adversarial audit by a session other than the
+  implementer. This session implemented neither, but has now implemented enough
+  of the surrounding library that a fresh session is the cleaner reader.
 
-| round | scope | harvested | survivors | priced |
-|---|---|---|---|---|
-| 1 | Spanish boards | 535 | 78 | 2 |
-| 2 | foreign boards | 875 | 29 | 1 reachable |
-| 3 | "agentic Python" | 1005 | 17 | 4 |
-| 4 | JSON sources + US | 2755 | 28 | 9 |
+## Still undelivered to the candidate, in Spanish
 
-Three findings worth keeping:
+The round-4 report (US vs EUR salary comparison; the Deel Analytics Engineer
+role), and the Manfred finding: *Senior Python Engineer*, Law Business Research
+(Centellic), €50,000–60,000, 100% remote, Spain, AI-first architecture.
 
-- **Salary silence is the binding constraint, not salary level.** Round 3 added
-  the rule that an advert with no salary, and no cheap way to approximate one,
-  is not shown. It removed 13 of 17 survivors. The approximation ladder that
-  earned its keep: the advert, the board's own salary field, the same advert on
-  another board, another advert from the same employer — reported with *which*
-  answered, because a figure from a sibling advert is a weaker claim.
-- **Measured, not asserted: 213 USD adverts carrying a band, median
-  $125,000–$160,000, and 117 of 213 are US/Canada-restricted.** EUR: 4 adverts,
-  median €61,654–€94,205. The US pays more and mostly cannot pay *here* — of
-  fifteen foreign adverts opened in round 2, four said contractor/B2B outright
-  and one said full-time.
-- **Two filter defects, both found by reading results rather than code.** A
-  gambling veto that misses slot-machine firms because their adverts never say
-  "casino", and a body-shop name list that had swallowed a payroll *platform* —
-  a company whose product is employment is not a company that rents engineers
-  out, and the entry was filtering out that firm's own engineering post.
+## Environment notes that cost time to rediscover
 
-## Ready for the next session
-
-`arsenal/tasks/` untouched; no task was claimed and none released. The
-connector work above was not a queued task and did not pretend to be one — if it
-should become one, seed it from #260 rather than from this file.
+- `open_task_pr.sh` needs **no workaround** since T100. If a task PR fails on
+  evidence drift, the finding is that something *new* is archive-sensitive, and
+  `status/evidence/T100.json` names it.
+- A task file with no ```gate``` block needs one before its PR, and the key must
+  already exist in the evidence file.
+- An acceptance ` ```bash ` block that does not name the module writing the
+  metric regenerates nothing. Three of this session's five tasks shipped with
+  that line missing from the task file; each was corrected in its own PR.
