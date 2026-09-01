@@ -42,6 +42,12 @@ the input that would make a regex report a violation that is not there.
 
 ## Acceptance gate
 
+```gate
+ci_targets_missing_from_makefile == 0
+evidence: status/evidence/D-22.json
+key: ci_targets_missing_from_makefile
+```
+
 ```bash
 uv run --extra dev pytest tests/test_repo_gate.py -q
 uv run --extra dev python -m integral.repo_gate
