@@ -210,14 +210,15 @@ Three more costs, each measured here:
 
 ## Known environment state
 
-**GitHub Actions is out of runner minutes until the next billing period** (noted
-2026-08-19). Every job fails in 3–5 seconds with `runner_id: 0` and an empty
-`runner_name` — no runner is ever assigned — on `main` as much as any branch, so it
-is not caused by any diff. Do not treat a red CI here as a signal about the code,
-and do not push speculative fixes for it. Diagnose once: `runner_id: 0` plus a
-sub-5-second duration means this. Remove this section once runs show real durations.
+**GitHub Actions has runner minutes again** (measured 2026-09-01: runs complete in
+~56 seconds with real conclusions). From 2026-08-19 until then every job failed in
+3–5 seconds with `runner_id: 0`, and this section told sessions that a red CI here
+said nothing about the code. That was true, and it cost something: the first run
+with a real conclusion found a job that had been failing since #123 for its own
+reasons, invisible for as long as everything failed. **A red CI is a signal
+again.** Read it.
 
-**Run the gate locally instead.** These are what CI would run, and all four must
+**Run the gate locally as well.** These are what CI runs, and all four must
 pass before a merge:
 
 ```bash
@@ -228,17 +229,34 @@ make evidence       # regenerate every measurement, fail on drift
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
-**One drift is not yours: `T55.files_scanned` moves by one on every task PR.**
-`open_task_pr.sh` runs the host gate, *then* archives the task file into the
-allowlisted `arsenal/tasks/_history/`, then commits — so the committed count was
-measured one file before the tree it ships with, and the PR it opens carries the
-stale count.
+**`open_task_pr.sh` cannot open a PR in this repo, and bundle v3.2.0 did not fix
+that — it only says it did.** `T55.files_scanned` counts files under
+`arsenal/tasks/` and the archive moves one of them into `_history/`, which the
+count excludes. The script runs the host gate **twice** — once before the archive
+(`open_task_pr.sh:227`) and once after it (`:627`) — so the committed evidence
+would have to hold two different values at once. Measured here on 2026-09-01,
+against the vendored v3.2.0 script:
 
-The script has already committed by the time you see it, so this is a **second
-commit on the branch it left you on**, not an amend: `make host-gate` regenerates
-the number, then `git add -A && git commit && git push` before the review lands.
-The squash merge folds it in. Do not go looking for a cause in the diff
-(`claude-arsenal#220`).
+```text
+pre-archive = 615    post-archive = 614
+```
+
+The v3.1.14 changelog states the gate "now runs once, over the archived tree",
+and that the failure message advising you to account for `_history/` "is gone".
+Both `bash -c "${host_gate}"` calls are still there and that sentence is still at
+`:636` (`claude-arsenal#336`). **Do not trust the entry over the file** — this one
+was believed here for the length of one pull request.
+
+So: **open the PR by hand** (`gh pr create`), and archive the task file yourself
+in the same commit. Every PR since #257 was opened this way.
+
+The repair that is ours rather than upstream's is that `files_scanned` should
+never have been committed as an exact value. It is a denominator, not a
+measurement — it exists to stop a clean zero resting on an empty scan, and a
+**floor** does that job without moving. (Counting `_history/` instead would make
+the number archive-invariant and immediately break `old_name_references == 0`:
+archived rows legitimately carry the old name, which is why `naming.py:99`
+allowlists that directory.) That is **T100**.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is

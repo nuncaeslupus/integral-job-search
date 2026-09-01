@@ -2,8 +2,9 @@
 
 `CLAUDE.md` says all four must pass before a merge — lint, test, evidence and
 verify-gates. Nothing ran them. PR #89 fell through three holes
-at once: GitHub Actions has had no runner minutes since 2026-08-19 (so `ci.yml`
-enforces nothing today), `open_task_pr.sh` re-runs the *payload* gate and never
+at once: GitHub Actions had no runner minutes from 2026-08-19 (so `ci.yml`
+enforced nothing while that lasted; runners returned 2026-09-01),
+`open_task_pr.sh` re-runs the *payload* gate and never
 asks whether the repo gate passed, and `keyword-guard` only fires on
 `arsenal/**` branches. They ran on #89 because a person asked, and `make
 test` then failed on nine violations that would otherwise have merged.
