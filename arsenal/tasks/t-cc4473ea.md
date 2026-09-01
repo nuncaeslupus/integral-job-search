@@ -10,6 +10,27 @@ tags: [v3, m5]
 
 # D-23: Gate accuracy over real adverts is unmeasured — no corpus labels exist
 
+## Where the labelled adverts may not come from
+
+The live session of 2026-08-29/30 harvested roughly **2,755 adverts** across four
+rounds, and landing them here would look like the cheapest possible unblock.
+
+**They are the wrong sample, and the owner ruled so on 2026-09-01.** Those rows
+are the shape of one person's queries, exclusions and language mix. An accuracy
+figure computed over them describes the gate's behaviour for that person, and it
+would be quoted as the gate's accuracy. This has to stay a generic tool.
+
+The connector library, which did not exist when this divergence was filed, is the
+replacement: a corpus drawn **by specification** — job families, languages,
+regions — with no candidate in the loop, and redrawable, which a one-off harvest
+never is. It can also be enriched for the four labels this task actually needs
+(permit, citizenship, clearance, role-language) where a harvest contains whatever
+it happens to contain. One measurement from the session says the enrichment is
+worth doing: 117 of 213 USD adverts carrying a band were US/Canada-restricted.
+
+The draw mechanism and the provenance rule are **T98**; this task consumes them
+and labels. Neither may read a row whose provenance is a candidate session.
+
 ## Acceptance gate
 
 ```gate
