@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 122,
-  "gates_declaring_status_key": 21,
+  "evidence_gates_read": 123,
+  "gates_declaring_status_key": 22,
   "unrecordable": [],
   "readings": [
     {
@@ -763,6 +763,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-52bb1ec0",
+      "key": "rate_limited_runs_reported_as_broken",
+      "evidence": "status/evidence/T73.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-570404b2",

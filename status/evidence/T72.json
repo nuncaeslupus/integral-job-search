@@ -3,6 +3,7 @@
   "connector_runs_evaluated": 12,
   "silent_connector_failures_evaluated": 12,
   "connector_runs_probed": 12,
+  "disabled": [],
   "gate_status": "measured",
   "readings": [
     {
@@ -13,7 +14,8 @@
       "probe_items": 6,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "builtin",
@@ -23,7 +25,8 @@
       "probe_items": 3,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "infojobs",
@@ -33,7 +36,8 @@
       "probe_items": 3,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "jobfluent",
@@ -43,7 +47,8 @@
       "probe_items": 3,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "jobsacuk",
@@ -53,7 +58,8 @@
       "probe_items": 25,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "pythonorg",
@@ -63,7 +69,8 @@
       "probe_items": 25,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "remotive",
@@ -73,7 +80,8 @@
       "probe_items": 18,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "tecnoempleo",
@@ -83,7 +91,8 @@
       "probe_items": 3,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "ticjob",
@@ -93,7 +102,8 @@
       "probe_items": 3,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "trabajos",
@@ -103,7 +113,8 @@
       "probe_items": 40,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-28"
+      "probe_captured_at": "2026-08-28",
+      "rate_limited": null
     },
     {
       "connector": "wellfound",
@@ -113,7 +124,8 @@
       "probe_items": 3,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     },
     {
       "connector": "weworkremotely",
@@ -123,7 +135,8 @@
       "probe_items": 25,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30"
+      "probe_captured_at": "2026-08-30",
+      "rate_limited": null
     }
   ]
 }
