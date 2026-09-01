@@ -60,8 +60,9 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -110,6 +111,11 @@ class BankEntry(Strict):
     dimension_id: DimensionId
     question_id: DimensionId
     order: int = Field(ge=0)
+    #: Carried through from `Question.form`, so a consumer walking the bank can
+    #: see how an item is put without reloading the dimension model — and so
+    #: `measure_monotone` can check the bank itself rather than only the files
+    #: it was built from.
+    form: Literal["narrative", "level_rating", "trade_off"] = "narrative"
     text: LocalisedText
 
     def resolves(self, dimension_ids: set[str]) -> bool:
@@ -161,11 +167,148 @@ def build_bank(dimensions: list[Dimension]) -> QuestionBank:
                     dimension_id=dimension.id,
                     question_id=question.id,
                     order=order,
+                    form=question.form,
                     text=question.text,
                 )
             )
             order += 1
     return QuestionBank(entries=tuple(entries), dimension_count=len(dimensions))
+
+
+#: T96. Quantities where, everything else equal, more is never worse, and
+#: which are **not** `dimensions/*.yaml` files. Pay is the case the candidate
+#: reported — *"7 is weird. Given the same job, always better more money."* —
+#: and it has no dimension file because it is not a soft dimension at all: it
+#: is a currency amount, carried by `weights.Package.salary_per_month`.
+#:
+#: Without this register the rule would be true of nothing that was actually
+#: asked. A dimension file joins the set by declaring `monotone: true`.
+MONOTONE_ELICITABLES: frozenset[str] = frozenset({"salary"})
+
+#: Where each of those is elicited instead. Not decoration: forbidding the
+#: level rating without naming the replacement is how a dimension stops being
+#: elicited at all, and `trade_off_route` is what a test can hold to it.
+_TRADE_OFF_ROUTES: dict[str, str] = {
+    "salary": (
+        "integral.weights — forced pairwise choice between two whole packages, "
+        "each priced, fitted to part-worths in salary-equivalent terms"
+    ),
+}
+
+
+def trade_off_route(elicitable: str) -> str | None:
+    """How this monotone quantity *is* asked, or `None` if nothing asks it."""
+    return _TRADE_OFF_ROUTES.get(elicitable)
+
+
+def monotone_ids(
+    dimensions: list[Dimension], elicitables: frozenset[str] = MONOTONE_ELICITABLES
+) -> frozenset[str]:
+    """Everything monotone: the register, plus every dimension declaring it."""
+    return elicitables | {d.id for d in dimensions if d.monotone}
+
+
+class Answer(Strict):
+    """One recorded response to a bank item."""
+
+    bank_id: str = Field(min_length=3)
+    value: float
+
+
+def answers_for_the_fit(
+    answers: Sequence[Answer],
+    bank: QuestionBank,
+    elicitables: frozenset[str] = MONOTONE_ELICITABLES,
+) -> tuple[Answer, ...]:
+    """The answers a fit may read. Two kinds are dropped, for one reason.
+
+    An answer to a `bank_id` the bank no longer carries is answering a retired
+    item, and retirement is what happens to a malformed one — keeping it would
+    let the question go on shaping weights after it was withdrawn. And an
+    answer to a level rating on a monotone quantity is noise however recently
+    it was given, because the question had no coherent answer at the moment it
+    was asked.
+
+    The second check is belt to the first's braces: `Dimension` already
+    refuses to define such an item. This is what holds if one ever reaches a
+    bank by another route, the same way `QuestionBank` re-checks duplicate ids
+    that `build_bank` should already have prevented.
+    """
+    monotone = elicitables | {
+        entry.dimension_id
+        for entry in bank.entries
+        if entry.dimension_id in elicitables
+    }
+    live = {
+        entry.bank_id: entry
+        for entry in bank.entries
+        if not (entry.form == "level_rating" and entry.dimension_id in monotone)
+    }
+    return tuple(answer for answer in answers if answer.bank_id in live)
+
+
+def level_rating_items(
+    bank: QuestionBank,
+    dimensions: list[Dimension],
+    elicitables: frozenset[str] = MONOTONE_ELICITABLES,
+) -> list[str]:
+    """Bank items asking a monotone quantity for a level rating."""
+    monotone = monotone_ids(dimensions, elicitables)
+    return [
+        entry.bank_id
+        for entry in bank.entries
+        if entry.form == "level_rating" and entry.dimension_id in monotone
+    ]
+
+
+def measure_monotone(
+    dimensions: list[Dimension],
+    *,
+    bank: QuestionBank | None = None,
+    elicitables: frozenset[str] = MONOTONE_ELICITABLES,
+) -> dict[str, Any]:
+    """T96's gate: `monotone_dimensions_asked_as_level_ratings`.
+
+    The denominator is every bank item put through the check plus every
+    monotone quantity considered, because a rule true of nothing is true. A
+    monotone quantity with no trade-off route counts as a violation too — the
+    rule deletes a question, and deleting it without a replacement leaves the
+    dimension unasked, which is a quieter version of the same fault.
+    """
+    bank = build_bank(dimensions) if bank is None else bank
+    offending = level_rating_items(bank, dimensions, elicitables)
+    monotone = monotone_ids(dimensions, elicitables)
+    unrouted = [
+        elicitable
+        for elicitable in sorted(elicitables)
+        if trade_off_route(elicitable) is None
+    ]
+    checked = len(bank.entries) + len(monotone)
+    return {
+        "monotone_dimensions_asked_as_level_ratings": len(offending) + len(unrouted),
+        # Both names, as every gate in this increment carries.
+        "monotone_dimensions_asked_as_level_ratings_evaluated": checked,
+        "items_checked": checked,
+        "monotone_elicitables_checked": len(monotone),
+        "gate_status": "measured" if checked else "unmeasured",
+        "monotone": sorted(monotone),
+        "offending_items": offending,
+        "elicitables_with_no_trade_off_route": unrouted,
+    }
+
+
+DEFAULT_MONOTONE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T96.json"
+
+
+def write_monotone_evidence(
+    evidence: Path = DEFAULT_MONOTONE_EVIDENCE_PATH,
+    dimensions: list[Dimension] | None = None,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T96.json`."""
+    measured = measure_monotone(load_dimensions() if dimensions is None else dimensions)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
 
 
 def unresolved_dimension_ids(bank: QuestionBank, dimensions: list[Dimension]) -> list[str]:
@@ -409,7 +552,31 @@ def _main(argv: list[str]) -> int:
         )
         return 3
 
+    # T96's record, beside T7's — one walk of the model, two questions of it:
+    # whether every dimension has a question, and whether any of those
+    # questions has a coherent answer. Written wherever T7's was asked for, so
+    # a caller redirecting one to a scratch directory is not asking to have
+    # the other written into the repository.
+    monotone = (
+        measure_monotone(load_dimensions(directory))
+        if args.check
+        else write_monotone_evidence(
+            Path(args.write_evidence).parent / "T96.json", load_dimensions(directory)
+        )
+    )
+
     violations: list[str] = []
+    violations.extend(
+        f"monotone and asked as a level rating: {bank_id} — one end of the scale is "
+        "incoherent, so the answer is noise. Ask what it is worth in terms of "
+        "something else"
+        for bank_id in monotone["offending_items"]
+    )
+    violations.extend(
+        f"{elicitable} is monotone and nothing elicits it as a trade-off — the level "
+        "rating is refused and no replacement is declared"
+        for elicitable in monotone["elicitables_with_no_trade_off_route"]
+    )
     if measured["question_dimension_coverage"] != 1.0:
         violations.append(
             f"question_dimension_coverage = {measured['question_dimension_coverage']} (want 1.0)"

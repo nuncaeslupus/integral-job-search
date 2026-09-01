@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 125,
-  "gates_declaring_status_key": 24,
+  "evidence_gates_read": 126,
+  "gates_declaring_status_key": 25,
   "unrecordable": [],
   "readings": [
     {
@@ -939,6 +939,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-c36b3722",
+      "key": "monotone_dimensions_asked_as_level_ratings",
+      "evidence": "status/evidence/T96.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-c40f0f88",
