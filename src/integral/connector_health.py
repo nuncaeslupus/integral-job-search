@@ -333,7 +333,17 @@ def assess(
         if connector.list.from_json is None
         else connector.list.from_json.fields
     )
-    refused = rate_limited(probe_html, probe_status, parsed_items=len(probe_items))
+    # Gated on `probed`, and classified exactly once. `rate_limited` answers
+    # from the recorded status alone when there is no body, so a package whose
+    # `captured.json` says 429 with no `list.html` beside it used to come back
+    # `inconclusive` with `rate_limited=None` — and both readers key off the
+    # second field, so `_main` filed it under "no current read captured" while
+    # `measure_rate_limiting` skipped it entirely. No probe file is "the rot
+    # stage did not run", which `probed=False` already says; it is not a
+    # refusal we watched happen.
+    refused = (
+        rate_limited(probe_html, probe_status, parsed_items=len(probe_items)) if probed else None
+    )
     read_through = probed and refused is None
 
     reasons = free_signals(probe_items if read_through else baseline_items, site, declared)
@@ -352,7 +362,7 @@ def assess(
         probe_items=len(probe_items),
         reasons=tuple(reasons),
         probed=probed,
-        rate_limited=refused if probed else None,
+        rate_limited=refused,
     )
 
 
@@ -684,15 +694,26 @@ RATE_LIMIT_SAMPLES: tuple[tuple[str, int | None, str], ...] = (
 )
 
 
-def _first_parsing_package(
-    directory: Path,
-) -> tuple[Path, Connector, str, str] | None:
-    """A real, enabled connector and a baseline of its own that yielded rows.
+def _ground_package(directory: Path) -> tuple[str, Connector, str, str] | None:
+    """A connector to put the constructed refusals through, and its baseline.
 
-    The samples are put through the same `assess` the live path uses, so they
-    need a real parser and a baseline with something to regress *from* — a
-    baseline that never yielded is excused by T72 before T73's branch is ever
-    reached, and every sample would pass for the wrong reason.
+    Three requirements, and the third was found by review rather than by
+    design. The baseline must **parse**, and must yield rows, so a sample has
+    something to regress *from* — a baseline that never yielded is excused by
+    T72 before T73's branch is ever reached, and every sample would pass for
+    the wrong reason.
+
+    And it must produce **no free signals of its own**. On the refusal path
+    `assess` runs the free signals over the baseline, so a ground fixture
+    carrying one undecoded entity or one off-host `detail_url` makes `reasons`
+    non-empty for all ten samples at once: `health` reads `broken`,
+    `rate_limited_runs_reported_as_broken` reads 10, and T73 fails for a
+    T72-class defect in an unrelated connector while naming rate limiting as
+    the cause. A gate whose red says the wrong thing is worse than one that
+    stays amber, so a library with no clean ground reports `unmeasured`.
+
+    The name comes back with it and is written into the evidence, so a reader
+    can always tell which fixture the samples were judged against.
     """
     for package in installed_packages(directory):
         if not package.usable or not is_enabled(directory / package.name):
@@ -703,8 +724,18 @@ def _first_parsing_package(
             baseline = (path / FIXTURE_DIRNAME / "list.html").read_text(encoding="utf-8")
         except (ConnectorError, OSError, UnicodeError):
             continue
-        if parse_list_page(connector, baseline):
-            return path, connector, package.site or package.name, baseline
+        site = package.site or package.name
+        items = parse_list_page(connector, baseline)
+        if not items:
+            continue
+        declared = frozenset(
+            connector.list.fields
+            if connector.list.from_json is None
+            else connector.list.from_json.fields
+        )
+        if free_signals(items, site, declared):
+            continue
+        return package.name, connector, site, baseline
     return None
 
 
@@ -725,7 +756,7 @@ def measure_rate_limiting(
     dressing an unrun check up as a pass.
     """
     readings: list[tuple[str, Reading]] = []
-    ground = _first_parsing_package(directory)
+    ground = _ground_package(directory)
     if ground is not None:
         _, connector, site, baseline = ground
         readings.extend(
@@ -758,6 +789,10 @@ def measure_rate_limiting(
         "rate_limited_runs_reported_as_broken_evaluated": evaluated,
         "runs_evaluated": evaluated,
         "gate_status": "measured" if evaluated else "unmeasured",
+        # Which fixture the constructed refusals were judged against. A defect
+        # in it would surface as ten broken samples at once, so a reader who
+        # sees that number needs to know where to look first.
+        "ground_package": ground[0] if ground is not None else None,
         "reported_as_broken": violations,
         "readings": [
             {

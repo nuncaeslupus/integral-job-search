@@ -3,6 +3,7 @@
   "rate_limited_runs_reported_as_broken_evaluated": 10,
   "runs_evaluated": 10,
   "gate_status": "measured",
+  "ground_package": "arbeitnow_en",
   "reported_as_broken": [],
   "readings": [
     {

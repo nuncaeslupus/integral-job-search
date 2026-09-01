@@ -35,6 +35,7 @@ from integral.connectors import (
     META_FILENAME,
     PROBE_DIRNAME,
     load_connector,
+    parse_list_page,
 )
 
 _PACKAGE = DEFAULT_CONNECTORS_DIR / "trabajos_es"
@@ -635,3 +636,57 @@ def test_a_disabled_connector_is_not_health_checked_and_is_said_so(tmp_path: Pat
     assert measured["disabled"] == ["trabajos_es"]
     assert measured["connector_runs_evaluated"] == 0
     assert measured["gate_status"] == "unmeasured"
+
+
+def test_a_recorded_refusal_with_no_captured_body_is_unprobed_not_inconclusive(
+    tmp_path: Path,
+) -> None:
+    """Found by review on #283. `rate_limited` answers from the status alone
+    when there is no body, so a `captured.json` saying 429 beside a missing
+    `list.html` produced `health == "inconclusive"` with `rate_limited is
+    None` — and both readers key off the second field, so `_main` filed it
+    under "no current read captured" while `measure_rate_limiting` skipped it.
+    No probe file is "the rot stage did not run", which `probed` already says.
+    """
+    package = _package_with_probe(tmp_path, captured='{"captured_at": "2026-09-01", "status": 429}')
+    (package / PROBE_DIRNAME / "list.html").unlink()
+
+    reading = assess_package(package, _CONNECTOR, _SITE)
+
+    assert reading.probed is False
+    assert reading.rate_limited is None
+    assert reading.health != "inconclusive"
+    assert reading.rot_stage_ran is False
+
+
+def test_the_samples_are_judged_against_a_fixture_with_no_signals_of_its_own() -> None:
+    """Found by review on #283, and the more serious of the two.
+
+    On the refusal path `assess` runs the free signals over the *baseline*, so
+    a ground fixture carrying one undecoded entity or one off-host
+    `detail_url` makes `reasons` non-empty for all ten samples at once: T73
+    then reads 10 violations and fails for a T72-class defect in an unrelated
+    connector, naming rate limiting as the cause.
+    """
+    ground = connector_health._ground_package(DEFAULT_CONNECTORS_DIR)
+
+    assert ground is not None
+    name, connector, site, baseline = ground
+    items = parse_list_page(connector, baseline)
+    assert items
+    assert connector_health.free_signals(items, site) == []
+    # And a reader is told which fixture it was, because ten broken samples at
+    # once is a question about the ground rather than about the samples.
+    assert connector_health.measure_rate_limiting()["ground_package"] == name
+
+
+def test_a_library_with_no_clean_ground_reports_unmeasured_rather_than_broken(
+    tmp_path: Path,
+) -> None:
+    """A gate whose red says the wrong thing is worse than one that stays
+    amber. With nothing clean to judge against, nothing was classified."""
+    measured = connector_health.measure_rate_limiting(directory=tmp_path)
+
+    assert measured["runs_evaluated"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["ground_package"] is None
