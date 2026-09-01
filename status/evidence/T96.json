@@ -1,12 +1,14 @@
 {
   "monotone_dimensions_asked_as_level_ratings": 0,
-  "monotone_dimensions_asked_as_level_ratings_evaluated": 35,
-  "items_checked": 35,
+  "monotone_dimensions_asked_as_level_ratings_evaluated": 37,
+  "items_checked": 37,
   "monotone_elicitables_checked": 1,
   "gate_status": "measured",
   "monotone": [
     "salary"
   ],
   "offending_items": [],
-  "elicitables_with_no_trade_off_route": []
+  "elicitables_with_no_trade_off_route": [],
+  "answer_filter_checks_run": 2,
+  "answer_filter_failures": []
 }

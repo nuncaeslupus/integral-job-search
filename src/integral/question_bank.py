@@ -218,6 +218,7 @@ class Answer(Strict):
 def answers_for_the_fit(
     answers: Sequence[Answer],
     bank: QuestionBank,
+    dimensions: list[Dimension] | None = None,
     elicitables: frozenset[str] = MONOTONE_ELICITABLES,
 ) -> tuple[Answer, ...]:
     """The answers a fit may read. Two kinds are dropped, for one reason.
@@ -233,12 +234,16 @@ def answers_for_the_fit(
     refuses to define such an item. This is what holds if one ever reaches a
     bank by another route, the same way `QuestionBank` re-checks duplicate ids
     that `build_bank` should already have prevented.
+
+    **Both sources of "monotone" are consulted, via `monotone_ids`.** There are
+    two — the `MONOTONE_ELICITABLES` register and a dimension file's own
+    `monotone: true` — and a filter that reads only the constant is checking a
+    hardcoded list against data that declares the same property for itself.
+    Pass `dimensions` (the model the bank was built from) and a dimension
+    declaring itself monotone is covered too; omit it and only the register is,
+    which is the fail-open reading of a safety filter.
     """
-    monotone = elicitables | {
-        entry.dimension_id
-        for entry in bank.entries
-        if entry.dimension_id in elicitables
-    }
+    monotone = monotone_ids(dimensions or [], elicitables)
     live = {
         entry.bank_id: entry
         for entry in bank.entries
@@ -274,6 +279,14 @@ def measure_monotone(
     monotone quantity with no trade-off route counts as a violation too — the
     rule deletes a question, and deleting it without a replacement leaves the
     dimension unasked, which is a quieter version of the same fault.
+
+    `probe_answer_filter` adds its own checks to both sides of that count. The
+    committed model carries no malformed item — that is the point of it — so
+    measuring only the model would leave `answers_for_the_fit` itself
+    unmeasured, which is how it went a whole review round consulting one of
+    the two sources of "monotone". The probe runs only when there was
+    something else to measure, so an empty model still reports `unmeasured`
+    rather than passing on its synthetic cases alone.
     """
     bank = build_bank(dimensions) if bank is None else bank
     offending = level_rating_items(bank, dimensions, elicitables)
@@ -283,17 +296,25 @@ def measure_monotone(
         for elicitable in sorted(elicitables)
         if trade_off_route(elicitable) is None
     ]
-    checked = len(bank.entries) + len(monotone)
+    considered = len(bank.entries) + len(monotone)
+    probe: dict[str, Any] = (
+        probe_answer_filter() if considered else {"checks_run": 0, "failures": []}
+    )
+    checked = considered + probe["checks_run"]
     return {
-        "monotone_dimensions_asked_as_level_ratings": len(offending) + len(unrouted),
+        "monotone_dimensions_asked_as_level_ratings": (
+            len(offending) + len(unrouted) + len(probe["failures"])
+        ),
         # Both names, as every gate in this increment carries.
         "monotone_dimensions_asked_as_level_ratings_evaluated": checked,
         "items_checked": checked,
         "monotone_elicitables_checked": len(monotone),
-        "gate_status": "measured" if checked else "unmeasured",
+        "gate_status": "measured" if considered else "unmeasured",
         "monotone": sorted(monotone),
         "offending_items": offending,
         "elicitables_with_no_trade_off_route": unrouted,
+        "answer_filter_checks_run": probe["checks_run"],
+        "answer_filter_failures": probe["failures"],
     }
 
 
@@ -361,7 +382,12 @@ def dimension_coverage(bank: QuestionBank, dimensions: list[Dimension]) -> tuple
 
 
 def _synthetic_dimension(
-    dimension_id: str, question_id: str, *, es_text: str = "Cuéntame algo."
+    dimension_id: str,
+    question_id: str,
+    *,
+    es_text: str = "Cuéntame algo.",
+    form: Literal["narrative", "level_rating", "trade_off"] = "narrative",
+    monotone: bool = False,
 ) -> Dimension:
     """One minimal, valid `Dimension` built in memory — no YAML, no disk.
 
@@ -376,6 +402,7 @@ def _synthetic_dimension(
         kind="soft",
         polarity="bipolar",
         group="the_work",
+        monotone=monotone,
         label=LocalisedText(en=dimension_id, es=dimension_id, ca=dimension_id),
         definition="a synthetic dimension used only to probe the bank generator",
         levels=synthetic_levels(),
@@ -383,6 +410,7 @@ def _synthetic_dimension(
             questions=[
                 Question(
                     id=question_id,
+                    form=form,
                     text=LocalisedText(en="Tell me about it.", es=es_text, ca="Explica'm-ho."),
                 )
             ]
@@ -390,6 +418,66 @@ def _synthetic_dimension(
         extraction=Extraction(),
         methods_ref="METHODS.md#21-structured-behavioural-elicitation",
     )
+
+
+def probe_answer_filter() -> dict[str, Any]:
+    """Hold `answers_for_the_fit` to a bank the model validator never saw.
+
+    The validator refuses a monotone dimension carrying a level rating, so no
+    bank `build_bank` produces can exercise the filter at all — the only way to
+    measure it is to forge the bank the filter exists for. Both directions are
+    checked, because a filter is wrong in two ways and only one of them is
+    loud:
+
+    * **fail-open** — an answer to a level rating on a dimension that declares
+      `monotone: true` reaches the fit. It is noise, and `weights.py` turns it
+      into a part-worth. This is the one the filter existed to stop and did
+      not, for anything outside `MONOTONE_ELICITABLES`;
+    * **fail-closed** — an answer to an ordinary level rating is dropped. The
+      question was fine and the candidate's answer is thrown away silently.
+    """
+    declared = _synthetic_dimension("dim_monotone", "q1", form="trade_off", monotone=True)
+    ordinary = _synthetic_dimension("dim_rated", "q1", form="level_rating")
+    text = LocalisedText(en="Rate it 1-7", es="Puntúa 1-7", ca="Puntua-ho de l'1 al 7")
+    forged = QuestionBank(
+        entries=(
+            BankEntry(
+                bank_id="dim_monotone:q1",
+                dimension_id="dim_monotone",
+                question_id="q1",
+                order=0,
+                form="level_rating",
+                text=text,
+            ),
+            BankEntry(
+                bank_id="dim_rated:q1",
+                dimension_id="dim_rated",
+                question_id="q1",
+                order=1,
+                form="level_rating",
+                text=text,
+            ),
+        ),
+        dimension_count=2,
+    )
+    answers = [
+        Answer(bank_id="dim_monotone:q1", value=7.0),
+        Answer(bank_id="dim_rated:q1", value=4.0),
+    ]
+    kept = {a.bank_id for a in answers_for_the_fit(answers, forged, [declared, ordinary])}
+
+    failures: list[str] = []
+    if "dim_monotone:q1" in kept:
+        failures.append(
+            "fail-open: an answer to a level rating on a dimension declaring "
+            "monotone: true reached the fit — the declaration was not read"
+        )
+    if "dim_rated:q1" not in kept:
+        failures.append(
+            "fail-closed: an answer to an ordinary level rating was dropped — "
+            "the filter is refusing questions that had a coherent answer"
+        )
+    return {"checks_run": 2, "failures": failures}
 
 
 MINIMUM_PROBES = 4
@@ -577,6 +665,7 @@ def _main(argv: list[str]) -> int:
         "rating is refused and no replacement is declared"
         for elicitable in monotone["elicitables_with_no_trade_off_route"]
     )
+    violations.extend(monotone["answer_filter_failures"])
     if measured["question_dimension_coverage"] != 1.0:
         violations.append(
             f"question_dimension_coverage = {measured['question_dimension_coverage']} (want 1.0)"

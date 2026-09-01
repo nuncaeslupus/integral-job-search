@@ -136,6 +136,58 @@ def test_a_live_monotone_level_rating_is_dropped_too() -> None:
     assert qb.answers_for_the_fit([qb.Answer(bank_id="salary:salary_q1", value=7.0)], bank) == ()
 
 
+def test_a_declared_monotone_dimension_is_filtered_too() -> None:
+    """The other source of "monotone", and the one the filter used to miss.
+
+    `MONOTONE_ELICITABLES` is a register of quantities with no dimension file;
+    a dimension file declares the same property with `monotone: true`. A live,
+    manually assembled bank — one that never went through `build_bank`, so the
+    `Dimension` validator never saw it — can carry a level rating for such a
+    dimension, and its answer reached the fit because the filter consulted the
+    register alone. The dimensions the bank is filtered against are the ones
+    that say whether they are monotone; the constant is only the rest.
+    """
+    declared = _dimension("more_is_better", monotone=True, form="trade_off")
+    assert declared.id not in qb.MONOTONE_ELICITABLES
+    entry = qb.BankEntry(
+        bank_id="more_is_better:more_is_better_q1",
+        dimension_id="more_is_better",
+        question_id="more_is_better_q1",
+        order=0,
+        form="level_rating",
+        text=LocalisedText(en="Rate it 1-7", es="Puntúa 1-7", ca="Puntua-ho de l'1 al 7"),
+    )
+    bank = qb.QuestionBank(entries=(entry,), dimension_count=1)
+    answer = qb.Answer(bank_id="more_is_better:more_is_better_q1", value=7.0)
+
+    assert qb.answers_for_the_fit([answer], bank, [declared]) == ()
+
+
+def test_an_ordinary_level_rating_still_reaches_the_fit() -> None:
+    """The fail-closed half: reading the dimensions must not start dropping
+    answers to questions that had a coherent answer all along."""
+    ordinary = _dimension("has_a_middle", monotone=False, form="level_rating")
+    bank = qb.build_bank([ordinary])
+    answer = qb.Answer(bank_id="has_a_middle:has_a_middle_q1", value=4.0)
+
+    assert qb.answers_for_the_fit([answer], bank, [ordinary]) == (answer,)
+
+
+def test_the_gate_measures_the_answer_filter() -> None:
+    """The committed model carries no malformed item, so the filter is only
+    measured if the gate forges one. An accepted review case that leaves the
+    count where it was leaves the code as unprotected as it was."""
+    measured = qb.measure_monotone(load_dimensions())
+
+    assert measured["answer_filter_checks_run"] == 2
+    assert measured["answer_filter_failures"] == []
+    assert measured["items_checked"] == (
+        len(qb.build_bank(load_dimensions()).entries)
+        + len(measured["monotone"])
+        + measured["answer_filter_checks_run"]
+    )
+
+
 def test_the_committed_model_asks_no_monotone_level_rating() -> None:
     measured = qb.measure_monotone(load_dimensions())
 
