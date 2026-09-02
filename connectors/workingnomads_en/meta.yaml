@@ -1,0 +1,38 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: workingnomads.com
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above: https://www.workingnomads.com/robots.txt
+# was read with this project's own agent token. `/api/exposed_jobs/` is not
+# disallowed and no rule names this token or any AI agent.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — one API response, taken on the date below. Never an
+# advert a candidate was reading.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # `fixture/list.html` holds JSON, not markup — the filename is the contract's.
+  # Excerpted: 3 of the 43 returned records, each `description` cut to its first
+  # 600 characters with the cut marked in the text.
+  bodies: excerpted
+  client_ip: redacted
+
+# `probe/list.html` is a SECOND read of the same endpoint, taken on the date in
+# `probe/captured.json` — 2026-09-02, three days after the fixture. The feed is
+# a different one: 45 records where the fixture's response carried 43, headed by
+# two adverts published 2026-08-31 (`/job/go/1826864/` and `/job/go/1826325/`)
+# that did not exist when the fixture was recorded, which pushes the three
+# records the fixture holds from positions 0–2 down to 2–4.
+#
+# Cut the way the fixture was cut: the first 3 records of the response, each
+# `description` to its first 600 characters with the cut marked in the text. So
+# the committed excerpt is the new head of the feed, not the fixture's rows.

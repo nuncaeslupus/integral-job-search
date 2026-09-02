@@ -1,0 +1,45 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: nofluffjobs.com
+# Poland-registered and Poland-heavy, but the board carries remote EU postings
+# and every one of them prints a range. `assess_coverage` matches country by
+# equality, so this does not count as covering ES even when the advert is
+# remote-from-anywhere — that is a known gap in the coverage model, not a claim
+# being made here.
+country: PL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above: https://nofluffjobs.com/robots.txt
+# carries `User-agent: *` groups only — no rule names this project's token or
+# any AI agent. Neither `/Python` nor its `?page=` form is disallowed.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — the first three cards of the Python listing, taken
+# on the date below. Never an advert a candidate was reading: the set of ads a
+# person opens carries their field, level, city and the fact that they are
+# looking, and a fixture in a public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Three cards out of twenty, cut from the served page. A fixture proves the
+  # connector finds the right fields in real markup; it does not need the whole
+  # listing to do that.
+  bodies: excerpted
+  client_ip: redacted
+
+# `probe/list.html` is a SECOND read of the same URL, taken on the date in
+# `probe/captured.json` — 2026-09-02, three days after the fixture. The served
+# page carried 20 cards both times, but a different 20: of the three the fixture
+# records, only `python-developer-regular-scalo-Warszawa-1` is still on the page
+# at all, and it has fallen from the first card to the twentieth.
+#
+# Cut the way the fixture was cut: the first 3 cards of the served page, sliced
+# in the raw bytes at card boundaries so everything kept is byte-identical to
+# what the server sent, wrapped in the same minimal shell. Since the ordering
+# turned over, those are three cards the fixture does not contain.
