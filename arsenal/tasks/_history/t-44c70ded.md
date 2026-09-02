@@ -4,6 +4,7 @@ title: "T101: A CI job can name a Makefile target that does not exist"
 priority: 5
 tags: [CI]
 workspace: BACKEND
+status: merged
 ---
 
 Imported from issue #269. **Its steps 1 and 3 are already done** — PR #267 deleted
@@ -40,6 +41,12 @@ length. The comment that named `verify-subtree` in four surviving jobs is exactl
 the input that would make a regex report a violation that is not there.
 
 ## Acceptance gate
+
+```gate
+ci_targets_missing_from_makefile == 0
+evidence: status/evidence/D-22.json
+key: ci_targets_missing_from_makefile
+```
 
 ```bash
 uv run --extra dev pytest tests/test_repo_gate.py -q

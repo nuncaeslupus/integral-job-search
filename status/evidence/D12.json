@@ -1,6 +1,6 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 126,
+  "evidence_gates_read": 127,
   "gates_declaring_status_key": 25,
   "unrecordable": [],
   "readings": [
@@ -731,6 +731,14 @@
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
+    },
+    {
+      "task": "t-44c70ded",
+      "key": "ci_targets_missing_from_makefile",
+      "evidence": "status/evidence/D-22.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
     },
     {
       "task": "t-490e52d5",
