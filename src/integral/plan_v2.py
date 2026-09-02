@@ -58,9 +58,9 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "S8.json"
 #: Committed as exact values they moved every time a task was seeded, which
 #: lands two rows on both sides at once and leaves every open PR's `S8.json`
 #: correct for its branch and stale for its merge ref (T104). Today's board
-#: carries 146 of each; the floor sits well below that, so the queue can be
+#: carries 162 of each; the floor sits well below that, so the queue can be
 #: pruned without the gate turning red for a reason that is not a finding.
-MINIMUM_PLAN_ROWS = 100
+MINIMUM_BOARD_SIZE = 100
 
 # T1, T4b, S3, S1r, D-1 — every label the two documents use for a task.
 _LABEL_RE = re.compile(r"^(?:T\d+[a-z]?|S\d+r?|D-\d+)$")
@@ -338,7 +338,7 @@ def _unmeasurable(reason: str) -> dict[str, object]:
 
 
 def floor_breaches(measured: dict[str, object]) -> list[str]:
-    """Which denominators came in under `MINIMUM_PLAN_ROWS`. Empty is the pass.
+    """Which denominators came in under `MINIMUM_BOARD_SIZE`. Empty is the pass.
 
     Read **before** the record is written, not after. `record` writes
     `plan_rows_at_least: 100` unconditionally, so a five-row plan that writes
@@ -351,9 +351,9 @@ def floor_breaches(measured: dict[str, object]) -> list[str]:
     for name in ("plan_rows", "queue_tasks"):
         count = measured[name]
         assert isinstance(count, int)
-        if count < MINIMUM_PLAN_ROWS:
+        if count < MINIMUM_BOARD_SIZE:
             breaches.append(
-                f"only {count} {name} (floor {MINIMUM_PLAN_ROWS}) — zero drift between an "
+                f"only {count} {name} (floor {MINIMUM_BOARD_SIZE}) — zero drift between an "
                 "empty plan and an empty queue is not a measurement"
             )
     return breaches
@@ -368,7 +368,7 @@ def write_evidence(
 
     Returns what was *measured*; writes what is *recorded*. `main` still needs
     the live counts to check them against their floor, and the file must not
-    carry them — see `MINIMUM_PLAN_ROWS`.
+    carry them — see `MINIMUM_BOARD_SIZE`.
 
     A run that breaches either floor writes nothing at all: the only record it
     could write is one that claims the floor held.
@@ -387,8 +387,8 @@ def record(measured: dict[str, object]) -> dict[str, object]:
     """What is committed, out of what was measured: the drift exactly, the two
     denominators as the floor they were checked against."""
     committed = {k: v for k, v in measured.items() if k not in ("plan_rows", "queue_tasks")}
-    committed["plan_rows_at_least"] = MINIMUM_PLAN_ROWS
-    committed["queue_tasks_at_least"] = MINIMUM_PLAN_ROWS
+    committed["plan_rows_at_least"] = MINIMUM_BOARD_SIZE
+    committed["queue_tasks_at_least"] = MINIMUM_BOARD_SIZE
     return committed
 
 

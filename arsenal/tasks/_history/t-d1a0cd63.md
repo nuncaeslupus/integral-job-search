@@ -26,7 +26,7 @@ uv run python -m integral.plan_v2
 ```
 
 The `bash` block regenerates the three evidence files; the `gate` block asserts
-the number in D12's. `board_sensitive_record_keys` counts the keys of D12's
+the number in D12's committed record. `board_sensitive_record_keys` counts the keys of D12's
 **committed record** that change when the board's gate census changes by one —
 which is what another task PR merging does to every open PR's merge ref. Zero
 is the property; `record_keys_compared` is the denominator that says the

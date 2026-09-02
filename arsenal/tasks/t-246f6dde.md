@@ -32,7 +32,7 @@ This is the third instance of one pattern: **`status/plan.md` states things abou
 
 ```gate
 milestone_row_membership_violations == 0
-evidence: status/evidence/T108.json
+evidence: status/evidence/D-29.json
 key: milestone_row_membership_violations
 ```
 

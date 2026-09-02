@@ -279,14 +279,14 @@ def test_the_row_counts_are_committed_as_a_floor(tmp_path: Path) -> None:
     plan_v2.write_evidence(target)
     committed = json.loads(target.read_text(encoding="utf-8"))
 
-    assert committed["plan_rows_at_least"] == plan_v2.MINIMUM_PLAN_ROWS
-    assert committed["queue_tasks_at_least"] == plan_v2.MINIMUM_PLAN_ROWS
+    assert committed["plan_rows_at_least"] == plan_v2.MINIMUM_BOARD_SIZE
+    assert committed["queue_tasks_at_least"] == plan_v2.MINIMUM_BOARD_SIZE
     assert "plan_rows" not in committed and "queue_tasks" not in committed
     # The floor is a guard, not a decoration: it has to be under what the
     # repository actually carries, and the live count has to be checked.
     for name in ("plan_rows", "queue_tasks"):
         count = measured[name]
-        assert isinstance(count, int) and count >= plan_v2.MINIMUM_PLAN_ROWS
+        assert isinstance(count, int) and count >= plan_v2.MINIMUM_BOARD_SIZE
 
 
 def test_a_plan_dependency_on_finished_work_is_not_drift(tmp_path: Path) -> None:
