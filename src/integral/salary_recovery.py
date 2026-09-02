@@ -50,21 +50,38 @@ nothing:
   — adjacent, before or after. This is the rule that keeps `14` out of "per 14
   pagues" and `8` out of "Beneficios8% DESCUENTO".
 * **A figure must sit beside a pay cue** — `salari(o)`, `sou`, `sueldo`,
-  `retribució(n)`, `remuneración`, `salary`, `compensation`, `pay`, `wage`, or a
+  `retribució(n)`, `remuneración`, `salary`, `compensation`, `wage`, or a
   gross marker (`brut`, `bruto`, `gross`, `b/a`). Cue and figure must share a
   *segment*, so "Salary: competitive. Home office budget of €500." reads as
   silence. Every money trap in the committed corpus — a €1.000 training budget, a
   €3.000 laptop budget, a $500 home-office allowance, a $400M Series D, "$60
   million+ from Insight Partners" — is refused by this rule alone, because none
-  of them is near a pay cue.
+  of them is near a pay cue. `pay` and `ote` are cues only with an adjacent
+  qualifier: bare, "We pay our AWS bill of 45,000 EUR per year" is a salary.
+* **A figure governed by a noun that is not a wage is refused**, on either side
+  of it: "we offer $100,000 in equity" and "equity worth up to $100,000" are the
+  same sentence twice. The noun governs unless an explicit *wage* noun stands
+  between it and the figure, which is what keeps "$50,000 + commission" and
+  "Base salary $130,000 - $160,000" reading as the salaries they are.
+* **A parenthetical is read as written unless it excludes.** "(excluding equity
+  and bonus)" is blanked because naming those nouns is how it says the band
+  holds neither; "(equity, not salary)" and "(this is the equity component)" are
+  not, because they say the opposite. Discriminating on the bracket rather than
+  on the verb deleted both kinds and let the second through.
 * **Net pay is refused outright.** `Salary` has no gross/net field, so a net
   figure stored here would be compared against gross figures everywhere else.
   Catalan's bare `net` is matched, and `.NET` is not (the lookbehind).
 * **Two readings mean no reading.** Two figures in one segment that are not a
   range, two segments that disagree, two currencies, two conflicting period
-  words: all return `None`.
-* **Every figure is bounds-checked for its period.** A number outside the range a
-  real wage occupies is a misparse whatever produced it.
+  words, **two duplicates whose bands differ**: all return `None`. A segment
+  naming two periods is not the same as a segment naming none — collapsing them
+  let "Sou brut: 6.000 € al mes, amb revisió anual" be read as €6.000 *a year*,
+  a €72k role shown at a twelfth of its value as a stated fact.
+* **Every figure is bounds-checked for its period, on every route.** A number
+  outside the range a real wage occupies is a misparse whatever produced it, and
+  "whatever produced it" includes a donor's `salary` field and an estimator:
+  `_band_defect` is the one place that decides, and `Recovered` cannot be
+  constructed around it.
 
 ## Stated ceilings
 
@@ -104,6 +121,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
+from math import isfinite
 from pathlib import Path
 from typing import Any, Literal
 
@@ -127,7 +145,10 @@ LANGUAGES: tuple[str, ...] = ("es", "ca", "en")
 #: Floors, not counts of the day (T100). A census that reports a clean zero over
 #: an empty scan is the failure this whole increment is about.
 MINIMUM_CORPUS_ADS = 150
-MINIMUM_WORDING_CASES = 40
+#: Raised from 40 when the second-reader audit landed 54 more cases: a floor
+#: that sits far below the set it guards stops guarding anything. Still a floor
+#: — never the count of the day.
+MINIMUM_WORDING_CASES = 120
 
 Route = Literal["advert_text", "duplicate", "detail_page", "estimate"]
 
@@ -148,13 +169,37 @@ class SalaryRecoveryError(Exception):
 # a dash, which is the range glue in "$45,000 - $50,000".
 _SEGMENT_SPLIT = re.compile(r"(?<=[.;!?])\s+|[\n\r]+|\s*[•·▪|]\s*")
 
+#: The nouns that mean *this job's wage* and nothing else. Narrower than
+#: `_CUE` on purpose: `_disqualified` uses this set to decide whether a wage
+#: noun stands between a figure and a "not a wage" noun, and a gross marker
+#: cannot play that part — "Gross package … in stock options" is gross
+#: *something*, and the something is not pay. `pay` and `ote` are out for the
+#: same reason (see `_CUE`): both are leaky enough to need a qualifier before
+#: they mean anything, and a leaky cue is not evidence a figure is a wage.
+_WAGE_NOUN = re.compile(
+    r"\b(?:salari|salaris|salario|salarios|salarial|sou|sous|sueldo|sueldos"
+    r"|remuneraci[oó]|remuneraci[oó]n|retribuci[oó]|retribuci[oó]n"
+    r"|salary|compensation|remuneration|wage|wages)\b",
+    re.IGNORECASE,
+)
+
 #: A pay cue. Gross markers count: tecnoempleo's list card prints
 #: "30.000€ - 36.000€ b/a" with no pay noun anywhere near it.
+#:
+#: `pay` and `ote` are **not** bare alternatives. Bare, `pay` is a verb far more
+#: often than a noun — "We pay our AWS bill of 45,000 EUR per year" and "our OTE
+#: model: customers pay 45,000 EUR per year for the product" both became
+#: salaries — so each needs an adjacent qualifier: an adjective in front of
+#: `pay`, or a colon / `range|scale|rate|band` behind it; a colon, `of`, or a
+#: money token beside `ote`. "Pay: £15.50 per hour" still reads.
 _CUE = re.compile(
     r"\b(?:salari|salaris|salario|salarios|salarial|sou|sous|sueldo|sueldos"
     r"|remuneraci[oó]|remuneraci[oó]n|retribuci[oó]|retribuci[oó]n"
-    r"|salary|compensation|remuneration|wage|wages|pay|ote"
+    r"|salary|compensation|remuneration|wage|wages"
     r"|brut|bruta|bruts|brutes|bruto|brutos|brutas|gross)\b"
+    r"|\b(?:base|gross|total|annual|monthly|weekly|hourly|daily|basic|starting)\s+pay\b"
+    r"|\bpay\s*(?::|\b(?:range|scale|rate|band)\b)"
+    r"|\bote\s*(?::|\bof\b)|[\d€$£]\s*\bote\b"
     r"|\bb/a\b|\bb/m\b",
     re.IGNORECASE,
 )
@@ -173,17 +218,39 @@ _NET = re.compile(
 #: groups are optional so bare numbers are still *found* — they are needed to
 #: recognise "30.000 - 36.000 €", where only the last member carries the symbol
 #: — but a group with no currency anywhere in it is discarded before it can
-#: become a band. Spaces are not thousands separators here: allowing them turns
-#: "28/08/2026 30.000€" into one 202,630,000-euro number.
+#: become a band.
+#:
+#: A whitespace thousands separator — the ES/CA/FR typographic convention, and
+#: what U+00A0 and U+202F exist for — is read only in a *valid grouping*: one to
+#: three digits, then runs of exactly three. That is what still keeps
+#: "Publicado 28/08/2026 30.000€" reading as 30.000€ rather than as one
+#: 202,630,000-euro number: "2026" is a four-digit leading group, so the grouped
+#: alternative cannot start there and the plain alternative stops at the space.
+#: All three renderings of "30 000" now read identically — before this, U+00A0
+#: parsed, U+202F silently did not, and a plain space was not admitted at all.
 _MONEY = re.compile(
     r"(?P<pre>US\$|€|\$|£|EUR|USD|GBP)?[ \u00a0\u202f]{0,2}"
-    r"(?P<num>\d[\d.,\u00a0\u202f]*\d|\d)"
+    r"(?P<num>\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?|\d[\d.,]*\d|\d)"
     r"[ \u00a0\u202f]{0,2}(?P<k>[kK](?![A-Za-z]))?"
     r"[ \u00a0\u202f]{0,2}"
     r"(?P<post>€|\$|£|EUR|USD|GBP|euros|euro|eurs|d[oó]lares|libras)?",
     re.IGNORECASE,
 )
 
+# ponytail: `$` is USD wherever it appears, with no locale check. That is wrong
+# for MXN, CAD, AUD, ARS, CLP and COP, all of which write `$`, and it is wrong
+# *loudly*: "Salario bruto anual de 600.000 $ en Ciudad de México" is a ~17x
+# overstatement presented to the candidate as a figure the employer stated. It
+# is not fixed here because no committed connector fetches from any of those
+# markets, so the fix would be untested guesswork and the guess ("Mexico in the
+# text ⇒ MXN") is a location parser this module has no business growing.
+# Upgrade path, when the first such connector lands: the connector already
+# declares its market in `connectors/<name>/meta.yaml`, so pass that market in
+# and let it choose the symbol's meaning — `band_in_text` gains a keyword
+# argument, `_CURRENCIES` gains a per-market table, and the three cases pinned
+# in `WORDING_CASES` under (h) flip from USD to the right currency. Until then
+# they pin what this actually does, so the next connector's author reads it in
+# the fixtures rather than in a candidate's ranked list.
 _CURRENCIES: dict[str, str] = {
     "€": "EUR",
     "eur": "EUR",
@@ -209,24 +276,37 @@ _GLUE = re.compile(
     re.IGNORECASE,
 )
 
-#: Money that is not this job's wage. Refused when it appears **before** the
-#: figure, which is where the noun that governs it sits: "equity worth up to
-#: $100,000" is not a salary, while "$50,000 + commission" is. Parentheses are
-#: stripped before this runs, so the corpus's "Annual base salary range
-#: (excluding equity and bonus): $152,405" — where the same nouns appear inside
-#: a clause that *excludes* them — still reads as the salary it is.
+#: Money that is not this job's wage.
+#:
+#: The vocabulary is the same in all three languages or it is a parity failure
+#: (#294): `acci[oó](?:nes|ns|n)?` covers ES `acción`/`acciones` **and** CA
+#: `acció`/`accions`, which the ES-only form missed — "Accions per valor de
+#: 90.000 € bruts anuals" read as a €90k salary while its Spanish twin was
+#: refused. English `commission` is deliberately absent: `comiss?i[oó]…` matches
+#: `comisión`/`comissió` and cannot reach it, because "$50,000 + commission" is
+#: a salary with a commission on top and must stay one.
 _NOT_A_WAGE = re.compile(
-    r"\b(?:equity|stock|shares|rsu|acci[oó]n(?:es)?|participacions?"
+    r"\b(?:equity|stock|shares|rsus?|acci[oó](?:nes|ns|n)?|participacions?"
     r"|bonus|bono|bonificaci[oó]n|incentivos?|referral"
     r"|budget|presupuesto|pressupost|allowance|ayuda|ajuda"
+    r"|diet(?:es|as|a)|comiss?i[oó](?:nes|ns|n)?|aportaci[oó](?:nes|ns|n)?"
+    r"|salary\s+sacrifice|relocation|home\s+office"
     r"|funding|revenue|facturaci[oó]n|turnover|valuation)\b",
     re.IGNORECASE,
 )
 
-#: Removed before `_NOT_A_WAGE` reads the segment. Nothing else uses the
-#: stripped text — the figures, the cue and the period are all read from the
-#: segment as written.
 _PARENTHETICAL = re.compile(r"\([^()]*\)")
+
+#: The verb that makes a parenthetical name a disqualifier in order to *exclude*
+#: it. "(excluding equity and bonus)" says the band contains neither, so reading
+#: those two nouns as disqualifiers inverts the sentence. Every other
+#: parenthetical is read as written — the old rule stripped all of them, which is
+#: what let "(equity, not salary)" and "(this is the equity component)" through.
+#: The discrimination is on the verb, never on the bracket.
+_EXCLUSION = re.compile(
+    r"\b(?:excluding|excluded|excludes|not\s+included|sin\s+incluir|exclou)\b",
+    re.IGNORECASE,
+)
 
 #: A lone figure preceded by one of these is a ceiling, not a floor.
 _UPPER = re.compile(r"\b(?:hasta|fins\s+a|up\s+to|m[aá]xim[oa]?|maximum)\b\s*$", re.IGNORECASE)
@@ -291,20 +371,77 @@ def _currency_of(match: re.Match[str]) -> str | None:
     return None
 
 
+#: `_as_float` removes the plain space and U+00A0 and leaves U+202F, so a narrow
+#: no-break space reached it as a letter and came back `None`. Removed here
+#: instead, once, for all three renderings.
+_THOUSANDS_WHITESPACE = str.maketrans("", "", " \u00a0\u202f")
+
+
 def _value_of(match: re.Match[str]) -> float | None:
-    value = _as_float(match.group("num"))
+    value = _as_float(match.group("num").translate(_THOUSANDS_WHITESPACE))
     if value is None:
         return None
     return value * 1000 if match.group("k") else value
 
 
-def _period_of(segment: str) -> str | None:
-    named = [name for name, pattern in _PERIODS if pattern.search(segment)]
-    if len(named) > 1:
-        return None  # the segment says two things; it has said nothing
+def _periods_in(segment: str) -> tuple[str, ...]:
+    """Every period this segment names — none, one, or a contradiction.
+
+    The three answers must stay distinguishable at the call site. Collapsing a
+    contradiction into `None` made "Sou brut: 6.000 € al mes, amb revisió anual"
+    — ordinary ES/CA boilerplate — indistinguishable from a segment with no
+    period word at all, and the caller then inferred "year" from the figure's
+    size: a €72k role shown as €6k, as a fact the employer stated.
+    """
+    named = tuple(name for name, pattern in _PERIODS if pattern.search(segment))
     if named:
-        return named[0]
-    return "month" if _PAYMENTS.search(segment) else None
+        return named
+    # "1.800 € per 12 pagues" states a monthly wage; only consulted when no
+    # explicit period word is present.
+    return ("month",) if _PAYMENTS.search(segment) else ()
+
+
+def _without_exclusions(segment: str) -> str:
+    """The segment with any *exclusion* parenthetical blanked, same length.
+
+    Length-preserving because `_disqualified` compares offsets against the
+    figure's span in the original segment.
+    """
+    parts = list(segment)
+    for match in _PARENTHETICAL.finditer(segment):
+        if _EXCLUSION.search(match.group()):
+            parts[match.start() : match.end()] = " " * (match.end() - match.start())
+    return "".join(parts)
+
+
+def _disqualified(segment: str, start: int, end: int) -> bool:
+    """Is the figure at `[start, end)` governed by a noun that is not a wage?
+
+    A `_NOT_A_WAGE` noun governs the figure **unless an explicit wage noun
+    stands between the two**. That is the whole rule, and it holds on both
+    sides: the old one looked only at the text before the figure, so
+    "Salary package: we offer $100,000 in equity" and "Sou: 90.000 € bruts
+    anuals en accions" both read as stated salaries.
+
+    Scanning outward from the figure to each disqualifier is what keeps
+    "$50,000 + commission" — the case the prefix-only rule existed for — and
+    "Base salary $130,000 - $160,000" working: nothing disqualifying lies
+    between the figure and its own noun. It is also what refuses
+    "Gross pay includes 20,000 EUR as an annual bonus", where the only thing
+    between the figure and `bonus` is "as an annual", and `pay` is not a wage
+    noun (see `_WAGE_NOUN`).
+    """
+    text = _without_exclusions(segment)
+    for match in _NOT_A_WAGE.finditer(text):
+        if match.end() <= start:
+            between = text[match.end() : start]
+        elif match.start() >= end:
+            between = text[end : match.start()]
+        else:
+            between = ""  # it overlaps the figure; nothing can stand between
+        if not _WAGE_NOUN.search(between):
+            return True
+    return False
 
 
 def _band_in_segment(segment: str) -> Salary | None:
@@ -330,8 +467,8 @@ def _band_in_segment(segment: str) -> Salary | None:
     group = banded[0]
     if len(group) > 2:
         return None
-    if _NOT_A_WAGE.search(_PARENTHETICAL.sub(" ", segment[: group[0].start()])):
-        return None  # the noun in front of this figure is not "salary"
+    if _disqualified(segment, group[0].start(), group[-1].end()):
+        return None  # the noun governing this figure is not "salary"
 
     currencies = {_currency_of(m) for m in group if _currency_of(m)}
     if len(currencies) != 1:
@@ -343,11 +480,17 @@ def _band_in_segment(segment: str) -> Salary | None:
         return None  # unreadable, or a `salaryFrom: 0` sentinel
     figures = sorted(value for value in values if value is not None)
 
-    period = _period_of(segment)
-    if period is None:
-        # No period word. A four-figure sum with a pay cue beside it is an
-        # annual salary in every market this tool covers; anything smaller
-        # could equally be monthly, daily or an allowance, and is refused.
+    named = _periods_in(segment)
+    if len(named) > 1:
+        return None  # the segment says two things; it has said nothing
+    if named:
+        period = named[0]
+    else:
+        # No period word *at all* — which is not the same as two, and inferring
+        # from the figure's size is only sound here. A four-figure sum with a
+        # pay cue beside it is an annual salary in every market this tool
+        # covers; anything smaller could equally be monthly, daily or an
+        # allowance, and is refused.
         if figures[0] < _BOUNDS["year"][0]:
             return None
         period = "year"
@@ -425,6 +568,36 @@ def house_estimate_bands(
 # The four lookups
 
 
+def _band_defect(salary: Salary) -> str | None:
+    """Why this band may not be shown to a candidate, or `None` if it may.
+
+    The same rules `_band_in_segment` already applies to text — a figure must
+    exist, be a real number, be positive (RO4's *"zero is not a wage"*, the
+    `salaryFrom: 0` sentinel), have a floor no higher than its ceiling, and sit
+    inside `_BOUNDS` for its period. `_band_in_segment` and `_usable_donor`
+    enforced them on two of the four routes; the estimate route validated the
+    `stated` flag and nothing else, so `nan`, `inf`, `-50000` and `1e12` all
+    rendered on the card. A band with no period is bounded as annual: the widest
+    band any period allows would be no check at all.
+    """
+    figures = [figure for figure in (salary.min, salary.max) if figure is not None]
+    if not figures:
+        return "a recovery with no figure is not a recovery"
+    if not all(isfinite(figure) for figure in figures):
+        return f"a figure that is not a finite number: {salary!r}"
+    if any(figure <= 0 for figure in figures):
+        return f"zero is not a wage: {salary!r}"
+    if salary.min is not None and salary.max is not None and salary.min > salary.max:
+        return f"a floor above its own ceiling: {salary!r}"
+    bounds = _BOUNDS.get(salary.period or "year")
+    if bounds is None:
+        return f"a period this module cannot bound: {salary.period!r}"
+    low, high = bounds
+    if any(figure < low or figure > high for figure in figures):
+        return f"outside what a real {salary.period or 'annual'} wage looks like: {salary!r}"
+    return None
+
+
 @dataclass(frozen=True)
 class Recovered:
     """One figure, and where it came from.
@@ -444,6 +617,11 @@ class Recovered:
             raise SalaryRecoveryError(f"a {self.route} recovery with no basis is a bare number")
         if self.route == "estimate" and self.salary.stated:
             raise SalaryRecoveryError("an estimate may never be stated")
+        # Every route, not just the two that parse text. This is the last place
+        # a figure can be stopped before a candidate reads it.
+        defect = _band_defect(self.salary)
+        if defect is not None:
+            raise SalaryRecoveryError(f"a {self.route} recovery is not a wage: {defect}")
 
 
 def is_silent(offer: Offer) -> bool:
@@ -458,8 +636,11 @@ def _usable_donor(donor: Offer, house_bands: frozenset[tuple[str, BandKey]]) -> 
         return False
     if (donor.source, band_key(salary)) in house_bands:
         return False
-    # `salaryFrom: 0` — present, and meaning absent.
-    return not any(figure == 0 for figure in (salary.min, salary.max) if figure is not None)
+    # The same rules the text route applies, so a donor cannot import a band
+    # `_band_in_segment` would have refused — `salaryFrom: 0` included. Checked
+    # here rather than left to `Recovered`, so an unusable donor is skipped for
+    # the next one instead of raising out of `recover`.
+    return _band_defect(salary) is None
 
 
 DetailReader = Callable[[Offer], str | None]
@@ -489,18 +670,32 @@ def recover(
         return Recovered(band, "advert_text", "stated in the body of this advert"), tuple(attempted)
 
     attempted.append("duplicate")
-    for donor in donors:
-        if donor.id != offer.id and _usable_donor(donor, house_bands):
-            assert donor.salary is not None
-            return (
-                Recovered(
-                    donor.salary,
-                    "duplicate",
-                    f"stated by the same advert on {donor.source}",
-                    donor_id=donor.id,
-                ),
-                tuple(attempted),
-            )
+    donated = [
+        (donor, donor.salary)
+        for donor in donors
+        if donor.id != offer.id and _usable_donor(donor, house_bands) and donor.salary is not None
+    ]
+    wanted = offer.salary.currency if offer.salary is not None else None
+    if wanted is not None:
+        # The recipient already says which currency this job pays in. A donor
+        # band in another one is not this job's band, whatever the join says.
+        donated = [pair for pair in donated if pair[1].currency in (None, wanted)]
+    # Two donors that disagree are two readings, and two readings mean no
+    # reading — `band_in_text`'s own rule, applied across the copies of one
+    # advert rather than within one. Returning the first usable donor made the
+    # answer depend on the order `find_duplicates` happened to yield: EUR 45-55k
+    # and USD 150-190k for the same job, whichever came first.
+    if len({band_key(salary) for _, salary in donated}) == 1:
+        donor, salary = donated[0]
+        return (
+            Recovered(
+                salary,
+                "duplicate",
+                f"stated by the same advert on {donor.source}",
+                donor_id=donor.id,
+            ),
+            tuple(attempted),
+        )
 
     if detail_reader is not None:
         attempted.append("detail_page")
@@ -807,6 +1002,99 @@ WORDING_CASES: tuple[tuple[str, str, Salary | None], ...] = (
         "El salari inicial serà de 1.800 euros bruts incrementant-se progressivament.",
         None,
     ),  # no period stated, and too small to be an annual figure
+    # --- Third pass: a second reader's adversarial cases ---------------------
+    # Every case below was written from the rules in this docstring and run
+    # **before** the fix, and every one of them was read as a stated salary by
+    # the parser that shipped a green gate. They are grouped by the defect they
+    # caught, so a regression names its own cause.
+    #
+    # (a) `_NOT_A_WAGE` was scoped to the text *before* the figure, so the noun
+    # that governs a figure from behind never disqualified anything.
+    ("en", "Salary package: we offer $100,000 in equity.", None),
+    ("en", "Gross package: 50,000 EUR in stock options per year.", None),
+    ("en", "Gross pay includes 20,000 EUR as an annual bonus.", None),
+    ("es", "Salario: 10.000 € anuales en acciones.", None),
+    ("ca", "Sou: 90.000 € bruts anuals en accions.", None),
+    ("en", "Gross compensation: 15,000 EUR per year of equity vesting.", None),
+    # (b) Every parenthetical was stripped before `_NOT_A_WAGE` read the
+    # segment, which deleted the disqualifying ones along with the excluding
+    # one. The verb decides now, not the bracket.
+    ("en", "Compensation up to $100,000 (equity, not salary).", None),
+    ("en", "Gross package of 80,000 EUR per year (this is the equity component).", None),
+    (
+        "es",
+        "Salario bruto anual (sin incluir bonus ni acciones): 40.000 € - 50.000 €",
+        _band(40000, 50000, "EUR", "year"),
+    ),  # the exclusion parenthetical still reads as the salary it is
+    # (c) Two period words collapsed into "no period", and "no period" inferred
+    # "year" from the figure's size — a €72k role shown to the candidate as €6k.
+    ("ca", "Sou brut: 6.000 € al mes, amb revisió anual.", None),
+    ("es", "Salario bruto de 6.000 € al mes, con revisión anual.", None),
+    ("en", "Gross pay 6,000 EUR per month, reviewed annually.", None),
+    ("es", "Salario bruto de 8.000 € mensuales en 14 pagas anuales.", None),
+    ("en", "Gross salary 30,000 EUR per year, paid monthly.", None),
+    # (d) `_NOT_A_WAGE` was ES-only where it should have been ES/CA/EN (#294),
+    # and six nouns were missing outright. The ES twin already refused; its
+    # Catalan form did not, which is the exact shape of a parity failure.
+    ("ca", "Accions per valor de 90.000 € bruts anuals.", None),
+    ("ca", "Acció de l'empresa valorada en 90.000 € bruts anuals.", None),
+    ("es", "Acciones por valor de 90.000 € brutos anuales.", None),  # the twin, still refused
+    ("es", "Dietas de 30 € brutos diarios.", None),
+    ("ca", "Dietes de 30 € bruts diaris.", None),
+    ("es", "Comisión bruta anual de hasta 20.000 €.", None),
+    ("ca", "Comissió bruta anual de fins a 20.000 €.", None),
+    ("es", "Plan de pensiones: aportación bruta de 6.000 € anuales.", None),
+    ("en", "Gross salary sacrifice scheme worth 6,000 EUR per year.", None),
+    ("en", "We pay a relocation package of up to 8,000 EUR per year.", None),
+    ("en", "We pay for your home office, up to 5,000 EUR per year.", None),
+    # (e) One case in eighty-two exercised `_NOT_A_WAGE`, out of twenty-two
+    # alternatives. An unexercised alternative is an untested one, and this is
+    # the branch that decides whether an equity grant is a wage.
+    ("en", "Gross salary of $90,000 per year in stock.", None),
+    ("en", "Gross compensation of £70,000 per year in shares.", None),
+    ("en", "Gross compensation of $120,000 per year in RSUs.", None),
+    ("ca", "Sou brut anual de 40.000 € en participacions.", None),
+    ("es", "Sueldo bruto anual más un bono de 6.000 €.", None),
+    ("es", "Bonificación bruta anual de 8.000 €.", None),
+    ("es", "Incentivos brutos anuales de hasta 12.000 €.", None),
+    ("en", "Gross referral award of £6,000 per year.", None),
+    ("en", "Gross training budget of €6,000 per year.", None),
+    ("es", "Presupuesto bruto anual de 6.000 € para formación.", None),
+    ("ca", "Pressupost brut anual de 6.000 € per a formació.", None),
+    ("en", "Gross allowance of €7,000 per year for equipment.", None),
+    ("es", "Ayuda bruta anual de 6.000 € para transporte.", None),
+    ("ca", "Ajuda bruta anual de 6.000 € per al transport.", None),
+    ("en", "Gross funding of £900,000 per year for the lab.", None),
+    ("en", "Gross revenue of £900,000 per year.", None),
+    ("es", "Facturación bruta anual de 900.000 €.", None),
+    ("en", "Gross turnover of £900,000 per year.", None),
+    ("en", "Our gross valuation rose by £900,000 per year.", None),
+    # (f) `pay` and `ote` were bare alternatives in `_CUE`, so a sentence about
+    # what the company pays *out* became a salary.
+    ("en", "We pay our AWS bill of 45,000 EUR per year.", None),
+    ("en", "Our OTE model: customers pay 45,000 EUR per year for the product.", None),
+    ("en", "OTE: £60,000 per annum", _band(60000, None, "GBP", "year")),  # the real use survives
+    # (g) The three renderings of a whitespace thousands separator. U+00A0
+    # parsed, U+202F silently returned nothing, and a plain space was not
+    # admitted; they agree now, and the date hazard the module docstring names
+    # still reads as the salary it is rather than as 202,630,000 euros.
+    ("es", "Salario bruto anual de 30\u00a0000 €", _band(30000, None, "EUR", "year")),
+    ("es", "Salario bruto anual de 30\u202f000 €", _band(30000, None, "EUR", "year")),
+    ("es", "Salario bruto anual de 30 000 €", _band(30000, None, "EUR", "year")),
+    (
+        "es",
+        "Publicado 28/08/2026 30.000€ brutos anuales",
+        _band(30000, None, "EUR", "year"),
+    ),  # four-digit leading group ⇒ "2026 30.000" is never one number
+    # (h) `$` is read as USD wherever it appears — a known ceiling, pinned here
+    # rather than fixed. See the `ponytail:` note beside `_CURRENCIES`.
+    (
+        "es",
+        "Salario bruto anual de 600.000 $ en Ciudad de México",
+        _band(600000, None, "USD", "year"),
+    ),  # MXN read as USD: a 17x overstatement, and today's behaviour
+    ("en", "Gross salary of $95,000 per year in Toronto", _band(95000, None, "USD", "year")),
+    ("en", "Gross salary of $110,000 per year in Sydney", _band(110000, None, "USD", "year")),
 )
 
 
@@ -815,6 +1103,16 @@ def _offer(source: str, text: str, salary: Salary | None = None) -> Offer:
 
 
 _HOUSE_BAND = Salary(min=80000, max=150000, currency="USD", period="year", stated=True)
+
+#: Long enough for `dedup.find_duplicates` to pair two copies of it, so the
+#: blast-radius check measures the join rather than two unrelated adverts.
+_POISON_BODY = (
+    "Staff platform engineer, remote within the EU. You will own the deployment "
+    "pipeline end to end, working in Go and Terraform against a Kubernetes "
+    "estate, and you will be the person other teams ask before they ship. We "
+    "care about the parts of the job nobody writes down: on-call that is humane, "
+    "reviews that are read, and a runbook that is true."
+)
 
 
 def _house_estimate_fixture() -> list[Offer]:
@@ -928,9 +1226,26 @@ def _check_corpus() -> tuple[int, int, list[str], dict[str, dict[str, int]]]:
     return len(defects), len(ads), defects, census
 
 
+#: Bands no route may ever produce. Every one of them rendered on the card
+#: before `_band_defect` ran on all four routes — `nan EUR/year (estimated —
+#: the advert did not say)` is what the estimate route printed, because the only
+#: thing it checked was the `stated` flag.
+_IMPOSSIBLE_BANDS: tuple[Salary, ...] = (
+    Salary(min=float("nan"), currency="EUR", period="year", stated=False),
+    Salary(min=40000, max=float("inf"), currency="EUR", period="year", stated=False),
+    Salary(min=-50000, currency="EUR", period="year", stated=False),
+    Salary(min=0, max=0, currency="EUR", period="year", stated=False),
+    Salary(min=90000, max=10000, currency="EUR", period="year", stated=False),
+    Salary(min=1e12, currency="EUR", period="year", stated=False),
+)
+
+_ESTIMATE_CHECKS = 4 + len(_IMPOSSIBLE_BANDS)
+
+
 def _check_estimate() -> tuple[int, int, list[str]]:
-    """An estimate may not reach `Salary(stated=True)`, and may not reach the
-    card unmarked. Both, because the flag and the card are two different lies.
+    """An estimate may not reach `Salary(stated=True)`, may not reach the card
+    unmarked, and may not be a number no wage could be. Three different lies:
+    the flag, the label, and the figure itself.
     """
     defects: list[str] = []
     silent = _offer(
@@ -947,7 +1262,7 @@ def _check_estimate() -> tuple[int, int, list[str]]:
     found, attempted = recover(silent, estimator=liar)
     if found is None:
         defects.append("the estimate route produced nothing where an estimator was supplied")
-        return len(defects), 3, defects
+        return len(defects), _ESTIMATE_CHECKS, defects
     if found.salary.stated:
         defects.append("an estimate reached Salary(stated=True)")
     if not found.basis.strip():
@@ -957,7 +1272,13 @@ def _check_estimate() -> tuple[int, int, list[str]]:
         defects.append(f"an estimate rendered without its marker: {card_row!r}")
     if "estimate" not in attempted:
         defects.append("the estimate route was not recorded as attempted")
-    return len(defects), 4, defects
+    for band in _IMPOSSIBLE_BANDS:
+        try:
+            Recovered(band, "estimate", "from comparable adverts")
+        except SalaryRecoveryError:
+            continue
+        defects.append(f"a figure no wage could be reached the card: {band!r}")
+    return len(defects), _ESTIMATE_CHECKS, defects
 
 
 def _check_duplicate_join() -> tuple[int, int, list[str]]:
@@ -990,7 +1311,68 @@ def _check_duplicate_join() -> tuple[int, int, list[str]]:
     found, _ = recover(silent, donors=[zeroed], house_bands=house)
     if found is not None:
         defects.append(f"a `salaryFrom: 0` sentinel was consumed as a wage: {found.salary!r}")
-    return len(defects), 5, defects
+
+    # Two donors that disagree, both orders. Returning the first usable donor
+    # made the answer a function of list order: the same job priced at EUR
+    # 45-55k or at USD 150-190k depending on which copy `find_duplicates`
+    # yielded first.
+    euros = _offer(
+        "boardone",
+        "Data engineer in Barcelona, ingestion pipeline, hybrid two days a week.",
+        Salary(min=45000, max=55000, currency="EUR", period="year", stated=True),
+    )
+    dollars = _offer(
+        "boardtwo",
+        "Data engineer in Barcelona, ingestion pipeline, hybrid two days per week.",
+        Salary(min=150000, max=190000, currency="USD", period="year", stated=True),
+    )
+    for order in ([euros, dollars], [dollars, euros]):
+        found, _ = recover(silent, donors=order, house_bands=house)
+        if found is not None:
+            defects.append(
+                "two donors that contradict each other still donated a band "
+                f"({[donor.source for donor in order]}): {found.salary!r}"
+            )
+
+    # The recipient says EUR; the donor's band is in USD. Whatever the join
+    # matched, that is not this job's figure.
+    in_euros = _offer(
+        "aggregator",
+        "Data engineer in Barcelona, working on the ingestion pipeline.",
+        Salary(currency="EUR", stated=False),
+    )
+    found, _ = recover(in_euros, donors=[dollars], house_bands=house)
+    if found is not None:
+        defects.append(f"a donor band contradicted the recipient's currency: {found.salary!r}")
+
+    # A donor whose band is impossible is skipped, not raised out of `recover`.
+    broken = _offer(
+        "brokenboard",
+        "Data engineer in Barcelona, working on the ingestion pipeline for them.",
+        Salary(min=float("inf"), currency="EUR", period="year", stated=True),
+    )
+    try:
+        found, _ = recover(silent, donors=[broken], house_bands=house)
+    except SalaryRecoveryError as error:
+        defects.append(f"an unusable donor raised instead of being skipped: {error}")
+    else:
+        if found is not None:
+            defects.append(f"a non-finite donor band was consumed: {found.salary!r}")
+
+    # Blast radius. `recover_all` writes each advert's parsed band back into the
+    # donor pool as `Salary(stated=True)`, so one misparse does not stay in one
+    # advert: it becomes the *stated* band on every near-duplicate, carrying a
+    # basis that says another board's employer said it. One poisoned advert and
+    # one twin is the smallest batch that measures it.
+    poisoned = _offer("poisonboard", _POISON_BODY + " Salary package: we offer $250,000 in equity.")
+    twin = _offer("mirrorboard", _POISON_BODY + " Apply on our portal for the full conditions.")
+    spread = recover_all([poisoned, twin])
+    if spread.recovered:
+        blast = [f"{found.route}={found.salary!r}" for found in spread.recovered.values()]
+        defects.append(
+            f"an equity grant was read as a salary and donated to its duplicate: {blast}"
+        )
+    return len(defects), 10, defects
 
 
 def _check_drop_discipline(
@@ -1018,6 +1400,16 @@ def _check_drop_discipline(
     by_route = Counter(found.route for found in report.recovered.values())
     if not by_route:
         defects.append("every lookup ran and none of them ever recovered a figure")
+    # Per route, not only in aggregate. The headline count is *structurally*
+    # zero: `_check_drop_discipline` always supplies a `detail_reader`, so
+    # `recover` always appends all three routes to `attempted` and
+    # `routes_missed` can never be non-empty here. The protection that actually
+    # bites is that each cheap route recovers something over the real corpus,
+    # and it lived only in `tests/test_salary_recovery.py`. Mirrored here so the
+    # evidence file stands on its own.
+    for route in ("advert_text", "duplicate"):
+        if not by_route.get(route):
+            defects.append(f"no advert in the corpus was recovered by the {route} route")
     return (
         len(missed),
         len(report.silent) * len(available),

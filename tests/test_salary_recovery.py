@@ -7,6 +7,7 @@ import pytest
 from integral.offers import Offer, Salary, compute_offer_id
 from integral.presentation import ESTIMATED_MARKER, _salary
 from integral.salary_recovery import (
+    _IMPOSSIBLE_BANDS,
     MINIMUM_CORPUS_ADS,
     MINIMUM_WORDING_CASES,
     ROUTES,
@@ -176,6 +177,59 @@ def test_a_present_but_zero_figure_is_not_a_wage() -> None:
     silent = _offer("aggregator", _BODY + " Ask us about the package.")
     found, _attempted = recover(silent, donors=[sentinel])
     assert found is None
+
+
+def test_two_duplicates_that_disagree_donate_nothing() -> None:
+    """Returning the first usable donor made the answer a function of list
+    order: the same job at EUR 45-55k or at USD 150-190k depending on which copy
+    `find_duplicates` happened to yield first. Two readings mean no reading."""
+    silent = _offer("aggregator", _BODY + " Ask us about the package.")
+    euros = _offer(
+        "boardone",
+        _BODY + " One.",
+        Salary(min=45000, max=55000, currency="EUR", period="year", stated=True),
+    )
+    dollars = _offer(
+        "boardtwo",
+        _BODY + " Two.",
+        Salary(min=150000, max=190000, currency="USD", period="year", stated=True),
+    )
+    for order in ([euros, dollars], [dollars, euros]):
+        found, _attempted = recover(silent, donors=order)
+        assert found is None, [donor.source for donor in order]
+
+    # And a donor band in a currency the recipient contradicts is not this
+    # job's figure, however well the join scored.
+    in_euros = _offer("aggregator", _BODY + " Ask us.", Salary(currency="EUR", stated=False))
+    found, _attempted = recover(in_euros, donors=[dollars])
+    assert found is None
+
+
+def test_no_route_may_produce_a_figure_no_wage_could_be() -> None:
+    """`__post_init__` validated the `stated` flag and nothing else, so `nan`,
+    `inf`, a negative, an inverted band and 1e12 all reached the card — the
+    estimate route rendering `nan EUR/year (estimated — the advert did not
+    say)`. `_BOUNDS` and RO4's "zero is not a wage" apply on every route."""
+    for band in _IMPOSSIBLE_BANDS:
+        with pytest.raises(SalaryRecoveryError):
+            Recovered(band, "estimate", "from comparable adverts")
+        with pytest.raises(SalaryRecoveryError):
+            Recovered(band.model_copy(update={"stated": True}), "duplicate", "another board")
+
+
+def test_one_misparse_does_not_become_the_stated_band_on_every_copy() -> None:
+    """Blast radius. `recover_all` writes each advert's parsed band back into
+    the donor pool as `Salary(stated=True)`, so a misparse does not stay in the
+    advert that caused it: it becomes the *stated* band on every near-duplicate,
+    under a basis claiming another board's employer said it."""
+    poison = " Salary package: we offer $250,000 in equity."
+    poisoned = _offer("poisonboard", _BODY + poison)
+    twin = _offer("mirrorboard", _BODY + " Apply on our portal for the conditions.")
+
+    report = recover_all([poisoned, twin])
+
+    assert report.recovered == {}
+    assert set(report.dropped) == {poisoned.id, twin.id}
 
 
 @pytest.mark.parametrize(("language", "text", "expected"), WORDING_CASES)
