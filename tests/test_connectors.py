@@ -963,11 +963,48 @@ def test_a_json_path_outside_the_grammar_is_refused(path: str) -> None:
         compile_path(path)
 
 
-def test_dig_returns_the_scalar_at_the_end_of_the_path() -> None:
-    document = json.loads(JOB_POSTING)
-    assert dig(document, compile_path("title")) == "Mid Data Platform Engineer"
-    assert dig(document, compile_path("baseSalary.value.minValue")) == "15000"
-    assert dig(document, compile_path("hiringOrganization.name")) == "QED.ai"
+# Every path `connectors/justjoin_en/connector.yaml` declares on its detail
+# route, with the value the schema.org document above holds at it. This is the
+# audit that is independent of the connector file: `check_fixture` proves the
+# package parses *its own* fixture, which a mistyped path can still do by
+# resolving to nothing on a board that often omits the field. Here the document
+# is known and every declared path must land on its known value.
+#
+# It covered `minValue` and `hiringOrganization.name` and nothing else, so a
+# path wrong for the ceiling, the currency, the period or either half of the
+# location would have gone unnoticed — and a salary with a floor and no ceiling
+# is exactly the shape this route was built to stop (#260 review).
+JUSTJOIN_DECLARED_PATHS = {
+    "title": "Mid Data Platform Engineer",
+    "description": "We build data pipelines.",
+    "hiringOrganization.name": "QED.ai",
+    "baseSalary.value.minValue": "15000",
+    "baseSalary.value.maxValue": "21500",
+    "baseSalary.currency": "PLN",
+    "baseSalary.value.unitText": "MONTH",
+    "jobLocation.address.addressLocality": "Warszawa",
+    "jobLocation.address.addressCountry": "PL",
+}
+
+
+@pytest.mark.parametrize(("path", "expected"), sorted(JUSTJOIN_DECLARED_PATHS.items()))
+def test_dig_returns_the_scalar_at_the_end_of_the_path(path: str, expected: str) -> None:
+    assert dig(json.loads(JOB_POSTING), compile_path(path)) == expected
+
+
+def test_the_path_audit_covers_every_path_the_shipped_connector_declares() -> None:
+    """An audit that lags the connector it audits is not an audit.
+
+    Two of the nine paths were covered when this was written, so the table is
+    pinned against the shipped file rather than left to be extended by whoever
+    remembers. A new field on justjoin's detail route fails here until it has a
+    known-value assertion above.
+    """
+    shipped = yaml.safe_load(
+        (_CONNECTOR_LIBRARY / "justjoin_en" / "connector.yaml").read_text(encoding="utf-8")
+    )
+    declared = set(shipped["detail"]["from_json"]["fields"].values())
+    assert declared == set(JUSTJOIN_DECLARED_PATHS)
 
 
 @pytest.mark.parametrize(
