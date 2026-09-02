@@ -367,6 +367,30 @@ _UNBOUNDED_PERIOD = re.compile(
     re.IGNORECASE,
 )
 
+#: "40 hours a week", "dos días a la semana" — a *working-time* phrase, not a pay
+#: period. `_UNBOUNDED_PERIOD`'s bare `a` alternative matched the `a week` inside
+#: one, so "Gross salary 45,000 EUR for 40 hours a week" refused a perfectly
+#: readable annual band and returned `None` (#312 review). Fail-closed rather than
+#: fail-open — a lost recovery, not a wrong one — but a lost recovery is what this
+#: whole task exists to stop, and full-time hours beside an annual figure is
+#: ordinary advert prose rather than an edge case.
+#:
+#: Blanked out of the segment before the period test rather than excluded inside
+#: it. The phrase says nothing about pay in either direction, so the honest thing
+#: to read is a segment that never carried it; folding another alternative into
+#: `_UNBOUNDED_PERIOD` would make a "which period is this" pattern also answer
+#: "and is it about pay at all", which is two questions in one regex.
+_WORKING_TIME = re.compile(
+    r"\b(?:\d{1,3}(?:[.,]\d+)?"
+    r"|one|two|three|four|five|six|seven|eight"
+    r"|un[oa]?|dos|tres|cuatro|cinco|seis|siete|ocho"
+    r"|quatre|cinc|sis|set|vuit)\s*"
+    r"(?:h|hrs?|hours?|hores|horas|d[ií]as?|dies|days?|jornades?|jornadas?)\s*"
+    r"(?:/|per|a\s+la|a|por|cada)\s*"
+    r"(?:week|setmana|semana)\b",
+    re.IGNORECASE,
+)
+
 #: "1.800 € per 12 pagues" states a *monthly* wage: the Spanish and Catalan
 #: convention is that a figure quoted with a payment count is the payment. Only
 #: consulted when no explicit period word is present, so "anual … (12 pagues)"
@@ -505,7 +529,17 @@ def _band_in_segment(segment: str) -> Salary | None:
         return None  # unreadable, or a `salaryFrom: 0` sentinel
     figures = sorted(value for value in values if value is not None)
 
-    named = _periods_in(segment)
+    # Working time is blanked before *both* period questions, not just the
+    # unbounded one. `_periods_in` reads "40 horas"/"40 hores" as an hourly pay
+    # period, while English "40 hours" it does not match at all — so the same
+    # advert in Spanish returned `None` (45.000 is nowhere near an hourly band)
+    # and in English returned the annual figure. That is the ES/EN/CA parity
+    # rule broken inside one function, and the fix has to sit above both reads
+    # or the languages diverge again at the next pattern.
+    #
+    # Position-based logic above still uses `segment`: `sub` keeps no offsets.
+    timeless = _WORKING_TIME.sub(" ", segment)
+    named = _periods_in(timeless)
     if len(named) > 1:
         return None  # the segment says two things; it has said nothing
     if named:
@@ -521,7 +555,7 @@ def _band_in_segment(segment: str) -> Salary | None:
         # is not "no period" either: it is a period we cannot store, and
         # inferring annual from it is how "Weekly pay: 6,000 EUR" became a
         # €6.000 year.
-        if _UNBOUNDED_PERIOD.search(segment):
+        if _UNBOUNDED_PERIOD.search(timeless):
             return None
         if figures[0] < _BOUNDS["year"][0]:
             return None
@@ -1176,6 +1210,39 @@ WORDING_CASES: tuple[tuple[str, str, Salary | None], ...] = (
         "Salario bruto de 30.000 € en una jornada de 40h semanales",
         _band(30000, None, "EUR", "year"),
     ),
+    # Working time stated with a period marker — "a week", not "40h semanales".
+    # `_UNBOUNDED_PERIOD`'s bare `a` alternative matched the `a week` inside the
+    # phrase and refused the annual figure (#312 review), and `_periods_in` read
+    # "horas"/"hores" as an *hourly* wage, so the identical advert answered
+    # differently in each of the three languages. Both reads now sit above
+    # `_WORKING_TIME`, and all three are committed here rather than only
+    # asserted in the suite: the case list is the denominator this gate reports.
+    (
+        "en",
+        "Gross salary 45,000 EUR for 40 hours a week",
+        _band(45000, None, "EUR", "year"),
+    ),
+    (
+        "es",
+        "Salario bruto 45.000 EUR por 40 horas a la semana",
+        _band(45000, None, "EUR", "year"),
+    ),
+    (
+        "ca",
+        "Salari brut 45.000 EUR per 40 hores a la setmana",
+        _band(45000, None, "EUR", "year"),
+    ),
+    # A word quantity and a day unit, which the numeric form would have missed.
+    (
+        "es",
+        "Sueldo 48.000 € brutos, cuatro días a la semana",
+        _band(48000, None, "EUR", "year"),
+    ),
+    # The controls. Blanking working time must not blank a real weekly wage:
+    # neither of these carries a quantity and a time unit before the week word,
+    # so both stay refused — a weekly figure is a period `_BOUNDS` cannot store.
+    ("en", "Salary 1,200 EUR a week", None),
+    ("ca", "Sou de 900 € per setmana", None),
 )
 
 
