@@ -104,8 +104,10 @@ def test_recall_is_refused_while_the_corpus_cannot_carry_it(
     assert audit["negated_label_count"] == len(expected)
 
 
-def _negated_ad(index: int, text: str, quote: str) -> LabelledAd:
-    """One evaluation-split ad carrying a single negated `on_call_load` label."""
+def _negated_ad(
+    index: int, text: str, quote: str, dimension: str = "on_call_load"
+) -> LabelledAd:
+    """One evaluation-split ad carrying a single negated label on `dimension`."""
     start = text.index(quote)
     return LabelledAd(
         id=f"t59-{index}",
@@ -115,7 +117,7 @@ def _negated_ad(index: int, text: str, quote: str) -> LabelledAd:
         split="evaluation",
         labels=[
             Label(
-                dimension="on_call_load",
+                dimension=dimension,
                 value=0.0,
                 spans=[Span(start=start, end=start + len(quote))],
                 negated=True,
@@ -179,3 +181,38 @@ def test_an_unknown_dimension_lowers_recall_rather_than_the_denominator(
     assert audit["negated_label_count"] == 10
     assert audit["extraction_negation_recall"] == 0.9
     assert audit["negation_recall_misses"] == ["t59-0/on_call_lod: no such dimension"]
+
+
+def test_a_denies_hit_is_not_credited_to_the_scope_rule(
+    dimensions: dict[str, Dimension],
+) -> None:
+    """Perfect recall, half of it earned by vocabulary the cue set already had.
+
+    `sin viajes` is a `denies` cue — the negator is inside the pattern, so
+    matching it proves nothing about T16's backward-looking scope rule. `no hace
+    guardias` reaches the same verdict the other way: the bare `guardias` cue is
+    `negatable` and only the scope rule makes it negative. (`sin guardias` would
+    *not* do — it is its own `denies` cue and `cue_findings` drops the narrower
+    `guardias` match contained inside it, so nothing negatable survives.)
+    Counting both mechanisms as one number is what T59's task file forbids, and
+    this is what stops it: recall is 1.0 and the split says only half of it
+    tested the rule.
+
+    The per-language counts come along because they are the same failure at a
+    different grain — a floor that is a bare total lets ten Spanish labels score
+    a number reported for ES, EN and CA alike.
+    """
+    store = [
+        _negated_ad(i, "Puesto estable. El equipo no hace guardias.", "guardias")
+        for i in range(5)
+    ]
+    store += [
+        _negated_ad(5 + i, "Trabajo estable. Sin viajes.", "Sin viajes", "travel_requirement")
+        for i in range(5)
+    ]
+
+    audit = negation_audit(store, list(dimensions.values()))
+
+    assert audit["extraction_negation_recall"] == 1.0
+    assert audit["negation_recall_hits_by_mechanism"] == {"scope": 5, "denies": 5}
+    assert audit["negated_label_count_by_language"] == {"en": 0, "es": 10, "ca": 0}

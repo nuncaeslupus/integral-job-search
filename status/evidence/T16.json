@@ -19,12 +19,21 @@
   "extraction_negation_recall": null,
   "negation_status": "unmeasured",
   "negation_recall_hits": 6,
+  "negation_recall_hits_by_mechanism": {
+    "scope": 3,
+    "denies": 3
+  },
   "negation_recall_misses": [
     "manfred-8386/process_formality: no cue settled the dimension",
     "manfred-8386/social_intensity: no cue settled the dimension",
     "manfred-8392/social_intensity: no cue settled the dimension"
   ],
   "negated_label_count": 9,
+  "negated_label_count_by_language": {
+    "en": 0,
+    "es": 9,
+    "ca": 0
+  },
   "negated_labels": [
     "manfred-8386/process_formality",
     "manfred-8386/social_intensity",

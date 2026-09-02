@@ -265,3 +265,26 @@ map is the number T57 exists to report.
 
 A pre-mark still is not a label. This shortens the round; it does not stand in
 for the person at the end of it.
+
+### What T59 costs — measured 2026-09-03
+
+`extraction_negation_recall` (T59, `lo-4b17`) has its own denominator and its own
+floor: **10 negated labels on the evaluation split**, counted overall rather than
+per dimension. The store carries **9**. One label unblocks the number.
+
+The live values are in `status/evidence/T16.json`. Two of them say what a bare
+count cannot, and both should be read before the round is called done:
+
+| key | today | why it matters |
+|---|---|---|
+| `negated_label_count_by_language` | `{en: 0, es: 9, ca: 0}` | The floor is a **total**. A tenth Spanish label makes the score "measured" with Catalan `no … pas` and every English negator never once scored. |
+| `negation_recall_hits_by_mechanism` | `{scope: 3, denies: 3}` | Half the hits are `denies` cues — the negator is inside the cue's own pattern (`sin\s+viajes`). Only `scope` tests the backward-looking rule T16 built. |
+
+So the cheap round is not "one more label". It is **one English and one Catalan
+negated label**, on adverts whose denial the cue set does *not* already spell
+out — a `negatable` cue with a negator in front of it, not a `denies` cue. That
+is three labels, and it takes the measurement from Spanish-only to the parity
+the repo requires everywhere else.
+
+A pre-mark still is not a label here either. `negated` is a person's reading of
+a denial, and `suggestions.json` cannot supply one.
