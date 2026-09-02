@@ -679,9 +679,47 @@ def from_feinaactiva_family(
             yield rec
 
 
-def from_urls(session: requests.Session, urls: list[str], source: str) -> Iterator[dict[str, Any]]:
-    """Any board that publishes schema.org JobPosting — used for the hand-picked CA ads."""
+def source_of(url: str) -> str | None:
+    """The board name this URL belongs to, or `None` if no board claims its host.
+
+    The reverse of `SOURCE_HOSTS`, and the only honest answer for a hand-supplied
+    URL: a corpus row's `source` is a board, and `corpus_scope.draw_selects` tests
+    it against the draw's `sources` axis.
+    """
+    host = (urlsplit(url).hostname or "").lower()
+    return next(
+        (name for name, h in SOURCE_HOSTS.items() if host == h or host.endswith("." + h)),
+        None,
+    )
+
+
+def from_urls(
+    session: requests.Session, urls: list[str], spec: Mapping[str, Any]
+) -> Iterator[dict[str, Any]]:
+    """Any board that publishes schema.org JobPosting — used for the hand-picked CA ads.
+
+    Takes the draw's specification rather than a source string. It used to be handed
+    the literal `"ca"`, which is a *language* written into the `source` field: no draw
+    declares `ca` as a source, so every row this produced was a provenance fault the
+    moment `corpus_scope` read it (#307 review). The board is derived from the URL's
+    host instead, and a URL whose board the draw does not name — or which advertises
+    a family the draw did not ask for — is skipped before it is fetched.
+    """
+    if "programming" not in set(spec["job_families"]):
+        print(
+            f"  ca-urls: draw {spec['id']!r} does not ask for programming — none fetched",
+            file=sys.stderr,
+        )
+        return
+    sources = set(spec["sources"])
     for url in urls:
+        source = source_of(url)
+        if source is None:
+            print(f"  no board claims this host: {url}", file=sys.stderr)
+            continue
+        if source not in sources:
+            print(f"  draw {spec['id']!r} does not name {source}: {url}", file=sys.stderr)
+            continue
         posting = jobposting_ld(get(session, url).text)
         if not posting:
             print(f"  no JobPosting block: {url}", file=sys.stderr)
@@ -701,16 +739,23 @@ def from_urls(session: requests.Session, urls: list[str], source: str) -> Iterat
 
 
 def draw_scoped(
-    spec: Mapping[str, Any], plan: list[tuple[str, str, Any, int]]
-) -> tuple[list[tuple[str, str, Any, int]], list[str]]:
+    spec: Mapping[str, Any], plan: list[tuple[str, str, Any, int, str]]
+) -> tuple[list[tuple[str, str, Any, int, str]], list[str]]:
     """The plan rows and job families a draw's specification asks for.
 
     Two of a draw's three axes are request-shaped: a `sources` entry decides which
-    boards are contacted, a `job_families` entry which searches are issued against
-    Feina Activa. A source or family the specification does not name is a request
-    to a real board that nobody asked for, which is the rule the policy ledger and
-    the redirect guard both enforce by other routes — `t25-families` names Feina
-    Activa alone, and an unconstrained run put three remote boards on the wire.
+    boards are contacted, a `job_families` entry which searches are issued. A source
+    or family the specification does not name is a request to a real board that
+    nobody asked for, which is the rule the policy ledger and the redirect guard
+    both enforce by other routes — `t25-families` names Feina Activa alone, and an
+    unconstrained run put three remote boards on the wire.
+
+    **Both axes bind the fixed plan, not just `sources`.** Every fixed adapter
+    searches for programming roles, so under `t25-families` — which names Feina
+    Activa but not `programming` — filtering on the source alone kept the
+    `feinaactiva` row and would have collected programming ads for a breadth draw
+    (#307 review). Those rows would then be refused by `corpus_scope.draw_selects`,
+    after the board had already been read.
 
     The third axis, the counts, deliberately does not bind here: shortages are read
     against the whole store, so a draw re-issued over a corpus that already holds
@@ -722,7 +767,7 @@ def draw_scoped(
     sources = set(spec["sources"])
     families = set(spec["job_families"])
     return (
-        [row for row in plan if row[1] in sources],
+        [row for row in plan if row[1] in sources and row[4] in families],
         [family for family in FAMILY_KEYWORDS if family in families],
     )
 
@@ -775,17 +820,21 @@ def main() -> int:
             added += 1
         print(f"{name}: +{added}")
 
+    # Every fixed adapter searches for programming roles and stamps `programming`
+    # on what it returns; the family is carried in the row rather than assumed, so
+    # `draw_scoped` filters on it and a non-programming adapter added later is
+    # handled by declaring its family here.
     plan = [
-        ("es", "manfred", from_manfred, args.target_es),
-        ("es", "tecnoempleo", from_tecnoempleo, args.target_es),
-        ("en", "weworkremotely", from_weworkremotely, args.target_en),
-        ("en", "remoteok", from_remoteok, args.target_en),
-        ("en", "remotive", from_remotive, args.target_en),
-        ("ca", "feinaactiva", from_feinaactiva, args.target_ca),
+        ("es", "manfred", from_manfred, args.target_es, "programming"),
+        ("es", "tecnoempleo", from_tecnoempleo, args.target_es, "programming"),
+        ("en", "weworkremotely", from_weworkremotely, args.target_en, "programming"),
+        ("en", "remoteok", from_remoteok, args.target_en, "programming"),
+        ("en", "remotive", from_remotive, args.target_en, "programming"),
+        ("ca", "feinaactiva", from_feinaactiva, args.target_ca, "programming"),
     ]
     # Policy before politeness: robots is asked per fetch inside `get()`, but a board
     # the ledger refuses is never planned in the first place.
-    refused = plan_refusals(name for _, name, _, _ in plan)
+    refused = plan_refusals(name for _, name, _, _, _ in plan)
     for name, why in sorted(refused.items()):
         print(f"{name}: not planned — {why}", file=sys.stderr)
     plan = [row for row in plan if row[1] not in refused]
@@ -796,7 +845,7 @@ def main() -> int:
     for name in {row[1] for row in unscoped} - {row[1] for row in plan}:
         print(f"{name}: not planned — draw {args.draw!r} does not name it", file=sys.stderr)
 
-    for lang, name, fetch, target in plan:
+    for lang, name, fetch, target, _family in plan:
         missing = target - language_counts(list(ads.values()))[lang]
         if missing > 0:
             absorb(name, fetch(session, missing))
@@ -814,7 +863,7 @@ def main() -> int:
     if args.ca_urls and args.ca_urls.exists():
         lines = args.ca_urls.read_text().splitlines()
         urls = [u.strip() for u in lines if u.strip().startswith("http")]
-        absorb("ca-urls", from_urls(session, permitted_urls(urls), "ca"))
+        absorb("ca-urls", from_urls(session, permitted_urls(urls), declared[args.draw]))
 
     all_ads = list(ads.values())
     save_ads(all_ads)

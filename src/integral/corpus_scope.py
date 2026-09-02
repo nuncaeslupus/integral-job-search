@@ -528,17 +528,28 @@ def measure_provenance(
     findings, absent = serving_path_findings(src_dir)
     scanned = len(serving_path_modules(src_dir)) - len(absent)
 
-    unmeasured: list[str] = []
+    # Two verdicts wear the same word and must not share an exit code. A scan that
+    # *could not run* — a serving-path module absent from the tree — is untrusted,
+    # and `make evidence` records that as "unmeasured (recorded)" and continues. A
+    # scan that ran, counted, and came back **under a floor** is a finding, and
+    # exit 3 would let `make evidence` sail past it: a corpus shrinking below
+    # MINIMUM_CORPUS_ROWS would leave the gate green (#307 review). They are kept in
+    # separate lists so the exit code reads a structure rather than grepping the
+    # message — the reason text is for a person, and a code path that parses it
+    # breaks the next time somebody rewords it.
+    untrusted: list[str] = []
+    breached: list[str] = []
     if rows_examined < MINIMUM_CORPUS_ROWS:
-        unmeasured.append(
+        breached.append(
             f"{rows_examined} corpus rows examined, below the {MINIMUM_CORPUS_ROWS} floor"
         )
     if absent:
-        unmeasured.append(f"serving-path modules not found: {', '.join(absent)}")
+        untrusted.append(f"serving-path modules not found: {', '.join(absent)}")
     if scanned < MINIMUM_SERVING_MODULES:
-        unmeasured.append(
+        breached.append(
             f"{scanned} serving-path modules scanned, below the {MINIMUM_SERVING_MODULES} floor"
         )
+    unmeasured = breached + untrusted
 
     measured: dict[str, Any] = {
         # The declared gate's key, and it is the sum because `gate_evidence.py` asserts
@@ -551,6 +562,7 @@ def measure_provenance(
         "corpus_rows_without_a_draw_specification": len(faults),
         "serving_path_corpus_reads": len(findings),
         "gate_status": "unmeasured" if unmeasured else "measured",
+        "floor_breaches": len(breached),
         "corpus_rows_evaluated_at_least": MINIMUM_CORPUS_ROWS,
         "serving_path_modules_scanned_at_least": MINIMUM_SERVING_MODULES,
         "declared_draws": sorted(load_draws(draws_path)),
@@ -593,10 +605,17 @@ def _main(argv: list[str]) -> int:
     _report([f"{f['where']} {f['row']}: {f['reason']}" for f in provenance["faults"]])
     _report([f"{f['module']}: {f['reason']}" for f in provenance["serving_path_findings"]])
 
-    if measured["mismatches"] or provenance["faults"] or provenance["serving_path_findings"]:
+    if (
+        measured["mismatches"]
+        or provenance["faults"]
+        or provenance["serving_path_findings"]
+        or provenance["floor_breaches"]
+    ):
         return 1
     # Exit 3 is `make evidence`'s "unmeasured": the check ran and found it cannot be
-    # scored, which is a verdict to record rather than a failure to stop on.
+    # scored, which is a verdict to record rather than a failure to stop on. A floor
+    # breach is *not* that — the scan ran and came back short — so it exits 1 above,
+    # because `Makefile:58-70` maps 3 to "unmeasured (recorded)" and continues.
     return 3 if provenance["gate_status"] == "unmeasured" else 0
 
 

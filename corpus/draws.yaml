@@ -62,6 +62,15 @@ draws:
       and dimension coverage are measured over more than one industry. Feina
       Activa alone, because it is the one board in reach advertising every
       family natively in the corpus's own languages.
-    languages: [ca, es]
+
+      The language axis is the same three as T4b even though only `ca` and `es`
+      came back, and that is the registry behaving as this file's preamble says
+      it must: it states what was *asked for*, not what arrived. `corpus/raw/
+      README.md` records the reason no English row exists — these are on-site
+      roles in Catalonia, and there is no English-language board advertising
+      Catalan hospitality work — and the axis is "a whitelist on what may enter",
+      not a per-family quota. Narrowing it to `[ca, es]` would make the
+      specification a record of the harvest, which is the one thing a draw is not.
+    languages: [ca, en, es]
     job_families: [administrative, healthcare, hospitality, retail, teaching, trades]
     sources: [feinaactiva]

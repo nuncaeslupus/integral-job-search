@@ -288,7 +288,7 @@ def test_a_supplied_url_on_a_refused_board_is_never_fetched(
 
     allowed = COLLECT.permitted_urls(urls, _ledger(tmp_path))
     assert allowed == []
-    assert list(COLLECT.from_urls(session, allowed, "ca")) == []
+    assert list(COLLECT.from_urls(session, allowed, COLLECT.load_draws()["t4b-programming"])) == []
     assert session.fetched == []
 
 
@@ -306,7 +306,7 @@ def test_a_supplied_url_on_an_unrecorded_host_is_refused_too(
     refused = COLLECT.url_refusals(urls, _ledger(tmp_path))
     assert "not recorded in SOURCE_HOSTS" in refused[urls[0]]
     assert COLLECT.permitted_urls(urls, _ledger(tmp_path)) == []
-    assert list(COLLECT.from_urls(session, [], "ca")) == []
+    assert list(COLLECT.from_urls(session, [], COLLECT.load_draws()["t4b-programming"])) == []
     assert session.fetched == []
 
 
@@ -414,24 +414,40 @@ def test_the_committed_plan_is_clean_against_the_committed_ledger() -> None:
 # T98 — a draw's specification narrows what is fetched, not only what is stamped.
 
 
-def _plan() -> list[tuple[str, str, Any, int]]:
-    """The collector's fixed plan, shaped as `main` builds it."""
+def _plan() -> list[tuple[str, str, Any, int, str]]:
+    """The collector's fixed plan, shaped as `main` builds it. Every fixed adapter
+    stamps `programming`, which is why the family axis has to bind it too."""
     return [
-        ("es", "manfred", None, 60),
-        ("es", "tecnoempleo", None, 60),
-        ("en", "weworkremotely", None, 25),
-        ("en", "remotive", None, 25),
-        ("ca", "feinaactiva", None, 15),
+        ("es", "manfred", None, 60, "programming"),
+        ("es", "tecnoempleo", None, 60, "programming"),
+        ("en", "weworkremotely", None, 25, "programming"),
+        ("en", "remotive", None, 25, "programming"),
+        ("ca", "feinaactiva", None, 15, "programming"),
     ]
 
 
 def test_a_draw_that_names_one_board_puts_no_other_board_on_the_wire() -> None:
     """`t25-families` declares Feina Activa alone. Before this bound the plan, a run
-    against it contacted three remote boards the specification never asked for —
-    real requests to real boards, which is the rule the ledger enforces elsewhere."""
+    against it contacted the remote boards the specification never asked for — real
+    requests to real boards, which is the rule the ledger enforces elsewhere."""
     spec = COLLECT.load_draws()["t25-families"]
     plan, _ = COLLECT.draw_scoped(spec, _plan())
-    assert [row[1] for row in plan] == ["feinaactiva"], plan
+    assert not [row[1] for row in plan if row[1] != "feinaactiva"], plan
+
+
+def test_a_breadth_draw_runs_no_programming_adapter_even_on_a_board_it_names() -> None:
+    """The source axis alone was not enough. `t25-families` names `feinaactiva` and
+    does *not* name `programming`, and every fixed adapter — the Feina Activa one
+    included — searches for programming roles and stamps that family. Filtering on the
+    source alone kept that row, so a breadth draw would have collected programming ads
+    and had every one of them refused by `draw_selects` after the board was read."""
+    spec = COLLECT.load_draws()["t25-families"]
+    plan, _ = COLLECT.draw_scoped(spec, _plan())
+    assert plan == [], plan
+
+    # And the control: T4b names programming, so its plan is not empty.
+    t4b, _ = COLLECT.draw_scoped(COLLECT.load_draws()["t4b-programming"], _plan())
+    assert [row[1] for row in t4b] == [row[1] for row in _plan()], t4b
 
 
 def test_a_programming_draw_issues_no_search_for_a_family_it_does_not_name() -> None:
@@ -456,3 +472,26 @@ def test_every_declared_draw_asks_only_for_boards_the_collector_can_reach() -> N
     for name, spec in COLLECT.load_draws().items():
         unreachable = set(spec["sources"]) - set(COLLECT.SOURCE_HOSTS)
         assert not unreachable, f"draw {name!r} names {sorted(unreachable)}"
+
+
+def test_a_supplied_url_takes_its_source_from_the_board_not_the_language() -> None:
+    """`from_urls` was handed the literal `"ca"` as its source — a *language* written
+    into the field `corpus_scope.draw_selects` tests against the draw's `sources` axis.
+    No draw declares `ca` as a source, so every row `--ca-urls` produced would have been
+    a provenance fault the moment the gate read it (#307 review)."""
+    assert COLLECT.source_of("https://feinaactiva.gencat.cat/oferta/1") == "feinaactiva"
+    assert COLLECT.source_of("https://www.tecnoempleo.com/x") == "tecnoempleo"
+    assert COLLECT.source_of("https://never-surveyed.invalid/x") is None
+
+    declared = {s for spec in COLLECT.load_draws().values() for s in spec["sources"]}
+    assert "ca" not in declared, "the old literal names no board in any draw"
+
+
+def test_a_supplied_url_on_a_board_the_draw_does_not_name_is_never_fetched() -> None:
+    """The `--ca-urls` path is bound by the same two axes as the plan. `t25-families`
+    asks for no programming, and these adapters stamp nothing else."""
+    session = FakeSession({})
+    url = "https://feinaactiva.gencat.cat/oferta/1"
+    breadth = COLLECT.load_draws()["t25-families"]
+    assert list(COLLECT.from_urls(session, [url], breadth)) == []
+    assert session.fetched == [], "a draw asking for no programming still read the board"

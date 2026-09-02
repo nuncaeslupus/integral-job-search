@@ -341,3 +341,36 @@ def _committed_raw_lines() -> list[str]:
     from integral.corpus_scope import DEFAULT_RAW_ADS
 
     return [line for line in DEFAULT_RAW_ADS.read_text(encoding="utf-8").splitlines() if line]
+
+
+def test_a_draw_that_is_not_a_string_is_refused_at_load(tmp_path: Path) -> None:
+    """`str(x or "").strip()` is not the test it looks like.
+
+    It stringifies anything non-empty, so a row whose `draw` is a dict passed the
+    check as though it named one — and the repr went on to be compared against the
+    registry downstream. A loader is a trust boundary; the type is part of the
+    contract (#307 review).
+    """
+    for wrong in ({"id": "t4b-programming"}, ["t4b-programming"], 7, True):
+        row = _row("mistyped") | {"draw": wrong}
+        with pytest.raises(ValueError, match="names no draw"):
+            load_ads(_corpus(tmp_path, [row]))
+
+
+def test_a_floor_breach_is_a_finding_not_an_unmeasured_reading(tmp_path: Path) -> None:
+    """Two verdicts wear the word "unmeasured" and must not share an exit code.
+
+    `Makefile:58-70` maps exit 3 to "unmeasured (recorded)" and **continues** — only
+    `*)` fails. So a corpus shrinking below `MINIMUM_CORPUS_ROWS` left `make evidence`
+    green: the scan ran, counted, came back short, and the gate sailed past it
+    (#307 review). A scan that could not run is the one that earns exit 3; a scan that
+    ran and breached a floor is a finding and exits 1.
+    """
+    measured = measure_provenance(
+        raw_path=_corpus(tmp_path, [_row("only")]),
+        labelled_path=_corpus(tmp_path, [_row("only")], "labelled.jsonl"),
+        draws_path=_registry(tmp_path),
+    )
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["floor_breaches"] == 1, measured.get("unmeasured_reason")
+    assert not measured["faults"], "the floor is the only reason this reading is short"

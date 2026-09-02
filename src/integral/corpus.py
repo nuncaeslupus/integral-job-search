@@ -153,7 +153,11 @@ def load_ads(path: Path = DEFAULT_PATH) -> list[dict[str, Any]]:
             raise ValueError(f"{path}:{lineno} ad {ad.get('id')!r} declares no job_family")
         # Refused for the same reason, and in the same place: a row that cannot name the
         # draw it came from is a session harvest, whatever else it carries.
-        if not str(ad.get("draw") or "").strip():
+        # `str(x or "")` is not the test it looks like: it stringifies *anything*
+        # non-empty, so a row whose `draw` is a dict or a list passed as though it
+        # named one, and the repr went on to be compared against the registry
+        # (#307 review). The type is checked before the emptiness.
+        if not isinstance(ad.get("draw"), str) or not ad["draw"].strip():
             raise ValueError(
                 f"{path}:{lineno} ad {ad.get('id')!r} names no draw — the corpus is drawn "
                 f"by specification (corpus/draws.yaml), never saved from a search"
