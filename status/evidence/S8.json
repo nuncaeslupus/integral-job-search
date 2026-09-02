@@ -9,5 +9,8 @@
   "gate_mismatches": [],
   "dependency_mismatches": [],
   "ungated_rows": [],
-  "violations": []
+  "violations": [
+    "t-d1a0cd63 title does not start with a task label: 'Every open task PR goes stale on D12 the moment any other task PR merges'",
+    "t-e4047287 title does not start with a task label: 'connector_contract._as_date has the same two date weaknesses T99 just fixed in connector_policy'"
+  ]
 }
