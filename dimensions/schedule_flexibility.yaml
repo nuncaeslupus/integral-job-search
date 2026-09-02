@@ -44,34 +44,39 @@ elicitation:
           canviar i qui hi havia d'estar d'acord?
 extraction:
   cues:
+    # A bare `jornada intensiva` is **not** this dimension's 0.4 rung. On these
+    # boards it names the shape of a fixed day — one unbroken block, 07:00 to
+    # 15:00 — and says nothing about give. The rung's own tell is "flexible
+    # start and finish, or **an intensive summer**, inside a fixed frame", so
+    # the cue asks for the seasonal or weekday qualifier that makes it one.
     en:
-      - pattern: "flexible\\s+(working\\s+)?(hours|schedule)"
+      - pattern: "flexible\\s+(working\\s+)?(hours|schedule|start)|flexitime|flexible\\s+start\\s+and\\s+finish"
         value: 0.7
         negatable: true
-      - pattern: "asynchronous|async"
+      - pattern: "asynchronous|async|summer\\s+hours|compressed\\s+(work\\s+)?week"
         value: 0.6
         negatable: false
       - pattern: "fixed\\s+(hours|schedule)"
         value: 0.0
         negatable: false
     es:
-      - pattern: "horario\\s+flexible|flexibilidad\\s+horaria"
+      - pattern: "horario\\s+flexible|jornada\\s+flexible|flexibilidad\\s+horaria|horari\\s+flexible|flexibilitat\\s+hor[àa]ria|entrada\\s+y\\s+salida\\s+flexible|horario\\s+a\\s+convenir"
         value: 0.7
         negatable: true
-      - pattern: "jornada\\s+intensiva"
+      - pattern: "jornada\\s+intensiva\\s+(en\\s+|els\\s+|los\\s+|de\\s+)?(verano|estiu|julio|agosto|juliol|agost|viernes|divendres)"
         value: 0.6
         negatable: false
-      - pattern: "horario\\s+fijo"
+      - pattern: "horario\\s+fijo|horari\\s+fix"
         value: 0.0
         negatable: false
     ca:
-      - pattern: "horari\\s+flexible|flexibilitat\\s+hor[àa]ria"
+      - pattern: "horari\\s+flexible|jornada\\s+flexible|flexibilitat\\s+hor[àa]ria|horario\\s+flexible|flexibilidad\\s+horaria|entrada\\s+i\\s+sortida\\s+flexible|horari\\s+a\\s+convenir"
         value: 0.7
         negatable: true
-      - pattern: "jornada\\s+intensiva"
+      - pattern: "jornada\\s+intensiva\\s+(a\\s+l['’]|en\\s+|els\\s+|los\\s+|de\\s+)?(estiu|verano|juliol|agost|julio|agosto|divendres|viernes)"
         value: 0.6
         negatable: false
-      - pattern: "horari\\s+fix"
+      - pattern: "horari\\s+fix|horario\\s+fijo"
         value: 0.0
         negatable: false
   gold:

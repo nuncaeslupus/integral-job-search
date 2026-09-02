@@ -899,6 +899,18 @@ def measure(
     measured["extraction_scored_dimensions"] = sorted(scored)
     measured["declared_subset"] = sorted(DECLARED_SUBSET)
     measured["scored_beyond_the_declared_subset"] = sorted(set(scored) - set(DECLARED_SUBSET))
+    # A dimension every one of whose evaluation labels asserts something has no
+    # negative class, so its F1 **cannot fall for over-firing**: a cue set that
+    # settled that dimension on every advert in the corpus would score 1.0 here.
+    # That is not a defect in the score — F1 is the metric T56 declares — but it
+    # is the one thing a reader must know before quoting a per-dimension 1.0, so
+    # it is named rather than left to be inferred from `true_positives == n`.
+    # `false_positives` is still counted for these, and is still 0.
+    measured["dimensions_with_no_negative_class"] = sorted(
+        d
+        for d, s in scored.items()
+        if s["true_positives"] + s["false_negatives"] == s["n"]
+    )
     if scored:
         measured["extraction_macro_f1"] = round(
             sum(s["f1"] for s in scored.values()) / len(scored), 4

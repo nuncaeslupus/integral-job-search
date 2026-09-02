@@ -44,7 +44,7 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "willing(ness)?\\s+to\\s+travel|travel\\s+required"
+      - pattern: "willing(ness)?\\s+to\\s+travel|travel\\s+required|business\\s+trips?"
         value: 0.8
         negatable: true
       - pattern: "relocat(e|ion)"
@@ -53,26 +53,39 @@ extraction:
       - pattern: "no\\s+travel"
         value: 0.0
         denies: true
+      - pattern: "occasional\\s+travel|client\\s+(site\\s+)?visits|own\\s+(car|vehicle)|driv(ing|er.s)\\s+licen[cs]e"
+        value: 0.4
+        negatable: true
+    # Rung 0.4 is "occasional — client visits, or periodic presence at an
+    # office". On these boards a driving licence or an own vehicle is asked for
+    # exactly when the role moves between sites, so it is read as that rung and
+    # not as the 0.9 of regular travel or relocation.
     es:
-      - pattern: "disponibilidad\\s+para\\s+viajar|viajes\\s+(frecuentes|puntuales)"
+      - pattern: "disponibilidad\\s+para\\s+viajar|disponibilitat\\s+per\\s+(a\\s+)?viatjar|viajes\\s+(frecuentes|puntuales)|movilidad\\s+(nacional|geogr[áa]fica|internacional)|mobilitat\\s+(nacional|geogr[àa]fica|internacional)"
         value: 0.8
         negatable: true
-      - pattern: "traslado|reubicaci[óo]n"
+      - pattern: "traslado|reubicaci[óo]n|trasllat"
         value: 0.9
         negatable: false
-      - pattern: "sin\\s+viajes|no\\s+viajes"
+      - pattern: "sin\\s+viajes|no\\s+viajes|sense\\s+viatges"
         value: 0.0
         denies: true
+      - pattern: "disponibilidad\\s+(de\\s+)?veh[íi]culo|disponibilitat\\s+(de\\s+)?vehicle|veh[íi]culo\\s+propio|vehicle\\s+propi|carn[eé]t?\\s+de\\s+conducir|carn[eè]t\\s+de\\s+conduir|permis(os)?\\s+de\\s+conduir|permiso\\s+de\\s+conducir|disponibilidad\\s+para\\s+desplaz|disponibilitat\\s+per\\s+(a\\s+)?despla[çc]|desplazamientos?\\b|despla[çc]aments?\\b|visitas\\s+a\\s+clientes|visites\\s+a\\s+clients"
+        value: 0.4
+        negatable: true
     ca:
-      - pattern: "disponibilitat\\s+per\\s+viatjar|viatges"
+      - pattern: "disponibilitat\\s+per\\s+(a\\s+)?viatjar|viatges\\b|disponibilidad\\s+para\\s+viajar|mobilitat\\s+(nacional|geogr[àa]fica|internacional)|movilidad\\s+(nacional|geogr[áa]fica|internacional)"
         value: 0.8
         negatable: true
-      - pattern: "trasllat"
+      - pattern: "trasllat|traslado|reubicaci[óo]"
         value: 0.9
         negatable: false
-      - pattern: "sense\\s+viatges"
+      - pattern: "sense\\s+viatges|sin\\s+viajes"
         value: 0.0
         denies: true
+      - pattern: "disponibilitat\\s+(de\\s+)?vehicle|disponibilidad\\s+(de\\s+)?veh[íi]culo|vehicle\\s+propi|veh[íi]culo\\s+propio|carn[eè]t\\s+de\\s+conduir|carn[eé]t?\\s+de\\s+conducir|permis(os)?\\s+de\\s+conduir|permiso\\s+de\\s+conducir|disponibilitat\\s+per\\s+(a\\s+)?despla[çc]|disponibilidad\\s+para\\s+desplaz|despla[çc]aments?\\b|desplazamientos?\\b|visites\\s+a\\s+clients|visitas\\s+a\\s+clientes"
+        value: 0.4
+        negatable: true
   gold:
     - ad_id: tecnoempleo-450515d772aac3661b41
       language: es

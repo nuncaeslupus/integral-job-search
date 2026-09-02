@@ -6,18 +6,18 @@
   "ads_with_suggestions": 176,
   "blind_control_count": 32,
   "suggestion_count": 1032,
-  "suggestion_cue_agreement": 0.2422,
-  "cue_unreachable": 782,
+  "suggestion_cue_agreement": 0.4322,
+  "cue_unreachable": 586,
   "cue_unreachable_examples": [
-    "feinaactiva-09202618331:compensation_transparency",
-    "feinaactiva-09202618331:contract_stability",
-    "feinaactiva-09202618331:seniority_expectation",
     "feinaactiva-09202618331:schedule_flexibility",
     "feinaactiva-09202618331:schedule_flexibility",
     "feinaactiva-09202618331:remote_arrangement",
     "feinaactiva-09202619629:contract_stability",
-    "feinaactiva-09202619629:compensation_transparency",
     "feinaactiva-09202619629:schedule_flexibility",
-    "feinaactiva-09202619629:collaboration_mode"
+    "feinaactiva-09202619629:collaboration_mode",
+    "feinaactiva-09202619629:company_stage",
+    "feinaactiva-09202619629:process_formality",
+    "feinaactiva-09202619998:schedule_flexibility",
+    "feinaactiva-09202619998:collaboration_mode"
   ]
 }

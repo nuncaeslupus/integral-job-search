@@ -44,33 +44,36 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "salary\\s+range|\\$\\s?\\d{2,3},?\\d{3}"
+      - pattern: "salary\\s+(range|band|bracket)|\\$\\s?\\d{2,3},?\\d{3}|€\\s?\\d{2,3},?\\d{3}|\\b\\d{2,3}\\s*k\\s*[-–]\\s*\\d{2,3}\\s*k\\b"
         value: 0.9
         negatable: false
-      - pattern: "competitive\\s+salary"
+      - pattern: "competitive\\s+(salary|compensation|pay|package)"
         value: 0.1
         negatable: false
-      - pattern: "depending\\s+on\\s+experience"
+      - pattern: "depending\\s+on\\s+experience|commensurate\\s+with\\s+experience|according\\s+to\\s+experience"
         value: 0.2
         negatable: false
+    # `salari mensual brut` is feinaactiva's own field name and appears on
+    # Spanish-language adverts too, so both slices carry it — see the note on
+    # `contract_stability`.
     es:
-      - pattern: "\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{2}\\.\\d{3}\\s*€"
+      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|\\d{1,3}[.,]\\d{3}\\s*€|€\\s*\\d{3,}|\\d{3,6}\\s*(€|euros?)\\b|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,2}\\s*pagas\\b|\\d{1,2}\\s*pagues\\b"
         value: 0.9
         negatable: false
-      - pattern: "salario\\s+competitivo"
+      - pattern: "salari[oe]?\\s+competitiv[oa]|retribuci[óo]n?\\s+competitiva|paquete\\s+retributivo"
         value: 0.1
         negatable: false
-      - pattern: "seg[úu]n\\s+(val[ií]a|experiencia)"
+      - pattern: "seg[úu]n\\s+(val[ií]a|experiencia|convenio)|segons\\s+(v[àa]lua|experi[èe]ncia|conveni)|a\\s+convenir|salario\\s+acorde"
         value: 0.2
         negatable: false
     ca:
-      - pattern: "salari\\s+mensual\\s+brut\\s*\\d|\\d{2}\\.\\d{3}\\s*€"
+      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|\\d{1,3}[.,]\\d{3}\\s*€|€\\s*\\d{3,}|\\d{3,6}\\s*(€|euros?)\\b|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,2}\\s*pagues\\b|\\d{1,2}\\s*pagas\\b"
         value: 0.9
         negatable: false
-      - pattern: "salari\\s+competitiu|retribuci[óo]\\s+competitiva"
+      - pattern: "salari\\s+competitiu|retribuci[óo]\\s+competitiva|salario\\s+competitivo"
         value: 0.1
         negatable: false
-      - pattern: "a\\s+convenir"
+      - pattern: "a\\s+convenir|segons\\s+(v[àa]lua|experi[èe]ncia|conveni)|seg[úu]n\\s+(val[ií]a|experiencia|convenio)"
         value: 0.2
         negatable: false
   gold:

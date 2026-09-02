@@ -42,35 +42,42 @@ elicitation:
           Repassa els tipus de contracte sota els quals has treballat. Quin et va fer
           canviar com planificaves la teva vida, i com?
 extraction:
+  # The Spanish and Catalan lists carry each other's spellings, and that is not
+  # duplication for its own sake: feinaactiva renders its structured fields
+  # ("Contracte laboral indefinit", "Jornada completa") in Catalan on adverts
+  # whose body is Spanish, so a `contrato indefinido`-only Spanish list reads
+  # nothing on half the Spanish corpus. The alternations below are written to
+  # tolerate the ES/CA cognate pair, so both language slices reach the same
+  # statements.
   cues:
     en:
-      - pattern: "permanent\\s+(contract|position)|full-?time\\s+employee"
+      - pattern: "permanent\\s+(contract|position|role)|full-?time\\s+employee|open-?ended\\s+contract|indefinite\\s+contract"
         value: 0.9
         negatable: true
       - pattern: "contractor|freelance"
         value: 0.2
         negatable: false
-      - pattern: "\\b\\d+\\s*month\\s+contract"
+      - pattern: "\\b\\d+\\s*-?\\s*month\\s+contract|fixed-?term|temporary\\s+contract|maternity\\s+cover|seasonal\\s+contract"
         value: 0.3
         negatable: false
     es:
-      - pattern: "contrato\\s+indefinido"
+      - pattern: "contrat\\w*\\s+(laboral\\s+|de\\s+trabajo\\s+|de\\s+treball\\s+)?(indefinido|indefinida|indefinit)\\b|contrat\\w*\\s*:\\s*(indefinido|indefinit)\\b|contrataci[óo]n\\s+indefinid|contractaci[óo]\\s+indefinit"
         value: 0.9
         negatable: true
-      - pattern: "aut[óo]nomo|freelance"
+      - pattern: "aut[óo]nomo|aut[òo]nom\\b|freelance|factura(ci[óo]n)?\\s+por\\s+horas"
         value: 0.2
         negatable: false
-      - pattern: "contrato\\s+temporal|obra\\s+y\\s+servicio"
+      - pattern: "contrat\\w*\\s+(laboral\\s+)?(temporal|eventual)|obra\\s+y\\s+servicio|contrato\\s+en\\s+pr[áa]cticas|interinidad|sustituci[óo]n\\s+(por\\s+|de\\s+)?baja|contrato\\s+de\\s+relevo|fij[oa]\\s+discontinu"
         value: 0.3
         negatable: false
     ca:
-      - pattern: "contracte\\s+indefinit"
+      - pattern: "contract\\w*\\s+(laboral\\s+|de\\s+treball\\s+)?(indefinit|indefinida|indefinido)\\b|contract\\w*\\s*:\\s*(indefinit|indefinido)\\b|contractaci[óo]\\s+indefinit|contrataci[óo]n\\s+indefinid"
         value: 0.9
         negatable: true
-      - pattern: "aut[òo]nom|freelance"
+      - pattern: "aut[òo]nom\\b|aut[óo]nomo|freelance"
         value: 0.2
         negatable: false
-      - pattern: "contracte\\s+temporal"
+      - pattern: "contract\\w*\\s+(laboral\\s+)?(temporal|eventual)|contract\\w*\\s+(laboral\\s+)?per\\s+substituci|substituci[óo]\\s+(per\\s+|de\\s+)?baixa|contracte\\s+en\\s+pr[àa]ctiques|interinitat|fix\\s+discontinu"
         value: 0.3
         negatable: false
   gold:

@@ -44,12 +44,12 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "fully\\s+remote|100%\\s+remote"
+      - pattern: "fully\\s+remote|100%\\s+remote|remote-?first|work\\s+from\\s+anywhere"
         value: 1.0
         negatable: true
-      - pattern: "hybrid"
+      - pattern: "hybrid|\\bremote\\b|work(ing)?\\s+from\\s+home|\\bwfh\\b|\\d\\s+days?\\s+(a|per)\\s+week\\s+(at\\s+home|remote|in\\s+the\\s+office)"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "on-?site[^.\\n]{0,60}(remote|from\\s+home)|(remote|work\\s+from\\s+home)[^.\\n]{0,60}on-?site"
         value: 0.5
         negatable: false
@@ -57,12 +57,12 @@ extraction:
         value: 0.0
         negatable: false
     es:
-      - pattern: "100\\s*%\\s*(en\\s+)?remoto|teletrabajo\\s+total"
+      - pattern: "100\\s*%\\s*(en\\s+)?remoto|teletrabajo\\s+total|100\\s*%\\s*teletre?ba[jl][oh]?|teletreball\\s+total|remoto\\s+total"
         value: 1.0
         negatable: true
-      - pattern: "h[ií]brid[oa]"
+      - pattern: "h[ií]brid[oa]?\\b|teletrabajo|teletreball|trabajo\\s+en\\s+remoto|\\ben\\s+remoto\\b|modalidad\\s+mixta|\\d{1,2}\\s*d[íi]as?\\s+de\\s+teletrabajo|\\d{1,3}\\s*%\\s*(de\\s+)?teletre?ba[jl][oh]?"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "presencial[^.\\n]{0,60}(teletrabajo|remoto)|(teletrabajo|remoto)[^.\\n]{0,60}presencial"
         value: 0.5
         negatable: false
@@ -70,12 +70,12 @@ extraction:
         value: 0.0
         negatable: false
     ca:
-      - pattern: "100\\s*%\\s*teletreball|teletreball\\s+total"
+      - pattern: "100\\s*%\\s*teletre?ba[lj][lh]?|teletreball\\s+total|100\\s*%\\s*(en\\s+)?remot\\b|remot\\s+total"
         value: 1.0
         negatable: true
-      - pattern: "h[ií]brid"
+      - pattern: "h[ií]brid\\w*|teletreball|teletrabajo|treball\\s+en\\s+remot|\\ben\\s+remot\\b|\\d{1,2}\\s*dies?\\s+de\\s+teletreball|\\d{1,3}\\s*%\\s*(de\\s+)?teletre?ba[lj][lh]?"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "presencial[^.\\n]{0,60}(teletreball|remot)|(teletreball|remot)[^.\\n]{0,60}presencial"
         value: 0.5
         negatable: false

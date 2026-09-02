@@ -43,34 +43,42 @@ elicitation:
           conèixer i qui et contractava mentre la construïes?
 extraction:
   cues:
+    # Bipolar, so a reading needs two matches that agree (T59). The staffing
+    # cues are split across two patterns for that reason and not by accident:
+    # an advert placing someone with a client says so twice — it names itself a
+    # consultancy *and* describes the placement — and one of the two alone is
+    # the passing mention the corroboration rule exists to distrust.
     en:
-      - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build"
+      - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build|our\\s+(platform|saas)|\\bsaas\\b"
         value: 0.7
         negatable: false
-      - pattern: "consultanc(y|ies)|client\\s+site|staff(ing|\\s+augmentation)|our\\s+client\\s+is"
+      - pattern: "consultanc(y|ies)|client\\s+site|staff(ing|\\s+augmentation)|our\\s+client\\s+is|\\bconsultants?\\b|systems?\\s+integrator"
         value: -0.7
         negatable: false
       - pattern: "end\\s+users?"
         value: 0.4
         negatable: false
+      - pattern: "join\\s+(one\\s+of\\s+)?our\\s+clients?|placed\\s+with\\s+(a|our)\\s+client|on\\s+behalf\\s+of\\s+our\\s+client"
+        value: -0.5
+        negatable: false
     es:
-      - pattern: "producto\\s+propio|nuestro\\s+producto"
+      - pattern: "producto\\s+propio|nuestro\\s+producto|nuestra\\s+plataforma|producte\\s+propi|\\bsaas\\b|dise[ñn]o\\s+y\\s+fabricaci[óo]n|somos\\s+fabricantes?"
         value: 0.7
         negatable: false
-      - pattern: "consultora|c[áa]rnica|cliente\\s+final"
+      - pattern: "consultor(a|es|as|ía|ia)\\b|c[áa]rnica|cliente\\s+final|client\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+servicios|partner\\s+(estrat[ée]gico|tecnol[óo]gico)"
         value: -0.7
         negatable: false
-      - pattern: "asignaci[óo]n\\s+a\\s+proyecto"
+      - pattern: "asignaci[óo]n\\s+a\\s+proyecto|para\\s+incorporar(se|te)?\\s+a\\s+(un|una|uno)\\b|nuestros\\s+clientes|els\\s+nostres\\s+clients|principales\\s+clientes|proyecto\\s+estable"
         value: -0.5
         negatable: false
     ca:
-      - pattern: "producte\\s+propi|el\\s+nostre\\s+producte"
+      - pattern: "producte\\s+propi|el\\s+nostre\\s+producte|la\\s+nostra\\s+plataforma|producto\\s+propio|\\bsaas\\b|disseny\\s+i\\s+fabricaci[óo]|som\\s+fabricants?"
         value: 0.7
         negatable: false
-      - pattern: "consultora|consultoria|client\\s+final"
+      - pattern: "consultor(a|es|es|ia|ía)\\b|consultoria|client\\s+final|cliente\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+serveis|partner\\s+(estrat[èe]gic|tecnol[òo]gic)"
         value: -0.7
         negatable: false
-      - pattern: "assignaci[óo]\\s+a\\s+projecte"
+      - pattern: "assignaci[óo]\\s+a\\s+projecte|per\\s+incorporar(-se|-te)?\\s+a\\s+(un|una)\\b|els\\s+nostres\\s+clients|nuestros\\s+clientes|principals\\s+clients|projecte\\s+estable"
         value: -0.5
         negatable: false
   gold:
