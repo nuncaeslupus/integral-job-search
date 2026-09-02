@@ -1,0 +1,38 @@
+# Working Nomads — ruled out on 2026-08-30 as "a shell", un-ruled-out on
+# 2026-08-30 by the JSON route it was already predicted to need.
+#
+# `connectors/ruled-out.yaml` named it in `engine_gap_json.reopens_if_closed`:
+# "workingnomads.com — ruled out as a shell, but serves /api/exposed_jobs/".
+# That is this file. Nothing about the board changed; the engine did.
+#
+# `robots.txt` was read live on 2026-08-30 with this project's own agent token.
+# `/api/exposed_jobs/` is not disallowed.
+site: workingnomads
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# The endpoint is public — "exposed" is the board's own word for it — and needs
+# no key. None is sent.
+auth: none
+
+list:
+  url_pattern: "https://www.workingnomads.com/api/exposed_jobs/"
+  # One response carries the board's whole current feed; there is no page
+  # parameter and none is invented.
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    # The response is a bare array of adverts, so there is no key to name and
+    # `$` says that rather than the field being left blank, which is what a
+    # typo looks like.
+    items: "$"
+    fields:
+      detail_url: url
+      title: title
+      company: company_name
+      text: description
+      location_raw: location
+# No salary fields: this feed carries none. Nothing here is guessed from the
+# body text — an estimate the candidate cannot check against the advert is
+# exactly what `Salary.stated` exists to keep out.

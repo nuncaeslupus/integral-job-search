@@ -1,0 +1,65 @@
+# Just Join IT — the first connector in this library that reads JSON instead of
+# markup, and the board that motivated the route.
+#
+# It was ruled out on 2026-08-30 and un-ruled-out the same day. The ruling was
+# right about the board and wrong about the reason: `connectors/ruled-out.yaml`
+# filed it under `engine_gap_json` with "unusable *by a CSS-selector engine*",
+# and `from_json` closed that gap. Nothing about justjoin.it changed.
+#
+# What is served: 1.9 MB of page with no advert markup in it at all. The visible
+# list is rendered client-side. But the postings are in the response — as
+# schema.org JSON-LD, `CollectionPage.hasPart` on the listing and one full
+# `JobPosting` on each advert's own page.
+#
+# `robots.txt` was read live on 2026-08-30 with this project's own agent token.
+# Both `/job-offers/` and `/job-offer/` are permitted.
+site: justjoin
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# Listings are public; reading them needs no account.
+auth: none
+
+list:
+  # One page, deliberately: `hasPart` carries a hundred adverts in a single
+  # response, which is more than the paginated HTML view shows across three.
+  # `mode: none` is the honest statement — this is not a page-numbered surface
+  # and no `?page=` form has been observed to work on it.
+  url_pattern: "https://justjoin.it/job-offers/all-locations/python"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    embedded_in: 'script[type="application/ld+json"]'
+    # The page serves two documents. Without this the BreadcrumbList — whose
+    # `itemListElement` is the filter vocabulary, not adverts — would be read as
+    # the listing and produce a hundred nonexistent jobs.
+    match:
+      "@type": CollectionPage
+    items: hasPart
+    fields:
+      # All the listing document carries. Everything else comes from the
+      # advert's own page, which is where this board keeps it.
+      detail_url: url
+
+detail:
+  from_json:
+    embedded_in: 'script[type="application/ld+json"]'
+    match:
+      "@type": JobPosting
+    fields:
+      title: title
+      company: hiringOrganization.name
+      text: description
+      # The reason this route was worth building. `minValue` and `maxValue` are
+      # JSON *numbers*, so `_as_float` reads them without anything having to be
+      # split out of a string — the failure that left six of this library's HTML
+      # connectors with salary deliberately unmapped. If the path ever stops
+      # resolving to a number, `dig` returns nothing and no `Salary` is built at
+      # all, rather than a `stated=True` with no figures behind it.
+      salary_min: baseSalary.value.minValue
+      salary_max: baseSalary.value.maxValue
+      salary_currency: baseSalary.currency
+      salary_period: baseSalary.value.unitText
+      location_raw: jobLocation.address.addressLocality
+      location_country: jobLocation.address.addressCountry

@@ -1,0 +1,45 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: himalayas.app
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above: https://himalayas.app/robots.txt was
+# read with this project's own agent token. `/jobs/api` is not disallowed and
+# no rule names this token or any AI agent.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — one API response, taken on the date below. Never an
+# advert a candidate was reading: the set of ads a person opens carries their
+# field, level, city and the fact that they are looking, and a fixture in a
+# public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # `fixture/list.html` holds JSON, not markup. The name is the contract's
+  # (`check_fixture` looks for exactly that file) and renaming it here would
+  # only make the package fail a check it passes. Excerpted twice, both noted
+  # rather than left to be noticed: 3 of the 20 returned records, and each
+  # `description` cut to its first 600 characters with the cut marked in the
+  # text.
+  bodies: excerpted
+  client_ip: redacted
+
+# `probe/list.html` is a SECOND read of the same endpoint, taken on the date in
+# `probe/captured.json` — 2026-09-02, three days after the fixture, so
+# `connector_health`'s rot stage is comparing two different days and not a file
+# with itself. The envelope proves it is a different response without anyone
+# having to trust the filename: `totalCount` moved 101863 → 103077, `updatedAt`
+# 1788126840 → 1788337249, and `nextCursor` base64-decodes from
+# `2026-08-30T20:35:58.537365Z|1855124` to `2026-09-02T07:09:30.749348Z|2138451`.
+# Not one `guid` in the served response is a `guid` the fixture holds.
+#
+# Cut the way the fixture was cut, so the two differ only where the board does:
+# 3 of the 20 returned records, each `description` and `excerpt` to its first
+# 600 characters with the cut marked in the text.
