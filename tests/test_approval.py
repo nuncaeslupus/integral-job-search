@@ -28,6 +28,7 @@ from integral.approval import (
     ApprovalError,
     PersonalDetails,
     _carries,
+    _retraction_report,
     measure_prepared,
     payload_digest,
     personal_details_in_master,
@@ -730,3 +731,32 @@ def test_the_retraction_probes_catch_every_planted_defect(tmp_path: Path) -> Non
     assert probed["retracted_episodes_still_sendable"] == 0
     assert probed["retracted_episodes_evaluated"] >= MINIMUM_RETRACTED_APPROVALS_EVALUATED
     assert probed["gate_status"] == "measured"
+
+
+def test_the_gate_report_names_the_two_failure_kinds_apart(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A red gate must say which way the boundary broke (#305 review).
+
+    `retraction_probe_failures` carries the over-refusal cases — "a clean send
+    was refused" — which is the *opposite* of a retracted episode getting out.
+    One shared message over both lists told the reader the reverse of what had
+    happened, on the failure that matters most.
+    """
+    failures = _retraction_report(
+        {
+            "retraction_probe_failures": ["a clean send was refused"],
+            "retracted_episodes_sendable": ["ep-000001"],
+            "retraction_probes": MINIMUM_RETRACTION_PROBES,
+            "retracted_episodes_evaluated": MINIMUM_RETRACTED_APPROVALS_EVALUATED,
+            "retracted_episodes_still_sendable": 1,
+            "gate_status": "measured",
+        }
+    )
+    reported = capsys.readouterr().err
+    assert failures == 1  # the exit code, not the count
+    assert reported.count("\u2717") == 2
+    assert "the retraction boundary failed a planted case: a clean send was refused" in reported
+    assert "a retracted episode was still sendable: ep-000001" in reported
+    # The over-refusal line must not wear the fail-open wording.
+    assert "still sendable: a clean send was refused" not in reported

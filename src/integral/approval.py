@@ -1163,9 +1163,17 @@ def _retraction_report(measured: dict[str, Any]) -> int:
     """Print D-24's measurement and say whether it fails the gate."""
     print(json.dumps(measured, ensure_ascii=False))
     failures = 0
-    for name in measured["retraction_probe_failures"] + measured["retracted_episodes_sendable"]:
-        print(f"✗ a retracted episode was still sendable: {name}", file=sys.stderr)
-        failures += 1
+    # Two lists, two meanings, and one of them is the opposite of the other:
+    # `retraction_probe_failures` holds the over-refusal cases too ("a clean
+    # send was refused"), so printing "still sendable" over both told whoever
+    # read the red gate the reverse of what had happened (#305 review).
+    for key, label in (
+        ("retraction_probe_failures", "the retraction boundary failed a planted case"),
+        ("retracted_episodes_sendable", "a retracted episode was still sendable"),
+    ):
+        for name in measured[key]:
+            print(f"✗ {label}: {name}", file=sys.stderr)
+            failures += 1
     for key, floor in (
         ("retraction_probes", MINIMUM_RETRACTION_PROBES),
         ("retracted_episodes_evaluated", MINIMUM_RETRACTED_APPROVALS_EVALUATED),
