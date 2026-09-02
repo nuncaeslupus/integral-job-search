@@ -128,10 +128,94 @@ reads the one honest measurement as a hard failure
   names one board and put four on the wire. The rows would have been refused by
   `corpus_scope.draw_selects` — but *after the request had been sent*, which is
   the half a fail-closed data path does not cover.
+- **A credential the check cannot see is a credential the check approves.**
+  `parse_curl` consumed `-u`/`--user` and `-b`/`--cookie` and dropped the value.
+  Neither ever reaches the URL query, a `-H` header or the body — *curl* turns
+  them into `Authorization` and `Cookie` on the wire — so all three of
+  `why_refused`'s checks ran, found nothing, and the board was scored as one the
+  engine could read once it learned to POST. Same shape as the `Content-Type`
+  lookup above and the redirect-hop ledger: **the third instance in one batch.**
+  When a "name every problem" function returns `[]`, ask what it is structurally
+  unable to look at.
+  Note the fix's second half: the record keeps the **option name only, never the
+  value**. A ledger secret copied into a dataclass and then into
+  `status/evidence/T89.json` is a credential this library carries, which is the
+  one thing `connectors.py` forbids.
+- **`str(x or "")` is not a type check.** It stringifies anything non-empty, so
+  a `draw` that arrived as a dict or a list passed a check meant to require a
+  string and its `repr` went on to be compared against the registry. Check the
+  type before the emptiness.
+- **A denominator written as a literal drifts the moment a check is added.**
+  `_ESTIMATE_CHECKS = 6 + len(_IMPOSSIBLE_BANDS)`; the batch-isolation block
+  added three `defects.append` sites and nobody bumped the 6, so the record
+  advertised 13 checks over 15 that ran. The fix is not a bigger literal — the
+  checks are **named** (`_ESTIMATE_CHECK_NAMES`) and the denominator is `len()`
+  of that, with a guard test reading `_check_estimate`'s own source so an
+  unnamed new check fails the suite instead of silently shrinking the record.
+  Same family as "a denominator committed as an exact value" above, one scope in.
 - **`status/plan.md` states things about the task graph that no gate reads.**
   Four instances now: plan ticks (D-27, 47 of 123), milestone rows in both
   directions (D-29, 82 of 89 merged-still-listed and 12 open-unlisted), and a
   task file's `deps: []` contradicting its plan row.
+
+## Mechanics that went wrong — do not rediscover these
+
+None of these is a code bug. Each cost real session time, and each has a
+one-line rule that prevents it.
+
+**`make evidence` regenerates the file; it does not stage it.** The drift check
+compares the working tree against the *index*, so a regenerated record that is
+not `git add`ed reports drift forever and `make host-gate` stays red no matter
+how many times it is re-run. Hit twice in one session (#307, #312), each time
+reading as though the fix had not worked.
+→ `git add -A && make host-gate`. `refresh_pr.sh` already does this; running the
+targets by hand is where the step gets dropped.
+
+**Never resolve an evidence conflict with `git checkout --ours`.** It takes a
+number measured against a *different* tree. T104's guard caught it —
+`records board_sensitive_record_keys=None, which is not a number` — but the
+guard is new; before it, the wrong number would have merged.
+→ `make evidence; git add -A; make evidence; git add -A` (twice: the first pass
+can change an input the second measures).
+
+**Confirm the worktree's branch is the PR's head branch before committing.**
+A T92 fix was committed and pushed onto a stray `fix-t92-review` branch while
+#312's head was `arsenal/t-f076b513-…`; the PR sat unchanged and looked
+unfixed. Recovered by cherry-picking, re-gating and deleting the stray remote
+branch, but only because it was noticed within minutes.
+→ `gh pr view <n> --json headRefName` and compare with `git branch --show-current`.
+Several worktrees carry near-identical names (`agent-a883852485810685f` vs
+`agent-a8288485f4ed84f25`); the directory name is not the branch.
+
+**zsh eats `$var:path`.** `$mb:status/plan.md` expanded to
+`e526us/plan.md0b2e…` — `:s` is a history modifier, not a separator. zsh also
+does not word-split unquoted variables.
+→ Quote it: `"${mb}:status/plan.md"`.
+
+### The review pump, six bugs in one script
+
+All six wasted the scarce resource the script exists to conserve — included
+CodeRabbit reviews, 8 per rolling hour.
+
+1. **It nudged into closed quota windows**, spending calls to receive bounce
+   comments. It now reads the clock before nudging.
+2. **The quota regex matched only `minutes`.** A `40 seconds` bounce fell
+   through to the 60-minute fail-safe, so the pump idled an hour over a
+   forty-second wait. **Parse the unit** — the bounce states either.
+3. **No in-flight notion.** It re-nudged a PR into a review that had just been
+   triggered, spending a second included review on the same head. Ten-minute
+   hold after `Full review triggered`.
+4. **A bounced nudge started the per-PR interval**, so the PR whose request was
+   *refused* waited longest — exactly backwards. A bounce is now exempt from
+   `NUDGE_EVERY`.
+5. **`typeset -A` under bash** → `subíndice de matriz incorrecto`. The script
+   runs under bash; use `declare -A`.
+6. **A duplicated `reply=$(gh api …)` fetch** survived a patch, doubling the API
+   calls and orphaning the comment that explained the guard below it.
+
+The general lesson: a throttle script's bugs are invisible in its output — it
+reports "nudged", "holding", and looks healthy while burning the budget. Every
+guard in it needs a log line saying *why* it held, not just that it did.
 
 ## Twelve open tasks are in no milestone row
 
