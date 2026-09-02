@@ -93,6 +93,56 @@ def plan_refusals(sources: Iterable[str], ledger: Path = DEFAULT_LEDGER_PATH) ->
     return found
 
 
+def url_refusals(urls: Iterable[str], ledger: Path = DEFAULT_LEDGER_PATH) -> dict[str, str]:
+    """Why each hand-supplied URL may not be fetched, by URL. Empty is a clean list.
+
+    `plan_refusals` binds the fixed plan; this binds `--ca-urls`, which reached
+    `from_urls` without passing the ledger at all. A `remoteok.com` URL in that file was
+    fetched in bulk despite the owner's `refuses: volume` ruling — the refusal routed
+    around by the one input a person types by hand, which is the input least likely to
+    have been checked against anything.
+
+    A host `SOURCE_HOSTS` does not record is refused as well, the same fail-closed rule
+    the plan path follows: a board nothing surveyed cannot be put through the ledger,
+    and "not checkable" reading as "allowed" is how the refused board got fetched the
+    first time. Overturning that costs one line in `SOURCE_HOSTS`, which is also where
+    the *next* reader looks to find out whether a board was considered at all.
+    """
+    refused = plan_refusals(SOURCE_HOSTS, ledger)
+    found: dict[str, str] = {}
+    for url in urls:
+        host = (urlsplit(url).hostname or "").lower()
+        name = next(
+            (
+                source
+                for source, known in SOURCE_HOSTS.items()
+                if host == known or host.endswith(f".{known}")
+            ),
+            None,
+        )
+        if name is None:
+            found[url] = (
+                f"host {host or '(none)'} is not recorded in SOURCE_HOSTS, so no refusal "
+                f"can be checked"
+            )
+        elif name in refused:
+            found[url] = refused[name]
+    return found
+
+
+def permitted_urls(urls: list[str], ledger: Path = DEFAULT_LEDGER_PATH) -> list[str]:
+    """The supplied URLs the ledger allows, with every refusal printed.
+
+    Filtering happens here rather than inside `from_urls` so a refused URL is dropped
+    *before* a session ever sees it: "refused" has to mean no request left the process,
+    not that the record was discarded after the fetch.
+    """
+    refused = url_refusals(urls, ledger)
+    for url, why in sorted(refused.items()):
+        print(f"{url}: not fetched — {why}", file=sys.stderr)
+    return [url for url in urls if url not in refused]
+
+
 # ponytail: no rate-limit machinery — a floor, and whatever the site asks for,
 # whichever is slower.
 #
@@ -721,7 +771,7 @@ def main() -> int:
     if args.ca_urls and args.ca_urls.exists():
         lines = args.ca_urls.read_text().splitlines()
         urls = [u.strip() for u in lines if u.strip().startswith("http")]
-        absorb("ca-urls", from_urls(session, urls, "ca"))
+        absorb("ca-urls", from_urls(session, permitted_urls(urls), "ca"))
 
     all_ads = list(ads.values())
     save_ads(all_ads)

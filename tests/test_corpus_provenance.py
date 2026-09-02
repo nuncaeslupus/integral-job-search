@@ -147,6 +147,46 @@ def test_an_empty_corpus_reports_unmeasured_rather_than_a_clean_zero(tmp_path: P
     assert "below the" in measured["unmeasured_reason"]
 
 
+def test_a_store_padded_with_duplicates_does_not_clear_the_coverage_floor(
+    tmp_path: Path,
+) -> None:
+    """The floor counted JSONL lines, so one valid row copied 400 times cleared it.
+
+    A denominator satisfiable by duplication measures nothing: the gate would read
+    `corpus_rows_without_a_draw_specification == 0` over a corpus of five distinct
+    adverts and report it as covering four hundred. Distinct identifiers per store are
+    what the floor is about.
+    """
+    distinct = [_row(f"real-{index}") for index in range(5)]
+    padded = distinct + [_row("real-0") for _ in range(MINIMUM_CORPUS_ROWS)]
+
+    measured = measure_provenance(
+        raw_path=_corpus(tmp_path, padded),
+        labelled_path=_corpus(tmp_path, padded, "labelled.jsonl"),
+        draws_path=_registry(tmp_path),
+    )
+    assert measured["gate_status"] == "unmeasured"
+    assert "below the" in measured["unmeasured_reason"]
+
+
+def test_a_repeated_identifier_is_itself_a_fault(tmp_path: Path) -> None:
+    """Two rows under one id are not one advert examined twice — they are a store that
+    cannot say which record the id names, in either direction."""
+    faults = _faults(tmp_path, [_row("once"), _row("twice"), _row("twice")])
+    assert [(f["where"], f["row"]) for f in faults] == [("raw", "twice"), ("labelled", "twice")]
+    assert "already" in faults[0]["reason"]
+
+
+def test_examined_counts_distinct_rows_not_lines(tmp_path: Path) -> None:
+    """The count the floor reads, stated directly: two stores of three rows each, one
+    of which is a repeat, is four distinct records and not six lines."""
+    rows = [_row("a"), _row("b"), _row("b")]
+    _, examined = provenance_faults(
+        _corpus(tmp_path, rows), _corpus(tmp_path, rows, "labelled.jsonl"), _registry(tmp_path)
+    )
+    assert examined == 4
+
+
 def test_a_labelled_row_with_no_raw_row_behind_it_is_a_fault(tmp_path: Path) -> None:
     """The labelled store carries no draw of its own because it is seeded from the raw
     corpus. That makes it the back door: a row dropped straight into it would otherwise

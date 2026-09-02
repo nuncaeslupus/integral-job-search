@@ -261,6 +261,73 @@ def test_an_empty_ledger_refuses_nothing(tmp_path: Path) -> None:
     assert COLLECT.plan_refusals(["manfred", "tecnoempleo", "feinaactiva"], ledger) == {}
 
 
+# ---------------------------------------------------------------------------
+# T98 — and a URL handed in on the command line is bound by the same ledger.
+#
+# `plan_refusals` covered the fixed plan only. `--ca-urls` reached `from_urls`
+# without passing the ledger at all, so a refused board's URL in that file was
+# fetched — the refusal routed around by the one input a person types by hand.
+
+
+def test_a_supplied_url_on_a_refused_board_is_never_fetched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hole: the ledger refuses the board, and `--ca-urls` fetched it anyway.
+
+    Asserted over the session rather than over the return value — "refused" has to mean
+    no request left the process, not that the record was discarded after the fetch.
+    """
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "refusedboard.test")
+    urls = ["https://refusedboard.test/oferta/1"]
+    session = FakeSession({})
+
+    allowed = COLLECT.permitted_urls(urls, _ledger(tmp_path))
+    assert allowed == []
+    assert list(COLLECT.from_urls(session, allowed, "ca")) == []
+    assert session.fetched == []
+
+
+def test_a_supplied_url_on_an_unrecorded_host_is_refused_too(
+    tmp_path: Path,
+) -> None:
+    """Fail-closed on the unknown, the same rule `SOURCE_HOSTS` already gives the plan.
+
+    A host nothing recorded cannot be put through the ledger, and "not checkable"
+    reading as "allowed" would leave the whole check bypassable by typing a URL.
+    """
+    urls = ["https://never-surveyed.invalid/oferta/1"]
+    session = FakeSession({})
+
+    refused = COLLECT.url_refusals(urls, _ledger(tmp_path))
+    assert "not recorded in SOURCE_HOSTS" in refused[urls[0]]
+    assert COLLECT.permitted_urls(urls, _ledger(tmp_path)) == []
+    assert list(COLLECT.from_urls(session, [], "ca")) == []
+    assert session.fetched == []
+
+
+def test_a_supplied_url_on_a_permitted_board_still_passes(tmp_path: Path) -> None:
+    """The negative control. A guard that refuses everything passes both tests above
+    and silently disables `--ca-urls`."""
+    url = "https://feinaactiva.gencat.cat/oferta/1"
+    assert COLLECT.permitted_urls([url], _ledger(tmp_path)) == [url]
+
+
+def test_a_subdomain_of_a_recorded_board_is_checked_not_waved_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`jobs.refusedboard.test` is the same board under a longer name, in the URL path
+    exactly as in the plan path."""
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "refusedboard.test")
+    assert COLLECT.permitted_urls(["https://jobs.refusedboard.test/x"], _ledger(tmp_path)) == []
+
+
+def test_the_committed_ledger_refuses_a_remoteok_url_handed_in_by_hand() -> None:
+    """The live reading, over the real ledger: the board the owner refused on
+    2026-08-31 is refused whichever input names it."""
+    assert COLLECT.url_refusals(["https://remoteok.com/remote-jobs/1"])
+    assert COLLECT.permitted_urls(["https://remoteok.com/remote-jobs/1"]) == []
+
+
 def test_the_committed_plan_is_clean_against_the_committed_ledger() -> None:
     """The live reading, over the real ledger. Every source the collector can plan is
     one the ledger does not refuse — and `remoteok`, which it does refuse, is named in

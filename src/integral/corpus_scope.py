@@ -273,8 +273,12 @@ CORE_SERVING_MODULES: tuple[str, ...] = (
     "rank",
 )
 
-# Reading either of these *is* reading the corpus, whichever name it arrives under.
-CORPUS_MODULES = frozenset({"integral.corpus", "integral.harness"})
+# Reading any of these *is* reading the corpus, whichever name it arrives under.
+# `integral.corpus_scope` is in the set because this module reads both stores itself —
+# `_read_rows`, `provenance_faults`, and `DEFAULT_RAW_ADS` as a plain path — so leaving
+# it out made the detector blind to the shortest route through itself, and the ban's own
+# count would have stayed at zero while a serving module used it. Fail-open.
+CORPUS_MODULES = frozenset({"integral.corpus", "integral.corpus_scope", "integral.harness"})
 _CORPUS_PATH_RE = re.compile(r"corpus/(?:raw|labelled)")
 
 # Floors, not counts of the day (T100's lesson): the evidence records what the scan must
@@ -350,11 +354,12 @@ def provenance_faults(
     labelled_path: Path = DEFAULT_LABELLED_ADS,
     draws_path: Path = DEFAULT_DRAWS,
 ) -> tuple[list[dict[str, str]], int]:
-    """Every corpus row that cannot be traced to a declared draw, and how many rows
-    were examined to find them.
+    """Every corpus row that cannot be traced to a declared draw, and how many
+    **distinct** rows were examined to find them.
 
-    Four ways a row fails, in the order they are checked — a row is reported once:
+    Five ways a row fails, in the order they are checked — a row is reported once:
 
+    0. its identifier already named another row in the same store;
     1. it names no draw at all;
     2. it is bound to a candidate (`corpus.CANDIDATE_BOUND_KEYS`);
     3. the draw it names is not declared in the registry;
@@ -364,16 +369,31 @@ def provenance_faults(
     The labelled store is examined too, by a different rule: it carries no draw of its
     own because `harness.build_store` seeds it *from* the raw corpus, so its provenance
     is its raw row. A labelled id with no raw row behind it came from somewhere else.
+
+    The count returned is of distinct identifiers per store, not of JSONL lines, and
+    that is what `MINIMUM_CORPUS_ROWS` is a floor on. Counting lines made the floor
+    satisfiable by duplication: one valid row copied four hundred times produced no
+    fault and cleared it, so a denominator advertised as four hundred adverts could be
+    one advert. A floor a corpus can meet without containing anything measures nothing.
     """
     draws = load_draws(draws_path)
     faults: list[dict[str, str]] = []
     raw = _read_rows(raw_path)
 
+    raw_seen: set[str] = set()
     for ad in raw:
         identifier = str(ad.get("id") or "?")
         named = str(ad.get("draw") or "").strip()
         bound = sorted(corpus.CANDIDATE_BOUND_KEYS & set(ad))
-        if not named:
+        if identifier in raw_seen:
+            faults.append(
+                {
+                    "row": identifier,
+                    "where": "raw",
+                    "reason": "the raw store already carries a row under this id",
+                }
+            )
+        elif not named:
             faults.append({"row": identifier, "where": "raw", "reason": "names no draw"})
         elif bound:
             faults.append(
@@ -400,12 +420,22 @@ def provenance_faults(
                     f"{ad.get('source')}/{ad.get('language')}/{ad.get('job_family')}",
                 }
             )
+        raw_seen.add(identifier)
 
     raw_ids = {str(ad.get("id")) for ad in raw}
     labelled = _read_rows(labelled_path)
+    labelled_seen: set[str] = set()
     for ad in labelled:
         identifier = str(ad.get("id") or "?")
-        if identifier not in raw_ids:
+        if identifier in labelled_seen:
+            faults.append(
+                {
+                    "row": identifier,
+                    "where": "labelled",
+                    "reason": "the labelled store already carries a row under this id",
+                }
+            )
+        elif identifier not in raw_ids:
             faults.append(
                 {
                     "row": identifier,
@@ -413,8 +443,9 @@ def provenance_faults(
                     "reason": "no raw-corpus row behind it, so no draw produced it",
                 }
             )
+        labelled_seen.add(identifier)
 
-    return faults, len(raw) + len(labelled)
+    return faults, len(raw_seen) + len(labelled_seen)
 
 
 def serving_path_modules(src_dir: Path = DEFAULT_SRC_DIR) -> list[str]:
@@ -510,6 +541,13 @@ def measure_provenance(
         )
 
     measured: dict[str, Any] = {
+        # The declared gate's key, and it is the sum because `gate_evidence.py` asserts
+        # exactly one. T98 states two properties and the block declared only the first,
+        # so a serving-cache regression — the half the task is named after — passed
+        # T98's own gate with `corpus_rows_without_a_draw_specification` still at zero.
+        # Both counts stay below, because a violation you cannot name is one nobody can
+        # act on; the sum is what makes either of them fail the gate.
+        "corpus_measurement_set_violations": len(faults) + len(findings),
         "corpus_rows_without_a_draw_specification": len(faults),
         "serving_path_corpus_reads": len(findings),
         "gate_status": "unmeasured" if unmeasured else "measured",

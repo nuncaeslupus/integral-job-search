@@ -1,4 +1,5 @@
 {
+  "corpus_measurement_set_violations": 0,
   "corpus_rows_without_a_draw_specification": 0,
   "serving_path_corpus_reads": 0,
   "gate_status": "measured",

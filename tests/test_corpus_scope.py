@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from integral.corpus_scope import (
+    _REPO_ROOT,
     CATALAN_SCOPE_ANCHOR,
     CORE_SERVING_MODULES,
     DEFAULT_PLAN,
@@ -29,6 +30,11 @@ from integral.corpus_scope import (
     serving_path_modules,
     t4b_row,
 )
+from integral.task_gate import parse_gate_block
+
+#: T98's archived payload — the file whose fenced `gate` block is what
+#: `make verify-gates` actually asserts.
+T98_PAYLOAD = _REPO_ROOT / "arsenal" / "tasks" / "_history" / "t-617ab974.md"
 
 _GOOD_PLAN = (
     "| T# | Description | ... |\n"
@@ -211,6 +217,17 @@ def test_the_serving_ban_is_measured_over_a_scan_that_covered_something() -> Non
         "from .harness import load_store\n",
         "from . import corpus\n",
         "from . import harness\n",
+        # This module. The detector was blind to itself: `corpus_scope` reads both
+        # stores (`_read_rows`, `provenance_faults`) and exports `DEFAULT_RAW_ADS`,
+        # so a serving module could reach the corpus through the very file that
+        # measures the ban and the count would stay at zero. Fail-open, and the
+        # shortest route of the lot once someone knows the module exists.
+        "from integral.corpus_scope import provenance_faults\n",
+        "from integral.corpus_scope import DEFAULT_RAW_ADS\n",
+        "from integral import corpus_scope\n",
+        "import integral.corpus_scope\n",
+        "from .corpus_scope import _read_rows\n",
+        "from . import corpus_scope\n",
         'ADS = "corpus/raw/ads.jsonl"\n',
         'ADS = "corpus/labelled/ads.jsonl"\n',
     ],
@@ -225,6 +242,27 @@ def test_a_serving_module_reaching_the_corpus_is_caught(tmp_path: Path, body: st
     findings, absent = serving_path_findings(src)
     assert absent == []
     assert [f["module"] for f in findings] == ["rank"]
+
+
+def test_the_declared_gate_fails_when_a_serving_module_reads_the_corpus(tmp_path: Path) -> None:
+    """The gate T98 declares must fail on either half of what T98 asserts.
+
+    It declared `corpus_rows_without_a_draw_specification` alone, and that key is a count
+    of *rows* — so a serving module reading the corpus left it at zero, left `gate_status`
+    at `measured`, and T98's own gate passed a serving-cache regression. The key the block
+    names is the sum, and this drives the half that used to be outside it.
+    """
+    src = _serving_tree(tmp_path, {"rank": "from integral.corpus import load_ads\n"})
+    measured = measure_provenance(src_dir=src)
+
+    assert measured["corpus_rows_without_a_draw_specification"] == 0
+    assert measured["serving_path_corpus_reads"] == 1
+    assert measured["corpus_measurement_set_violations"] == 1
+
+    fields = parse_gate_block(T98_PAYLOAD.read_text(encoding="utf-8"))
+    assert fields is not None
+    assert fields["key"] == "corpus_measurement_set_violations", fields
+    assert fields["key"] in measured
 
 
 def test_a_new_sourcing_module_is_inside_the_scan_the_day_it_lands(tmp_path: Path) -> None:

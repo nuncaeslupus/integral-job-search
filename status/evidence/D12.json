@@ -806,7 +806,7 @@
     },
     {
       "task": "t-617ab974",
-      "key": "corpus_rows_without_a_draw_specification",
+      "key": "corpus_measurement_set_violations",
       "evidence": "status/evidence/T98.json",
       "value_is_numeric": true,
       "declares_status_key": true,
