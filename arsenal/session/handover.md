@@ -74,6 +74,7 @@ variables** — build the target directly, never
 | #312 | T92 salary recovery | `98c9a09` | review on head |
 | #318 | T59 diagnosis — **closes nothing** | `e3db5f3` | first review |
 | #319 | T56 extractor macro-F1 0.4943 → 0.774 | — | **a second reader**, see below |
+| #320 | T57 ontology hit rate 0.6143 → 0.9071 | `05f1e04` | **41 accepted findings to apply**, see below |
 
 All were CI-green before their last push; the only `pending` check on each is
 CodeRabbit itself. **Nothing was merged this session** — the owner asked to hold
@@ -280,8 +281,12 @@ The refutations, so they are not re-litigated:
   `breached`/`untrusted` split. A test pinning a human-readable sentence breaks
   on a reword and passes on a wrong classification.
 
-**Three tasks were dispatched to workers and only one produced a task PR.** That
-is the honest ratio and it is worth knowing before planning the next round.
+**Three tasks were dispatched to workers; two produced task PRs and one correctly
+refused to.** Both PRs cleared their gate and **neither is merge-ready**, for the
+same reason in two forms: the cue vocabulary in #319 and the concept map in #320
+were each written by the session that measured them. That is the circularity
+CLAUDE.md's second-reader section exists for, and it is the shape to expect from
+any task whose metric is a vocabulary.
 
 ### T59 (`lo-4b17`, #124) — released back to the queue, unclaimed
 
@@ -309,11 +314,45 @@ avanzado de inglés` no).
 
 Do not merge it on the gate. See the Open PRs section.
 
-### T57 (`lo-7c14`, #119) — still claimed at session end
+### T57 (`lo-7c14`, #119) — #320, and its own review is not applied yet
 
-Dispatched, unfinished when the session ended. **The claim is still held and the
-issue still carries `arsenal:claimed`** — release it or resume it. Its worktree
-holds uncommitted work.
+`ontology_hit_rate` 0.6143 → **0.9071**, and parity is now measured rather than
+claimed: `ontology_hit_rate_by_language` = ca 0.9098, en 0.8731, es 0.9163, with
+a test behind it. 340 concept names over 492 occurrences, spread across the three
+languages in proportion to the corpus. The denominator never moved and 156
+occurrences were left honestly unmapped as the staleness signal.
+
+**Do not merge #320 as it stands.** Its independent adversarial review of
+`concept_map.yaml` finished *after* the push, so **none of its findings are in
+the diff**. It is posted in full as a PR comment (`5517619074`) and it found **41
+placements wrong in the fail-open direction, covering 57 of the 492 credited
+occurrences**. Correcting all 57 gives 0.8732, so the gate still clears — but
+CLAUDE.md requires the accepted cases to be committed into the gate's own
+fixtures before merge, not merely answered in a thread. That is the first job on
+this PR tomorrow.
+
+The costliest single placement: `internal mobility across countries` (5 occ) sits
+on `travel_requirement`, a **`hard` dealbreaker**, from a quote the read pass
+itself annotated *"offered as a benefit"*. Scored as a requirement it can
+disqualify a candidate on a perk.
+
+Worth more than its eleven occurrences: **narrow technical specialisms (PKI,
+MBSE, navigation algorithms, platform engineering, quantum cryptography) have no
+dimension at all.** `technical_depth` measures hardness, `tool_specificity`
+measures tools, `domain_knowledge` measures sectors — none asks *which technical
+field*. The map hid the gap by stretching `domain_knowledge`; unmapping them puts
+it back into the staleness signal, where a missing dimension belongs.
+
+Two collateral changes reviewers will query, both deliberate and documented
+in-code: the ad-side size band in `tests/test_dimension_content.py` went 20–25 →
+20–40 (the plan's band and the 0.85 gate could not both hold), and two picker
+groups (`requirements`, `skills`) were added with `english_demand` moved into
+`requirements`, to keep every group under the 8-row no-scroll cap.
+
+Also recorded: re-mapping onto the **existing** model as generously as its own
+definitions allow tops out at **0.6875**. 369 of the 492 occurrences needed 12
+new ad-side dimensions. So the 0.85 gate was not reachable by better mapping
+alone, which is the fact to check first if the new dimensions are challenged.
 
 ## Seeding a task is two commits' worth of content
 
