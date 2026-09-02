@@ -1,8 +1,8 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 12,
-  "silent_connector_failures_evaluated": 12,
-  "connector_runs_probed": 12,
+  "connector_runs_evaluated": 16,
+  "silent_connector_failures_evaluated": 16,
+  "connector_runs_probed": 16,
   "disabled": [],
   "gate_status": "measured",
   "readings": [
@@ -26,6 +26,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30",
+      "rate_limited": null
+    },
+    {
+      "connector": "himalayas",
+      "site": "himalayas.app",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-02",
       "rate_limited": null
     },
     {
@@ -59,6 +70,28 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30",
+      "rate_limited": null
+    },
+    {
+      "connector": "justjoin",
+      "site": "justjoin.it",
+      "health": "healthy",
+      "baseline_items": 5,
+      "probe_items": 5,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-02",
+      "rate_limited": null
+    },
+    {
+      "connector": "nofluffjobs",
+      "site": "nofluffjobs.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-02",
       "rate_limited": null
     },
     {
@@ -136,6 +169,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30",
+      "rate_limited": null
+    },
+    {
+      "connector": "workingnomads",
+      "site": "workingnomads.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-02",
       "rate_limited": null
     }
   ]

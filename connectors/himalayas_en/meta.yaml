@@ -30,3 +30,16 @@ fixture:
   # text.
   bodies: excerpted
   client_ip: redacted
+
+# `probe/list.html` is a SECOND read of the same endpoint, taken on the date in
+# `probe/captured.json` — 2026-09-02, three days after the fixture, so
+# `connector_health`'s rot stage is comparing two different days and not a file
+# with itself. The envelope proves it is a different response without anyone
+# having to trust the filename: `totalCount` moved 101863 → 103077, `updatedAt`
+# 1788126840 → 1788337249, and `nextCursor` base64-decodes from
+# `2026-08-30T20:35:58.537365Z|1855124` to `2026-09-02T07:09:30.749348Z|2138451`.
+# Not one `guid` in the served response is a `guid` the fixture holds.
+#
+# Cut the way the fixture was cut, so the two differ only where the board does:
+# 3 of the 20 returned records, each `description` and `excerpt` to its first
+# 600 characters with the cut marked in the text.

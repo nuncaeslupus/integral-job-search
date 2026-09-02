@@ -33,3 +33,14 @@ fixture:
   # `description` to its first 600 characters with the cut marked in the text.
   bodies: excerpted
   client_ip: redacted
+
+# `probe/list.html` is a SECOND read of the same URL, taken on the date in
+# `probe/captured.json` — 2026-09-02, three days after the fixture. `hasPart`
+# still carries 100 adverts and **not one of the five the fixture records is
+# among them**: this board turned its whole first page over inside three days,
+# which is the clearest possible evidence that the two files are two reads.
+#
+# Cut the way the fixture was cut: both `application/ld+json` blocks in a
+# minimal shell, with `hasPart` reduced from 100 entries to 5. The 1.9 MB of
+# script bundles and inline CSS around them is not evidence of anything and is
+# not committed.

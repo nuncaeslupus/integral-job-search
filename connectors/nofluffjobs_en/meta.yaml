@@ -32,3 +32,14 @@ fixture:
   # listing to do that.
   bodies: excerpted
   client_ip: redacted
+
+# `probe/list.html` is a SECOND read of the same URL, taken on the date in
+# `probe/captured.json` — 2026-09-02, three days after the fixture. The served
+# page carried 20 cards both times, but a different 20: of the three the fixture
+# records, only `python-developer-regular-scalo-Warszawa-1` is still on the page
+# at all, and it has fallen from the first card to the twentieth.
+#
+# Cut the way the fixture was cut: the first 3 cards of the served page, sliced
+# in the raw bytes at card boundaries so everything kept is byte-identical to
+# what the server sent, wrapped in the same minimal shell. Since the ordering
+# turned over, those are three cards the fixture does not contain.
