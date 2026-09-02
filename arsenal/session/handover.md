@@ -217,8 +217,14 @@ CodeRabbit reviews, 8 per rolling hour.
 4. **A bounced nudge started the per-PR interval**, so the PR whose request was
    *refused* waited longest — exactly backwards. A bounce is now exempt from
    `NUDGE_EVERY`.
-5. **`typeset -A` under bash** → `subíndice de matriz incorrecto`. The script
-   runs under bash; use `declare -A`.
+5. **`subíndice de matriz incorrecto`, and the first fix was wrong.** It was
+   read as zsh's `typeset -A` under bash and changed to `declare -A`; the error
+   came straight back, because the declaration was never the problem. The line
+   was `local key="$1" prev=${last_held[$key]:-0}` — **`local` expands all of its
+   arguments before the builtin runs**, so `$key` is still empty when the
+   subscript is read, and bash rejects the empty subscript. Split it into
+   separate `local` statements. Worth remembering as a bash rule, not a pump
+   bug: the same trap catches `local n=$1 out=${arr[$n]}` anywhere.
 6. **A duplicated `reply=$(gh api …)` fetch** survived a patch, doubling the API
    calls and orphaning the comment that explained the guard below it.
 
