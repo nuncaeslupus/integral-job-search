@@ -23,7 +23,7 @@ import json
 import re
 import sys
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -700,6 +700,33 @@ def from_urls(session: requests.Session, urls: list[str], source: str) -> Iterat
             yield rec
 
 
+def draw_scoped(
+    spec: Mapping[str, Any], plan: list[tuple[str, str, Any, int]]
+) -> tuple[list[tuple[str, str, Any, int]], list[str]]:
+    """The plan rows and job families a draw's specification asks for.
+
+    Two of a draw's three axes are request-shaped: a `sources` entry decides which
+    boards are contacted, a `job_families` entry which searches are issued against
+    Feina Activa. A source or family the specification does not name is a request
+    to a real board that nobody asked for, which is the rule the policy ledger and
+    the redirect guard both enforce by other routes — `t25-families` names Feina
+    Activa alone, and an unconstrained run put three remote boards on the wire.
+
+    The third axis, the counts, deliberately does not bind here: shortages are read
+    against the whole store, so a draw re-issued over a corpus that already holds
+    enough rows collects nothing. That is a real gap and a separate task —
+    draw-scoped counting changes what `--target-*` means. This function only ever
+    *narrows*, so it can never import a row `corpus_scope.draw_selects` would then
+    refuse.
+    """
+    sources = set(spec["sources"])
+    families = set(spec["job_families"])
+    return (
+        [row for row in plan if row[1] in sources],
+        [family for family in FAMILY_KEYWORDS if family in families],
+    )
+
+
 def main() -> int:
     global DRAW
     ap = argparse.ArgumentParser(description=__doc__)
@@ -762,13 +789,19 @@ def main() -> int:
     for name, why in sorted(refused.items()):
         print(f"{name}: not planned — {why}", file=sys.stderr)
     plan = [row for row in plan if row[1] not in refused]
+    unscoped = plan
+
+    # The draw's two request-shaped axes bind the plan; see `draw_scoped`.
+    plan, families = draw_scoped(declared[args.draw], plan)
+    for name in {row[1] for row in unscoped} - {row[1] for row in plan}:
+        print(f"{name}: not planned — draw {args.draw!r} does not name it", file=sys.stderr)
 
     for lang, name, fetch, target in plan:
         missing = target - language_counts(list(ads.values()))[lang]
         if missing > 0:
             absorb(name, fetch(session, missing))
 
-    for family in FAMILY_KEYWORDS:
+    for family in families:
         have = job_family_counts(list(ads.values())).get(family, 0)
         if have < args.target_family:
             absorb(

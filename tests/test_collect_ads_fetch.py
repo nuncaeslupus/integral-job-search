@@ -408,3 +408,51 @@ def test_the_committed_plan_is_clean_against_the_committed_ledger() -> None:
     assert list(refused) == ["remoteok"], refused
     survivors = [name for name in COLLECT.SOURCE_HOSTS if name not in refused]
     assert len(survivors) >= 5, survivors
+
+
+# ---------------------------------------------------------------------------
+# T98 — a draw's specification narrows what is fetched, not only what is stamped.
+
+
+def _plan() -> list[tuple[str, str, Any, int]]:
+    """The collector's fixed plan, shaped as `main` builds it."""
+    return [
+        ("es", "manfred", None, 60),
+        ("es", "tecnoempleo", None, 60),
+        ("en", "weworkremotely", None, 25),
+        ("en", "remotive", None, 25),
+        ("ca", "feinaactiva", None, 15),
+    ]
+
+
+def test_a_draw_that_names_one_board_puts_no_other_board_on_the_wire() -> None:
+    """`t25-families` declares Feina Activa alone. Before this bound the plan, a run
+    against it contacted three remote boards the specification never asked for —
+    real requests to real boards, which is the rule the ledger enforces elsewhere."""
+    spec = COLLECT.load_draws()["t25-families"]
+    plan, _ = COLLECT.draw_scoped(spec, _plan())
+    assert [row[1] for row in plan] == ["feinaactiva"], plan
+
+
+def test_a_programming_draw_issues_no_search_for_a_family_it_does_not_name() -> None:
+    """`t4b-programming` declares `job_families: [programming]`, and no
+    `FAMILY_KEYWORDS` entry is programming — so it searches for none of them."""
+    spec = COLLECT.load_draws()["t4b-programming"]
+    _, families = COLLECT.draw_scoped(spec, _plan())
+    assert families == [], families
+
+
+def test_the_breadth_draw_still_asks_for_every_family_it_declares() -> None:
+    """The negative control: narrowing that refuses everything would pass both tests
+    above. `t25-families` names six families and every one is a keyword set here."""
+    spec = COLLECT.load_draws()["t25-families"]
+    _, families = COLLECT.draw_scoped(spec, _plan())
+    assert sorted(families) == sorted(spec["job_families"]), families
+
+
+def test_every_declared_draw_asks_only_for_boards_the_collector_can_reach() -> None:
+    """The live reading over the committed registry: a draw naming a source the
+    collector has no fetcher for would silently collect nothing for it."""
+    for name, spec in COLLECT.load_draws().items():
+        unreachable = set(spec["sources"]) - set(COLLECT.SOURCE_HOSTS)
+        assert not unreachable, f"draw {name!r} names {sorted(unreachable)}"
