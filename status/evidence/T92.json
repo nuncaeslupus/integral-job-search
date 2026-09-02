@@ -9,7 +9,7 @@
     "detail_page": 0
   },
   "wording_cases_misread": 0,
-  "wording_cases_evaluated": 136,
+  "wording_cases_evaluated": 147,
   "wording_cases_at_least": 120,
   "corpus_house_estimates_of_our_own": 0,
   "corpus_ads_evaluated": 208,
@@ -23,7 +23,7 @@
     "ca": {
       "read": 90,
       "mentions_money": 15,
-      "recovered": 14
+      "recovered": 15
     },
     "en": {
       "read": 25,
@@ -32,9 +32,9 @@
     }
   },
   "estimate_provenance_failures": 0,
-  "estimate_checks_evaluated": 10,
+  "estimate_checks_evaluated": 13,
   "duplicate_join_failures": 0,
-  "duplicate_join_checks_evaluated": 10,
+  "duplicate_join_checks_evaluated": 11,
   "other_defects_total": 0,
   "defects": []
 }

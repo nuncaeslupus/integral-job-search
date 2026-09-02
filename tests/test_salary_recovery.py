@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
+from integral import salary_recovery
 from integral.offers import Offer, Salary, compute_offer_id
 from integral.presentation import ESTIMATED_MARKER, _salary
 from integral.salary_recovery import (
@@ -230,6 +234,91 @@ def test_one_misparse_does_not_become_the_stated_band_on_every_copy() -> None:
 
     assert report.recovered == {}
     assert set(report.dropped) == {poisoned.id, twin.id}
+
+
+def test_one_defective_estimate_does_not_discard_the_whole_batch() -> None:
+    """`Recovered.__post_init__` refusing a defective band is right for a direct
+    constructor call and wrong as a way to end a batch. The estimate route
+    builds `Recovered` from caller-supplied output, so an estimator returning
+    `nan` raised out of `recover`, out of `recover_all`, and took every other
+    offer's recovery with it. The duplicate route pre-filters with
+    `_usable_donor` for exactly this reason; the estimate route does now too."""
+    poisoned = _offer("boardone", _BODY + " Ask about the package.")
+    sound = _offer("boardtwo", "Night warehouse operative in Manresa, forklift licence, nights.")
+
+    def poisoner(offer: Offer) -> tuple[Salary, str]:
+        if offer.id == poisoned.id:
+            broken = Salary(min=float("nan"), currency="EUR", period="year", stated=False)
+            return (broken, "a guess")
+        sane = Salary(min=48000, max=58000, currency="EUR", period="year", stated=False)
+        return (sane, "a guess")
+
+    report = recover_all([poisoned, sound], estimator=poisoner)
+
+    assert poisoned.id in report.dropped
+    assert "estimate" in report.attempted[poisoned.id]
+    assert report.recovered[sound.id].route == "estimate"
+
+    # Unchanged, and deliberately: constructing one directly is still refused.
+    with pytest.raises(SalaryRecoveryError):
+        Recovered(
+            Salary(min=float("nan"), currency="EUR", period="year", stated=False),
+            "estimate",
+            "a guess",
+        )
+
+
+def test_a_band_with_no_currency_is_a_bare_number_on_every_route() -> None:
+    """`_band_in_segment` refuses a figure with no currency — the rule that
+    keeps "14" out of "per 14 pagues". `_band_defect` did not, so a donor or an
+    estimator could put `45000 to 55000` on the card with nothing saying of
+    what, and the recipient filter admits `currency in (None, wanted)`."""
+    unpriced = Salary(min=45000, max=55000, period="year", stated=True)
+    donor = _offer("unpricedboard", _BODY + " One.", unpriced)
+    silent = _offer("aggregator", _BODY + " Ask us about the package.")
+
+    found, _attempted = recover(silent, donors=[donor])
+    assert found is None
+
+    def estimator(_: Offer) -> tuple[Salary, str]:
+        return (Salary(min=45000, max=55000, period="year", stated=False), "a guess")
+
+    found, _attempted = recover(silent, estimator=estimator)
+    assert found is None
+
+    with pytest.raises(SalaryRecoveryError):
+        Recovered(unpriced.model_copy(update={"stated": False}), "estimate", "a guess")
+
+
+def test_the_wording_floor_is_enforced_where_the_evidence_is_written(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`naming.MINIMUM_SCANNED`'s class of defect: a floor nothing asserts in
+    the path that actually gates a merge. `_check_wording` reported only misread
+    cases, so `WORDING_CASES` could fall below its floor and `_main` would still
+    return 0 — and `Makefile` maps exit 3 to "unmeasured (recorded)" and carries
+    on, so a floor breach has to be a 1."""
+    monkeypatch.setattr(salary_recovery, "MINIMUM_WORDING_CASES", len(WORDING_CASES) + 1)
+
+    _misread, _seen, defects = salary_recovery._check_wording()
+    assert any("floor" in defect for defect in defects), defects
+
+    evidence = tmp_path / "T92.json"
+    assert salary_recovery._main([str(evidence)]) == 1
+    # And the record on disk names the breach rather than a clean claim.
+    written = json.loads(evidence.read_text(encoding="utf-8"))
+    assert any("floor" in defect for defect in written["defects"]), written["defects"]
+
+
+def test_every_recovered_advert_lands_in_exactly_one_language_bucket() -> None:
+    """`corpus_recovered_by_route` totalled 18 and `corpus_recovery_by_language`
+    totalled 17: the census counted only what `band_in_text` read, so the one
+    advert recovered by the duplicate route had no language bucket at all."""
+    measured = measure()
+    by_route = sum(measured["corpus_recovered_by_route"].values())
+    census = measured["corpus_recovery_by_language"]
+    by_language = sum(bucket["recovered"] for bucket in census.values())
+    assert by_language == by_route, measured["corpus_recovery_by_language"]
 
 
 @pytest.mark.parametrize(("language", "text", "expected"), WORDING_CASES)

@@ -342,6 +342,31 @@ _PERIODS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 
+#: A **pay period** `_BOUNDS` has no entry for. `_CUE` already accepts
+#: `weekly pay`, and `_PERIODS` has no week pattern, so such a segment reached
+#: the size-inference branch below as "no period word at all" and any figure
+#: ≥ 5.000 was stored as a *stated annual* band: "Weekly pay: 6,000 EUR" read as
+#: EUR 6.000 a year. A period this module cannot represent is refused, never
+#: inferred — the same rule as a segment naming two of them.
+#:
+#: Scoped to **pay periods only**, which is the whole difficulty. "Retribució
+#: mensual bruta (12 pagues i 40h setmanals) 1458€" states hours per week, not a
+#: wage per week, and a bare `setmanal`/`semanal` alternative would refuse an
+#: advert that reads correctly today. So the week word counts only after a
+#: period marker (`per`, `a la`, `/`, `cada`) or directly beside a wage noun.
+#: The fortnight forms are here for the same reason as the weekly ones and not
+#: because a corpus advert uses them: `_BOUNDS` cannot bound either.
+_UNBOUNDED_PERIOD = re.compile(
+    r"(?:/\s*|\bper\s+|\ba\s+(?:la\s+)?|\bpor\s+|\bcada\s+)"
+    r"(?:week|setmana|semana|quinzena|quincena|fortnight)\b"
+    r"|\b(?:weekly|setmanals?|semanal(?:es)?|quinzenals?|quincenal(?:es)?|fortnightly)\s+"
+    r"(?:pay|salary|wage|salari|salario|sou|sueldo|paga|retribuci[oó]n?|remuneraci[oó]n?)\b"
+    r"|\b(?:pay|salary|wage|salari|salario|sou|sueldo|paga|retribuci[oó]n?|remuneraci[oó]n?)\s+"
+    r"(?:brut[oa]?s?\s+|brutes\s+)?"
+    r"(?:weekly|setmanals?|semanal(?:es)?|quinzenals?|quincenal(?:es)?|fortnightly)\b",
+    re.IGNORECASE,
+)
+
 #: "1.800 € per 12 pagues" states a *monthly* wage: the Spanish and Catalan
 #: convention is that a figure quoted with a payment count is the payment. Only
 #: consulted when no explicit period word is present, so "anual … (12 pagues)"
@@ -491,6 +516,13 @@ def _band_in_segment(segment: str) -> Salary | None:
         # pay cue beside it is an annual salary in every market this tool
         # covers; anything smaller could equally be monthly, daily or an
         # allowance, and is refused.
+        #
+        # …unless the segment names a pay period `_BOUNDS` cannot bound, which
+        # is not "no period" either: it is a period we cannot store, and
+        # inferring annual from it is how "Weekly pay: 6,000 EUR" became a
+        # €6.000 year.
+        if _UNBOUNDED_PERIOD.search(segment):
+            return None
         if figures[0] < _BOUNDS["year"][0]:
             return None
         period = "year"
@@ -572,9 +604,12 @@ def _band_defect(salary: Salary) -> str | None:
     """Why this band may not be shown to a candidate, or `None` if it may.
 
     The same rules `_band_in_segment` already applies to text — a figure must
-    exist, be a real number, be positive (RO4's *"zero is not a wage"*, the
-    `salaryFrom: 0` sentinel), have a floor no higher than its ceiling, and sit
-    inside `_BOUNDS` for its period. `_band_in_segment` and `_usable_donor`
+    exist, **carry a currency**, be a real number, be positive (RO4's *"zero is
+    not a wage"*, the `salaryFrom: 0` sentinel), have a floor no higher than its
+    ceiling, and sit inside `_BOUNDS` for its period. The currency rule was the
+    one left behind: `_band_in_segment` refuses an unpriced figure outright, but
+    a donor or an estimator could hand the card a bare `45000 to 55000` with
+    nothing saying of what. `_band_in_segment` and `_usable_donor`
     enforced them on two of the four routes; the estimate route validated the
     `stated` flag and nothing else, so `nan`, `inf`, `-50000` and `1e12` all
     rendered on the card. A band with no period is bounded as annual: the widest
@@ -583,6 +618,8 @@ def _band_defect(salary: Salary) -> str | None:
     figures = [figure for figure in (salary.min, salary.max) if figure is not None]
     if not figures:
         return "a recovery with no figure is not a recovery"
+    if not salary.currency:
+        return f"a figure with no currency is a bare number: {salary!r}"
     if not all(isfinite(figure) for figure in figures):
         return f"a figure that is not a finite number: {salary!r}"
     if any(figure <= 0 for figure in figures):
@@ -718,10 +755,16 @@ def recover(
             # Not a request: whatever the estimator claimed, an estimate is
             # never stated. This is the only place the flag is set, so an
             # estimator that lies cannot launder its band into a claim.
-            return (
-                Recovered(salary.model_copy(update={"stated": False}), "estimate", basis),
-                tuple(attempted),
-            )
+            estimate = salary.model_copy(update={"stated": False})
+            # The same discipline `_usable_donor` gives the duplicate route, for
+            # the same reason. `Recovered.__post_init__` raises on a defective
+            # band, which is right for a direct constructor call and wrong here:
+            # this band is caller-supplied, so a single estimator returning
+            # `nan` used to raise out of `recover`, out of `recover_all`, and
+            # discard every other offer's recovery in the batch. A bad estimate
+            # costs its own offer and nothing else.
+            if basis.strip() and _band_defect(estimate) is None:
+                return Recovered(estimate, "estimate", basis), tuple(attempted)
 
     return None, tuple(attempted)
 
@@ -1095,6 +1138,44 @@ WORDING_CASES: tuple[tuple[str, str, Salary | None], ...] = (
     ),  # MXN read as USD: a 17x overstatement, and today's behaviour
     ("en", "Gross salary of $95,000 per year in Toronto", _band(95000, None, "USD", "year")),
     ("en", "Gross salary of $110,000 per year in Sydney", _band(110000, None, "USD", "year")),
+    # --- Fourth pass: a review round on the third ---------------------------
+    # (i) A pay period `_BOUNDS` cannot bound reached the size-inference branch
+    # as "no period word at all", and any figure ≥ 5.000 was then stored as a
+    # **stated annual** band. `_CUE` already accepted `weekly pay`, so the cue
+    # existed and the period did not: "Weekly pay: 6,000 EUR" read as EUR 6.000
+    # a *year*, a fifty-second of what the advert says, as a fact the employer
+    # stated. Same class as (c) — a period the module cannot represent must be
+    # refused, never inferred. Every one of these read as an annual band before
+    # `_UNBOUNDED_PERIOD` existed.
+    ("en", "Weekly pay: 6,000 EUR", None),
+    ("en", "Salary: 6,000 GBP per week", None),
+    ("en", "Gross pay of 6,000 EUR a week", None),
+    ("es", "Salario semanal: 6.000 €", None),
+    ("es", "Salario de 6.000 € a la semana", None),
+    ("es", "Salario quincenal: 6.000 € brutos", None),
+    ("ca", "Sou setmanal: 6.000 €", None),
+    ("ca", "Sou brut de 6.000 € per setmana", None),
+    # …and the cases the scoping exists for, which read correctly *before* this
+    # pass and must still read after it. "40h setmanals" states hours per week,
+    # not a wage per week: a bare `setmanal`/`semanal` alternative would refuse
+    # both of these, which is a fail-closed regression traded for the fix above.
+    # The second names no bounded period at all, so it is the one that actually
+    # reaches the branch `_UNBOUNDED_PERIOD` guards.
+    (
+        "ca",
+        "Retribució mensual bruta de 1.458 € (40h setmanals)",
+        _band(1458, None, "EUR", "month"),
+    ),
+    (
+        "ca",
+        "Sou brut de 30.000 € en una jornada de 40h setmanals",
+        _band(30000, None, "EUR", "year"),
+    ),
+    (
+        "es",
+        "Salario bruto de 30.000 € en una jornada de 40h semanales",
+        _band(30000, None, "EUR", "year"),
+    ),
 )
 
 
@@ -1153,11 +1234,26 @@ def _house_estimate_fixture() -> list[Offer]:
 
 
 def _check_wording() -> tuple[int, int, list[str]]:
+    """Every case reads as the spec requires, over a set that has not shrunk.
+
+    The floor is checked **here** and not only in `tests/`, which is
+    `naming.MINIMUM_SCANNED`'s defect one module over: `_check_wording` reported
+    only misread cases, so `WORDING_CASES` could fall under
+    `MINIMUM_WORDING_CASES` and `_main` would still return 0 — a clean zero over
+    a set small enough to mean nothing. It is a defect rather than an
+    `unmeasured` verdict on purpose: `Makefile`'s `evidence` target maps exit 3
+    to "unmeasured (recorded)" and carries on, so a 3 here would not fail
+    `make evidence`. `_main` folds this into its exit 1.
+    """
     defects = []
     for language, text, expected in WORDING_CASES:
         actual = band_in_text(text)
         if actual != expected:
             defects.append(f"[{language}] {text!r}: expected {expected!r}, read {actual!r}")
+    if len(WORDING_CASES) < MINIMUM_WORDING_CASES:
+        defects.append(
+            f"only {len(WORDING_CASES)} wording cases; the floor is {MINIMUM_WORDING_CASES}"
+        )
     return len(defects), len(WORDING_CASES), defects
 
 
@@ -1182,7 +1278,7 @@ def corpus_offers() -> list[Offer]:
     return offers
 
 
-def _check_corpus() -> tuple[int, int, list[str], dict[str, dict[str, int]]]:
+def _check_corpus(report: RecoveryReport) -> tuple[int, int, list[str], dict[str, dict[str, int]]]:
     """Read every committed advert, and check our own spread.
 
     The census is the parity evidence: a parser that only reads English is a
@@ -1197,22 +1293,35 @@ def _check_corpus() -> tuple[int, int, list[str], dict[str, dict[str, int]]]:
     adverts state no salary at all, so a low share is the market rather than
     the parser. What a reader wants is how many of the adverts that name money
     turned into a band, and how that differs between the three languages.
+
+    `recovered` counts the **whole** recovery — every route `report` used, not
+    only what `band_in_text` read. Counting the text route alone made the census
+    total 17 against `corpus_recovered_by_route`'s 18: the one advert recovered
+    from a duplicate had no language bucket at all, and two numbers in the same
+    evidence file disagreed about how many adverts were recovered.
     """
     ads = load_ads()
     blank = {"read": 0, "mentions_money": 0, "recovered": 0}
     census: dict[str, dict[str, int]] = {language: dict(blank) for language in LANGUAGES}
     per_source: dict[str, Counter[BandKey]] = defaultdict(Counter)
+    # `corpus_offers` dedupes by offer id and keeps the first advert with that
+    # text, so the census must resolve a recovery to a language the same way.
+    language_of: dict[str, str] = {}
     for ad in ads:
         language = str(ad.get("language", ""))
         census.setdefault(language, dict(blank))
         census[language]["read"] += 1
         text = str(ad.get("text", ""))
+        language_of.setdefault(compute_offer_id(text), language)
         if _MENTIONS_MONEY.search(text):
             census[language]["mentions_money"] += 1
         band = band_in_text(text)
         if band is not None:
-            census[language]["recovered"] += 1
             per_source[str(ad.get("source", ""))][band_key(band)] += 1
+    for offer_id in report.recovered:
+        language = language_of.get(offer_id, "")
+        census.setdefault(language, dict(blank))
+        census[language]["recovered"] += 1
 
     defects = [
         f"we read the identical band {band!r} out of {count} of {source}'s adverts"
@@ -1237,9 +1346,14 @@ _IMPOSSIBLE_BANDS: tuple[Salary, ...] = (
     Salary(min=0, max=0, currency="EUR", period="year", stated=False),
     Salary(min=90000, max=10000, currency="EUR", period="year", stated=False),
     Salary(min=1e12, currency="EUR", period="year", stated=False),
+    # A bare number with no unit. `_band_in_segment` refuses a figure with no
+    # currency outright — it is the rule that keeps "14" out of "per 14 pagues"
+    # — but `_band_defect` did not, so a donor or an estimator could hand the
+    # card `45000 to 55000` with nothing saying of what.
+    Salary(min=45000, max=55000, period="year", stated=False),
 )
 
-_ESTIMATE_CHECKS = 4 + len(_IMPOSSIBLE_BANDS)
+_ESTIMATE_CHECKS = 6 + len(_IMPOSSIBLE_BANDS)
 
 
 def _check_estimate() -> tuple[int, int, list[str]]:
@@ -1278,6 +1392,43 @@ def _check_estimate() -> tuple[int, int, list[str]]:
         except SalaryRecoveryError:
             continue
         defects.append(f"a figure no wage could be reached the card: {band!r}")
+
+    # Blast radius, the other way round. `Recovered.__post_init__` refusing a
+    # defective band is right for a direct constructor call and wrong as a way
+    # to end a batch: the estimate route builds `Recovered` out of whatever the
+    # caller's estimator returned, so one `nan` raised out of `recover`, out of
+    # `recover_all`, and took every other offer's recovery with it. The
+    # duplicate route already drops an unusable donor and keeps going; so does
+    # this one now.
+    poisoned = _offer(
+        "boardone", "Data engineer in Barcelona owning the ingestion pipeline, Python and dbt."
+    )
+    sound = _offer(
+        "boardtwo", "Night warehouse operative in Manresa, forklift licence, permanent contract."
+    )
+
+    def poisoner(offer: Offer) -> tuple[Salary, str]:
+        if offer.id == poisoned.id:
+            return (
+                Salary(min=float("nan"), currency="EUR", period="year", stated=False),
+                "from comparable adverts",
+            )
+        return (
+            Salary(min=48000, max=58000, currency="EUR", period="year", stated=False),
+            "from comparable adverts",
+        )
+
+    try:
+        batch = recover_all([poisoned, sound], estimator=poisoner)
+    except SalaryRecoveryError as error:
+        defects.append(f"one defective estimate ended the whole batch: {error}")
+    else:
+        if poisoned.id in batch.recovered:
+            defects.append(
+                f"a defective estimate was recovered anyway: {batch.recovered[poisoned.id]!r}"
+            )
+        if sound.id not in batch.recovered:
+            defects.append("a sound estimate was discarded alongside a defective one")
     return len(defects), _ESTIMATE_CHECKS, defects
 
 
@@ -1345,6 +1496,19 @@ def _check_duplicate_join() -> tuple[int, int, list[str]]:
     if found is not None:
         defects.append(f"a donor band contradicted the recipient's currency: {found.salary!r}")
 
+    # A band with no currency is a bare number. `_band_in_segment` refuses one
+    # in text; `_usable_donor` delegates to `_band_defect`, which did not, and
+    # the recipient filter admits `currency in (None, wanted)` — so a donor
+    # carrying min/max/period and no unit donated `45000 to 55000` of nothing.
+    unpriced = _offer(
+        "unpricedboard",
+        "Data engineer in Barcelona, working on the ingestion pipeline all week.",
+        Salary(min=45000, max=55000, period="year", stated=True),
+    )
+    found, _ = recover(silent, donors=[unpriced], house_bands=house)
+    if found is not None:
+        defects.append(f"a donor band with no currency was consumed: {found.salary!r}")
+
     # A donor whose band is impossible is skipped, not raised out of `recover`.
     broken = _offer(
         "brokenboard",
@@ -1372,12 +1536,14 @@ def _check_duplicate_join() -> tuple[int, int, list[str]]:
         defects.append(
             f"an equity grant was read as a salary and donated to its duplicate: {blast}"
         )
-    return len(defects), 10, defects
+    return len(defects), 11, defects
 
 
-def _check_drop_discipline(
-    offers: Sequence[Offer],
-) -> tuple[int, int, list[str], dict[str, int]]:
+def _no_detail(_: Offer) -> str | None:
+    return None  # no network here; the reader is the seam, not a fetcher
+
+
+def _check_drop_discipline(report: RecoveryReport) -> tuple[int, int, list[str], dict[str, int]]:
     """The plan's metric: `salary_silent_offers_dropped_without_a_lookup`.
 
     Run over the committed corpus, not over a pair of strings. Two things are
@@ -1385,12 +1551,12 @@ def _check_drop_discipline(
     nothing: every dropped offer must have had all three available routes
     tried, **and** the routes must actually recover something — a lookup that
     is performed and never succeeds is the accusation restated, not answered.
+
+    The report is passed in rather than built here so that `_check_corpus`'s
+    per-language census counts the same recoveries this counts per route. Two
+    passes over the corpus is how the evidence file came to hold 18 recoveries
+    in one key and 17 in another.
     """
-
-    def no_detail(_: Offer) -> str | None:
-        return None  # no network here; the reader is the seam, not a fetcher
-
-    report = recover_all(offers, detail_reader=no_detail)
     available: tuple[Route, ...] = ("advert_text", "duplicate", "detail_page")
     missed = report.routes_missed(available)
     defects = [
@@ -1434,11 +1600,15 @@ def measure() -> dict[str, Any]:
     rather than counts of the day (T100).
     """
     offers = corpus_offers()
+    # One pass over the corpus, read by both the per-route count and the
+    # per-language census, so the two can never disagree about how many adverts
+    # were recovered.
+    report = recover_all(offers, detail_reader=_no_detail)
     wording, wording_seen, wording_defects = _check_wording()
-    corpus, corpus_seen, corpus_defects, census = _check_corpus()
+    corpus, corpus_seen, corpus_defects, census = _check_corpus(report)
     estimate, estimate_seen, estimate_defects = _check_estimate()
     duplicate, duplicate_seen, duplicate_defects = _check_duplicate_join()
-    dropped, dropped_seen, dropped_defects, by_route = _check_drop_discipline(offers)
+    dropped, dropped_seen, dropped_defects, by_route = _check_drop_discipline(report)
 
     defects = (
         wording_defects + corpus_defects + estimate_defects + duplicate_defects + dropped_defects
