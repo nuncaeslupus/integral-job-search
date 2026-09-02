@@ -2,7 +2,7 @@
   "unrecordable_task_gates": 0,
   "unrecordable": [],
   "evidence_gates_read_at_least": 100,
-  "gates_declaring_status_key_at_least": 1,
+  "gates_declaring_status_key_at_least": 20,
   "board_sensitive_record_keys": 0,
   "record_keys_compared": 4,
   "board_sensitivity_status": "measured",

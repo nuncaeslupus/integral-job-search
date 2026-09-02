@@ -381,8 +381,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # The floor, last: a real disagreement outranks a thin denominator, the
-    # same precedence `naming` and `task_gate` apply. Exit 3 is "nothing was
-    # counted, so nothing passed and nothing failed".
+    # same precedence `naming` and `task_gate` apply.
+    #
+    # **Exit 1, not 3.** `Makefile`'s evidence loop prints "unmeasured
+    # (recorded)" for 3 and carries on, and `record` writes
+    # `plan_rows_at_least` unconditionally — so a two-row plan committed a
+    # record claiming a hundred, produced no drift, and passed. See
+    # `task_gate._main` for the same repair on the same day.
     for name in ("plan_rows", "queue_tasks"):
         count = measured[name]
         assert isinstance(count, int)
@@ -392,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
                 "empty plan and an empty queue is not a measurement",
                 file=sys.stderr,
             )
-            return 3
+            return 1
     return 0
 
 

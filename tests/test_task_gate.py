@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from integral import task_gate
 
@@ -225,25 +228,42 @@ def test_archiving_a_task_file_changes_nothing_either(tmp_path: Path) -> None:
     assert task_gate.record(task_gate.measure(tasks, history, tmp_path)) == before
 
 
-def test_a_census_committed_as_an_exact_value_is_reported_sensitive() -> None:
-    """The gate, shown failing. Put a census key back and the metric finds it —
-    otherwise `board_sensitive_record_keys == 0` would hold over a record that
-    stopped carrying the sensitive keys rather than being fixed."""
-    census = dict(task_gate.record(task_gate.measure()))
-    census["evidence_gates_read"] = 126
+def test_a_census_committed_as_an_exact_value_is_reported_sensitive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gate, shown failing — by running the gate.
 
-    assert task_gate.sensitive_keys(census, {**census, "evidence_gates_read": 127}) == [
-        "evidence_gates_read"
-    ]
+    The first version of this test hand-built two dicts one key apart and
+    asserted `sensitive_keys` reported that key. Its docstring said "the gate,
+    shown failing"; the gate never ran, and what it established was that dict
+    comparison compares dicts. Put a census key back into what `record`
+    *commits* and the reading itself has to find it — otherwise
+    `board_sensitive_record_keys == 0` would hold over a record that stopped
+    carrying the sensitive keys rather than being fixed. (#297, D-3.)
+    """
+    real_record = task_gate.record
+
+    def with_the_census_back(measured: dict[str, Any]) -> dict[str, Any]:
+        return real_record(measured) | {"evidence_gates_read": measured["evidence_gates_read"]}
+
+    monkeypatch.setattr(task_gate, "record", with_the_census_back)
+
+    reading = task_gate.measure_board_sensitivity()
+
+    assert reading["board_sensitive"] == ["evidence_gates_read"]
+    assert reading["board_sensitive_record_keys"] == 1
+    assert reading["record_keys_compared"] == task_gate.MINIMUM_RECORD_KEYS_COMPARED + 1
 
 
 def test_the_board_sensitivity_gate_counts_the_keys_it_compared() -> None:
     """A zero over nothing compared is the failure this repository's gates are
-    built around. The denominator is asserted here too."""
+    built around. The denominator is asserted here too — against the module's
+    floor, not against `len(record(measure()))`, which was `4 >= 4` and moved
+    with whatever `record` happened to emit (#297, D-4)."""
     measured = task_gate.measure_board_sensitivity()
 
     assert measured["board_sensitive_record_keys"] == 0, measured["board_sensitive"]
-    assert measured["record_keys_compared"] >= len(task_gate.record(task_gate.measure()))
+    assert measured["record_keys_compared"] >= task_gate.MINIMUM_RECORD_KEYS_COMPARED
     assert measured["board_sensitivity_status"] == "measured"
 
 
@@ -260,3 +280,160 @@ def test_the_sensitivity_reading_is_unmeasured_with_no_gate_to_withhold(tmp_path
 
     assert measured["board_sensitivity_status"] == "unmeasured"
     assert measured["record_keys_compared"] == 0
+
+
+# --- the floors, enforced --------------------------------------------------
+#
+# Nothing invoked `_main` until #297's second-reader audit, so every line of
+# the exit-code logic was untested and D-1 — a floor breach exiting 3, which
+# `make evidence` prints as "unmeasured (recorded)" and walks past — sat behind
+# a green suite. These are that audit's cases 1 and 2, as fixtures. The
+# precedent is T100's `test_an_empty_scan_still_fails` in `tests/test_naming.py`.
+
+
+def _board_of(tmp_path: Path, gates: int, *, status_key_gates: int = 0) -> Path:
+    """A board carrying `gates` readable evidence gates — the census a floor counts.
+
+    Every gate is recordable (a real number at its key), so `unrecordable_task_gates`
+    is zero and the run reaches the floors rather than stopping on a finding.
+    """
+    tasks = tmp_path / "arsenal" / "tasks"
+    tasks.mkdir(parents=True)
+    evidence = tmp_path / "status" / "evidence" / "X.json"
+    evidence.parent.mkdir(parents=True)
+    evidence.write_text(json.dumps({"score": 0.9, "score_status": "measured"}), encoding="utf-8")
+    for n in range(gates):
+        task_id = f"lo-{n:04d}"
+        (tasks / f"{task_id}.md").write_text(
+            _GATE.format(
+                task_id=task_id,
+                title="a task with a gate",
+                status="merged",
+                metric="score",
+                evidence="status/evidence/X.json",
+                key="score",
+                extra="status-key: score_status\n" if n < status_key_gates else "",
+            ),
+            encoding="utf-8",
+        )
+    return tasks
+
+
+def _read_the_board(monkeypatch: pytest.MonkeyPatch, tasks: Path, root: Path) -> None:
+    """Point `_main` at `tasks`. The measuring is real; only the board moves.
+
+    `measure`'s paths are default arguments, bound at definition, so patching
+    `DEFAULT_TASKS_DIR` would do nothing. The module attribute is the seam:
+    both `write_evidence` and `measure_board_sensitivity` look `measure` up by
+    name, and the latter's perturbation is forwarded so the sensitivity reading
+    stays a real comparison rather than a board compared with itself.
+    """
+    real_measure = task_gate.measure
+
+    def bound(
+        _tasks: Path = tasks,
+        _history: Path = tasks,
+        _root: Path = root,
+        withheld: frozenset[str] = frozenset(),
+    ) -> dict[str, Any]:
+        return real_measure(tasks, tasks / "_history", root, withheld)
+
+    monkeypatch.setattr(task_gate, "measure", bound)
+
+
+def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tasks: Path) -> tuple[int, Path]:
+    """`_main` over `tasks`, writing its evidence somewhere disposable."""
+    _read_the_board(monkeypatch, tasks, tmp_path)
+    target = tmp_path / "D12.json"
+    return task_gate._main(["task_gate", "--write-evidence", str(target)]), target
+
+
+def test_a_healthy_synthetic_board_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The control. Without it the three failures below could all be the harness."""
+    exit_code, target = _run(monkeypatch, tmp_path, _board_of(tmp_path, 105, status_key_gates=25))
+
+    assert exit_code == 0
+    assert json.loads(target.read_text(encoding="utf-8"))["board_sensitive_record_keys"] == 0
+
+
+def test_a_sub_floor_board_fails_instead_of_recording_a_floor_it_never_met(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Audit case 1: five readable gates against a floor of a hundred.
+
+    Exit 3 was the old answer, and `Makefile`'s evidence loop maps 3 to
+    "unmeasured (recorded)" and continues — so `make host-gate` was fully green
+    over a board on which 126 of 131 gates were never read. Exit 1 is the only
+    code that loop treats as a failure.
+    """
+    exit_code, target = _run(monkeypatch, tmp_path, _board_of(tmp_path, 5, status_key_gates=5))
+
+    assert exit_code == 1
+    assert "only 5 gate(s) counted for evidence_gates_read (floor 100)" in capsys.readouterr().err
+    # The committed record cannot tell this board from a healthy one — a floor
+    # is a constant by construction, which is the whole point of replacing the
+    # census. So the exit code is the only thing that can, and it has to be one
+    # the caller stops on.
+    committed = json.loads(target.read_text(encoding="utf-8"))
+    assert committed["evidence_gates_read_at_least"] == task_gate.MINIMUM_GATES_READ
+
+
+def test_a_near_floor_board_fails_too(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Audit case 2: ninety-two of a hundred and thirty-one.
+
+    The interval [1, 99] is where a floor differs from a census, and it was
+    silent for every value in it — a board that lost thirty per cent of its
+    gates produced no artefact and no non-zero the caller respected.
+    """
+    exit_code, _ = _run(monkeypatch, tmp_path, _board_of(tmp_path, 92, status_key_gates=92))
+
+    assert exit_code == 1
+    assert "only 92 gate(s) counted for evidence_gates_read (floor 100)" in capsys.readouterr().err
+
+
+def test_a_board_that_stopped_declaring_status_keys_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-5: the adoption floor, raised from one to twenty and now enforced.
+
+    The board declares twenty-nine `status-key` gates. Against a floor of one,
+    this fixture — a hundred and five gates of which three still declare one —
+    was a pass: an eighty-nine per cent collapse in the use of D-12's third
+    outcome, invisible.
+    """
+    exit_code, _ = _run(monkeypatch, tmp_path, _board_of(tmp_path, 105, status_key_gates=3))
+
+    assert exit_code == 1
+    assert (
+        "only 3 gate(s) counted for gates_declaring_status_key (floor 20)"
+        in capsys.readouterr().err
+    )
+
+
+def test_a_record_that_drops_a_key_fails_its_own_denominator(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-4: `record_keys_compared` as something that can fail.
+
+    `record` emits four keys unconditionally, so the old assertion
+    `record_keys_compared >= len(record(measure()))` was `4 >= 4` — it moved
+    with whatever `record` emitted and could not fail. Drop a key and the
+    comparison spans three: zero sensitive keys over a shrunken record is a
+    smaller claim than the gate makes, and it now says so.
+    """
+    tasks = _board_of(tmp_path, 105, status_key_gates=25)
+    real_record = task_gate.record
+
+    def without_the_finding(measured: dict[str, Any]) -> dict[str, Any]:
+        return {k: v for k, v in real_record(measured).items() if k != "unrecordable_task_gates"}
+
+    monkeypatch.setattr(task_gate, "record", without_the_finding)
+
+    exit_code, _ = _run(monkeypatch, tmp_path, tasks)
+
+    assert exit_code == 1
+    assert "only 3 record key(s) were compared (floor 4)" in capsys.readouterr().err

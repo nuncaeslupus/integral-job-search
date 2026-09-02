@@ -67,9 +67,23 @@ MINIMUM_GATES_READ = 100
 
 #: The same, for the third outcome. D-12 exists to make `unmeasured`
 #: expressible, and a board where *no* gate declares a `status-key` has the
-#: facility without the use — so one is the honest floor and zero is a
-#: finding. The exact count is not: it grows with the queue.
-MINIMUM_STATUS_KEY_GATES = 1
+#: facility without the use. The exact count is still not committable — it
+#: grows with the queue — but a floor of one was not a floor: the board
+#: declares twenty-nine, so one permitted a 96% collapse in adoption with no
+#: signal at all, and said nothing the test suite's `>= 1` did not already
+#: say. Twenty is the same fraction of live that `MINIMUM_GATES_READ` is
+#: (100/132), which is enough headroom to shed a workspace and little enough
+#: that losing most of the adoption is a finding.
+MINIMUM_STATUS_KEY_GATES = 20
+
+#: The floor `record_keys_compared` is asserted against. `record` emits four
+#: keys — the finding, its reasons, and the two floors — so the sensitivity
+#: comparison spans four or the comparison did not span the record. It is a
+#: literal rather than `len(record(measure()))` on purpose: derived from the
+#: live record it would move with the record and could never fail, which is
+#: exactly how a `record` that quietly stopped emitting a key would slip a
+#: vacuous zero past this denominator.
+MINIMUM_RECORD_KEYS_COMPARED = 4
 
 #: What `record` drops in favour of a floor, or drops outright. `readings` is
 #: the per-task detail — one row per gate, regenerable by `--check`, read by
@@ -400,8 +414,19 @@ def _main(argv: list[str]) -> int:
 
     # The floors, last: a real finding outranks a thin denominator, the same
     # precedence `naming` applies between a surviving reference and a short
-    # sweep. Exit 3 is "nothing was counted, so nothing passed and nothing
-    # failed" — not a pass.
+    # sweep.
+    #
+    # **Exit 1, not 3.** A breach here is a finding, not an absence of one: the
+    # sweep ran, counted, and came back short. Exit 3 is the code `make
+    # evidence` deliberately tolerates — `Makefile`'s `case` prints "unmeasured
+    # (recorded)" and carries on — so returning it turned every floor into
+    # advice. And a floor that only advises is worse than the census it
+    # replaced: `record` writes `evidence_gates_read_at_least` unconditionally,
+    # so a five-gate board produced a green `make evidence` with no drift to
+    # notice, where the exact value it replaced produced a red one. The
+    # artefact cannot tell those two boards apart by construction — that is the
+    # point of a floor — so the exit code is what has to, and it must be one
+    # `make evidence` treats as failure. Found by second-reader audit on #297.
     for name, floor in (
         ("evidence_gates_read", MINIMUM_GATES_READ),
         ("gates_declaring_status_key", MINIMUM_STATUS_KEY_GATES),
@@ -412,7 +437,7 @@ def _main(argv: list[str]) -> int:
                 "zero unrecordable gates over nothing is not a measurement",
                 file=sys.stderr,
             )
-            return 3
+            return 1
     if measured["board_sensitivity_status"] != "measured":
         print(
             "board_sensitive_record_keys: UNMEASURED — no recordable gate to withhold, so "
@@ -420,6 +445,18 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 3
+    # The sensitivity reading's own denominator, after the board's. Zero
+    # sensitive keys over three keys compared is a smaller claim than zero over
+    # four, and nothing else would say so.
+    if measured["record_keys_compared"] < MINIMUM_RECORD_KEYS_COMPARED:
+        print(
+            f"only {measured['record_keys_compared']} record key(s) were compared "
+            f"(floor {MINIMUM_RECORD_KEYS_COMPARED}) — `record` stopped committing "
+            "something, and zero sensitive keys over a shrunken record is not the "
+            "property this gate asserts",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
