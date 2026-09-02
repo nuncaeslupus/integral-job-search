@@ -144,10 +144,12 @@ rather than an answered comment.
 - **D-5.** `gates_declaring_status_key_at_least = 1` against a live 29 is not a
   denominator — it is D-12's *adoption* reading — and a floor of one permitted a
   96% collapse while adding nothing over the suite's existing `>= 1`. Raised to
-  **20**, the same fraction of live that `MINIMUM_GATES_READ` is (100/132),
-  rather than restored as a reading: the exact count moves when a task
-  declaring a `status-key` merges, which is the defect. Fixture: 105 gates of
-  which 3 declare one — a pass under the old floor.
+  **20** — a round floor nine under the live twenty-nine — rather than restored
+  as a reading: the exact count moves when a task declaring a `status-key`
+  merges, which is the defect. Not a fraction of `MINIMUM_GATES_READ`: 100/132
+  is 76% and 20/29 is 69%, and an earlier draft of this note claimed they
+  matched. Fixture: 105 gates of which 3 declare one — a pass under the old
+  floor.
 
 Two more, recorded and deliberately not coded:
 

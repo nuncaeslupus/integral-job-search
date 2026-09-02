@@ -71,9 +71,14 @@ MINIMUM_GATES_READ = 100
 #: grows with the queue — but a floor of one was not a floor: the board
 #: declares twenty-nine, so one permitted a 96% collapse in adoption with no
 #: signal at all, and said nothing the test suite's `>= 1` did not already
-#: say. Twenty is the same fraction of live that `MINIMUM_GATES_READ` is
-#: (100/132), which is enough headroom to shed a workspace and little enough
-#: that losing most of the adoption is a finding.
+#: say. Twenty is a round floor under the live twenty-nine — nine of headroom,
+#: enough to shed a workspace and little enough that losing most of the
+#: adoption is a finding. It is deliberately NOT derived from
+#: `MINIMUM_GATES_READ`'s fraction: 100/132 is 76% and 20/29 is 69%, so a
+#: sentence claiming the two floors sit at the same fraction of live would be
+#: false, and a false rationale is worse than a stated round number — the next
+#: reader would recompute the ratio to move the floor and land somewhere the
+#: headroom argument never justified.
 MINIMUM_STATUS_KEY_GATES = 20
 
 #: The floor `record_keys_compared` is asserted against. `record` emits four
