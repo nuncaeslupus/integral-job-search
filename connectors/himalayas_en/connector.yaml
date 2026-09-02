@@ -1,0 +1,54 @@
+# Himalayas — a remote-jobs board with a public JSON API, and the first source
+# in this library that hands over a salary as two numbers and a currency without
+# anything having to be parsed out of prose.
+#
+# That is the whole reason it is here. Six of this library's HTML connectors
+# leave salary deliberately unmapped because the board prints it as one
+# unsplittable string ("$120k–$160k", "según valía", "20 500 – 27 000 PLN / mth")
+# and `build_offer` would turn that into `Salary(stated=True)` carrying no
+# figures. Here `minSalary` and `maxSalary` are JSON numbers.
+#
+# `robots.txt` was read live on 2026-08-30 with this project's own agent token.
+# `/jobs/api` is not disallowed and no rule names this token or any AI agent.
+site: himalayas
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-30"
+# The API is public; reading it needs no key and none is sent.
+auth: none
+
+list:
+  # `limit` is capped server-side at 20 however high it is set (asked for 100,
+  # got 20, out of a stated totalCount above 100 000).
+  url_pattern: "https://himalayas.app/jobs/api?limit=20"
+  # `mode: none`, and this is a statement about the *pagination model*, not
+  # about the board. Himalayas continues with `offset`, which is a **record
+  # cursor** — offset=1 is the window starting at the second advert, not the
+  # second page. `{page}` can only substitute a page number, so expressing this
+  # as `query_param: offset` would issue three requests for twenty-two distinct
+  # records and call the overlap pagination. Declaring one page is the honest
+  # description of what this connector alone can reach; a caller wanting more
+  # passes explicit offsets.
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    # No `embedded_in`: the response body *is* the JSON. No `match` either —
+    # there is one document and it is the one we want.
+    items: jobs
+    fields:
+      detail_url: applicationLink
+      source_ref: guid
+      title: title
+      company: companyName
+      text: description
+      salary_min: minSalary
+      salary_max: maxSalary
+      salary_currency: currency
+      salary_period: salaryPeriod
+      # `locationRestrictions` is an array ("[]" for worldwide, ["United
+      # States"] for a restricted post) and `dig` treats an array as no value,
+      # so it is not mapped. Mapping it would be a lie in the shape of a field:
+      # `location_raw` would be absent for a worldwide job and absent for a
+      # US-only one, which are the two answers a candidate most needs told
+      # apart. The restriction stays legible inside `text`.
