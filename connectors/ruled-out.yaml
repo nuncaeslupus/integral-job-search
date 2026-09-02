@@ -254,7 +254,9 @@ corrected:
       `connectors/usajobs_en/`, added by T89 and the library's first POST
       package. Both surfaces were re-captured on 2026-09-02 with this tool's
       own product token: the list POST (200, 35,067 bytes, 25 rows, `Total: 44`,
-      `Pager.NumberOfPages: 2`) and one announcement,
+      `Pager.NumberOfPages: 2` — the committed *fixture*; the *probe* is a
+      second read an hour later and reads `Total: 43`, which `meta.yaml`
+      records and is the point of keeping both) and one announcement,
       https://www.usajobs.gov/job/856726500 (200, 126,012 bytes,
       server-rendered — test 2 passes in the served bytes, so no headless
       browser). Robots re-adjudicated the same day with two parsers agreeing

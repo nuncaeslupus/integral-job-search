@@ -82,7 +82,7 @@ fixture:
 # `probe/list.html` is a SECOND read of the same POST, taken on 2026-09-02 at
 # 09:10:01Z — same URL, same body, same 200 — and it is a genuinely separate
 # response, not a copy of the fixture: 34,737 bytes against the fixture's
-# 35,067, `Total` 44 against 44 an hour earlier now 43, and a different
+# 35,067, `Total` 43 against the fixture's 44 an hour earlier, and a different
 # `UniqueSearchID`. Two announcements had closed and two more had opened
 # between the reads, so the `Jobs` arrays are not equal while both still carry
 # 25 rows. That is what makes the rot stage mean something here: it compares
