@@ -1,140 +1,113 @@
 # Session handover
 
-**Written 2026-09-02, ~17:40 UTC.** Board: **126 merged of 147**. Six PRs open, every
-one CI-green, **none merged** — and the reason is the single most important thing on
-this page.
+Board: **162 tasks, 126 merged**, 28 open, 4 claimed. Five PRs open, all green,
+all waiting on the same thing.
 
-## The reviewer is the bottleneck, and its green signals lie
+## The one thing to know: `after-ci-and-review`'s review half has no reader
 
-`merge-policy` is `after-ci-and-review` (T103, #304). CI is mechanically checked;
-**the review half has no reader**. A session decides by looking, and every signal it
-would naturally look at reads as success over an unreviewed head. Four variants
-measured today, all filed on **#313**:
+`merge-policy` is `after-ci-and-review`. CI is checked mechanically. **Nothing
+reads the review half**, and CodeRabbit reports a green check in four distinct
+situations where it has not reviewed the head:
 
-1. `CodeRabbit  pass  Review skipped: draft pull request`
-2. `CodeRabbit  pass  Review rate limited`
-3. `CodeRabbit  pass  Review completed` — on a **superseded** commit
-4. `@coderabbitai review` → `✅ Action performed — Review finished`, **producing no
-   review of the head**
+1. `Review skipped: draft pull request`
+2. `Review rate limited`
+3. `Review completed` — on a **superseded** commit
+4. `@coderabbitai review` → `✅ Action performed — Review finished`, producing
+   no review at all. Its own note says the command applies "only when automatic
+   reviews are paused", and a review that *bounced off the rate limit* was never
+   paused. **The working command is `@coderabbitai full review`.**
 
-(4) is the dangerous one: it is the *repair* path failing. Its own note says the
-command "is applicable only when automatic reviews are paused" — and a review that
-**bounced off the rate limit** was never paused. So the careful sequence (request,
-wait for the acknowledgement, merge) returns success over unreviewed code. Use
-`@coderabbitai full review`, not `@coderabbitai review`.
-
-**Exactly one signal has survived all four.** Check this and nothing else:
+The only signal that survives all four is a review object whose `commit_id`
+equals the head:
 
 ```bash
 R=nuncaeslupus/integral-job-search
-h=$(gh pr view $N --json headRefOid --jq '.headRefOid[0:7]')
+h=$(gh pr view $N --json headRefOid --jq .headRefOid)
 gh api repos/$R/pulls/$N/reviews \
-  --jq "[.[]|select(.user.login==\"coderabbitai[bot]\")|select(.commit_id[0:7]==\"$h\")]|length"
+  --jq "[.[]|select(.user.login==\"coderabbitai[bot]\")|select(.commit_id==\"$h\")]|length"
 ```
 
-Zero means not reviewed, whatever the checks say. **All six PRs answer zero right now.**
+Filed as **D-28** (#313). Until it is built, that query is the gate, run by hand.
 
-Also: a review's **inline-comment count is not a proxy for "nothing found"**. #295's
-review reported zero inline comments and carried a real defect, posted as an *outside
-diff range* comment in the review body. Read the body.
+**Inline-comment count is not a proxy for "nothing found."** #295's review
+reported 0 inline comments and carried a real defect in the body as an *outside
+diff range* comment. Read the body.
 
-### The quota, measured
+## Quota, measured
 
-Plan **Team**, profile **CHILL**, **8 included reviews per window**. Spent by 09:36,
-partially refilled ~15:29, spent again by 16:00. **Every push queues a re-review**, so
-N open PRs × M fix rounds burn N×M against a fixed window, and #288's refresh-main
-churn multiplies it. Do not open a seventh PR while six wait — it deepens the queue
-without increasing throughput. The user's standing instruction:
+**8 included reviews per hour**, Plan Team, profile CHILL — per hour, not per
+day. Every push queues a re-review. The rate-limit reply carries
+`next included review will be available in N minutes`; parse that rather than
+polling on a flat interval.
 
-> "If CodeRabbit is unavailable, wait for it's limits to restore"
+`tmp/` has no pump script — the one this session used lives in the scratchpad.
+Rewrite it from the shape above: request `@coderabbitai full review` on the
+highest-priority PR with no review on head, read `N` out of the refusal, sleep
+`N+1` minutes. Require a *numeric* review count before treating a PR as
+reviewed: `[ -z "$resp" ]` after a grep fires on API failure as well as absence,
+which is the exit-3 fail-open shape in a shell script. And **zsh does not
+word-split unquoted variables** — build the target directly, never
+`echo $pending | tr ' ' '\n' | head -1`.
 
-Silence is not approval. Do not merge past it.
+## Open PRs
 
-## Open PRs — what each waits on
+| PR | task | head | waiting on |
+|---|---|---|---|
+| #295 | T89 usajobs POST connector | `4286dec` | review on head |
+| #297 | T104 D12 staleness | `f561956` | CI, then review on head |
+| #305 | D-24 retraction (+ D-26 task file) | `4fa5e23` | review on head |
+| #307 | T98 corpus is a measurement set | `754797a` | review on head |
+| #312 | T92 salary recovery | `d1a2f0d` | review on head |
 
-| PR | task | head | CI | waits on |
-|---|---|---|---|---|
-| #264 | getmanfred connector | `02ec73a` | CLEAN | review (request bounced 16:00) |
-| #295 | T89 GET-only | `fb6844b` | CLEAN | review of the fix head |
-| #297 | T104 stale-PR gate | `0fcf2ff` | CLEAN | review (`full review` bounced 16:14) |
-| #305 | D-24 retraction | `5a60aaa` | CLEAN | review of the fix head |
-| #307 | T98 corpus scope | `a4f6dfa` | CLEAN | review (request bounced 16:00) |
-| #312 | T92 salary parser | `d1a2f0d` | CLEAN | review of round-2 fixes |
+**Merge #297 first.** T104 is what stops every other open PR going stale on
+`status/evidence/D12.json` and `S8.json` when anything merges. Measured three
+times in one hour this session: a commit touching no code forced a refresh on
+two PRs, and each refresh is a new head and another review out of the eight.
 
-Every one has had its findings answered on the PR. Nothing is waiting on work.
+## Patterns this session kept finding
 
-## What landed today
+- **Exit 3 fails open.** `Makefile:58-70` maps exit 3 to `unmeasured (recorded)`
+  and *continues*; only `*)` fails. A module returning 3 on a floor breach does
+  not fail `make evidence`. **Return 1.** Still open in `naming._main` (T115).
+- **Write-before-check** — `write_evidence` calling `record(measured)` before
+  validating floors.
+- **A denominator committed as an exact value** drifts on unrelated merges. Use
+  a floor (`*_at_least`). T55, T100, T104, and T111 is the next one.
+- **A metric named after one direction of a two-direction contract.** D-29's
+  gate measured only "merged tasks still listed" while twelve open tasks sat in
+  no milestone row. Widened to `milestone_row_membership_violations`.
+- **An exclusion with no counter.** D-26's gate excluded sent versions and
+  counted nothing, so a growing excluded set — or a version misclassified as
+  sent — would have been silence. Every exclusion gets its own reported key.
+- **Fixing a fail-open can open a fail-closed hole one layer out.** T92 round 1
+  made `Recovered.__post_init__` raise and `recover_all` did not catch, so one
+  bad estimator ended the batch.
+- **`status/plan.md` states things about the task graph that no gate reads.**
+  Four instances now: plan ticks (D-27, 47 of 123), milestone rows in both
+  directions (D-29, 82 of 89 merged-still-listed and 12 open-unlisted), and a
+  task file's `deps: []` contradicting its plan row.
 
-Merged: T99 (#289), T101 (#291), T96 (#287), T83 (#286), T95 (#290), T93 (#292),
-**T103 (#304)**, **#260** (four JSON connector packages).
+## Twelve open tasks are in no milestone row
 
-Three **second-reader audits**, every one finding defects behind a green
-`make host-gate`:
+`T56, T57, T59, T69, T89, T91, T92, T94, T98, T102, T105, T106` — pre-existing,
+not from this session's seeding (those fifteen are placed). Deliberately not
+assigned: a milestone is a statement about build order and it was not this
+session's call to make twelve of them. Recorded in **D-29**'s row with the
+number, so the gate that lands there has a denominator to beat.
 
-- **#297 (T104)** — 7 findings, 2 blocking. Floors unenforceable. CodeRabbit then found
-  **write-before-check** one layer down, and `task_gate` had it too — with an existing
-  test asserting the false claim was present.
-- **#264 (getmanfred)** — 4 blockers. Probe byte-identical to fixture (T72's defect,
-  with `T72.json` already recording `healthy, probed: true` on a comparison that could
-  not fail). Now a genuine second read: `cmp` exits 1 at byte 432.
-- **#305 (D-24)** — 8 fail-open inputs. Byte-equality join defeated by a full stop, a
-  curly apostrophe, a doubled space, casing, NFC/NFD and paraphrase. `kind == "episode"`
-  excluded `kind="statement"`, which is what the only production path writes.
-- **#312 (T92)** — do-not-merge, 6 blocking fail-opens. Worst: `_period_of` documents
-  *"the segment says two things; it has said nothing"* and the caller then treats that
-  `None` as "no period" and infers year, so `6.000 € al mes, amb revisió anual` became
-  `6000 EUR/year stated=True` — a €72k role shown as €6k, on ordinary CA/ES boilerplate.
+## Queue
 
-## Two patterns to check first on any new gate
+The fifteen issues filed this session are seeded (T107–T118, D-27, D-28, D-29).
+A bare `issue_import.py --apply` is **not enough**: `plan_v2.measure` requires
+the task title to start with a label and a matching row in `status/plan.md`, and
+without both `make test` goes red on `test_the_committed_plan_and_queue_agree`.
+Label the issue *and* its task file, then write the plan row.
 
-**The exit-3 fail-open.** `Makefile:58-70` maps exit 3 to `unmeasured (recorded)` and
-**continues**; only `*)` fails. A module returning 3 on a floor breach does not fail
-`make evidence`. Combined with a `record()` writing `<metric>_at_least: <floor>`
-unconditionally, the committed file states a falsehood with zero drift. Found in
-`task_gate` and `plan_v2` (fixed); still open in `naming._main` (**#309**). **Return 1.**
+`t-d1a0cd63` and `t-e4047287` report "no issue handle" — both archived; noise,
+not a blocker.
 
-**Write-before-check.** `write_evidence` calling `record(measured)` *before* validating
-floors, so a failing run leaves evidence claiming success.
+## Candidate deliverables
 
-**Fixing a fail-open can open a fail-closed hole one layer out.** T92 round 1 made
-`Recovered.__post_init__` raise on an impossible band — correct — and `recover_all`
-did not catch it, so one bad estimator ended the batch and discarded every recovery
-already collected. Caught in round 2. CLAUDE.md records the same shape for T70: eight
-of ten defects introduced by the session fixing the previous one.
-
-## `status/plan.md` states things no gate reads — three instances
-
-Filed, not fixed: **#308** (47 of 123 archived-merged tasks had unticked rows — fixed on
-main, gate not built) and **#314** (the milestone rows still list **82 of 89** merged
-labels; M1 and cross-cutting entirely, while the contract says merged tasks are not
-listed). A third surfaced on #305: a task file's `deps: []` contradicting its own plan
-row. Derive merged state from `arsenal/tasks/_history/*.md` (`status: merged`) — never
-from the plan's own ticks, since a check reading the document it checks measures nothing.
-
-Note `deps` takes task **ids** (`t-…`/`lo-…`), not plan labels — CodeRabbit suggested
-`deps: [D-24, T46]`, which would have declared two dependencies no task file declares.
-
-## Filed and unclaimed
-
-**#313** (the review-half reader, four variants above), **#314** (milestone rows),
-**#309** (`naming._main` exit 3), **#311** (`ticjob_es` probe byte-identical to its
-fixture — the same defect #264 just fixed), #293 (T105), #294, #296, #298–#302, #306,
-#308, #310. Plus **T106** (`t-6b3ce41f`, US tax rules — per-figure `citations` under
-`probe_pay`'s intact refusal of `source: verified`) and **D-26** (`t-f03571d1`, ships
-with #305; its purge must skip versions named in `applications/` or it destroys the only
-copy of what was sent).
-
-## Candidate track
-
-Step 0's `.active.json` binding is **per session** — the next session must re-run
-`write_active_handle(profiles_root(), 'ivan', session_id=<this session's id>)` before
-anything under `profiles/` opens. Both Spanish reports are complete in the scratchpad
-and **await owner review before anything goes out**. Not in the repo, and no candidate
-PII may enter it.
-
-## Worktrees
-
-`../ijs-manfred-conn` stays while #264 is open. `tmp/refresh_pr.sh <worktree>` merges
-main, auto-resolves `status/evidence/` conflicts by re-measuring, re-runs `make evidence`
-and pushes — mechanical, not a judgement. Several `.claude/worktrees/agent-*` are stale
-from merged PRs and can be pruned.
+Both Spanish reports are complete in the scratchpad and await owner review.
+Step-0 `.active.json` binding is **per-session** and must be re-run next
+session. Nothing goes out before the owner reads it.

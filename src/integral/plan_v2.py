@@ -50,6 +50,18 @@ DEFAULT_PLAN = _REPO_ROOT / "status" / "plan.md"
 DEFAULT_QUEUE = _REPO_ROOT / "arsenal" / "tasks"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "S8.json"
 
+#: The floor `plan_rows` and `queue_tasks` are asserted against, and what the
+#: record carries in their place. Both are **denominators** — they exist so
+#: that `plan_queue_task_drift == 0` cannot rest on an empty plan or an empty
+#: queue — and neither says anything about whether the two documents agree.
+#:
+#: Committed as exact values they moved every time a task was seeded, which
+#: lands two rows on both sides at once and leaves every open PR's `S8.json`
+#: correct for its branch and stale for its merge ref (T104). Today's board
+#: carries 162 of each; the floor sits well below that, so the queue can be
+#: pruned without the gate turning red for a reason that is not a finding.
+MINIMUM_BOARD_SIZE = 100
+
 # T1, T4b, S3, S1r, D-1 — every label the two documents use for a task.
 _LABEL_RE = re.compile(r"^(?:T\d+[a-z]?|S\d+r?|D-\d+)$")
 
@@ -325,16 +337,59 @@ def _unmeasurable(reason: str) -> dict[str, object]:
     }
 
 
+def floor_breaches(measured: dict[str, object]) -> list[str]:
+    """Which denominators came in under `MINIMUM_BOARD_SIZE`. Empty is the pass.
+
+    Read **before** the record is written, not after. `record` writes
+    `plan_rows_at_least: 100` unconditionally, so a five-row plan that writes
+    first leaves behind an artefact asserting a floor the run never met — and
+    that artefact is what the next healthy run's `make evidence` diffs
+    against. Found by review on #297, which is where the exit code was fixed
+    and the ordering was not.
+    """
+    breaches = []
+    for name in ("plan_rows", "queue_tasks"):
+        count = measured[name]
+        assert isinstance(count, int)
+        if count < MINIMUM_BOARD_SIZE:
+            breaches.append(
+                f"only {count} {name} (floor {MINIMUM_BOARD_SIZE}) — zero drift between an "
+                "empty plan and an empty queue is not a measurement"
+            )
+    return breaches
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     plan: Path = DEFAULT_PLAN,
     queue: Path = DEFAULT_QUEUE,
 ) -> dict[str, object]:
-    """Measure and record `status/evidence/S8.json`."""
+    """Measure and record `status/evidence/S8.json`.
+
+    Returns what was *measured*; writes what is *recorded*. `main` still needs
+    the live counts to check them against their floor, and the file must not
+    carry them — see `MINIMUM_BOARD_SIZE`.
+
+    A run that breaches either floor writes nothing at all: the only record it
+    could write is one that claims the floor held.
+    """
     measured = measure(plan, queue)
+    if floor_breaches(measured):
+        return measured
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    evidence.write_text(
+        json.dumps(record(measured), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return measured
+
+
+def record(measured: dict[str, object]) -> dict[str, object]:
+    """What is committed, out of what was measured: the drift exactly, the two
+    denominators as the floor they were checked against."""
+    committed = {k: v for k, v in measured.items() if k not in ("plan_rows", "queue_tasks")}
+    committed["plan_rows_at_least"] = MINIMUM_BOARD_SIZE
+    committed["queue_tasks_at_least"] = MINIMUM_BOARD_SIZE
+    return committed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -349,7 +404,25 @@ def main(argv: list[str] | None = None) -> int:
     for violation in violations:
         print(f"✗ {violation}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
-    return 0 if not violations else 1
+    if violations:
+        return 1
+
+    # The floor, last: a real disagreement outranks a thin denominator, the
+    # same precedence `naming` and `task_gate` apply. It is *reported* last and
+    # *checked* first — `write_evidence` reads the same `floor_breaches` before
+    # it writes anything.
+    #
+    # **Exit 1, not 3.** `Makefile`'s evidence loop prints "unmeasured
+    # (recorded)" for 3 and carries on, and `record` writes
+    # `plan_rows_at_least` unconditionally — so a two-row plan committed a
+    # record claiming a hundred, produced no drift, and passed. See
+    # `task_gate._main` for the same repair on the same day.
+    breaches = floor_breaches(measured)
+    for breach in breaches:
+        print(breach, file=sys.stderr)
+    if breaches:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
