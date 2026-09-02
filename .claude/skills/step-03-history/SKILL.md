@@ -33,6 +33,15 @@ A resolved handle. Better with Intake behind it, and does not require it: with n
 - Follow the candidate rather than the checklist — someone who starts talking about the manager who left is handing over the episode already; take it.
 - **Every negative episode gets a follow-up about what was learned or what they would do differently** — never a judgement.
 
+**This is where the invitation earns its keep — repeat it.** An episode nobody would put on
+a CV is usually the one that carries a trait: a bad week, something they fixed for free, a
+hobby that turned out to be the same skill. Say plainly that anything counts, good or bad,
+and say it again if the answers start reading like bullet points.
+
+```text
+"Anything at all — good or bad, work or not. Something that went badly and what you did about it is worth as much to me here as a promotion."
+```
+
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
 
 In this step that sounds like:
@@ -74,7 +83,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's a good bank — seven episodes, and the one about the failed migration will earn its keep the first time someone asks how you handle pressure. Traits next — carry on?"
+"That's a good bank — seven episodes, and the one about the failed migration will earn its keep the first time someone asks how you handle pressure. Traits next: I'd do it while those episodes are fresh, because it reads them rather than asking you to rate yourself. Carry on?"
 ```
 
 Writes `last_activity`.
