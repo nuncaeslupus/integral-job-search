@@ -29,6 +29,7 @@ New or changed offers to read, and a dimension model that loads and validates. A
 ## Protocol — the manner, not the mechanism
 
 - **Automatic — no conversation.** The model is the last resort, not the first: normalise the advert, take what patterns and keyword rules can take outright (salary, contract type, hours, location, technologies), and send to a model only the dimensions those could not settle.
+- **Salary is looked for before an offer is called silent.** `integral.salary_recovery.recover_all` runs the four lookups — the advert's own body, a canonical duplicate that states a band, the board's detail route, then an estimator if one is supplied — and reports which routes were tried for each offer it could not price. An offer dropped for having no salary must have been through it (T92). An estimate it returns is `Salary(stated=False)` and carries its basis; never write one into a stated field.
 - Handle negation as inversion, not absence — "no on-call" is evidence *against*, not missing evidence.
 - **Annotate the offer against the candidate immediately afterwards, locally** — a second pass, on this machine, that the model never sees. The annotation is a distinct, recomputed artefact, never a field inside the extraction.
 

@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 132,
-  "gates_declaring_status_key": 30,
+  "evidence_gates_read": 133,
+  "gates_declaring_status_key": 31,
   "unrecordable": [],
   "readings": [
     {
@@ -1040,6 +1040,14 @@
       "task": "t-ee6c9fd2",
       "key": "internal_terms_used_before_introduction",
       "evidence": "status/evidence/T95.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-f076b513",
+      "key": "salary_silent_offers_dropped_without_a_lookup",
+      "evidence": "status/evidence/T92.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
