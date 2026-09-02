@@ -10,6 +10,7 @@
       "market": "ES",
       "connectorless": false,
       "usable": [
+        "getmanfred_es",
         "infojobs_es",
         "jobfluent_es",
         "tecnoempleo_es",

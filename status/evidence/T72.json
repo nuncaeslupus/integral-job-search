@@ -29,6 +29,17 @@
       "rate_limited": null
     },
     {
+      "connector": "getmanfred",
+      "site": "getmanfred.com",
+      "health": "healthy",
+      "baseline_items": 3,
+      "probe_items": 3,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-02",
+      "rate_limited": null
+    },
+    {
       "connector": "himalayas",
       "site": "himalayas.app",
       "health": "healthy",
