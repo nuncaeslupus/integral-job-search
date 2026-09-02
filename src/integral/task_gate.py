@@ -343,6 +343,26 @@ def measure_board_sensitivity(
     }
 
 
+def floor_breaches(measured: dict[str, Any]) -> list[str]:
+    """Which census counts came in under their floor. Empty is the pass.
+
+    Read **before** the record is written, not after. `record` writes
+    `evidence_gates_read_at_least: 100` unconditionally, so a five-gate board
+    that writes first leaves an artefact asserting a floor the run never met —
+    and that artefact is what the next healthy run's `make evidence` diffs
+    against. Same repair, same day, as `plan_v2.floor_breaches`.
+    """
+    return [
+        f"only {measured[name]} gate(s) counted for {name} (floor {floor}) — "
+        "zero unrecordable gates over nothing is not a measurement"
+        for name, floor in (
+            ("evidence_gates_read", MINIMUM_GATES_READ),
+            ("gates_declaring_status_key", MINIMUM_STATUS_KEY_GATES),
+        )
+        if measured[name] < floor
+    ]
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     tasks: Path = DEFAULT_TASKS_DIR,
@@ -353,9 +373,14 @@ def write_evidence(
     Returns what was *measured*, sensitivity reading included; writes what is
     *recorded*. `_main` still needs the live counts to check them against
     their floors, and the file must not carry them.
+
+    A run that breaches either floor writes nothing at all: the only record it
+    could write is one that claims the floors held.
     """
     measured = measure(tasks, history)
     sensitivity = measure_board_sensitivity(tasks, history)
+    if floor_breaches(measured):
+        return measured | sensitivity
     committed = record(measured) | {
         key: value for key, value in sensitivity.items() if key not in _DIAGNOSTIC_ONLY
     }
@@ -414,7 +439,8 @@ def _main(argv: list[str]) -> int:
 
     # The floors, last: a real finding outranks a thin denominator, the same
     # precedence `naming` applies between a surviving reference and a short
-    # sweep.
+    # sweep. They are *reported* last and *checked* first — `write_evidence`
+    # reads the same `floor_breaches` before it writes anything.
     #
     # **Exit 1, not 3.** A breach here is a finding, not an absence of one: the
     # sweep ran, counted, and came back short. Exit 3 is the code `make
@@ -427,17 +453,11 @@ def _main(argv: list[str]) -> int:
     # artefact cannot tell those two boards apart by construction — that is the
     # point of a floor — so the exit code is what has to, and it must be one
     # `make evidence` treats as failure. Found by second-reader audit on #297.
-    for name, floor in (
-        ("evidence_gates_read", MINIMUM_GATES_READ),
-        ("gates_declaring_status_key", MINIMUM_STATUS_KEY_GATES),
-    ):
-        if measured[name] < floor:
-            print(
-                f"only {measured[name]} gate(s) counted for {name} (floor {floor}) — "
-                "zero unrecordable gates over nothing is not a measurement",
-                file=sys.stderr,
-            )
-            return 1
+    breaches = floor_breaches(measured)
+    for breach in breaches:
+        print(breach, file=sys.stderr)
+    if breaches:
+        return 1
     if measured["board_sensitivity_status"] != "measured":
         print(
             "board_sensitive_record_keys: UNMEASURED — no recordable gate to withhold, so "

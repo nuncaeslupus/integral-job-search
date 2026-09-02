@@ -337,6 +337,28 @@ def _unmeasurable(reason: str) -> dict[str, object]:
     }
 
 
+def floor_breaches(measured: dict[str, object]) -> list[str]:
+    """Which denominators came in under `MINIMUM_PLAN_ROWS`. Empty is the pass.
+
+    Read **before** the record is written, not after. `record` writes
+    `plan_rows_at_least: 100` unconditionally, so a five-row plan that writes
+    first leaves behind an artefact asserting a floor the run never met — and
+    that artefact is what the next healthy run's `make evidence` diffs
+    against. Found by review on #297, which is where the exit code was fixed
+    and the ordering was not.
+    """
+    breaches = []
+    for name in ("plan_rows", "queue_tasks"):
+        count = measured[name]
+        assert isinstance(count, int)
+        if count < MINIMUM_PLAN_ROWS:
+            breaches.append(
+                f"only {count} {name} (floor {MINIMUM_PLAN_ROWS}) — zero drift between an "
+                "empty plan and an empty queue is not a measurement"
+            )
+    return breaches
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     plan: Path = DEFAULT_PLAN,
@@ -347,8 +369,13 @@ def write_evidence(
     Returns what was *measured*; writes what is *recorded*. `main` still needs
     the live counts to check them against their floor, and the file must not
     carry them — see `MINIMUM_PLAN_ROWS`.
+
+    A run that breaches either floor writes nothing at all: the only record it
+    could write is one that claims the floor held.
     """
     measured = measure(plan, queue)
+    if floor_breaches(measured):
+        return measured
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(
         json.dumps(record(measured), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
@@ -381,23 +408,20 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # The floor, last: a real disagreement outranks a thin denominator, the
-    # same precedence `naming` and `task_gate` apply.
+    # same precedence `naming` and `task_gate` apply. It is *reported* last and
+    # *checked* first — `write_evidence` reads the same `floor_breaches` before
+    # it writes anything.
     #
     # **Exit 1, not 3.** `Makefile`'s evidence loop prints "unmeasured
     # (recorded)" for 3 and carries on, and `record` writes
     # `plan_rows_at_least` unconditionally — so a two-row plan committed a
     # record claiming a hundred, produced no drift, and passed. See
     # `task_gate._main` for the same repair on the same day.
-    for name in ("plan_rows", "queue_tasks"):
-        count = measured[name]
-        assert isinstance(count, int)
-        if count < MINIMUM_PLAN_ROWS:
-            print(
-                f"only {count} {name} (floor {MINIMUM_PLAN_ROWS}) — zero drift between an "
-                "empty plan and an empty queue is not a measurement",
-                file=sys.stderr,
-            )
-            return 1
+    breaches = floor_breaches(measured)
+    for breach in breaches:
+        print(breach, file=sys.stderr)
+    if breaches:
+        return 1
     return 0
 
 

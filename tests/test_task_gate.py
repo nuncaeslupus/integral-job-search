@@ -372,12 +372,12 @@ def test_a_sub_floor_board_fails_instead_of_recording_a_floor_it_never_met(
 
     assert exit_code == 1
     assert "only 5 gate(s) counted for evidence_gates_read (floor 100)" in capsys.readouterr().err
-    # The committed record cannot tell this board from a healthy one — a floor
-    # is a constant by construction, which is the whole point of replacing the
-    # census. So the exit code is the only thing that can, and it has to be one
-    # the caller stops on.
-    committed = json.loads(target.read_text(encoding="utf-8"))
-    assert committed["evidence_gates_read_at_least"] == task_gate.MINIMUM_GATES_READ
+    # And it wrote nothing. A record from this run could not tell the board
+    # from a healthy one — a floor is a constant by construction, which is the
+    # whole point of replacing the census — so writing it would assert a floor
+    # the run had just failed. The exit code is the only thing that can carry
+    # the finding, and it has to be one the caller stops on.
+    assert not target.exists()
 
 
 def test_a_near_floor_board_fails_too(
@@ -395,6 +395,29 @@ def test_a_near_floor_board_fails_too(
     assert "only 92 gate(s) counted for evidence_gates_read (floor 100)" in capsys.readouterr().err
 
 
+def test_a_sub_floor_run_leaves_an_existing_record_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ordering, where it costs something: the exit code is not the only
+    output of a failing run.
+
+    `write_evidence` wrote before `_main` checked, so a five-gate board
+    overwrote the committed D12 record with one claiming a hundred gates read
+    — and that overwritten file is what the *next* run over a healthy board
+    diffs against in `make evidence`. Byte-identical, not merely still valid.
+    """
+    tasks = _board_of(tmp_path, 5, status_key_gates=5)
+    _read_the_board(monkeypatch, tasks, tmp_path)
+    healthy = tmp_path / "D12.json"
+    healthy.write_text('{"kept": true}\n', encoding="utf-8")
+    before = healthy.read_bytes()
+
+    exit_code = task_gate._main(["task_gate", "--write-evidence", str(healthy)])
+
+    assert exit_code == 1
+    assert healthy.read_bytes() == before
+
+
 def test_a_board_that_stopped_declaring_status_keys_fails(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -405,13 +428,14 @@ def test_a_board_that_stopped_declaring_status_keys_fails(
     was a pass: an eighty-nine per cent collapse in the use of D-12's third
     outcome, invisible.
     """
-    exit_code, _ = _run(monkeypatch, tmp_path, _board_of(tmp_path, 105, status_key_gates=3))
+    exit_code, target = _run(monkeypatch, tmp_path, _board_of(tmp_path, 105, status_key_gates=3))
 
     assert exit_code == 1
     assert (
         "only 3 gate(s) counted for gates_declaring_status_key (floor 20)"
         in capsys.readouterr().err
     )
+    assert not target.exists()
 
 
 def test_a_record_that_drops_a_key_fails_its_own_denominator(

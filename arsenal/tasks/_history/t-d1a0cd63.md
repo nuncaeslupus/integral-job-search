@@ -162,6 +162,27 @@ Two more, recorded and deliberately not coded:
   no index, "the board lost thirty gates" produced no artefact and no exit code
   anything respected.
 
+## Review round 2 (#297) — two more, both fixed here
+
+- **The floor record was written before the floor check.** D-1 fixed the exit
+  code and left the ordering: `write_evidence` wrote `record(measured)` first,
+  so a five-row plan overwrote `S8.json` with `plan_rows_at_least: 100` — a
+  claim that the floor passed — and *then* `main` returned 1. A failing run
+  left behind the artefact the next healthy run's `make evidence` diffs
+  against, which is D-1's own finding surviving its own fix. `plan_v2` and
+  `task_gate` both had it; both now read `floor_breaches(measured)` before
+  writing anything and write nothing when it is non-empty. Fixtures:
+  `test_a_sub_floor_run_leaves_an_existing_record_untouched` on each module —
+  byte-identical, not merely still valid — plus `assert not target.exists()`
+  on each of the three sub-floor cases that previously asserted the false
+  claim was present.
+- **A test that passed over a `None`.**
+  `test_which_file_was_archived_is_reported_but_not_committed` asserted
+  `"archived_for_the_comparison" in measured`, which holds when
+  `measure_archive_sensitivity` reports `None` for it — so it proved a key and
+  not a filename. D-3's shape, one file over. It now asserts a non-null
+  `naming.first_task_file()` and compares the reported value against it.
+
 ## Location
 
 `src/integral/task_gate.py` with `tests/test_task_gate.py` and

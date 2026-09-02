@@ -265,9 +265,14 @@ def test_which_file_was_archived_is_reported_but_not_committed(tmp_path: Path) -
     name made T100's own record go stale the moment that task merged — the very
     defect T100 measures. The caller still gets the name for its message."""
     target = tmp_path / "T100.json"
+    # Non-null, and the file the gate actually picked. `in measured` passed
+    # over the `None` a repository with no live task file returns, so the test
+    # proved a key rather than a filename — D-3's tautology, one file over.
+    expected = naming.first_task_file()
+    assert expected is not None
     measured = naming.write_archive_sensitivity_evidence(target)
 
-    assert "archived_for_the_comparison" in measured
+    assert measured["archived_for_the_comparison"] == expected
     assert "archived_for_the_comparison" not in json.loads(target.read_text(encoding="utf-8"))
 
 

@@ -532,35 +532,65 @@ def _measuring(monkeypatch: pytest.MonkeyPatch, plan: Path, queue: Path) -> None
     monkeypatch.setattr(plan_v2, "measure", bound)
 
 
-def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rows: int) -> int:
+def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rows: int) -> tuple[int, Path]:
     plan = _plan(tmp_path, _rows(rows))
     queue = _queue(tmp_path, *(f"T{n}: Do it" for n in range(1, rows + 1)))
     _measuring(monkeypatch, plan, queue)
-    return plan_v2.main([str(tmp_path / "S8.json")])
+    target = tmp_path / "S8.json"
+    return plan_v2.main([str(target)]), target
 
 
 def test_an_agreeing_plan_above_the_floor_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The control: the two failures below are the floor, not the harness."""
-    assert _run(monkeypatch, tmp_path, 105) == 0
+    exit_code, target = _run(monkeypatch, tmp_path, 105)
+
+    assert exit_code == 0
+    assert json.loads(target.read_text(encoding="utf-8"))["plan_queue_task_drift"] == 0
 
 
 def test_a_sub_floor_plan_fails_instead_of_recording_a_floor_it_never_met(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Audit case 1, on S8: five rows against a floor of a hundred."""
-    exit_code = _run(monkeypatch, tmp_path, 5)
+    exit_code, target = _run(monkeypatch, tmp_path, 5)
 
     assert exit_code == 1
     assert "only 5 plan_rows (floor 100)" in capsys.readouterr().err
+    # And it wrote nothing. `record` emits `plan_rows_at_least: 100`
+    # unconditionally, so the only artefact this run could produce is one
+    # asserting the floor it just failed.
+    assert not target.exists()
 
 
 def test_a_near_floor_plan_fails_too(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Audit case 2, on S8: ninety-two rows. [1, 99] was silent for every value."""
-    exit_code = _run(monkeypatch, tmp_path, 92)
+    exit_code, target = _run(monkeypatch, tmp_path, 92)
 
     assert exit_code == 1
     assert "only 92 plan_rows (floor 100)" in capsys.readouterr().err
+    assert not target.exists()
+
+
+def test_a_sub_floor_run_leaves_an_existing_record_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ordering, where it costs something: the exit code is not the only
+    output of a failing run.
+
+    `write_evidence` wrote before `main` checked, so a five-row plan
+    overwrote the committed S8 record with one claiming a hundred rows — and
+    that overwritten file is what the *next* run over a healthy tree diffs
+    against in `make evidence`. Byte-identical, not merely still valid.
+    """
+    healthy = tmp_path / "S8.json"
+    healthy.write_text('{"kept": true}\n', encoding="utf-8")
+    before = healthy.read_bytes()
+
+    exit_code, _ = _run(monkeypatch, tmp_path, 5)
+
+    assert exit_code == 1
+    assert healthy.read_bytes() == before
