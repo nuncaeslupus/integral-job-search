@@ -1,0 +1,13 @@
+{
+  "corpus_rows_without_a_draw_specification": 0,
+  "serving_path_corpus_reads": 0,
+  "gate_status": "measured",
+  "corpus_rows_evaluated_at_least": 400,
+  "serving_path_modules_scanned_at_least": 12,
+  "declared_draws": [
+    "t25-families",
+    "t4b-programming"
+  ],
+  "faults": [],
+  "serving_path_findings": []
+}

@@ -150,3 +150,34 @@ def test_the_declared_agent_is_sent_on_every_hop(monkeypatch: pytest.MonkeyPatch
     _run(monkeypatch, FakeRobots(set()), session)
     assert sent == [COLLECT.USER_AGENT, COLLECT.USER_AGENT]
     assert "Mozilla" not in COLLECT.USER_AGENT
+
+
+# T98 — the collector cannot write a row nothing can account for.
+
+
+def _fetched() -> Any:
+    return COLLECT.record(
+        "board-1",
+        "exampleboard",
+        "https://example.invalid/1",
+        "Programador/a",
+        "Example S.L.",
+        "Buscamos una persona para trabajar en Python. " * 20,
+        "programming",
+    )
+
+
+def test_collecting_without_a_draw_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--draw` is required and validated against the registry, but the guard lives on
+    `record` as well: an import-time default of `""` must not silently produce a corpus
+    whose rows name nothing."""
+    monkeypatch.setattr(COLLECT, "DRAW", "")
+    with pytest.raises(RuntimeError, match="no draw set"):
+        _fetched()
+
+
+def test_a_collected_row_carries_the_draw_it_was_collected_against(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(COLLECT, "DRAW", "t4b-programming")
+    assert _fetched()["draw"] == "t4b-programming"

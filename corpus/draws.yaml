@@ -1,0 +1,67 @@
+# The draws this corpus was produced by — T98.
+#
+# **The corpus is a measurement set, not a serving cache.** The distinction is
+# the whole of this file:
+#
+# * a *measurement set* is a fixed, described sample, used to score extractors
+#   and rankers and to show that a change moved a number;
+# * a *serving cache* is whatever the last search happened to pull, kept around
+#   to answer the next one.
+#
+# The second is what must be impossible, and the owner ruled on it twice. No
+# candidate is ever served from stored adverts: an advert is perishable, a
+# stored one is stale by definition, and reading offers out of a cache is what
+# let one live session return three adverts and call the market exhausted.
+# Every candidate's adverts are fetched for them, at the moment, through the
+# connectors.
+#
+# The other half of the ruling points the other way and matters just as much.
+# **The corpus must not be built from one candidate's harvest either.** A live
+# session harvested ~2,755 adverts against one person's profile; landing them
+# was tempting and would have been wrong. Those rows are the shape of *one
+# person's* queries and exclusions, so a gate measured on them reports accuracy
+# for that person — and the number would be quoted as accuracy for everyone.
+# This stays a generic tool.
+#
+# So a corpus row is produced by a **draw**: a stated query shape — job
+# families, languages, sources — issued through the connectors with no
+# candidate in the loop. A draw can be re-issued; a session harvest never can.
+# Every row in `corpus/raw/ads.jsonl` names the draw that produced it, and
+# `integral.corpus.load_ads` refuses one that does not, or one carrying any key
+# that ties it to a person. `integral.corpus_scope` measures the rest: that the
+# draw is declared here, and that the specification below still selects exactly
+# the rows claiming it.
+#
+# **A draw specification carries no candidate.** `candidate`, `profile`,
+# `session`, `drawn_for` and their kin are refused at load, in a draw and in a
+# row alike. If a draw cannot be stated without naming a person, it is a search,
+# not a draw.
+#
+# ## Adding a draw
+#
+# Declare it here first — id, date, purpose, and the three axes below — then
+# collect against it, writing the draw's id into every row it produces. The
+# registry is the specification, not a record of what arrived: if the rows that
+# come back fall outside the axes, the specification is what is wrong.
+
+draws:
+  - id: t4b-programming
+    drawn_at: "2026-08-15"
+    purpose: >
+      T4b's measurement baseline: remote programming adverts in the three
+      supported languages, the slice T5 labels and T15/T20 are scored on.
+      Catalan is a known divergence — see corpus/raw/README.md.
+    languages: [ca, en, es]
+    job_families: [programming]
+    sources: [feinaactiva, manfred, remotive, tecnoempleo, weworkremotely]
+
+  - id: t25-families
+    drawn_at: "2026-08-23"
+    purpose: >
+      T25's breadth draw: six non-programming job families, so vocabulary reach
+      and dimension coverage are measured over more than one industry. Feina
+      Activa alone, because it is the one board in reach advertising every
+      family natively in the corpus's own languages.
+    languages: [ca, es]
+    job_families: [administrative, healthcare, hospitality, retail, teaching, trades]
+    sources: [feinaactiva]

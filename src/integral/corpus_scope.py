@@ -48,15 +48,55 @@ transplant in whichever is not its native shape. A short, distinctive phrase
 naturally while still being an exact, mechanical `in` check rather than a
 prose-similarity heuristic that could pass on a document saying something
 else entirely.
+
+---
+
+**T98 — the corpus is a measurement set, not a serving cache, and it is not one
+candidate's search.** That is the other half of "what is this corpus for", so it is
+measured here, and `write_provenance_evidence` records it as `status/evidence/T98.json`.
+
+Two properties, and neither survives as prose:
+
+* **The serving ban.** No candidate is ever handed a stored advert as an offer. An
+  advert is perishable and a stored one is stale by definition; reading offers out of
+  a cache is what let one live session return three adverts and call the market
+  exhausted. `serving_path_findings` asserts this over the *code* — the sourcing,
+  offer-store, ranking and presentation modules may not reach the corpus at all.
+* **The provenance.** Every row names a **draw** declared in `corpus/draws.yaml`, and
+  that draw's specification must still select it. `integral.corpus.load_ads` already
+  refuses a row that names no draw or carries a candidate-bound key; what it cannot do
+  without the registry — is the draw *declared*, and does its stated query shape
+  actually account for this row — is `provenance_faults` here.
+
+The second check is what makes provenance a filter rather than a comment. A row copied
+out of a candidate's harvest can trivially be labelled `draw: t4b-programming`; it
+cannot as easily come from a source, language and job family that draw declares. So the
+specification is applied, not just cited, and a row it does not select is a fault.
+
+**The import closure is deliberately not the serving set.** `rank` imports `extraction`,
+which imports `harness`, which imports `corpus` — so a transitive check fails today on a
+module whose corpus read is offline evaluation of the extractor, not an offer being
+served. Widening the check to catch that would mean allowlisting `extraction`, which
+removes the one module most able to hide the violation. The named set below is narrower
+and honest about it: it is every `sourcing_*` module (discovered, so a new one is
+covered the day it lands) plus the offer store and the ranked page, each scanned for a
+*direct* corpus read — which is what "just read the corpus when the connectors return
+nothing" would actually look like.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+import yaml
+
+from integral import corpus
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PLAN = _REPO_ROOT / "status" / "plan.md"
@@ -196,15 +236,309 @@ def write_evidence(
     return measured
 
 
+# ------------------------------------------------------------------ T98: the corpus
+# is a measurement set, not a serving cache
+
+DEFAULT_T98_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T98.json"
+DEFAULT_DRAWS = _REPO_ROOT / "corpus" / "draws.yaml"
+DEFAULT_RAW_ADS = _REPO_ROOT / "corpus" / "raw" / "ads.jsonl"
+DEFAULT_LABELLED_ADS = _REPO_ROOT / "corpus" / "labelled" / "ads.jsonl"
+DEFAULT_SRC_DIR = _REPO_ROOT / "src" / "integral"
+
+# What a draw specification must state to be re-issuable without a person in the loop.
+# `purpose` is in the list because a draw nobody can say the point of is a harvest with
+# a name; the three axes are what a connector is actually pointed at.
+DRAW_SPEC_FIELDS: tuple[str, ...] = (
+    "id",
+    "drawn_at",
+    "purpose",
+    "languages",
+    "job_families",
+    "sources",
+)
+
+# The offer-serving path: where an advert reaches a candidate. Every `sourcing_*` module
+# is discovered rather than listed, so a new one is inside the scan the day it lands;
+# these are the rest of the path, and a missing one makes the reading `unmeasured`
+# rather than quietly shrinking the scan — a renamed module dropping out unnoticed is
+# the clean-zero-over-an-empty-set failure this whole file exists to refuse.
+CORE_SERVING_MODULES: tuple[str, ...] = (
+    "dedup",
+    "explain",
+    "feedback",
+    "freshness",
+    "lifecycle",
+    "offers",
+    "presentation",
+    "rank",
+)
+
+# Reading either of these *is* reading the corpus, whichever name it arrives under.
+CORPUS_MODULES = frozenset({"integral.corpus", "integral.harness"})
+_CORPUS_PATH_RE = re.compile(r"corpus/(?:raw|labelled)")
+
+# Floors, not counts of the day (T100's lesson): the evidence records what the scan must
+# at least have covered, so an archive, a rename or a growing corpus never rewrites the
+# committed number — and a scan that has shrunk below the floor reports `unmeasured`
+# instead of a clean zero over nothing.
+MINIMUM_CORPUS_ROWS = 400
+MINIMUM_SERVING_MODULES = 12
+
+
+def load_draws(path: Path = DEFAULT_DRAWS) -> dict[str, dict[str, Any]]:
+    """The declared draw specifications, by id.
+
+    A draw missing any of `DRAW_SPEC_FIELDS`, declared twice, or carrying a
+    candidate-bound key is refused outright rather than reported: an unusable
+    specification in the registry is worse than none, because every row naming it then
+    reads as accounted for.
+    """
+    document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    draws: dict[str, dict[str, Any]] = {}
+    for entry in document.get("draws") or []:
+        identifier = str(entry.get("id") or "")
+        missing = [field for field in DRAW_SPEC_FIELDS if not entry.get(field)]
+        if missing:
+            raise ValueError(f"{path}: draw {identifier!r} declares no {', '.join(missing)}")
+        bound = sorted(corpus.CANDIDATE_BOUND_KEYS & set(entry))
+        if bound:
+            raise ValueError(
+                f"{path}: draw {identifier!r} is bound to a candidate ({', '.join(bound)}) "
+                f"— a draw that cannot be stated without naming a person is a search"
+            )
+        if identifier in draws:
+            raise ValueError(f"{path}: draw {identifier!r} is declared twice")
+        draws[identifier] = dict(entry)
+    return draws
+
+
+def draw_queries(spec: Mapping[str, Any]) -> list[tuple[str, str, str]]:
+    """The (source, language, job family) triples a draw asks for.
+
+    Sorted, and derived from the specification alone, so the same specification always
+    names the same work — which is the whole of what "reproducible" means here. A
+    session harvest has no such expansion: it is whatever came back.
+    """
+    return sorted(
+        (str(source), str(language), str(family))
+        for source in spec["sources"]
+        for language in spec["languages"]
+        for family in spec["job_families"]
+    )
+
+
+def draw_selects(spec: Mapping[str, Any], ad: Mapping[str, Any]) -> bool:
+    """Whether re-issuing this specification would have asked for this row."""
+    return (ad.get("source"), ad.get("language"), ad.get("job_family")) in set(draw_queries(spec))
+
+
+def _read_rows(path: Path) -> list[dict[str, Any]]:
+    """Every JSONL row, unvalidated.
+
+    Deliberately not `corpus.load_ads`: that refuses a row with no draw, and a
+    measurement that cannot read the violating row cannot count it.
+    """
+    if not path.is_file():
+        return []
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+
+
+def provenance_faults(
+    raw_path: Path = DEFAULT_RAW_ADS,
+    labelled_path: Path = DEFAULT_LABELLED_ADS,
+    draws_path: Path = DEFAULT_DRAWS,
+) -> tuple[list[dict[str, str]], int]:
+    """Every corpus row that cannot be traced to a declared draw, and how many rows
+    were examined to find them.
+
+    Four ways a row fails, in the order they are checked — a row is reported once:
+
+    1. it names no draw at all;
+    2. it is bound to a candidate (`corpus.CANDIDATE_BOUND_KEYS`);
+    3. the draw it names is not declared in the registry;
+    4. the declared specification would not have asked for it — the check that stops a
+       harvested row from passing by copying a legitimate draw's label.
+
+    The labelled store is examined too, by a different rule: it carries no draw of its
+    own because `harness.build_store` seeds it *from* the raw corpus, so its provenance
+    is its raw row. A labelled id with no raw row behind it came from somewhere else.
+    """
+    draws = load_draws(draws_path)
+    faults: list[dict[str, str]] = []
+    raw = _read_rows(raw_path)
+
+    for ad in raw:
+        identifier = str(ad.get("id") or "?")
+        named = str(ad.get("draw") or "").strip()
+        bound = sorted(corpus.CANDIDATE_BOUND_KEYS & set(ad))
+        if not named:
+            faults.append({"row": identifier, "where": "raw", "reason": "names no draw"})
+        elif bound:
+            faults.append(
+                {
+                    "row": identifier,
+                    "where": "raw",
+                    "reason": f"bound to a candidate ({', '.join(bound)})",
+                }
+            )
+        elif named not in draws:
+            faults.append(
+                {
+                    "row": identifier,
+                    "where": "raw",
+                    "reason": f"names draw {named!r}, which corpus/draws.yaml does not declare",
+                }
+            )
+        elif not draw_selects(draws[named], ad):
+            faults.append(
+                {
+                    "row": identifier,
+                    "where": "raw",
+                    "reason": f"draw {named!r} does not ask for "
+                    f"{ad.get('source')}/{ad.get('language')}/{ad.get('job_family')}",
+                }
+            )
+
+    raw_ids = {str(ad.get("id")) for ad in raw}
+    labelled = _read_rows(labelled_path)
+    for ad in labelled:
+        identifier = str(ad.get("id") or "?")
+        if identifier not in raw_ids:
+            faults.append(
+                {
+                    "row": identifier,
+                    "where": "labelled",
+                    "reason": "no raw-corpus row behind it, so no draw produced it",
+                }
+            )
+
+    return faults, len(raw) + len(labelled)
+
+
+def serving_path_modules(src_dir: Path = DEFAULT_SRC_DIR) -> list[str]:
+    """The modules that put an advert in front of a candidate as an offer."""
+    discovered = {path.stem for path in src_dir.glob("sourcing_*.py")}
+    return sorted(discovered | set(CORE_SERVING_MODULES))
+
+
+def _corpus_reads(source: str) -> list[str]:
+    """How this module reaches the corpus, if it does — by import or by path."""
+    reasons: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module in CORPUS_MODULES:
+                reasons.append(f"imports from {node.module}")
+            elif node.module == "integral":
+                for alias in node.names:
+                    if f"integral.{alias.name}" in CORPUS_MODULES:
+                        reasons.append(f"imports integral.{alias.name}")
+        elif isinstance(node, ast.Import):
+            reasons.extend(
+                f"imports {alias.name}" for alias in node.names if alias.name in CORPUS_MODULES
+            )
+    if _CORPUS_PATH_RE.search(source):
+        reasons.append("names a corpus/ path")
+    return sorted(set(reasons))
+
+
+def serving_path_findings(
+    src_dir: Path = DEFAULT_SRC_DIR,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Every serving-path module that reads the corpus, and every one that is missing.
+
+    A missing module is returned separately because it is not a violation — it is a
+    reason to distrust the whole reading, and `measure_provenance` turns it into
+    `unmeasured` rather than folding it into a count of zero.
+    """
+    findings: list[dict[str, str]] = []
+    absent: list[str] = []
+    for name in serving_path_modules(src_dir):
+        path = src_dir / f"{name}.py"
+        if not path.is_file():
+            absent.append(name)
+            continue
+        for reason in _corpus_reads(path.read_text(encoding="utf-8")):
+            findings.append({"module": name, "reason": reason})
+    return findings, absent
+
+
+def measure_provenance(
+    raw_path: Path = DEFAULT_RAW_ADS,
+    labelled_path: Path = DEFAULT_LABELLED_ADS,
+    draws_path: Path = DEFAULT_DRAWS,
+    src_dir: Path = DEFAULT_SRC_DIR,
+) -> dict[str, Any]:
+    """T98's gate reading: rows the declared draws do not account for, and serving-path
+    modules that read the corpus."""
+    faults, rows_examined = provenance_faults(raw_path, labelled_path, draws_path)
+    findings, absent = serving_path_findings(src_dir)
+    scanned = len(serving_path_modules(src_dir)) - len(absent)
+
+    unmeasured: list[str] = []
+    if rows_examined < MINIMUM_CORPUS_ROWS:
+        unmeasured.append(
+            f"{rows_examined} corpus rows examined, below the {MINIMUM_CORPUS_ROWS} floor"
+        )
+    if absent:
+        unmeasured.append(f"serving-path modules not found: {', '.join(absent)}")
+    if scanned < MINIMUM_SERVING_MODULES:
+        unmeasured.append(
+            f"{scanned} serving-path modules scanned, below the {MINIMUM_SERVING_MODULES} floor"
+        )
+
+    measured: dict[str, Any] = {
+        "corpus_rows_without_a_draw_specification": len(faults),
+        "serving_path_corpus_reads": len(findings),
+        "gate_status": "unmeasured" if unmeasured else "measured",
+        "corpus_rows_evaluated_at_least": MINIMUM_CORPUS_ROWS,
+        "serving_path_modules_scanned_at_least": MINIMUM_SERVING_MODULES,
+        "declared_draws": sorted(load_draws(draws_path)),
+        "faults": faults,
+        "serving_path_findings": findings,
+    }
+    if unmeasured:
+        measured["unmeasured_reason"] = "; ".join(unmeasured)
+    return measured
+
+
+def write_provenance_evidence(
+    evidence: Path = DEFAULT_T98_EVIDENCE_PATH,
+    raw_path: Path = DEFAULT_RAW_ADS,
+    labelled_path: Path = DEFAULT_LABELLED_ADS,
+    draws_path: Path = DEFAULT_DRAWS,
+    src_dir: Path = DEFAULT_SRC_DIR,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T98.json`."""
+    measured = measure_provenance(raw_path, labelled_path, draws_path, src_dir)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _report(lines: Sequence[str]) -> None:
+    for line in lines:
+        print(line, file=sys.stderr)
+
+
 def _main(argv: list[str]) -> int:
-    """`python -m integral.corpus_scope [path]` → D-1's gate evidence."""
+    """`python -m integral.corpus_scope [path]` → D-1's and T98's gate evidence."""
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)
-    print(json.dumps(measured, ensure_ascii=False))
-    for mismatch in measured["mismatches"]:
-        print(f"{mismatch['document']}: {mismatch['reason']}", file=sys.stderr)
-    return 1 if measured["mismatches"] else 0
+    provenance = write_provenance_evidence()
+    print(json.dumps({**measured, **provenance}, ensure_ascii=False))
+
+    _report([f"{m['document']}: {m['reason']}" for m in measured["mismatches"]])
+    _report([f"{f['where']} {f['row']}: {f['reason']}" for f in provenance["faults"]])
+    _report([f"{f['module']}: {f['reason']}" for f in provenance["serving_path_findings"]])
+
+    if measured["mismatches"] or provenance["faults"] or provenance["serving_path_findings"]:
+        return 1
+    # Exit 3 is `make evidence`'s "unmeasured": the check ran and found it cannot be
+    # scored, which is a verdict to record rather than a failure to stop on.
+    return 3 if provenance["gate_status"] == "unmeasured" else 0
 
 
 if __name__ == "__main__":

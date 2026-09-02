@@ -23,6 +23,36 @@ LANGUAGES = ("es", "en", "ca")
 MIN_ADS_PER_FAMILY = 15
 DEFAULT_FAMILY_EVIDENCE = Path("status/evidence/T25.json")
 
+# T98: the corpus is a measurement set, not a serving cache, and it is never one
+# candidate's search. A row therefore names the **draw** that produced it — a stated
+# query shape issued through the connectors, declared in `corpus/draws.yaml` — and
+# carries nothing that ties it to a person.
+#
+# These two checks are the ones this module can make on its own, and they are made at
+# load rather than reported afterwards: a row nobody can trace to a draw must not be
+# readable as corpus. Whether the named draw is *declared*, and whether its
+# specification still selects the row, needs the registry and a YAML parser, so it
+# lives in `integral.corpus_scope` with the rest of T98's measurement — this file is
+# stdlib-only on purpose (see the module docstring).
+#
+# The key list is what a session harvest looks like when it is written down honestly:
+# it says who it was fetched for. A row that says so is refused *because* it says so —
+# the sample is one person's queries and exclusions, and a number measured on it would
+# be quoted as a number for everyone.
+CANDIDATE_BOUND_KEYS = frozenset(
+    {
+        "candidate",
+        "candidate_id",
+        "drawn_for",
+        "for_candidate",
+        "profile",
+        "profile_id",
+        "search_id",
+        "session",
+        "session_id",
+    }
+)
+
 
 # --------------------------------------------------------------- T25: job families
 #
@@ -121,6 +151,19 @@ def load_ads(path: Path = DEFAULT_PATH) -> list[dict[str, Any]]:
         # would otherwise sit in the corpus counting towards no family and blocking none.
         if not str(ad.get("job_family") or "").strip():
             raise ValueError(f"{path}:{lineno} ad {ad.get('id')!r} declares no job_family")
+        # Refused for the same reason, and in the same place: a row that cannot name the
+        # draw it came from is a session harvest, whatever else it carries.
+        if not str(ad.get("draw") or "").strip():
+            raise ValueError(
+                f"{path}:{lineno} ad {ad.get('id')!r} names no draw — the corpus is drawn "
+                f"by specification (corpus/draws.yaml), never saved from a search"
+            )
+        bound = sorted(CANDIDATE_BOUND_KEYS & set(ad))
+        if bound:
+            raise ValueError(
+                f"{path}:{lineno} ad {ad.get('id')!r} is bound to a candidate "
+                f"({', '.join(bound)}) — no corpus row is collected for a person"
+            )
         ads.append(ad)
     return ads
 

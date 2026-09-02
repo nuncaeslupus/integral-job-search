@@ -12,10 +12,32 @@ sorted by `id`:
 | `language` | `es` / `en` / `ca`, detected with `py3langid` over the ad text |
 | `title`, `company` | as published |
 | `job_family` | the family the ad advertises for; `programming` is T4b's slice, the rest are T25's |
+| `draw` | the draw that produced the row, declared in [`corpus/draws.yaml`](../draws.yaml) |
 | `text` | the ad body, verbatim apart from HTML→text and whitespace collapsing |
 
 **No labels.** Labelling is T5, and it covers the `programming` 100 only — the six
 families T25 added are unlabelled raw text, which T26 sequences.
+
+## This is a measurement set, not a serving cache (T98)
+
+Two rules, both owner rulings, and neither is enforced by this document.
+
+**No candidate is ever served from these adverts.** An advert is perishable and a
+stored one is stale by definition; reading offers out of a cache is what let one live
+session return three adverts and call the market exhausted. Every candidate's adverts
+are fetched for them, at the moment, through the connectors. `integral.corpus_scope`
+asserts this over the code: the sourcing, offer-store, ranking and presentation modules
+may not reach the corpus at all.
+
+**And this corpus is never one candidate's harvest.** A sample drawn against one
+person's profile is the shape of that person's queries and exclusions, so a number
+measured on it would be quoted as a number for everyone. So every row names the
+**draw** that produced it — a stated query shape, issued through the connectors with no
+candidate in the loop, and re-issuable, which a session harvest never is.
+`integral.corpus.load_ads` refuses a row that names no draw or carries a key tying it to
+a person; `integral.corpus_scope` checks that the draw is declared and that its
+specification still selects the row. `corpus/draws.yaml` is where a new draw is declared
+*before* it is collected.
 
 ## Provenance
 

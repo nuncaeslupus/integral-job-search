@@ -43,6 +43,7 @@ from integral.corpus import (
     write_evidence,
     write_family_evidence,
 )
+from integral.corpus_scope import load_draws
 from integral.robots import USER_AGENT, Robots
 
 # ponytail: no rate-limit machinery — a floor, and whatever the site asks for,
@@ -141,9 +142,18 @@ def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
     raise RuntimeError(f"more than {MAX_REDIRECTS} redirects fetching {url!r}")
 
 
+# T98: the draw this run is executing, set once from `--draw` and stamped onto every row
+# it produces. A module-level value rather than an eighth parameter threaded through
+# eight call sites, because one run *is* one draw — and `record` refuses to build a row
+# while it is empty, so the collector cannot write a corpus nothing can account for.
+DRAW = ""
+
+
 def record(
     ad_id: str, source: str, url: str, title: str, company: str, text: str, job_family: str
 ) -> dict[str, Any] | None:
+    if not DRAW:
+        raise RuntimeError("no draw set — collect against a draw declared in corpus/draws.yaml")
     if len(text) < 400:  # a stub, not an ad
         return None
     return {
@@ -155,6 +165,7 @@ def record(
         "title": title.strip(),
         "company": company.strip(),
         "job_family": job_family,
+        "draw": DRAW,
         "text": text,
     }
 
@@ -583,7 +594,13 @@ def from_urls(session: requests.Session, urls: list[str], source: str) -> Iterat
 
 
 def main() -> int:
+    global DRAW
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--draw",
+        required=True,
+        help="id of the draw being executed, declared in corpus/draws.yaml (T98)",
+    )
     ap.add_argument("--target-es", type=int, default=60)
     ap.add_argument("--target-en", type=int, default=25)
     ap.add_argument("--target-ca", type=int, default=15)
@@ -597,6 +614,18 @@ def main() -> int:
     ap.add_argument("--evidence", type=Path, default=Path("status/evidence/T4b.json"))
     ap.add_argument("--family-evidence", type=Path, default=Path("status/evidence/T25.json"))
     args = ap.parse_args()
+
+    # Declared first, collected against second. Accepting an undeclared id here would put
+    # the specification after the fact, which is how a harvest acquires a draw's name.
+    declared = load_draws()
+    if args.draw not in declared:
+        print(
+            f"draw {args.draw!r} is not declared in corpus/draws.yaml "
+            f"(declared: {', '.join(sorted(declared)) or 'none'})",
+            file=sys.stderr,
+        )
+        return 2
+    DRAW = args.draw
 
     ads = {ad["id"]: ad for ad in load_ads()}
     texts = {ad["text"] for ad in ads.values()}

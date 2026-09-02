@@ -15,11 +15,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from integral.corpus_scope import (
     CATALAN_SCOPE_ANCHOR,
+    CORE_SERVING_MODULES,
     DEFAULT_PLAN,
+    MINIMUM_SERVING_MODULES,
     TARGET_MIX,
     measure,
+    measure_provenance,
+    serving_path_findings,
+    serving_path_modules,
     t4b_row,
 )
 
@@ -149,3 +156,92 @@ def test_a_negated_declaration_does_not_satisfy_the_anchor(tmp_path: Path) -> No
 
     assert measured["corpus_language_slice_mismatch"] == 1
     assert "status/plan.md" in measured["mismatches"][0]["document"]
+
+
+# --------------------------------------------------------------------------------
+# T98 — the serving ban, asserted over the code rather than promised in a document.
+#
+# "No candidate is ever served from the corpus" is a sentence a document can hold while
+# the code does the opposite. What makes it enforceable is that the modules putting an
+# advert in front of a candidate as an *offer* — sourcing, the offer store, ranking,
+# presentation — do not reach the corpus at all, so "just read the corpus when the
+# connectors return nothing" is not a two-line change anybody can make quietly.
+
+
+def _serving_tree(tmp_path: Path, extra: dict[str, str] | None = None) -> Path:
+    """A synthetic `src/integral` carrying every serving-path module, all empty."""
+    src = tmp_path / "integral"
+    src.mkdir()
+    for name in (*CORE_SERVING_MODULES, "sourcing_market", "sourcing_strategy", "sourcing_cycles"):
+        (src / f"{name}.py").write_text("", encoding="utf-8")
+    for name, body in (extra or {}).items():
+        (src / f"{name}.py").write_text(body, encoding="utf-8")
+    return src
+
+
+def test_no_ranking_path_reads_the_corpus_as_an_offer_source() -> None:
+    """The real tree. An advert is perishable and a stored one is stale by definition;
+    serving from the corpus is what let one live session return three adverts and call
+    the market exhausted."""
+    findings, absent = serving_path_findings()
+    assert findings == [], findings
+    assert absent == [], absent
+    assert len(serving_path_modules()) >= MINIMUM_SERVING_MODULES
+
+
+def test_the_serving_ban_is_measured_over_a_scan_that_covered_something() -> None:
+    """A clean zero is only worth reading over a real denominator, so the floor and the
+    module census are inside the evidence rather than beside it."""
+    measured = measure_provenance()
+    assert measured["serving_path_corpus_reads"] == 0, measured["serving_path_findings"]
+    assert measured["gate_status"] == "measured", measured.get("unmeasured_reason")
+    assert measured["serving_path_modules_scanned_at_least"] == MINIMUM_SERVING_MODULES
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "from integral.corpus import load_ads\n",
+        "from integral.harness import load_store\n",
+        "from integral import corpus\n",
+        "import integral.corpus\n",
+        'ADS = "corpus/raw/ads.jsonl"\n',
+        'ADS = "corpus/labelled/ads.jsonl"\n',
+    ],
+)
+def test_a_serving_module_reaching_the_corpus_is_caught(tmp_path: Path, body: str) -> None:
+    """Shown to fail for the right reason, not merely to pass on today's tree.
+
+    Every spelling is here because catching one and missing five is a fail-open check,
+    and the shortest route to a serving cache is whichever import the author reached for.
+    """
+    src = _serving_tree(tmp_path, {"rank": body})
+    findings, absent = serving_path_findings(src)
+    assert absent == []
+    assert [f["module"] for f in findings] == ["rank"]
+
+
+def test_a_new_sourcing_module_is_inside_the_scan_the_day_it_lands(tmp_path: Path) -> None:
+    """The set is not a frozen list: `sourcing_*` is discovered, so a module added next
+    week is covered without anyone remembering to add it here."""
+    src = _serving_tree(tmp_path, {"sourcing_brand_new": "from integral.corpus import load_ads\n"})
+    assert "sourcing_brand_new" in serving_path_modules(src)
+    findings, _ = serving_path_findings(src)
+    assert [f["module"] for f in findings] == ["sourcing_brand_new"]
+
+
+def test_a_missing_serving_module_makes_the_reading_unmeasured_not_zero(tmp_path: Path) -> None:
+    """A renamed or deleted module dropping out of the scan must not read as one fewer
+    place the violation could be. The scan shrinking is a reason to distrust the number,
+    which is a verdict of its own."""
+    src = _serving_tree(tmp_path)
+    (src / "rank.py").unlink()
+
+    findings, absent = serving_path_findings(src)
+    assert findings == []
+    assert absent == ["rank"]
+
+    measured = measure_provenance(src_dir=src)
+    assert measured["serving_path_corpus_reads"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert "rank" in measured["unmeasured_reason"]
