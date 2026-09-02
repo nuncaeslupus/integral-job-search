@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 129,
-  "gates_declaring_status_key": 27,
+  "evidence_gates_read": 130,
+  "gates_declaring_status_key": 28,
   "unrecordable": [],
   "readings": [
     {
@@ -1016,6 +1016,14 @@
       "task": "t-e6f1dc24",
       "key": "offers_ranked_despite_a_stated_disqualification",
       "evidence": "status/evidence/T76.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-ee6c9fd2",
+      "key": "internal_terms_used_before_introduction",
+      "evidence": "status/evidence/T95.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
