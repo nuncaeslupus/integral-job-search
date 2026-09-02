@@ -81,6 +81,18 @@ DEFAULT_CREDENTIAL_CASES_PATH = (
     _REPO_ROOT / "tests" / "fixtures" / "connectors" / "credential_keys.yaml"
 )
 
+#: curl options that carry a credential in the token after them, mapped to the
+#: name a refusal reports. **Only the name is ever kept** — `parse_curl` records
+#: which of these appeared and discards the value, because a credential read out
+#: of a ledger and held in a dataclass is a credential this library carries, and
+#: `connectors.py`'s rule is that it may not.
+_CREDENTIAL_OPTIONS = {
+    "-u": "--user",
+    "--user": "--user",
+    "-b": "--cookie",
+    "--cookie": "--cookie",
+}
+
 #: curl options that consume the token after them. Anything else beginning
 #: with `-` is a bare flag, and the first remaining positional that looks like
 #: a URL is the request target. Without this set `-A "integral-job-search/…"`
@@ -135,6 +147,11 @@ class RecordedRequest:
     method: str
     headers: dict[str, str]
     body: str | None
+    #: The credential-bearing curl options the recorded command used, by long
+    #: name and never with their values. `why_refused` reads this; without it a
+    #: POST needing HTTP Basic or a session cookie parsed to a request carrying
+    #: neither, and the gate reported it readable (#295 review).
+    credential_options: tuple[str, ...] = ()
 
 
 def _entries(node: Any) -> list[dict[str, Any]]:
@@ -177,6 +194,7 @@ def parse_curl(command: str) -> RecordedRequest | None:
     url: str | None = None
     headers: dict[str, str] = {}
     body: str | None = None
+    credentials: list[str] = []
 
     index = 1
     while index < len(tokens):
@@ -193,6 +211,9 @@ def parse_curl(command: str) -> RecordedRequest | None:
                 # curl's own behaviour: data without an explicit -X is a POST.
                 if method == "GET":
                     method = "POST"
+            elif token in _CREDENTIAL_OPTIONS:
+                # The name, not `value`. See `_CREDENTIAL_OPTIONS`.
+                credentials.append(_CREDENTIAL_OPTIONS[token])
             index += 2
             continue
         if token.startswith("-"):
@@ -204,7 +225,14 @@ def parse_curl(command: str) -> RecordedRequest | None:
 
     if method != "POST" or url is None:
         return None
-    return RecordedRequest(site="", url=url, method=method, headers=headers, body=body)
+    return RecordedRequest(
+        site="",
+        url=url,
+        method=method,
+        headers=headers,
+        body=body,
+        credential_options=tuple(dict.fromkeys(credentials)),
+    )
 
 
 def recorded_post_boards(ledger: Path = DEFAULT_LEDGER_PATH) -> tuple[list[RecordedRequest], int]:
@@ -225,6 +253,7 @@ def recorded_post_boards(ledger: Path = DEFAULT_LEDGER_PATH) -> tuple[list[Recor
                     method=request.method,
                     headers=request.headers,
                     body=request.body,
+                    credential_options=request.credential_options,
                 )
             )
     return posts, len(entries)
@@ -296,6 +325,19 @@ def why_refused(recorded: RecordedRequest) -> list[str]:
     reasons += [
         f"{recorded.site}: the recorded body key {key!r} names a credential"
         for key in credential_keys(body)
+    ]
+    # A credential does not have to be in the URL, a header or the body: curl
+    # puts `-u` on the wire as `Authorization` and `-b` as `Cookie` itself, so
+    # neither is visible to the three checks above. The parser used to consume
+    # both and drop them, which made a board needing HTTP Basic parse into a
+    # request carrying no credential at all — and a request carrying no
+    # credential is refused by nothing, so the gate scored it as one the engine
+    # could read (#295 review). That is the fail-open shape this module exists
+    # to refuse: a check answering "no problem" because it could not see one.
+    reasons += [
+        f"{recorded.site}: the recorded curl passes {option} — a credential curl puts on the "
+        f"wire itself, which no connector may carry"
+        for option in recorded.credential_options
     ]
     return reasons
 

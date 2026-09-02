@@ -2105,3 +2105,47 @@ def test_getmanfreds_detail_urls_are_composed_and_stay_on_the_portal() -> None:
     assert rows
     for row in rows:
         assert row["detail_url"].startswith("https://www.getmanfred.com/ofertas-empleo/")
+
+
+def test_a_recorded_curl_that_authenticates_is_refused_and_its_secret_is_not_kept() -> None:
+    """`-u` and `-b` are credentials curl puts on the wire by itself.
+
+    Neither reaches the URL's query, a `-H` header or the body, so all three of
+    `why_refused`'s checks looked and found nothing. The parser consumed both
+    options and dropped them, so a board answering only to HTTP Basic parsed
+    into a request carrying no credential — and the gate counted it as a board
+    the engine could read once it learned to POST. It cannot: `build_list_requests`
+    sends neither (#295 review).
+
+    The second assertion is the other half of the rule. A refusal has to name
+    the option, and it may not carry the secret: `connectors.py`'s line is that
+    a connector may not carry a credential, and a ledger value copied into a
+    dataclass and then into an evidence file is exactly that.
+    """
+    for option, secret in (("-u", "surveyor:hunter2"), ("-b", "session=abc123")):
+        recorded = connector_transport.parse_curl(
+            f"curl -s -X POST {option} '{secret}' "
+            "-H 'Content-Type: application/json' "
+            '-d \'{"q":"python"}\' '
+            "'https://boards.test/api/search'"
+        )
+        assert recorded is not None
+        refused = connector_transport.why_refused(recorded)
+        assert len(refused) == 1, refused
+        assert option in ("-u", "-b")
+        assert ("--user" if option == "-u" else "--cookie") in refused[0]
+        assert secret not in repr(recorded), "the value was kept, not just the option name"
+        assert secret not in refused[0]
+
+
+def test_the_long_spellings_of_the_credential_options_are_refused_too() -> None:
+    """`--user` and `--cookie` are the same wire behaviour spelled out, and a
+    surveyor pasting a captured command may use either. Matching only the short
+    form would leave the fail-open open for half the ways of writing it."""
+    for option in ("--user", "--cookie"):
+        recorded = connector_transport.parse_curl(
+            f"curl -X POST {option} 'x' -d '{{}}' 'https://boards.test/api/search'"
+        )
+        assert recorded is not None
+        assert recorded.credential_options == (option,)
+        assert connector_transport.why_refused(recorded) != []
