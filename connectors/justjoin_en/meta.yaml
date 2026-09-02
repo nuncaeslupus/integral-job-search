@@ -1,0 +1,46 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: justjoin.it
+# Poland-registered and Poland-heavy. The board carries remote EU postings, but
+# `assess_coverage` matches country by equality, so this does not count as
+# covering ES — a known gap in the coverage model, not a claim made here.
+country: PL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-08-30"
+
+# Checked, not assumed, on the day above: https://justjoin.it/robots.txt was
+# read with this project's own agent token. Neither /job-offers/ nor
+# /job-offer/ is disallowed, and no rule names this token or any AI agent.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — one listing response and the first advert it names,
+# taken on the date below. Never an advert a candidate was reading: the set of
+# ads a person opens carries their field, level, city and the fact that they are
+# looking, and a fixture in a public repository carries that forever.
+fixture:
+  provenance: sampled
+  recorded: "2026-08-30"
+  # Both fixtures are the page's `application/ld+json` blocks, verbatim, in a
+  # minimal shell — which is the whole of what this connector reads. The 1.9 MB
+  # of script bundles and inline CSS around them is not evidence of anything and
+  # is not committed. Two further excerpts, both noted here rather than left for
+  # a reader to notice: `hasPart` is cut from 100 entries to 5, and the advert's
+  # `description` to its first 600 characters with the cut marked in the text.
+  bodies: excerpted
+  client_ip: redacted
+
+# `probe/list.html` is a SECOND read of the same URL, taken on the date in
+# `probe/captured.json` — 2026-09-02, three days after the fixture. `hasPart`
+# still carries 100 adverts and **not one of the five the fixture records is
+# among them**: this board turned its whole first page over inside three days,
+# which is the clearest possible evidence that the two files are two reads.
+#
+# Cut the way the fixture was cut: both `application/ld+json` blocks in a
+# minimal shell, with `hasPart` reduced from 100 entries to 5. The 1.9 MB of
+# script bundles and inline CSS around them is not evidence of anything and is
+# not committed.

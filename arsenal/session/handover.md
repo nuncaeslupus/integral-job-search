@@ -1,108 +1,115 @@
-# Session handover — 2026-09-01 ~18:25 UTC, interactive, laptop
+# Session handover — 2026-09-02 ~11:00 UTC, interactive, laptop
 
-Board: **119 merged of 144** on `main` (`355b1b7`), 17 open, 5 claimed with a
-PR open. `make host-gate` exit 0 on every branch below.
+Board: **126 merged of 147** on `main`, 19 open, 1 done, 1 blocked.
+Merge policy changed today: **`after-ci-and-review`**, so CI green is now a
+condition of merging and not merely a signal.
 
 Nothing identifying the candidate is recorded here, and nothing should be. That
 is the rule rather than discretion: identity, history and stated constraints
 live in the local profile store, and a document in a public repository keeps
 whatever it says forever.
 
-## What landed
+## What landed today
 
 | Task | PR | What it fixed |
 |---|---|---|
-| T97 | #282 | Step 1 could not read the CV and carried on. An import log, a partial-read field, and coverage held open until the failure is said out loud |
-| T73 | #283 | A 429 or a block page read as parser rot, so our own rate limiting retired working boards. Third verdict `inconclusive` |
-| T90 | #285 | A stated exclusion reached only the ranking, so a demoted advert still arrived. It reaches the query now, and accumulates |
-| T100 | #284 | `T55.files_scanned` committed as an exact value; the archive moved it, so `open_task_pr.sh` could not open a PR without hand surgery. It is a floor now |
+| T99 | #289 | `connector_policy._as_date` accepted a `datetime` and an unpadded `2026-8-1` |
+| T101 | #291 | A CI job could name a Makefile target that did not exist |
+| T96 | #287 | A monotone filter consulted the constant, not the data — the expression collapsed to a no-op |
+| T83 | #286 | Extra and duplicate attribution rows |
+| T95 | #290 | An unstated salary was suppressed to `unknown`; it is shown *marked* now, and an estimate may never read as stated |
+| T93 | #292 | Interview direction: recommendation and question judged independently, and a close could recommend applying because a role ranked first |
+| T103 | #304 | Merge policy set to `after-ci-and-review`, gated on T101's key **and** a committed green-CI capture |
+| — | #260 | Four JSON connector packages, held since 08-31 for a probe. Probes captured live 09-02; `connector_health` **unmeasured → measured**, 16 of 16 probed |
+| — | #308 | 47 of 123 merged tasks carried an unticked plan row. Ticked on `main` in `e32a541`; the gate is filed, not built |
 
-## Open, green, waiting on review
+## Open PRs, and what each is waiting on
 
-`merge-policy = after-review`, and **CodeRabbit has produced nothing since
-16:16 UTC** — no review and no rate-limit comment, on four PRs, including after
-an explicit `@coderabbitai review`. `references/pr-review-loop.md` says treat
-that as the vendor's clock, check back slowly, and never merge past the policy.
-None of these has had a first review, so none has cleared the bar.
-
-| PR | Task | Note |
+| PR | Task | State |
 |---|---|---|
-| #286 | T83 — attribution register | `docs/METHODS.md` §2.9, fourteen rows, README Acknowledgements |
-| #287 | T96 — monotone dimensions | proved T100: opened with **no workaround at all** |
-| #289 | T99 — policy refusals | **needs the owner's decision, not a review** — see below |
-| #290 | T95 — chunking and register | changes two `test_presentation.py` tests deliberately |
+| #295 | T89 | Green, refreshed against main. **CodeRabbit rate-limited** — re-requested; nothing else outstanding |
+| #297 | T104 | Second-reader audit done (2 blockers) and fixed; CodeRabbit then found `plan_v2` writes the floor record *before* the floor check. Fix in flight |
+| #305 | D-24 | Second-reader audit found **eight fail-open inputs**. Blocking; fix in flight |
+| #307 | T98 | Four CodeRabbit findings; three accepted, one rejected with a better fix. In flight |
+| #312 | T92 | Fresh. CodeRabbit requested, second-reader audit running |
+| #264 | getmanfred | Second-reader audit found **four blockers**. Fix in flight |
 
-## #289 is not waiting on a bot
+## The thing worth reading twice
 
-T99's whole diagnosis is that a policy removing boards from a candidate's reach
-was written by the implementing session on its own judgement and never put to
-the owner. Merging it on `after-review` would repeat that exactly.
+**The second-reader rule earned its keep today, three times.** Every one of
+those audits found defects sitting behind a green `make host-gate`, and in each
+case the reason was the one CLAUDE.md names: the fixtures were derived from the
+code.
 
-The owner's position is on record, quoted in the task file, and
-`ruled-out.yaml`'s **own header** already said the same thing two hundred lines
-above the entry contradicting it — *"those bans target bulk training crawls; a
-connector is one candidate's search."* Nothing could see the contradiction
-because the header also said "Nothing reads this file", which was true until
-this PR.
+- **#305** — the join between "this was retracted" and "this is approved to
+  send" is byte-for-byte string equality. A trailing full stop, a curly
+  apostrophe, a doubled space, different casing, NFC vs NFD, or the polished
+  version of the sentence all let a withdrawn story reach an employer.
+  `_carries`, which normalises shingles for exactly this, sits three functions
+  above, unused. And the kind filter is `kind == "episode"` while
+  `add_conversation_entry` — the only production path that writes one — stamps
+  `kind="statement"`.
+- **#264** — the probe is byte-identical to the fixture, which is the defect T72
+  fixed, and `T72.json` had already recorded the package `healthy, probed: true`
+  on a comparison that could not fail. `ticjob_es` has the same identity
+  (pre-existing, filed as #311). Separately, `..` survives `quote(safe="")`, and
+  the divergence it creates is measured:
+  `Robots().allows(".../x/../jobs?q=python")` is `True` while the resolved
+  `/jobs?q=python` is `False`.
+- **#297** — the floors it introduced exit **3**, which `Makefile:58-70` maps to
+  `"unmeasured (recorded)"` and continues, while the record still claimed
+  `measured`. `make host-gate` was green over a board where 126 of 131 gates
+  were never read.
 
-Applied as: the remoteok entry narrowed from **access** to **volume**, recording
-`decided_by: owner`, `decided_on: 2026-08-31`, and the owner's words. It builds
-no connector and is not a finding that remoteok should be read. **If the owner
-reads it the other way, one commit inverts it** — the gate measures the record,
-not the verdict.
+That last shape is now the first thing to check on any new gate. `naming._main`
+still has it (#309).
 
-## Two findings filed rather than worked around
+## Filed today, unclaimed
 
-- **#274 (closed by #284)** carries the workaround and its retirement, with
-  three data points: #282, #283 and #286 needed the `git mv` dance; #287 did
-  not.
-- **#288 is open and unclaimed.** Every open task PR goes stale on `D12.json`
-  the moment any other task PR merges — CI checks the *merge* ref and D12 counts
-  gate blocks. It is quadratic in open PRs, restarts the review bot each time,
-  and cost more session time today than any single review finding. Four possible
-  shapes are listed; none is picked, because the choice is about what D12's
-  drift check is for.
+| # | What |
+|---|---|
+| #306 | D-25 — the substance sweep trusts the manifest, so a deleted line whose substance survives in a headline is invisible |
+| #308 | A merged task's plan row is never ticked and nothing notices |
+| #309 | `naming._main`'s floor exits 3, which `make evidence` records and continues |
+| #310 | **`urllib.robotparser` returns the first matching rule, not RFC 9309's longest match** — so on any robots.txt opening with `Allow: /` it answers True to everything and never refuses. `ruled-out.yaml`'s "two matchers must agree" silently degrades to one, fail-open, in the component that exists as the independent check |
+| #311 | `ticjob_es`'s probe is byte-identical to its fixture |
+| #293 | T105 — `connector_contract._as_date` has T99's two weaknesses |
+| #294 | Language parity |
+| #296 | Rename `status_is_asserted` — two cold readers misread it the same way |
+| #298–#302 | T89 deferred audit findings |
 
-## Review findings this session — seven, six accepted
+Also seeded with a plan row: **T106** (`t-6b3ce41f`) — ship a cited `taxes/US.json`
+from IRS and SSA primary sources and give every tax figure a `citations` entry.
+`taxes/` ships only ES and DE, both `source: generated` with every figure
+asserted by one prose paragraph citing blogs. `probe_pay` refuses
+`source: verified` outright and **stays** refused: that label is a claim about a
+person, and T106 builds the layer underneath it, not a way past it.
 
-Every accepted case was committed as a fixture, never answered only in a
-comment. Denominators rose: 57→60 tests on T73, 13→16 on T90, 23→24 on T100.
+## Candidate track
 
-Two are worth carrying forward because both are the reviewed task's own subject
-turned on itself:
+Step 0 was run in this session — `.active.json` is bound to it and
+`run_checkpoint.py --id <handle>` exits 0. **The binding is per session**, so the
+next session must run step 0 again before it can read anything under
+`profiles/`; that is `read_active_handle`'s design, not a fault.
 
-- **T100's `_main` accepted zero sensitive keys without asking whether anything
-  had been compared** — a denominator nobody read, inside the fix for a
-  denominator nobody asserted.
-- **T90's probe counted one presentation twice**, clearing its own floor with
-  the duplicate, three lines below the comment forbidding exactly that.
+Two Spanish deliverables are drafted and **await owner review before anything
+goes out**. They are in the session scratchpad, not in this repository, and they
+must stay there. Three things the profile actually said, which changed both:
 
-The one rejected finding claimed `D12.gates_declaring_status_key` disagreed with
-its own array; it was counted from the diff hunk rather than the file. 23 and 23.
+- The 7 pairwise choices price mission alignment and stack modernity at a
+  combined **€1,309/month** — more than the net gap between €50k and €75k gross.
+  A badly-fitting job has to pay roughly €25k/yr more just to break even, which
+  reframes the whole US-vs-EUR question the round was about.
+- **`salary.state` is `unknown`** — no floor, no target, ever given. That is the
+  one thing to ask for.
+- **79 of 105 saved adverts carry no salary**, and most of the 26 that do are in
+  złoty. That is T92's accusation, measured on real data.
 
-## Known holes, named on the record
+No dollar figures were shown: there is no `taxes/US.json`, and inventing one at
+run time is what T106 exists to replace.
 
-- **T73's block-page markers are English-only** and this library is ES/CA-facing.
-  A Spanish challenge page is a live fail-open. Recorded in `METHODS.md` §2.9's
-  limits column, not just in a PR comment.
-- **#264** (getmanfred connector) and **#260** (four JSON packages) are still
-  draft and still blocked on an adversarial audit by a session other than the
-  implementer. This session implemented neither, but has now implemented enough
-  of the surrounding library that a fresh session is the cleaner reader.
+## Worktrees
 
-## Still undelivered to the candidate, in Spanish
-
-The round-4 report (US vs EUR salary comparison; the Deel Analytics Engineer
-role), and the Manfred finding: *Senior Python Engineer*, Law Business Research
-(Centellic), €50,000–60,000, 100% remote, Spain, AI-first architecture.
-
-## Environment notes that cost time to rediscover
-
-- `open_task_pr.sh` needs **no workaround** since T100. If a task PR fails on
-  evidence drift, the finding is that something *new* is archive-sensitive, and
-  `status/evidence/T100.json` names it.
-- A task file with no ```gate``` block needs one before its PR, and the key must
-  already exist in the evidence file.
-- An acceptance ` ```bash ` block that does not name the module writing the
-  metric regenerates nothing. Three of this session's five tasks shipped with
-  that line missing from the task file; each was corrected in its own PR.
+`../ijs-manfred-conn` stays while #264 is open. The rest are
+`.claude/worktrees/agent-*`, each held by a running fix. `../ijs-json-conn` was
+removed when #260 merged.
