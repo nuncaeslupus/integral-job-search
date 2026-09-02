@@ -33,6 +33,44 @@ A resolved handle (step 0). Nothing else: someone with no document, no recent CV
 - With no document, work backwards from the last job through the ones before, asking for what a CV would carry, and stop when the shape of a career is there, not when a form is full.
 - Establish where they live — it decides currency, work authorisation, commutable borders and how a foreign employer would tax them.
 
+**Keep inviting the talk a CV has no box for.** A document is the skeleton; the useful part
+is usually what surrounds it. Invite the anecdote, the good or bad experience, the thing they
+do in their spare time, explicitly, more than once — the invitation given only at step 0 has
+already been forgotten by the time someone is listing job titles.
+
+```text
+"Say anything that comes with it, by the way — why you left, what the place was like, what you were doing at weekends that year. It's often more use to me than the job title."
+```
+
+**Pull the string on anything that does not explain itself.** A gap between two roles, a
+switch of field, a tool that appears once and never again, a job that lasted three months, a
+sideline mentioned in passing — each is either nothing at all or the most interesting thing
+in the document, and one question is what tells you which. Ask it when you notice it, once,
+and take "nothing to it" for an answer. Leaving it unasked is the miss: the candidate assumed
+you had read past it, and the search is poorer for a detail they would happily have
+explained.
+
+```text
+"Two things I noticed: eighteen months between the hospital and Acme, and Rust appears once and never again. Anything in either of those?"
+```
+
+**Ask for what their field produces, not for a GitHub link.** Every line of work leaves
+artefacts, and they say more than any CV line does — but which artefact depends entirely on
+the work. Read the field off what they have just described and ask for that row:
+
+| Their field | What to ask to see |
+|---|---|
+| software and data | public repositories, anything they have shipped or contributed to |
+| design and product | a portfolio, or two pieces they would put in front of a stranger |
+| research and academia | publications, a thesis, a dataset, a preprint |
+| teaching and training | course materials, a syllabus they wrote, a class they built |
+| trades, hospitality, care | photographs of finished work, a menu, a build, a reference |
+| writing, media, music | published pieces, a byline, a channel, a recording |
+
+A field not on this list still gets the question — ask what someone in their line of work
+would show you, and treat the answer as the row. Never ask a designer for a repository, and
+never skip the question because the row is not obvious.
+
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
 
 In this step that sounds like:
@@ -102,7 +140,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's your history down — twelve years, four roles, and the Catalan I nearly missed. Next is what would rule a job out — the quickest way to stop me showing you things you'd never take. Shall we?"
+"That's your history down — twelve years, four roles, and the Catalan I nearly missed. Next is what would rule a job out; I'd do that one now, because it's the quickest way to stop me showing you things you'd never take. Shall we?"
 ```
 
 Writes `last_activity`.

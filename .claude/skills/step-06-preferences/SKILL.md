@@ -73,7 +73,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"So a shorter commute is worth about €200 a month to you, and remote about €600. Does that sound like you? We can look at real jobs now."
+"So a shorter commute is worth about €200 a month to you, and remote about €600 — say if either of those is off. I'd go and look at real jobs now, because the weights only prove themselves against adverts you can actually take or leave. Shall I?"
 ```
 
 Writes `last_activity`.

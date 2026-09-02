@@ -73,7 +73,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's what I've got: you like a lot of autonomy, you're happier fixing than launching, and I don't have enough yet on how you take pressure. Next I'll put some real adverts in front of you and see what you make of them — that's where this starts paying off."
+"That's what I've got: you like a lot of autonomy, you're happier fixing than launching, and I don't have enough yet on how you take pressure. I'd put some real adverts in front of you next, because that's where this starts paying off — what you say about a concrete job tells me more than any of these scores. Shall I?"
 ```
 
 Writes `last_activity`.

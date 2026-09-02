@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 130,
-  "gates_declaring_status_key": 28,
+  "evidence_gates_read": 131,
+  "gates_declaring_status_key": 29,
   "unrecordable": [],
   "readings": [
     {
@@ -835,6 +835,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-73711f12",
+      "key": "steps_offered_without_a_recommendation",
+      "evidence": "status/evidence/T93.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-7bf38efa",

@@ -73,7 +73,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"Here are the top five. The Girona one is first mostly because they say 'we don't do on-call' outright, which is worth about €400 a month to you. Want to react to any of these?"
+"Here are the top five. The Girona one is first mostly because they say 'we don't do on-call' outright, which is worth about €400 a month to you. I'd react to a couple of these before anything else, because what you say about them is what moves the order next time. Want to?"
 ```
 
 Writes `last_activity`.
