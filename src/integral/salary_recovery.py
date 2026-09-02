@@ -1353,7 +1353,24 @@ _IMPOSSIBLE_BANDS: tuple[Salary, ...] = (
     Salary(min=45000, max=55000, period="year", stated=False),
 )
 
-_ESTIMATE_CHECKS = 6 + len(_IMPOSSIBLE_BANDS)
+#: The estimate probe's checks that are not one of the impossible bands, named
+#: rather than counted. The literal `6` here was written before this task added
+#: the batch-isolation block and was never bumped, so the record advertised 13
+#: checks over 15 that ran (#312 review) — a denominator maintained by hand drifts
+#: away from the thing it counts, which is the defect this whole task is about.
+#: `test_the_estimate_denominator_counts_every_check` holds the two together.
+_ESTIMATE_CHECK_NAMES = (
+    "the estimate route produced nothing",
+    "an estimate reached Salary(stated=True)",
+    "an estimate carried no basis",
+    "an estimate rendered without its marker",
+    "the estimate route was not recorded as attempted",
+    "one defective estimate ended the whole batch",
+    "a defective estimate was recovered anyway",
+    "a sound estimate was discarded alongside a defective one",
+)
+
+_ESTIMATE_CHECKS = len(_ESTIMATE_CHECK_NAMES) + len(_IMPOSSIBLE_BANDS)
 
 
 def _check_estimate() -> tuple[int, int, list[str]]:

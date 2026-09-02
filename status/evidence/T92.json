@@ -32,7 +32,7 @@
     }
   },
   "estimate_provenance_failures": 0,
-  "estimate_checks_evaluated": 13,
+  "estimate_checks_evaluated": 15,
   "duplicate_join_failures": 0,
   "duplicate_join_checks_evaluated": 11,
   "other_defects_total": 0,

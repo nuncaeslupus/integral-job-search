@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -364,3 +365,29 @@ def test_every_supported_language_recovers_something_from_the_real_corpus() -> N
     for language in ("es", "ca", "en"):
         assert census[language]["read"] > 0, language
         assert census[language]["recovered"] > 0, f"{language}: nothing recovered from real adverts"
+
+
+def test_the_estimate_denominator_counts_every_check_the_probe_makes() -> None:
+    """A hand-maintained denominator drifts away from the thing it counts.
+
+    `_ESTIMATE_CHECKS` was the literal `6` plus the bands, written before this task
+    added the batch-isolation block, so `estimate_checks_evaluated` advertised 13
+    checks over the 15 that actually ran (#312 review). Counting the probe's own
+    `defects.append` sites keeps the two together: every check appends exactly once,
+    and the only one inside the band loop is the band check itself, which the
+    denominator counts as `len(_IMPOSSIBLE_BANDS)` instead.
+    """
+    source = inspect.getsource(salary_recovery._check_estimate)
+    append_sites = source.count("defects.append")
+    banded = source.count('defects.append(f"a figure no wage could be reached the card')
+    assert banded == 1, "the band check moved; this test's arithmetic assumes one site"
+
+    assert append_sites - banded == len(salary_recovery._ESTIMATE_CHECK_NAMES), (
+        f"{append_sites - banded} non-band checks in the probe, "
+        f"{len(salary_recovery._ESTIMATE_CHECK_NAMES)} named in _ESTIMATE_CHECK_NAMES"
+    )
+
+    _, evaluated, _ = salary_recovery._check_estimate()
+    assert evaluated == len(salary_recovery._ESTIMATE_CHECK_NAMES) + len(
+        salary_recovery._IMPOSSIBLE_BANDS
+    )
