@@ -169,6 +169,10 @@ corrected:
     lesson: "same as jobfluent — a Claude-agent group does not bind integral-job-search/0.1"
 
   - site: getmanfred.com
+    # SHIPPED — `connectors/getmanfred_es`, on 2026-09-02. This entry stays as
+    # the survey record that led there, because the correction is the lesson;
+    # the package is the current statement of what the board serves and how it
+    # is read, and the counts below are the ones measured on the day, not today.
     was: >
       ruled out yesterday under javascript_rendered, with the note "there is
       nothing to select even in principle". That reading of the served list HTML
@@ -219,7 +223,7 @@ corrected:
       nobody re-fetched the page. The reason it was plausible is that the
       *listing* page was never the surface in question, and the note was written
       from memory of a different board.
-    retest: "curl -s --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" 'https://www.getmanfred.com/api/v2/public/offers?lang=ES&onlyActive=true&currency=%E2%82%AC' | python3 -c \"import json,sys; d=json.load(sys.stdin); print(len(d), sum(1 for o in d if o['salaryTo']))\"  # prints '21 21' today"
+    retest: "curl -s --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" 'https://www.getmanfred.com/api/v2/public/offers?lang=ES&onlyActive=true&currency=%E2%82%AC' | python3 -c \"import json,sys; d=json.load(sys.stdin); print(len(d), sum(1 for o in d if o['salaryTo']))\"  # prints '20 20' today (2026-09-02; it was '21 21' on 08-31 — the board is small and it moves daily, so a different pair here is not a regression)"
 
   - site: usajobs.gov
     was: >
