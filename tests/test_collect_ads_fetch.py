@@ -181,3 +181,92 @@ def test_a_collected_row_carries_the_draw_it_was_collected_against(
 ) -> None:
     monkeypatch.setattr(COLLECT, "DRAW", "t4b-programming")
     assert _fetched()["draw"] == "t4b-programming"
+
+
+# ---------------------------------------------------------------------------
+# T98 — a board the policy ledger refuses is never planned.
+
+
+_LEDGER = """
+policy_refused:
+  - site: refusedboard.test
+    refuses: volume
+    robots_verdict: allowed
+    rule_cited: "Disallow: /*?action=get_jobs"
+    decided_by: owner
+    decided_on: 2026-01-01
+    decision: "Bulk ingestion of this board is not ours to do."
+"""
+
+
+def _ledger(tmp_path: Path, document: str = _LEDGER) -> Path:
+    path = tmp_path / "ruled-out.yaml"
+    path.write_text(document, encoding="utf-8")
+    return path
+
+
+def test_a_policy_refused_board_is_refused_by_the_planner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The defect this exists for: the collector named a board `ruled-out.yaml` refuses,
+    stamped its rows with the selected draw, and the draw did not list it as a source.
+
+    Adding it to the draw would have made the two agree by writing a refusal into a
+    specification. The plan is what was wrong, so the plan is what is checked — and by
+    reading the ledger rather than by deleting one name, so the next refused board is
+    caught the day it is added.
+    """
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "refusedboard.test")
+    refused = COLLECT.plan_refusals(["refusedboard", "manfred"], _ledger(tmp_path))
+    assert list(refused) == ["refusedboard"]
+    assert "policy_refused" in refused["refusedboard"]
+
+
+def test_a_volume_refusal_binds_the_collector_the_same_as_an_access_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`refuses: volume` is the owner's line between a candidate reading a handful of
+    adverts and a tool ingesting a board. A corpus draw is the second by construction,
+    so both kinds bind here — reading `volume` as "collect anyway" is the fail-open
+    version of this check."""
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "refusedboard.test")
+    for kind in ("volume", "access"):
+        ledger = _ledger(tmp_path, _LEDGER.replace("refuses: volume", f"refuses: {kind}"))
+        assert list(COLLECT.plan_refusals(["refusedboard"], ledger)) == ["refusedboard"], kind
+
+
+def test_a_subdomain_of_a_refused_site_is_refused_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refusal names a board, not a hostname spelling. `jobs.refusedboard.test` is the
+    same board, and an exact-match check would wave it through."""
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "jobs.refusedboard.test")
+    assert list(COLLECT.plan_refusals(["refusedboard"], _ledger(tmp_path))) == ["refusedboard"]
+
+
+def test_a_source_with_no_recorded_host_cannot_be_checked_and_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Fail-closed on the unknown. A source added to the plan without a host in
+    `SOURCE_HOSTS` cannot be put through the ledger at all, and "not checkable" reading
+    as "allowed" is exactly how the refused board got planned in the first place."""
+    refused = COLLECT.plan_refusals(["brand_new_board"], _ledger(tmp_path))
+    assert "no host recorded" in refused["brand_new_board"]
+
+
+def test_an_empty_ledger_refuses_nothing(tmp_path: Path) -> None:
+    """The negative control. Without it a check that refuses everything would pass every
+    assertion above."""
+    ledger = _ledger(tmp_path, "policy_refused: []\n")
+    assert COLLECT.plan_refusals(["manfred", "tecnoempleo", "feinaactiva"], ledger) == {}
+
+
+def test_the_committed_plan_is_clean_against_the_committed_ledger() -> None:
+    """The live reading, over the real ledger. Every source the collector can plan is
+    one the ledger does not refuse — and `remoteok`, which it does refuse, is named in
+    `SOURCE_HOSTS` so that the refusal is found rather than missed."""
+    assert "remoteok" in COLLECT.SOURCE_HOSTS
+    refused = COLLECT.plan_refusals(COLLECT.SOURCE_HOSTS)
+    assert list(refused) == ["remoteok"], refused
+    survivors = [name for name in COLLECT.SOURCE_HOSTS if name not in refused]
+    assert len(survivors) >= 5, survivors

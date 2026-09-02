@@ -205,6 +205,12 @@ def test_the_serving_ban_is_measured_over_a_scan_that_covered_something() -> Non
         "from integral.harness import load_store\n",
         "from integral import corpus\n",
         "import integral.corpus\n",
+        # The relative spellings. A serving module is a sibling of `corpus`, so these
+        # are the shortest thing to type and were the ones the scan missed.
+        "from .corpus import load_ads\n",
+        "from .harness import load_store\n",
+        "from . import corpus\n",
+        "from . import harness\n",
         'ADS = "corpus/raw/ads.jsonl"\n',
         'ADS = "corpus/labelled/ads.jsonl"\n',
     ],

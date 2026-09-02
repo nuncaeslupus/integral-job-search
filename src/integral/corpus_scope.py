@@ -423,14 +423,35 @@ def serving_path_modules(src_dir: Path = DEFAULT_SRC_DIR) -> list[str]:
     return sorted(discovered | set(CORE_SERVING_MODULES))
 
 
+def _imported_module(node: ast.ImportFrom) -> str:
+    """The absolute module a `from … import` names, with `integral` put back.
+
+    A relative import is the same read under a shorter name: `from .corpus import
+    load_ads` sets `module` to `"corpus"` and `level` to `1`, and reading it as
+    written finds nothing in `CORPUS_MODULES`. That was fail-open in the check that
+    enforces the serving ban — the ban's own count would stay at zero while a serving
+    module read the corpus directly.
+
+    Every serving module sits directly in `src/integral/`, so `level == 1` is the only
+    relative form that can reach a sibling; `level >= 2` leaves the package and cannot
+    be `integral.corpus` under another name.
+    """
+    if node.level == 0:
+        return node.module or ""
+    if node.level > 1:
+        return ""
+    return f"integral.{node.module}" if node.module else "integral"
+
+
 def _corpus_reads(source: str) -> list[str]:
     """How this module reaches the corpus, if it does — by import or by path."""
     reasons: list[str] = []
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            if node.module in CORPUS_MODULES:
-                reasons.append(f"imports from {node.module}")
-            elif node.module == "integral":
+        if isinstance(node, ast.ImportFrom):
+            module = _imported_module(node)
+            if module in CORPUS_MODULES:
+                reasons.append(f"imports from {module}")
+            elif module == "integral":
                 for alias in node.names:
                     if f"integral.{alias.name}" in CORPUS_MODULES:
                         reasons.append(f"imports integral.{alias.name}")

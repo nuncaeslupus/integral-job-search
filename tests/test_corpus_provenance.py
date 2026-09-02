@@ -25,7 +25,7 @@ from typing import Any
 
 import pytest
 
-from integral.corpus import load_ads
+from integral.corpus import CANDIDATE_BOUND_KEYS, load_ads
 from integral.corpus_scope import (
     DEFAULT_DRAWS,
     MINIMUM_CORPUS_ROWS,
@@ -174,12 +174,15 @@ def test_a_row_harvested_for_one_candidate_is_refused(tmp_path: Path) -> None:
         load_ads(path)
 
 
-@pytest.mark.parametrize(
-    "key", ["candidate", "drawn_for", "for_candidate", "profile_id", "search_id", "session_id"]
-)
+@pytest.mark.parametrize("key", sorted(CANDIDATE_BOUND_KEYS))
 def test_every_candidate_bound_key_is_refused_at_load(tmp_path: Path, key: str) -> None:
     """One spelling caught and five waved through is a fail-open filter. A harvest names
-    its person under whichever of these the writing code happened to use."""
+    its person under whichever of these the writing code happened to use.
+
+    The parametrisation is derived from the set rather than restating it, because a
+    hand-copied list is the same fail-open filter one level up: this test shipped
+    omitting `candidate_id`, `profile` and `session`, and read as covering all nine.
+    """
     path = _corpus(tmp_path, [_row("harvested", **{key: "whoever"})])
     with pytest.raises(ValueError, match="bound to a candidate"):
         load_ads(path)
@@ -259,9 +262,18 @@ def test_a_draw_is_reproducible_from_its_specification() -> None:
     draws = load_draws()
     assert draws, DEFAULT_DRAWS
 
+    # A second, independent reading of the registry — not the same object twice.
+    # `draw_queries(spec) == draw_queries(spec)` compares two calls on one object in
+    # one process and cannot fail, so it measured nothing; an expansion that depended
+    # on parse order, on dict identity, or on what a previous call had done would have
+    # passed it. Re-loading makes the expected value something the *specification*
+    # determines, which is the claim in this docstring.
+    reloaded = load_draws()
+    assert sorted(reloaded) == sorted(draws), DEFAULT_DRAWS
+
     rows = [json.loads(line) for line in _committed_raw_lines()]
     for identifier, spec in draws.items():
-        assert draw_queries(spec) == draw_queries(spec)
+        assert draw_queries(spec) == draw_queries(reloaded[identifier]), identifier
         assert draw_queries(spec), identifier
 
         claimed = {str(row["id"]) for row in rows if row.get("draw") == identifier}

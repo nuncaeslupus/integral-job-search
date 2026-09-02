@@ -23,7 +23,7 @@ import json
 import re
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -33,6 +33,7 @@ import py3langid
 import requests
 from bs4 import BeautifulSoup
 
+from integral.connector_policy import DEFAULT_LEDGER_PATH, refusals
 from integral.corpus import (
     LANGUAGES,
     classify_family,
@@ -45,6 +46,52 @@ from integral.corpus import (
 )
 from integral.corpus_scope import load_draws
 from integral.robots import USER_AGENT, Robots
+
+# The host each named source fetches from, so the plan below can be put through the
+# policy ledger by name. A source with no host here is refused too: an unrecorded host
+# cannot be checked against a refusal, and "not checkable" must not read as "allowed".
+SOURCE_HOSTS = {
+    "manfred": "getmanfred.com",
+    "tecnoempleo": "tecnoempleo.com",
+    "weworkremotely": "weworkremotely.com",
+    "remoteok": "remoteok.com",
+    "remotive": "remotive.com",
+    "feinaactiva": "feinaactiva.gencat.cat",
+}
+
+
+def plan_refusals(sources: Iterable[str], ledger: Path = DEFAULT_LEDGER_PATH) -> dict[str, str]:
+    """Why each named source may not be collected from, by name. Empty is a clean plan.
+
+    `connectors/ruled-out.yaml` is the record of which boards were surveyed and refused,
+    and this collector is the one thing in the repo that fetches a board in bulk. Both
+    kinds of refusal bind it. An `access` refusal removes the board outright; a `volume`
+    refusal is the owner's line between "a candidate looking at a handful of adverts"
+    and "a tool ingesting a board", and a corpus draw is unambiguously the second.
+
+    This is a check rather than a deletion so the *next* refused source is caught the
+    day it is added, and so overturning a refusal in the ledger re-enables the source
+    without anyone having to remember this file. A refused source is dropped from the
+    plan and the reason printed — adding it to a draw's `sources:` axis instead would
+    turn a refusal into a specification, which is the move T98 exists to prevent.
+    """
+    refused = {row.site: row for row in refusals(ledger) if row.site}
+    found: dict[str, str] = {}
+    for name in sources:
+        host = SOURCE_HOSTS.get(name)
+        if not host:
+            found[name] = "no host recorded in SOURCE_HOSTS, so no refusal can be checked"
+            continue
+        for site, row in refused.items():
+            if host == site or host.endswith(f".{site}"):
+                found[name] = (
+                    f"{host} is in connectors/ruled-out.yaml `policy_refused` "
+                    f"(refuses {row.refuses or 'unstated'}, decided by "
+                    f"{row.decided_by or 'unstated'} on {row.decided_on or 'no date'})"
+                )
+                break
+    return found
+
 
 # ponytail: no rate-limit machinery — a floor, and whatever the site asks for,
 # whichever is slower.
@@ -649,6 +696,13 @@ def main() -> int:
         ("en", "remotive", from_remotive, args.target_en),
         ("ca", "feinaactiva", from_feinaactiva, args.target_ca),
     ]
+    # Policy before politeness: robots is asked per fetch inside `get()`, but a board
+    # the ledger refuses is never planned in the first place.
+    refused = plan_refusals(name for _, name, _, _ in plan)
+    for name, why in sorted(refused.items()):
+        print(f"{name}: not planned — {why}", file=sys.stderr)
+    plan = [row for row in plan if row[1] not in refused]
+
     for lang, name, fetch, target in plan:
         missing = target - language_counts(list(ads.values()))[lang]
         if missing > 0:
