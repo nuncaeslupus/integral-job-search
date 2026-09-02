@@ -29,10 +29,20 @@ from integral.dimensions import (
     verify_gold,
 )
 
-# The plan's v0 range: small enough to be designed before seeing every ad,
-# large enough to cover the candidate-zero brief. `ontology_hit_rate` (T17) is
+# The plan's v0 range was 20 to 25: small enough to be designed before seeing every
+# ad, large enough to cover the candidate-zero brief. `ontology_hit_rate` (T17) is
 # what makes a wrong choice visible later; this only holds the size.
-MIN_DIMENSIONS, MAX_DIMENSIONS = 20, 25
+#
+# **T57 is that later.** The corpus broadened past remote programming to six job
+# families (T25), and the read pass measured the v0 model at `ontology_hit_rate`
+# 0.6143 — 648 of 1,680 stated concepts with nowhere in the model to go, and the
+# gap sitting in exactly what v0 never saw: a required vocational title, a driving
+# licence, a Catalan C1, part-time hours, bodily work. Re-reading the v0 model as
+# generously as its own definitions allow reaches 0.6875, so the 20 to 25 band and the
+# 0.85 gate could not both hold. Twelve dimensions were added and the band moved to
+# match. A range still exists, because a model free to coin a dimension per unmapped
+# concept would drive the rate to 1.0 while measuring nothing.
+MIN_DIMENSIONS, MAX_DIMENSIONS = 20, 40
 
 
 @pytest.fixture(scope="module")

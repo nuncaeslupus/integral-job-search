@@ -1,7 +1,7 @@
 id: english_demand
 kind: hard
 polarity: unipolar
-group: dealbreakers
+group: requirements
 label:
   en: English demand
   es: Exigencia de inglés

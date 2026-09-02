@@ -7,34 +7,66 @@ from an ad, the axes the ranker compares on, and later the CV and interview work
 are all projections of these files. Changing an `id` is a breaking change
 everywhere; adding a file is additive.
 
-23 dimensions, within the plan's 20–25 range for v0. The 23rd, `talking_clients`,
-was coined by the labeller mid-read rather than designed up front — which is the
-labelling page's `+ new dimension` path working as intended.
+41 dimensions — 37 ad-side and 4 candidate traits. v0 was 23, within the plan's
+20–25 range; `talking_clients` was the 23rd, coined by the labeller mid-read
+rather than designed up front, which is the labelling page's `+ new dimension`
+path working as intended.
+
+**Twelve were added by T57**, for the only honest reason there is: the corpus
+broadened past remote programming to six job families and `ontology_hit_rate` read
+**0.6143** — 648 of the 1,680 concepts the adverts stated had nowhere in the model
+to go. Re-reading the v0 model as generously as its own definitions allow reaches
+0.6875, so widening was the only route to the 0.85 gate that did not involve
+dropping what the readers could not name. The twelve cover what a care, trades,
+retail or teaching advert says and a programming advert does not —
+`formal_credential`, `local_language_demand`, `commute_burden`,
+`contracted_hours`, `physical_demand`, `work_eligibility`, `role_breadth`,
+`domain_knowledge`, `tool_specificity`, `hiring_process_burden`, `variable_pay` —
+plus `ai_in_the_work`, which is the market moving rather than the corpus widening.
+The measurement now reads **0.9071**, with no language below 0.87.
 
 | id | kind | polarity | group | rungs (what you actually click) |
 |----|------|----------|-------|--------------------------------|
+| `ai_in_the_work` | soft | unipolar | `skills` | Not mentioned · Tools available or encouraged · The work is AI work |
+| `ambition` | soft | bipolar | `growth` | Content with the work they hold · Not yet elicited · Reaches for the next step |
 | `career_progression` | soft | unipolar | `growth` | No path named · Growth mentioned, undefined · A named path |
+| `collaboration_mode` | soft | bipolar | `people` | Alone · Not stated · Both · In a team |
+| `commute_burden` | hard | unipolar | `requirements` | No condition stated · Local residence expected · Own vehicle or licence required |
 | `company_stage` | soft | bipolar | `growth` | Early-stage startup · Mid-size or unstated · Large and established |
 | `compensation_transparency` | soft | unipolar | `terms` | Silent on pay · Described, never quantified · A figure or a band |
 | `contract_stability` | hard | unipolar | `dealbreakers` | Freelance / self-employed · Fixed-term · Open-ended |
-| `english_demand` | hard | unipolar | `dealbreakers` | Not required · Intermediate · The job runs in English |
+| `contracted_hours` | hard | unipolar | `dealbreakers` | Not stated · Very short part time · Part time · Full time |
+| `creativity` | soft | bipolar | `the_work` | Works from the proven pattern · Not yet elicited · Invents an approach |
+| `domain_knowledge` | soft | unipolar | `skills` | Not stated · A sector named · Domain expertise required |
+| `english_demand` | hard | unipolar | `requirements` | Not required · Intermediate · The job runs in English |
+| `formal_credential` | hard | unipolar | `requirements` | None stated · Desirable · Required |
+| `hiring_process_burden` | soft | unipolar | `terms` | Nothing stated · A described process · An artefact or test required |
 | `inclusion_commitment` | soft | unipolar | `people` | Silent · Boilerplate · Concrete commitment |
+| `leadership` | soft | unipolar | `people` | Nobody to lead · Leads work, not people · A small team · A big team, or several |
+| `learning_orientation` | soft | bipolar | `growth` | Learns what the job requires · Not yet elicited · Studies the field unprompted |
 | `learning_support` | soft | unipolar | `growth` | Nothing · Mentioned, nothing named · Paid and specific |
+| `local_language_demand` | hard | unipolar | `requirements` | Not required · Conversational · Certified or native level |
 | `mentoring_culture` | soft | unipolar | `people` | Sink or swim · Mentioned · Deliberate |
-| `mission_alignment` | soft | bipolar | `growth` | A sector to refuse · Not stated · Purpose stated |
+| `mission_alignment` | soft | unipolar | `growth` | Not stated · Purpose stated |
 | `on_call_load` | soft | unipolar | `terms` | None · Occasional · Rotation or incident duty |
+| `physical_demand` | soft | unipolar | `requirements` | None stated · Some handling or standing · Heavy or hazardous |
 | `process_formality` | soft | bipolar | `the_work` | Lightweight · Not stated · Agile ceremony · Heavy formal process |
 | `product_vs_services` | soft | bipolar | `the_work` | Consultancy or staffing · Not stated · The employer's own product |
 | `remote_arrangement` | hard | unipolar | `dealbreakers` | On-site · Hybrid · Fully remote |
+| `role_breadth` | soft | bipolar | `the_work` | One specialism · Not stated · Several jobs in one post |
 | `schedule_flexibility` | soft | unipolar | `terms` | Fixed timetable · Some give · Shaped around the person |
 | `seniority_expectation` | hard | unipolar | `dealbreakers` | Junior · Mid-level · Senior |
 | `social_intensity` | soft | bipolar | `people` | Solitary and focused · Not stated · Group-heavy |
+| `spare_time_engagement` | soft | bipolar | `growth` | The day ends when it ends · Not yet elicited · The craft follows them home |
 | `stack_modernity` | soft | bipolar | `the_work` | Legacy estate · Not stated · Current and active |
 | `talking_clients` | soft | unipolar | `the_work` | None · A little · Some relationship · Job is about that |
 | `team_autonomy` | soft | bipolar | `people` | Decisions arrive made · Not stated · The team decides |
 | `technical_depth` | soft | bipolar | `the_work` | Operating what exists · Not stated · Engineering hard problems |
+| `tool_specificity` | soft | unipolar | `skills` | No tool named · A broad list · A named stack required |
 | `travel_requirement` | hard | unipolar | `dealbreakers` | None stated · Occasional · Regular travel or relocation |
+| `variable_pay` | soft | unipolar | `terms` | None named · A bonus or premium · Equity or profit sharing |
 | `wellbeing_benefits` | soft | unipolar | `terms` | None named · One perk · Real provision |
+| `work_eligibility` | hard | unipolar | `requirements` | No restriction stated · A region or timezone band · A permit or country required |
 | `work_intensity` | soft | bipolar | `the_work` | Deliberate pace · Not stated · Sustained pressure |
 
 ## Levels — the rungs a human labels in

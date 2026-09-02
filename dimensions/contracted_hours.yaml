@@ -1,0 +1,88 @@
+id: contracted_hours
+kind: hard
+polarity: unipolar
+group: dealbreakers
+label:
+  en: "Contracted hours"
+  es: "Jornada contratada"
+  ca: "Jornada contractada"
+definition: >
+  How many hours the contract is for, from a few hours a week through part time to a
+  full working week. A property of the contract's size, not of when the hours fall nor
+  of how far they can be moved — those are `schedule_flexibility`.
+levels:
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No consta"
+      ca: "No consta"
+    tell: "the ad never says how many hours the post is"
+  - value: 0.2
+    label:
+      en: "Very short part time"
+      es: "Jornada muy reducida"
+      ca: "Jornada molt reduïda"
+    tell: "a handful of hours — under about fifteen a week"
+  - value: 0.5
+    label:
+      en: "Part time"
+      es: "Jornada parcial"
+      ca: "Jornada parcial"
+    tell: "explicitly part time, or an hours figure well under full"
+  - value: 0.9
+    label:
+      en: "Full time"
+      es: "Jornada completa"
+      ca: "Jornada completa"
+    tell: "'jornada completa', full time, or the statutory full week"
+elicitation:
+  questions:
+    - id: ch_q1
+      text:
+        en: >
+          Have you ever worked fewer hours than you wanted, or more? Tell me what that
+          did to the rest of your life at the time.
+        es: >
+          ¿Has trabajado alguna vez menos horas de las que querías, o más? Cuéntame qué
+          le hizo eso al resto de tu vida en ese momento.
+        ca: >
+          Has treballat mai menys hores de les que volies, o més? Explica'm què li va
+          fer això a la resta de la teva vida en aquell moment.
+extraction:
+  cues:
+    en:
+      - pattern: "\\bfull[- ]time\\b"
+        value: 0.9
+      - pattern: "\\bpart[- ]time\\b|\\b\\d{2}\\s*(hours|h)\\s+(a|per)\\s+week\\b"
+        value: 0.5
+    es:
+      - pattern: "\\bjornada\\s+completa\\b"
+        value: 0.9
+      - pattern: "\\bjornada\\s+parcial\\b|\\bmedia\\s+jornada\\b"
+        value: 0.5
+      - pattern: "\\b\\d{1,2}(,\\d)?\\s*(horas|h)\\s+(a\\s+la\\s+semana|semanales)\\b"
+        value: 0.5
+    ca:
+      - pattern: "\\bjornada\\s+completa\\b"
+        value: 0.9
+      - pattern: "\\bjornada\\s+parcial\\b|\\bmitja\\s+jornada\\b"
+        value: 0.5
+      - pattern: "\\b\\d{1,2}(,\\d)?\\s*(hores|h)\\s+(a\\s+la\\s+setmana|setmanals)\\b"
+        value: 0.5
+  gold:
+    - ad_id: remotive-1919265
+      language: en
+      span: "Those who prefer consistent contract work over a full-time role, who want to create a variety of new products alongside other top-tier builders."
+      value: 0.9
+      derived_from: cue
+    - ad_id: feinaactiva-FA92317450
+      language: es
+      span: "Jornada completa"
+      value: 0.9
+      derived_from: cue
+    - ad_id: feinaactiva-09202618154
+      language: ca
+      span: "Jornada completa"
+      value: 0.9
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -40,12 +40,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
 from pydantic import BaseModel, ConfigDict
 
+from integral.corpus import load_ads
 from integral.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, load_dimensions
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SUGGESTIONS_PATH = _REPO_ROOT / "corpus" / "labelled" / "suggestions.json"
+DEFAULT_CONCEPT_MAP_PATH = _REPO_ROOT / "corpus" / "labelled" / "concept_map.yaml"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T17.json"
 
 
@@ -69,13 +72,68 @@ def known_dimension_ids(dimensions: list[Dimension]) -> set[str]:
     return {dimension.id for dimension in dimensions}
 
 
-def read_suggestions(path: Path, known: set[str]) -> ConceptSource:
+def concept_name(entry: dict[str, Any]) -> str:
+    """What the read pass called this concept, in its own words.
+
+    Step 1 wrote `note` as `"<name> — <what the advert says>"`, and the set of
+    names before the dash is exactly the source's own top-level `unmapped` list.
+    `read_concept_map` asserts that correspondence rather than assuming it, so a
+    source whose notes stop carrying a name is refused instead of silently
+    mapping nothing.
+    """
+    return str(entry.get("note", "")).split(" — ", 1)[0].strip()
+
+
+def read_concept_map(path: Path, known: set[str], declared: set[str]) -> dict[str, str]:
+    """Step 2's rule table: which dimension the model would ask each concept under.
+
+    Two refusals, and both are the point. A key that is not a declared dimension
+    would credit the model with a question it does not have; a concept the source
+    never stated would credit it with covering something nobody read. Either one
+    raises `ontology_hit_rate` without widening anything, which is the failure the
+    metric exists to catch — so neither is a warning.
+
+    The table lives beside the corpus rather than inside `suggestions.json`
+    because that file is the record of what the read pass could **not** name.
+    Rewriting its entries to point at the widened model would destroy the only
+    evidence that the widening was needed.
+    """
+    if not path.exists():  # pragma: no cover - the committed map is part of the corpus
+        return {}
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    mapping: dict[str, str] = {}
+    for dimension, concepts in (payload.get("concepts") or {}).items():
+        if dimension not in known:
+            raise OntologyHealthError(
+                f"{path}: {dimension!r} is not a dimension the model declares — a concept "
+                "map may only point at questions the model actually asks"
+            )
+        for concept in concepts:
+            if concept not in declared:
+                raise OntologyHealthError(
+                    f"{path}: {concept!r} is not a concept the source declares as unmapped — "
+                    "a map may only place names the read pass actually stated"
+                )
+            mapping[concept] = dimension
+    return mapping
+
+
+def read_suggestions(
+    path: Path,
+    known: set[str],
+    concept_map_path: Path = DEFAULT_CONCEPT_MAP_PATH,
+) -> ConceptSource:
     """The corpus read pass as a concept source.
 
     An entry naming no dimension is **unmapped, not skipped**: the reader found
     something in the advert and had nowhere to put it, which is precisely the
     event the metric counts. It is identified by its quote so the review this
     task exists to feed has the advert's own words to read.
+
+    An entry the read pass left unmapped counts as mapped only if the committed
+    concept map places its name on a dimension the model declares — which is
+    step 2 of the read pass re-run against the widened model, not a second
+    reading of the advert (T57).
     """
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -83,10 +141,12 @@ def read_suggestions(path: Path, known: set[str]) -> ConceptSource:
         raise OntologyHealthError(f"{path}: no concept source to read") from exc
 
     entries = [entry for suggestions in payload["by_ad"].values() for entry in suggestions]
+    declared = set(payload.get("unmapped") or [])
+    concept_map = read_concept_map(concept_map_path, known, declared)
     mapped: list[str] = []
     unmapped: list[str] = []
     for entry in entries:
-        dimension = entry.get("dimension")
+        dimension = entry.get("dimension") or concept_map.get(concept_name(entry))
         if dimension in known:
             mapped.append(dimension)
         else:
@@ -134,6 +194,36 @@ def tally(sources: list[ConceptSource]) -> dict[str, Any]:
     }
 
 
+def hit_rate_by_language(
+    suggestions_path: Path,
+    known: set[str],
+    concept_map_path: Path = DEFAULT_CONCEPT_MAP_PATH,
+) -> dict[str, float]:
+    """The same ratio, computed inside each corpus language.
+
+    The aggregate can clear a threshold while one language sits well under it,
+    and a model that only covers what English ads say is a partial feature that
+    reads as a whole one. The three languages are the same product, so the split
+    is recorded beside the total rather than left for a reviewer to derive.
+    """
+    payload = json.loads(suggestions_path.read_text(encoding="utf-8"))
+    declared = set(payload.get("unmapped") or [])
+    concept_map = read_concept_map(concept_map_path, known, declared)
+    language = {ad["id"]: ad["language"] for ad in load_ads()}
+
+    counted: dict[str, list[int]] = {}
+    for ad_id, entries in payload["by_ad"].items():
+        bucket = counted.setdefault(language.get(ad_id, "unknown"), [0, 0])
+        for entry in entries:
+            dimension = entry.get("dimension") or concept_map.get(concept_name(entry))
+            bucket[0 if dimension in known else 1] += 1
+    return {
+        lang: round(mapped / (mapped + unmapped), 4)
+        for lang, (mapped, unmapped) in sorted(counted.items())
+        if mapped + unmapped
+    }
+
+
 def measure(
     suggestions_path: Path = DEFAULT_SUGGESTIONS_PATH,
     dimensions_dir: Path = DEFAULT_DIMENSIONS_DIR,
@@ -142,6 +232,7 @@ def measure(
     known = known_dimension_ids(load_dimensions(dimensions_dir))
     measured = tally([read_suggestions(suggestions_path, known)])
     measured["known_dimensions"] = len(known)
+    measured["ontology_hit_rate_by_language"] = hit_rate_by_language(suggestions_path, known)
     return measured
 
 
