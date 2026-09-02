@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 128,
-  "gates_declaring_status_key": 26,
+  "evidence_gates_read": 130,
+  "gates_declaring_status_key": 28,
   "unrecordable": [],
   "readings": [
     {
@@ -941,12 +941,28 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-c0b48b91",
+      "key": "borrowed_techniques_without_attribution",
+      "evidence": "status/evidence/T83.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-c2c4dddb",
       "key": "blind_ranking_leaks",
       "evidence": "status/evidence/T20a.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-c36b3722",
+      "key": "monotone_dimensions_asked_as_level_ratings",
+      "evidence": "status/evidence/T96.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-c40f0f88",
