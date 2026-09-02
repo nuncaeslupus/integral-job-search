@@ -55,16 +55,29 @@ unchanged. `probe_boundary` is the other half — ten scenarios that are defects
 purpose, each asserting the boundary *catches* it. `_main` fails if any probe
 fails or if fewer than `MINIMUM_PROBES` ran.
 
-## The chokepoint
+## What this boundary is, and what it is not
 
 `generate` renders an episode only when handed one, and `integral.approval` is
 its only supported caller — but a keyword argument inside a package is a
-convention, not a lock. What is enforced is the thing that matters: **nothing
-becomes sendable while an unapproved disclosure is in the document.** `prepare`
+convention, not a lock. What is enforced is that **nothing is drafted or
+recorded as sent while an unapproved disclosure is in the document**: `prepare`
 re-reads what it just wrote and refuses to write a payload over a finding, and
 `record_sent` re-runs the whole measurement against the files as they stand at
 send time — so a document edited after drafting is caught at the boundary, not
 trusted because it was clean an hour ago.
+
+**It is not a chokepoint on sending, and this file cannot be one.** §6.2 and
+step 11 both stop one step short of sending: what the tool produces is
+`cv/generated/<offer>/v<N>/letter.md` and the text to paste, and the candidate
+presses send. So the file on disk *is* the send, and `record_sent` is
+bookkeeping after the fact. A retraction that lands after drafting is caught
+here — nothing further will draft or record — while the already-written letter
+still carries the withdrawn story, because `retraction.purge_derived_citations`
+scans `{profile, rankings, extractions, annotations}` and not `cv/generated`.
+Purging it is **D-26**, and is deliberately not done here: a version already
+named in `applications/` is the only record of what was actually sent, and §7
+makes it immutable, so the purge has to skip those and that is a task, not a
+line.
 
 **What the confirmation proves, and what it does not.** `record_sent` requires
 the payload's own digest, which pins *which* payload was named — a standing "send
@@ -82,6 +95,7 @@ import json
 import re
 import sys
 import tempfile
+import unicodedata
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -107,7 +121,7 @@ from integral.generate import (
     render_entry,
 )
 from integral.identity import ProfileStore, create_profile
-from integral.profile import EvidenceLog
+from integral.profile import EVIDENCE_PARTS, EvidenceLog, Kind, ProfileError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T46.json"
@@ -216,7 +230,12 @@ _NOT_WORD = re.compile(r"\W+", re.UNICODE)
 
 
 def _words(text: str) -> list[str]:
-    return _NOT_WORD.sub(" ", text.casefold()).split()
+    # NFC first, or `\W+` splits a decomposed `í` into `i` plus a combining mark
+    # and every shingle around it differs from the composed spelling of the same
+    # word. ES/EN/CA are supported identically, so a text that arrives decomposed
+    # — which is what a paste from some editors and macOS filesystems gives —
+    # must compare equal to the composed one (#305 review, D-4).
+    return _NOT_WORD.sub(" ", unicodedata.normalize("NFC", text.casefold())).split()
 
 
 def _carries(document: str, episode: str) -> bool:
@@ -390,6 +409,38 @@ def _approved_texts(store: ProfileStore, offer_id: str, version: int) -> set[str
     }
 
 
+# Which retracted rows cannot be the story an approval names. An **exclusion**
+# and not a whitelist of `episode`, because `add_conversation_entry` — the only
+# production path putting an `Episode` into `cv/master.json` from a conversation
+# — writes its row as `kind="statement"`, `step="intake"`, so a whitelist skipped
+# the one path that matters (#305 review, D-2). A `constraint` is a fact about
+# what would rule a job out and a `reaction` is about an advert, so neither is a
+# story the candidate told; a `retraction` row is bookkeeping about the log, and
+# its text ("Forget that.") is nobody's episode. Written as an exclusion so a
+# kind added to `profile.Kind` later joins by default: that over-refuses, which
+# §6.2 prefers, where a whitelist would fail open in silence.
+_NEVER_A_STORY = frozenset({"constraint", "reaction", "retraction"})
+
+
+def _withdrawn_by(text: str, retracted: frozenset[str]) -> bool:
+    """Does any retracted sentence carry this approval's substance, or vice versa?
+
+    Not `text in retracted`. Byte equality let six single-character drifts —
+    a trailing full stop, a curly apostrophe, a doubled space, casing, a normal
+    form, and the raw utterance the polished sentence came from — each send a
+    withdrawn story (#305 review, D-1). `_carries` is the same normalised
+    eight-word shingle test the module already runs over documents, and it is
+    checked both ways because either side can be the longer one: the log holds
+    what the candidate said, the approval holds what was written down.
+
+    It over-refuses on a short retracted row that turns up inside a longer
+    approved sentence. That is the direction §6.2 asks for, and `_carries`
+    returns `False` for an empty normalised text, so a whitespace-only row
+    still withdraws nothing.
+    """
+    return any(_carries(text, row) or _carries(row, text) for row in retracted)
+
+
 def retracted_episode_texts(store: ProfileStore, master: CVMaster) -> frozenset[str]:
     """Every episode sentence a live retraction has withdrawn (D-24).
 
@@ -404,10 +455,12 @@ def retracted_episode_texts(store: ProfileStore, master: CVMaster) -> frozenset[
     Two ways a row reaches a sentence, because nothing joins them directly — an
     approval names `(offer_id, version, text)` and a retraction names a row id:
 
-    * **the retracted row's own text.** A text match, so it cannot tell two rows
-      carrying the same sentence apart and withdraws the approval for both. That
-      is deliberate: §6.2 would rather refuse a live episode than send a
-      withdrawn one, and the approval carries nothing finer to match on.
+    * **the retracted row's own text**, matched by `_withdrawn_by` rather than by
+      equality. A text match, so it cannot tell two rows carrying the same
+      sentence apart and withdraws the approval for both. That is deliberate:
+      §6.2 would rather refuse a live episode than send a withdrawn one, and the
+      approval carries nothing finer to match on. Which kinds of row are read at
+      all is `_NEVER_A_STORY`.
     * **a story-bank episode whose `provenance` names the retracted row.** A
       sentence the candidate polished on its way into the CV store no longer
       matches the log row word for word, and the text match alone reads clean —
@@ -425,7 +478,11 @@ def retracted_episode_texts(store: ProfileStore, master: CVMaster) -> frozenset[
     suppressed = log.suppressed_ids()
     if not suppressed:
         return frozenset()
-    texts = {row.text for row in log.rows() if row.kind == "episode" and row.id in suppressed}
+    texts = {
+        row.text
+        for row in log.rows()
+        if row.id in suppressed and row.kind not in _NEVER_A_STORY
+    }
     texts |= {
         episode.text
         for episode in master.episodes
@@ -455,7 +512,8 @@ def measure_prepared(
     # here because `prepare` and `record_sent` both route through this function,
     # so a story withdrawn between drafting and sending is caught at whichever of
     # the two comes next, and neither has to remember to ask.
-    withdrawn = approved & retracted_episode_texts(store, master)
+    retracted = retracted_episode_texts(store, master)
+    withdrawn = {text for text in approved if _withdrawn_by(text, retracted)}
     approved -= withdrawn
     claims = read_manifest(store, offer_id, version).claims
 
@@ -628,7 +686,7 @@ def retracted_episodes_sendable(store: ProfileStore, master: CVMaster) -> dict[s
         measured: dict[str, Any] | None = None
         for approval in approvals.episodes:
             evaluated += 1
-            if approval.text not in withdrawn:
+            if not _withdrawn_by(approval.text, withdrawn):
                 continue
             documents = "\n".join(
                 document.read_text(encoding="utf-8")
@@ -874,13 +932,28 @@ def probe_boundary(root: Path) -> dict[str, Any]:
     return {"detection_probes": checks, "detection_probe_failures": failures}
 
 
-# Ten assertions across eight scenarios, six of which put an approval in front of
-# a live retraction. Floors, not the count of the day: adding a scenario raises
-# them, and a probe set that quietly shrank stops clearing them.
-MINIMUM_RETRACTION_PROBES = 10
-MINIMUM_RETRACTED_APPROVALS_EVALUATED = 6
+# Twenty-one assertions across nineteen scenarios, sixteen of which put an
+# approval in front of a live retraction. Floors, not the count of the day:
+# adding a scenario raises them, and a probe set that quietly shrank stops
+# clearing them. Eleven of the nineteen came from the #305 second-reader audit,
+# and every one of the eight it called fail-open was red before its fix.
+MINIMUM_RETRACTION_PROBES = 21
+MINIMUM_RETRACTED_APPROVALS_EVALUATED = 16
 
 _REWORDED_ROW = "Cut the nightly billing run right down — it used to take us six hours."
+
+# The #305 cases. Each is one edit away from the sentence the approval names,
+# and each one sent before `_withdrawn_by` and `_NEVER_A_STORY` landed.
+_OWNED_ROW = "Owned the client's month end close and cut the handover from three days to one."
+# Fourteen words with the accented one eighth, so no eight-word shingle avoids
+# it and only NFC normalisation in `_words` can match the two spellings.
+_ACCENTED_ROW = (
+    "Reduje el cierre contable de la vieja delegación de Lleida a cuarenta minutos justos."
+)
+_RAW_UTTERANCE = (
+    "Yeah, so basically I cut the nightly billing run from six hours to forty minutes by "
+    "rewriting the reconciliation step, that was the thing I did there."
+)
 
 
 def probe_retracted_sends(root: Path) -> dict[str, Any]:
@@ -938,6 +1011,40 @@ def probe_retracted_sends(root: Path) -> dict[str, Any]:
     win, failure = (episode.text for episode in _FIXTURE_EPISODES)
     plain = _probe_master()
     later = "2026-01-02T09:00:00+00:00"
+
+    def bank(text: str) -> CVMaster:
+        """The fixture story bank with a different sentence in the approved slot."""
+        return plain.model_copy(
+            update={
+                "episodes": (
+                    _FIXTURE_EPISODES[0].model_copy(update={"text": text}),
+                    _FIXTURE_EPISODES[1],
+                )
+            }
+        )
+
+    def withdrawn_by(
+        handle: str,
+        row_text: str,
+        *,
+        kind: Kind = "episode",
+        step: str = "history",
+        master: CVMaster | None = None,
+    ) -> None:
+        """Approve the story, retract a row spelling it differently, expect a refusal."""
+        held = plain if master is None else master
+        store = fresh(handle)
+        row = EvidenceLog(store).append(
+            recorded_at="2026-01-01T09:00:00+00:00",
+            step=step,
+            kind=kind,
+            text=row_text,
+            source="conversation",
+        )
+        payload = drafted(store, held)
+        retract(EvidenceLog(store), row.id, at=later)
+        check(sends(store, held, payload) is None, f"{handle}: a retracted episode was sendable")
+        scan(store, held)
 
     # 1 — the defect itself: approved, then the evidence behind it withdrawn.
     store = fresh("retracted")
@@ -1048,6 +1155,106 @@ def probe_retracted_sends(root: Path) -> dict[str, Any]:
     check(
         sends(store, plain, payload) is not None,
         "retracting a constraint row withdrew an episode approval",
+    )
+    scan(store, plain)
+
+    # 9-14 and 16 - one character apart from the approved sentence, and each one
+    # sent while the join was byte equality (#305 review, D-1 and D-4).
+    withdrawn_by("punctuated", win.rstrip("."))
+    withdrawn_by("apostrophe", _OWNED_ROW.replace("'", "\u2019"), master=bank(_OWNED_ROW))
+    withdrawn_by("spaced", win.replace("six hours", "six  hours"))
+    withdrawn_by("cased", win.upper())
+    withdrawn_by(
+        "accented",
+        unicodedata.normalize("NFD", _ACCENTED_ROW),
+        master=bank(unicodedata.normalize("NFC", _ACCENTED_ROW)),
+    )
+    withdrawn_by("polished", _RAW_UTTERANCE)
+    # The shape `add_conversation_entry` writes, and the one a `kind == "episode"`
+    # whitelist skipped (#305 review, D-2).
+    withdrawn_by("intake-statement", win, kind="statement", step="intake")
+
+    # 15 — two rows for one story. The story bank holds what was said, intake
+    # holds the row the CV entry is provenanced to; retracting the story-bank
+    # row is the candidate withdrawing the story, and only the text joins it.
+    store = fresh("two-rows")
+    bank_row = episode_row(store, _RAW_UTTERANCE)
+    intake = EvidenceLog(store).append(
+        recorded_at="2026-01-01T09:30:00+00:00",
+        step="intake",
+        kind="statement",
+        text=win,
+        source="conversation",
+    )
+    provenanced = plain.model_copy(
+        update={
+            "episodes": (
+                _FIXTURE_EPISODES[0].model_copy(
+                    update={"provenance": (ConversationTurn(evidence_id=intake.id),)}
+                ),
+                _FIXTURE_EPISODES[1],
+            )
+        }
+    )
+    payload = drafted(store, provenanced)
+    retract(EvidenceLog(store), bank_row, at=later)
+    check(
+        sends(store, provenanced, payload) is None,
+        "retracting the story-bank row left the CV store episode sendable",
+    )
+    scan(store, provenanced)
+
+    # 17 — a log that does not settle must stop the send. Written by hand,
+    # because `append` refuses to retract a row that is not there yet and so
+    # cannot make the cycle. No `scan`: reading this log is what raises.
+    store = fresh("broken-chain")
+    episode_row(store, win)
+    payload = drafted(store, plain)
+    evidence = store.path(*EVIDENCE_PARTS)
+    evidence.write_text(
+        evidence.read_text(encoding="utf-8")
+        + "".join(
+            json.dumps(
+                {
+                    "id": row_id,
+                    "recorded_at": later,
+                    "step": "any",
+                    "kind": "retraction",
+                    "text": "Forget that.",
+                    "source": "conversation",
+                    "retracts": retracts,
+                }
+            )
+            + "\n"
+            for row_id, retracts in (("ev-000900", "ev-000901"), ("ev-000901", "ev-000900"))
+        ),
+        encoding="utf-8",
+    )
+    try:
+        sends(store, plain, payload)
+        settled = True
+    except ProfileError:
+        settled = False
+    check(not settled, "a retraction chain that does not settle was read as no retraction")
+
+    # 18 — retract, undo, undo the undo. The third level puts the row back under.
+    store = fresh("thrice")
+    row = episode_row(store, win)
+    payload = drafted(store, plain)
+    first = retract(EvidenceLog(store), row, at=later)
+    second = retract(EvidenceLog(store), first.id, at="2026-01-03T09:00:00+00:00")
+    retract(EvidenceLog(store), second.id, at="2026-01-04T09:00:00+00:00")
+    check(sends(store, plain, payload) is None, "a thrice-nested retraction left the story out")
+    scan(store, plain)
+
+    # 19 — the limit of the over-refusal: an empty sentence withdraws nothing.
+    store = fresh("blank")
+    row = episode_row(store, "   ")
+    payload = drafted(store, plain)
+    retract(EvidenceLog(store), row, at=later)
+    check(
+        sends(store, plain, payload) is not None,
+        "a whitespace-only retracted row blocked a live approval",
     )
     scan(store, plain)
 
