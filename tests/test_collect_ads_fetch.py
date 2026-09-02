@@ -82,6 +82,11 @@ def _no_waiting(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _run(monkeypatch: pytest.MonkeyPatch, robots: FakeRobots, session: FakeSession) -> Any:
     monkeypatch.setattr(COLLECT, "ROBOTS", robots)
+    # `board.test` and `otro.test` are boards for the purposes of these fixtures: every
+    # hop is put through the policy ledger, and a host `SOURCE_HOSTS` does not record is
+    # refused before robots.txt is ever asked.
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "board", "board.test")
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "otro", "otro.test")
     return COLLECT.get(session, ALLOWED)
 
 
@@ -326,6 +331,72 @@ def test_the_committed_ledger_refuses_a_remoteok_url_handed_in_by_hand() -> None
     2026-08-31 is refused whichever input names it."""
     assert COLLECT.url_refusals(["https://remoteok.com/remote-jobs/1"])
     assert COLLECT.permitted_urls(["https://remoteok.com/remote-jobs/1"]) == []
+
+
+# ---------------------------------------------------------------------------
+# T98 — and every redirect hop is bound by the same ledger.
+#
+# The plan is filtered before it is walked and `--ca-urls` before it is read, and
+# neither reaches a redirect: `get()` follows hops by hand and asked only robots.txt
+# about each one. A first hop the ledger allows may land on a board it refuses, and a
+# redirect target is the one URL nobody typed and nobody checked — the refusal routed
+# around by the board itself.
+
+REFUSED_HOP = "https://remoteok.com/remote-jobs/1"
+UNKNOWN_HOP = "https://never-surveyed.invalid/oferta/1"
+
+
+def test_a_redirect_onto_a_ledger_refused_board_is_never_fetched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live reading, over the real ledger: `remoteok.com` carries `refuses: volume`,
+    decided by the owner, and arriving there through a `302` is the same violation as
+    naming it in the plan.
+
+    Asserted over the session rather than over the return value — "refused" has to mean
+    no request left the process.
+    """
+    session = FakeSession({ALLOWED: FakeResponse(location=REFUSED_HOP)})
+    robots = FakeRobots(set())
+
+    with pytest.raises(PermissionError, match="policy ledger"):
+        _run(monkeypatch, robots, session)
+
+    assert session.fetched == [ALLOWED], "the refused board was fetched anyway"
+    assert REFUSED_HOP not in robots.asked, "the ledger is asked before robots.txt, not after"
+
+
+def test_a_redirect_onto_an_unrecorded_host_is_refused_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail-closed on the unknown, the rule the plan path and `--ca-urls` already follow.
+    A board nothing surveyed cannot be put through the ledger, and "not checkable"
+    reading as "allowed" would leave the whole check bypassable by a `Location` header."""
+    session = FakeSession({ALLOWED: FakeResponse(location=UNKNOWN_HOP)})
+    robots = FakeRobots(set())
+
+    with pytest.raises(PermissionError, match="not recorded in SOURCE_HOSTS"):
+        _run(monkeypatch, robots, session)
+
+    assert session.fetched == [ALLOWED], "the unrecorded host was fetched anyway"
+    assert UNKNOWN_HOP not in robots.asked
+
+
+def test_a_redirect_between_two_permitted_boards_still_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The negative control, over two boards the committed ledger permits. Without it a
+    hop check that refuses everything passes both tests above and silently breaks every
+    board that redirects."""
+    first = "https://feinaactiva.gencat.cat/search/offers/detail/1"
+    second = "https://www.tecnoempleo.com/ofertas-trabajo/rf-abc"
+    session = FakeSession({first: FakeResponse(location=second), second: FakeResponse()})
+    monkeypatch.setattr(COLLECT, "ROBOTS", FakeRobots(set()))
+
+    response = COLLECT.get(session, first)
+
+    assert response.raised
+    assert session.fetched == [first, second]
 
 
 def test_the_committed_plan_is_clean_against_the_committed_ledger() -> None:

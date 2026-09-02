@@ -164,14 +164,25 @@ Reading the corpus needs nothing but the stdlib:
 ```python
 from integral.corpus import load_ads, job_family_counts, language_counts
 
-ads = load_ads()  # raises on any entry without a resolvable source_url or a job_family
+ads = load_ads()  # every row is validated on the way in — see below
 job_family_counts(ads)  # {'administrative': 18, ..., 'programming': 100, ...}
 ```
 
-Collecting more needs the scraping stack and egress to the boards:
+`load_ads` raises `ValueError`, naming the file, the line and the ad, on a row that:
+
+* has no `source_url` beginning `https://` — http is refused at load rather than at the
+  gate, so a corpus cannot load here and fail the acceptance test there;
+* has no `text`, or only whitespace;
+* declares no `job_family` — it would count towards no family and block none;
+* names no `draw` — the corpus is drawn by specification, never saved from a search;
+* carries any key tying it to a person (`candidate`, `candidate_id`, `drawn_for`,
+  `for_candidate`, `profile`, `profile_id`, `search_id`, `session`, `session_id`).
+
+Collecting more needs the scraping stack and egress to the boards, and a draw declared
+in [`corpus/draws.yaml`](../draws.yaml) *before* the run:
 
 ```bash
-uv run --extra collect python tools/collect_ads.py \
+uv run --extra collect python tools/collect_ads.py --draw t4b-programming \
     --target-es 60 --target-en 25 --target-ca 15 --target-family 18
 uv run python -m integral.corpus     # recount → status/evidence/T4b.json and T25.json
 make test

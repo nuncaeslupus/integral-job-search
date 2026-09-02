@@ -208,7 +208,7 @@ MAX_REDIRECTS = 5
 
 
 def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
-    """Fetch `url`, or refuse because the site's robots.txt says not to.
+    """Fetch `url`, or refuse because the policy ledger or the site's robots.txt says not to.
 
     The check is here rather than in each board adapter because every fetch
     goes through here: a rule that has to be remembered at each call site is a
@@ -218,12 +218,22 @@ def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
     them itself, which would check the first URL and fetch the last — so a
     board that redirects a permitted path onto a disallowed one, or onto
     another host entirely, would walk straight through the check. Every hop is
-    a fetch, so every hop asks that origin's own robots.txt and waits for that
-    origin's own crawl delay.
+    a fetch, so every hop is put through the refusal ledger, asks that origin's
+    own robots.txt and waits for that origin's own crawl delay.
     """
     for _ in range(MAX_REDIRECTS + 1):
         if urlsplit(url).scheme != "https":
             raise PermissionError(f"the collector reads https only, not {url!r}")
+        # The ledger, before robots and before the request leaves the process. The plan
+        # is filtered before it is walked and `--ca-urls` before it is read; neither
+        # reaches a redirect target, which is the one URL nobody typed — an allowed
+        # first hop landing on a refused board is the refusal routed around by the
+        # board itself. Asking robots.txt first would put a question to a board we may
+        # not fetch at all. `url_refusals` is the same reader the other two paths use,
+        # so there is still exactly one parser of `connectors/ruled-out.yaml`.
+        refused = url_refusals([url])
+        if url in refused:
+            raise PermissionError(f"the policy ledger refuses {url} — {refused[url]}")
         if not ROBOTS.allows(url):
             raise PermissionError(f"robots.txt disallows {USER_AGENT} on {url}")
         # Before, not after: a delay that only follows the final response does

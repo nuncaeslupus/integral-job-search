@@ -20,7 +20,6 @@ import pytest
 from integral.corpus_scope import (
     _REPO_ROOT,
     CATALAN_SCOPE_ANCHOR,
-    CORE_SERVING_MODULES,
     DEFAULT_PLAN,
     MINIMUM_SERVING_MODULES,
     TARGET_MIX,
@@ -175,10 +174,18 @@ def test_a_negated_declaration_does_not_satisfy_the_anchor(tmp_path: Path) -> No
 
 
 def _serving_tree(tmp_path: Path, extra: dict[str, str] | None = None) -> Path:
-    """A synthetic `src/integral` carrying every serving-path module, all empty."""
+    """A synthetic `src/integral` carrying every serving-path module, all empty.
+
+    Mirrored off the real tree rather than hand-listed. A hand-listed set of eleven sat
+    below `MINIMUM_SERVING_MODULES`, so every reading taken over it came back
+    `unmeasured` from the floor — which made the missing-module fixture below pass for
+    the wrong reason and put `gate_status == "measured"` out of reach of the gate
+    fixture. Reading the census keeps the synthetic tree at the real one's size as the
+    real one grows.
+    """
     src = tmp_path / "integral"
     src.mkdir()
-    for name in (*CORE_SERVING_MODULES, "sourcing_market", "sourcing_strategy", "sourcing_cycles"):
+    for name in serving_path_modules():
         (src / f"{name}.py").write_text("", encoding="utf-8")
     for name, body in (extra or {}).items():
         (src / f"{name}.py").write_text(body, encoding="utf-8")
@@ -258,6 +265,10 @@ def test_the_declared_gate_fails_when_a_serving_module_reads_the_corpus(tmp_path
     assert measured["corpus_rows_without_a_draw_specification"] == 0
     assert measured["serving_path_corpus_reads"] == 1
     assert measured["corpus_measurement_set_violations"] == 1
+    # And it fails as a *measurement*. A synthetic tree below the module floor reports
+    # `unmeasured` whatever it finds, which is a different verdict from "one violation
+    # here" — the gate is red either way and the fixture stops telling them apart.
+    assert measured["gate_status"] == "measured", measured.get("unmeasured_reason")
 
     fields = parse_gate_block(T98_PAYLOAD.read_text(encoding="utf-8"))
     assert fields is not None
@@ -288,4 +299,8 @@ def test_a_missing_serving_module_makes_the_reading_unmeasured_not_zero(tmp_path
     measured = measure_provenance(src_dir=src)
     assert measured["serving_path_corpus_reads"] == 0
     assert measured["gate_status"] == "unmeasured"
-    assert "rank" in measured["unmeasured_reason"]
+    # It has to be unmeasured *because of `rank`*. The synthetic tree used to sit below
+    # the module floor, so the verdict arrived from the floor and this fixture passed
+    # without the absent-module detection existing at all — a gate testing something
+    # other than what it claims.
+    assert measured["unmeasured_reason"] == "serving-path modules not found: rank"
