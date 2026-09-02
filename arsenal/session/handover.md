@@ -192,6 +192,15 @@ Several worktrees carry near-identical names (`agent-a883852485810685f` vs
 does not word-split unquoted variables.
 → Quote it: `"${mb}:status/plan.md"`.
 
+**`issue_import.py` reports "nothing missing" when the fetch omitted `labels`.**
+The import fetch was `--json number,title,body`; `labels_of()` then returned an
+empty set for every row, every issue was filtered out, and the script printed
+`no open 'arsenal:queue' issue is missing a task` — **indistinguishable from
+success**. #316 sat unseeded and would have stayed invisible. The protocol's
+field list (`number, title, state, labels, assignees`) is not a suggestion; the
+label *is* the filter. Worth reporting upstream: a filter that matches nothing
+because its input field is absent should say so, not report a clean empty.
+
 ### The review pump, six bugs in one script
 
 All six wasted the scarce resource the script exists to conserve — included
