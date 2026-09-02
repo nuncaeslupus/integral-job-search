@@ -1509,6 +1509,39 @@ def test_the_transport_gate_reports_a_post_the_engine_cannot_issue() -> None:
     assert connector_transport.why_refused(fine) == []
 
 
+def test_a_lowercase_content_type_is_compared_not_skipped() -> None:
+    """HTTP header names are case-insensitive (RFC 9110 §5.1), and a recorded
+    command is written by a person.
+
+    `parse_curl` keeps whatever case the `-H` was typed in, so a recording of
+    `-H 'content-type: application/x-www-form-urlencoded'` used to make the
+    lookup return `None` — and the comparison was then skipped rather than
+    failed. `why_unreadable` returning `[]` reads as "the engine can issue this
+    request", so a form POST the engine cannot send was reported as a board with
+    no gap: the check said yes because it could not find the header (#295 review).
+    """
+    lowercased = connector_transport.RecordedRequest(
+        site="lowerboard.test",
+        url="https://lowerboard.test/search",
+        method="POST",
+        headers={"content-type": "application/x-www-form-urlencoded"},
+        body='{"q": "python"}',
+    )
+    reasons = connector_transport.why_unreadable(lowercased)
+    assert any("Content-Type" in reason for reason in reasons), reasons
+
+    # The negative control: matching content types in different cases are the
+    # same header, so a lookup that lowercases both must not invent a mismatch.
+    mixed_case = connector_transport.RecordedRequest(
+        site="mixedboard.test",
+        url="https://mixedboard.test/search",
+        method="POST",
+        headers={"CONTENT-TYPE": JSON_CONTENT_TYPE},
+        body='{"q": "python"}',
+    )
+    assert connector_transport.why_unreadable(mixed_case) == []
+
+
 def test_a_board_refused_on_policy_is_not_a_board_readable_only_by_post(tmp_path: Path) -> None:
     """A credential refusal is this tool declining a board, not an engine gap.
 

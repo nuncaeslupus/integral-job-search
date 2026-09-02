@@ -53,6 +53,7 @@ from __future__ import annotations
 import json
 import shlex
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -299,6 +300,21 @@ def why_refused(recorded: RecordedRequest) -> list[str]:
     return reasons
 
 
+def _header(headers: Mapping[str, str], name: str) -> str | None:
+    """One header by name, case-insensitively (RFC 9110 §5.1).
+
+    `parse_curl` keeps whatever case the recorded command was written in, and a
+    recorded `-H 'content-type: application/json'` used to make
+    `headers.get("Content-Type")` return `None` — which skipped the comparison
+    entirely rather than failing it. A check that reports no gap because it could
+    not find the header is the fail-open this module exists to close (#295
+    review): `why_unreadable` returning an empty list is read as "the engine can
+    issue this request".
+    """
+    wanted = name.lower()
+    return next((value for key, value in headers.items() if key.lower() == wanted), None)
+
+
 def why_unreadable(recorded: RecordedRequest) -> list[str]:
     """Every way the engine still fails to issue the recorded request.
 
@@ -320,11 +336,11 @@ def why_unreadable(recorded: RecordedRequest) -> list[str]:
         reasons.append(f"{recorded.site}: method is {built.method}, recorded {recorded.method}")
     if built.url != recorded.url:
         reasons.append(f"{recorded.site}: url is {built.url}, recorded {recorded.url}")
-    expected_type = recorded.headers.get("Content-Type")
-    if expected_type is not None and built.headers.get("Content-Type") != expected_type:
+    expected_type = _header(recorded.headers, "Content-Type")
+    built_type = _header(built.headers, "Content-Type")
+    if expected_type is not None and built_type != expected_type:
         reasons.append(
-            f"{recorded.site}: Content-Type is {built.headers.get('Content-Type')!r}, "
-            f"recorded {expected_type!r}"
+            f"{recorded.site}: Content-Type is {built_type!r}, recorded {expected_type!r}"
         )
     if recorded.body:
         if built.body is None:
