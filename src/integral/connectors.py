@@ -172,6 +172,54 @@ LIST_FIELD_NAMES = ALLOWED_OFFER_FIELDS | {"detail_url"}
 # brace in the string and substituted literally.
 PAGE_PLACEHOLDER = "{page}"
 
+#: The `Content-Type` a JSON request body implies. Derived from the body's
+#: declared form (`ListPage.body_json`) rather than being a header a connector
+#: may set: a connector that could name headers could name `Authorization`,
+#: and "a connector may not carry a credential" is a rule this schema keeps by
+#: having nowhere to write one. See `build_list_requests`.
+JSON_CONTENT_TYPE = "application/json"
+
+#: Key names a request body may not use. Everywhere else in this schema "a
+#: connector may not carry a credential" is kept structurally — there is no
+#: field to write one in — but `body_json` is by necessity free-form data (a
+#: board's search payload is the board's own vocabulary), so the rule needs a
+#: check rather than an absence. This is admission lint and not a sandbox, the
+#: same honesty `connector_contract`'s import allowlist states about itself: it
+#: refuses a key that says what it is, and a determined contributor can call a
+#: token `q`. What it does stop is the accident and the shrug — a board whose
+#: payload really does want an `api_key` is a board this tool may not read, and
+#: the refusal says so at load instead of after the secret is committed.
+# ponytail: a name list, not a secret detector; entropy scanning of values is
+# the upgrade path if a real key ever gets past this.
+CREDENTIAL_KEY_TOKENS = frozenset(
+    {
+        "apikey",
+        "auth",
+        "authorization",
+        "bearer",
+        "cookie",
+        "credential",
+        "credentials",
+        "key",
+        "passwd",
+        "password",
+        "secret",
+        "session",
+        "token",
+    }
+)
+
+
+def _names_a_credential(key: str) -> bool:
+    """Does this body key name a credential?
+
+    Split on the separators a payload key actually uses — `api_key`,
+    `api-key`, `X-Api-Key`, `apiKey` — so the list holds words rather than
+    every spelling of every word.
+    """
+    parts = re.split(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])", key)
+    return any(part.lower() in CREDENTIAL_KEY_TOKENS for part in parts if part)
+
 
 # ---------------------------------------------------------------------------
 # the selector grammar — a closed vocabulary, matched against, never evaluated
@@ -609,7 +657,12 @@ class Pagination(Strict):
     """How a listing continues past its first page. Stored as data for a
     fetcher (T12) to walk — this module never issues a request."""
 
-    mode: Literal["none", "query_param", "path_segment"] = "none"
+    #: `body_field` is the POST case: the page number is not in the URL at all
+    #: but in the request body, which is where a search back end that takes its
+    #: whole query as JSON puts it. `param` then names the body key rather than
+    #: a query-string key, and `ListPage` checks that the key exists and holds
+    #: the placeholder — see `_a_page_placeholder_and_a_body_field_imply_each_other`.
+    mode: Literal["none", "query_param", "path_segment", "body_field"] = "none"
     param: str | None = Field(default=None, min_length=1)
     start: int = Field(default=1, ge=0)
     max_pages: int = Field(default=1, ge=1, le=1000)
@@ -643,11 +696,99 @@ class Pagination(Strict):
         return self
 
 
+def _literal_body_violations(node: Any, where: str = "body_json") -> list[str]:
+    """Every reason `node` is not a literal request body.
+
+    The contract T89 fixes in writing, because "literal body" and "substitute
+    the page" are only compatible if the exception is written down:
+
+    * the **only** placeholder is `{page}`, and only as a *complete* value —
+      a JSON string whose entire content is `"{page}"`;
+    * `"page {page} of many"` is **refused**, not passed through. Loud over
+      literal: a brace that does nothing looks exactly like a placeholder that
+      silently stopped working, and refusing is the posture `url_pattern`
+      already takes;
+    * a brace anywhere else — in a key, in the middle of a string, alone —
+      is refused, which is what stops the next contributor reintroducing
+      general templating one convenience at a time;
+    * **a key may never be a placeholder.** `{"{page}": 1}` is refused: only
+      values substitute, and a body whose *shape* varies by page is not a
+      literal body.
+
+    Nothing here is a format string and nothing is concatenated: the body is
+    already a parsed structure by the time this sees it (YAML parsed it, once,
+    at load), so there is no escaping question and no way to change the body's
+    shape. That is the whole difference between this and string templating.
+    """
+    violations: list[str] = []
+    if isinstance(node, str):
+        if node != PAGE_PLACEHOLDER and ("{" in node or "}" in node):
+            violations.append(
+                f"{where}: {node!r} carries a brace but is not the literal "
+                f"{PAGE_PLACEHOLDER} placeholder — a request body is literal data, "
+                "never a template"
+            )
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            if not isinstance(key, str):
+                violations.append(f"{where}: key {key!r} is not a string")
+                continue
+            if "{" in key or "}" in key:
+                violations.append(
+                    f"{where}: key {key!r} carries a brace — only values substitute, so a "
+                    "body whose shape varies by page is not a literal body"
+                )
+            if _names_a_credential(key):
+                violations.append(
+                    f"{where}: key {key!r} names a credential — a connector may not carry "
+                    "one, and a board whose search needs one is a board this tool may not "
+                    "read (see the module docstring's 'Carry a credential')"
+                )
+            violations.extend(_literal_body_violations(value, f"{where}.{key}"))
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            violations.extend(_literal_body_violations(item, f"{where}[{index}]"))
+    elif not isinstance(node, (bool, int, float)) and node is not None:
+        # `yaml.safe_load` also produces `date`/`datetime` for an unquoted
+        # date, and `json.dumps` cannot serialise one. Refused here rather
+        # than raised at request-build time, where the connector's author is
+        # no longer in the room.
+        violations.append(
+            f"{where}: {type(node).__name__} is not a JSON value — a request body may hold "
+            "only objects, arrays, strings, numbers, booleans and null"
+        )
+    return violations
+
+
+def _carries_the_page_placeholder(node: Any) -> bool:
+    """Is `{page}` anywhere in this already-validated body?"""
+    if isinstance(node, str):
+        return node == PAGE_PLACEHOLDER
+    if isinstance(node, dict):
+        return any(_carries_the_page_placeholder(value) for value in node.values())
+    if isinstance(node, list):
+        return any(_carries_the_page_placeholder(item) for item in node)
+    return False
+
+
 class ListPage(Strict):
     """The search-results page: how to reach it, how it continues, and one
     selector per item container plus per field within it."""
 
     url_pattern: str = Field(min_length=1)
+    #: The HTTP method the engine issues for this listing. `GET` by default,
+    #: so every connector written before T89 is unchanged — a board whose
+    #: search is a POST was simply unreachable, however public it was.
+    method: Literal["GET", "POST"] = "GET"
+    #: The request body, declared as **data** — a YAML mapping, which is a
+    #: parsed structure before this schema ever sees it. There is deliberately
+    #: no way to declare a body as text: a body assembled by templating is a
+    #: second injection surface, and `url_pattern` already refuses every brace
+    #: but `{page}` for exactly that reason. `_literal_body_violations` holds
+    #: the line here. The form is JSON and only JSON, which is what makes
+    #: `Content-Type` follow from the declaration rather than being a third
+    #: thing to get wrong; `build_list_requests` derives it.
+    body_json: dict[str, Any] | None = None
     pagination: Pagination = Field(default_factory=Pagination)
     #: Markup route. Required unless `json` is given instead.
     item: str | None = Field(default=None, min_length=1)
@@ -739,6 +880,63 @@ class ListPage(Strict):
                 f"url_pattern may only use the literal {{page}} placeholder: {pattern!r}"
             )
         return pattern
+
+    @field_validator("body_json")
+    @classmethod
+    def _body_is_literal(cls, body: dict[str, Any] | None) -> dict[str, Any] | None:
+        if body is not None:
+            violations = _literal_body_violations(body)
+            if violations:
+                raise ValueError("; ".join(violations))
+        return body
+
+    @model_validator(mode="after")
+    def _only_a_post_carries_a_body(self) -> ListPage:
+        # The default did not move: a GET connector sends no body, and one that
+        # declares a body has contradicted its own method rather than quietly
+        # getting a body it cannot send.
+        if self.body_json is not None and self.method != "POST":
+            raise ValueError(
+                f"list.body_json is declared but list.method is {self.method!r} — only a "
+                "POST carries a request body"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _a_page_placeholder_and_a_body_field_imply_each_other(self) -> ListPage:
+        # Both directions, because each failure is real and they differ. Too
+        # narrow — a placeholder the pagination does not name — and the page
+        # number lands somewhere nothing declared, so a caller reading
+        # `pagination.param` is told the wrong field varies. Too broad — a
+        # `body_field` mode over a body with nothing to vary — and every page
+        # is the same request, which is the duplicate fetch `mode: none`
+        # already guards against, one layer down.
+        placeholder = self.body_json is not None and _carries_the_page_placeholder(self.body_json)
+        if placeholder and self.pagination.mode != "body_field":
+            raise ValueError(
+                f"list.body_json carries the {PAGE_PLACEHOLDER} placeholder but "
+                f"pagination.mode is {self.pagination.mode!r} — a body that paginates must "
+                "say so with mode: body_field"
+            )
+        if self.pagination.mode == "body_field":
+            if not placeholder:
+                raise ValueError(
+                    f"pagination.mode is 'body_field' but no {PAGE_PLACEHOLDER} placeholder "
+                    "appears in list.body_json — nothing would vary from page to page"
+                )
+            body = self.body_json or {}
+            # `Pagination` already refuses a nameless param for any mode but
+            # `none`, so the `is None` arm is unreachable through a load — it
+            # is here because a `model_copy(update=...)` object skips that
+            # validator, the same reason `build_list_urls` repeats its clamp.
+            param = self.pagination.param
+            if param is None or body.get(param) != PAGE_PLACEHOLDER:
+                raise ValueError(
+                    f"pagination.param is {self.pagination.param!r} but that is not a "
+                    f"top-level key of list.body_json holding {PAGE_PLACEHOLDER} — the key "
+                    "carrying the page number is the one the pagination must name"
+                )
+        return self
 
 
 class DetailPage(Strict):
@@ -987,6 +1185,77 @@ def build_list_urls(connector: Connector, *, page_count: int | None = None) -> l
     return [
         connector.list.url_pattern.replace(PAGE_PLACEHOLDER, str(start + offset))
         for offset in range(pages)
+    ]
+
+
+@dataclass(frozen=True)
+class ListRequest:
+    """One list-page request, described rather than issued.
+
+    Everything a fetcher needs and nothing it does not: this module still
+    never opens a socket (see "Fetching is not this module's job"), and a
+    connector still cannot name a header — `headers` is derived from the
+    declared body form, so there is nowhere for an `Authorization` to be
+    written even by a contributor who wants one.
+    """
+
+    url: str
+    method: str
+    headers: dict[str, str]
+    #: `None` for a GET. Serialised UTF-8 JSON for a declared `body_json`.
+    body: bytes | None
+
+
+def _page_substituted(node: Any, page: int) -> Any:
+    """`node` with every `{page}` value replaced by the page **number**.
+
+    The substitution is on the parsed structure, never on the serialised text.
+    A string whose entire content is `"{page}"` becomes a JSON *number*, so a
+    board expecting `{"Page": 2}` gets that and not `{"Page": "2"}`; nothing a
+    connector wrote is ever concatenated into a string that is then parsed as
+    JSON, so the body's *shape* cannot vary by page. Everything else is
+    returned untouched — `_literal_body_violations` already refused any other
+    brace at load, so there is no second placeholder to miss here.
+    """
+    if isinstance(node, str):
+        return page if node == PAGE_PLACEHOLDER else node
+    if isinstance(node, dict):
+        return {key: _page_substituted(value, page) for key, value in node.items()}
+    if isinstance(node, list):
+        return [_page_substituted(item, page) for item in node]
+    return node
+
+
+def build_list_requests(
+    connector: Connector, *, page_count: int | None = None
+) -> list[ListRequest]:
+    """The sequence of list-page **requests** `connector.list` describes.
+
+    `build_list_urls` answers "which URLs", which was the whole question while
+    every connector was a GET. It is not the whole question for a board whose
+    search is a POST carrying the query in its body (T89): two pages of such a
+    board are the *same* URL and differ only in the payload, so a caller
+    holding URLs alone would issue the first page twice.
+
+    A GET connector gets exactly what it always did — its URL, no body, no
+    headers — which is the property the gate enumerates over every committed
+    package rather than trusting to review.
+    """
+    page = connector.list
+    urls = build_list_urls(connector, page_count=page_count)
+    if page.body_json is None:
+        return [ListRequest(url=url, method=page.method, headers={}, body=None) for url in urls]
+    start = page.pagination.start
+    return [
+        ListRequest(
+            url=url,
+            method=page.method,
+            headers={"Content-Type": JSON_CONTENT_TYPE},
+            body=json.dumps(
+                _page_substituted(page.body_json, start + offset), ensure_ascii=False
+            ).encode("utf-8"),
+        )
+        for offset, url in enumerate(urls)
     ]
 
 

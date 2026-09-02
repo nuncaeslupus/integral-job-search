@@ -1,8 +1,8 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 12,
-  "silent_connector_failures_evaluated": 12,
-  "connector_runs_probed": 12,
+  "connector_runs_evaluated": 13,
+  "silent_connector_failures_evaluated": 13,
+  "connector_runs_probed": 13,
   "disabled": [],
   "gate_status": "measured",
   "readings": [
@@ -114,6 +114,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-28",
+      "rate_limited": null
+    },
+    {
+      "connector": "usajobs",
+      "site": "usajobs.gov",
+      "health": "healthy",
+      "baseline_items": 25,
+      "probe_items": 25,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-02",
       "rate_limited": null
     },
     {

@@ -1,0 +1,10 @@
+{
+  "boards_readable_only_by_post": 0,
+  "boards_readable_only_by_post_evaluated": 1,
+  "ledger_entries_scanned": 25,
+  "get_connectors_still_plain_gets": 13,
+  "get_connectors_evaluated": 13,
+  "unreadable": [],
+  "get_packages_changed": [],
+  "gate_status": "measured"
+}

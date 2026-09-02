@@ -237,12 +237,47 @@ corrected:
       no session**: measured with a bare curl and this tool's product token,
       after the capture showed the request. The api_note's second half also
       expired the day it was written — #259 shipped the from_json route.
-    still_blocked_by: >
+    was_blocked_by: >
       the engine issues GETs. `ListPage.url_pattern` is a URL and there is
       nowhere to put a method or a request body, so this endpoint cannot be
       expressed as a connector today. That is a named, small engine gap with a
       live example, which is a better thing to have than a board filed under a
       reason that was never true.
+    unblocked_by: >
+      T89, and this board is no longer blocked by anything: it has a connector.
+      `ListPage.method` and `ListPage.body_json` land the request shape and
+      `integral.connectors.build_list_requests` issues it — the same POST, the
+      same JSON body, the same Content-Type, checked against the `retest` line
+      below rather than against anything the implementer wrote
+      (`integral.connector_transport`, `status/evidence/T89.json`).
+    connector: >
+      `connectors/usajobs_en/`, added by T89 and the library's first POST
+      package. Both surfaces were re-captured on 2026-09-02 with this tool's
+      own product token: the list POST (200, 35,067 bytes, 25 rows, `Total: 44`,
+      `Pager.NumberOfPages: 2`) and one announcement,
+      https://www.usajobs.gov/job/856726500 (200, 126,012 bytes,
+      server-rendered — test 2 passes in the served bytes, so no headless
+      browser). Robots re-adjudicated the same day with two parsers agreeing
+      AND a negative control: /Search/ExecuteSearch and /job/… True, /Content/
+      and /Scripts/ False.
+
+      `MinimumRange` is mapped as `salary_min` only after running test 4 over
+      all 25 rows: 14 distinct minimums and 18 distinct
+      (MinimumRange, SalaryDisplay) pairs, $50,460 to $169,279, no zeros. That
+      is the employer's own figure, not remoteok's one invented band on 48 of
+      50 adverts. No `salary_max`: every row reads "Starting at $X", which is a
+      floor, and synthesising the other end would be inventing the employer's
+      words.
+    still_open: >
+      the page key. Only page 1 was captured, and its request body carried NO
+      page key at all, so `Page` — the name the board's own `Pager` implies
+      through `CurrentPageIndex`/`NextPageIndex` — is unverified as the REQUEST
+      key. The connector therefore ships `max_pages: 1`, which makes the
+      unverified name inert in every branch: an unbound key is ignored and
+      returns page 1, and a bound one returns page 1 too, because
+      `Pager.FirstPageIndex` is 1. One measurement raises it — POST the same
+      body with `"Page": 2` and check the rows differ from page 1 — and it must
+      be made before `max_pages` moves, not after.
     lesson: >
       an API key on the *developer* API says nothing about the *website's* API.
       Yesterday's entry checked data.usajobs.gov (401 without an
@@ -326,6 +361,11 @@ javascript_rendered:
       key in the query string. A connector may not carry a credential, and a
       key lifted from someone else's capture is a credential whoever minted it
       can revoke. Two independent reasons; neither is about rendering.
+
+      T89 closed the first of the two: the engine issues POSTs now. The ruling
+      is unchanged, because the second reason was never the engine's to fix —
+      and `body_json` refuses a key named like a credential at load, so the
+      Algolia payload cannot be written into a connector even by accident.
     evidence: >
       Six links on the whole page and every one is a category filter
       (/en/jobs?q=Attorney and similar); zero per-offer hrefs. The 67k characters
@@ -513,7 +553,9 @@ engine_gap_json:
   reopens_if_closed:
     - "the salary field on tecnoempleo_es, infojobs_es, ticjob_es, builtin_en, jobsacuk_en and wellfound_en — all six left salary unmapped for want of a split, and several have clean JSON-LD sitting in the same page"
     - "workingnomads.com — ruled out as a shell, but serves /api/exposed_jobs/ (REOPENED 2026-08-30; connector waits on feat/json-connector-packages for its probe)"
-    - "usajobs.gov — see above; its API is public and its listing is not in HTML"
+    - "usajobs.gov — DONE. Its API is public and its listing is not in HTML; #259
+      gave it the from_json route and T89 gave it the POST, and it now ships as
+      connectors/usajobs_en. See the `corrected` entry above."
 
   # Boards ruled out *only* by this gap — closing it makes each a connector.
   boards:
