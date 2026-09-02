@@ -961,8 +961,9 @@ def probe_retracted_sends(root: Path) -> dict[str, Any]:
 
     Each scenario is a fresh profile with its own evidence log, because a
     retraction is a fact about a log and the interesting cases differ in what
-    the log says. Six of the eight are defects on purpose; two are the
-    over-refusal the fix must not become.
+    the log says. Fourteen of the nineteen are defects on purpose; four are the
+    over-refusal the fix must not become, and one pins an application record
+    against being rewritten.
     """
     from integral.retraction import retract, unretract
 
@@ -1402,7 +1403,8 @@ def _retraction_report(measured: dict[str, Any]) -> int:
 def _main(argv: list[str] | None = None) -> int:
     """Write T46's and D-24's gate evidence. Exit 1 on any disclosure no approval backs."""
     args = [arg for arg in (argv if argv is not None else sys.argv)[1:] if not arg.startswith("--")]
-    measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
+    target = Path(args[0]) if args else DEFAULT_EVIDENCE_PATH
+    measured = write_evidence(target)
     failures = 0
     for key, label in (
         ("unapproved_episodes", "disclosed with no per-use approval"),
@@ -1434,7 +1436,12 @@ def _main(argv: list[str] | None = None) -> int:
     # Written unconditionally, before the exit code is decided: short-circuiting
     # here would leave `D-24.json` stale whenever T46 was red, and `make
     # evidence` would then report drift in the gate that was still passing.
-    retraction_exit = _retraction_report(write_retraction_evidence())
+    # Beside T46's record wherever that was asked for, so a run pointed at a
+    # scratch directory writes nothing into the repo (#305 review); with no
+    # argument this is exactly `DEFAULT_D24_EVIDENCE_PATH`.
+    retraction_exit = _retraction_report(
+        write_retraction_evidence(target.with_name(DEFAULT_D24_EVIDENCE_PATH.name))
+    )
     return 1 if (failures or retraction_exit) else 0
 
 

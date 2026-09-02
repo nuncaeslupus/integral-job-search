@@ -23,12 +23,14 @@ from pathlib import Path
 import pytest
 
 from integral.approval import (
+    DEFAULT_D24_EVIDENCE_PATH,
     MINIMUM_PROBES,
     MINIMUM_RETRACTED_APPROVALS_EVALUATED,
     MINIMUM_RETRACTION_PROBES,
     ApprovalError,
     PersonalDetails,
     _carries,
+    _main,
     _retraction_report,
     measure_prepared,
     payload_digest,
@@ -954,3 +956,22 @@ def test_the_gate_report_names_the_two_failure_kinds_apart(
     assert "a retracted episode was still sendable: ep-000001" in reported
     # The over-refusal line must not wear the fail-open wording.
     assert "still sendable: a clean send was refused" not in reported
+
+
+def test_a_scratch_evidence_run_writes_nothing_into_the_repo(tmp_path: Path) -> None:
+    """D-24's evidence must follow the path it was given, as T46's always has.
+
+    `_main` read `argv[1]` for T46 and then called `write_retraction_evidence()`
+    with no argument, so a run pointed at a scratch directory still rewrote the
+    committed `status/evidence/D-24.json` (#305 review).
+    """
+    committed = DEFAULT_D24_EVIDENCE_PATH
+    before = (committed.read_bytes(), committed.stat().st_mtime_ns) if committed.exists() else None
+
+    assert _main(["integral.approval", str(tmp_path / "T46.json")]) == 0
+
+    after = (committed.read_bytes(), committed.stat().st_mtime_ns) if committed.exists() else None
+    assert after == before, "a scratch run rewrote the committed status/evidence/D-24.json"
+    assert (tmp_path / "T46.json").exists()
+    scratch = json.loads((tmp_path / "D-24.json").read_text(encoding="utf-8"))
+    assert scratch["gate_status"] == "measured"
