@@ -101,10 +101,19 @@ def a_red_check_blocks(policy: str) -> bool:
 
 
 def configured_policy(config: Path = DEFAULT_CONFIG_PATH) -> str | None:
-    """`arsenal/config.toml`'s `merge-policy`, or `None` if it cannot be read."""
+    """`arsenal/config.toml`'s `merge-policy`, or `None` if it cannot be read.
+
+    `UnicodeError` is in the tuple with the parse errors because
+    `read_text(encoding="utf-8")` raises `UnicodeDecodeError` for a file that
+    is not valid UTF-8, and that is neither an `OSError` nor a parse error — it
+    would have taken the command down instead of reporting `unmeasured`. The
+    same applies to the two JSON readers below (#304 review). A file this
+    module cannot decode is a file it cannot read, and every reader here has
+    one answer for that.
+    """
     try:
         payload = tomllib.loads(config.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
         return None
     value = payload.get(CONFIG_KEY)
     return value if isinstance(value, str) else None
@@ -119,7 +128,7 @@ def ci_targets_missing(d22: Path = DEFAULT_D22_PATH) -> int | None:
     """
     try:
         record = json.loads(d22.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     value = record.get(CI_TARGETS_KEY) if isinstance(record, dict) else None
     return value if isinstance(value, int) and not isinstance(value, bool) else None
@@ -129,7 +138,7 @@ def read_capture(capture: Path = DEFAULT_CAPTURE_PATH) -> dict[str, Any] | None:
     """The committed CI observation, or `None` if there is not a usable one."""
     try:
         record = json.loads(capture.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     if not isinstance(record, dict):
         return None

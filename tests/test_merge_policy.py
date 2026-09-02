@@ -131,3 +131,36 @@ def test_a_reader_control_the_module_gets_wrong_is_counted_as_a_violation(
     measured = _measure(tmp_path, capture=GREEN_CAPTURE)
     assert measured["policy_reader_control_failures"] == ["always", "after-review"]
     assert measured["merge_policy_ignores_ci"] == 2
+
+
+@pytest.mark.parametrize(
+    ("reader", "name"),
+    [
+        (merge_policy.configured_policy, "config.toml"),
+        (merge_policy.ci_targets_missing, "D-22.json"),
+        (merge_policy.read_capture, "ci-conclusion.json"),
+    ],
+)
+def test_a_file_that_is_not_utf8_reads_as_unreadable(
+    tmp_path: Path, reader: object, name: str
+) -> None:
+    """#304 review. `read_text(encoding="utf-8")` raises `UnicodeDecodeError`
+    on a file that is not valid UTF-8, and that is neither an `OSError` nor a
+    parse error — so it escaped all three readers and took the command down
+    instead of reporting `unmeasured`. Every reader answers `None`.
+    """
+    corrupt = tmp_path / name
+    corrupt.write_bytes(b"\xff\xfe\x00not utf-8 at all")
+    assert reader(corrupt) is None  # type: ignore[operator]
+
+
+def test_a_gate_run_over_undecodable_files_is_unmeasured_not_a_pass(tmp_path: Path) -> None:
+    """The three readers together: an undecodable tree measures nothing."""
+    for name in ("config.toml", "D-22.json", "ci-conclusion.json"):
+        (tmp_path / name).write_bytes(b"\xff\xfe\x00")
+    measured = merge_policy.measure(
+        config=tmp_path / "config.toml",
+        d22=tmp_path / "D-22.json",
+        capture=tmp_path / "ci-conclusion.json",
+    )
+    assert measured["gate_status"] == "unmeasured"
