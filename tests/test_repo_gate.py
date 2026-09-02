@@ -14,11 +14,21 @@ while `make evidence` exited 0 printing "no drift".
 what the task requires: it must find every module that writes evidence (not
 just the three the bug report named), it must not depend on any naming
 convention to do it, and its own gate must not pass on an empty input set.
+
+**T101 is here too**, because it is the same module's second half: every
+`make` target a CI job names must be a rule the Makefile defines.
+`verify-subtree` lost its rule in #123 and its job kept calling it, failing on
+every run until 2026-09-01 and invisible while the runner outage failed every
+job anyway. The check must read the workflows as parsed YAML — the comment
+that named `verify-subtree` outlived the job by six weeks, so a regex over the
+file text reports a violation that is not there.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from integral import repo_gate
 
@@ -143,3 +153,192 @@ def test_a_failing_module_list_command_is_unmeasured_not_a_traceback(tmp_path: P
 
     assert measured["gate_status"] == "unmeasured"
     assert "module list failed to evaluate" in measured["unmeasured_reason"]
+
+
+# ---------------------------------------------------------------------------
+# T101 — a CI job may not name a Makefile target that does not exist
+
+
+def _repo(tmp_path: Path, makefile: str, workflow: str) -> Path:
+    """A throwaway repository root: one Makefile, one workflow."""
+    (tmp_path / "Makefile").write_text(makefile, encoding="utf-8")
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "ci.yml").write_text(workflow, encoding="utf-8")
+    return tmp_path
+
+
+def test_every_target_this_repositorys_ci_runs_exists() -> None:
+    """Against the real tree — the assertion the task is for."""
+    measured = repo_gate.measure()
+
+    assert measured["ci_targets_missing"] == []
+    assert measured["ci_targets_missing_from_makefile"] == 0
+    # Not a vacuous zero: CI really does run `make`, and what it runs includes
+    # the four `CLAUDE.md` requires before a merge.
+    assert measured["ci_targets_missing_from_makefile_evaluated"] >= 4
+    assert set(repo_gate.ci_make_targets()) >= {"lint", "test", "evidence", "verify-gates"}
+    # The constructed controls go through the same reader and are counted, so
+    # the denominator moves when the reader regresses and not only when a
+    # workflow does.
+    assert measured["ci_reader_control_failures"] == []
+    assert len(measured["ci_reader_controls"]) == len(repo_gate.CI_READER_CONTROLS)
+    assert measured["ci_targets_missing_from_makefile_evaluated"] == len(
+        repo_gate.ci_make_targets()
+    ) + sum(len(expected) for _, _, expected in repo_gate.CI_READER_CONTROLS)
+
+
+def test_a_delimiter_glued_to_the_target_name_does_not_hide_it(tmp_path: Path) -> None:
+    """Fail-open, and the worse direction. `shlex.split` keeps `ghost;` as one
+    token, `_TARGET_TOKEN_RE` rejects it, and the missing target is never
+    reported — the gate goes green over a broken workflow. Review on #291."""
+    root = _repo(
+        tmp_path,
+        "lint:\n\ttrue\n",
+        "jobs:\n"
+        "  everything:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          make ghost; make phantom && make lint\n"
+        "          make spectre | tee log\n"
+        "          (make wraith)\n",
+    )
+
+    assert repo_gate.ci_make_targets_missing(root) == ["ghost", "phantom", "spectre", "wraith"]
+
+
+def test_run_outside_a_step_is_data_and_not_a_shell_command(tmp_path: Path) -> None:
+    """`run` is a shell command in exactly one place in the Actions schema:
+    `jobs.<job_id>.steps[*].run`. An environment variable called `run` is
+    someone's data, and reading it invents a violation that is not there —
+    `--check` then exits 1 over a valid workflow. Review on #291."""
+    root = _repo(
+        tmp_path,
+        "lint:\n\ttrue\n",
+        "env:\n"
+        "  run: make ghost\n"
+        "jobs:\n"
+        "  build:\n"
+        "    env:\n"
+        "      run: make phantom\n"
+        "    steps:\n"
+        "      - with:\n"
+        "          run: make spectre\n"
+        "      - run: make lint\n",
+    )
+
+    assert repo_gate.ci_make_targets(root / ".github" / "workflows") == ["lint"]
+    assert repo_gate.ci_make_targets_missing(root) == []
+
+
+def test_a_reader_control_the_module_gets_wrong_is_counted_as_a_violation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The controls are not decoration: a reader that misreads one has to make
+    the number this gate asserts is zero move."""
+    monkeypatch.setattr(
+        repo_gate,
+        "CI_READER_CONTROLS",
+        (("a control nothing can satisfy", "jobs:\n  a:\n    steps: []\n", ("ghost",)),),
+    )
+    measured = repo_gate.measure_ci_targets()
+
+    assert measured["ci_targets_missing_from_makefile"] == 1
+    assert "a control nothing can satisfy" in measured["ci_reader_control_failures"][0]
+
+
+def test_a_workflow_naming_an_absent_target_is_reported(tmp_path: Path) -> None:
+    """The fault this task came from: `verify-subtree` lost its rule in #123
+    and its job kept calling it, red on every run for six weeks."""
+    root = _repo(
+        tmp_path,
+        "lint:\n\truff check .\n",
+        "jobs:\n  lint:\n    steps:\n      - run: make lint\n"
+        "  dead:\n    steps:\n      - run: make verify-subtree\n",
+    )
+
+    assert repo_gate.ci_make_targets_missing(root) == ["verify-subtree"]
+
+
+def test_a_target_named_only_in_a_comment_is_not_read_as_a_step(tmp_path: Path) -> None:
+    """The regex trap. This repository's workflow comments discuss Make
+    targets at length, and the comment naming `verify-subtree` outlived the
+    job that ran it — a check reading the file text would report a violation
+    that is not there, from a YAML comment, a step name or a shell comment."""
+    root = _repo(
+        tmp_path,
+        "lint:\n\truff check .\n",
+        "# make verify-subtree once ran here\n"
+        "jobs:\n"
+        "  lint:\n"
+        "    steps:\n"
+        "      # nor here: make verify-subtree\n"
+        "      - name: make verify-subtree is only prose in a name\n"
+        "        run: |\n"
+        "          # and not here either: make verify-subtree\n"
+        "          make lint\n",
+    )
+
+    assert repo_gate.ci_make_targets(root / ".github" / "workflows") == ["lint"]
+    assert repo_gate.ci_make_targets_missing(root) == []
+
+
+def test_a_multi_line_run_block_is_read(tmp_path: Path) -> None:
+    """A `run: |` block is a shell script, and every `make` on any of its
+    lines is a step that has to work — including a second one on the same
+    line, which a per-line first-match read would miss."""
+    root = _repo(
+        tmp_path,
+        "lint:\n\ttrue\n",
+        "jobs:\n"
+        "  everything:\n"
+        "    steps:\n"
+        "      - run: |\n"
+        "          uv sync\n"
+        "          make lint && make ghost\n"
+        "          make phantom\n",
+    )
+
+    assert repo_gate.ci_make_targets_missing(root) == ["ghost", "phantom"]
+
+
+def test_a_target_the_makefile_defines_but_ci_never_runs_is_not_a_violation(
+    tmp_path: Path,
+) -> None:
+    """The direction this check deliberately does not assert. `format`,
+    `clean`, `build`, `publish`, `sync`, `help`, `reader` and
+    `labelling-round` are all deliberately not CI steps, so the converse would
+    be false on a correct repository from its first run and the repair would
+    be an allowlist edited every time a target is added."""
+    root = _repo(
+        tmp_path,
+        "lint:\n\ttrue\nformat:\n\ttrue\nclean:\n\ttrue\npublish:\n\ttrue\n",
+        "jobs:\n  lint:\n    steps:\n      - run: make lint\n",
+    )
+
+    assert repo_gate.ci_make_targets_missing(root) == []
+
+
+def test_the_ci_reading_does_not_pass_over_a_workflow_tree_that_runs_no_make(
+    tmp_path: Path,
+) -> None:
+    """A zero count over nothing scanned is not a pass, and neither is a
+    workflow this cannot parse. Both record `-1` — and neither erases D-22's
+    own answer about `CLAUDE.md`, which is a different question."""
+    empty = tmp_path / "no-workflows-here"
+    empty.mkdir()
+
+    silent = repo_gate.measure_ci_targets(workflows=empty)
+    assert silent["ci_targets_missing_from_makefile"] == -1
+    assert silent["ci_targets_missing_from_makefile_evaluated"] == 0
+    assert "scanned nothing" in silent["ci_unmeasured_reason"]
+
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / "ci.yml").write_text("jobs:\n  - [unbalanced\n", encoding="utf-8")
+    unparseable = repo_gate.measure_ci_targets(workflows=broken)
+    assert unparseable["ci_targets_missing_from_makefile"] == -1
+    assert "could not be parsed" in unparseable["ci_unmeasured_reason"]
+
+    # D-22's own reading survives both, because it does not depend on them.
+    assert repo_gate.measure(workflows=empty)["required_gates_with_no_enforcement_point"] == 0
