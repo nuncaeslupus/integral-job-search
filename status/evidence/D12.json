@@ -957,6 +957,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-c36b3722",
+      "key": "monotone_dimensions_asked_as_level_ratings",
+      "evidence": "status/evidence/T96.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-c40f0f88",
       "key": "ranked_offers_without_a_url",
       "evidence": "status/evidence/T44.json",
