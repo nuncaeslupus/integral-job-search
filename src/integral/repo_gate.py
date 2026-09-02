@@ -43,6 +43,15 @@ this package may execute arbitrary contributed code (PR #77). `measure_evidence_
 is the same assertion `measure` makes for D-22, one level down: not just "does
 every required gate have an enforcement point" but "does the one command that
 regenerates evidence actually reach every module that produces it".
+
+**T101 is D-22's own hole, one file over.** `DEFAULT_INSTRUCTIONS` is
+`CLAUDE.md` and nothing else, so nothing asserted that a target named in
+`.github/workflows/` exists — and one did not. `verify-subtree` lost its rule
+in #123 and its job kept calling it, red on every run until 2026-09-01 and
+invisible while the runner outage failed everything else too.
+`ci_targets_missing_from_makefile` is recorded into D-22's file rather than
+its own, because it is the same claim about the same Makefile: every `make`
+the project tells something to run is a rule that exists.
 """
 
 from __future__ import annotations
@@ -52,11 +61,14 @@ import ast
 import itertools
 import json
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-22.json"
@@ -64,6 +76,7 @@ DEFAULT_T85_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T85.json"
 DEFAULT_MAKEFILE = _REPO_ROOT / "Makefile"
 DEFAULT_INSTRUCTIONS = _REPO_ROOT / "CLAUDE.md"
 DEFAULT_SRC_DIR = _REPO_ROOT / "src" / "integral"
+DEFAULT_WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 
 #: The target that runs the whole repo gate in one command. Named for the key
 #: `claude-arsenal` points a worker at, not for what CI happens to call it.
@@ -199,6 +212,190 @@ def payload_gate_is_not_the_repo_gate(rules: dict[str, tuple[str, ...]]) -> bool
     return bool(repo - payload)
 
 
+# ---------------------------------------------------------------------------
+# T101 — a CI job may not name a Makefile target that does not exist
+
+
+# A Make target name, spelled as `_RULE_RE` spells it. Reading a `make`
+# invocation stops at the first token that is not one, so `make lint && ./x`
+# yields `lint` and not `&&`.
+_TARGET_TOKEN_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
+def _run_scripts(document: Any) -> list[str]:
+    """Every `run:` script in a parsed workflow document.
+
+    Parsed, never matched against the file text. A regex over the text reads
+    the word `make` out of comments, and this repository's workflows discuss
+    Make targets at length — the comment naming `verify-subtree` outlived the
+    job that ran it, so a regex would report a violation that is not there.
+
+    `jobs.<job_id>.steps[*].run` and nowhere else, because that is the one
+    place the Actions schema puts a shell command. The first version of this
+    walked the whole document for any mapping with a string `run`, which reads
+    `jobs.<id>.env.run` — an ordinary environment variable — as a step, and
+    then fails the gate over a `make` in somebody's data (review on #291).
+    """
+    if not isinstance(document, dict):
+        return []
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        return []
+    scripts: list[str] = []
+    for job in jobs.values():
+        steps = job.get("steps") if isinstance(job, dict) else None
+        for step in steps if isinstance(steps, list) else []:
+            script = step.get("run") if isinstance(step, dict) else None
+            if isinstance(script, str):
+                scripts.append(script)
+    return scripts
+
+
+def _make_targets_in(script: str) -> list[str]:
+    """The targets every `make` invocation in one shell script names.
+
+    `shlex` rather than a second regex: a `run: |` block is a shell script,
+    and `shlex` already knows that a `#` inside quotes does not start a
+    comment and that a trailing backslash continues a line.
+
+    `punctuation_chars` rather than `shlex.split`, because that helper keeps
+    `ghost;` as a single token, `_TARGET_TOKEN_RE` then rejects it, and a
+    genuinely missing target goes unreported — the fail-open direction. The
+    lexer emits `;`, `&&` and `|` as tokens of their own, so the target is
+    read and the delimiter ends the invocation (review on #291).
+
+    ponytail: reading stops at the first token that is not a target name, so
+    `make -C sub thing` contributes nothing rather than reading `sub` as a
+    target. Nothing here invokes make that way; teach it options the day one
+    does, not before — guessing which options take an argument is how a check
+    starts reporting violations that are not there.
+    """
+    lexer = shlex.shlex(script, posix=True, punctuation_chars=";&|()")
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        # An unbalanced quote is a broken step, not a target reference.
+        return []
+    targets: list[str] = []
+    after_make = False
+    for token in tokens:
+        if token == "make":
+            after_make = True
+        elif after_make and _TARGET_TOKEN_RE.match(token):
+            targets.append(token)
+        else:
+            after_make = False
+    return targets
+
+
+#: Constructed workflows the reader must get right, read by the same two
+#: functions the live tree goes through. The live tree names four targets and
+#: all four exist, so a denominator counting only those never moves when the
+#: *reader* regresses — and both of these were reader faults found by review on
+#: #291, each fail-open: a real missing target that goes unreported, or a
+#: violation invented out of somebody's data.
+CI_READER_CONTROLS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "a shell delimiter glued to the target name — `make ghost;`",
+        "jobs:\n  a:\n    steps:\n      - run: make ghost; make phantom && make lint\n",
+        ("ghost", "phantom", "lint"),
+    ),
+    (
+        "`run` as an environment variable name, which is data and not a step",
+        "jobs:\n  a:\n    env:\n      run: make ghost\n    steps:\n      - run: make lint\n",
+        ("lint",),
+    ),
+)
+
+
+def _control_readings() -> tuple[int, list[str]]:
+    """`CI_READER_CONTROLS` put through the reader: targets seen, failures."""
+    evaluated = 0
+    failures: list[str] = []
+    for label, document, expected in CI_READER_CONTROLS:
+        read = tuple(
+            t for s in _run_scripts(yaml.safe_load(document)) for t in _make_targets_in(s)
+        )
+        evaluated += len(expected)
+        if read != expected:
+            failures.append(f"accepted: {label} — read {list(read)}, expected {list(expected)}")
+    return evaluated, failures
+
+
+def ci_make_targets(workflows: Path = DEFAULT_WORKFLOWS_DIR) -> list[str]:
+    """Every Make target a workflow step runs, sorted and deduplicated."""
+    named: set[str] = set()
+    for path in sorted(itertools.chain(workflows.glob("*.yml"), workflows.glob("*.yaml"))):
+        for script in _run_scripts(yaml.safe_load(path.read_text(encoding="utf-8"))):
+            named.update(_make_targets_in(script))
+    return sorted(named)
+
+
+def ci_make_targets_missing(repo_root: Path = _REPO_ROOT) -> list[str]:
+    """The targets CI runs that the Makefile does not define.
+
+    One direction only. *A target that exists must be named in CI* is the
+    tempting converse and is false on a correct repository: `format`, `clean`,
+    `build`, `publish`, `sync`, `help`, `reader` and `labelling-round` are
+    deliberately not CI steps, so asserting it would fail from its first run
+    and the repair would be an allowlist edited every time a target is added.
+    """
+    rules = make_rules(repo_root / "Makefile")
+    return [t for t in ci_make_targets(repo_root / ".github" / "workflows") if t not in rules]
+
+
+def measure_ci_targets(
+    makefile: Path = DEFAULT_MAKEFILE, workflows: Path = DEFAULT_WORKFLOWS_DIR
+) -> dict[str, Any]:
+    """T101's half of the D-22 record: `ci_targets_missing_from_makefile`.
+
+    Its own reading rather than a branch of `measure`'s, so that an unreadable
+    workflow tree records `-1` here without also erasing D-22's answer about
+    `CLAUDE.md`. Two questions, two verdicts.
+
+    `verify-subtree` is the fault behind it: `a4e9541` (T58, #123) deleted the
+    target when the bundle stopped being a subtree and left the job calling
+    it. It failed on every run from then until 2026-09-01, invisible because
+    the runner outage was failing every job for an unrelated reason.
+    """
+
+    def _unreadable(reason: str) -> dict[str, Any]:
+        return {
+            "ci_targets_missing_from_makefile": -1,
+            "ci_targets_missing_from_makefile_evaluated": 0,
+            "ci_targets_missing": [],
+            "ci_unmeasured_reason": reason,
+        }
+
+    try:
+        rules = make_rules(makefile)
+    except OSError as exc:
+        return _unreadable(f"{makefile.name} could not be read: {exc}")
+    try:
+        named = ci_make_targets(workflows)
+    except (OSError, yaml.YAMLError) as exc:
+        return _unreadable(f"a workflow under {workflows.name}/ could not be parsed: {exc}")
+    if not named:
+        return _unreadable(
+            f"no step under {workflows.name}/ runs a `make` target, so a zero count here "
+            "would rest on having scanned nothing"
+        )
+    missing = [t for t in named if t not in rules]
+    control_targets, control_failures = _control_readings()
+    return {
+        # A control the reader gets wrong counts as a violation: the number
+        # this gate asserts is zero has to move when the reader breaks, not
+        # only when a workflow does.
+        "ci_targets_missing_from_makefile": len(missing) + len(control_failures),
+        "ci_targets_missing_from_makefile_evaluated": len(named) + control_targets,
+        "ci_targets_missing": missing,
+        "ci_reader_controls": [label for label, _, _ in CI_READER_CONTROLS],
+        "ci_reader_control_failures": control_failures,
+    }
+
+
 def _unmeasured(reason: str, readings: list[Reading]) -> dict[str, Any]:
     """The shape a reading that could not happen takes: `-1`, never `0`."""
     return {
@@ -221,6 +418,18 @@ def _unmeasured(reason: str, readings: list[Reading]) -> dict[str, Any]:
 
 
 def measure(
+    instructions: Path = DEFAULT_INSTRUCTIONS,
+    makefile: Path = DEFAULT_MAKEFILE,
+    workflows: Path = DEFAULT_WORKFLOWS_DIR,
+) -> dict[str, Any]:
+    """D-22's reading, with T101's `ci_targets_missing_from_makefile` beside it."""
+    return {
+        **_measure_required_gates(instructions, makefile),
+        **measure_ci_targets(makefile, workflows),
+    }
+
+
+def _measure_required_gates(
     instructions: Path = DEFAULT_INSTRUCTIONS, makefile: Path = DEFAULT_MAKEFILE
 ) -> dict[str, Any]:
     """D-22's gate reading: `required_gates_with_no_enforcement_point`."""
@@ -280,9 +489,10 @@ def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     instructions: Path = DEFAULT_INSTRUCTIONS,
     makefile: Path = DEFAULT_MAKEFILE,
+    workflows: Path = DEFAULT_WORKFLOWS_DIR,
 ) -> dict[str, Any]:
     """Measure and record `status/evidence/D-22.json`."""
-    measured = measure(instructions, makefile)
+    measured = measure(instructions, makefile, workflows)
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return measured
@@ -466,13 +676,13 @@ def write_evidence_reach(
 def _main(argv: list[str]) -> int:
     """`python -m integral.repo_gate [--check] [--list-evidence-modules]`.
 
-    Without arguments it writes both D-22's and T85's evidence files —
+    Without arguments it writes both D-22's (T101 included) and T85's evidence files —
     `make evidence`'s module list invokes this module once, like any other, so
     both records are produced from the one run. `--list-evidence-modules` is
     the discovery command `make evidence` itself now runs to build that list.
     """
     parser = argparse.ArgumentParser(
-        description="D-22 and T85: the gates that check the evidence run's own machinery"
+        description="D-22, T101 and T85: the gates that check the repo's own gate machinery"
     )
     parser.add_argument(
         "--check",
@@ -508,14 +718,24 @@ def _main(argv: list[str]) -> int:
     print(json.dumps({"D-22": d22, "T85": t85}, ensure_ascii=False))
     for reason in d22["unenforced"]:
         print(reason, file=sys.stderr)
+    if "ci_unmeasured_reason" in d22:
+        print(d22["ci_unmeasured_reason"], file=sys.stderr)
+    for target in d22["ci_targets_missing"]:
+        print(
+            f"a CI step runs `make {target}`, which the Makefile does not define",
+            file=sys.stderr,
+        )
+    for failure in d22.get("ci_reader_control_failures", []):
+        print(f"the CI reader misread a control: {failure}", file=sys.stderr)
     for module in t85["modules_missing"]:
         print(f"{module} writes evidence but is not reached by `make evidence`", file=sys.stderr)
 
     d22_unenforced = d22["required_gates_with_no_enforcement_point"]
+    ci_missing = d22["ci_targets_missing_from_makefile"]
     t85_unreached = t85["gate_modules_outside_the_evidence_run"]
-    if d22_unenforced == -1 or t85["gate_status"] == "unmeasured":
+    if d22_unenforced == -1 or ci_missing == -1 or t85["gate_status"] == "unmeasured":
         return 3
-    if d22_unenforced or t85_unreached:
+    if d22_unenforced or ci_missing or t85_unreached:
         return 1
     return 0
 
