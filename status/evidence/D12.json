@@ -1005,6 +1005,14 @@
       "status_is_asserted": true
     },
     {
+      "task": "t-cb6914ef",
+      "key": "merge_policy_ignores_ci",
+      "evidence": "status/evidence/T103.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-cd8dcc16",
       "key": "gate_modules_outside_the_evidence_run",
       "evidence": "status/evidence/T85.json",
