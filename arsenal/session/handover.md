@@ -1,115 +1,113 @@
-# Session handover — 2026-09-02 ~11:00 UTC, interactive, laptop
+# Session handover
 
-Board: **126 merged of 147** on `main`, 19 open, 1 done, 1 blocked.
-Merge policy changed today: **`after-ci-and-review`**, so CI green is now a
-condition of merging and not merely a signal.
+Board: **162 tasks, 126 merged**, 28 open, 4 claimed. Five PRs open, all green,
+all waiting on the same thing.
 
-Nothing identifying the candidate is recorded here, and nothing should be. That
-is the rule rather than discretion: identity, history and stated constraints
-live in the local profile store, and a document in a public repository keeps
-whatever it says forever.
+## The one thing to know: `after-ci-and-review`'s review half has no reader
 
-## What landed today
+`merge-policy` is `after-ci-and-review`. CI is checked mechanically. **Nothing
+reads the review half**, and CodeRabbit reports a green check in four distinct
+situations where it has not reviewed the head:
 
-| Task | PR | What it fixed |
-|---|---|---|
-| T99 | #289 | `connector_policy._as_date` accepted a `datetime` and an unpadded `2026-8-1` |
-| T101 | #291 | A CI job could name a Makefile target that did not exist |
-| T96 | #287 | A monotone filter consulted the constant, not the data — the expression collapsed to a no-op |
-| T83 | #286 | Extra and duplicate attribution rows |
-| T95 | #290 | An unstated salary was suppressed to `unknown`; it is shown *marked* now, and an estimate may never read as stated |
-| T93 | #292 | Interview direction: recommendation and question judged independently, and a close could recommend applying because a role ranked first |
-| T103 | #304 | Merge policy set to `after-ci-and-review`, gated on T101's key **and** a committed green-CI capture |
-| — | #260 | Four JSON connector packages, held since 08-31 for a probe. Probes captured live 09-02; `connector_health` **unmeasured → measured**, 16 of 16 probed |
-| — | #308 | 47 of 123 merged tasks carried an unticked plan row. Ticked on `main` in `e32a541`; the gate is filed, not built |
+1. `Review skipped: draft pull request`
+2. `Review rate limited`
+3. `Review completed` — on a **superseded** commit
+4. `@coderabbitai review` → `✅ Action performed — Review finished`, producing
+   no review at all. Its own note says the command applies "only when automatic
+   reviews are paused", and a review that *bounced off the rate limit* was never
+   paused. **The working command is `@coderabbitai full review`.**
 
-## Open PRs, and what each is waiting on
+The only signal that survives all four is a review object whose `commit_id`
+equals the head:
 
-| PR | Task | State |
-|---|---|---|
-| #295 | T89 | Green, refreshed against main. **CodeRabbit rate-limited** — re-requested; nothing else outstanding |
-| #297 | T104 | Second-reader audit done (2 blockers) and fixed; CodeRabbit then found `plan_v2` writes the floor record *before* the floor check. Fix in flight |
-| #305 | D-24 | Second-reader audit found **eight fail-open inputs**. Blocking; fix in flight |
-| #307 | T98 | Four CodeRabbit findings; three accepted, one rejected with a better fix. In flight |
-| #312 | T92 | Fresh. CodeRabbit requested, second-reader audit running |
-| #264 | getmanfred | Second-reader audit found **four blockers**. Fix in flight |
+```bash
+R=nuncaeslupus/integral-job-search
+h=$(gh pr view $N --json headRefOid --jq .headRefOid)
+gh api repos/$R/pulls/$N/reviews \
+  --jq "[.[]|select(.user.login==\"coderabbitai[bot]\")|select(.commit_id==\"$h\")]|length"
+```
 
-## The thing worth reading twice
+Filed as **D-28** (#313). Until it is built, that query is the gate, run by hand.
 
-**The second-reader rule earned its keep today, three times.** Every one of
-those audits found defects sitting behind a green `make host-gate`, and in each
-case the reason was the one CLAUDE.md names: the fixtures were derived from the
-code.
+**Inline-comment count is not a proxy for "nothing found."** #295's review
+reported 0 inline comments and carried a real defect in the body as an *outside
+diff range* comment. Read the body.
 
-- **#305** — the join between "this was retracted" and "this is approved to
-  send" is byte-for-byte string equality. A trailing full stop, a curly
-  apostrophe, a doubled space, different casing, NFC vs NFD, or the polished
-  version of the sentence all let a withdrawn story reach an employer.
-  `_carries`, which normalises shingles for exactly this, sits three functions
-  above, unused. And the kind filter is `kind == "episode"` while
-  `add_conversation_entry` — the only production path that writes one — stamps
-  `kind="statement"`.
-- **#264** — the probe is byte-identical to the fixture, which is the defect T72
-  fixed, and `T72.json` had already recorded the package `healthy, probed: true`
-  on a comparison that could not fail. `ticjob_es` has the same identity
-  (pre-existing, filed as #311). Separately, `..` survives `quote(safe="")`, and
-  the divergence it creates is measured:
-  `Robots().allows(".../x/../jobs?q=python")` is `True` while the resolved
-  `/jobs?q=python` is `False`.
-- **#297** — the floors it introduced exit **3**, which `Makefile:58-70` maps to
-  `"unmeasured (recorded)"` and continues, while the record still claimed
-  `measured`. `make host-gate` was green over a board where 126 of 131 gates
-  were never read.
+## Quota, measured
 
-That last shape is now the first thing to check on any new gate. `naming._main`
-still has it (#309).
+**8 included reviews per hour**, Plan Team, profile CHILL — per hour, not per
+day. Every push queues a re-review. The rate-limit reply carries
+`next included review will be available in N minutes`; parse that rather than
+polling on a flat interval.
 
-## Filed today, unclaimed
+`tmp/` has no pump script — the one this session used lives in the scratchpad.
+Rewrite it from the shape above: request `@coderabbitai full review` on the
+highest-priority PR with no review on head, read `N` out of the refusal, sleep
+`N+1` minutes. Require a *numeric* review count before treating a PR as
+reviewed: `[ -z "$resp" ]` after a grep fires on API failure as well as absence,
+which is the exit-3 fail-open shape in a shell script. And **zsh does not
+word-split unquoted variables** — build the target directly, never
+`echo $pending | tr ' ' '\n' | head -1`.
 
-| # | What |
-|---|---|
-| #306 | D-25 — the substance sweep trusts the manifest, so a deleted line whose substance survives in a headline is invisible |
-| #308 | A merged task's plan row is never ticked and nothing notices |
-| #309 | `naming._main`'s floor exits 3, which `make evidence` records and continues |
-| #310 | **`urllib.robotparser` returns the first matching rule, not RFC 9309's longest match** — so on any robots.txt opening with `Allow: /` it answers True to everything and never refuses. `ruled-out.yaml`'s "two matchers must agree" silently degrades to one, fail-open, in the component that exists as the independent check |
-| #311 | `ticjob_es`'s probe is byte-identical to its fixture |
-| #293 | T105 — `connector_contract._as_date` has T99's two weaknesses |
-| #294 | Language parity |
-| #296 | Rename `status_is_asserted` — two cold readers misread it the same way |
-| #298–#302 | T89 deferred audit findings |
+## Open PRs
 
-Also seeded with a plan row: **T106** (`t-6b3ce41f`) — ship a cited `taxes/US.json`
-from IRS and SSA primary sources and give every tax figure a `citations` entry.
-`taxes/` ships only ES and DE, both `source: generated` with every figure
-asserted by one prose paragraph citing blogs. `probe_pay` refuses
-`source: verified` outright and **stays** refused: that label is a claim about a
-person, and T106 builds the layer underneath it, not a way past it.
+| PR | task | head | waiting on |
+|---|---|---|---|
+| #295 | T89 usajobs POST connector | `4286dec` | review on head |
+| #297 | T104 D12 staleness | `f561956` | CI, then review on head |
+| #305 | D-24 retraction (+ D-26 task file) | `4fa5e23` | review on head |
+| #307 | T98 corpus is a measurement set | `754797a` | review on head |
+| #312 | T92 salary recovery | `d1a2f0d` | review on head |
 
-## Candidate track
+**Merge #297 first.** T104 is what stops every other open PR going stale on
+`status/evidence/D12.json` and `S8.json` when anything merges. Measured three
+times in one hour this session: a commit touching no code forced a refresh on
+two PRs, and each refresh is a new head and another review out of the eight.
 
-Step 0 was run in this session — `.active.json` is bound to it and
-`run_checkpoint.py --id <handle>` exits 0. **The binding is per session**, so the
-next session must run step 0 again before it can read anything under
-`profiles/`; that is `read_active_handle`'s design, not a fault.
+## Patterns this session kept finding
 
-Two Spanish deliverables are drafted and **await owner review before anything
-goes out**. They are in the session scratchpad, not in this repository, and they
-must stay there. Three things the profile actually said, which changed both:
+- **Exit 3 fails open.** `Makefile:58-70` maps exit 3 to `unmeasured (recorded)`
+  and *continues*; only `*)` fails. A module returning 3 on a floor breach does
+  not fail `make evidence`. **Return 1.** Still open in `naming._main` (T115).
+- **Write-before-check** — `write_evidence` calling `record(measured)` before
+  validating floors.
+- **A denominator committed as an exact value** drifts on unrelated merges. Use
+  a floor (`*_at_least`). T55, T100, T104, and T111 is the next one.
+- **A metric named after one direction of a two-direction contract.** D-29's
+  gate measured only "merged tasks still listed" while twelve open tasks sat in
+  no milestone row. Widened to `milestone_row_membership_violations`.
+- **An exclusion with no counter.** D-26's gate excluded sent versions and
+  counted nothing, so a growing excluded set — or a version misclassified as
+  sent — would have been silence. Every exclusion gets its own reported key.
+- **Fixing a fail-open can open a fail-closed hole one layer out.** T92 round 1
+  made `Recovered.__post_init__` raise and `recover_all` did not catch, so one
+  bad estimator ended the batch.
+- **`status/plan.md` states things about the task graph that no gate reads.**
+  Four instances now: plan ticks (D-27, 47 of 123), milestone rows in both
+  directions (D-29, 82 of 89 merged-still-listed and 12 open-unlisted), and a
+  task file's `deps: []` contradicting its plan row.
 
-- The 7 pairwise choices price mission alignment and stack modernity at a
-  combined **€1,309/month** — more than the net gap between €50k and €75k gross.
-  A badly-fitting job has to pay roughly €25k/yr more just to break even, which
-  reframes the whole US-vs-EUR question the round was about.
-- **`salary.state` is `unknown`** — no floor, no target, ever given. That is the
-  one thing to ask for.
-- **79 of 105 saved adverts carry no salary**, and most of the 26 that do are in
-  złoty. That is T92's accusation, measured on real data.
+## Twelve open tasks are in no milestone row
 
-No dollar figures were shown: there is no `taxes/US.json`, and inventing one at
-run time is what T106 exists to replace.
+`T56, T57, T59, T69, T89, T91, T92, T94, T98, T102, T105, T106` — pre-existing,
+not from this session's seeding (those fifteen are placed). Deliberately not
+assigned: a milestone is a statement about build order and it was not this
+session's call to make twelve of them. Recorded in **D-29**'s row with the
+number, so the gate that lands there has a denominator to beat.
 
-## Worktrees
+## Queue
 
-`../ijs-manfred-conn` stays while #264 is open. The rest are
-`.claude/worktrees/agent-*`, each held by a running fix. `../ijs-json-conn` was
-removed when #260 merged.
+The fifteen issues filed this session are seeded (T107–T118, D-27, D-28, D-29).
+A bare `issue_import.py --apply` is **not enough**: `plan_v2.measure` requires
+the task title to start with a label and a matching row in `status/plan.md`, and
+without both `make test` goes red on `test_the_committed_plan_and_queue_agree`.
+Label the issue *and* its task file, then write the plan row.
+
+`t-d1a0cd63` and `t-e4047287` report "no issue handle" — both archived; noise,
+not a blocker.
+
+## Candidate deliverables
+
+Both Spanish reports are complete in the scratchpad and await owner review.
+Step-0 `.active.json` binding is **per-session** and must be re-run next
+session. Nothing goes out before the owner reads it.
