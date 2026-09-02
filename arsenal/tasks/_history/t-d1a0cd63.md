@@ -40,7 +40,7 @@ placeholder gate into a real one, so the moment any task PR merged, main's D12
 gained a row and **every other open PR's committed D12 was correct for its own
 branch and stale for its merge commit**:
 
-```
+```text
  status/evidence/D12.json | 4 ++--
 evidence: committed evidence does not match what the code measures now
 ```
