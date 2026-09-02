@@ -31,9 +31,9 @@ This is the third instance of one pattern: **`status/plan.md` states things abou
 **Acceptance gate**
 
 ```gate
-milestone_rows_listing_merged_tasks == 0
-evidence: status/evidence/T108.json
-key: milestone_rows_listing_merged_tasks
+milestone_row_membership_violations == 0
+evidence: status/evidence/D-29.json
+key: milestone_row_membership_violations
 ```
 
 Derive merged state from `arsenal/tasks/_history/*.md` (`status: merged`) and never from the plan's own ticks — a check that reads the document it is checking measures nothing. The denominator is the number of milestone-row labels evaluated, and `gate_status` must be `unmeasured` when the archive cannot be read or resolves no labels, rather than reporting the clean zero an empty scan produces. A **floor** on the labels scanned, in the `naming.MINIMUM_SCANNED` style, not a count of the day — the count moves on every task PR and would drift by construction (T100).

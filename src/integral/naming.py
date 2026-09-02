@@ -300,10 +300,21 @@ def write_archive_sensitivity_evidence(
     evidence: Path = DEFAULT_ARCHIVE_EVIDENCE_PATH,
     repo_root: Path = _REPO_ROOT,
 ) -> dict[str, Any]:
-    """Measure and record `status/evidence/T100.json`."""
+    """Measure and record `status/evidence/T100.json`.
+
+    Returns the whole reading; commits all of it but
+    `archived_for_the_comparison`. *Which* file `first_task_file` picks is the
+    sorted-first **live** task, so it changes the moment that task merges —
+    committing it made T100's own record go stale on somebody else's merge,
+    which is the defect T100 measures, in the file that measures it. The
+    caller still gets the name for its stderr message.
+    """
     measured = measure_archive_sensitivity(repo_root)
+    committed = {k: v for k, v in measured.items() if k != "archived_for_the_comparison"}
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    evidence.write_text(
+        json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return measured
 
 
@@ -381,9 +392,7 @@ def _main(argv: list[str]) -> int:
     # explicit `--repo <tree> <target>`, which is the one shape a test of a
     # repository with no live task file can take.
     if target is not None:
-        sensitivity = write_archive_sensitivity_evidence(
-            target.parent / "T100.json", repo_root
-        )
+        sensitivity = write_archive_sensitivity_evidence(target.parent / "T100.json", repo_root)
         for key in sensitivity["sensitive"]:
             print(
                 f"✗ `{key}` changes when {sensitivity['archived_for_the_comparison']} is "

@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from integral import plan_v2, repo_gate
 
 HEADER = "| T# | Description | Step | Size | Depends | Gate | Tests | St |"
@@ -267,6 +269,26 @@ def test_the_committed_plan_and_queue_agree() -> None:
     assert measured["plan_queue_task_drift"] == 0
 
 
+def test_the_row_counts_are_committed_as_a_floor(tmp_path: Path) -> None:
+    """T104's family. `plan_rows` and `queue_tasks` are denominators, and
+    seeding a task moves both — leaving every open PR's `S8.json` correct for
+    its branch and stale for its merge ref. The floor says what they were for
+    without moving; the live counts stay in what `main` checks."""
+    measured = plan_v2.measure()
+    target = tmp_path / "S8.json"
+    plan_v2.write_evidence(target)
+    committed = json.loads(target.read_text(encoding="utf-8"))
+
+    assert committed["plan_rows_at_least"] == plan_v2.MINIMUM_BOARD_SIZE
+    assert committed["queue_tasks_at_least"] == plan_v2.MINIMUM_BOARD_SIZE
+    assert "plan_rows" not in committed and "queue_tasks" not in committed
+    # The floor is a guard, not a decoration: it has to be under what the
+    # repository actually carries, and the live count has to be checked.
+    for name in ("plan_rows", "queue_tasks"):
+        count = measured[name]
+        assert isinstance(count, int) and count >= plan_v2.MINIMUM_BOARD_SIZE
+
+
 def test_a_plan_dependency_on_finished_work_is_not_drift(tmp_path: Path) -> None:
     """The board carries what a task is still waiting on; the plan's `Depends`
     column carries everything it ever waited on. Migrating to per-task files
@@ -478,3 +500,97 @@ def test_a_requirement_with_no_block_after_it_records_minus_one(tmp_path: Path) 
 
     assert measured["required_gates_with_no_enforcement_point"] == -1
     assert "names no `make` targets" in measured["unenforced"][0]
+
+
+# --- the floor, enforced ---------------------------------------------------
+#
+# `main` had no test at all until #297's second-reader audit, and the floor it
+# checks exited 3 — which `Makefile`'s evidence loop prints as "unmeasured
+# (recorded)" and walks past, while `record` writes `plan_rows_at_least: 100`
+# unconditionally. A two-row plan therefore committed a record claiming a
+# hundred rows, produced no drift, and passed. Same defect and same repair as
+# `task_gate._main`; these are the audit's two board sizes on S8's side.
+
+
+def _rows(count: int) -> str:
+    """A plan table of `count` agreeing rows, T1..T<count>."""
+    body = "".join(
+        f"| T{n} | Do it | 0 | S | — | `thing_violations == 0` "
+        f"| `test_thing` in `tests/t.py` | ☐ |\n"
+        for n in range(1, count + 1)
+    )
+    return f"## Implementation tasks\n\n{HEADER}\n{DIVIDER}\n{body}"
+
+
+def _measuring(monkeypatch: pytest.MonkeyPatch, plan: Path, queue: Path) -> None:
+    """Point `main` at `plan` and `queue`. The measuring itself stays real."""
+    real_measure = plan_v2.measure
+
+    def bound(_plan: Path = plan, _queue: Path = queue) -> dict[str, object]:
+        return real_measure(plan, queue)
+
+    monkeypatch.setattr(plan_v2, "measure", bound)
+
+
+def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rows: int) -> tuple[int, Path]:
+    plan = _plan(tmp_path, _rows(rows))
+    queue = _queue(tmp_path, *(f"T{n}: Do it" for n in range(1, rows + 1)))
+    _measuring(monkeypatch, plan, queue)
+    target = tmp_path / "S8.json"
+    return plan_v2.main([str(target)]), target
+
+
+def test_an_agreeing_plan_above_the_floor_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The control: the two failures below are the floor, not the harness."""
+    exit_code, target = _run(monkeypatch, tmp_path, 105)
+
+    assert exit_code == 0
+    assert json.loads(target.read_text(encoding="utf-8"))["plan_queue_task_drift"] == 0
+
+
+def test_a_sub_floor_plan_fails_instead_of_recording_a_floor_it_never_met(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Audit case 1, on S8: five rows against a floor of a hundred."""
+    exit_code, target = _run(monkeypatch, tmp_path, 5)
+
+    assert exit_code == 1
+    assert "only 5 plan_rows (floor 100)" in capsys.readouterr().err
+    # And it wrote nothing. `record` emits `plan_rows_at_least: 100`
+    # unconditionally, so the only artefact this run could produce is one
+    # asserting the floor it just failed.
+    assert not target.exists()
+
+
+def test_a_near_floor_plan_fails_too(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Audit case 2, on S8: ninety-two rows. [1, 99] was silent for every value."""
+    exit_code, target = _run(monkeypatch, tmp_path, 92)
+
+    assert exit_code == 1
+    assert "only 92 plan_rows (floor 100)" in capsys.readouterr().err
+    assert not target.exists()
+
+
+def test_a_sub_floor_run_leaves_an_existing_record_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ordering, where it costs something: the exit code is not the only
+    output of a failing run.
+
+    `write_evidence` wrote before `main` checked, so a five-row plan
+    overwrote the committed S8 record with one claiming a hundred rows — and
+    that overwritten file is what the *next* run over a healthy tree diffs
+    against in `make evidence`. Byte-identical, not merely still valid.
+    """
+    healthy = tmp_path / "S8.json"
+    healthy.write_text('{"kept": true}\n', encoding="utf-8")
+    before = healthy.read_bytes()
+
+    exit_code, _ = _run(monkeypatch, tmp_path, 5)
+
+    assert exit_code == 1
+    assert healthy.read_bytes() == before
