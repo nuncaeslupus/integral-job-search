@@ -57,10 +57,24 @@ def main(argv: list[str] | None = None) -> int:
         help="emit one JSON object per task with its DERIVED state, for a host check to consume",
     )
     parser.add_argument("--fail-on-problems", action="store_true")
+    parser.add_argument(
+        "--pending-merge",
+        action="store_true",
+        help="a branch, not the default: an archived task whose issue is still open is the "
+        "documented in-flight state, not drift",
+    )
     args = parser.parse_args(argv)
 
+    # "I did not ask GitHub" and "GitHub has no handle for this" are different
+    # answers, and reporting the first as the second makes the handle check
+    # unfailable-and-unpassable: every task reads `no issue handle` because the
+    # caller supplied no issue data to look in. That is what `make queue-doctor`
+    # does — it has no channel — so the first task file added to a board turned
+    # its dogfood into a build that could not go green. The check is skipped,
+    # visibly, when there is nothing to check it against.
     issues: list[dict[str, Any]] = []
-    if args.issues and args.issues.is_file():
+    handles_known = bool(args.issues and args.issues.is_file())
+    if handles_known:
         payload = json.loads(args.issues.read_text(encoding="utf-8"))
         if isinstance(payload, dict):
             payload = payload.get("issues", [])
@@ -77,9 +91,15 @@ def main(argv: list[str] | None = None) -> int:
     issue_state = state_from_issues(issues, titles=titles, warnings=warnings)
     state = effective_state(tasks, issue_state)
     handled = {t for i in issues if (t := task_id_from_issue(i, titles=titles))}
+    if tasks and not handles_known:
+        print(
+            "query_status: no --issues file — issue handles and issue state not checked",
+            file=sys.stderr,
+        )
 
     counts = {"open": 0, "claimed": 0, "done": 0, "cancelled": 0, "blocked": 0}
     problems: list[str] = []
+    notes: list[str] = []
     known_ids = {t["id"] for t in tasks}
     for task in tasks:
         current = state.get(task["id"], "open")
@@ -94,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if not task["gate"]:
             problems.append(f"{task['id']}: no fenced gate block — nothing would be checked")
-        if task["id"] not in handled:
+        if handles_known and task["id"] not in handled:
             problems.append(f"{task['id']}: no issue handle — not claimable until one exists")
         for dep in task["deps"]:
             if dep not in known_ids:
@@ -110,10 +130,23 @@ def main(argv: list[str] | None = None) -> int:
         number = issue_number_for(task["id"], issues, titles=titles)
         where = f"#{number}" if number else "its issue"
         if task.get("status") in TERMINAL and actual in {"open", "claimed"}:
-            problems.append(
-                f"{task['id']}: archived as {task['status']} but {where} is still {actual} — "
-                "the PR merged without closing it; close it as completed"
-            )
+            # `open_task_pr.sh` archives the task file in the SAME diff that
+            # closes its issue, so between opening a PR and merging it, every
+            # task that PR finishes reads archived-with-an-open-issue. On a
+            # branch that is the protocol working; only on the default branch
+            # does it mean a merge did half its job. Without the distinction
+            # the documented workflow cannot produce a green PR — the same
+            # shape as reporting a missing handle nobody looked for.
+            if args.pending_merge:
+                notes.append(
+                    f"{task['id']}: archived as {task['status']}, {where} still {actual} — "
+                    "expected until this branch merges"
+                )
+            else:
+                problems.append(
+                    f"{task['id']}: archived as {task['status']} but {where} is still {actual} — "
+                    "the PR merged without closing it; close it as completed"
+                )
         elif task.get("status") not in TERMINAL and actual == "done":
             problems.append(
                 f"{task['id']}: {where} is closed as completed but the task file is still live "
@@ -152,6 +185,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"query_status: {problem}", file=sys.stderr)
         return 1 if (problems and args.fail_on_problems) else 0
 
+    for note in notes:
+        print(f"query_status: {note}", file=sys.stderr)
     print(
         f"tasks: {len(tasks)} — "
         + ", ".join(f"{k} {v}" for k, v in counts.items() if v or k in {"open", "claimed", "done"})
@@ -166,7 +201,9 @@ def main(argv: list[str] | None = None) -> int:
                 marks.append("blocked-by " + ",".join(blockers))
             if not task["gate"]:
                 marks.append("no-gate")
-            if task["id"] not in handled:
+            if not handles_known:
+                marks.append("handle?")
+            elif task["id"] not in handled:
                 marks.append("no-handle")
             suffix = f"  [{'; '.join(marks)}]" if marks else ""
             print(f"  {task['id']}  p{task['priority']:<3} {current:<9} {task['title']}{suffix}")

@@ -7,7 +7,9 @@ import os
 import re
 import shutil
 import sys
+import tomllib
 from pathlib import Path
+from typing import Any
 
 CLAUDE_MD_MARKER = "<!-- claude-arsenal: auto-managed -->"
 CLAUDE_MD_END_MARKER = "<!-- /claude-arsenal: auto-managed -->"
@@ -75,6 +77,25 @@ merge-policy = "after-ci"
 #   host-gate = "make lint test evidence"
 host-gate = ""
 
+# Shell command that installs this repo's dependencies, run once in a fresh
+# worktree before the first gate (claude-arsenal/bin/host_setup.sh). Empty = no
+# setup step. A worktree is a checkout: it carries tracked files and none of
+# what an install produces, so without this the first gate a worker runs fails
+# on a missing tool and every worker works that out for itself.
+#   host-setup = "npm ci && uv sync"
+host-setup = ""
+
+# How hard the pre-PR adversarial review binds when a TASK PR is opened — a
+# reviewer with no history of the change reads it first
+# (claude-arsenal/bin/adversarial_review.sh). The gates above prove the repo
+# still works; only this one can tell whether the change is the change that was
+# asked for. Read by open_task_pr.sh only: the execution, github and ship skills
+# run the same gate as a step of their own workflow and do not consult this.
+#   warn      Open the task PR either way, and state the outcome in its body.
+#   required  No clearing verdict for this exact tree, no task PR.
+#   off       Do not check, write nothing in the body.
+pre-pr-review = "warn"
+
 # test-first writes a failing test before the change; test-after writes tests
 # alongside it.
 test-discipline = "test-first"
@@ -86,6 +107,24 @@ session-end = "handoff"
 # surface's real budget differs, rather than deleting skills to fit a number
 # that is not yours.
 listing-budget = 8000
+
+# Which skill sections this repo installs. Written by `/init` from the profile
+# you picked ("what kind of project is this?"), as a [skills] table below.
+#
+# Every installed skill costs a row in the resident skills listing of every
+# session, forever, whether or not it ever triggers — so a repo that never
+# touches Python should not be carrying five Python skills. Flip a value and
+# the next `/init` (which the session protocol runs anyway) adds or prunes the
+# skills for that section.
+#
+#   workflow  specify, design, execution, review, ship, gate-check
+#   python    python-bootstrap, pypi-release, coverage-gaps, dep-upgrade,
+#             mutmut-report
+#
+# The core section — init, continue, queue-add, queue-status, github,
+# session-end — is always installed and is not listed: the vendored session
+# protocol names those skills directly, so switching one off would break every
+# session rather than save anything worth saving.
 
 # Which model runs what. An alias Claude Code resolves (opus | sonnet | haiku)
 # or a full model id.
@@ -104,9 +143,13 @@ orchestrator = ""
 workers = "sonnet"
 """
 
+# Permissive on purpose: until the probe runs, every `surface:` task stays
+# eligible. `access:` capabilities are deliberately absent — they gate work a
+# session may genuinely be unable to do, so they are granted by the probe or by
+# naming one at /continue, never by a default nobody chose.
 DEFAULT_SURFACE_PROFILE = {
     "surface": "unknown",
-    "capabilities": ["surface:cli", "surface:web"],
+    "capabilities": ["surface:cli", "surface:web", "surface:cloud"],
 }
 
 WORKSPACE_SPEC_STUB = """\
@@ -281,6 +324,37 @@ def _parse_version(text: str) -> tuple[int, ...] | None:
         return None
 
 
+_CHANGELOG_HEADING = re.compile(r"(?m)^## \[(\d+\.\d+\.\d+)\][^\n]*\n")
+
+
+def _changelog_since(bundle: Path, installed_ver: str, bundle_ver: str) -> str:
+    """Bundle CHANGELOG.md entries newer than installed_ver, up to bundle_ver.
+
+    "" when there is no changelog yet, no entry falls in that range, or either
+    version fails to parse — this is an enhancement to the upgrade banner below,
+    never a reason to withhold it, so every failure here is silent, not fatal.
+    """
+    changelog = bundle / "CHANGELOG.md"
+    if not changelog.is_file():
+        return ""
+    since, upto = _parse_version(installed_ver), _parse_version(bundle_ver)
+    if since is None or upto is None:
+        return ""
+    try:
+        text = changelog.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ""
+    parts = _CHANGELOG_HEADING.split(text)
+    entries: list[tuple[tuple[int, ...], str, str]] = []
+    for i in range(1, len(parts), 2):
+        version = _parse_version(parts[i])
+        body = parts[i + 1].strip() if i + 1 < len(parts) else ""
+        if version is not None and since < version <= upto and body:
+            entries.append((version, parts[i], body))
+    entries.sort(reverse=True)
+    return "\n\n".join(f"## {ver}\n{body}" for _, ver, body in entries)
+
+
 def _check_bundle_version(bundle: Path, arsenal: Path) -> tuple[str, str] | None:
     """Print an upgrade banner; REPORT a downgrade instead of performing one.
 
@@ -306,6 +380,9 @@ def _check_bundle_version(bundle: Path, arsenal: Path) -> tuple[str, str] | None
     print(
         f"Upgrading claude-arsenal bundle: {installed_ver} → {bundle_ver}"
     )
+    changelog = _changelog_since(bundle, installed_ver, bundle_ver)
+    if changelog:
+        print(f"\nWhat's new:\n\n{changelog}\n")
     return None
 
 
@@ -379,8 +456,377 @@ def _source_skills_dir() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def _vendor_skills(repo_path: Path, silent: bool = False) -> None:
+# ---------------------------------------------------------------------------
+# Sections — which skills a repo actually installs.
+#
+# Every vendored skill costs the same two things in every session forever: a
+# `name` + `description` row in the resident skills listing, and a share of the
+# 8000-char listing budget the auditor enforces. A repo that never touches
+# Python paid for five Python skills anyway, because vendoring was all-or-
+# nothing. Sections make that a choice.
+#
+# A section is declared per skill in SKILL.md frontmatter (`section:`, under
+# `metadata:` by convention). A skill that names none is `core`.
+#
+#   core      the bundle itself — the installer, the queue engine, and the two
+#             skills the vendored AGENTS.md protocol names by hand. Never
+#             toggleable: switching these off breaks the protocol every session
+#             loads, so they are not offered as a choice that could be got
+#             wrong.
+#   workflow  the spec -> design -> execute -> review -> ship discipline.
+#   python    the Python toolchain skills.
+#
+# Defaults are for a FRESH install only. An upgrade never applies them — see
+# _resolve_sections for why that distinction is the whole safety story.
+_CORE_SECTION = "core"
+
+_SECTION_DEFAULTS: dict[str, bool] = {
+    "workflow": True,
+    "python": False,
+}
+
+# Named answers to "what kind of project is this?" — the question `/init` asks
+# before a first install. A profile is only ever a starting point: it is
+# written out as an explicit [skills] table the consumer can edit afterwards,
+# so nobody has to remember what "general" meant six months later.
+_PROFILES: dict[str, tuple[str, ...]] = {
+    "minimal": (),
+    "general": ("workflow",),
+    "python": ("workflow", "python"),
+    "all": tuple(_SECTION_DEFAULTS),
+}
+
+_FRONTMATTER_SECTION = re.compile(r"^\s*section:\s*[\"']?([A-Za-z0-9_-]+)", re.MULTILINE)
+
+
+def _known_sections() -> set[str]:
+    """Every section a consumer may ask for: the registered ones plus any shipped.
+
+    Read from the shipped skills rather than from `_SECTION_DEFAULTS` alone so
+    that adding a section to a SKILL.md is enough to make it requestable. A
+    shipped section with no entry in `_SECTION_DEFAULTS` is simply off by
+    default — opt-in, which is the right default for anything new.
+    """
+    try:
+        shipped = {
+            _skill_section(d)
+            for d in _source_skills_dir().iterdir()
+            if (d / "SKILL.md").is_file()
+        }
+    except OSError:
+        shipped = set()
+    return (set(_SECTION_DEFAULTS) | shipped) - {_CORE_SECTION}
+
+
+def _skill_section(skill_dir: Path) -> str:
+    """The section a skill declares in its frontmatter, or `core` if it names none.
+
+    Only the frontmatter block is searched, so the word `section:` in body prose
+    cannot silently re-file a skill. An unreadable or malformed SKILL.md falls
+    back to `core` — a skill we cannot classify is one we keep installing,
+    because the failure mode of the other choice is silently dropping it.
+    """
+    try:
+        text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return _CORE_SECTION
+    if not text.startswith("---"):
+        return _CORE_SECTION
+    end = text.find("\n---", 3)
+    if end == -1:
+        return _CORE_SECTION
+    match = _FRONTMATTER_SECTION.search(text[3:end])
+    return match.group(1) if match else _CORE_SECTION
+
+
+# The shipped capability map. A vendored init.py's `_source_skills_dir()` is the
+# consumer's own `.claude/skills/`, already pruned to the sections that repo
+# installed — so it can enumerate the skills a repo HAS and not the ones it does
+# not, which is exactly the question a map exists to answer. The manifest is
+# written in the marketplace, where every skill is visible, and travels with the
+# skill; `scripts/sync_sections.py` generates it and CI fails on drift.
+_SECTIONS_MANIFEST = Path(__file__).resolve().parent.parent / "assets" / "sections.json"
+
+
+def _load_manifest() -> dict[str, Any] | None:
+    """The shipped section manifest, or None when this bundle predates it."""
+    try:
+        data = json.loads(_SECTIONS_MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) and isinstance(data.get("sections"), list) else None
+
+
+def _manifest_from_disk() -> dict[str, Any]:
+    """A manifest shaped like the shipped one, built from whatever is on disk.
+
+    The degraded path for a consumer whose bundle predates `sections.json`. It
+    can only see installed skills, so the caller says so rather than printing a
+    partial map as though it were the whole one.
+    """
+    by_section: dict[str, list[dict[str, str]]] = {}
+    try:
+        skills = sorted(d for d in _source_skills_dir().iterdir() if (d / "SKILL.md").is_file())
+    except OSError:
+        skills = []
+    for skill_dir in skills:
+        by_section.setdefault(_skill_section(skill_dir), []).append(
+            {"name": skill_dir.name, "description": ""}
+        )
+    return {
+        "sections": [
+            {
+                "name": name,
+                "default": name == _CORE_SECTION or _SECTION_DEFAULTS.get(name, False),
+                "core": name == _CORE_SECTION,
+                "blurb": "",
+                "skills": by_section[name],
+            }
+            for name in sorted(by_section, key=lambda s: (s != _CORE_SECTION, s))
+        ]
+    }
+
+
+def _installed_skills(repo_path: Path) -> set[str] | None:
+    """Skill names present in the host's `.claude/skills/`, or None if there is none.
+
+    Ground truth for the map's on/off column: a section is on here if a skill of
+    it is actually loadable, which is what a session cares about and what stays
+    right when `arsenal/config.toml` has been edited but no install has run yet.
+    """
+    dest = repo_path / ".claude" / "skills"
+    try:
+        return {d.name for d in dest.iterdir() if (d / "SKILL.md").is_file()}
+    except OSError:
+        return None
+
+
+def _section_is_on(section: dict[str, Any], installed: set[str] | None, config: Path) -> bool:
+    """Whether this repo has the section, read from disk and falling back to config."""
+    if section.get("core"):
+        return True
+    names = {s["name"] for s in section.get("skills", [])}
+    if installed is not None and names:
+        return bool(names & installed)
+    recorded = _read_sections_table(config)
+    if recorded is not None:
+        return bool(recorded.get(section["name"], section.get("default", False)))
+    return bool(section.get("default", False))
+
+
+def list_sections(repo_path: Path, only: str | None = None) -> int:
+    """Print the capability map: every section this bundle ships, and what is on here.
+
+    Writes nothing — no config, no vendoring, no bundle refresh. The session-start
+    protocol runs this unattended on every session, and a discovery command with a
+    side effect is a discovery command nobody dares run.
+
+    Skills are named for sections that are OFF and not for ones that are ON,
+    which is the whole budget of this output: an installed skill already carries
+    its name and full description in the resident skills listing, so naming it
+    again pays twice for one fact, while an uninstalled one appears nowhere else
+    at all.
+    """
+    manifest = _load_manifest()
+    degraded = manifest is None
+    if manifest is None:
+        manifest = _manifest_from_disk()
+
+    sections: list[dict[str, Any]] = manifest["sections"]
+    if only is not None:
+        sections = [s for s in sections if s["name"] == only]
+        if not sections:
+            known = ", ".join(s["name"] for s in manifest["sections"])
+            print(f"init: no section named {only!r}. Known: {known}", file=sys.stderr)
+            return 2
+
+    installed = _installed_skills(repo_path)
+    config = _home(repo_path) / "config.toml"
+    on = {s["name"] for s in sections if _section_is_on(s, installed, config)}
+
+    if only is not None:
+        section = sections[0]
+        state = "installed here" if section["name"] in on else "NOT installed here"
+        print(f"{section['name']} — {section['blurb'] or 'no description'} [{state}]")
+        for skill in section["skills"]:
+            print(f"  {skill['name']}")
+            if skill["description"]:
+                print(f"    {skill['description']}")
+        return 0
+
+    width = max((len(s["name"]) for s in sections), default=4)
+    print(f"skill sections — {len(on)} of {len(sections)} installed here")
+    for section in sections:
+        is_on = section["name"] in on
+        detail = section["blurb"] or "no description"
+        if not is_on and section["skills"]:
+            detail += " (" + ", ".join(s["name"] for s in section["skills"]) + ")"
+        print(f"  {section['name']:<{width}}  {'on ' if is_on else 'off'}  {detail}")
+    if degraded:
+        print(
+            "  (installed sections only — this bundle predates the shipped map; "
+            "run claude-arsenal/bin/check_update.sh)"
+        )
+    else:
+        print(
+            "  off sections: `init.py --sections a,b` or edit [skills] in arsenal/config.toml; "
+            "`--section NAME` for detail"
+        )
+    return 0
+
+
+def _read_sections_table(config: Path) -> dict[str, bool] | None:
+    """The `[skills]` table from arsenal/config.toml, or None if it has none.
+
+    None and an empty table are different answers and the caller depends on it:
+    None means "this repo has never been asked", which is what triggers the
+    upgrade-preserving path. An empty `[skills]` table means "asked, and the
+    answer was core only".
+    """
+    if not config.is_file():
+        return None
+    try:
+        raw = tomllib.loads(config.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as exc:
+        sys.exit(f"init: cannot read {config}: {exc}")
+    except tomllib.TOMLDecodeError as exc:
+        sys.exit(f"init: {config} is not valid TOML — {exc}")
+
+    table = raw.get("skills")
+    if table is None:
+        return None
+    if not isinstance(table, dict):
+        sys.exit(f"init: {config}: [skills] must be a table of section = true/false")
+
+    # A non-boolean is a typo, and the cost of guessing is pruning skills a repo
+    # is using. `workflow = "treu"` used to read as false and silently delete
+    # six skills; it now stops the install and says which line to fix.
+    for name, value in table.items():
+        if not isinstance(value, bool):
+            sys.exit(
+                f"init: {config}: [skills] {name} = {value!r} is not true or false"
+            )
+    # Unknown names are NOT fatal, deliberately: a repo that has run a newer
+    # bundle carries sections this one has never heard of, and downgrading
+    # should not be an error. They are ignored here, and a name absent from the
+    # table falls back to its shipped default rather than to off (see
+    # _resolve_sections) — so a misspelled key fails toward keeping skills.
+    return dict(table)
+
+
+def _write_sections_table(config: Path, enabled: set[str], known: list[str]) -> None:
+    """Record the resolved sections as a `[skills]` table, replacing any existing one.
+
+    Written out in full — every known section, `true` or `false` — rather than
+    only the enabled ones. A consumer opting a section back in should find the
+    line already there to flip, not have to know the name of something that was
+    never mentioned.
+    """
+    header = "\n".join(
+        ["[skills]"] + [f"{name} = {str(name in enabled).lower()}" for name in known]
+    )
+    text = config.read_text(encoding="utf-8") if config.is_file() else ""
+    existing = re.search(r"^\[skills\]\s*$", text, re.MULTILINE)
+    if existing:
+        rest = text[existing.end():]
+        nxt = re.search(r"^\[", rest, re.MULTILINE)
+        tail = rest[nxt.start():] if nxt else ""
+        text = text[: existing.start()] + header + "\n" + ("\n" + tail if tail else "")
+    else:
+        text = (text.rstrip("\n") + "\n\n" if text.strip() else "") + header + "\n"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(text, encoding="utf-8")
+
+
+def _resolve_sections(
+    config: Path,
+    dest: Path,
+    by_section: dict[str, set[str]],
+    profile: str | None,
+    sections: list[str] | None,
+) -> set[str]:
+    """Decide which sections this repo installs, and record the decision.
+
+    The decision is recorded in `arsenal/config.toml` rather than inferred each
+    run, for the same reason `queue-automation` is: the session-start protocol
+    runs `init.py --silent` every session, so anything re-derived from the state
+    of the checkout gets re-derived after the consumer changes that state, and
+    quietly undoes them.
+
+    Four cases:
+
+      * `--sections` / `--profile` given — an explicit answer. Use it and record
+        it, overwriting any previous one. This is what `/init` passes after
+        asking what kind of project this is.
+      * a `[skills]` table exists — the repo has already answered. Honour it
+        exactly, including sections it sets to false.
+      * no table, and skills are already vendored — an UPGRADE. Enable every
+        section that has a skill on disk right now and record that. This is the
+        case that must never apply a default: `python` ships default-off, so
+        defaulting here would delete five skills out of a repo that has been
+        using them, on a routine `--silent` upgrade nobody was watching.
+      * no table, nothing vendored — a FRESH install. Apply the shipped
+        defaults and record them.
+    """
+    known = sorted(_known_sections() | (set(by_section) - {_CORE_SECTION}))
+
+    # An explicit list wins outright — `--sections ""` means core only, which
+    # is a different answer from "nothing was passed" and must not fall through
+    # to the recorded table or the defaults.
+    if sections is not None:
+        chosen = set(sections)
+    elif profile:
+        chosen = set(known) if profile == "all" else set(_PROFILES[profile])
+    else:
+        recorded = _read_sections_table(config)
+        if recorded is not None:
+            return {_CORE_SECTION} | {
+                name
+                for name in known
+                if recorded.get(name, _SECTION_DEFAULTS.get(name, False))
+            }
+        # Asked of the *bundle*, by name, not of the installed files by their
+        # metadata. `_skill_section` falls back to `core` for a SKILL.md it
+        # cannot classify — right for its own case, inverted here: a bundle
+        # installed before `section:` existed carries the line in no skill at
+        # all, so every directory classified as `core`, `vendored` came out as
+        # `{"core"}`, and the subtraction below emptied it *after* the truth
+        # test that was supposed to catch "we found nothing". The recorded
+        # answer was then no sections, and the prune loop rmtree-d the
+        # consumer's workflow and python skills on a run they invoked to
+        # upgrade them. Names are stable across every version that ever
+        # shipped, and `by_section` is keyed on them.
+        vendored_names = {
+            d.name
+            for d in dest.iterdir()
+            if d.is_dir() and (d / _VENDOR_MARKER).is_file()
+        } if dest.is_dir() else set()
+        vendored = {
+            section for section, names in by_section.items() if names & vendored_names
+        }
+        chosen = (
+            vendored - {_CORE_SECTION}
+            if vendored
+            else {name for name, on in _SECTION_DEFAULTS.items() if on}
+        )
+
+    chosen &= set(known)
+    _write_sections_table(config, chosen, known)
+    return {_CORE_SECTION} | chosen
+
+
+def _vendor_skills(
+    repo_path: Path,
+    silent: bool = False,
+    profile: str | None = None,
+    sections: list[str] | None = None,
+) -> None:
     """Copy the sibling skills into .claude/skills/ so every surface can load them.
+
+    Only the sections this repo installs are copied (see _resolve_sections);
+    a skill whose section is off is pruned, so switching one off in
+    `arsenal/config.toml` takes effect on the next session rather than needing a
+    manual delete that the next upgrade would undo anyway.
 
     Only folders carrying the marker are ever replaced or removed — a skill the
     consumer authored is not ours to touch. Vendoring into itself (running from
@@ -391,7 +837,15 @@ def _vendor_skills(repo_path: Path, silent: bool = False) -> None:
     if source.resolve() == dest.resolve():
         return  # running from the vendored copy; nothing to copy in
 
-    available = {d.name for d in source.iterdir() if (d / "SKILL.md").is_file()}
+    shipped = {d.name: _skill_section(d) for d in source.iterdir() if (d / "SKILL.md").is_file()}
+    by_section: dict[str, set[str]] = {}
+    for name, section in shipped.items():
+        by_section.setdefault(section, set()).add(name)
+
+    enabled = _resolve_sections(
+        _home(repo_path) / "config.toml", dest, by_section, profile, sections
+    )
+    available = {name for name, section in shipped.items() if section in enabled}
     dest.mkdir(parents=True, exist_ok=True)
 
     for name in sorted(available):
@@ -404,7 +858,8 @@ def _vendor_skills(repo_path: Path, silent: bool = False) -> None:
         shutil.copytree(source / name, target)
         (target / _VENDOR_MARKER).write_text("", encoding="utf-8")
 
-    # Prune skills a previous version vendored that this one no longer ships.
+    # Prune skills a previous version vendored that this one no longer ships,
+    # and skills whose section this repo has switched off.
     removed = []
     # Materialised first: iterdir() walks a live scandir, and rmtree inside the
     # loop can make it skip the entry that follows a deleted one.
@@ -414,9 +869,15 @@ def _vendor_skills(repo_path: Path, silent: bool = False) -> None:
             removed.append(d.name)
 
     if not silent or removed:
-        print(f"  skills: vendored {len(available)} into .claude/skills/")
+        # Every shipped section, not only the ones with a `_SECTION_DEFAULTS`
+        # entry. A section that ships without one is off by default — opt-in —
+        # and opt-in is what "new" looks like, so those are exactly the ones a
+        # consumer is most likely to be missing and least likely to know about.
+        off = sorted((set(_SECTION_DEFAULTS) | set(by_section)) - enabled - {_CORE_SECTION})
+        suffix = f" (sections off: {', '.join(off)})" if off else ""
+        print(f"  skills: vendored {len(available)} into .claude/skills/{suffix}")
     for name in removed:
-        print(f"  skills: pruned {name} (no longer shipped)")
+        print(f"  skills: pruned {name} (not shipped, or its section is off)")
 
 
 def _register_gate_hook(repo_path: Path) -> None:
@@ -595,7 +1056,11 @@ def _home(repo_path: Path) -> Path:
     The consumer edits a file nothing reads and every setting silently stays at
     its default.
     """
-    home = repo_path / os.environ.get("ARSENAL_HOME", "arsenal")
+    # `.strip() or "arsenal"`, not a bare default: `os.environ.get` returns the
+    # empty string for a variable that is exported and unset, and `repo_path /
+    # ""` is the repo root — so every host-owned file would be scaffolded
+    # straight into the top of the consumer's tree.
+    home = repo_path / (os.environ.get("ARSENAL_HOME", "").strip() or "arsenal")
     # It has to land inside the repo. A task is a file in the repository —
     # versioned, and committed by the PR that opens it — so a tree outside it
     # can never reach the board, and `${ARSENAL_HOME}/tasks` as an absolute
@@ -783,6 +1248,8 @@ def init_base(
     bundle_override: Path | None = None,
     silent: bool = False,
     allow_downgrade: bool = False,
+    skills_profile: str | None = None,
+    sections: list[str] | None = None,
 ) -> bool:
     """True when the install ran; False when it refused to downgrade (nothing written)."""
     bundle = _bundle_dir(bundle_override)
@@ -886,7 +1353,7 @@ def init_base(
 
     # Vendor the skills and wire the gate — the only path that reaches a cloud
     # session — then retire a plugin declaration an older init may have written.
-    _vendor_skills(repo_path, silent=silent)
+    _vendor_skills(repo_path, silent=silent, profile=skills_profile, sections=sections)
     _register_gate_hook(repo_path)
     _retire_plugin_declaration(repo_path)
 
@@ -910,6 +1377,8 @@ def init_workspace(
     plan: str,
     bundle_override: Path | None = None,
     allow_downgrade: bool = False,
+    skills_profile: str | None = None,
+    sections: list[str] | None = None,
 ) -> None:
     # The workspace name becomes a directory under arsenal/project/ — host-owned,
     # so a bundle upgrade never touches a workspace's spec, plan, or context.
@@ -926,8 +1395,21 @@ def init_workspace(
 
     # Ensure base exists first. A refusal there wrote nothing, so registering a
     # workspace on top would report one ready over an uninitialized bundle.
-    if not (arsenal / "bin").is_dir() and not init_base(
-        repo_path, bundle_override, allow_downgrade=allow_downgrade
+    #
+    # Also run it — on an install that already exists — when the caller named a
+    # profile or a section list, because that is the only place either takes
+    # effect. Accepting `--sections extract` and installing the defaults is the
+    # expensive direction of silent: the caller believes the section is on, and
+    # finds out when a skill they asked for is not there. `init_base` is
+    # idempotent by construction (the session-start protocol runs it every
+    # session), so the extra call on an existing install is a refresh.
+    wants_sections = skills_profile is not None or sections is not None
+    if (not (arsenal / "bin").is_dir() or wants_sections) and not init_base(
+        repo_path,
+        bundle_override,
+        allow_downgrade=allow_downgrade,
+        skills_profile=skills_profile,
+        sections=sections,
     ):
         sys.exit("init: workspace not registered — the bundle refused to install (see above)")
 
@@ -953,7 +1435,28 @@ def init_workspace(
     print(f"\ninit: workspace {workspace!r} ready at {ws_dir.relative_to(repo_path)}")
 
 
+def _parse_sections(raw: str | None) -> list[str] | None:
+    """`--sections a,b` -> ["a", "b"]. An unknown name is fatal, not ignored.
+
+    A typo'd section is a request for skills that will not be installed, and
+    silently installing fewer skills than someone asked for is the kind of
+    failure nobody notices until a skill they expected does not trigger.
+    """
+    if raw is None:
+        return None
+    known = _known_sections()
+    names = [part.strip() for part in raw.split(",") if part.strip()]
+    unknown = sorted(set(names) - known - {_CORE_SECTION})
+    if unknown:
+        sys.exit(
+            f"init: unknown section(s) {', '.join(unknown)} — "
+            f"known sections are {', '.join(sorted(known))}"
+        )
+    return names
+
+
 def main() -> None:
+    """Parse the CLI and run either a base install or a workspace registration."""
     p = argparse.ArgumentParser(description="Bootstrap or update claude-arsenal/ in a host repo.")
     p.add_argument("--repo-path", default=".", help="Path to the host repository root.")
     p.add_argument("--workspace", metavar="NAME", help="Register a workspace.")
@@ -962,7 +1465,38 @@ def main() -> None:
     p.add_argument("--plan", default=None, help="Plan file path override.")
     p.add_argument("--bundle-dir", help="Override path to plugin bundle/ (for testing).")
     p.add_argument(
-        "--silent", action="store_true",
+        "--profile",
+        choices=sorted(_PROFILES),
+        help="What kind of project this is, as a starting set of skill sections: "
+        + "; ".join(
+            f"{name} = core"
+            + ("".join(f" + {s}" for s in secs) if secs else " only")
+            for name, secs in sorted(_PROFILES.items())
+        )
+        + ". Recorded as an editable [skills] table in arsenal/config.toml.",
+    )
+    p.add_argument(
+        "--sections",
+        metavar="A,B",
+        help="Install exactly these skill sections (comma-separated), on top of core. "
+        f"Known: {', '.join(sorted(_known_sections()))}. Overrides --profile.",
+    )
+    p.add_argument(
+        "--list-sections",
+        action="store_true",
+        help="Print the capability map — every skill section this bundle ships, whether it is "
+        "installed here, and the skills of the ones that are not. Writes nothing.",
+    )
+    p.add_argument(
+        "--section",
+        metavar="NAME",
+        help="Detail for one section: every skill it contains, with its description. "
+        "Answers whether an uninstalled skill actually fits before recommending it.",
+    )
+    # `--quiet` is the canon's spelling; `--silent` shipped first and keeps
+    # working, so no consumer's existing invocation breaks.
+    p.add_argument(
+        "--quiet", "--silent", action="store_true", dest="silent",
         help="Suppress 'up to date' lines; only print refreshed files and version banner.",
     )
     p.add_argument(
@@ -974,6 +1508,11 @@ def main() -> None:
     repo_path = Path(args.repo_path).resolve()
     bundle_override = Path(args.bundle_dir) if args.bundle_dir else None
 
+    # Read-only, and answered before anything else: this is what the session-start
+    # protocol runs, and it must never be a path into an install.
+    if args.list_sections or args.section:
+        raise SystemExit(list_sections(repo_path, only=args.section))
+
     if args.workspace:
         name = args.workspace
         root = args.root or f"./{name}/"
@@ -983,10 +1522,13 @@ def main() -> None:
         spec = args.spec or f"{ws_rel}/spec.md"
         plan = args.plan or f"{ws_rel}/plan.md"
         init_workspace(repo_path, name, root, spec, plan, bundle_override,
-                       allow_downgrade=args.allow_downgrade)
+                       allow_downgrade=args.allow_downgrade,
+                       skills_profile=args.profile,
+                       sections=_parse_sections(args.sections))
     else:
         init_base(repo_path, bundle_override, silent=args.silent,
-                  allow_downgrade=args.allow_downgrade)
+                  allow_downgrade=args.allow_downgrade, skills_profile=args.profile,
+                  sections=_parse_sections(args.sections))
 
 
 if __name__ == "__main__":

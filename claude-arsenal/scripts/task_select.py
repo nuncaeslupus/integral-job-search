@@ -184,7 +184,22 @@ HISTORY_DIRNAME = "_history"
 
 # Where worktree_probe.sh and worker_postcheck.sh record whether git worktrees
 # actually work on this surface.
-ISOLATION_SENTINEL = Path("arsenal/session/worktree_isolation")
+def _session_dir() -> Path:
+    """The session-state directory, resolved the way every writer resolves it.
+
+    `worktree_probe.sh` and `worker_postcheck.sh` honour ARSENAL_SESSION_DIR and
+    ARSENAL_HOME; this path was hardcoded. With a relocated host tree the probe
+    wrote `unavailable` to one file while the selector read a stale `available`
+    from another — and `available` is what permits ramping to N workers, so the
+    disagreement dispatched parallel workers into a single checkout.
+    """
+    session = os.environ.get("ARSENAL_SESSION_DIR", "").strip()
+    if session:
+        return Path(session)
+    return Path(os.environ.get("ARSENAL_HOME", "").strip() or "arsenal") / "session"
+
+
+ISOLATION_SENTINEL = _session_dir() / "worktree_isolation"
 
 
 def isolation_verdict(sentinel: Path) -> str:
@@ -218,6 +233,15 @@ def state_from_issues(
     not release work that was never actually done, and a label is the only
     signal every surface can see. `state_reason` is honoured when present.
     """
+    # A task can carry more than one handle — a duplicate created against a
+    # stale fetch, or a board re-seeded — and last-write-wins made the answer
+    # depend on the order GitHub happened to return them. `issue_number_for`
+    # already resolves that by preferring an OPEN handle; this has to agree, or
+    # the two disagree about the same board. A live issue therefore outranks a
+    # terminal one, and among terminal ones `cancelled` outranks `done`: both
+    # directions err toward "not finished", which keeps work visible rather
+    # than handing out a task twice.
+    precedence = {"claimed": 3, "open": 2, "cancelled": 1, "done": 0}
     state: dict[str, str] = {}
     resolved = 0
     for issue in issues:
@@ -229,6 +253,7 @@ def state_from_issues(
             label["name"] if isinstance(label, dict) else str(label)
             for label in (issue.get("labels") or [])
         }
+        derived: str
         if str(issue.get("state", "")).lower() == "closed":
             # `state_reason` is the precise signal, but not every surface can
             # return it: the GitHub MCP tools a cloud session uses have no such
@@ -240,15 +265,19 @@ def state_from_issues(
             # when it happens to be there.
             reason = issue.get("state_reason")
             if cancelled_label in labels:
-                state[task_id] = "cancelled"
+                derived = "cancelled"
             elif reason is None:
-                state[task_id] = "done"
+                derived = "done"
             else:
-                state[task_id] = "done" if str(reason).lower() == "completed" else "cancelled"
+                derived = "done" if str(reason).lower() == "completed" else "cancelled"
         elif claimed_label in labels or issue.get("assignee") or issue.get("assignees"):
-            state[task_id] = "claimed"
+            derived = "claimed"
         else:
-            state[task_id] = "open"
+            derived = "open"
+
+        current = state.get(task_id)
+        if current is None or precedence[derived] > precedence[current]:
+            state[task_id] = derived
 
     # An empty map is indistinguishable from a healthy new board: every task
     # defaults to `open`, so selection looks right until the first task is

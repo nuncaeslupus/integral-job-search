@@ -36,7 +36,7 @@ hand between ticks is. Read the comments, not the check.
 
 ## Default watched bots
 
-```
+```text
 gemini-code-assist[bot]
 coderabbitai[bot]
 claude[bot]
@@ -80,12 +80,25 @@ The fetch costs one extra GraphQL call per tick (~50 ms typical), well under the
 - **Cron's floor is 1 minute.** `/loop` converts `Ns` to `ceil(N/60)m`, so `90s` schedules as `*/2 * * * *` (every 2 min) — it does NOT poll sub-minute. Treat the `90s` figure as user-facing intent; the underlying cron cadence is 2 min. If you genuinely need every-minute polling, write `/loop 1m …` and accept the higher API load.
 - **Always include the agree/disagree/ambiguous rubric inline in the `/loop` prompt** AND pass `--unresolved-only` to the script. A bare `/loop 90s python3 .../query_pr_state.py --pr <N>` produces a JSON snapshot each tick and forces the LLM to re-derive what to do from the skill body every time. `--unresolved-only` filters out comments whose review thread is GH-side resolved OR has a human reply (the "addressed in <sha>" pattern) so each tick stays focused on what actually still needs attention. The rubric-inlined form keeps each tick self-contained:
 
-  ```
+  ```text
   /loop 90s python3 "${CLAUDE_SKILL_DIR}/scripts/query_pr_state.py" --pr <N> --unresolved-only — if state is bot_commented, address per the rubric (agree → fix + push + reply "addressed in <sha>" via gh api repos/<owner>/<repo>/pulls/<N>/comments/<id>/replies; disagree → reply with rationale on the same endpoint; ambiguous → reply asking for clarification + ping the user). If ci_failed, fetch the failing job log and fix + reply on any related comments. Every fix or dismissal MUST be paired with a reply on the thread — that is what makes --unresolved-only filter the comment on the next tick. Only stop the loop on ready_to_merge, merged, or closed — bot_approved still waits for the quiet window. When stopping, CronDelete <job-id> and hand back to user to merge.
   ```
 
 - Termination: the loop exits as soon as `query_pr_state.py` returns `ready_to_merge` (exit 0 with `state: "ready_to_merge"`). Call `CronDelete <job-id>` to stop early — the `/loop` skill prints the job ID at scheduling time, and `CronList` recovers it later.
 - Abort: Claude stops the loop if `query_pr_state.py` returns exit 2 with a state other than `ci_failed` (e.g. authentication error, repo not found). Surface the error to the user.
+
+## When the review bot rate-limits itself
+
+Some review-bot vendors cap how many reviews they run per hour (or per day), independently of anything GitHub itself enforces — the bot just posts a plain PR comment saying it is out of budget for now. Wording varies by vendor ("rate limit", "review limit reached", an "included reviews" quota exhausted, and similar), and `query_pr_state.py` does not classify it as its own state — it only reads reactions, reviews, and line comments, not general PR comments — so it is easy to mistake the resulting silence for `waiting` and either give up on the PR or hammer the bot with retries that fail the same way.
+
+Treat a rate-limit comment as informational, not as something to fix:
+
+- It is not `ci_failed` and not a defect in the diff. Nothing about the code is wrong, so there is nothing to patch — the fix, if any, is time.
+- The comment usually says when the next slot frees up. Requeue the re-review request after that window, not immediately — an immediate retry lands in the same exhausted window and burns another attempt for nothing.
+- The quota is typically shared account/org-wide, not per-PR. If several PRs are being pushed at once, review requests on all of them draw from the same hourly pool, and one PR hitting the limit is usually a sign the others are close behind it.
+- Some review bots also pause automatic re-review once a branch has accumulated many commits, independently of the rate limit — pushing a fix is not guaranteed to bring a fresh look on its own. If the bot's own comments name a manual command to re-request a review, send it explicitly after every fix; do not assume a push alone reactivates it.
+- Merging does not have to wait on a fresh review from a rate-limited bot. `merge-policy: after-review` (see `plugins/core/skills/init/assets/references/github-automation.md`) is satisfied once *a* review has landed and its comments are addressed — a still-pending re-review is not a blocker for a PR that already cleared that bar on an earlier commit. Keep driving the PRs that are already clear to merge instead of blocking a whole batch on one bot's clock.
+- If the same rate limit keeps coming back across several retries, stop retrying on a short fixed cadence and fall back to a slower check-in instead — an hourly wake (a scheduled reminder, or the host's own recurring-task mechanism) both respects the bot's own cooldown and avoids burning API calls in a loop that cannot succeed any faster than the vendor's clock allows.
 
 ## Caveats
 

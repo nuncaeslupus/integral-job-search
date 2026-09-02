@@ -420,11 +420,15 @@ def test_a_confirmed_note_seeds_a_task_naming_its_step_and_skill(tmp_path: Path)
     spec = seed_specs(live.review(), [1])[0]
     assert "la pregunta llegó pronto" in spec.title
     assert "step-02-constraints" in spec.body
-    assert spec.command()[:2] == ["python3", ".claude/skills/queue-add/scripts/new_task.py"]
+    assert spec.command()[:2] == ["python3", ".claude/skills/queue-add/scripts/create_task.py"]
+    # The path is into a vendored skill, so an arsenal release can rename it out
+    # from under us — v3.0.0 did exactly that, `new_task.py` to `create_task.py`.
+    # A printed command that no longer resolves seeds nothing and says nothing.
+    assert Path(spec.command()[1]).exists(), "the seed script this triage prints has moved"
 
 
 def test_a_seed_command_carries_the_body_not_just_the_title(tmp_path: Path) -> None:
-    """`new_task.py --body` defaults to empty, so a command printing only the
+    """`create_task.py --body` defaults to empty, so a command printing only the
     title seeds a truncated one-liner and loses the note's full text and the
     step it was made at — the context triage exists to carry into the queue."""
     live = channel(tmp_path)

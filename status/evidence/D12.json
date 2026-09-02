@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 121,
-  "gates_declaring_status_key": 21,
+  "evidence_gates_read": 131,
+  "gates_declaring_status_key": 29,
   "unrecordable": [],
   "readings": [
     {
@@ -709,6 +709,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-332d6826",
+      "key": "unreported_cv_read_failures",
+      "evidence": "status/evidence/T97.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
+    },
+    {
       "task": "t-37cfb89e",
       "key": "silent_connector_failures",
       "evidence": "status/evidence/T72.json",
@@ -723,6 +731,14 @@
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
+    },
+    {
+      "task": "t-44c70ded",
+      "key": "ci_targets_missing_from_makefile",
+      "evidence": "status/evidence/D-22.json",
+      "value_is_numeric": true,
+      "declares_status_key": false,
+      "status_is_asserted": false
     },
     {
       "task": "t-490e52d5",
@@ -757,6 +773,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-52bb1ec0",
+      "key": "rate_limited_runs_reported_as_broken",
+      "evidence": "status/evidence/T73.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-570404b2",
       "key": "standing_scope_decisions_not_resurfaced",
       "evidence": "status/evidence/T67.json",
@@ -768,6 +792,14 @@
       "task": "t-57cd25d8",
       "key": "excluded_offers_missing_from_the_page",
       "evidence": "status/evidence/T87.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-61199f84",
+      "key": "archive_sensitive_evidence_keys",
+      "evidence": "status/evidence/T100.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
@@ -805,6 +837,14 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-73711f12",
+      "key": "steps_offered_without_a_recommendation",
+      "evidence": "status/evidence/T93.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-7bf38efa",
       "key": "spec_consistency_violations",
       "evidence": "status/evidence/T61.json",
@@ -816,6 +856,14 @@
       "task": "t-804d4c01",
       "key": "robots_verdicts_misread",
       "evidence": "status/evidence/T70.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-8084f0bf",
+      "key": "restated_exclusions_resurfaced",
+      "evidence": "status/evidence/T90.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
@@ -901,12 +949,28 @@
       "status_is_asserted": false
     },
     {
+      "task": "t-c0b48b91",
+      "key": "borrowed_techniques_without_attribution",
+      "evidence": "status/evidence/T83.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
       "task": "t-c2c4dddb",
       "key": "blind_ranking_leaks",
       "evidence": "status/evidence/T20a.json",
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-c36b3722",
+      "key": "monotone_dimensions_asked_as_level_ratings",
+      "evidence": "status/evidence/T96.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-c40f0f88",
@@ -923,6 +987,14 @@
       "value_is_numeric": true,
       "declares_status_key": false,
       "status_is_asserted": false
+    },
+    {
+      "task": "t-ca02a857",
+      "key": "policy_refusals_without_an_owner_decision",
+      "evidence": "status/evidence/T99.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
     },
     {
       "task": "t-cd8dcc16",
@@ -952,6 +1024,14 @@
       "task": "t-e6f1dc24",
       "key": "offers_ranked_despite_a_stated_disqualification",
       "evidence": "status/evidence/T76.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-ee6c9fd2",
+      "key": "internal_terms_used_before_introduction",
+      "evidence": "status/evidence/T95.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true

@@ -77,7 +77,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's the CV and letter for the Girona role. I've led with the migration work and left out the teaching — say if that's wrong. Ready to send, or sit on it?"
+"That's the CV and letter for the Girona role. I've led with the migration work and left out the teaching — say if that's wrong. I'd send it today rather than polish it, because the posting is already a fortnight old. Ready to send, or sit on it?"
 ```
 
 Writes `last_activity`.

@@ -172,6 +172,14 @@ class Question(Strict):
     """A behavioural elicitation question (METHODS §2.1), not a self-rating."""
 
     id: DimensionId
+    #: How the question is put. `narrative` is what METHODS §2.1 describes and
+    #: what every committed dimension asks — "tell me about the last time…" —
+    #: so it is the default and no file had to change to gain this field.
+    #: The other two exist so the monotone rule below has something to be
+    #: about: a `level_rating` asks the candidate to place themselves on the
+    #: dimension's own scale, and a `trade_off` asks what this is worth in
+    #: terms of something else.
+    form: Literal["narrative", "level_rating", "trade_off"] = "narrative"
     text: LocalisedText
 
 
@@ -284,6 +292,16 @@ class Dimension(Strict):
     id: DimensionId
     kind: Literal["soft", "hard"]
     polarity: Literal["bipolar", "unipolar"]
+    #: T96. Whether, everything else held equal, more of this is never worse.
+    #: Declared rather than inferred: `polarity` is about the *scale* and says
+    #: nothing about whether a middle of it is a coherent place to sit.
+    #:
+    #: A monotone dimension has no answerable level rating — one end of the
+    #: scale is incoherent, so a mid-scale answer is cooperation with a
+    #: malformed question and the fitter turns it into a part-worth over
+    #: noise. What is elicitable is the trade-off, which is what a part-worth
+    #: means in the first place.
+    monotone: bool = False
     side: Side = "matched"
     compares_against: str = ""
     group: Group
@@ -310,6 +328,33 @@ class Dimension(Strict):
             raise ValueError(
                 f"{self.id}: a candidate_trait must not carry ad cues or gold — "
                 "a trait is elicited, never extracted from an ad"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _a_monotone_dimension_is_asked_as_a_trade_off(self) -> Dimension:
+        """T96. Refused where the dimension is defined, not where it is asked.
+
+        A gate that only reports the malformed item afterwards has already let
+        the candidate answer it, and *"7 is weird"* was the candidate doing
+        the reporting. Both halves are required: forbidding the level rating
+        without requiring the trade-off would delete the question and put
+        nothing in its place, leaving the dimension unelicited and the model
+        quietly poorer.
+        """
+        if not self.monotone:
+            return self
+        rated = [q.id for q in self.elicitation.questions if q.form == "level_rating"]
+        if rated:
+            raise ValueError(
+                f"{self.id}: monotone, so {', '.join(rated)} cannot be a level rating — "
+                "one end of the scale is incoherent and a mid-scale answer is noise. "
+                "Ask what it is worth in terms of something else"
+            )
+        if not any(q.form == "trade_off" for q in self.elicitation.questions):
+            raise ValueError(
+                f"{self.id}: monotone and carries no trade-off question — the only "
+                "answerable form for it, so without one the dimension is not elicited"
             )
         return self
 

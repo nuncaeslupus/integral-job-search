@@ -33,6 +33,16 @@ If the runtime (`integral.step_runtime.offered`) is not offering `reactions` for
 - Vary the question; the same prompt fifteen times reads as a form.
 - Capture their words verbatim and extract afterwards — never ask them to categorise their own reaction.
 
+**Keep the reactions unguarded, and say so.** The value is in the aside, not the rating:
+what it reminded them of, the last place that talked like this, the thing they do in their
+spare time that this would end. Repeat the invitation — this is a conversation, there is no
+wrong answer — because by now the candidate has answered four steps of questions and will
+default to answering narrowly.
+
+```text
+"Just react — first thing that comes to mind, no wrong answer. If it reminds you of somewhere you worked, tell me about that instead."
+```
+
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
 
 In this step that sounds like:
@@ -72,7 +82,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's telling. You didn't mention money once, and you flinched at every mention of 'fast-paced'. Want to turn that into weights? It's what lets me put a number on a shorter commute."
+"That's telling. You didn't mention money once, and you flinched at every mention of 'fast-paced'. I'd turn that into weights next, because it's what lets me put a number on a shorter commute instead of guessing. Want to?"
 ```
 
 Writes `last_activity`.

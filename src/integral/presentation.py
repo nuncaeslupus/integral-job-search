@@ -69,8 +69,10 @@ UNKNOWN = "unknown"
 #: label is a claim about *this* ranking, so it is as wrong when untrue as its
 #: absence is when true. Step 9 also asks what would sharpen it, in the same line.
 PROVISIONAL_LABEL = (
-    "Provisional: ranked on your hard constraints and pay only — no preference "
-    "weights yet. Working through step 6's paired choices is what would sharpen it."
+    "Provisional: I have put these in an order — the ranking — using only the things "
+    "you said are non-negotiable and the pay, because I do not yet know how much each "
+    "thing is worth to you. Working through step 6's paired choices is what would "
+    "sharpen it."
 )
 
 #: "Show a handful at a time, not forty."
@@ -101,11 +103,93 @@ $outside"""
 )
 
 
+#: T95. How an unstated figure is marked, and what it rests on. Two constants
+#: because the gate looks for the exact bytes the card shows — the same reason
+#: `PROVISIONAL_LABEL` and `FLAG_MARKER` are constants — so a paraphrase cannot
+#: drift away from the check.
+ESTIMATED_MARKER = "(estimated — the advert did not say)"
+ESTIMATE_BASIS = "from the range this role and level pays on comparable adverts"
+
+#: T95. Our machinery, and the plain words that must come first.
+#:
+#: *"'pasamos a convertir esto en pesos para el ranking' is weird for the user
+#: when nothing about ranking or weights has been explained before."* The
+#: candidate is describing register, not comprehension: these are real things
+#: with real names, and the names are ours rather than theirs. Either the term
+#: is introduced before it is used, or it is not used.
+#:
+#: The value is the introduction that must appear **before** the term's first
+#: occurrence. Explaining it afterwards is explaining it to somebody who has
+#: already been confused by it, which is what happened.
+INTERNAL_TERMS: dict[str, str] = {
+    "ranking": "I have put these in an order",
+    "weights": "how much each thing is worth to you",
+    "part-worth": "what one step of a trade-off is worth in money",
+    "corpus": "the adverts I have collected",
+    "connector": "the piece that reads one job board",
+}
+
+#: Every row a card carries, so a decision does not need a second turn to be
+#: made. `link` is in the set deliberately: the candidate called it optional
+#: rather than the payload, and an *absent* row reads as "there was nothing to
+#: show", which they cannot tell from a card that never had the field.
+DECISION_FIELDS: tuple[str, ...] = ("pay", "hours", "location", "contract", "link")
+
+
+def terms_used_before_introduction(text: str, terms: Mapping[str, str] | None = None) -> list[str]:
+    """Which of our words this text uses before saying what they mean.
+
+    A term nobody uses is not a violation — the rule is *introduced or not
+    used*, and the second half is often the better answer. Matched
+    case-insensitively, because the sentence the candidate quoted back began
+    one.
+    """
+    lowered = text.lower()
+    found: list[str] = []
+    for term, introduction in (INTERNAL_TERMS if terms is None else terms).items():
+        used = lowered.find(term.lower())
+        if used < 0:
+            continue
+        introduced = lowered.find(introduction.lower())
+        if introduced < 0 or introduced > used:
+            found.append(term)
+    return found
+
+
+def summary_fields_missing(page: str) -> list[str]:
+    """Rows a decision needs that this page does not carry."""
+    return [field for field in DECISION_FIELDS if f"{field}:" not in page]
+
+
+def chunks(sequence: Sequence[Any], size: int = DEFAULT_LIMIT) -> list[list[Any]]:
+    """`sequence` in groups of at most `size`, losing nothing.
+
+    *"Four ads can be very few. I like that you don't give me long lists, but
+    maybe two or three chunks can help better."* The instinct against long
+    lists was right and the quantity was not, so the cap belongs to the chunk
+    rather than to the turn: every advert the ranking found reaches the
+    candidate, a few at a time. What this replaces is `frontier[:limit]` and a
+    count of what was dropped.
+    """
+    if size < 1:
+        raise ValueError(f"chunk size must be at least 1; got {size}")
+    return [list(sequence[start : start + size]) for start in range(0, len(sequence), size)]
+
+
 def _salary(offer: Offer) -> str:
-    """§5.2's salary, or `unknown` — including when a number is present but
-    `stated` is false, which is the distinction that field exists to carry."""
+    """§5.2's salary, said as what it is: stated, estimated, or unknown.
+
+    T95. Suppressing an unstated figure to `unknown` honoured T92 — an estimate
+    must never read as stated — by throwing the estimate away, and the summary
+    is the only place the candidate actually looks. So the figure is shown and
+    marked, with the basis beside it: a number the candidate cannot argue with
+    is the same failure as a number presented as a fact.
+
+    `unknown` still means what it meant. No figure is no figure, and the
+    estimate route must not turn a silent advert into one.
+    """
     salary = offer.salary
-    if salary is None or not salary.stated:
+    if salary is None:
         return UNKNOWN
     low, high = salary.min, salary.max
     if low is None and high is None:
@@ -113,7 +197,10 @@ def _salary(offer: Offer) -> str:
     currency = salary.currency or ""
     period = f"/{salary.period}" if salary.period else ""
     figures = " to ".join(f"{value:,.0f}" for value in (low, high) if value is not None)
-    return f"{figures} {currency}{period}".strip()
+    shown = f"{figures} {currency}{period}".strip()
+    if salary.stated:
+        return shown
+    return f"{shown} {ESTIMATED_MARKER} ({ESTIMATE_BASIS})"
 
 
 def _location(offer: Offer) -> str:
@@ -255,6 +342,7 @@ def render(
     nets: Mapping[str, NetEstimate] | None = None,
     outside: Mapping[str, Sequence[OutsideFinding]] | None = None,
     limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
 ) -> str:
     """The page: the provisional line when it is true, then a handful of cards.
 
@@ -275,8 +363,11 @@ def render(
     missing = [offer_id for offer_id in frontier if offer_id not in by_id]
     if missing:
         raise KeyError(f"{len(missing)} ranked offer(s) were not supplied: {', '.join(missing)}")
-    shown = frontier[:limit]
-    remaining = len(frontier) - len(shown)
+    groups = chunks(frontier, limit) if limit else [list(frontier)]
+    if not 0 <= offset < max(len(groups), 1):
+        raise ValueError(f"offset {offset} is not a group of this ranking")
+    shown = groups[offset] if groups else []
+    remaining = len(frontier) - (offset + 1) * limit if limit else 0
     flagged = set(ranking.get("flagged", ()))
 
     lines: list[str] = []
@@ -297,7 +388,14 @@ def render(
         for offer_id in shown
     ]
     if remaining > 0:
-        lines.append(f"({remaining} more not shown.)")
+        # Not "not shown" — that was the page reporting a truncation as if it
+        # were the whole answer. The rest exists and is one word away, which is
+        # the difference between a short list and a short *first* group.
+        further = len(groups) - offset - 1
+        lines.append(
+            f"({remaining} more, in {further} further group(s) — say the word and "
+            "I'll show the next.)"
+        )
     excluded = list(ranking.get("excluded", ()))
     if excluded:
         lines.append(_excluded_block(excluded, by_id))
@@ -721,6 +819,96 @@ def write_exclusion_evidence(evidence: Path = DEFAULT_T87_EVIDENCE_PATH) -> dict
     return measured
 
 
+DEFAULT_T95_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T95.json"
+
+
+def offer_with_salary(amount: float | None, *, stated: bool) -> Offer:
+    """One offer carrying just enough to render a pay row — for the checks
+    about how a figure is said, which need nothing else about the advert."""
+    from integral.offers import compute_offer_id
+
+    text = "Una oferta de ejemplo para comprobar cómo se dice el salario."
+    return Offer(
+        id=compute_offer_id(text),
+        source="fixture",
+        title="Data engineer",
+        company="Ejemplo SL",
+        salary=(
+            None
+            if amount is None and not stated
+            else Salary(min=amount, currency="EUR", period="year", stated=stated)
+        ),
+        text=text,
+    )
+
+
+def pages_for_the_fixture(limit: int = DEFAULT_LIMIT) -> list[str]:
+    """Every group of the module's own fixture ranking, rendered.
+
+    The register and field-set checks run over this rather than over a string
+    written for them: a page assembled by the test is a page nobody ships, and
+    the leak the candidate reported was in `PROVISIONAL_LABEL` — real text, on
+    the real page, that no check was reading.
+    """
+    offers, candidates = _fixture()
+    ranking = rank(
+        candidates,
+        dimensions=_FIXTURE_DIMENSIONS,
+        revision=ProfileRevision(rows=len(candidates), sha256="0" * 64),
+        weights=None,
+        at="2026-08-24T00:00:00Z",
+    )
+    explanations = explain(ranking, candidates, None)
+    groups = chunks(list(ranking["pareto"]), limit) or [[]]
+    return [
+        render(ranking, offers, explanations=explanations, limit=limit, offset=index)
+        for index in range(len(groups))
+    ]
+
+
+def measure_register(
+    pages: Sequence[str] | None = None,
+    terms: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """T95's gate: `internal_terms_used_before_introduction`.
+
+    The denominator is pages read times terms looked for, because a rule over
+    an empty vocabulary is a rule over nothing and so is a rule over no text.
+    Both can be empty independently, which is why both are counted.
+    """
+    read = list(pages_for_the_fixture() if pages is None else pages)
+    vocabulary = INTERNAL_TERMS if terms is None else terms
+    leaks = [
+        f"page {index}: {term} used before it is introduced"
+        for index, page in enumerate(read)
+        for term in terms_used_before_introduction(page, vocabulary)
+    ]
+    incomplete = [
+        f"page {index}: no {field} row — a decision needs it"
+        for index, page in enumerate(read)
+        for field in summary_fields_missing(page)
+    ]
+    checked = len(read) * len(vocabulary)
+    return {
+        "internal_terms_used_before_introduction": len(leaks),
+        # Both names, as every gate in this increment carries.
+        "internal_terms_used_before_introduction_evaluated": checked,
+        "pages_read": len(read),
+        "terms_checked": len(vocabulary),
+        "gate_status": "measured" if checked else "unmeasured",
+        "summary_fields_missing": incomplete,
+        "leaks": leaks,
+    }
+
+
+def write_register_evidence(evidence: Path = DEFAULT_T95_EVIDENCE_PATH) -> dict[str, Any]:
+    """Measure and record `status/evidence/T95.json`."""
+    measured = measure_register()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     measured = measure()
     evidence.parent.mkdir(parents=True, exist_ok=True)
@@ -753,6 +941,24 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 1
+
+    # T95 rides beside them both: register is a property of the page these
+    # gates already render, so it is read from the same walk rather than from
+    # a second fixture nobody ships.
+    register = write_register_evidence(args.evidence.parent / "T95.json")
+    for leak in register["leaks"]:
+        print(leak, file=sys.stderr)
+    for gap in register["summary_fields_missing"]:
+        print(gap, file=sys.stderr)
+    if register["internal_terms_used_before_introduction"] or register["summary_fields_missing"]:
+        return 1
+    if register["gate_status"] != "measured":
+        print(
+            "internal_terms_used_before_introduction: UNMEASURED — no page or no "
+            "vocabulary was read. Not a pass and not a fail.",
+            file=sys.stderr,
+        )
+        return 3
 
     # T87 rides beside T44 rather than replacing it — one module, two gates,
     # two evidence files.

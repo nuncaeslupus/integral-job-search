@@ -72,7 +72,7 @@ offered at the end of every first-run step exactly as that section requires.
 Usually silent, folded into step 9's presentation. When run alone, it says:
 
 ```text
-"Read the fourteen new ones. Three don't say anything about how they work, which is itself worth knowing."
+"Read the fourteen new ones. Three don't say anything about how they work, which is itself worth knowing. I'd go straight to the ranking, because reading fourteen adverts one at a time is what the order is meant to save you. Shall I?"
 ```
 
 Writes `last_activity`.

@@ -114,10 +114,31 @@ dispatches that many workers at once. Run when the queue has open tasks:
    (see `agents/worker.md`) so they run concurrently:
    - `isolation: worktree`
    - Inject the relative-path directive and the task payload path.
+   - Say that the gates run in the **foreground** and that ending the turn ends
+     the task. You are the one who can set that expectation before the worker
+     chooses how to run a 10-minute gate; `agents/worker.md` says it too, but a
+     worker deciding under time pressure reads your prompt last.
+   - Say to run `claude-arsenal/bin/host_setup.sh` first, before any test. A
+     worktree carries tracked files and nothing an install produces, so without
+     it the first gate in each worktree fails on a missing tool and every worker
+     in the fan-out diagnoses the same environmental fact separately — five of
+     nine, in the session that prompted this. The script is a no-op unless the
+     repo declares `host-setup` in `arsenal/config.toml`; if the worker reports
+     that it does not, declare it once rather than paying for it per worker. Any
+     non-zero exit — 1 the command failed, 2 the config is unreadable or this is
+     not a git repository — means the tree is not set up and the worker returns
+     `open`; only exit 0 continues, whether or not a command was declared.
 6. **Wait for all workers.** Then, for each returned outcome:
    - **Assert the tree invariant first** — pass the worker's reported root so
-     isolation is measured rather than inferred:
-     `ARSENAL_WORKER_TOPLEVEL=<worker's toplevel> claude-arsenal/bin/worker_postcheck.sh`.
+     isolation is measured rather than inferred, and its outcome and returned
+     text so a `done` is checked for the evidence a completion carries:
+     `ARSENAL_WORKER_OUTCOME=done ARSENAL_WORKER_RESULT="<the worker's result>" ARSENAL_WORKER_TOPLEVEL=<worker's toplevel> claude-arsenal/bin/worker_postcheck.sh`.
+     **Exit 4** → the worker reported `done` with no PR URL, no `branch:` and no
+     `toplevel:`. That is an abandoned task, not a completion — usually a
+     backgrounded gate whose turn ended, with its processes still alive. Nothing
+     was touched: resume that worker and let it finish in the foreground. Do not
+     record the task as done, and do not re-dispatch it as a fresh attempt; the
+     work is intact and only needs the turn it was cut off from.
      It guarantees HEAD is back on the session's own branch and the tree is clean.
      In a real worktree this is a no-op (`ok`);
      if it prints `restored`, the worker ran in-place — clamp
@@ -197,8 +218,11 @@ function signature.
 
 Each worker implements its task in an isolated worktree, cuts a feature branch off
 the **host default branch** via `claude-arsenal/bin/open_task_pr.sh`, which runs the
-host gate (`host-gate` in `arsenal/config.toml`) and `gate_run.sh` itself and
-refuses on either failure — and only then commits (Conventional
+pre-PR adversarial review check, the host gate (`host-gate` in
+`arsenal/config.toml`) and `gate_run.sh` itself, and refuses on either gate's
+failure — or, where `pre-pr-review = "required"`, on a change no independent
+reviewer has cleared. It records the review outcome in the PR body under every
+mode but `off`. Only then does it commit (Conventional
 Commits + the dynamic `Co-Authored-By` from the `github` skill, never a hardcoded
 model), pushes, and opens a PR. The PR diff is just that task's code.
 
@@ -297,5 +321,6 @@ before starting; older versions do not support `statusLine.rate_limits`.
 | Agent | File | When used |
 |-------|------|-----------|
 | Worker | `agents/worker.md` | Spawned via Task tool per claimed task |
+| Reviewer | `agents/reviewer.md` | Spawned by the worker before its PR opens, on a packet from `adversarial_review.sh` — no history of the change |
 
 ---

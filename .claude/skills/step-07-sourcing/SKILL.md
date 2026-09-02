@@ -172,7 +172,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"Fourteen new, six duplicates, and four have closed since last week. Want to see the new ones ranked?"
+"Fourteen new, six duplicates, and four have closed since last week. I'd look at them ranked rather than as a list, because the order is where the work on your preferences actually shows. Want to see them?"
 ```
 
 Writes `last_activity`.

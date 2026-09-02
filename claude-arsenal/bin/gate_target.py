@@ -53,7 +53,9 @@ EMBEDDED_PATH = re.compile(
 )
 
 REDIRECTS = {">", ">>", ">|", "&>", "&>>", "1>", "2>", "1>>", "2>>"}
-SEPARATORS = {";", "&&", "||", "|", "&", "(", ")", "\n"}
+# `(` and `)` are deliberately absent — they are handled in `_simple_commands`,
+# where the difference between a subshell and a function call can be told.
+SEPARATORS = {";", "&&", "||", "|", "&", "\n"}
 
 # Where each utility writes, given its file arguments.
 #   "all"  — every path argument is a destination
@@ -68,15 +70,60 @@ UTILITIES = {
 }
 
 # Interpreter write calls, for the heredoc-into-python route.
+#
+# The `open(...)` alternative matches on the MODE, not on a later `.write`:
+# `open(path, "w").close()` truncates the file to nothing and never calls
+# `write`, so a pattern keyed on the write itself missed the one form that
+# destroys a skill without writing a byte. `w`, `a`, `x` and `+` are the modes
+# that can mutate; `r`, `rb`, `rt` and a bare `open(path)` are reads and must
+# not match, because a gate that blocks reads gets routed around rather than
+# through.
 WRITERS = re.compile(
     r"write_text\s*\(|\.write\s*\(|writeFileSync|shutil\.(?:copy|move)"
     r"|os\.replace|\.unlink\s*\(|\.rename\s*\(|rmtree\s*\(|makedirs\s*\("
+    r"""|open\s*\([^)]*?,\s*(?:mode\s*=\s*)?['"][rwaxbt+]*[wax+][rwaxbt+]*['"]"""
+)
+
+# `git` subcommands that overwrite or delete a path they are given. `git` was
+# absent from UTILITIES entirely, so `git restore SKILL.md` and
+# `git checkout -- SKILL.md` — the two commands a session reaches for to undo an
+# edit — sailed past the gate. Read-only plumbing (`diff`, `log`, `show`,
+# `status`, `add`) is deliberately not here.
+#
+# Known limit: `git apply patch.diff` names the patch, not what it rewrites, so
+# the destination is not visible from the command line at all.
+GIT_WRITE_SUBCOMMANDS = frozenset({"restore", "checkout", "rm", "clean", "mv", "stash"})
+
+# `git` options that consume the argument after them, so the subcommand is not
+# mistaken for their value in `git -C /repo restore …`.
+GIT_GLOBAL_OPTS_WITH_VALUE = frozenset(
+    {"-C", "-c", "--git-dir", "--work-tree", "--exec-path", "--namespace"}
 )
 
 
+# A backslash-newline is a line continuation: bash removes it and the command
+# carries on. Removed here too, before the lexer is told to treat a newline as a
+# separator, or `cp SKILL \<newline> /tmp/bak` would split into `cp SKILL` and
+# report a *read* of the skill as a write. Inside a quoted heredoc body bash
+# would keep the backslash; joining two lines of an interpreter script costs
+# nothing, because that text is scanned by regex for paths and write calls
+# rather than parsed.
+_LINE_CONTINUATION = re.compile(r"\\\n")
+
+
 def _tokenise(command: str) -> list[str]:
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    # `\n` is punctuation rather than whitespace: bash separates commands on an
+    # unquoted newline, and dropping it merged
+    #     echo starting
+    #     rm -rf .claude/skills/specify
+    # into one token stream whose first word is `echo` — so the gate looked at
+    # `echo`, found no destination, and let the `rm` through. A newline inside
+    # quotes still belongs to its token, which is what keeps a heredoc whole.
+    lexer = shlex.shlex(
+        _LINE_CONTINUATION.sub("", command), posix=True, punctuation_chars="();<>|&\n"
+    )
     lexer.whitespace_split = True
+    lexer.whitespace = " \t\r"
     try:
         return list(lexer)
     except ValueError:
@@ -86,13 +133,54 @@ def _tokenise(command: str) -> list[str]:
 
 
 def _simple_commands(tokens: list[str]) -> list[list[str]]:
+    """Split on what bash treats as a command boundary — and only on that.
+
+    `(` opens a subshell only in **command position**; anywhere else it is the
+    paren of a call. Splitting on every one of them tore
+    `p.write_text(".claude/skills/x/SKILL.md")` into a fragment ending in
+    `p.write_text` — which `WRITERS` cannot match, because the regex needs the
+    paren adjacent — and a fragment holding only the path, with no write signal
+    beside it. The result was not a partial miss: the whole heredoc-into-python
+    route, the one the module docstring names as the reason this file exists,
+    returned nothing at all.
+    """
     out: list[list[str]] = [[]]
+    depth = 0
     for tok in tokens:
-        if tok in SEPARATORS:
+        if tok == "(" and not out[-1]:
+            # Command position: a real subshell.
+            depth += 1
+            out.append([])
+        elif tok == ")" and depth:
+            depth -= 1
+            out.append([])
+        elif tok in SEPARATORS:
             out.append([])
         else:
+            # Including a `(` mid-command and its `)`, so the joined text still
+            # reads as `write_text ( … )` for the regexes below.
             out[-1].append(tok)
     return [c for c in out if c]
+
+
+def _git_destinations(rest: list[str]) -> list[str]:
+    """Paths a `git` invocation overwrites, or none when the subcommand only reads."""
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok in GIT_GLOBAL_OPTS_WITH_VALUE:
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        break
+    if i >= len(rest) or rest[i] not in GIT_WRITE_SUBCOMMANDS:
+        return []
+    # Everything after the subcommand that is not a flag or the `--` separator.
+    # A tree-ish (`git checkout HEAD~1 -- path`) or a branch name lands here too
+    # and is harmless: it is not shaped like a skill path, so it never matches.
+    return [a for a in rest[i + 1:] if a != "--" and not a.startswith("-")]
 
 
 def _destinations(cmd: list[str]) -> list[str]:
@@ -123,7 +211,9 @@ def _destinations(cmd: list[str]) -> list[str]:
     rest = args[pos + 1:]
     files = [a for a in rest if not a.startswith("-")]
 
-    if util == "sed":
+    if util == "git":
+        dests.extend(_git_destinations(rest))
+    elif util == "sed":
         if any(a.startswith("-i") for a in rest):
             # sed -i 's/…/…/' FILE… — the script is the first non-flag arg.
             dests.extend(files[1:] if len(files) > 1 else files)

@@ -4,7 +4,9 @@
 # Compares the installed bundle version (claude-arsenal/.bundle-version) against
 # the latest version tag on the upstream remote. When behind: runs
 # `git subtree pull` to bring in the new bundle, then re-runs init.py --silent
-# to propagate any file-level changes to the host project.
+# to propagate any file-level changes to the host project. Either way, prints
+# the CHANGELOG.md entries between the installed version and the new one, so
+# an update says what changed, not just the version number.
 #
 # NO SILENT "ALREADY CURRENT". Every path that declines to update says why. A
 # consumer once re-vendored, was told it was current, and sat on a stale bundle
@@ -38,6 +40,8 @@
 #                    that could satisfy both readings.
 #   ARSENAL_UPSTREAM_VERSION_PATH  path of .bundle-version inside the marketplace
 #                    repo, for the untagged-release probe
+#   ARSENAL_UPSTREAM_CHANGELOG_PATH  path of CHANGELOG.md inside the marketplace
+#                    repo, for printing what changed on an update
 #
 # Exit: 0 always — update failures are printed as warnings and never abort a session.
 
@@ -65,6 +69,7 @@ PREFIX="${ARSENAL_PREFIX:-claude-arsenal}"
 BUNDLE_DIR="${ARSENAL_BUNDLE_DIR:-${PREFIX}}"
 VERSION_FILE="${BUNDLE_DIR}/.bundle-version"
 UPSTREAM_VERSION_PATH="${ARSENAL_UPSTREAM_VERSION_PATH:-plugins/core/skills/init/assets/.bundle-version}"
+UPSTREAM_CHANGELOG_PATH="${ARSENAL_UPSTREAM_CHANGELOG_PATH:-plugins/core/skills/init/assets/CHANGELOG.md}"
 
 _warn() { echo "check_update.sh: $*" >&2; }
 
@@ -82,23 +87,61 @@ except (ValueError, IndexError):
 " "$1" "$2" 2>/dev/null
 }
 
-# Report a newer version sitting untagged on the marketplace's default branch.
-# Reads the file from a THROWAWAY bare repo: a --depth=1 fetch into the
-# consumer's own repo would leave shallow objects behind and can break a later
-# `git subtree merge`, and this repo is not ours to make shallow.
-_upstream_branch_version() {
-    local url tmpdir version=""
+# Read `path` at `ref` on the remote, via a THROWAWAY bare repo. A --depth=1
+# fetch into the consumer's own repo would leave shallow objects behind and can
+# break a later `git subtree merge`, and this repo is not ours to make shallow.
+# Empty on any failure (no remote, unreachable ref, no such path) — every
+# caller treats that as "nothing to report", never as an error worth aborting on.
+_show_upstream_file() {
+    local ref="$1" path="$2" url tmpdir content=""
     url="$(git remote get-url "${REMOTE}" 2>/dev/null || true)"
     [[ -n "${url}" ]] || return 0
     tmpdir="$(mktemp -d 2>/dev/null || true)"
     [[ -n "${tmpdir}" ]] || return 0
     if git init -q --bare "${tmpdir}" 2>/dev/null \
-        && git -C "${tmpdir}" fetch -q --depth=1 "${url}" HEAD 2>/dev/null; then
-        version="$(git -C "${tmpdir}" show "FETCH_HEAD:${UPSTREAM_VERSION_PATH}" 2>/dev/null \
-            | tr -d '[:space:]' || true)"
+        && git -C "${tmpdir}" fetch -q --depth=1 "${url}" "${ref}" 2>/dev/null; then
+        content="$(git -C "${tmpdir}" show "FETCH_HEAD:${path}" 2>/dev/null || true)"
     fi
     rm -rf "${tmpdir}" 2>/dev/null || true
-    printf '%s' "${version}"
+    printf '%s' "${content}"
+}
+
+# Report a newer version sitting untagged on the marketplace's default branch.
+_upstream_branch_version() {
+    _show_upstream_file "HEAD" "${UPSTREAM_VERSION_PATH}" | tr -d '[:space:]'
+}
+
+# Print CHANGELOG.md entries for versions in (installed, latest] — what a
+# consumer actually gets by updating, not just the version number. Silent on
+# any failure: this is an enhancement to the UPDATE AVAILABLE / pulling-update
+# messages below, never a reason to treat the update path differently.
+_print_changelog_since() {
+    local installed="$1" latest="$2" text
+    text="$(_show_upstream_file "refs/tags/v${latest}" "${UPSTREAM_CHANGELOG_PATH}")"
+    [[ -n "${text}" ]] || return 0
+    printf '%s' "${text}" | python3 -c "
+import re, sys
+def parse(v):
+    return tuple(int(x) for x in v.split('.'))
+installed, latest = parse(sys.argv[1]), parse(sys.argv[2])
+parts = re.split(r'(?m)^## \[(\d+\.\d+\.\d+)\][^\n]*\n', sys.stdin.read())
+entries = []
+for i in range(1, len(parts), 2):
+    try:
+        v = parse(parts[i])
+    except ValueError:
+        continue
+    if installed < v <= latest:
+        body = parts[i + 1].strip() if i + 1 < len(parts) else ''
+        if body:
+            entries.append((v, parts[i], body))
+entries.sort(reverse=True)
+for _, ver, body in entries:
+    print()
+    print(f'  --- new in {ver} ---')
+    for line in body.splitlines():
+        print(f'  {line}')
+" "${installed}" "${latest}" 2>/dev/null || true
 }
 
 # Only worth a network round trip when the default branch actually carries
@@ -106,7 +149,11 @@ _upstream_branch_version() {
 # no untagged release to find.
 _report_untagged_upstream() {
     local installed="$1" latest="$2" head_sha tag_sha branch_version
-    head_sha="$(git ls-remote "${REMOTE}" HEAD 2>/dev/null | awk 'NR==1{print $1}')"
+    # `|| true` on the pipeline: this file promises "Exit: 0 always" because
+    # session-start step 0(a) runs it as a *report*, and an unreachable or
+    # credential-less remote aborting under `set -e` removes the very report it
+    # exists to produce — leaving the session unaware the bundle is stale.
+    head_sha="$(git ls-remote "${REMOTE}" HEAD 2>/dev/null | awk 'NR==1{print $1}' || true)"
     [[ -n "${head_sha}" ]] || return 0
     if [[ -n "${latest}" ]]; then
         tag_sha="$(git ls-remote "${REMOTE}" "refs/tags/v${latest}^{}" 2>/dev/null | awk 'NR==1{print $1}')"
@@ -157,9 +204,36 @@ _report_skill_skew() {
     # the exact failure this guard exists to catch, failing open (#244).
     # `sort` in the fallback is load-bearing for the same reason — without it
     # the same tree answers differently on different machines.
+    #
+    # `sort` made the fallback deterministic, but determinism is not
+    # correctness: with two or more candidates it still picked one — the
+    # lexicographically first, which has nothing to do with which skill owns the
+    # bundle — and reported a confident verdict about it. That turned "wrong on
+    # some machines" into "wrong on every machine, reproducibly", and a wrong
+    # verdict here is silent: `_semver_gt` returns false, the probe says nothing,
+    # and step 0(b) rewrites the bundle backwards.
+    #
+    # A probe that cannot identify its own subject says so instead of answering.
+    # That is the same rule the gates already follow with `gate_status:
+    # unmeasured` — the check ran, and what it found is that this cannot be
+    # scored. Warning and returning is fail-VISIBLE rather than fail-closed: the
+    # operator sees the ambiguity, and step 0(b) is not blocked for a host whose
+    # layout is merely unusual.
     ver_file=".claude/skills/init/assets/.bundle-version"
-    [[ -f "${ver_file}" ]] \
-        || ver_file="$(find .claude/skills -path '*/init/assets/.bundle-version' 2>/dev/null | sort | head -1 || true)"
+    if [[ ! -f "${ver_file}" ]]; then
+        local candidates count
+        # No `mapfile`: this ships to consumers and runs under the bash 3.2 that
+        # macOS still installs as /bin/bash, where it does not exist.
+        candidates="$(find .claude/skills -path '*/init/assets/.bundle-version' 2>/dev/null | sort || true)"
+        count="$(printf '%s' "${candidates}" | grep -c . || true)"
+        if [[ "${count:-0}" -gt 1 ]]; then
+            _warn "AMBIGUOUS VENDORED SKILL — ${count} candidate version files and no canonical ${ver_file}; not guessing which owns the bundle."
+            _warn "  Candidates: $(printf '%s' "${candidates}" | tr '\n' ' ')"
+            _warn "  The skew check is INERT until one of them is at .claude/skills/init/, so step 0(b) is unguarded: confirm the vendored skill is not behind the bundle before running it."
+            return 0
+        fi
+        ver_file="$(printf '%s\n' "${candidates}" | head -1)"
+    fi
     [[ -n "${ver_file}" ]] || return 0
     skill_ver="$(tr -d '[:space:]' < "${ver_file}" 2>/dev/null || true)"
     [[ -n "${skill_ver}" ]] || return 0
@@ -243,10 +317,12 @@ fi
 if [[ ${CHECK_ONLY} -eq 1 ]]; then
     echo "claude-arsenal: installed=v${installed}, latest=v${latest} — UPDATE AVAILABLE"
     echo "  run without --check-only, or: ${_manual_hint}"
+    _print_changelog_since "${installed}" "${latest}"
     exit 0
 fi
 
 echo "claude-arsenal: installed=v${installed}, latest=v${latest} — pulling update…"
+_print_changelog_since "${installed}" "${latest}"
 
 # Ensure the working tree is clean before the subtree update
 if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
@@ -287,7 +363,11 @@ fi
 # Re-run init.py --silent so any new bundle scripts are propagated
 init_py="$(find .claude/skills -name 'init.py' -path '*/init/scripts/init.py' 2>/dev/null | head -1 || true)"
 if [[ -n "${init_py}" ]]; then
-    python3 "${init_py}" --repo-path . --silent
+    # A refusal from init.py (a downgrade guard, a malformed config) is a
+    # warning here, not an abort: aborting skips the version verification just
+    # below, which is the check that separates "updated" from "half-updated".
+    python3 "${init_py}" --repo-path . --silent \
+        || _warn "init.py refused to re-run after the update; new bundle scripts may not be in place"
 fi
 
 # Only now is "updated" a claim worth making. A success message that can print

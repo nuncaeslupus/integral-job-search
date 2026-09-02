@@ -288,6 +288,43 @@ w-shingling technique for near-duplicate detection this module's shingle width f
 
 ---
 
+### 2.9 Techniques adapted from `ai-job-search`
+
+The failure-handling layer of
+[`MadsLorentzen/ai-job-search`](https://github.com/MadsLorentzen/ai-job-search)
+(MIT, © 2026 Mads Lorentzen) — five weeks of one person hitting real portals and
+writing down what broke. Each row below records what was taken, where it lives
+here, and what the borrowing does **not** extend to.
+
+**Its matching layer was assessed and rejected**, in `status/specification.md`
+§3 Option A, and is still rejected: it scores on an unvalidated 30/25/15/30
+rubric with no evidence spans, no confidence and no corpus. This repository
+takes the failure-handling layer and none of the scoring layer. That judgement
+is recorded here rather than only in the specification so that nobody
+re-imports the rubric later on the strength of this acknowledgement.
+
+MIT requires notice retention for copied code, not attribution for ideas. What
+follows is mostly the second kind — observations about how real boards fail,
+re-implemented here. Where actual code was retained, its notice travels with the
+file.
+
+| Task | What was taken | Where it lives here | Limits of the borrowing |
+|---|---|---|---|
+| T70 | That robots handling must never fail open, and that a blank line inside a record is where a naive parser silently ends it | `src/integral/robots.py` | The RFC 9309 matcher is ours. Longest-match precedence and `Allow` winning an equal-length tie were derived from the RFC text, not from upstream — the borrowing is the *failure report*, not the implementation |
+| T71 | Reading `robots.txt` with a browser user-agent when the honest one is refused | `src/integral/robots.py` | Narrowed here to the **policy resource only**, never content, and the recovered policy is then obeyed more strictly rather than less. Both conditions are added here, and neither is licence to fetch a page the honest agent was refused |
+| T72 | Free signals over evidence already in hand — company null on every row, undecoded entities, off-portal URLs, zero yield from a portal that has yielded before — then one bounded sentinel probe | `src/integral/connector_health.py` | The two-capture discipline is ours: baseline and probe must be reads taken on different days, because comparing a file with itself measures nothing. Nothing here forces a probe refresh, so a stale probe certifies a board that may since have rotted |
+| T73 | That a 429 or a block page is `inconclusive`, never `broken`, and that disabling a connector asks first | `src/integral/connector_health.py` | The block-page markers are English-only, and this library is ES/CA-facing: a Spanish challenge page is a known fail-open. Statuses 403 and 503 are treated as refusals here, which is a judgement rather than something upstream settles |
+| T74 | That liveness must read page identity and not only URL identity — a fetch landing on content that is not the advert is `unverified` | `src/integral/liveness.py` | Covers the fragment-anchor case where the URL never changed. It does not cover a board that serves a plausible *different* advert at the same URL, which page identity alone cannot see |
+| T75 | Preferring the employer's own posting over an aggregator copy when deduplicating | `src/integral/dedup.py` | The reason is specific and does not generalise: aggregators strip the grade that `seniority_expectation` reads. Where an aggregator carries more, this preference is wrong and nothing here detects that |
+| T76 | The eligibility gate — a stated, role-level bar the candidate cannot meet excludes the offer before scoring; "silence is not permission" | `src/integral/eligibility.py` | Role-level is the whole of it: a company-wide welcome to international applicants is not role-level permission, and is not read as one |
+| T77 | That every verdict carries the advert's own sentence, because a veto with no quote is unfalsifiable | `src/integral/eligibility.py` | The quote must be a span of the advert text and never of an outside source. A quote proves the sentence was there; it does not prove the reading of it |
+| T78 | `language_requirement` as its own hard field, read by the gate and never by the ranker | `src/integral/offers.py` | Records the role's *stated* requirement, not the language the advert happens to be written in. Absent means the advert stated nothing, never that a requirement was checked for and cleared |
+| T79 | Showing an Excluded section with each exclusion's quoted reason, and keeping a `FLAG` offer ranked with its marker | `src/integral/rank.py` | The withheld count is reported rather than the offers silently dropped. It does not make an exclusion reversible in place — changing one is a separate act with its own record |
+| T80 | The ATS text-layer contract, asserted over the generated document text so it is renderer-independent | `src/integral/ats.py` | Contact e-mail, telephone and every employment date present as literal text, with no mojibake. A text layer that passes is not evidence any particular ATS parses the document |
+| T81 | Keyword coverage in four statuses — `covered`, `synonym-only`, `missing (have it)`, `missing (gap)` | `src/integral/ats.py` | The four statuses exist to keep a document bug distinguishable from a candidate gap. Never a licence to keyword-stuff: a keyword the candidate cannot evidence stays `missing (gap)` |
+| T82 | The application status vocabulary, split Open and Final | `src/integral/lifecycle.py` | Legacy space-spellings are accepted on read and never written. The vocabulary is the candidate's view of an application, not an employer's ATS state, and the two do not correspond |
+| T84 | Step 11's two drafting rules — relevance-weighted cutting, and the interview backtrack test | `.claude/skills/step-11-application/SKILL.md` | Prose rules for a person to apply, not a scored function. Nothing measures whether a line would survive the room; the test is a question the drafter asks |
+
 ## 3. Techniques deliberately NOT used
 
 **Type indicators (MBTI, DISC, and similar four-letter systems).** Excluded.

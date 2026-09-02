@@ -71,10 +71,13 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
+import yaml
+
 from integral.connector_coverage import installed_packages
 from integral.connectors import (
     DEFAULT_CONNECTORS_DIR,
     FIXTURE_DIRNAME,
+    META_FILENAME,
     PROBE_DIRNAME,
     Connector,
     ConnectorError,
@@ -84,8 +87,46 @@ from integral.connectors import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T72.json"
+#: T73's record. Same module, separate file: the two gates ask different
+#: questions of the same readings and a reader must be able to fail one
+#: without the other going quiet.
+DEFAULT_RATE_LIMIT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T73.json"
 
-Health = Literal["healthy", "broken"]
+#: T73. `inconclusive` is the third verdict, and it is not a soft `broken`:
+#: it says the question was not answered, the same distinction `liveness`
+#: draws with `unverified` and the gate layer with `unmeasured`.
+Health = Literal["healthy", "broken", "inconclusive"]
+
+class ConnectorHealthError(Exception):
+    """A health-check action was asked for in a way this module refuses."""
+
+
+#: Statuses that mean "we were not allowed to look", never "the parser
+#: rotted". 429 is the canonical refusal; 403 is the same refusal spelled by
+#: a WAF; 503 is the board being unavailable, which says nothing about our
+#: selectors either. None of the three is evidence about the markup, because
+#: none of them delivered any.
+BLOCKED_STATUSES: frozenset[int] = frozenset({403, 429, 503})
+
+#: What a challenge page says when it is served with a 200. Lowercased
+#: substring match, and — see `rate_limited` — consulted **only** when
+#: nothing parsed, because every one of these phrases can legitimately occur
+#: inside an advert on a page that was served to us in full.
+BLOCK_PAGE_MARKERS: tuple[str, ...] = (
+    "just a moment",
+    "attention required",
+    "checking your browser",
+    "enable javascript and cookies to continue",
+    "ddos protection by cloudflare",
+    "access denied",
+    "you have been blocked",
+    "request blocked",
+    "unusual traffic",
+    "too many requests",
+    "rate limit",
+    "captcha",
+    "_incapsula_resource",
+)
 
 #: What "undecoded" means: an entity reference that survived HTML parsing
 #: unescaped — the tell-tale of a title pulled from the wrong element, or
@@ -121,11 +162,59 @@ class Reading:
     #: probe was read, and also when one was read but records no date — an
     #: undated capture cannot say how current the verdict is.
     probe_captured_at: str | None = None
+    #: T73. Why the capture was a refusal rather than a listing — the status
+    #: it carried, or the challenge page it turned out to be. `None` means we
+    #: were shown the page. This is not a reason: it is the *absence* of
+    #: evidence, and folding it in with the reasons is what let a 429 read as
+    #: breakage.
+    rate_limited: str | None = None
+
+    @property
+    def rot_stage_ran(self) -> bool:
+        """Did the comparison this module exists to make actually happen?
+
+        A refused capture is a file that was read, so `probed` is true for it
+        — but nothing was compared. Only this answers whether a zero here is
+        a finding about parser rot or a lower bound over the free signals.
+        """
+        return self.probed and self.rate_limited is None
 
 
 def undecoded_entities(values: Iterable[str]) -> list[str]:
     """Which of these strings still carry a raw `&name;`/`&#N;` reference."""
     return [v for v in values if _ENTITY_RE.search(v)]
+
+
+def rate_limited(html: str | None, status: int | None, *, parsed_items: int = 0) -> str | None:
+    """Why this capture was a refusal rather than a listing — or `None`.
+
+    T73's whole content. A capture that yielded nothing is the input to T72's
+    regression branch, and there are two entirely different reasons for it:
+    the board restyled and our selectors stopped matching, or the board
+    refused us. Only the first is breakage.
+
+    Two signals, and they are deliberately asymmetric:
+
+    * **The recorded status** decides on its own. `probe/captured.json`
+      already carries it, written by the `[LAPTOP]` process that made the
+      capture, and a 429 is not open to interpretation.
+    * **The body markers** are consulted only once `parsed_items` is 0.
+      Every phrase in `BLOCK_PAGE_MARKERS` can occur inside a real advert —
+      "captcha" and "access denied" both appear in job descriptions — and a
+      page that yielded rows was plainly served to us whatever words it
+      contains. Reading the markers first would let one advert turn a whole
+      healthy board `inconclusive`, which is the same silencing this module
+      exists to prevent, arriving from the other side.
+    """
+    if status is not None and status in BLOCKED_STATUSES:
+        return f"the capture records HTTP {status} — the board refused the read"
+    if html is None or parsed_items:
+        return None
+    lowered = html.lower()
+    for marker in BLOCK_PAGE_MARKERS:
+        if marker in lowered:
+            return f"the capture is a challenge page, not a listing ({marker!r})"
+    return None
 
 
 def on_portal_host(url: str, site: str) -> bool:
@@ -205,7 +294,12 @@ def free_signals(
 
 
 def assess(
-    connector: Connector, site: str, *, baseline_html: str, probe_html: str | None
+    connector: Connector,
+    site: str,
+    *,
+    baseline_html: str,
+    probe_html: str | None,
+    probe_status: int | None = None,
 ) -> Reading:
     """T72's verdict for one connector, given its baseline and today's read.
 
@@ -220,6 +314,15 @@ def assess(
     costs no request to see; but the regression branch is skipped and the
     reading is marked unprobed, which is what stops `measure` calling the
     result a measurement.
+
+    `probe_status` is what `probe/captured.json` recorded for that read. T73:
+    a capture the board refused yields nothing, exactly like a capture whose
+    selectors stopped matching, and only the status and the body can tell the
+    two apart. When it was a refusal the regression branch is skipped and the
+    verdict is `inconclusive` — *unless* a free signal fired, because those
+    cost no request and a finding we actually made outranks a question we
+    could not ask. That precedence is the same one `_main` already applies
+    between a real violation and a missing probe.
     """
     baseline_items = parse_list_page(connector, baseline_html)
     probed = probe_html is not None
@@ -230,14 +333,27 @@ def assess(
         if connector.list.from_json is None
         else connector.list.from_json.fields
     )
-    reasons = free_signals(probe_items if probed else baseline_items, site, declared)
-    if probed and baseline_items and not probe_items:
+    # Gated on `probed`, and classified exactly once. `rate_limited` answers
+    # from the recorded status alone when there is no body, so a package whose
+    # `captured.json` says 429 with no `list.html` beside it used to come back
+    # `inconclusive` with `rate_limited=None` — and both readers key off the
+    # second field, so `_main` filed it under "no current read captured" while
+    # `measure_rate_limiting` skipped it entirely. No probe file is "the rot
+    # stage did not run", which `probed=False` already says; it is not a
+    # refusal we watched happen.
+    refused = (
+        rate_limited(probe_html, probe_status, parsed_items=len(probe_items)) if probed else None
+    )
+    read_through = probed and refused is None
+
+    reasons = free_signals(probe_items if read_through else baseline_items, site, declared)
+    if read_through and baseline_items and not probe_items:
         reasons.append(
             f"{len(baseline_items)} row(s) recorded previously, 0 now — the parser no "
             "longer matches this connector's own markup"
         )
 
-    health: Health = "broken" if reasons else "healthy"
+    health: Health = "broken" if reasons else ("inconclusive" if refused else "healthy")
     return Reading(
         connector=connector.site,
         site=site,
@@ -246,6 +362,7 @@ def assess(
         probe_items=len(probe_items),
         reasons=tuple(reasons),
         probed=probed,
+        rate_limited=refused,
     )
 
 
@@ -279,6 +396,34 @@ def probe_fetch(package: Path, *, fetch: Callable[[Path], str] = default_fetch) 
     return result
 
 
+def _read_capture(package: Path) -> dict[str, Any]:
+    """`probe/captured.json` as a mapping, `{}` whenever it cannot be read.
+
+    Absent, unreadable, not UTF-8, not JSON, or JSON that is not an object —
+    all of them mean the same thing to every caller here: this capture does
+    not describe itself. None of them is a reason to fail the health check,
+    because the record annotates the verdict rather than producing it.
+    """
+    try:
+        raw = (package / PROBE_DIRNAME / PROBE_CAPTURE_FILE).read_text(encoding="utf-8")
+        payload = json.loads(raw)
+    except (OSError, UnicodeError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def probe_status(package: Path) -> int | None:
+    """The HTTP status this package's capture records, or `None`.
+
+    `bool` is excluded deliberately: it is an `int` in Python, and a
+    `"status": true` would otherwise compare as 1. A capture that does not
+    record a status is not a refusal — it is a capture predating the field,
+    and the body markers are what answers for it.
+    """
+    status = _read_capture(package).get("status")
+    return status if isinstance(status, int) and not isinstance(status, bool) else None
+
+
 def probe_captured_at(package: Path) -> str | None:
     """When this package's probe was taken, per `probe/captured.json`.
 
@@ -288,11 +433,7 @@ def probe_captured_at(package: Path) -> str | None:
     does not say how current it is", which is what the caller records; none of
     them is a reason to fail the health check, because the date annotates the
     verdict rather than producing it."""
-    try:
-        raw = (package / PROBE_DIRNAME / PROBE_CAPTURE_FILE).read_text(encoding="utf-8")
-        recorded = json.loads(raw).get("captured_at")
-    except (OSError, UnicodeError, ValueError, AttributeError):
-        return None
+    recorded = _read_capture(package).get("captured_at")
     if not isinstance(recorded, str):
         return None
     try:
@@ -333,7 +474,13 @@ def assess_package(
     # baseline: that substitution is what made the regression branch dead
     # code in the production path while the evidence still said "measured".
     probe_html = probe_fetch(package, fetch=fetch)
-    reading = assess(connector, site, baseline_html=baseline_html, probe_html=probe_html)
+    reading = assess(
+        connector,
+        site,
+        baseline_html=baseline_html,
+        probe_html=probe_html,
+        probe_status=probe_status(package),
+    )
     # Only a reading that actually read a probe can carry its date; stamping an
     # unprobed one would date a rot stage that never ran.
     if not reading.probed:
@@ -341,20 +488,94 @@ def assess_package(
     return replace(reading, probe_captured_at=probe_captured_at(package))
 
 
-def measure(
-    directory: Path = DEFAULT_CONNECTORS_DIR,
-    *,
-    fetch: Callable[[Path], str] = default_fetch,
-) -> dict[str, Any]:
-    """T72's gate reading: `silent_connector_failures`.
+#: The one key `set_enabled` writes. Its absence means enabled: fifteen
+#: packages predate this flag and none of them is retired.
+_ENABLED_RE = re.compile(r"^enabled:.*$", re.MULTILINE)
 
-    Only `usable` packages are evaluated — `installed_packages` already
-    marks a reserved-example-domain package (`examplejobs_es`) unusable, and
-    a worked example has no portal to have silently rotted.
+
+def is_enabled(package: Path) -> bool:
+    """Is this connector still in service? Absent or malformed means yes.
+
+    Defaulting open is the deliberate direction. A typo in one package's
+    `meta.yaml` should not quietly retire a working board — the failure this
+    task exists to prevent, arriving through the flag built to prevent it.
     """
-    packages = [p for p in installed_packages(directory) if p.usable]
+    try:
+        meta = yaml.safe_load((package / META_FILENAME).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return True
+    if not isinstance(meta, dict):
+        return True
+    return meta.get("enabled") is not False
+
+
+def offer_to_disable(reading: Reading) -> str | None:
+    """What to put to a human about this connector, or `None` for nothing.
+
+    Offered, never automatic — and never for `inconclusive`. Retiring a board
+    on the strength of our own rate limiting is precisely the outcome T73
+    exists to make impossible, so the third verdict is not a quieter `broken`
+    that still reaches for the switch: it reaches for nothing.
+    """
+    if reading.health != "broken":
+        return None
+    return (
+        f"{reading.connector} reads broken: {'; '.join(reading.reasons)}. "
+        f"Disable it? `set_enabled(<package>, False, confirmed=True)` writes "
+        f"`enabled: false` into its {META_FILENAME} and touches nothing else."
+    )
+
+
+def set_enabled(package: Path, enabled: bool, *, confirmed: bool) -> Path:
+    """Flip one connector's `enabled` flag. Refuses without `confirmed`.
+
+    The keyword is the whole mechanism: nothing in this module calls it, so
+    the only way a board is retired is a caller that said so in as many
+    words. A health check that switches boards off by itself is a health
+    check that gets switched off after its first false alarm, and then the
+    silent rot it existed to catch comes back unwatched.
+
+    One key, edited in the text. `meta.yaml` carries the reasoning a
+    maintainer wrote about a board — trabajos_es's runs to thirty lines of
+    robots.txt findings — and re-serialising it through `yaml.safe_dump` to
+    change one boolean would delete all of it.
+    """
+    if not confirmed:
+        raise ConnectorHealthError(
+            f"refusing to set enabled={enabled} on {package.name} without confirmation — "
+            "disabling a connector is offered to a human, never taken automatically"
+        )
+    meta = package / META_FILENAME
+    text = meta.read_text(encoding="utf-8")
+    line = f"enabled: {'true' if enabled else 'false'}"
+    updated, replaced = _ENABLED_RE.subn(line, text, count=1)
+    if not replaced:
+        note = "# Set by hand or by an accepted health-check offer."
+        updated = text.rstrip("\n") + f"\n\n{note}\n{line}\n"
+    meta.write_text(updated, encoding="utf-8")
+    return meta
+
+
+def _live_readings(
+    directory: Path, *, fetch: Callable[[Path], str] = default_fetch
+) -> tuple[list[Reading], list[str]]:
+    """Every enabled, usable package read once, plus the names of the retired.
+
+    Only `usable` packages are evaluated — `installed_packages` already marks
+    a reserved-example-domain package (`examplejobs_es`) unusable, and a
+    worked example has no portal to have silently rotted.
+
+    A retired board is not health-checked, but it is *named* rather than
+    dropped: a library that shrank to nothing must read `unmeasured`, never
+    as a clean run over an empty set.
+    """
+    usable = [p for p in installed_packages(directory) if p.usable]
+    disabled = [p.name for p in usable if not is_enabled(directory / p.name)]
+    retired = set(disabled)
     readings: list[Reading] = []
-    for package in packages:
+    for package in usable:
+        if package.name in retired:
+            continue
         path = directory / package.name
         try:
             connector = load_connector(path)
@@ -372,9 +593,22 @@ def measure(
             )
             continue
         readings.append(assess_package(path, connector, package.site or package.name, fetch=fetch))
+    return readings, disabled
 
+
+def measure(
+    directory: Path = DEFAULT_CONNECTORS_DIR,
+    *,
+    fetch: Callable[[Path], str] = default_fetch,
+) -> dict[str, Any]:
+    """T72's gate reading: `silent_connector_failures`."""
+    readings, disabled = _live_readings(directory, fetch=fetch)
     evaluated = len(readings)
-    probed = sum(1 for r in readings if r.probed)
+    # `rot_stage_ran`, not `probed`: T73 added a third way for the comparison
+    # not to have happened. A refused capture is a file that was read and
+    # nothing that was compared, and counting it as probed would stamp
+    # `measured` on a run that looked at a challenge page.
+    probed = sum(1 for r in readings if r.rot_stage_ran)
     violations = [r for r in readings if r.health == "broken"]
     # Two ways to be unmeasured, and both are real. Nothing evaluated is the
     # empty-input-set failure the task payload names. Something evaluated but
@@ -391,6 +625,7 @@ def measure(
         "connector_runs_evaluated": evaluated,
         "silent_connector_failures_evaluated": evaluated,
         "connector_runs_probed": probed,
+        "disabled": disabled,
         "gate_status": status,
         "readings": [
             {
@@ -402,10 +637,186 @@ def measure(
                 "reasons": list(r.reasons),
                 "probed": r.probed,
                 "probe_captured_at": r.probe_captured_at,
+                "rate_limited": r.rate_limited,
             }
             for r in readings
         ],
     }
+
+
+#: Known refusals, each carrying its own ground truth. Every entry here *is*
+#: a refusal — that is not the classifier's opinion, it is why the row exists
+#: — so a run that reports one of them `broken` has failed T73's gate outright.
+#:
+#: They are constructed rather than drawn from the library because the
+#: library is fifteen 200s: a denominator taken only from live captures would
+#: be 0, `gate_status` would read `unmeasured` for as long as every board
+#: kept answering, and a gate that never runs is exactly the silent success
+#: this increment exists to catch. A live refusal, when one happens, is
+#: counted beside them.
+RATE_LIMIT_SAMPLES: tuple[tuple[str, int | None, str], ...] = (
+    ("bare 429", 429, "<html><body>Too Many Requests</body></html>"),
+    ("429 with a retry hint", 429, "<html><body>Slow down. Retry after 60s.</body></html>"),
+    ("403 from a WAF", 403, "<html><body>Forbidden</body></html>"),
+    ("503 while the board is down", 503, "<html><body>Service Unavailable</body></html>"),
+    (
+        "cloudflare interstitial, served 200",
+        200,
+        "<html><head><title>Just a moment...</title></head>"
+        "<body>Checking your browser before accessing.</body></html>",
+    ),
+    (
+        "cloudflare block, served 200",
+        200,
+        "<html><head><title>Attention Required! | Cloudflare</title></head>"
+        "<body>You have been blocked.</body></html>",
+    ),
+    (
+        "captcha challenge, served 200",
+        200,
+        "<html><body><div id='captcha'>Please complete the captcha</div></body></html>",
+    ),
+    (
+        "incapsula challenge, served 200",
+        200,
+        "<html><body><iframe src='/_Incapsula_Resource?SWCGHOEL'></iframe></body></html>",
+    ),
+    (
+        "rate-limit notice with no status recorded",
+        None,
+        "<html><body>You have hit our rate limit. Try later.</body></html>",
+    ),
+    (
+        "unusual-traffic interstitial with no status recorded",
+        None,
+        "<html><body>Our systems have detected unusual traffic.</body></html>",
+    ),
+)
+
+
+def _ground_package(directory: Path) -> tuple[str, Connector, str, str] | None:
+    """A connector to put the constructed refusals through, and its baseline.
+
+    Three requirements, and the third was found by review rather than by
+    design. The baseline must **parse**, and must yield rows, so a sample has
+    something to regress *from* — a baseline that never yielded is excused by
+    T72 before T73's branch is ever reached, and every sample would pass for
+    the wrong reason.
+
+    And it must produce **no free signals of its own**. On the refusal path
+    `assess` runs the free signals over the baseline, so a ground fixture
+    carrying one undecoded entity or one off-host `detail_url` makes `reasons`
+    non-empty for all ten samples at once: `health` reads `broken`,
+    `rate_limited_runs_reported_as_broken` reads 10, and T73 fails for a
+    T72-class defect in an unrelated connector while naming rate limiting as
+    the cause. A gate whose red says the wrong thing is worse than one that
+    stays amber, so a library with no clean ground reports `unmeasured`.
+
+    The name comes back with it and is written into the evidence, so a reader
+    can always tell which fixture the samples were judged against.
+    """
+    for package in installed_packages(directory):
+        if not package.usable or not is_enabled(directory / package.name):
+            continue
+        path = directory / package.name
+        try:
+            connector = load_connector(path)
+            baseline = (path / FIXTURE_DIRNAME / "list.html").read_text(encoding="utf-8")
+        except (ConnectorError, OSError, UnicodeError):
+            continue
+        site = package.site or package.name
+        items = parse_list_page(connector, baseline)
+        if not items:
+            continue
+        declared = frozenset(
+            connector.list.fields
+            if connector.list.from_json is None
+            else connector.list.from_json.fields
+        )
+        if free_signals(items, site, declared):
+            continue
+        return package.name, connector, site, baseline
+    return None
+
+
+def measure_rate_limiting(
+    directory: Path = DEFAULT_CONNECTORS_DIR,
+    *,
+    samples: tuple[tuple[str, int | None, str], ...] = RATE_LIMIT_SAMPLES,
+    fetch: Callable[[Path], str] = default_fetch,
+) -> dict[str, Any]:
+    """T73's gate reading: `rate_limited_runs_reported_as_broken`.
+
+    The denominator is what makes this a measurement. It counts refusals
+    *classified*, and every constructed sample is a refusal by construction —
+    so deleting the block check does not quietly zero this gate, it fires it:
+    the samples fall through to the regression branch, report `broken`, and
+    the numerator rises. An empty sample set with no live refusal leaves
+    nothing classified, and `gate_status` says `unmeasured` rather than
+    dressing an unrun check up as a pass.
+    """
+    readings: list[tuple[str, Reading]] = []
+    ground = _ground_package(directory)
+    if ground is not None:
+        _, connector, site, baseline = ground
+        readings.extend(
+            (
+                name,
+                assess(
+                    connector,
+                    site,
+                    baseline_html=baseline,
+                    probe_html=body,
+                    probe_status=status,
+                ),
+            )
+            for name, status, body in samples
+        )
+    # Live refusals count too — they are the case the samples stand in for,
+    # and on the day a board starts answering 429 this is where it shows up.
+    readings.extend(
+        (f"live: {r.connector}", r)
+        for r in _live_readings(directory, fetch=fetch)[0]
+        if r.rate_limited is not None
+    )
+
+    violations = [name for name, r in readings if r.health == "broken"]
+    evaluated = len(readings)
+    return {
+        "rate_limited_runs_reported_as_broken": len(violations),
+        # Both names on purpose, as T72 does: the payload names the first,
+        # the `status-key` mechanism was written against the second.
+        "rate_limited_runs_reported_as_broken_evaluated": evaluated,
+        "runs_evaluated": evaluated,
+        "gate_status": "measured" if evaluated else "unmeasured",
+        # Which fixture the constructed refusals were judged against. A defect
+        # in it would surface as ten broken samples at once, so a reader who
+        # sees that number needs to know where to look first.
+        "ground_package": ground[0] if ground is not None else None,
+        "reported_as_broken": violations,
+        "readings": [
+            {
+                "case": name,
+                "health": r.health,
+                "rate_limited": r.rate_limited,
+                "baseline_items": r.baseline_items,
+                "probe_items": r.probe_items,
+                "reasons": list(r.reasons),
+            }
+            for name, r in readings
+        ],
+    }
+
+
+def write_rate_limit_evidence(
+    evidence: Path = DEFAULT_RATE_LIMIT_EVIDENCE_PATH,
+    directory: Path = DEFAULT_CONNECTORS_DIR,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T73.json`."""
+    measured = measure_rate_limiting(directory)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
 
 
 def write_evidence(
@@ -432,10 +843,29 @@ def _main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
 
     measured = write_evidence(Path(args.path))
+    # Two gates, one module, two files — the same shape `cv_store` uses for
+    # S4 and T97. They ask different questions of the same readings, and a
+    # reader must be able to fail one without the other going quiet.
+    # Beside T72's file, wherever that was asked for: a caller redirecting
+    # one record to a scratch directory is not asking to have the other
+    # written into the repository.
+    rate_limits = write_rate_limit_evidence(Path(args.path).parent / "T73.json")
     print(json.dumps(measured, ensure_ascii=False))
     for reading in measured["readings"]:
         for reason in reading["reasons"]:
             print(f"{reading['connector']}: {reason}", file=sys.stderr)
+        if reading.get("rate_limited"):
+            print(
+                f"{reading['connector']}: inconclusive — {reading['rate_limited']}. "
+                "Not evidence of breakage, and not grounds to disable anything.",
+                file=sys.stderr,
+            )
+    # T73 fails loudly and on its own: a refusal reported as breakage is how
+    # a working board gets retired, and it must not be readable as T72 noise.
+    if rate_limits["rate_limited_runs_reported_as_broken"]:
+        for case in rate_limits["reported_as_broken"]:
+            print(f"rate-limited run reported as broken: {case}", file=sys.stderr)
+        return 1
 
     # A violation the free signals actually FOUND is a measured failure, and it
     # outranks any missing probe. Testing `unmeasured` first meant one unprobed
@@ -451,11 +881,26 @@ def _main(argv: list[str]) -> int:
         if not evaluated:
             why = "0 connector(s) evaluated"
         else:
-            unprobed = [r["connector"] for r in measured["readings"] if not r["probed"]]
+            # Two different ways the rot stage does not run, and telling a
+            # reader which happened is the difference between "capture one"
+            # and "we are being refused". `probed` alone conflated them.
+            uncaptured = [
+                r["connector"]
+                for r in measured["readings"]
+                if not r["probed"] and not r.get("rate_limited")
+            ]
+            refused = [r["connector"] for r in measured["readings"] if r.get("rate_limited")]
+            parts = []
+            if uncaptured:
+                parts.append(
+                    f"no current read captured at {PROBE_DIRNAME}/list.html for: "
+                    f"{', '.join(uncaptured)}"
+                )
+            if refused:
+                parts.append(f"the board refused the read for: {', '.join(refused)}")
             why = (
-                f"{evaluated} connector(s) evaluated but only {probed} probed — no current "
-                f"read captured at {PROBE_DIRNAME}/list.html for: {', '.join(unprobed)}. "
-                "The rot stage did not run"
+                f"{evaluated} connector(s) evaluated but only {probed} compared — "
+                f"{'; '.join(parts)}. The rot stage did not run"
             )
         print(
             f"silent_connector_failures: UNMEASURED — {why}. Not a pass and not a fail.",

@@ -156,15 +156,24 @@ def _is_allowlisted(relative: str) -> bool:
     return any(relative == entry or relative.startswith(entry) for entry in ALLOWLIST)
 
 
-def measure(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
-    """T55's gate: surviving references to the old package and repository names."""
+def measure(
+    repo_root: Path = _REPO_ROOT, *, archived: frozenset[str] = frozenset()
+) -> dict[str, Any]:
+    """T55's gate: surviving references to the old package and repository names.
+
+    `archived` names repo-relative paths to measure as though they had already
+    been moved into `arsenal/tasks/_history/`. That directory is allowlisted,
+    so archiving a file *is* "this path stops being scanned" and nothing else
+    — which is what lets `measure_archive_sensitivity` answer T100's question
+    without moving anybody's task file on disk to find out.
+    """
     package: list[str] = []
     repository: list[str] = []
     scanned = 0
 
     for path in _tracked_files(repo_root):
         relative = path.relative_to(repo_root).as_posix()
-        if _is_allowlisted(relative):
+        if relative in archived or _is_allowlisted(relative):
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -192,14 +201,126 @@ def measure(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
     }
 
 
+#: The floor `files_scanned` is asserted against, and what the record carries
+#: in its place. Today's sweep sees a little over six hundred files; this sits
+#: well below that so the repository can lose a directory without the gate
+#: turning red for a reason that is not a finding.
+#:
+#: A floor rather than a census because `files_scanned` is a **denominator**.
+#: It measures nothing about the code — it exists to stop a clean zero resting
+#: on an empty scan — and committing it as an exact value made every added
+#: file a drift, `open_task_pr.sh`'s archive included. That is T100: the
+#: script archives the task file and then runs the host gate, so the committed
+#: number had to be the pre-archive value and the post-archive value at once.
+MINIMUM_SCANNED = 500
+
+#: T100's own record, beside T55's. Two questions of one sweep: what the
+#: rename left behind, and whether what we commit about it can survive a task
+#: file moving into `_history/`.
+DEFAULT_ARCHIVE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T100.json"
+
+
+def record(measured: dict[str, Any]) -> dict[str, Any]:
+    """What is committed, out of what was measured.
+
+    The one difference is the denominator: the live count goes out and the
+    floor it was checked against goes in. The number is not dropped — a reader
+    comparing two evidence files still sees what the sweep guaranteed — it
+    just stops being a value that moves when a file is added.
+    """
+    committed = {key: value for key, value in measured.items() if key != "files_scanned"}
+    committed["files_scanned_at_least"] = MINIMUM_SCANNED
+    return committed
+
+
+def first_task_file(repo_root: Path = _REPO_ROOT) -> str | None:
+    """The repo-relative path of one live task file, or `None` if there is none.
+
+    Deterministic — sorted, first — because a gate that picks a different
+    input each run reports a different thing each run.
+
+    It must be a file the sweep currently *scans*. `arsenal/tasks/` also holds
+    `_migrated-history.md`, which is allowlisted already, and archiving that
+    moves nothing: the first version of this picked it, compared a tree with
+    itself, and reported `measured` over a no-op — the same self-comparison
+    that made `connector_health`'s probe worthless before T72 was rewritten.
+    """
+    try:
+        tracked = _tracked_files(repo_root)
+    except NamingError:
+        return None
+    live = sorted(
+        relative
+        for relative in (path.relative_to(repo_root).as_posix() for path in tracked)
+        if relative.startswith("arsenal/tasks/")
+        and relative.endswith(".md")
+        and "/" not in relative[len("arsenal/tasks/") :]
+        and not _is_allowlisted(relative)
+    )
+    return live[0] if live else None
+
+
+def sensitive_keys(live: dict[str, Any], archived: dict[str, Any]) -> list[str]:
+    """Which committed keys disagree across the archive. Empty is the goal."""
+    return sorted(key for key in live | archived if live.get(key) != archived.get(key))
+
+
+def measure_archive_sensitivity(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
+    """T100's gate: `archive_sensitive_evidence_keys`.
+
+    Not a test of the fix's shape but of its effect. `record` could satisfy
+    "the archive changes nothing" by dropping the sensitive key entirely, so
+    the metric compares the two records key by key and the denominator —
+    `evidence_keys_compared` — is what says the comparison happened at all.
+    With no task file to archive there is nothing to move and nothing proved,
+    which is `unmeasured` rather than a pass.
+    """
+    candidate = first_task_file(repo_root)
+    if candidate is None:
+        return {
+            "archive_sensitive_evidence_keys": 0,
+            "evidence_keys_compared": 0,
+            "gate_status": "unmeasured",
+            "archived_for_the_comparison": None,
+            "sensitive": [],
+        }
+    live = record(measure(repo_root))
+    archived = record(measure(repo_root, archived=frozenset({candidate})))
+    sensitive = sensitive_keys(live, archived)
+    return {
+        "archive_sensitive_evidence_keys": len(sensitive),
+        "evidence_keys_compared": len(live | archived),
+        "gate_status": "measured",
+        "archived_for_the_comparison": candidate,
+        "sensitive": sensitive,
+    }
+
+
+def write_archive_sensitivity_evidence(
+    evidence: Path = DEFAULT_ARCHIVE_EVIDENCE_PATH,
+    repo_root: Path = _REPO_ROOT,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T100.json`."""
+    measured = measure_archive_sensitivity(repo_root)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     repo_root: Path = _REPO_ROOT,
 ) -> dict[str, Any]:
-    """Measure and record `status/evidence/T55.json`."""
+    """Measure and record `status/evidence/T55.json`.
+
+    Returns what was *measured*; writes what is *recorded*. The caller still
+    needs the live count for the floor check, and the file must not carry it.
+    """
     measured = measure(repo_root)
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    evidence.write_text(
+        json.dumps(record(measured), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return measured
 
 
@@ -249,7 +370,56 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
     print(json.dumps(measured, ensure_ascii=False))
-    return 1 if measured["old_name_references"] else 0
+    if measured["old_name_references"]:
+        return 1
+
+    sensitivity: dict[str, Any] | None = None
+    # T100, beside T55 — one sweep, two questions, two files. Written exactly
+    # when T55's own record is: `--repo` supplies no default target, so a
+    # measurement of another tree lands nowhere unless the caller said where.
+    # Gating this on `own_repo` as well made the T100 half unreachable for an
+    # explicit `--repo <tree> <target>`, which is the one shape a test of a
+    # repository with no live task file can take.
+    if target is not None:
+        sensitivity = write_archive_sensitivity_evidence(
+            target.parent / "T100.json", repo_root
+        )
+        for key in sensitivity["sensitive"]:
+            print(
+                f"✗ `{key}` changes when {sensitivity['archived_for_the_comparison']} is "
+                "archived — a committed value that moves on the archive is what stops "
+                "`open_task_pr.sh` opening a PR (T100)",
+                file=sys.stderr,
+            )
+        if sensitivity["archive_sensitive_evidence_keys"]:
+            return 1
+
+    # The floor, last: a surviving reference is a finding and outranks a thin
+    # denominator, the same precedence `connector_health` applies between a
+    # real violation and a missing probe. Exit 3 is "nothing was counted, so
+    # nothing passed and nothing failed".
+    if measured["files_scanned"] < MINIMUM_SCANNED:
+        print(
+            f"only {measured['files_scanned']} file(s) were scanned (floor "
+            f"{MINIMUM_SCANNED}) — zero surviving references over nothing is not a "
+            "measurement",
+            file=sys.stderr,
+        )
+        return 3
+    # T100's own denominator, after T55's. Zero sensitive keys over no
+    # comparison is zero, and this task exists because a denominator nobody
+    # asserted let a check report success over work it did not do — so a
+    # checkout that has archived its only task file must not read as a pass
+    # here either. Found by review on #284: the fix reproducing the failure it
+    # fixes, one exit code down.
+    if sensitivity is not None and sensitivity["gate_status"] != "measured":
+        print(
+            "archive_sensitive_evidence_keys: UNMEASURED — no live task file to "
+            "archive, so nothing was compared. Not a pass and not a fail.",
+            file=sys.stderr,
+        )
+        return 3
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
