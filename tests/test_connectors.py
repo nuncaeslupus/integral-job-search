@@ -1284,6 +1284,62 @@ def test_a_record_missing_a_named_field_gets_no_detail_url_rather_than_a_broken_
 
 
 @pytest.mark.parametrize(
+    "record",
+    [
+        pytest.param({"id": 7, "slug": "", "position": "P"}, id="empty-slug"),
+        pytest.param({"id": "", "slug": "s", "position": "P"}, id="empty-id"),
+        pytest.param({"id": 7, "slug": "   ", "position": "P"}, id="blank-slug"),
+    ],
+)
+def test_an_empty_or_blank_value_gets_no_detail_url_either(record: dict[str, object]) -> None:
+    """Second-reader audit on #264, D2: the guard was `value is None`, so these
+    three rows composed `…/jobs/7/`, `…/jobs//s` and `…/jobs/7/%20%20%20` — the
+    hole the docstring promises never to build, on a board that answers 200 to
+    the holed path. `_json_record` already read `""` as absent for every mapped
+    field; `_present` is now the one rule both of them read."""
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    (row,) = parse_list_page(connector, json.dumps([record]))
+    assert "detail_url" not in row
+    assert row["title"] == "P"
+
+
+@pytest.mark.parametrize("value", ["..", "."])
+def test_a_dot_segment_is_refused_rather_than_left_to_steer_the_url(value: str) -> None:
+    """Second-reader audit on #264, D3: `.` is unreserved, so `quote(safe="")`
+    leaves `..` intact and "one opaque segment" was false for exactly two
+    strings. The consequence is measurable against this repo's own robots
+    matcher, which answers `True` to `https://www.dice.com/x/../jobs?q=python`
+    and `False` to `https://www.dice.com/jobs?q=python` — a remote value
+    steering a fetch past the check built to refuse it."""
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    (row,) = parse_list_page(connector, json.dumps([{"id": value, "slug": "x", "position": "P"}]))
+    assert "detail_url" not in row
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # Quoting happens before the check, so a percent-encoded spelling of
+        # `..` arrives double-encoded and is a segment like any other: the
+        # guard refuses two strings, not a family of near-misses.
+        ("%2e%2e", "%252e%252e"),
+        ("%2E%2E", "%252E%252E"),
+        ("...", "..."),
+        ("..x", "..x"),
+        (".hidden", ".hidden"),
+    ],
+)
+def test_a_value_that_merely_resembles_a_dot_segment_still_composes(
+    value: str, expected: str
+) -> None:
+    """The other half of D3: a guard that over-refused would cost real rows
+    their `detail_url`, which is the same silent loss in the other direction."""
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    (row,) = parse_list_page(connector, json.dumps([{"id": 1, "slug": value, "position": "P"}]))
+    assert row["detail_url"] == f"https://templateboard.test/jobs/1/{expected}"
+
+
+@pytest.mark.parametrize(
     "template",
     [
         "https://b.test/jobs/{0.__class__}",
@@ -1291,6 +1347,12 @@ def test_a_record_missing_a_named_field_gets_no_detail_url_rather_than_a_broken_
         "https://b.test/jobs/{id}{",
         "https://b.test/jobs/{{id}}",
         "https://b.test/jobs/every-row-the-same",
+        # Second-reader audit on #264, D7. `{$}` compiled to the empty path and
+        # `dig(record, ())` is `None` for any dict row, so the template named no
+        # field and silently gave every row no `detail_url` while the "names no
+        # field" guard never fired. Fail-closed, and still a template whose
+        # author would never learn it did nothing.
+        "https://b.test/jobs/{$}",
     ],
 )
 def test_a_template_outside_the_grammar_is_refused_at_load(template: str) -> None:
@@ -1341,6 +1403,22 @@ def test_a_salary_figure_of_zero_or_less_is_absent_rather_than_stated(figure: st
     assert offer.salary.min is None
     assert offer.salary.max == 65000.0
     assert offer.salary.stated is True
+
+
+def test_a_currency_with_no_surviving_figure_is_no_salary_at_all() -> None:
+    """Second-reader audit on #264, D6. `_as_wage` nulls both figures while the
+    old guard asked only whether any salary KEY was present, so a 0/0 advert
+    that also sent a currency yielded `Salary(stated=True)` carrying no numbers
+    — `ruled-out.yaml`'s caveat: "worse than no salary at all, because the
+    ranking uses it". No shipped fixture reaches it today; weworkremotely's
+    JSON-LD `minValue '0' / maxValue '0'` is one connector-change away."""
+    connector = parse_connector(TEMPLATE_CONNECTOR)
+    offer = build_offer(
+        connector,
+        list_fields={"salary_min": "0", "salary_max": "0", "salary_currency": "EUR"},
+        detail_fields={"text": "A body long enough to be an advert." * 3},
+    )
+    assert offer.salary is None
 
 
 def test_a_real_floor_still_survives() -> None:

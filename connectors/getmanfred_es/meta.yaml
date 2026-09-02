@@ -36,6 +36,29 @@ policy:
 # repo's tooling reads rather than a claim about the format — `connect_portal`,
 # `connector_health` and `excerpt_fixture` all address `fixture/list.html` by
 # name. The same convention is used by the other `from_json` packages.
+#
+# `probe/list.html` is a SECOND read of the same query, fetched live on
+# 2026-09-02 — a day later than the fixture — cut by the same rule, and it is
+# not a copy. The first revision of this package shipped the two byte-identical,
+# which is the exact tautology `connector_health`'s docstring names: the
+# production path compared a string with itself, so `silent_connector_failures`
+# could only ever be 0 while the evidence read `probed: true`. Caught by the
+# second-reader audit on #264 (D1).
+#
+# What differs between the two captures, in full — because "it differs" is not
+# something a later reader can check. Three values across the three records:
+#
+#   * offer 8389 `offerLanguages`: ["EN","ES"] -> ["ES","EN"] (order only)
+#   * offer 8467 `updatedAt`: 2026-08-27T13:45:48.821Z -> 2026-09-01T09:05:26.911Z
+#   * offer 8464 `offerLanguages`: ["EN","ES"] -> ["ES","EN"] (order only)
+#
+# 14 differing bytes, and none of them in a field this connector maps — which
+# is the healthy reading rather than a weak one. The rot check asks whether the
+# same selectors still find the same items in a genuinely later response, and
+# they do: three records, each still yielding title, company, both figures and
+# a composed detail_url. The board itself moved in the same interval (21 live
+# offers on 09-01, 20 on 09-02), so the two files being nearly equal is a fact
+# about the three offers kept, not about the capture.
 fixture:
   provenance: sampled
   recorded: "2026-09-01"

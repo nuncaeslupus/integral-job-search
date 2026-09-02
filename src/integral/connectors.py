@@ -21,10 +21,15 @@ that is matched against, never evaluated. Concretely, nothing in this module
 ever calls `eval`, `exec`, `compile`, `__import__`, `getattr` on a
 connector-supplied name, or a subprocess/shell function with connector-
 supplied text; `yaml.safe_load` is the only loader used, so a `!!python/…`
-tag is refused before it can construct anything; and a URL pattern's only
-placeholder is substituted with `str.replace`, never `str.format`, because a
+tag is refused before it can construct anything; and neither of the two
+connector-controlled brace grammars ever reaches `str.format`, because a
 connector-controlled format string is its own attribute-access injection
-vector even though it never reaches `eval`. `probe_connector_isolation`
+vector even though it never reaches `eval` — a `url_pattern`'s only
+placeholder is substituted with `str.replace`, and a `detail_url_template`'s
+slots are found with a regex, each one checked against the same `JSON_PATH`
+every other path in the file must satisfy, and the values spliced in by hand
+(`_templated_url`), with a leftover brace refused at load either way.
+`probe_connector_isolation`
 below tries each of these routes and asserts every one is refused — "the
 gate is the reason" this module exists in this shape.
 
@@ -490,7 +495,12 @@ def compile_url_template(template: str) -> tuple[tuple[str, ...], ...]:
     residue = URL_TEMPLATE_SLOT.sub("", template)
     if "{" in residue or "}" in residue:
         raise ConnectorError(f"unbalanced or nested braces in detail_url_template: {template!r}")
-    if not paths:
+    # `not all(paths)` is the `{$}` case, and it is the same fault as the empty
+    # one: `compile_path` maps `JSON_ROOT` to the empty path, `dig(record, ())`
+    # is `None` for any dict row, so a template carrying it names a field the
+    # way `$` names a document — which is to say not at all — and quietly gives
+    # every row no `detail_url` while looking like it composes one.
+    if not paths or not all(paths):
         raise ConnectorError(
             f"detail_url_template names no field, so every row would get the same URL: {template!r}"
         )
@@ -548,6 +558,20 @@ def dig_container(document: Any, path: tuple[str, ...]) -> list[Any]:
     return node if isinstance(node, list) else []
 
 
+def _present(value: str | None) -> bool:
+    """One rule for "this record actually carries that field".
+
+    `dig` already answers `None` for a missing key, a `null` and a container.
+    What it cannot know is that a board publishes the empty string, or a run
+    of spaces, where it has nothing to say — and both of those are absent.
+    Written once and read by both consumers below, because having the rule in
+    only one of them is what let `slug: ""` build `…/jobs/7/` and
+    `slug: "   "` build `…/jobs/7/%20%20%20` while every mapped field treated
+    the same value as missing.
+    """
+    return value is not None and value.strip() != ""
+
+
 def _templated_url(document: Any, template: str) -> str | None:
     """`detail_url_template` with this record's own values substituted.
 
@@ -561,21 +585,42 @@ def _templated_url(document: Any, template: str) -> str | None:
     off-host signal checks the result as well; this is the half that makes the
     check unnecessary rather than merely present.
 
-    A record missing any named field yields `None` — no `detail_url` for that
-    row, which `build_offer` handles — rather than a URL with a hole in it. A
-    wrong detail URL is worse than an absent one on any board that answers 200
-    to an unknown id, and getmanfred, the board this was written for, is one:
-    a made-up offer id returns a page whose `pageProps` carries no offer at
-    all, so a broken link there looks exactly like a successful fetch.
+    A record whose named field is missing, `null`, empty or blank yields
+    `None` — no `detail_url` for that row, which `build_offer` handles —
+    rather than a URL with a hole in it. A wrong detail URL is worse than an
+    absent one on any board that answers 200 to an unknown id, and getmanfred,
+    the board this was written for, is one: a made-up offer id returns a page
+    whose `pageProps` carries no offer at all, so a broken link there looks
+    exactly like a successful fetch.
     """
     parts: list[str] = []
     last = 0
     for match in URL_TEMPLATE_SLOT.finditer(template):
         value = dig(document, compile_path(match.group(1)))
-        if value is None:
+        # `value is None` first only so mypy can narrow; `_present` covers it.
+        if value is None or not _present(value):
+            return None
+        encoded = quote(value, safe="")
+        if encoded in {".", ".."}:
+            # The "one opaque segment" property above is false for exactly two
+            # strings. `.` is unreserved, so `quote` leaves it alone and `..`
+            # survives whole, steering the composed URL up a level —
+            # `…/ofertas-empleo/../x`. That is a remote value
+            # moving a fetch to a path this repo's own robots matcher answers
+            # differently about (`/x/../jobs?q=python` allowed where
+            # `/jobs?q=python` is refused), which is the whole reason the
+            # values are escaped in the first place.
+            #
+            # Refusing the value, rather than normalising the composed URL and
+            # re-asserting its prefix: a refusal reuses the row's existing
+            # "no detail_url" outcome instead of introducing a second URL
+            # implementation to keep honest, and it fails at the value that is
+            # wrong rather than at the string it contaminated. Percent-encoded
+            # spellings need no case of their own — quoting happens first, so
+            # a value of `%2e%2e` arrives here as `%252e%252e`.
             return None
         parts.append(template[last : match.start()])
-        parts.append(quote(value, safe=""))
+        parts.append(encoded)
         last = match.end()
     parts.append(template[last:])
     return "".join(parts)
@@ -680,7 +725,7 @@ def _json_record(document: Any, source: JsonSource) -> dict[str, str]:
     record: dict[str, str] = {}
     for name, path in source.fields.items():
         value = dig(document, compile_path(path))
-        if value is not None and value != "":
+        if value is not None and _present(value):
             record[name] = value
     if source.detail_url_template is not None:
         url = _templated_url(document, source.detail_url_template)
@@ -1325,11 +1370,21 @@ def build_offer(
             country=merged.get("location_country"),
             remote=merged.get("location_remote"),
         )
+    # A currency, or a period, with no figure that survived `_as_wage` is not a
+    # stated salary. The old condition asked whether any salary KEY was present,
+    # so an advert sending `salaryFrom: 0`, `salaryTo: 0` and `currency: "€"` —
+    # which no shipped fixture does today, and weworkremotely's JSON-LD
+    # `minValue: '0' / maxValue: '0'` is one connector-change away from doing —
+    # produced `Salary(stated=True)` carrying no numbers at all. That is worse
+    # than no salary: `stated` is what the ranking reads to mean "the employer
+    # said", and it would be saying it about nothing.
     salary = None
-    if any(k in merged for k in ("salary_min", "salary_max", "salary_currency", "salary_period")):
+    minimum = _as_wage(merged.get("salary_min"))
+    maximum = _as_wage(merged.get("salary_max"))
+    if minimum is not None or maximum is not None:
         salary = Salary(
-            min=_as_wage(merged.get("salary_min")),
-            max=_as_wage(merged.get("salary_max")),
+            min=minimum,
+            max=maximum,
             currency=merged.get("salary_currency"),
             period=merged.get("salary_period"),
             stated=True,
@@ -1621,6 +1676,33 @@ def probe_connector_isolation() -> ProbeReport:
     must_be_refused(
         "!!python/name tag resolves a name instead of failing to load",
         lambda: parse_connector("site: !!python/name:os.system\nlocale: en\n"),
+    )
+
+    # 13-15. `detail_url_template` is the SECOND connector-controlled brace
+    #     grammar in this file, and probe 9 only covers the first (`url_pattern`
+    #     and its `{page}`). The same three payloads, aimed at the new surface:
+    #     an attribute-access path inside a slot, a leftover brace, and an empty
+    #     slot. Each must be refused at load by `compile_url_template`.
+    def _json_connector(template: str) -> str:
+        return (
+            "site: acme\nlocale: en\nversion: '1.0.0'\nlast_verified: '2026-01-01'\n"
+            "list:\n  url_pattern: 'https://x.test'\n"
+            "  from_json:\n    items: '$'\n"
+            f"    detail_url_template: '{template}'\n"
+            "    fields:\n      text: body\n"
+        )
+
+    must_be_refused(
+        "a detail_url_template slot naming an attribute path loads successfully",
+        lambda: parse_connector(_json_connector("https://x.test/{0.__class__}")),
+    )
+    must_be_refused(
+        "a detail_url_template with a leftover brace loads successfully",
+        lambda: parse_connector(_json_connector("https://x.test/{id}/{0.__class__.__init__")),
+    )
+    must_be_refused(
+        "an empty detail_url_template slot loads successfully",
+        lambda: parse_connector(_json_connector("https://x.test/{}")),
     )
 
     return ProbeReport(probes_run=probes, violations=tuple(violations))
