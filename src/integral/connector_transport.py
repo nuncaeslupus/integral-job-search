@@ -413,7 +413,12 @@ def measure(
 
     try:
         posts, scanned = recorded_post_boards(ledger)
-    except (OSError, yaml.YAMLError) as exc:
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        # `ValueError` is `shlex.split` refusing an unmatched quote in a
+        # `retest:` command (#295 review). A malformed entry is a ledger the
+        # gate cannot read, which is what `unmeasured` is for — letting it
+        # propagate takes `make evidence` down with a traceback instead, and a
+        # module that dies never gets to record that it could not measure.
         return _unmeasured(f"the ruled-out ledger could not be read: {exc}")
     if scanned < MINIMUM_LEDGER_ENTRIES:
         return _unmeasured(

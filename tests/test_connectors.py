@@ -1573,6 +1573,43 @@ def test_a_board_refused_on_policy_is_not_a_board_readable_only_by_post(tmp_path
     assert connector_transport.measure(patched)["gate_status"] == "unmeasured"
 
 
+def test_a_retest_command_with_a_broken_quote_is_unmeasured_not_a_crash(
+    tmp_path: Path,
+) -> None:
+    """`parse_curl` tokenises with `shlex`, and `shlex.split` raises
+    `ValueError: No closing quotation` on an unmatched quote. `measure` caught
+    `OSError` and `yaml.YAMLError` and not that, so one mistyped `retest:` in
+    the ledger took down `make evidence` instead of recording that the ledger
+    could not be read (#295 review).
+
+    The direction matters: a crash is fail-closed and loses nothing, but the
+    gate's own contract is that an input it cannot read is `unmeasured` — a
+    module that dies instead never gets to say so, and the drift check reports
+    a traceback rather than a missing measurement.
+    """
+    ledger = yaml.safe_load(
+        connector_transport.DEFAULT_LEDGER_PATH.read_text(encoding="utf-8")
+    )
+    for entry in connector_transport._entries(ledger):
+        if isinstance(entry.get("retest"), str):
+            entry["retest"] = "curl -s 'https://boards.test/search?q=python"
+            break
+    patched = tmp_path / "ruled-out.yaml"
+    patched.write_text(yaml.safe_dump(ledger), encoding="utf-8")
+
+    measured = connector_transport.measure(patched)
+    assert measured["gate_status"] == "unmeasured"
+
+
+def test_parse_curl_raises_on_an_unmatched_quote_rather_than_guessing() -> None:
+    """The refusal above is only meaningful if the tokeniser really does fail
+    here — a `parse_curl` that silently recovered would make the guard dead
+    code. Pinned so the guard cannot become decorative.
+    """
+    with pytest.raises(ValueError, match="No closing quotation"):
+        connector_transport.parse_curl("curl -s 'https://boards.test/a")
+
+
 def test_every_committed_connector_still_builds_a_plain_get() -> None:
     """A POST route that quietly changed what a GET connector sends would
     break every existing package silently, and T89's own count of POST-only
