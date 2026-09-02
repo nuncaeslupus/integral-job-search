@@ -574,9 +574,9 @@ terms, in the candidate's currency). The candidate sees an ordered list of what
 each dimension is worth per month.
 
 **Boundary.** *"So a shorter commute is worth about €200 a month to you, and
-remote about €600. Does that sound like you? I'd go and look at real jobs now,
-because the weights only prove themselves against adverts you can actually take
-or leave."* Writes `last_activity`.
+remote about €600 — say if either of those is off. I'd go and look at real
+jobs now, because the weights only prove themselves against adverts you can
+actually take or leave. Shall I?"* Writes `last_activity`.
 
 **Gate.** `weight_salary_equivalent_roundtrip_error <= 0.01` — converting a
 dimension to currency and back recovers the part-worth within 1%, so the number
@@ -883,9 +883,10 @@ changes with `status_changed_at`; a recomputed ranking. The candidate sees the
 re-ordered list and a plain statement of what changed and why.
 
 **Boundary.** *"Noted — agencies out. That dropped three of them and pushed the
-Girona role to the top. I'd apply to the Girona one next, because it has stayed
-top through two rounds of your own corrections. Anything else jump out first?"*
-Writes `last_activity`.
+Girona role to the top. Being top of the list isn't the same as you wanting
+it, so I'd mark the Girona one shortlisted now, because that's the step that
+records your interest and nothing gets drafted for a role you haven't
+shortlisted. Shall I shortlist it?"* Writes `last_activity`.
 
 **Gate.** `feedback_traceability == 1.0` — every derived value names the evidence
 rows that produced it, so "the ranking changed because you said X" is checkable
@@ -1039,10 +1040,10 @@ offer's status. Evidence rows linking each lesson to a dimension or an episode.
 The candidate sees, beforehand, what to rehearse; afterwards, what to carry into
 the next one.
 
-**Boundary.** *"Logged. They pushed hard on on-call and you didn't have much —
-I'd build that into a story before the next one, because the same question
-comes round and you now know exactly how it lands. How did it feel?"* Writes
-`last_activity`.
+**Boundary.** *"Logged. They pushed hard on on-call and you didn't have much.
+How did it feel? I'd build that into a story before the next one, because the
+same question comes round and you now know exactly how it lands — shall I?"*
+Writes `last_activity`.
 
 **Gate.** `interview_lesson_linkage == 1.0` — every logged interview produces at
 least one evidence row linked to a dimension or a story-bank episode. An

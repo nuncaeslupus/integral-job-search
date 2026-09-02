@@ -73,7 +73,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"Noted — agencies out. That dropped three of them and pushed the Girona role to the top. I'd apply to the Girona one next, because it has stayed top through two rounds of your own corrections. Anything else jump out first?"
+"Noted — agencies out. That dropped three of them and pushed the Girona role to the top. Being top of the list isn't the same as you wanting it, so I'd mark the Girona one shortlisted now, because that's the step that records your interest and nothing gets drafted for a role you haven't shortlisted. Shall I shortlist it?"
 ```
 
 Writes `last_activity`.

@@ -9,6 +9,7 @@ are negative controls, and they exist to prove the reader can still say no.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -87,9 +88,13 @@ def test_a_declined_recommendation_is_still_honoured(measured: dict[str, Any]) -
     # is refused even though it carries a recommendation and a reason.
     coercive = read_close(
         "control",
-        ('"I\'d do traits next, because it reads your episodes. You need to answer these first."',),
+        (
+            '"I\'d do traits next, because it reads your episodes — shall we? '
+            'You need to answer these first."',
+        ),
     )
     assert coercive["has_recommendation"] and coercive["has_reason"]
+    assert coercive["question_answers_the_recommendation"]
     assert coercive["coercive_lines"]
 
 
@@ -176,11 +181,18 @@ def test_the_reader_refuses_its_own_negative_controls() -> None:
     every measurement and not only here.
     """
     assert judge_controls() == []
-    assert len(NEGATIVE_CONTROLS) >= 4
+    assert len(NEGATIVE_CONTROLS) >= 8
     refused = [
         name for name, _, recommended, override in NEGATIVE_CONTROLS if not recommended or override
     ]
-    assert len(refused) >= 3, "the controls no longer include anything that must be refused"
+    assert len(refused) >= 6, "the controls no longer include anything that must be refused"
+
+    # The pairing controls must fail on the pair and nothing else: each one does
+    # carry a first-person recommendation, so a reader that simply stopped
+    # recognising "I'd" would satisfy them for the wrong reason.
+    for name, close, recommended, _ in NEGATIVE_CONTROLS:
+        if "question" in name and not recommended:
+            assert read_close("control", (close,))["has_recommendation"], name
 
 
 def test_a_library_with_no_close_reads_as_an_offer_without_a_recommendation(
@@ -213,4 +225,138 @@ def test_write_evidence_records_the_measurement(tmp_path: Path) -> None:
     measured = write_evidence(evidence)
     assert json.loads(evidence.read_text(encoding="utf-8")) == measured
     assert measured["steps_offered_without_a_recommendation"] == 0
+    assert measured["negative_controls_evaluated"] == len(NEGATIVE_CONTROLS)
     assert artefact_fallback(_step(load_steps(), "intake")) is True
+
+
+def _mutated_library(tmp_path: Path, slug: str, old: str, new: str) -> Path:
+    """A copy of the shipped library with one close, or one section, changed."""
+    library = tmp_path / "skills"
+    shutil.copytree(DEFAULT_SKILLS_DIR, library)
+    skill_md = library / slug / "SKILL.md"
+    text = skill_md.read_text(encoding="utf-8")
+    assert old in text, f"the text this fixture mutates is no longer shipped in {slug}"
+    skill_md.write_text(text.replace(old, new, 1), encoding="utf-8")
+    return library
+
+
+def test_a_close_that_asks_about_something_else_has_offered_nothing(
+    steps: StepList, tmp_path: Path
+) -> None:
+    """Finding 1: a recommendation and a question are not an offer *apart*.
+
+    The fixture is the wording this task shipped and review rejected — step 12
+    recommended building a story and then asked how the interview felt. Both
+    limbs read clean on their own, so the pair is what has to be judged: the
+    candidate is given nothing to say yes or no to.
+    """
+    library = _mutated_library(
+        tmp_path,
+        "step-12-interview-log",
+        "How did it feel? I'd build that into a story before the next one, because the same "
+        "question comes round and you now know exactly how it lands — shall I?",
+        "I'd build that into a story before the next one, because the same question comes "
+        "round and you now know exactly how it lands. How did it feel?",
+    )
+    interview = _step(steps, "interview_log")
+    reading = read_skill(interview, library)
+    assert reading.has_recommendation and reading.has_reason and reading.leaves_the_choice
+    assert not reading.question_answers_the_recommendation
+    assert reading.lacks_a_recommendation
+    assert measure(skills_dir=library)["steps_offered_without_a_recommendation"] == 1
+
+
+def test_a_removed_when_declined_section_is_counted_as_overriding_the_decline(
+    steps: StepList, tmp_path: Path
+) -> None:
+    """Finding 2: delete the section that honours a "no" and nothing else notices.
+
+    Every other limb of the close is untouched, so a reader that reports the
+    coercion and the question mark alone returns a clean zero over a library
+    whose decline has nowhere to land. That is the fail-open direction.
+    """
+    library = _mutated_library(
+        tmp_path, "step-03-history", "## When declined", "## Once declined, some day"
+    )
+    history = _step(steps, "history")
+    reading = read_skill(history, library)
+    assert not reading.has_when_declined
+    assert not reading.lacks_a_recommendation, "only the decline section was removed"
+    assert reading.overrides_a_decline
+    measured = measure(skills_dir=library)
+    assert measured["steps_overriding_a_decline"] == 1
+    assert [o["step"] for o in measured["offenders"]] == ["history"]
+
+
+def test_an_application_recommended_off_the_rank_alone_is_refused(
+    steps: StepList, tmp_path: Path
+) -> None:
+    """Finding 4: reaching the top of a list is not the candidate wanting it.
+
+    Step 11 requires an offer at `shortlisted` and step 10 says a status is
+    never inferred from silence, so the wording this task shipped — *"I'd apply
+    to the Girona one next, because it has stayed top through two rounds"* —
+    recommends an application nobody asked for.
+    """
+    library = _mutated_library(
+        tmp_path,
+        "step-10-feedback",
+        "Being top of the list isn't the same as you wanting it, so I'd mark the Girona one "
+        "shortlisted now, because that's the step that records your interest and nothing gets "
+        "drafted for a role you haven't shortlisted. Shall I shortlist it?",
+        "I'd apply to the Girona one next, because it has stayed top through two rounds of "
+        "your own corrections. Shall I?",
+    )
+    feedback = _step(steps, "feedback")
+    reading = read_skill(feedback, library)
+    assert reading.recommends_applying and not reading.records_the_shortlist
+    assert not reading.lacks_a_recommendation, "it does recommend, and asks about what it says"
+    assert reading.infers_interest_from_rank and reading.overrides_a_decline
+    assert measure(skills_dir=library)["steps_overriding_a_decline"] == 1
+
+
+def test_an_invalid_utf8_skill_is_unmeasured_rather_than_a_crash(
+    steps: StepList, tmp_path: Path
+) -> None:
+    """Finding 3: a measurement that cannot be taken reports, it does not abort.
+
+    `read_skill` already turned this into evidence; the three protocol readers
+    raised on the same bytes, so `measure` and `write_evidence` died before
+    recording anything at all.
+    """
+    library = tmp_path / "skills"
+    shutil.copytree(DEFAULT_SKILLS_DIR, library)
+    intake = _step(steps, "intake")
+    skill_md = library / skill_dir_name(intake) / "SKILL.md"
+    skill_md.write_bytes(b"## Protocol\n\n\xff\xfe is not utf-8\n")
+
+    assert follow_up_rule(intake, library) is False
+    assert artefact_fields(intake, library) == []
+    assert artefact_fallback(intake, library) is False
+
+    measured = measure(skills_dir=library)
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["steps_offered_without_a_recommendation"] == -1
+    assert "could not be read" in measured["unmeasured_reason"]
+
+
+def test_an_unreadable_skill_is_unmeasured_rather_than_a_crash(
+    steps: StepList, tmp_path: Path
+) -> None:
+    """The same for a file the process is not allowed to open."""
+    library = tmp_path / "skills"
+    shutil.copytree(DEFAULT_SKILLS_DIR, library)
+    intake = _step(steps, "intake")
+    skill_md = library / skill_dir_name(intake) / "SKILL.md"
+    skill_md.chmod(0o000)
+    if os.access(skill_md, os.R_OK):  # pragma: no cover - root ignores the mode
+        pytest.skip("this process can read a mode-000 file, so there is nothing to provoke")
+
+    assert follow_up_rule(intake, library) is False
+    assert artefact_fields(intake, library) == []
+    assert artefact_fallback(intake, library) is False
+
+    evidence = tmp_path / "T93.json"
+    measured = write_evidence(evidence, skills_dir=library)
+    assert measured["gate_status"] == "unmeasured"
+    assert json.loads(evidence.read_text(encoding="utf-8")) == measured

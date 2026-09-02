@@ -19,6 +19,7 @@
   ],
   "intake_artefact_fallback": true,
   "negative_controls_misjudged": 0,
+  "negative_controls_evaluated": 8,
   "gate_status": "measured",
   "offenders": [],
   "readings": [
@@ -33,9 +34,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": true,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -49,9 +54,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": true,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -65,9 +74,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -81,9 +94,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": true,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -97,9 +114,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -113,9 +134,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": true,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -124,14 +149,18 @@
       "skill_dir": "step-06-preferences",
       "skill_md_exists": true,
       "spoken": [
-        "\"So a shorter commute is worth about €200 a month to you, and remote about €600. Does that sound like you? I'd go and look at real jobs now, because the weights only prove themselves against adverts you can actually take or leave.\"\n"
+        "\"So a shorter commute is worth about €200 a month to you, and remote about €600 — say if either of those is off. I'd go and look at real jobs now, because the weights only prove themselves against adverts you can actually take or leave. Shall I?\"\n"
       ],
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -145,9 +174,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -161,9 +194,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -177,9 +214,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -188,14 +229,18 @@
       "skill_dir": "step-10-feedback",
       "skill_md_exists": true,
       "spoken": [
-        "\"Noted — agencies out. That dropped three of them and pushed the Girona role to the top. I'd apply to the Girona one next, because it has stayed top through two rounds of your own corrections. Anything else jump out first?\"\n"
+        "\"Noted — agencies out. That dropped three of them and pushed the Girona role to the top. Being top of the list isn't the same as you wanting it, so I'd mark the Girona one shortlisted now, because that's the step that records your interest and nothing gets drafted for a role you haven't shortlisted. Shall I shortlist it?\"\n"
       ],
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": true,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -209,9 +254,13 @@
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     },
     {
@@ -220,14 +269,18 @@
       "skill_dir": "step-12-interview-log",
       "skill_md_exists": true,
       "spoken": [
-        "\"Logged. They pushed hard on on-call and you didn't have much — I'd build that into a story before the next one, because the same question comes round and you now know exactly how it lands. How did it feel?\"\n"
+        "\"Logged. They pushed hard on on-call and you didn't have much. How did it feel? I'd build that into a story before the next one, because the same question comes round and you now know exactly how it lands — shall I?\"\n"
       ],
       "has_recommendation": true,
       "has_reason": true,
       "leaves_the_choice": true,
+      "question_answers_the_recommendation": true,
+      "recommends_applying": false,
+      "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
       "invites_open_ended_talk": false,
+      "read_failure": "",
       "reasons": []
     }
   ]

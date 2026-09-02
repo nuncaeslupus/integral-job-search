@@ -72,7 +72,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"Logged. They pushed hard on on-call and you didn't have much — I'd build that into a story before the next one, because the same question comes round and you now know exactly how it lands. How did it feel?"
+"Logged. They pushed hard on on-call and you didn't have much. How did it feel? I'd build that into a story before the next one, because the same question comes round and you now know exactly how it lands — shall I?"
 ```
 
 Writes `last_activity`.
