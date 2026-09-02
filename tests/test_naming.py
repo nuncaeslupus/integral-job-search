@@ -7,6 +7,7 @@ looking in the wrong place, and only the second kind is silent.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import tomllib
 from pathlib import Path
@@ -257,6 +258,17 @@ def test_the_archive_gate_counts_the_keys_it_compared() -> None:
     assert measured["archive_sensitive_evidence_keys"] == 0
     assert measured["evidence_keys_compared"] >= len(naming.record(naming.measure()))
     assert measured["gate_status"] == "measured"
+
+
+def test_which_file_was_archived_is_reported_but_not_committed(tmp_path: Path) -> None:
+    """`first_task_file` returns the sorted-first *live* task, so committing its
+    name made T100's own record go stale the moment that task merged — the very
+    defect T100 measures. The caller still gets the name for its message."""
+    target = tmp_path / "T100.json"
+    measured = naming.write_archive_sensitivity_evidence(target)
+
+    assert "archived_for_the_comparison" in measured
+    assert "archived_for_the_comparison" not in json.loads(target.read_text(encoding="utf-8"))
 
 
 def test_the_archive_gate_is_unmeasured_when_there_is_no_task_file_to_archive(

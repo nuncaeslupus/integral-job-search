@@ -267,6 +267,26 @@ def test_the_committed_plan_and_queue_agree() -> None:
     assert measured["plan_queue_task_drift"] == 0
 
 
+def test_the_row_counts_are_committed_as_a_floor(tmp_path: Path) -> None:
+    """T104's family. `plan_rows` and `queue_tasks` are denominators, and
+    seeding a task moves both — leaving every open PR's `S8.json` correct for
+    its branch and stale for its merge ref. The floor says what they were for
+    without moving; the live counts stay in what `main` checks."""
+    measured = plan_v2.measure()
+    target = tmp_path / "S8.json"
+    plan_v2.write_evidence(target)
+    committed = json.loads(target.read_text(encoding="utf-8"))
+
+    assert committed["plan_rows_at_least"] == plan_v2.MINIMUM_PLAN_ROWS
+    assert committed["queue_tasks_at_least"] == plan_v2.MINIMUM_PLAN_ROWS
+    assert "plan_rows" not in committed and "queue_tasks" not in committed
+    # The floor is a guard, not a decoration: it has to be under what the
+    # repository actually carries, and the live count has to be checked.
+    for name in ("plan_rows", "queue_tasks"):
+        count = measured[name]
+        assert isinstance(count, int) and count >= plan_v2.MINIMUM_PLAN_ROWS
+
+
 def test_a_plan_dependency_on_finished_work_is_not_drift(tmp_path: Path) -> None:
     """The board carries what a task is still waiting on; the plan's `Depends`
     column carries everything it ever waited on. Migrating to per-task files

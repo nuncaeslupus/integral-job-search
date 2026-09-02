@@ -50,6 +50,18 @@ DEFAULT_PLAN = _REPO_ROOT / "status" / "plan.md"
 DEFAULT_QUEUE = _REPO_ROOT / "arsenal" / "tasks"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "S8.json"
 
+#: The floor `plan_rows` and `queue_tasks` are asserted against, and what the
+#: record carries in their place. Both are **denominators** — they exist so
+#: that `plan_queue_task_drift == 0` cannot rest on an empty plan or an empty
+#: queue — and neither says anything about whether the two documents agree.
+#:
+#: Committed as exact values they moved every time a task was seeded, which
+#: lands two rows on both sides at once and leaves every open PR's `S8.json`
+#: correct for its branch and stale for its merge ref (T104). Today's board
+#: carries 146 of each; the floor sits well below that, so the queue can be
+#: pruned without the gate turning red for a reason that is not a finding.
+MINIMUM_PLAN_ROWS = 100
+
 # T1, T4b, S3, S1r, D-1 — every label the two documents use for a task.
 _LABEL_RE = re.compile(r"^(?:T\d+[a-z]?|S\d+r?|D-\d+)$")
 
@@ -330,11 +342,27 @@ def write_evidence(
     plan: Path = DEFAULT_PLAN,
     queue: Path = DEFAULT_QUEUE,
 ) -> dict[str, object]:
-    """Measure and record `status/evidence/S8.json`."""
+    """Measure and record `status/evidence/S8.json`.
+
+    Returns what was *measured*; writes what is *recorded*. `main` still needs
+    the live counts to check them against their floor, and the file must not
+    carry them — see `MINIMUM_PLAN_ROWS`.
+    """
     measured = measure(plan, queue)
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    evidence.write_text(
+        json.dumps(record(measured), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return measured
+
+
+def record(measured: dict[str, object]) -> dict[str, object]:
+    """What is committed, out of what was measured: the drift exactly, the two
+    denominators as the floor they were checked against."""
+    committed = {k: v for k, v in measured.items() if k not in ("plan_rows", "queue_tasks")}
+    committed["plan_rows_at_least"] = MINIMUM_PLAN_ROWS
+    committed["queue_tasks_at_least"] = MINIMUM_PLAN_ROWS
+    return committed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -349,7 +377,23 @@ def main(argv: list[str] | None = None) -> int:
     for violation in violations:
         print(f"✗ {violation}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
-    return 0 if not violations else 1
+    if violations:
+        return 1
+
+    # The floor, last: a real disagreement outranks a thin denominator, the
+    # same precedence `naming` and `task_gate` apply. Exit 3 is "nothing was
+    # counted, so nothing passed and nothing failed".
+    for name in ("plan_rows", "queue_tasks"):
+        count = measured[name]
+        assert isinstance(count, int)
+        if count < MINIMUM_PLAN_ROWS:
+            print(
+                f"only {count} {name} (floor {MINIMUM_PLAN_ROWS}) — zero drift between an "
+                "empty plan and an empty queue is not a measurement",
+                file=sys.stderr,
+            )
+            return 3
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
