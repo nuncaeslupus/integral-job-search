@@ -50,3 +50,22 @@ make help     # every target
 - [docs/distribution.md](docs/distribution.md) — how it is installed and where state lives
 
 MIT licensed.
+
+## Acknowledgements
+
+The failure-handling layer of this tool is adapted from
+[`MadsLorentzen/ai-job-search`](https://github.com/MadsLorentzen/ai-job-search)
+(MIT, © 2026 Mads Lorentzen) — how a job board actually fails, written down by
+someone who spent five weeks finding out. Robots handling that cannot fail
+open, a connector health check with three verdicts rather than two, liveness
+that reads page identity, the eligibility gate and its quoted reasons, the ATS
+text-layer contract: each began as a report from that project.
+
+What was taken, where each piece lives, and what the borrowing does **not**
+extend to are recorded one row at a time in
+[`docs/METHODS.md` §2.9](docs/METHODS.md). Its matching layer was assessed and
+**not** adopted, and that judgement is recorded there too.
+
+MIT requires notice retention for copied code, not attribution for ideas. Most
+of the above is the second kind; this section is a commitment rather than a
+licence obligation.
