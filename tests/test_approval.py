@@ -929,7 +929,7 @@ def test_the_retraction_probes_catch_every_planted_defect(tmp_path: Path) -> Non
     assert probed["gate_status"] == "measured"
 
 
-def test_the_gate_report_names_the_two_failure_kinds_apart(
+def test_the_retraction_gate_report_names_the_two_failure_kinds_apart(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A red gate must say which way the boundary broke (#305 review).
@@ -958,7 +958,7 @@ def test_the_gate_report_names_the_two_failure_kinds_apart(
     assert "still sendable: a clean send was refused" not in reported
 
 
-def test_a_scratch_evidence_run_writes_nothing_into_the_repo(tmp_path: Path) -> None:
+def test_a_scratch_retraction_evidence_run_writes_nothing_into_the_repo(tmp_path: Path) -> None:
     """D-24's evidence must follow the path it was given, as T46's always has.
 
     `_main` read `argv[1]` for T46 and then called `write_retraction_evidence()`
