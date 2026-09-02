@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 131,
-  "gates_declaring_status_key": 29,
+  "evidence_gates_read": 132,
+  "gates_declaring_status_key": 30,
   "unrecordable": [],
   "readings": [
     {
@@ -992,6 +992,14 @@
       "task": "t-ca02a857",
       "key": "policy_refusals_without_an_owner_decision",
       "evidence": "status/evidence/T99.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-cb6914ef",
+      "key": "merge_policy_ignores_ci",
+      "evidence": "status/evidence/T103.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true

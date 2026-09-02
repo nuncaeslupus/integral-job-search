@@ -5,6 +5,7 @@ priority: 10
 deps: [t-44c70ded]
 tags: [CI]
 workspace: BACKEND
+status: merged
 ---
 
 Imported from issue #182. It was filed to be done *once runners return*; they
@@ -25,9 +26,26 @@ check that says no *other* job names a target that no longer exists.
 
 ## Acceptance gate
 
+```gate
+merge_policy_ignores_ci == 0
+evidence: status/evidence/T103.json
+key: merge_policy_ignores_ci
+status-key: gate_status
+```
+
 ```bash
 test "$(python3 claude-arsenal/scripts/arsenal_config.py --get merge-policy)" = "after-ci-and-review"
+uv run python -m integral.merge_policy --check
+uv run --extra dev pytest tests/test_merge_policy.py -q
 ```
+
+Both preconditions below are readings inside `integral.merge_policy`'s metric —
+`merge_policy_ignores_ci` counts eight of them, and one that cannot be taken
+records `gate_status: unmeasured` rather than a pass. The commands here are the
+live form, run once when the PR is opened; the module re-reads T101's key on
+every `make evidence` and reads the `CI` conclusion from `status/ci-conclusion.json`,
+a capture `--refresh-ci` rewrites deliberately (a value fetched per run would
+drift the evidence the moment CI changed colour or the machine went offline).
 
 Then the two preconditions, because the policy is a claim about **GitHub Actions
 conclusions** and not about `make ci`. `arsenal/config.toml` already draws that
