@@ -1,0 +1,13 @@
+{
+  "borrowed_techniques_without_attribution": 0,
+  "borrowed_techniques_without_attribution_evaluated": 28,
+  "borrowed_techniques_checked": 14,
+  "gate_status": "measured",
+  "upstream": "MadsLorentzen/ai-job-search",
+  "adapted_modules_found": 3,
+  "adapted_modules_outside_the_register": [],
+  "attribution_rows_found": 14,
+  "register_tasks_outside_the_borrowed_set": [],
+  "register_tasks_credited_more_than_once": [],
+  "violations_attribution": []
+}

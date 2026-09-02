@@ -29,6 +29,7 @@ Exit: 0 on success, 1 if nothing to migrate, 2 on error.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import secrets
@@ -41,34 +42,46 @@ TERMINAL = {"done", "merged"}
 HISTORY_DIRNAME = "_history"
 DEFAULT_QUEUE = Path("claude-arsenal/queue/tasks.jsonl")
 
-CONFIG_TEMPLATE = """\
-# claude-arsenal host configuration.
-#
-# This file is yours. Upstream never rewrites it, so anything set here survives
-# a bundle upgrade — which is the point: a preference stored in a vendored
-# skill disappears the next time that skill is refreshed.
+# `init.py` owns the config template; this script reads it rather than keeping a
+# copy. The copy that used to live here drifted, and because `init.py` will not
+# rewrite a `config.toml` that already exists, every repo migrated before
+# running `/init` was left permanently without `host-gate` and `[models]` — with
+# no ordering of the two scripts that produced a complete file.
+_MERGE_POLICY_LINE = re.compile(r'^merge-policy = ".*"$', re.MULTILINE)
 
-# How far must a task PR get before it may be merged?
-#   always              merge as soon as it is open
-#   after-review        merge once a review approves — for a repo with no CI, or
-#                       whose CI is unavailable rather than merely red
-#   after-ci            merge once CI is green
-#   after-ci-and-review require both
-#   never               never merge automatically; you review every PR
-merge-policy = "{merge_policy}"
 
-# test-first writes a failing test before the change; test-after writes tests
-# alongside it.
-test-discipline = "test-first"
+def config_template(repo_root: Path) -> str | None:
+    """`init.py`'s `_CONFIG_TEMPLATE`, or None when no `init.py` can be found.
 
-# What /session-end leaves behind: handoff | ticket | none
-session-end = "handoff"
-
-# The skills-listing character budget the auditor enforces. The default is
-# 8000; raise it if your surface's real budget differs, rather than deleting
-# skills to fit a number that is not yours.
-listing-budget = 8000
-"""
+    None means this script writes no config at all, which is the honest answer:
+    a partial one is worse than none, because its existence is exactly what
+    stops `init.py` writing the complete one.
+    """
+    here = Path(__file__).resolve()
+    candidates = [
+        # Inside the plugin tree: assets/scripts/ → ../../scripts/init.py
+        *here.parents[2].glob("scripts/init.py"),
+        # Vendored into a consumer: .claude/skills/init/scripts/init.py
+        *sorted(repo_root.glob(".claude/skills/*/scripts/init.py")),
+    ]
+    for candidate in candidates:
+        if candidate.name != "init.py":
+            continue
+        spec = importlib.util.spec_from_file_location("_arsenal_init_template", candidate)
+        if spec is None or spec.loader is None:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["_arsenal_init_template"] = module
+        try:
+            spec.loader.exec_module(module)
+            template = getattr(module, "_CONFIG_TEMPLATE", None)
+        except Exception:  # a bundle we cannot read is not a reason to crash
+            continue
+        finally:
+            sys.modules.pop("_arsenal_init_template", None)
+        if isinstance(template, str) and "merge-policy" in template:
+            return template
+    return None
 
 
 def new_task_id() -> str:
@@ -84,25 +97,85 @@ def new_task_id() -> str:
     return f"t-{secrets.token_hex(4)}"
 
 
+class MigrateError(Exception):
+    """A queue row this migration refuses to guess at."""
+
+
+# A task id becomes a FILENAME, so it is validated before it is joined to a
+# path. The charset matches `task_select.TASK_MARKER_RE`; `.` is in it, so the
+# separator and `..` checks below are the part that actually contains a
+# traversal — `../../etc/x` is all legal characters.
+_TASK_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _safe_id(raw: object, *, where: str) -> str:
+    task_id = str(raw)
+    if (
+        not _TASK_ID_RE.match(task_id)
+        or ".." in task_id
+        or "/" in task_id
+        or "\\" in task_id
+        or task_id in {".", ""}
+        # `create_task.py` and `task_select.py` both skip `.`/`_` names when
+        # they collect the task set, so migrating one writes a file the queue
+        # can never select and no dependency can ever be satisfied by — while
+        # reporting success.
+        or task_id.startswith((".", "_"))
+    ):
+        raise MigrateError(f"{where}: task id {task_id!r} is not a usable filename")
+    return task_id
+
+
+def _contained(path: Path, root: Path, *, where: str) -> Path:
+    """`path`, proven to be inside `root`. Raises rather than reading or writing out."""
+    resolved = path.resolve()
+    root_resolved = root.resolve()
+    if resolved != root_resolved and root_resolved not in resolved.parents:
+        raise MigrateError(f"{where}: {path} resolves outside {root}")
+    return resolved
+
+
 def read_rows(queue_path: Path) -> list[dict[str, Any]]:
+    """Every row in the legacy queue, or a refusal naming the line that is wrong.
+
+    Skipping a malformed line and reporting success was the dangerous half: a
+    user who trusts that report and deletes the old queue has destroyed the only
+    record of that task. A migration that stops on the line it cannot read costs
+    one edit; one that quietly drops it costs the task.
+    """
     if not queue_path.is_file():
         return []
     rows: list[dict[str, Any]] = []
-    for line in queue_path.read_text(encoding="utf-8").splitlines():
+    for lineno, line in enumerate(queue_path.read_text(encoding="utf-8").splitlines(), 1):
         line = line.strip()
         if not line:
             continue
         try:
             data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict) and data.get("id"):
-            rows.append(data)
+        except json.JSONDecodeError as exc:
+            raise MigrateError(f"{queue_path}:{lineno}: not valid JSON — {exc}") from exc
+        if not isinstance(data, dict):
+            raise MigrateError(
+                f"{queue_path}:{lineno}: expected an object, got {type(data).__name__}"
+            )
+        if not data.get("id"):
+            raise MigrateError(
+                f"{queue_path}:{lineno}: row has no 'id' — cannot become a task file"
+            )
+        _safe_id(data["id"], where=f"{queue_path}:{lineno}")
+        rows.append(data)
     return rows
 
 
 def _yaml_list(values: list[str]) -> str:
-    return "[" + ", ".join(values) + "]"
+    """A YAML flow sequence whose items survive being read back.
+
+    Each item is serialised, not concatenated. These values arrive as arbitrary
+    JSON strings, so joining them raw turned the single tag `"needs, review"`
+    into two items, and `"type: bug"` into a mapping nested inside the list —
+    changing what the migrated file means, or making it unparseable.
+    """
+    return "[" + ", ".join(json.dumps(v, ensure_ascii=False) for v in values) + "]"
 
 
 def task_markdown(row: dict[str, Any], payload_body: str, *, terminal: bool = False) -> str:
@@ -118,7 +191,7 @@ def task_markdown(row: dict[str, Any], payload_body: str, *, terminal: bool = Fa
     if row.get("requires"):
         lines.append(f"requires: {_yaml_list([str(r) for r in row['requires']])}")
     if row.get("workspace"):
-        lines.append(f"workspace: {row['workspace']}")
+        lines.append(f"workspace: {json.dumps(str(row['workspace']), ensure_ascii=False)}")
     if row.get("tags"):
         lines.append(f"tags: {_yaml_list([str(t) for t in row['tags']])}")
     if row.get("issue"):
@@ -176,12 +249,23 @@ def migrate(
     report.append(f"queue: {len(rows)} row(s) — {len(live)} live, {len(finished)} terminal")
 
     def payload_for(row: dict[str, Any]) -> str:
+        # `payload` is a path out of the legacy queue file, so it is contained
+        # before it is read: a row carrying `../../.ssh/id_rsa` would otherwise
+        # have its contents copied into a task file under `arsenal/tasks/`.
         payload_path = queue_dir / str(row.get("payload") or f"{row['id']}.md")
-        return payload_path.read_text(encoding="utf-8") if payload_path.is_file() else ""
+        try:
+            resolved = _contained(payload_path, queue_dir, where=f"row {row['id']} payload")
+        except MigrateError as exc:
+            report.append(f"payload: {exc} — skipped")
+            return ""
+        return resolved.read_text(encoding="utf-8") if resolved.is_file() else ""
 
     created = skipped = 0
     for row in live:
-        target = tasks_dir / f"{row['id']}.md"
+        # `read_rows` already refused an unusable id; contained again here
+        # because this is the write, and a write is where a traversal lands.
+        target = tasks_dir / f"{_safe_id(row['id'], where='live row')}.md"
+        _contained(target, tasks_dir, where=f"task file for {row['id']}")
         if target.exists():
             skipped += 1
             continue
@@ -200,7 +284,8 @@ def migrate(
     history_dir = tasks_dir / HISTORY_DIRNAME
     kept = 0
     for row in finished:
-        target = history_dir / f"{row['id']}.md"
+        target = history_dir / f"{_safe_id(row['id'], where='terminal row')}.md"
+        _contained(target, history_dir, where=f"history file for {row['id']}")
         if target.exists():
             continue
         if apply:
@@ -249,10 +334,19 @@ def migrate(
 
     config = home / "config.toml"
     if not config.exists():
-        if apply:
-            home.mkdir(parents=True, exist_ok=True)
-            config.write_text(CONFIG_TEMPLATE.format(merge_policy=merge_policy), encoding="utf-8")
-        report.append(f"config: create {config} (merge-policy = {merge_policy})")
+        template = config_template(repo_root)
+        if template is None:
+            report.append(
+                f"config: {config} NOT created — init.py was not found, and it owns the "
+                "template. Run /init; then set merge-policy = "
+                f'"{merge_policy}" to keep the policy this queue was using.'
+            )
+        else:
+            body = _MERGE_POLICY_LINE.sub(f'merge-policy = "{merge_policy}"', template, count=1)
+            if apply:
+                home.mkdir(parents=True, exist_ok=True)
+                config.write_text(body, encoding="utf-8")
+            report.append(f"config: create {config} (merge-policy = {merge_policy})")
     else:
         report.append(f"config: {config} already exists — left alone")
 
@@ -297,6 +391,13 @@ def main(argv: list[str] | None = None) -> int:
         code, report = migrate(
             repo_root, queue_path, home, apply=args.apply, merge_policy=args.merge_policy
         )
+    except MigrateError as exc:
+        # Exit 2 and write nothing. A migration that skipped the row it could
+        # not read and still reported success is how the only record of a task
+        # gets deleted along with the old queue.
+        print(f"arsenal_migrate: {exc}", file=sys.stderr)
+        print("arsenal_migrate: nothing was written — fix the row and re-run.", file=sys.stderr)
+        return 2
     except OSError as exc:
         print(f"arsenal_migrate: {exc}", file=sys.stderr)
         return 2

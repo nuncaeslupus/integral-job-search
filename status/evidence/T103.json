@@ -1,0 +1,19 @@
+{
+  "merge_policy": "after-ci-and-review",
+  "merge_policy_ignores_ci": 0,
+  "merge_policy_ignores_ci_evaluated": 8,
+  "policy_reader_controls": [
+    "always",
+    "after-review",
+    "after-ci",
+    "after-ci-and-review",
+    "never"
+  ],
+  "policy_reader_control_failures": [],
+  "ci_targets_missing_from_makefile": 0,
+  "latest_ci_conclusion_on_main": "success",
+  "latest_ci_run_on_main_captured_at": "2026-09-02",
+  "latest_ci_run_on_main_id": 33616510586,
+  "readings_that_say_ci_does_not_block": [],
+  "gate_status": "measured"
+}

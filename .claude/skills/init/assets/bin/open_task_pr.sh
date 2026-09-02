@@ -29,6 +29,21 @@
 # part of the PR's own diff, so the archive lands exactly when the merge does
 # and no follow-up commit is owed to anyone.
 #
+# Three things are checked before any of that happens, in this order: whether a
+# reviewer with no history of the work cleared this exact tree
+# (`adversarial_review.sh check`), the host's own gate, and the task's
+# acceptance gate. The last two are mechanical and say nothing about whether the
+# change is the change that was asked for; the first is the only one that can.
+# It runs first because the other two execute arbitrary consumer commands, and
+# any untracked artifact they leave behind would move the tree out from under
+# the review's digest and report a genuine CLEAR as stale.
+#
+# The outcome is written into the PR body under every mode but `off`, so a PR
+# opened with no review on record says so where the person merging it will read
+# it. The body states only what the receipt proves — that a verdict was recorded
+# for this tree — not that any particular reviewer ran: nothing here can tell a
+# subagent's verdict from one a session wrote itself.
+#
 # Env: ARSENAL_QUEUE_REMOTE (default origin); ARSENAL_COAUTHOR (optional);
 #      ARSENAL_TASK_ISSUE (issue number, when the caller already knows it);
 #      ARSENAL_ISSUES_JSON (saved issue list, default /tmp/arsenal-issues.json);
@@ -76,12 +91,12 @@ cd "${_repo_root}" || {
 # ---------------------------------------------------------------------------
 # Gates, before anything touches git.
 #
-# worker.md step 4 asks a worker to run the host lint gate and then gate_run.sh,
+# worker.md step 5 asks a worker to run the host lint gate and then gate_run.sh,
 # and to open no PR if either fails. AGENTS.md goes further and states the
 # payload gate "is a hard precondition" because this script re-runs it. Neither
 # was true: nothing here ran either gate, so both were instructions with no data
 # path behind them — which this project already names as the thing that makes a
-# step not happen. A worker that forgot step 4, or ran only the `make lint` the
+# step not happen. A worker that forgot step 5, or ran only the `make lint` the
 # prose gives as its example, opened a perfectly valid PR over a red repo.
 #
 # The refusal is the load-bearing half. A worker that *cannot* open a PR over a
@@ -101,7 +116,88 @@ _gate_fail() {
 # There is deliberately no way to skip this. An escape hatch would be reached
 # for exactly when a repo is red, which is the case the refusal exists for.
 #
-# 1. The host's own gate, when the repo declares one. Absent by default, so a
+# 1. The pre-PR adversarial review — FIRST, before either gate runs.
+#
+#    The two gates below prove the change does not break the repo. Neither
+#    can tell whether it does what the task asked, because both are
+#    mechanical and the only reader who has judged that is the session that
+#    wrote it. `adversarial_review.sh check` asks whether a reviewer with no
+#    history of this work cleared THIS tree — digest-bound, so a CLEAR from
+#    before the last edit does not count.
+#
+#    Order is load-bearing, and it was wrong the first time. Both gates below
+#    run arbitrary consumer commands, and a gate that leaves any untracked
+#    artifact — a timestamped log, a coverage report, __pycache__ — changes
+#    the tree between the reviewer's verdict and this check. Running the
+#    check afterwards therefore reported a genuine CLEAR as stale: under
+#    `warn` the PR body then asserted something false on the one surface this
+#    feature exists to make truthful, and under `required` the refusal could
+#    never be cleared, because every retry re-ran the gate that invalidated
+#    the receipt. Asking before the gates run removes the whole class.
+#
+#    What the receipt covers is the tree the AUTHOR produced, not the final PR
+#    byte-for-byte: this script goes on to archive the task file into
+#    `tasks/_history/` as part of the same diff, after this check. That mutation
+#    is deliberately outside the review's scope — it is this helper's own
+#    bookkeeping, identical on every task PR, and re-reviewing after it would
+#    never converge, because the next run would mutate the tree again. No
+#    author-written change can enter through it.
+#
+#    Default is `warn`, not a refusal, and that is deliberate: a hard gate
+#    added to every existing worker loop overnight is a gate a consumer
+#    disables on the first red morning. So the outcome is written into the PR
+#    body instead, where the human who merges it reads it. Silence is what
+#    this repo keeps getting bitten by, not friction. Set
+#    `pre-pr-review = "required"` in arsenal/config.toml to make it refuse.
+review_note=""
+review_mode="warn"
+if [[ -f "${BUNDLE_SCRIPTS}/arsenal_config.py" ]]; then
+    # Errors are NOT swallowed into the default, for the same reason the
+    # host-gate read above does not swallow its own. arsenal_config.py exits 2
+    # on a value outside the enum — which is exactly what a consumer who typed
+    # `requried` or `Required` gets — and `|| echo warn` would turn that
+    # refusal back into the permissive mode they were trying to leave. The
+    # validation would then be enforced by nobody, which is worse than absent:
+    # it reads as protection while granting none.
+    if ! review_mode="$(python3 "${BUNDLE_SCRIPTS}/arsenal_config.py" \
+            --repo-root "${_repo_root}" --get pre-pr-review 2>&1)"; then
+        _gate_fail "could not read pre-pr-review from ${_repo_root}/${ARSENAL_HOME}/config.toml: ${review_mode}"
+    fi
+    review_mode="$(printf '%s' "${review_mode}" | tr -d '[:space:]')"
+    [[ -z "${review_mode}" ]] && review_mode="warn"
+fi
+# A `required` gate whose checker is not installed must not pass. Guarding the
+# whole block on the file's presence made the strictest setting a silent no-op
+# in exactly the bundle that cannot honour it — the failure this repo keeps
+# naming, wearing the label of the safeguard.
+if [[ "${review_mode}" != "off" && ! -f "${SCRIPT_DIR}/adversarial_review.sh" ]]; then
+    if [[ "${review_mode}" == "required" ]]; then
+        _gate_fail "pre-pr-review is 'required' but ${SCRIPT_DIR}/adversarial_review.sh is not installed, so the gate cannot run"
+    fi
+    review_note="Pre-PR adversarial review: **not run** — the review helper is not installed in this bundle."
+fi
+if [[ "${review_mode}" != "off" && -f "${SCRIPT_DIR}/adversarial_review.sh" ]]; then
+    # Anchored to the git root like the two gates below. The review directory is
+    # a repo-root-relative path, and `git ls-files --others` only sees from the
+    # cwd down — run from a subdirectory this would read a different tree than
+    # the one the review was written for, and report a clean "not run".
+    # --task namespaces the review slot. Without it there is one slot per working
+    # tree and `emit` clears it, so a second worker in a shared tree — which
+    # worker.md expects, because some surfaces ignore `isolation: worktree` —
+    # deletes the first worker's genuine CLEAR out from under this check.
+    ( cd "${_repo_root:-.}" && bash "${SCRIPT_DIR}/adversarial_review.sh" check --task "${TASK_ID}" ) >&2
+    case $? in
+        0) review_note="Pre-PR adversarial review: **CLEAR** — a clearing verdict is on record for this exact tree." ;;
+        1) review_note="Pre-PR adversarial review: **BLOCK** — a blocking verdict is on record for this tree and was not resolved before the PR opened. Read the findings before merging." ;;
+        3) review_note="Pre-PR adversarial review: **STALE** — the change was reviewed, then edited again. What is in this PR has not been reviewed." ;;
+        *) review_note="Pre-PR adversarial review: **not run** — no review verdict was recorded for this change before the PR opened." ;;
+    esac
+    if [[ "${review_mode}" == "required" && "${review_note}" != *CLEAR* ]]; then
+        _gate_fail "pre-pr-review is 'required' and there is no CLEAR review for this tree (run adversarial_review.sh emit, review it, then verdict)"
+    fi
+fi
+
+# 2. The host's own gate, when the repo declares one. Absent by default, so a
 #    repo without one is unaffected.
 # Anchored to the git root, not the cwd: this script is routinely invoked from a
 # worktree or a subdirectory, and arsenal_config.py resolves arsenal/config.toml
@@ -126,14 +222,22 @@ if [[ -f "${BUNDLE_SCRIPTS}/arsenal_config.py" ]]; then
         _gate_fail "could not read host-gate from ${_repo_root}/${ARSENAL_HOME}/config.toml: ${host_gate}"
     fi
 fi
-if [[ -n "${host_gate}" ]]; then
-    echo "open_task_pr: running host gate: ${host_gate}" >&2
-    if ! bash -c "${host_gate}" >&2; then
-        _gate_fail "host gate failed (${host_gate})"
-    fi
-fi
+# The host gate is READ here and RUN after the archive, not here. It used to run
+# on both sides of the archive, and a host measurement over the repo's own files
+# under `${ARSENAL_HOME}/tasks/` cannot satisfy both: the archive moves a tracked
+# file, so the two runs demand two different committed values. Staging the
+# pre-archive number failed the second run; staging the post-archive number
+# failed the first and never reached the archive. The script could not open the
+# PR at all, and its own advice — make the measurement account for `_history/` —
+# asked hosts to count rows in a ledger that is append-only by design.
+#
+# The archived tree is the one the PR ships, so it is the only tree whose
+# measurement means anything. Running once, there, costs a slower failure: a red
+# repo is now discovered after the branch is cut rather than before. The archive
+# is undone on refusal (below) and the branch carries no commit, so the cost is
+# time, not a tree left moved.
 
-# 2. The task's own mechanical gate — the precondition AGENTS.md already claims
+# 3. The task's own mechanical gate — the precondition AGENTS.md already claims
 #    this script enforces.
 if [[ -f "${SCRIPT_DIR}/gate_run.sh" ]]; then
     # Gate chatter goes to stderr: this script's stdout is a contract that
@@ -154,6 +258,29 @@ if [[ -f "${SCRIPT_DIR}/gate_run.sh" ]]; then
         2) _gate_fail "the task gate could not read ${ARSENAL_HOME}/tasks/${TASK_ID}.md (gate_run.sh exit 2). A repo still on the pre-v0.25 claude-arsenal/queue/ layout must run arsenal_migrate.py first" ;;
         *) _gate_fail "the task gate failed (gate_run.sh exit ${_rc})" ;;
     esac
+fi
+
+# The gates ran after the review, and `git add -A` below commits whatever they
+# left behind. This names that gap; it does NOT refuse over it, and the
+# distinction was arrived at the hard way.
+#
+# Checking after the gates made a gate's own artifacts invalidate a genuine
+# CLEAR, and under `required` that never converged: each retry re-ran the gate
+# that invalidated the receipt. Checking before them fixed that and put a false
+# CLEAR in its place — a build log riding inside a PR whose body called the tree
+# reviewed. Refusing on the drift detected here brings the first failure
+# straight back, because round N's review covers round N-1's artifact and the
+# gate rewrites it every time.
+#
+# So the guarantee is drawn where it can actually be met: `required` means an
+# independent reviewer cleared THE AUTHOR'S tree. What the gates then wrote is
+# disclosed in the PR body and never silently absorbed, but it does not block —
+# those artifacts are not the author's change, committing them is behaviour this
+# helper already had, and a setting nobody can satisfy protects nobody.
+if [[ "${review_note}" == *CLEAR* ]]; then
+    if ! ( cd "${_repo_root:-.}" && bash "${SCRIPT_DIR}/adversarial_review.sh" check --task "${TASK_ID}" ) >/dev/null 2>&1; then
+        review_note="Pre-PR adversarial review: **CLEAR for the tree as reviewed — but the gates then changed it.** They ran after the review and left files behind, so this PR carries content no reviewer saw. Ignore or clean whatever your gate writes into the tree."
+    fi
 fi
 
 # Snapshot the working tree to a permanent refs/arsenal-rescue/… ref. Used
@@ -346,7 +473,13 @@ EOF
     fi
 fi
 
-current="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+# Where the caller started. The host gate now runs after this checkout (#256),
+# so a refusal there has a branch switch to undo — and this script's own promise
+# on a refusal is that nothing was committed and the tree is as it was. Leaving
+# the caller on a branch they did not ask to be on is the same class of stray
+# side effect the archive rollback exists to prevent.
+_ENTRY_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+current="${_ENTRY_BRANCH}"
 if [[ "${current}" != "${BRANCH}" ]]; then
     if git rev-parse --verify --quiet "${BRANCH}" >/dev/null 2>&1; then
         git checkout "${BRANCH}" >/dev/null 2>&1 || { echo "open_task_pr: cannot switch to ${BRANCH}" >&2; exit 1; }
@@ -503,8 +636,12 @@ fi
 # just passed (#220). Re-run it here, where the tree is final: a gate that
 # regenerates its evidence writes the right numbers into this commit, and one
 # that only checks confirms the tree being committed is the certified one.
-if [[ -n "${host_gate}" && -n "${_ARCHIVED_DEST}" ]]; then
-    echo "open_task_pr: re-running host gate over the archived tree: ${host_gate}" >&2
+# Not conditional on the archive: `_ARCHIVED_DEST` is empty for an unlinked PR
+# and for a task worked from a payload elsewhere, and gating on it would leave
+# those two cases running no host gate at all — a skip, in the one check the
+# script says has deliberately no way to skip it.
+if [[ -n "${host_gate}" ]]; then
+    echo "open_task_pr: running host gate over the tree being committed: ${host_gate}" >&2
     if ! bash -c "${host_gate}" >&2; then
         # Say which of the two happened. Claiming the restoration unconditionally
         # told a reader the tree was back the way it started in exactly the case
@@ -514,14 +651,30 @@ if [[ -n "${host_gate}" && -n "${_ARCHIVED_DEST}" ]]; then
         else
             restored="THE ROLLBACK ALSO FAILED — see above; the tree needs a hand before re-running. Nothing was committed."
         fi
-        echo "open_task_pr: host gate failed after the task file was archived (${host_gate}) — no PR opened. ${restored} A gate that passes before the archive and fails after it is measuring the repo's own files; re-run once the measurement accounts for ${ARSENAL_HOME}/tasks/_history/." >&2
+        # Uncommitted work follows a plain checkout, so this returns the caller
+        # to the branch they ran from with their edits intact. Reported, not
+        # silent: a switch that fails leaves them somewhere they did not choose,
+        # and that is the case where they have to act.
+        if [[ -n "${_ENTRY_BRANCH}" && "${_ENTRY_BRANCH}" != "HEAD" \
+              && "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)" != "${_ENTRY_BRANCH}" ]]; then
+            if git checkout "${_ENTRY_BRANCH}" >/dev/null 2>&1; then
+                restored="${restored} You are back on ${_ENTRY_BRANCH}."
+            else
+                restored="${restored} NOTE: could not switch back to ${_ENTRY_BRANCH} — you are on ${BRANCH}."
+            fi
+        fi
+        echo "open_task_pr: host gate failed (${host_gate}) — no PR opened. ${restored} The gate ran over the tree this PR would commit, with the task file already in ${ARSENAL_HOME}/tasks/_history/; if it passes over your working tree but fails here, it is measuring the repo's own files and the archive is the difference." >&2
         exit 1
     fi
 fi
-[[ -n "${_ARCHIVED_BACKUP}" ]] && rm -f "${_ARCHIVED_BACKUP}"
-
 # Stage and commit — the shared-checkout guard above already cleared `git add
 # -A`, and a dynamic Co-Authored-By is added only when supplied.
+#
+# The rescue backup is deliberately NOT deleted yet. It used to be dropped
+# right here, before the commit, so a `git commit` that failed left the task
+# file moved into `tasks/_history/` with `status: merged` — which the selector
+# reads as finished work — and `_unarchive_task_file` had nothing to restore
+# from. That is exactly what the rollback above exists to prevent.
 git add -A
 
 # `Closes #<issue>` goes in the commit message as well as the PR body. The body
@@ -535,10 +688,27 @@ fi
 if [[ -n "${ARSENAL_COAUTHOR:-}" ]]; then
     commit_args+=(-m "Co-Authored-By: ${ARSENAL_COAUTHOR}")
 fi
-if ! git commit "${commit_args[@]}" >/dev/null 2>&1; then
-    echo "open_task_pr: nothing to commit for ${TASK_ID} (empty diff); return outcome 'open' with failure notes" >&2
+if ! commit_err="$(git commit "${commit_args[@]}" 2>&1 >/dev/null)"; then
+    # Not "empty diff": `_archive_task_file` moved a tracked file and `git add
+    # -A` staged it, so there IS something to commit whenever the archive ran.
+    # Reaching here then means a hook, a git-config problem, or an identity that
+    # cannot be resolved — and the message used to name the one cause that
+    # cannot apply, sending the reader to look in the wrong place.
+    if [[ -n "${_ARCHIVED_DEST}" ]]; then
+        if _unarchive_task_file; then
+            restored="The task file has been restored to ${ARSENAL_HOME}/tasks/."
+        else
+            restored="THE ROLLBACK ALSO FAILED — see above; the tree needs a hand before re-running."
+        fi
+    else
+        restored="Nothing had been archived, so the tree is unchanged."
+    fi
+    echo "open_task_pr: could not commit ${TASK_ID} — no PR opened. ${restored} git said: ${commit_err:-<no output>}" >&2
+    [[ -n "${_ARCHIVED_BACKUP}" ]] && rm -f "${_ARCHIVED_BACKUP}"
     exit 1
 fi
+# The commit holds the archive now, so the backup has nothing left to protect.
+[[ -n "${_ARCHIVED_BACKUP}" ]] && rm -f "${_ARCHIVED_BACKUP}"
 
 # Push with exponential backoff (network-transient retry only).
 delay=1
@@ -562,8 +732,13 @@ if [[ -n "${ISSUE}" ]]; then
 else
     gate_note="$(printf 'Acceptance gate in `%s/tasks/%s.md`; it passed before the PR was opened. This PR closes no issue, so merging it does NOT complete the task.' "${ARSENAL_HOME}" "${TASK_ID}")"
 fi
-BODY="$(printf '## Summary\n\n%s\n\n%s\n\n## Test plan\n\n%s\n' \
-    "${closes_line}" "${TITLE}" "${gate_note}")"
+# The review outcome rides in the body on purpose. stderr scrolls past and
+# nobody re-reads a worker's log; the PR body is the one surface the person
+# merging this actually looks at, so "nobody independent read this" has to be
+# written where that decision is made.
+BODY="$(printf '## Summary\n\n%s\n\n%s\n\n## Test plan\n\n%s\n%s' \
+    "${closes_line}" "${TITLE}" "${gate_note}" \
+    "$([[ -n "${review_note}" ]] && printf '\n%s\n' "${review_note}")")"
 PR_TITLE="${TYPE}: ${TITLE}"
 
 # Open the PR over whichever channel exists. `gh` first, then REST — the REST

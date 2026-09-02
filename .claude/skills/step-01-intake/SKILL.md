@@ -33,6 +33,44 @@ A resolved handle (step 0). Nothing else: someone with no document, no recent CV
 - With no document, work backwards from the last job through the ones before, asking for what a CV would carry, and stop when the shape of a career is there, not when a form is full.
 - Establish where they live — it decides currency, work authorisation, commutable borders and how a foreign employer would tax them.
 
+**Keep inviting the talk a CV has no box for.** A document is the skeleton; the useful part
+is usually what surrounds it. Invite the anecdote, the good or bad experience, the thing they
+do in their spare time, explicitly, more than once — the invitation given only at step 0 has
+already been forgotten by the time someone is listing job titles.
+
+```text
+"Say anything that comes with it, by the way — why you left, what the place was like, what you were doing at weekends that year. It's often more use to me than the job title."
+```
+
+**Pull the string on anything that does not explain itself.** A gap between two roles, a
+switch of field, a tool that appears once and never again, a job that lasted three months, a
+sideline mentioned in passing — each is either nothing at all or the most interesting thing
+in the document, and one question is what tells you which. Ask it when you notice it, once,
+and take "nothing to it" for an answer. Leaving it unasked is the miss: the candidate assumed
+you had read past it, and the search is poorer for a detail they would happily have
+explained.
+
+```text
+"Two things I noticed: eighteen months between the hospital and Acme, and Rust appears once and never again. Anything in either of those?"
+```
+
+**Ask for what their field produces, not for a GitHub link.** Every line of work leaves
+artefacts, and they say more than any CV line does — but which artefact depends entirely on
+the work. Read the field off what they have just described and ask for that row:
+
+| Their field | What to ask to see |
+|---|---|
+| software and data | public repositories, anything they have shipped or contributed to |
+| design and product | a portfolio, or two pieces they would put in front of a stranger |
+| research and academia | publications, a thesis, a dataset, a preprint |
+| teaching and training | course materials, a syllabus they wrote, a class they built |
+| trades, hospitality, care | photographs of finished work, a menu, a build, a reference |
+| writing, media, music | published pieces, a byline, a channel, a recording |
+
+A field not on this list still gets the question — ask what someone in their line of work
+would show you, and treat the answer as the row. Never ask a designer for a repository, and
+never skip the question because the row is not obvious.
+
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
 
 In this step that sounds like:
@@ -42,6 +80,35 @@ In this step that sounds like:
 …then, once the work is finished…
 "Thanks for waiting — that's your history in. …"
 ```
+
+**Say what the document did not give you, before moving on.** `import_document` returns
+what happened to the file — it may be a format nothing here reads, a scan with no text
+layer, a corrupt archive, or a document that imported and yielded no contact address
+and no year. Every one of those is ordinary and none of them is a reason to stop. What
+is not allowed is carrying on as though the read succeeded: the candidate then answers
+questions their own CV already answered, and has no way to know why.
+
+Say it in one line, in their language, then continue by conversation for the part the
+document did not cover:
+
+```text
+"That file didn't open here — I'll take it the long way instead, if that's all right."
+"I've got your history, but no email address came out of the file. What's the best one?"
+```
+
+Then record that you said it:
+
+```python
+from integral.cv_store import acknowledge_read_problems, unreported_read_problems
+```
+
+`unreported_read_problems(store)` is the list. **Say every entry in it** — a candidate
+told about one of three failed uploads has been told less than they were owed — then
+`acknowledge_read_problems(store, "cv.docx")` marks the ones you named. Passing no file
+name clears all of them at once, which is right only when you enumerated all of them.
+Whatever is left unsaid stays outstanding, and **until it is cleared `run_checkpoint.py`
+will not report this step covered** — that is the enforcement, and it is deliberately
+reporting rather than repairing (T97). Never acknowledge before saying.
 
 **Never:**
 
@@ -73,7 +140,7 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"That's your history down — twelve years, four roles, and the Catalan I nearly missed. Next is what would rule a job out — the quickest way to stop me showing you things you'd never take. Shall we?"
+"That's your history down — twelve years, four roles, and the Catalan I nearly missed. Next is what would rule a job out; I'd do that one now, because it's the quickest way to stop me showing you things you'd never take. Shall we?"
 ```
 
 Writes `last_activity`.
@@ -88,9 +155,9 @@ What this skill checks, mechanically, before ending the step: run
 `${CLAUDE_SKILL_DIR}/scripts/run_checkpoint.py --id <handle> [--input-dir <profiles-root>]`,
 this skill's own checkpoint script. It reads the candidate's
 `session/state.json` (T35) and profile tree (T34) and reports whether this step's *machine-visible*
-half of the stop rule is met — every artefact `intake` produces is present, and nothing is
-left outstanding in the recorded position — never by asking the model to eyeball the transcript
-and decide.
+half of the stop rule is met — every artefact `intake` produces is present, nothing is
+left outstanding in the recorded position, and no document read that fell short is still
+unsaid (T97) — never by asking the model to eyeball the transcript and decide.
 
 Exit 0 means that half is satisfied *and* this step's acceptance gate is built, so the run
 may be read as the step having passed. Exit 1 means coverage is not met (still open, or

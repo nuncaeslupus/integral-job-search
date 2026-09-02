@@ -52,6 +52,27 @@ DEFAULTS: dict[str, Any] = {
     # named `make lint` as its example, so a repo whose real gate is five
     # commands had four of them enforced by nobody.
     "host-gate": "",
+    # Shell command run by bin/host_setup.sh in a fresh worktree, before the
+    # first gate. Empty by default. A worktree carries tracked files and nothing
+    # an install produces, so the first gate in one fails on a missing tool
+    # rather than on the change under test — and every worker rediscovers that
+    # separately. Naming the command here is what turns it from a diagnosis
+    # into a step.
+    "host-setup": "",
+    # How hard the pre-PR adversarial review binds ON THE TASK-PR PATH. Read by
+    # open_task_pr.sh and nowhere else, via bin/adversarial_review.sh, whose
+    # `check` asks whether a reviewer that never saw this work cleared THIS
+    # tree. It is not a global switch: `execution`, `github` and `ship` run the
+    # same gate as a step of their own workflow, and a session following those
+    # skills does not consult this key.
+    #   warn      (default) open the PR either way, and record the outcome —
+    #             cleared, blocked, stale, or never run — in the PR body, where
+    #             the human merging it looks. Chosen as the default because a
+    #             gate that breaks every existing worker loop on upgrade gets
+    #             turned off, and one that says nothing gets forgotten.
+    #   required  refuse to open the PR without a CLEAR receipt for this tree.
+    #   off       skip the check and write no line.
+    "pre-pr-review": "warn",
     # test-first writes a failing test before the change; test-after writes
     # tests alongside it. Read by `execution`.
     "test-discipline": "test-first",
@@ -79,6 +100,15 @@ DEFAULTS: dict[str, Any] = {
     "task-label": "arsenal:task",
     # Ref namespace for atomic claim refs.
     "claim-prefix": "arsenal/claims",
+    # Which skill sections /init vendors into .claude/skills/, on top of the
+    # always-installed core. Registered here so `--explain` can report them and
+    # so the loader keeps them; the values are written by init.py from the
+    # profile chosen at install, not hand-seeded into the config template —
+    # one writer, so the shipped defaults and the recorded answer cannot drift.
+    # The defaults here are what a FRESH install gets; an upgrade preserves
+    # whatever the repo already had (init.py:_resolve_sections).
+    "skills.workflow": True,
+    "skills.python": False,
     # Which model runs the session that dispatches work. Advisory, and the one
     # key here nothing can enforce from inside a session: a session cannot
     # change the model it is already running as, so this is read and reported
@@ -103,6 +133,12 @@ ENUMS: dict[str, set[str]] = {
     "merge-policy": {"always", "after-review", "after-ci", "after-ci-and-review", "never"},
     "test-discipline": {"test-first", "test-after"},
     "session-end": {"handoff", "ticket", "none"},
+    # open_task_pr.sh compares this against the literal "required", so anything
+    # else — "Required", "requried", "on" — takes the warn path: the PR opens,
+    # its body says no review ran, and the consumer who wrote the value believes
+    # a binding gate is in place. A misspelled opt-out fails the other way,
+    # writing a line into the body of someone who switched the check off.
+    "pre-pr-review": {"warn", "required", "off"},
 }
 
 CONFIG_RELPATH = "config.toml"
@@ -184,7 +220,19 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
             raise ConfigError(
                 f"{key}: {values[key]!r} is not one of {sorted(allowed)} (from {sources[key]})"
             )
-    if not isinstance(values["listing-budget"], int) or values["listing-budget"] <= 0:
+    # Same strictness init.py applies when it reads this table: a non-boolean
+    # here decides whether skills are installed or pruned, so a typo must stop
+    # rather than be coerced.
+    for key in (k for k in DEFAULTS if k.startswith("skills.")):
+        if not isinstance(values[key], bool):
+            raise ConfigError(
+                f"{key} must be true or false, got {values[key]!r} (from {sources[key]})"
+            )
+    # `type(...) is int`, not `isinstance`: `bool` subclasses `int` in Python, so
+    # `listing-budget = true` passed validation and produced `True` — which then
+    # behaves as the number 1 everywhere downstream, capping the skills listing
+    # at one character rather than being refused as the wrong type.
+    if type(values["listing-budget"]) is not int or values["listing-budget"] <= 0:
         raise ConfigError(
             f"listing-budget must be a positive integer, got {values['listing-budget']!r}"
         )

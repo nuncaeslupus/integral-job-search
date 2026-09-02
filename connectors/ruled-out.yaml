@@ -15,9 +15,14 @@
 # is stated, so a future reader can run one line and know whether anything
 # changed. A ruling without a retest is a guess with a date on it.
 #
-# Nothing reads this file. `connector_packages()` and `connector_coverage` both
-# filter on `is_dir()`, so a top-level file here is inert and no gate parses it.
-# It is for the next person (or the next Claude) deciding where to spend an hour.
+# `connector_packages()` and `connector_coverage` both filter on `is_dir()`, so
+# nothing in the sourcing path reads this file; it is for the next person (or
+# the next Claude) deciding where to spend an hour. **One gate does read it**:
+# `integral.connector_policy` (T99) parses `policy_refused` and asserts every
+# entry there records whose call it was. Nothing else parses any other section,
+# and this line is the only place that says so — the header used to read
+# "nothing reads this file", which is how the section below came to contradict
+# the rule stated twenty lines down without anything noticing.
 
 # ---------------------------------------------------------------------------
 # The two tests that decide it, so an entry below can be read as shorthand.
@@ -38,6 +43,26 @@
 #    Always run a NEGATIVE CONTROL: show some path returning False, or a True
 #    answer is indistinguishable from a matcher that says yes to everything.
 #
+#    `restated_for_every_named_agent` — the one case where a True is not
+#    enough. A path the `*` group does not reach, but which the SAME file
+#    disallows for every named AI agent it lists, is not fetched, and the board
+#    goes to `policy_refused` rather than to `robots_refused`.
+#
+#    This does not contradict the paragraph above it; the two are about
+#    different things. "A ClaudeBot group does not bind this tool" answers a
+#    BLANKET ban on a whole site, aimed at bulk training crawls. This answers a
+#    SPECIFIC path the operator closed to everyone they could think of, usually
+#    with a plain-language caption saying what it is. remoteok.com captioned it
+#    `# AJAX endpoints`, then listed the same two Disallows again for eleven
+#    named agents. Taking that path because our product token is not on the list
+#    is reading a permission out of an omission.
+#
+#    The bar is high on purpose, so this stays a rule and not a mood: the same
+#    path, disallowed in the same file, for EVERY named agent — not one, not a
+#    Claude-shaped subset. One board meets it today. Anything ruled out this way
+#    records the matcher's True, a second parser agreeing, and the operator's
+#    own words, so the judgement can be overturned by argument.
+#
 # 2. SERVER-RENDERED OR NOT. Counting hrefs is unreliable — a wrong URL pattern
 #    looks exactly like an empty page (it fooled the first survey on infojobs,
 #    tecnoempleo and usajobs alike). The reliable test is: **take a real advert
@@ -45,6 +70,68 @@
 #    Absent means client-injected. Framework markers (`id="__next"`, `ng-app`)
 #    prove nothing on their own: wellfound.com carries `id="__next"` and is
 #    server-rendered anyway.
+#
+# 3. WHAT DID THE PAGE FETCH? Test 2 answers "is the advert in these bytes",
+#    which is not the same question as "can this board be read". A client-side
+#    board got its rows from *somewhere*, and that somewhere is usually a plain
+#    request this tool can make too. Test 2 cannot see it, because it reads one
+#    response and the answer is in the next one.
+#
+#    Record a browser capture and search it for the advert instead:
+#
+#      uv run --with playwright python3 tools/capture_har.py <url> tmp/<site>.har
+#      python3 .claude/skills/har/scripts/query_har.py --input tmp/<site>.har \
+#          --response-match "<a real advert title>"
+#
+#    Three of the six boards filed under `javascript_rendered` fell to this the
+#    first time it was run — getmanfred.com, remoteok.com and usajobs.gov. Each
+#    then answered a plain `curl` under this tool's own product token, so the
+#    browser was needed to *find* the endpoint and not to use it. A board is not
+#    ruled out on rendering until its capture has been read.
+#
+#    **Then run test 1 again, against the endpoint the capture just revealed.**
+#    This step was written into the file a day after the rest of it, because
+#    skipping it is what produced the only wrong entry this ledger has yet
+#    carried. A capture reveals a URL nobody had looked at before, and robots
+#    speaks about *paths* — so the permission established for the listing page
+#    says nothing about the XHR behind it. remoteok.com was moved to `corrected`
+#    on the strength of `/?tags=dev&action=get_jobs`, and that path is the
+#    subject of a `Disallow` line in the board's own robots.txt under the
+#    heading `# AJAX endpoints`. Two of the three corrections survived the
+#    follow-up; remoteok.com is now in `policy_refused` — allowed by robots,
+#    refused by us — and its entry records what the shortcut cost.
+#
+#    The order is not decorative. Test 1 before the capture asks "may I read
+#    this page"; test 1 after it asks "may I read the thing the page reads",
+#    and only the second question is about the URL a connector would fetch.
+#
+# 4. IS THE STRUCTURED DATA TELLING THE TRUTH? Tests 1-3 establish that a field
+#    can be READ. None of them asks whether its value is a fact. A schema.org
+#    `baseSalary` is the most inviting field on the web — typed, four-part,
+#    exactly the shape `build_offer` wants — and it is also the one boards are
+#    most willing to fill in on the employer's behalf.
+#
+#    The test is one line, and it is a SPREAD, not a spot check:
+#
+#      <parse the list> | count how many distinct (min, max, currency) triples
+#
+#    remoteok.com: 48 of 50 adverts carried the identical `USD 80000-150000
+#    YEAR`, one of them a car dealership in Dunfermline whose own description
+#    states GBP 28,000. Nothing marks it as an estimate. A spot check on any
+#    single advert passes; the spread is what exposes it.
+#
+#    Two shapes to know:
+#      * A HOUSE ESTIMATE, as above — a plausible band stamped onto every ad
+#        that did not state one. Never map it. Prefer a figure the employer
+#        supplied, or none.
+#      * A SENTINEL, where the field is present and means absent. getmanfred's
+#        list API sends `salaryFrom: 0` on 9 of 21 offers; zero is not a wage.
+#        A present-but-zero figure must not become `Salary(stated=True, min=0)`.
+#
+#    Both fail the same way, and it is the worst way available here: the offer
+#    ranks, the gate is green, and the number is fiction. A connector that maps
+#    no salary is merely less useful. One that maps an invented salary is
+#    actively wrong about the thing the candidate is optimising for.
 # ---------------------------------------------------------------------------
 
 surveyed: 2026-08-30
@@ -80,6 +167,90 @@ corrected:
     was: "ruled out in trabajos_es because robots.txt names ClaudeBot/Claude/anthropic-ai with Disallow: /"
     now: "re-surveyed under the corrected robots test; see connectors/ for the outcome"
     lesson: "same as jobfluent — a Claude-agent group does not bind integral-job-search/0.1"
+
+  - site: getmanfred.com
+    was: >
+      ruled out yesterday under javascript_rendered, with the note "there is
+      nothing to select even in principle". That reading of the served list HTML
+      was correct and is unchanged; the ruling drawn from it was not.
+    now: >
+      https://www.getmanfred.com/api/v2/public/offers?lang=ES&onlyActive=true&currency=%E2%82%AC
+      — a public JSON array the list page fetches on load. 21 active offers,
+      each with salaryTo, salaryFrom, currency, company.name, remotePercentage,
+      position, slug and id, in euros. It answers a plain curl under this tool's
+      own product token; no browser, no key, no cookie, and robots.txt is a bare
+      `User-agent: * / Allow: /` with the API on no disallowed path (re-checked
+      2026-08-31, after the capture, per test 3's second half).
+
+      Count the figures carefully, because the first draft of this entry did
+      not: **21 of 21 carry a salary ceiling, and 12 of 21 carry a floor.** The
+      other 9 send `salaryFrom: 0`, which is a sentinel for "not stated" and not
+      a wage — a connector mapping it straight through would publish nine offers
+      paying from zero euros. The values are JSON numbers, not strings, so a
+      truth test on `salaryFrom` is what distinguishes them; `sum(1 for o in d
+      if o['salaryTo'])` counts ceilings and was misread as counting bands.
+    lesson: >
+      the capture took four commands to read and the ruling had stood for a day.
+      Test 3 above exists because of this entry. Two details are worth carrying
+      to whoever writes the connector.
+
+      **The detail JSON's own salaryMin/salaryMax are in THOUSANDS** (50, 60)
+      where the list API is in euros (50000, 60000). `build_offer` lets detail
+      win on overlap, so a connector mapping salary from the detail page would
+      report a 50-euro job and pass every gate. The fix is not a scale factor in
+      the connector file: it is to declare no salary on the detail route at all,
+      so the list API's euros are the only figures that reach `build_offer`.
+      Verified on offer 8451 (2026-08-31): list says 50000/60000, detail says
+      50/60, same advert.
+
+      **There is no `script[id="jobPostingSchema"]`.** An earlier draft of this
+      entry said there was, and named it the cleaner detail surface; it was
+      checked on 2026-08-31 against a real advert and the page carries zero
+      `application/ld+json` blocks. What exists is `offer.jsonld` — a *string*
+      of JSON nested inside the `__NEXT_DATA__` document, holding a correct
+      JobPosting with baseSalary in euros and unitText YEAR. `dig` returns a
+      string, and this engine has no step that parses a field's value as a
+      second document, so that correct salary is unreachable today. It is worth
+      knowing anyway: it is the board's own statement that the band is annual,
+      which is why the connector leaves `salary_period` absent rather than
+      inventing one.
+
+      The wrong claim survived a day and a PR because it was plausible and
+      nobody re-fetched the page. The reason it was plausible is that the
+      *listing* page was never the surface in question, and the note was written
+      from memory of a different board.
+    retest: "curl -s --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" 'https://www.getmanfred.com/api/v2/public/offers?lang=ES&onlyActive=true&currency=%E2%82%AC' | python3 -c \"import json,sys; d=json.load(sys.stdin); print(len(d), sum(1 for o in d if o['salaryTo']))\"  # prints '21 21' today"
+
+  - site: usajobs.gov
+    was: >
+      ruled out yesterday under javascript_rendered as "not salvageable without
+      a headless browser", with an api_note adding that data.usajobs.gov was
+      deliberately not used because "a connector pointed at JSON is the same
+      silent-nothing with extra steps". Both halves are now wrong, for
+      different reasons.
+    now: >
+      POST https://www.usajobs.gov/Search/ExecuteSearch with
+      {"Keyword":"python","ResultsPerPage":25} — the site's OWN front-end
+      search, not the developer API. It answers 200 with 25 rows carrying
+      Title, SalaryDisplay, MinimumRange, LocationDisplay, Agency and an
+      absolute PositionURI, plus a Pager giving the total. **No key, no cookie,
+      no session**: measured with a bare curl and this tool's product token,
+      after the capture showed the request. The api_note's second half also
+      expired the day it was written — #259 shipped the from_json route.
+    still_blocked_by: >
+      the engine issues GETs. `ListPage.url_pattern` is a URL and there is
+      nowhere to put a method or a request body, so this endpoint cannot be
+      expressed as a connector today. That is a named, small engine gap with a
+      live example, which is a better thing to have than a board filed under a
+      reason that was never true.
+    lesson: >
+      an API key on the *developer* API says nothing about the *website's* API.
+      Yesterday's entry checked data.usajobs.gov (401 without an
+      Authorization-Key, still true) and generalised from it to the whole
+      domain. The front end had to be able to search without a key, because it
+      searches for logged-out visitors — which was deducible without a capture,
+      and was not deduced.
+    retest: "curl -s -X POST -H 'Content-Type: application/json' -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" -d '{\"Keyword\":\"python\",\"ResultsPerPage\":25}' 'https://www.usajobs.gov/Search/ExecuteSearch' | python3 -c \"import json,sys; print(len(json.load(sys.stdin)['Jobs']))\"  # prints 25 today"
 
 # ---------------------------------------------------------------------------
 # Ruled out because ROBOTS refuses us — the `*` group, not an AI-agent group.
@@ -127,45 +298,34 @@ robots_refused:
     detail: "robots.txt disallows the search path; never fetched, so nothing is known or claimed about how it renders"
 
 javascript_rendered:
-  - site: getmanfred.com
-    checked: 2026-08-30
-    evidence: >
-      243 KB of bytes reduce to 5,504 characters of visible text, all of it nav,
-      footer and the filter form. Four real advert titles taken from the site's
-      own sitemap-offers.xml (1,642 per-offer URLs) were searched in the served
-      list HTML: three absent outright, the fourth present only as
-      {"label":"Product Manager","value":26} inside a filter vocabulary.
-      __NEXT_DATA__.pageProps holds only currencies/languages/techs/techRoles —
-      no offer array, so there is nothing to select even in principle.
-    detail_pages_render: true
-    detail_note: "individual /ofertas-empleo/<id>/<slug> pages are fully SSR'd, salary band included — but a connector needs a list surface and there is none"
-    robots: "Allow: / with no AI-agent group. Robots was never the obstacle here."
-    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://www.getmanfred.com/ofertas-empleo | grep -c 'href=\"/ofertas-empleo/[0-9]'  # prints 0 today; anything above 0 reopens this"
-
-  - site: usajobs.gov
-    checked: 2026-08-30
-    evidence: >
-      The results container is served literally empty —
-      <div id="search-results" class="mt-4"></div> — with a spinner element beside
-      it. None of the strings on every real USAJOBS row appear even once:
-      "per year", "GS-", "Open & closing dates", "Announcement number" all count 0.
-      The 317 KB payload is the occupational-series filter taxonomy in inline JSON.
-      Checked across /Search/Results, bare /Search, page 2, and the tech.usajobs.gov
-      branded portal — same empty div on all four. /sitemap.xml is advertised in
-      robots.txt and 404s.
-    detail_pages_render: true
-    detail_note: >
-      /job/<id> is server-rendered and complete. This makes the board look
-      salvageable at a glance; it is not, without a headless browser.
-    robots: "permissive; three negative controls confirmed the matcher discriminates"
-    api_note: >
-      data.usajobs.gov offers the rows as JSON. Deliberately NOT used: this engine
-      matches CSS selectors against markup, so a connector pointed at JSON is the
-      same silent-nothing with extra steps.
-    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" 'https://www.usajobs.gov/Search/Results?k=python' | grep -c 'id=\"search-results\"></div>'  # prints 1 today"
+  # getmanfred.com, remoteok.com and usajobs.gov were here until 2026-08-31.
+  # Their served HTML is exactly as empty as this section said — the entries
+  # were not sloppy — and all three fetch their adverts from an endpoint a plain
+  # curl reaches under this tool's own product token. Reading "the advert is not
+  # in these bytes" as "this board cannot be read" was the whole error, and it
+  # was made six times in one sitting.
+  #
+  # TWO of the six ended up in `corrected`, not three: remoteok.com went there
+  # and came back out the same day, because the endpoint the capture revealed is
+  # one the board's robots.txt names under `# AJAX endpoints`. It is in
+  # `policy_refused` now. The correction was undone by the step that had been
+  # left out — re-running test 1 against the newly found URL — which is why test
+  # 3 in the header ends with that step spelled out.
+  #
+  # What remains is NOT thereby confirmed. Each entry carries `capture_read`,
+  # which says whether test 3 has actually been run against it and what came
+  # back. None of the three below has been read to a conclusion, and an unread
+  # capture is precisely the state getmanfred was in yesterday.
 
   - site: idealist.org
     checked: 2026-08-30
+    capture_read: >
+      2026-08-31 — read, and the ruling stands. The rows come from a POST to
+      nsv3auess7-dsn.algolia.net (191 KB of JSON), so this board fails the same
+      GET-only limit as usajobs did AND carries an application id plus a search
+      key in the query string. A connector may not carry a credential, and a
+      key lifted from someone else's capture is a credential whoever minted it
+      can revoke. Two independent reasons; neither is about rendering.
     evidence: >
       Six links on the whole page and every one is a category filter
       (/en/jobs?q=Attorney and similar); zero per-offer hrefs. The 67k characters
@@ -173,15 +333,36 @@ javascript_rendered:
       reminder that a large visible-text count is not evidence of content.
     retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://www.idealist.org/en/jobs | grep -coE 'href=\"/en/jobs/[a-z0-9-]{10,}\"'  # prints 0 today"
 
-  - site: remoteok.com
-    checked: 2026-08-30
-    evidence: "the table holds <tr class=\"placeholder job\"> rows — literal placeholders, filled client-side. No advert text in the served bytes."
-    robots: "names ClaudeBot with Disallow: / — which does NOT bind us; this ruling is about rendering, not policy"
-    retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://remoteok.com/remote-dev-jobs | grep -c 'placeholder job'  # non-zero today"
-
   - site: feinaactiva.gencat.cat
     checked: 2026-08-30
     evidence: "Angular application (<base href=\"/\">, no offer links in served HTML). Robots is permissive."
+    capture_read: >
+      2026-08-31, second attempt — captured twice, read, and NOT concluded. The
+      first attempt reported "the capture never happened: navigation times out,
+      and the robots fetch fails with SSL: CERTIFICATE_VERIFY_FAILED". Both
+      halves of that were wrong, and neither was about this board:
+
+        * the timeout was real, but `/web/guest/home` answers 302 to `/home` and
+          the recorder discarded the capture on the exception instead of writing
+          what it had. `tools/capture_har.py` now closes the browser context in
+          a `finally`, so a slow or hostile site leaves evidence rather than
+          nothing — and this page then recorded 75 entries on the next run;
+        * robots.txt fetches fine (200, three lines, one bare `User-agent: *`
+          group with no rules at all — the most permissive file in this survey).
+          The SSL failure did not reproduce.
+
+      What the two captures show: `/es/home` and `/es/search` are both the same
+      Angular shell, and the app talks to a public REST namespace on its own
+      host — `/api/profiles`, `/api/business/total`,
+      `/api/admin/statics/public/*`, `/api/offers/utils/positions`. That last
+      one answers `8119` to a plain curl, so the board has 8,119 positions and a
+      readable API in front of them.
+
+      The offers endpoint itself was not reached. `/es/search` fetches no
+      adverts on load — it is a form, and the results request only fires once a
+      query is submitted — so a capture of the landing page cannot see it. The
+      next step is a capture that submits the form, not another page load.
+    next_step: "capture /es/search WITH a query submitted, then read the request that returns the rows; the API namespace is public and the route table in main.js names `search` as the only listing route"
     note: "Catalonia's public employment service — worth re-checking occasionally, since a public body may add an SSR or open-data surface"
 
   - site: landing.jobs
@@ -197,6 +378,16 @@ javascript_rendered:
       served is the search shell — filter form, currency selector, experience
       dropdown — and the results arrive later over the wire.
     robots: "Allow. Robots was never the obstacle."
+    capture_read: >
+      2026-08-31 — attempted, NOT concluded. An 11.4 MB capture was recorded,
+      but `query_har.py --response-match` aborts on it: one response is stored
+      decoded while its content-encoding header still says `br`, and
+      `_harlib._decompress` lets `brotli.error` escape, so a single bad body
+      ends the whole query instead of that one entry. Filed upstream against
+      claude-arsenal. The 20 API-shaped requests in the capture are all consent
+      and analytics vendors, which is suggestive and is not a reading — this
+      board is the one on this list most worth finishing, since it publishes
+      gross annual bands.
     retest: "curl -sL --compressed -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://landing.jobs/jobs/for/python | grep -cE 'href=\"/jobs/[0-9]+'  # prints 0 today; anything above 0 reopens this"
 
 # ---------------------------------------------------------------------------
@@ -367,6 +558,100 @@ moved_or_gone:
       disallowed from anyway. Both halves are dead ends; robots.txt closes one
       and rendering closes the other.
     retest: "curl -sIL -A \"integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)\" https://otta.com/jobs | head -1  # 404 today"
+
+# Ruled out by OUR policy, not by the board's robots.txt. Everything here is
+# mechanically ALLOWED — the matcher says True and a second parser agrees — and
+# is not fetched anyway. Kept apart from `robots_refused` on purpose: collapsing
+# the two would let a judgement call be read later as a measurement, which is
+# the one thing this file exists to prevent.
+#
+# The rule being applied is named in the header as
+# `restated_for_every_named_agent`. Each entry must show the matcher's True, a
+# second parser agreeing, and the text the operator wrote — so the judgement can
+# be overturned by argument rather than only by re-doing the work.
+#
+# And each entry must say **whose call it was, when, and whether it refuses
+# volume or access** (T99, `integral.connector_policy`). The first entry here
+# had none of that: it was written by the implementing session on its own
+# reading of the operator's intent, and read a week later exactly like a
+# settled position. Throttling a connector and deleting a board from a
+# candidate's reach are different refusals, and a section that does not say
+# which cannot be argued with.
+policy_refused:
+  - site: remoteok.com
+    checked: 2026-08-31
+    refuses: volume
+    robots_verdict: allowed
+    decided_by: owner
+    decided_on: 2026-08-31
+    decision: >
+      "It is the user who will use the scraper, not you, and most of them did
+      not allow massive scraping for AI, but they allow it for making some
+      searches. You should be able to build a scraper for this use without any
+      problem."
+
+      The owner's call, stated in session on 2026-08-31 and applied here on
+      2026-09-01. It turns on *who is fetching*: a tool the candidate runs to
+      look at a handful of adverts is not an AI crawler ingesting a board, even
+      where one user agent covers both. The eleven restated Disallow lines are
+      read as what they say they are — a refusal of bulk AI ingestion — so this
+      entry refuses **volume** and not **access**. It was previously an access
+      refusal written on the implementing session's own judgement and never put
+      to the owner; that is the defect T99 records, and it would have been the
+      defect whichever way this resolved.
+
+      This narrows the ledger entry. It does not build a connector, and it is
+      not a finding that remoteok should be read — the shell/AJAX mechanism in
+      `detail` below is unchanged and still the reason nobody has.
+    was_in: "corrected, for about six hours on 2026-08-31, before test 1 was re-run against the endpoint the capture found"
+    verdict: >
+      Allowed by robots and refused for volume, not access. This is OUR policy,
+      applied under the `restated_for_every_named_agent` rule in the header;
+      robots.txt does not refuse it and this entry does not claim it does.
+    rule_cited: >
+      `Disallow: /*?action=get_jobs` and `Disallow: /?tags`, under the heading
+      `# AJAX endpoints`, and restated verbatim in the file's AI/LLM group.
+    detail: >
+      The capture was right about the mechanism and the correction drawn from it
+      was wrong. remoteok.com serves a shell: `/remote-dev-jobs` is 59,681 bytes
+      with zero `<tr data-slug>` rows, and the 50 rows of ordinary markup arrive
+      only from `/?tags=dev&action=get_jobs&premium=0&offset=`. That endpoint is
+      the subject of the two Disallow lines above, so the board's only advert
+      surface is the one path it asks crawlers not to take.
+
+      **The repo matcher returns True for it, and that is not a defect.** Nor is
+      it a loophole to use. Read the file and the reason is plain: those Disallow
+      lines sit after `User-agent: AhrefsBot / Disallow: /`, so under RFC 9309 a
+      group ends at the next user-agent line and they belong to AhrefsBot rather
+      than to `*`. Python's stdlib `urllib.robotparser` agrees with our matcher
+      on all three URLs, which is the negative control this file asks for: two
+      independent parsers, same verdict, so the True is the file's meaning and
+      not our bug. The operator's *intent* is unmistakable all the same — they
+      captioned the block `# AJAX endpoints`, and the file's own AI/LLM section
+      restates `Disallow: /*?action=get_jobs` and `Disallow: /?tags` verbatim
+      for GPTBot, ClaudeBot, anthropic-ai, Claude-Web, PerplexityBot and six
+      others. A board that writes the same refusal twice has said it twice.
+
+      Reading a site's only content surface through a stray blank line, against
+      a restriction restated for every AI agent the operator could name, is not
+      a permission this ledger will record as one. The mechanism is written down
+      so the next reader can disagree with the judgement rather than have to
+      re-derive the facts — and so that a later fix to remoteok's robots.txt,
+      in either direction, is visibly the thing that changes the answer.
+    also: >
+      Independently disqualifying even if the robots question went the other
+      way: the ld+json in those rows is fabricated. 48 of the 50 JobPosting
+      blocks carry the identical band `USD 80000-150000 YEAR`, including a Vertu
+      Motors vehicle progressor in Dunfermline whose own description states a
+      basic salary of GBP 28,000. RemoteOK stamps a house estimate into
+      schema.org `baseSalary` for every advert that does not state one, and does
+      not mark it as an estimate. See the `salary` note in `engine_gap_json` —
+      a connector reading `baseSalary` without checking the spread across rows
+      would have published 48 invented bands.
+    retest: >
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)"
+      https://remoteok.com/robots.txt | grep -n 'action=get_jobs'   # 3 lines today, one of them in the AI/LLM group
+
 
 policy_unreadable:
   - site: simplyhired.com

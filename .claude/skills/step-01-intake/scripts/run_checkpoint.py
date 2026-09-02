@@ -41,6 +41,7 @@ from typing import Any
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
+from integral.cv_store import unreported_read_problems  # noqa: E402
 from integral.identity import IdentityError, ProfileStore  # noqa: E402
 from integral.process_spec import Step, StepList, load_steps  # noqa: E402
 from integral.session import SessionError, SessionStore  # noqa: E402
@@ -98,7 +99,16 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         session
         and (on_this_step or finished or STEP_ID in session.pending_steps)
     )
-    coverage_met = finished and not outstanding
+    # T97. `cv_master` is present the moment `cv/master.json` exists, and it
+    # exists whether the candidate's document was read, half-read, or refused
+    # outright — so artefact presence alone reported this step covered over a
+    # CV nothing had managed to open, and every later step ran on the thinner
+    # profile without being told. A read that failed and has not been put to
+    # the candidate holds coverage open; saying it clears it. Reporting is the
+    # bar, not repairing: a document this project genuinely cannot read is a
+    # fact to state, not a reason to strand the candidate on step 1.
+    cv_read_problems = unreported_read_problems(store)
+    coverage_met = finished and not outstanding and not cv_read_problems
 
     result: dict[str, Any] = {
         "step": STEP_ID,
@@ -109,6 +119,7 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         "produces": list(step.produces),
         "artefacts_present": finished,
         "position_outstanding": outstanding,
+        "cv_read_problems": cv_read_problems,
         "started": started,
         "coverage_met": coverage_met,
         # Whether a met checkpoint may be read as the step having passed. It is
@@ -121,7 +132,8 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         "gate_state": step.gate.state,
         "note": (
             "coverage_met is the machine-visible half of the stop rule — every produced "
-            "artefact present and nothing left outstanding in the recorded position. "
+            "artefact present, nothing left outstanding in the recorded position, and no "
+            "document read that failed without the candidate being told (T97). "
             f"It is not the {step.gate.metric} gate, which {step.gate.task} owns and "
             "measures separately."
         ),
@@ -175,6 +187,12 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(result, ensure_ascii=False))
     if not result["runnable"]:
         print(f"{STEP_ID} is not runnable: missing {result['missing_inputs']}", file=sys.stderr)
+    # `.get`, because `checkpoint` is the only thing that computes this and a
+    # caller driving `main` over a stubbed result should not be made to know
+    # about a key it does not set. An absent key reads as no known problem,
+    # which is the same answer a candidate who uploaded nothing gets.
+    for problem in result.get("cv_read_problems") or ():
+        print(f"the CV was not fully read, and nobody has said so: {problem}", file=sys.stderr)
     if result["certification_note"] and result["runnable"] and result["coverage_met"]:
         print(result["certification_note"], file=sys.stderr)
     # One shared decision, never re-spelled here — not even for the codes this

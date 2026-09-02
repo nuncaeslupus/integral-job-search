@@ -1,0 +1,19 @@
+{
+  "restated_exclusions_resurfaced": 0,
+  "restated_exclusions_resurfaced_evaluated": 8,
+  "presentations_checked": 8,
+  "gate_status": "measured",
+  "resurfaced": [],
+  "failures": [],
+  "exclusions_carried": [
+    "role:frontend",
+    "sector:e-commerce",
+    "sector:fintech",
+    "stack:cloud"
+  ],
+  "negative_controls": [
+    "a rank penalty instead of an exclusion — demoted to 97 and still on the page",
+    "an override naming a different exclusion than the one the advert trips",
+    "an exclusion carried for one cycle and dropped, so it must be restated"
+  ]
+}
