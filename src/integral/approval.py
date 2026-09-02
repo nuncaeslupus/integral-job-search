@@ -17,6 +17,16 @@ edits; inserting an unrelated episode above an approved one used to invalidate
 the approval, and editing one used to leave the old approval sitting there. What
 was approved is a sentence, and the sentence is what goes to the employer.
 
+**An approval cannot outlive the evidence it was granted over (D-24).** Retracting
+an episode is how a candidate withdraws the thing the approval was given over, and
+the approval used to survive it: `approvals.json` was the only thing consulted at
+the send boundary, retraction never touched that file, and `record_sent`
+re-measured against an unchanged approval and recorded the send. So
+`measure_prepared` now subtracts `retracted_episode_texts` from what the approval
+file backs. The subtraction, and not a store lookup — `retracted_episode_texts`
+says why the log is read every time rather than a flag written when the retraction
+landed, and why the join is deliberately coarse.
+
 **No autonomous outward action.** Nothing here sends. `prepare` writes the
 documents, the details to paste into the employer's form, and `payload.json` —
 the summary of everything that would go. `record_sent` records that the
@@ -80,6 +90,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from integral.cv_store import (
+    ConversationTurn,
     CVMaster,
     Episode,
     Skill,
@@ -96,9 +107,11 @@ from integral.generate import (
     render_entry,
 )
 from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T46.json"
+DEFAULT_D24_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-24.json"
 
 SCHEMA_VERSION: Literal[1] = 1
 
@@ -377,6 +390,51 @@ def _approved_texts(store: ProfileStore, offer_id: str, version: int) -> set[str
     }
 
 
+def retracted_episode_texts(store: ProfileStore, master: CVMaster) -> frozenset[str]:
+    """Every episode sentence a live retraction has withdrawn (D-24).
+
+    Read from the **log**, every time, rather than from a flag written into
+    `approvals.json` when the retraction landed. The log is the only record that
+    is always current: `unretract` puts a row back, `suppressed_ids` resolves the
+    nesting, and a retraction written by any path at all — not only `retract` —
+    is seen here. A mark stamped into the approval file at retraction time would
+    have to be stamped by every writer and unstamped by `unretract`, and the one
+    that forgot would fail open.
+
+    Two ways a row reaches a sentence, because nothing joins them directly — an
+    approval names `(offer_id, version, text)` and a retraction names a row id:
+
+    * **the retracted row's own text.** A text match, so it cannot tell two rows
+      carrying the same sentence apart and withdraws the approval for both. That
+      is deliberate: §6.2 would rather refuse a live episode than send a
+      withdrawn one, and the approval carries nothing finer to match on.
+    * **a story-bank episode whose `provenance` names the retracted row.** A
+      sentence the candidate polished on its way into the CV store no longer
+      matches the log row word for word, and the text match alone reads clean —
+      fail-open. `Episode.provenance` already carries the `ConversationTurn` the
+      claim came from, so this join is exact and costs no schema change.
+
+    This only ever *removes* authority. Episode backing still comes from
+    `approvals.json` and nothing else — routing it back through a list the
+    candidate edits is what the module docstring forbids, and a subtraction is
+    not that.
+    """
+    log = EvidenceLog(store)
+    if not log.exists():
+        return frozenset()
+    suppressed = log.suppressed_ids()
+    if not suppressed:
+        return frozenset()
+    texts = {row.text for row in log.rows() if row.kind == "episode" and row.id in suppressed}
+    texts |= {
+        episode.text
+        for episode in master.episodes
+        for source in episode.provenance
+        if isinstance(source, ConversationTurn) and source.evidence_id in suppressed
+    }
+    return frozenset(texts)
+
+
 def measure_prepared(
     store: ProfileStore, master: CVMaster, offer_id: str, version: int
 ) -> dict[str, Any]:
@@ -393,6 +451,12 @@ def measure_prepared(
             "and a version that does not exist is not a version that passed"
         )
     approved = _approved_texts(store, offer_id, version)
+    # D-24: an approval cannot outlive the evidence it was granted over. Applied
+    # here because `prepare` and `record_sent` both route through this function,
+    # so a story withdrawn between drafting and sending is caught at whichever of
+    # the two comes next, and neither has to remember to ask.
+    withdrawn = approved & retracted_episode_texts(store, master)
+    approved -= withdrawn
     claims = read_manifest(store, offer_id, version).claims
 
     # What backs a line, by kind. A CV entry is backed by the store re-rendering
@@ -435,7 +499,12 @@ def measure_prepared(
                 # an episode looks like after the candidate tidies it out of
                 # their story bank, and it used to measure clean.
                 findings.append(
-                    f"{offer_id}/v{version} {name}: {line} — no per-use approval backs this line"
+                    f"{offer_id}/v{version} {name}: {line} — "
+                    + (
+                        "the candidate retracted the evidence this approval was given over"
+                        if line in withdrawn
+                        else "no per-use approval backs this line"
+                    )
                 )
 
     # Substance carried by something that is not an episode line: a headline or a
@@ -525,6 +594,63 @@ def sends_without_confirmation(store: ProfileStore) -> list[str]:
         if data.get("confirmed_digest") != digest:
             broken.append(f"{offer_id}/v{version}: confirms a different payload")
     return broken
+
+
+def retracted_episodes_sendable(store: ProfileStore, master: CVMaster) -> dict[str, Any]:
+    """D-24's reading over one profile — a withdrawn story the boundary still lets out.
+
+    Counts an approval on disk that (a) names a sentence a live retraction
+    withdrew, (b) is actually carried by that version's finished documents, and
+    (c) `measure_prepared` nonetheless reports nothing about — which is exactly
+    the condition under which `record_sent` records the send. All three,
+    because an approval standing over a sentence no document carries sends
+    nothing, and counting it would fail the gate on a case with no victim.
+
+    `retracted_episodes_evaluated` is the denominator: approvals actually
+    compared against a retracted row. A profile with no retraction in its log
+    compares nothing, so it reports `unmeasured` rather than a clean zero.
+    """
+    withdrawn = retracted_episode_texts(store, master)
+    empty: dict[str, Any] = {
+        "retracted_episodes_still_sendable": 0,
+        "retracted_episodes_sendable": [],
+        "retracted_episodes_evaluated": 0,
+        "gate_status": "unmeasured",
+    }
+    generated = store.path("cv", "generated")
+    if not withdrawn or not generated.is_dir():
+        return empty
+
+    evaluated = 0
+    sendable: list[str] = []
+    for path in sorted(generated.glob("*/v*/approvals.json")):
+        approvals = Approvals.model_validate_json(path.read_text(encoding="utf-8"))
+        measured: dict[str, Any] | None = None
+        for approval in approvals.episodes:
+            evaluated += 1
+            if approval.text not in withdrawn:
+                continue
+            documents = "\n".join(
+                document.read_text(encoding="utf-8")
+                for document in sorted(path.parent.glob("*.md"))
+            )
+            if not _carries(documents, approval.text):
+                continue
+            if measured is None:
+                measured = measure_prepared(store, master, approvals.offer_id, approvals.version)
+            if not measured["unapproved_episode_disclosures"]:
+                sendable.append(
+                    f"{approvals.offer_id}/v{approvals.version}: {approval.text} — retracted, "
+                    "and the send boundary would still record it"
+                )
+    if evaluated == 0:
+        return empty
+    return {
+        "retracted_episodes_still_sendable": len(sendable),
+        "retracted_episodes_sendable": sorted(sendable),
+        "retracted_episodes_evaluated": evaluated,
+        "gate_status": "measured",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -748,6 +874,193 @@ def probe_boundary(root: Path) -> dict[str, Any]:
     return {"detection_probes": checks, "detection_probe_failures": failures}
 
 
+# Ten assertions across eight scenarios, six of which put an approval in front of
+# a live retraction. Floors, not the count of the day: adding a scenario raises
+# them, and a probe set that quietly shrank stops clearing them.
+MINIMUM_RETRACTION_PROBES = 10
+MINIMUM_RETRACTED_APPROVALS_EVALUATED = 6
+
+_REWORDED_ROW = "Cut the nightly billing run right down — it used to take us six hours."
+
+
+def probe_retracted_sends(root: Path) -> dict[str, Any]:
+    """D-24: drive the send boundary against a story the candidate withdrew.
+
+    Each scenario is a fresh profile with its own evidence log, because a
+    retraction is a fact about a log and the interesting cases differ in what
+    the log says. Six of the eight are defects on purpose; two are the
+    over-refusal the fix must not become.
+    """
+    from integral.retraction import retract, unretract
+
+    failures: list[str] = []
+    checks = 0
+    evaluated = 0
+    sendable: list[str] = []
+
+    def check(condition: bool, message: str) -> None:
+        nonlocal checks
+        checks += 1
+        if not condition:
+            failures.append(message)
+
+    def fresh(handle: str) -> ProfileStore:
+        identity = create_profile(root, "Probe", handle=handle, language="en")
+        return ProfileStore(root, identity.handle)
+
+    def episode_row(store: ProfileStore, text: str, at: str = "2026-01-01T09:00:00+00:00") -> str:
+        return (
+            EvidenceLog(store)
+            .append(
+                recorded_at=at, step="history", kind="episode", text=text, source="conversation"
+            )
+            .id
+        )
+
+    def scan(store: ProfileStore, master: CVMaster) -> None:
+        nonlocal evaluated
+        measured = retracted_episodes_sendable(store, master)
+        evaluated += measured["retracted_episodes_evaluated"]
+        sendable.extend(measured["retracted_episodes_sendable"])
+
+    def sends(store: ProfileStore, master: CVMaster, payload: Payload) -> Path | None:
+        try:
+            return record_sent(
+                store, master, _PROBE_OFFER, payload.version, confirms=payload_digest(payload)
+            )
+        except ApprovalError:
+            return None
+
+    def drafted(store: ProfileStore, master: CVMaster) -> Payload:
+        write_master(store, master)
+        return _probe_prepare(store, master, approved=(0,))
+
+    win, failure = (episode.text for episode in _FIXTURE_EPISODES)
+    plain = _probe_master()
+    later = "2026-01-02T09:00:00+00:00"
+
+    # 1 — the defect itself: approved, then the evidence behind it withdrawn.
+    store = fresh("retracted")
+    row = episode_row(store, win)
+    payload = drafted(store, plain)
+    retract(EvidenceLog(store), row, at=later)
+    check(sends(store, plain, payload) is None, "a retracted episode was still sendable")
+    scan(store, plain)
+
+    # 2 — over-refusal: retracting a *different* story leaves this one sendable.
+    store = fresh("untouched")
+    episode_row(store, win)
+    other = episode_row(store, failure, at="2026-01-01T10:00:00+00:00")
+    payload = drafted(store, plain)
+    retract(EvidenceLog(store), other, at=later)
+    check(
+        sends(store, plain, payload) is not None,
+        "retracting another episode blocked a live approval",
+    )
+    scan(store, plain)
+
+    # 3 — an application record is immutable, so a later retraction cannot rewrite it.
+    store = fresh("immutable")
+    row = episode_row(store, win)
+    payload = drafted(store, plain)
+    record = sends(store, plain, payload)
+    check(record is not None, "a clean send was refused")
+    before = record.read_bytes() if record is not None else b""
+    retract(EvidenceLog(store), row, at=later)
+    check(
+        record is not None and record.read_bytes() == before,
+        "a retraction rewrote an application record",
+    )
+    scan(store, plain)
+
+    # 4 — two rows, one sentence. The approval names the sentence, so both go.
+    store = fresh("duplicate")
+    episode_row(store, win)
+    twin = episode_row(store, win, at="2026-01-01T10:00:00+00:00")
+    payload = drafted(store, plain)
+    retract(EvidenceLog(store), twin, at=later)
+    check(
+        sends(store, plain, payload) is None,
+        "one of two identical rows was retracted and the send stood",
+    )
+    scan(store, plain)
+
+    # 5 — retracted before drafting: `prepare` refuses, so no payload is written.
+    store = fresh("undrafted")
+    row = episode_row(store, win)
+    retract(EvidenceLog(store), row, at=later)
+    write_master(store, plain)
+    try:
+        _probe_prepare(store, plain, approved=(0,))
+        drafting_refused = False
+    except ApprovalError:
+        drafting_refused = True
+    check(drafting_refused, "a retracted episode was drafted into an application")
+    check(
+        not store.path(*_version_parts(_PROBE_OFFER, 1), "payload.json").exists(),
+        "a payload was written over a retracted episode",
+    )
+    scan(store, plain)
+
+    # 6 — an accidental retraction, undone. The check reads the log, not a stamp.
+    store = fresh("undone")
+    row = episode_row(store, win)
+    payload = drafted(store, plain)
+    undo = retract(EvidenceLog(store), row, at=later)
+    unretract(EvidenceLog(store), undo.id, at="2026-01-03T09:00:00+00:00")
+    check(sends(store, plain, payload) is not None, "an undone retraction still blocked the send")
+    scan(store, plain)
+
+    # 7 — the sentence was polished on its way into the CV store, so only
+    # `Episode.provenance` joins the approval to the row that was withdrawn.
+    store = fresh("reworded")
+    row = episode_row(store, _REWORDED_ROW)
+    reworded = plain.model_copy(
+        update={
+            "episodes": (
+                _FIXTURE_EPISODES[0].model_copy(
+                    update={"provenance": (ConversationTurn(evidence_id=row),)}
+                ),
+                _FIXTURE_EPISODES[1],
+            )
+        }
+    )
+    payload = drafted(store, reworded)
+    retract(EvidenceLog(store), row, at=later)
+    check(
+        sends(store, reworded, payload) is None,
+        "a reworded episode outlived the row it came from",
+    )
+    scan(store, reworded)
+
+    # 8 — only a story-bank row withdraws a story. Retracting a constraint that
+    # happens to repeat the sentence must not block the send.
+    store = fresh("constraint")
+    stated = EvidenceLog(store).append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="constraints",
+        kind="constraint",
+        text=win,
+        source="conversation",
+    )
+    payload = drafted(store, plain)
+    retract(EvidenceLog(store), stated.id, at=later)
+    check(
+        sends(store, plain, payload) is not None,
+        "retracting a constraint row withdrew an episode approval",
+    )
+    scan(store, plain)
+
+    return {
+        "retracted_episodes_still_sendable": len(sendable),
+        "retracted_episodes_sendable": sorted(sendable),
+        "retracted_episodes_evaluated": evaluated,
+        "gate_status": "measured" if evaluated else "unmeasured",
+        "retraction_probes": checks,
+        "retraction_probe_failures": failures,
+    }
+
+
 # ---------------------------------------------------------------------------
 # the gate — measured over the real corpus, against a stated fixture candidate
 
@@ -837,8 +1150,42 @@ def write_evidence(
     return measured
 
 
+def write_retraction_evidence(evidence: Path = DEFAULT_D24_EVIDENCE_PATH) -> dict[str, Any]:
+    """Measure and record `status/evidence/D-24.json` — beside T46's, never inside it."""
+    with tempfile.TemporaryDirectory(prefix="integral-d24-") as scratch:
+        measured = probe_retracted_sends(Path(scratch) / "profiles")
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _retraction_report(measured: dict[str, Any]) -> int:
+    """Print D-24's measurement and say whether it fails the gate."""
+    print(json.dumps(measured, ensure_ascii=False))
+    failures = 0
+    for name in measured["retraction_probe_failures"] + measured["retracted_episodes_sendable"]:
+        print(f"✗ a retracted episode was still sendable: {name}", file=sys.stderr)
+        failures += 1
+    for key, floor in (
+        ("retraction_probes", MINIMUM_RETRACTION_PROBES),
+        ("retracted_episodes_evaluated", MINIMUM_RETRACTED_APPROVALS_EVALUATED),
+    ):
+        if measured[key] < floor:
+            print(f"{key} is {measured[key]}, below the floor of {floor}", file=sys.stderr)
+            failures += 1
+    # The probes always plant a retraction, so `unmeasured` here is a probe set
+    # that stopped reaching the check — a broken gate, not an unscored one.
+    if measured["gate_status"] != "measured":
+        print(
+            "no approval was checked against a retraction — the probe measured nothing",
+            file=sys.stderr,
+        )
+        failures += 1
+    return 1 if failures else 0
+
+
 def _main(argv: list[str] | None = None) -> int:
-    """Write T46's gate evidence. Exit 1 on any disclosure no approval backs."""
+    """Write T46's and D-24's gate evidence. Exit 1 on any disclosure no approval backs."""
     args = [arg for arg in (argv if argv is not None else sys.argv)[1:] if not arg.startswith("--")]
     measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
     failures = 0
@@ -869,7 +1216,11 @@ def _main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         failures += 1
-    return 1 if failures else 0
+    # Written unconditionally, before the exit code is decided: short-circuiting
+    # here would leave `D-24.json` stale whenever T46 was red, and `make
+    # evidence` would then report drift in the gate that was still passing.
+    retraction_exit = _retraction_report(write_retraction_evidence())
+    return 1 if (failures or retraction_exit) else 0
 
 
 if __name__ == "__main__":  # pragma: no cover

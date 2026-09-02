@@ -23,6 +23,8 @@ import pytest
 
 from integral.approval import (
     MINIMUM_PROBES,
+    MINIMUM_RETRACTED_APPROVALS_EVALUATED,
+    MINIMUM_RETRACTION_PROBES,
     ApprovalError,
     PersonalDetails,
     _carries,
@@ -31,13 +33,25 @@ from integral.approval import (
     personal_details_in_master,
     prepare,
     probe_boundary,
+    probe_retracted_sends,
     read_payload,
     record_sent,
+    retracted_episodes_sendable,
     sends_without_confirmation,
 )
-from integral.cv_store import CVMaster, Episode, Experience, Skill, SourcedText, write_master
+from integral.cv_store import (
+    ConversationTurn,
+    CVMaster,
+    Episode,
+    Experience,
+    Skill,
+    SourcedText,
+    write_master,
+)
 from integral.generate import GenerationError, read_manifest
 from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog
+from integral.retraction import retract, unretract
 
 ADVERT = (
     "We are hiring a data engineer in Girona. You will own a PostgreSQL estate "
@@ -519,3 +533,200 @@ def test_a_planted_episode_is_not_counted_as_withheld(
     assert measured["unapproved_episode_disclosures"] == 1
     assert FAILURE in measured["unapproved_episodes"][0]
     assert measured["episodes_withheld"] == 0, "it is in the document; it was not withheld"
+
+
+# ---------------------------------------------------------------------------
+# D-24 — an approval cannot outlive the evidence it was granted over
+#
+# Every name below carries `retract`, because the task's gate selects these with
+# `-k retract`. A name spelled `…retraction…` still matches; a name with neither
+# is silently not run, which is the one failure a green gate cannot show.
+
+
+def _episode_row(store: ProfileStore, text: str, *, at: str = "2026-01-01T09:00:00+00:00") -> str:
+    """One story-bank row in the evidence log, returning its id."""
+    return (
+        EvidenceLog(store)
+        .append(recorded_at=at, step="history", kind="episode", text=text, source="conversation")
+        .id
+    )
+
+
+def _retract_row(store: ProfileStore, row_id: str, *, at: str = "2026-01-02T09:00:00+00:00") -> str:
+    return retract(EvidenceLog(store), row_id, at=at).id
+
+
+def test_a_retracted_episode_cannot_be_sent(store: ProfileStore, master: CVMaster) -> None:
+    """The defect. Approve, retract the evidence, and the send boundary must refuse."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, row)
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+
+
+def test_an_unretracted_approval_still_sends(store: ProfileStore, master: CVMaster) -> None:
+    """Retracting some *other* episode must not turn every send into a refusal."""
+    _episode_row(store, WIN)
+    other = _episode_row(store, FAILURE)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, other)
+
+    record = record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    assert record.exists()
+
+
+def test_retraction_after_send_does_not_rewrite_the_record(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """An application record is what the candidate answers questions about later."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    record = record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    before = record.read_bytes()
+
+    _retract_row(store, row)
+    assert record.read_bytes() == before
+
+
+def test_an_empty_retraction_check_reports_unmeasured(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """An approval and no retraction checks nothing — and nothing checked is not a pass."""
+    _episode_row(store, WIN)
+    _prepare(store, master, approved=(0,))
+
+    measured = retracted_episodes_sendable(store, master)
+    assert measured["retracted_episodes_evaluated"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["retracted_episodes_still_sendable"] == 0
+
+
+def test_a_populated_retraction_check_reports_measured(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """The denominator assertion — it cannot live in the empty-input test above."""
+    row = _episode_row(store, WIN)
+    _prepare(store, master, approved=(0,))
+    _retract_row(store, row)
+
+    measured = retracted_episodes_sendable(store, master)
+    assert measured["retracted_episodes_evaluated"] > 0
+    assert measured["gate_status"] == "measured"
+    assert measured["retracted_episodes_still_sendable"] == 0
+
+
+def test_retracting_one_of_two_identical_episodes_withdraws_the_approval(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """Two rows, one sentence. The approval names the sentence, so both go.
+
+    Over-refusing on purpose: the approval carries no evidence id, so a text
+    match cannot tell the retracted row from the survivor, and §6.2 prefers the
+    refusal to the send.
+    """
+    _episode_row(store, WIN)
+    twin = _episode_row(store, WIN, at="2026-01-01T10:00:00+00:00")
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, twin)
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+
+
+def test_an_undone_retraction_makes_the_approval_live_again(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """`unretract` puts the row back, so the check must read the log, not a snapshot."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    retraction = _retract_row(store, row)
+    unretract(EvidenceLog(store), retraction, at="2026-01-03T09:00:00+00:00")
+
+    record = record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    assert record.exists()
+
+
+def test_a_retracted_episode_is_refused_before_a_payload_is_written(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """`prepare` routes through the same measurement, so a retracted story never drafts."""
+    row = _episode_row(store, WIN)
+    _retract_row(store, row)
+
+    with pytest.raises(ApprovalError):
+        _prepare(store, master, approved=(0,))
+    assert not store.path("cv", "generated", "girona-1", "v1", "payload.json").exists()
+
+
+def test_the_finding_names_the_retraction_that_withdrew_the_approval(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """ "No per-use approval backs this line" would not tell the candidate their
+    "forget that" was honoured — and the refusal is the one place they can see it."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    _retract_row(store, row)
+
+    measured = measure_prepared(store, master, offer_id, version)
+    assert measured["unapproved_episode_disclosures"] == 1
+    assert "retracted the evidence" in measured["unapproved_episodes"][0]
+
+
+def test_retracting_a_constraint_row_does_not_withdraw_an_episode_approval(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """Only a story-bank row withdraws a story. Fail-closed guard."""
+    log = EvidenceLog(store)
+    constraint = log.append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="constraints",
+        kind="constraint",
+        text=WIN,
+        source="conversation",
+    )
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, constraint.id)
+
+    record = record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    assert record.exists()
+
+
+def test_a_retracted_row_withdraws_the_episode_its_provenance_names(store: ProfileStore) -> None:
+    """The candidate polished the sentence on its way into the CV store.
+
+    The log row and the store episode no longer share a word for word text, so a
+    text match alone reads clean — fail-open. `Episode.provenance` is the join
+    that already exists, and it is exact.
+    """
+    row = _episode_row(store, "Cut the nightly billing run right down. It took six hours.")
+    built = CVMaster(
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(
+            Episode(kind="achievement", text=WIN, provenance=(ConversationTurn(evidence_id=row),)),
+            Episode(kind="failure", text=FAILURE),
+        ),
+    )
+    write_master(store, built)
+    offer_id, version = _prepare(store, built, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, row)
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, built, offer_id, version, confirms=payload_digest(payload))
+
+
+def test_the_retraction_probes_catch_every_planted_defect(tmp_path: Path) -> None:
+    probed = probe_retracted_sends(tmp_path / "profiles")
+    assert probed["retraction_probe_failures"] == []
+    assert probed["retraction_probes"] >= MINIMUM_RETRACTION_PROBES
+    assert probed["retracted_episodes_still_sendable"] == 0
+    assert probed["retracted_episodes_evaluated"] >= MINIMUM_RETRACTED_APPROVALS_EVALUATED
+    assert probed["gate_status"] == "measured"

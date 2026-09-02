@@ -1,7 +1,7 @@
 {
   "unrecordable_task_gates": 0,
-  "evidence_gates_read": 131,
-  "gates_declaring_status_key": 29,
+  "evidence_gates_read": 132,
+  "gates_declaring_status_key": 30,
   "unrecordable": [],
   "readings": [
     {
@@ -912,6 +912,14 @@
       "task": "t-9e5a05a0",
       "key": "applications_with_a_noncanonical_status",
       "evidence": "status/evidence/T82.json",
+      "value_is_numeric": true,
+      "declares_status_key": true,
+      "status_is_asserted": true
+    },
+    {
+      "task": "t-a7f31c04",
+      "key": "retracted_episodes_still_sendable",
+      "evidence": "status/evidence/D-24.json",
       "value_is_numeric": true,
       "declares_status_key": true,
       "status_is_asserted": true
