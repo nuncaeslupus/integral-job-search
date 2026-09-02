@@ -68,10 +68,27 @@ variables** — build the target directly, never
 
 | PR | task | head | waiting on |
 |---|---|---|---|
-| #295 | T89 usajobs POST connector | `5d266c6` | review on head |
-| #305 | D-24 retraction (+ D-26 task file) | `e0b0527` | review on head |
-| #307 | T98 corpus is a measurement set | `bda48bb` | review on head |
-| #312 | T92 salary recovery | `a13ba87` | review on head |
+| #295 | T89 usajobs POST connector | `cbf881b` | review on head |
+| #305 | D-24 retraction (+ D-26 task file) | `a7d809d` | review on head |
+| #307 | T98 corpus is a measurement set | `499eb3e` | review on head |
+| #312 | T92 salary recovery | `98c9a09` | review on head |
+| #318 | T59 diagnosis — **closes nothing** | `e3db5f3` | first review |
+| #319 | T56 extractor macro-F1 0.4943 → 0.774 | — | **a second reader**, see below |
+
+All were CI-green before their last push; the only `pending` check on each is
+CodeRabbit itself. **Nothing was merged this session** — the owner asked to hold
+merging until the next one.
+
+#319 is the one that must not be merged on a green gate alone. Its author says
+so itself: the cue vocabulary was written by the session that measured it, on the
+*elicitation* split and scored on *evaluation*, but nothing structural stopped a
+pattern being chosen because it fixed one evaluation advert. That is exactly the
+circularity CLAUDE.md's second-reader section exists for, and the cue diffs — not
+the number — are what want the adversarial read. Two more of its own caveats:
+eight of the eleven scored dimensions **have no negative class**, so their F1
+cannot fall for over-firing (now emitted as `dimensions_with_no_negative_class`);
+and `team_autonomy` stayed at 0.0 and was deliberately not forced, because
+widening it created a new `prefilter_suppressed_positives`.
 
 **The quadratic is closed.** Merging #297 made all four `CONFLICTING` one last
 time — T104 shrank `D12.json` from 1,066 lines to a small record and every open
@@ -153,6 +170,18 @@ reads the one honest measurement as a hard failure
   of that, with a guard test reading `_check_estimate`'s own source so an
   unnamed new check fails the suite instead of silently shrinking the record.
   Same family as "a denominator committed as an exact value" above, one scope in.
+- **A fail-closed bug can hide a parity break, and fixing the reported half
+  leaves the other two languages broken and the gate green.** #312's review
+  reported that `40 hours a week` made `_UNBOUNDED_PERIOD` refuse
+  `Gross salary 45,000 EUR for 40 hours a week`. True. But the Spanish and
+  Catalan forms returned `None` for a *different* reason and never reached that
+  branch at all: `_periods_in` reads `40 horas` / `40 hores` as an **hourly**
+  wage, which English `40 hours` does not match, so 45.000 failed the hourly
+  bounds. One advert, three languages, two distinct causes, one symptom. The fix
+  had to sit above **both** period reads or the languages diverge again at the
+  next pattern. When a review names one language's route to a symptom, check
+  whether the other two arrive by the same road.
+
 - **`status/plan.md` states things about the task graph that no gate reads.**
   Four instances now: plan ticks (D-27, 47 of 123), milestone rows in both
   directions (D-29, 82 of 89 merged-still-listed and 12 open-unlisted), and a
@@ -231,6 +260,72 @@ CodeRabbit reviews, 8 per rolling hour.
 The general lesson: a throttle script's bugs are invisible in its output — it
 reports "nudged", "holding", and looks healthy while burning the budget. Every
 guard in it needs a log line saying *why* it held, not just that it did.
+
+## This session, and what is waiting
+
+**Merged: 9 PRs**, of which #297 (T104) was the one that mattered — it closed the
+quadratic described above. **Nothing merged after the owner asked to hold.**
+
+Four review rounds were worked to completion (#295, #305, #307, #312) and every
+finding was either fixed with a red-first fixture or refuted with a measurement.
+The refutations, so they are not re-litigated:
+
+- T104's acceptance block "does not run" — `gate_evidence.py` reads only the
+  ` ```gate ` fence; the ` ```bash ` block is a human recipe.
+- `T53.packages_checked` should stay 18 — no: it is `len(report.packages)`, the
+  **contract** gate over every committed package, with no method filter. 19 is
+  right. The GET census the finding described is `T89.get_connectors_evaluated`,
+  a different key in a different file, and it already reads 18.
+- A `"below the" in reason` string match — replaced with a structural
+  `breached`/`untrusted` split. A test pinning a human-readable sentence breaks
+  on a reword and passes on a wrong classification.
+
+**Three tasks were dispatched to workers and only one produced a task PR.** That
+is the honest ratio and it is worth knowing before planning the next round.
+
+### T59 (`lo-4b17`, #124) — released back to the queue, unclaimed
+
+Blocked on **labelling, not code**: 9 negated labels against a floor of 10.
+`open_task_pr.sh` refused, correctly, rather than open a PR closing the issue
+over a gate that never ran. #318 carries the diagnosis and closes nothing.
+
+The number was never the finding. Two keys now record what the bare count hid:
+`negated_label_count_by_language` = `{en: 0, es: 9, ca: 0}` and
+`negation_recall_hits_by_mechanism` = `{scope: 3, denies: 3}`.
+**So the cheap unblock is three labels, not one** — one EN, one CA, one more ES
+on a `negatable` cue. A tenth *Spanish* label alone satisfies the floor and turns
+the gate green over a measurement in which Catalan `no … pas` and every English
+negator were never once scored, and in which half the hits never exercise the
+scope rule T59 exists to score. That is worse than the current silence.
+
+### T56 (`lo-6f53`, #117) — #319, needs a second reader before it merges
+
+0.4943 → **0.774**, no label touched, zero false positives in every scored
+dimension. Root cause of 84 of 88 misses was *no cue matching at all*, and two
+causes were systematic: feinaactiva renders structured fields in **Catalan on
+Spanish-language adverts**, so ES-only patterns read nothing across much of the
+ES corpus; and only one word order was matched (`inglés alto` yes, `nivel
+avanzado de inglés` no).
+
+Do not merge it on the gate. See the Open PRs section.
+
+### T57 (`lo-7c14`, #119) — still claimed at session end
+
+Dispatched, unfinished when the session ended. **The claim is still held and the
+issue still carries `arsenal:claimed`** — release it or resume it. Its worktree
+holds uncommitted work.
+
+## Seeding a task is two commits' worth of content
+
+`235c757` seeded T119's task file from #316 and left `status/plan.md` untouched,
+so `test_the_committed_plan_and_queue_agree` failed on a clean checkout and
+`make host-gate` was red **on `main`, for every task PR in the repo**. It was
+found by a worker whose own gate went red for a reason unrelated to its task,
+and fixed in `e2cf2fe`.
+
+`issue_import.py --apply` writes the task file and nothing else. The plan row is
+the other half, and the gate that enforces the pair only runs at the repo level —
+so the failure surfaces on somebody else's branch, not on the seeder's.
 
 ## Twelve open tasks are in no milestone row
 
