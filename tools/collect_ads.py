@@ -111,16 +111,12 @@ def url_refusals(urls: Iterable[str], ledger: Path = DEFAULT_LEDGER_PATH) -> dic
     refused = plan_refusals(SOURCE_HOSTS, ledger)
     found: dict[str, str] = {}
     for url in urls:
-        host = (urlsplit(url).hostname or "").lower()
-        name = next(
-            (
-                source
-                for source, known in SOURCE_HOSTS.items()
-                if host == known or host.endswith(f".{known}")
-            ),
-            None,
-        )
+        # `source_of`, not a second copy of the rule. This match decides whether a
+        # URL is put through the refusal ledger at all, so a divergence between two
+        # implementations of it is a fail-open with no symptom (#307 review).
+        name = source_of(url)
         if name is None:
+            host = (urlsplit(url).hostname or "").lower()
             found[url] = (
                 f"host {host or '(none)'} is not recorded in SOURCE_HOSTS, so no refusal "
                 f"can be checked"

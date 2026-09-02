@@ -134,9 +134,23 @@ def test_a_row_naming_an_undeclared_draw_is_a_fault(tmp_path: Path) -> None:
     assert "does not declare" in faults[0]["reason"]
 
 
-def test_an_empty_corpus_reports_unmeasured_rather_than_a_clean_zero(tmp_path: Path) -> None:
-    """Zero faults over zero rows is the failure mode the floor exists for: the number
-    the gate reads would be perfect and would mean nothing."""
+def test_a_corpus_under_the_row_floor_reports_unmeasured_rather_than_a_clean_zero(
+    tmp_path: Path,
+) -> None:
+    """Zero faults over two rows is the failure mode the floor exists for: the number
+    the gate reads is perfect and means nothing.
+
+    The name used to say "an empty corpus", which the fixture never built — it
+    writes one row into each store (#307 review). Two clean rows is the sharper
+    case anyway: an empty store could plausibly be caught by something else, while
+    this one is a corpus that parses, validates and reports a flawless zero.
+
+    Its sibling `test_a_floor_breach_is_a_finding_not_an_unmeasured_reading` builds
+    the same two rows. That is deliberate and the two are not duplicates: this one
+    asserts what the *reader* sees (`unmeasured`, so no caller mistakes the zero for
+    a pass), and the sibling asserts how the breach is *classified* internally
+    (`floor_breaches`, which is what makes it exit 1 instead of 3).
+    """
     measured = measure_provenance(
         raw_path=_corpus(tmp_path, [_row("only")]),
         labelled_path=_corpus(tmp_path, [_row("only")], "labelled.jsonl"),
@@ -144,7 +158,7 @@ def test_an_empty_corpus_reports_unmeasured_rather_than_a_clean_zero(tmp_path: P
     )
     assert measured["corpus_rows_without_a_draw_specification"] == 0
     assert measured["gate_status"] == "unmeasured"
-    assert "below the" in measured["unmeasured_reason"]
+    assert measured["floor_breaches"], "a short scan is a breach, not an absent reading"
 
 
 def test_a_store_padded_with_duplicates_does_not_clear_the_coverage_floor(
