@@ -1,6 +1,6 @@
 ---
 id: t-d1a0cd63
-title: "Every open task PR goes stale on D12 the moment any other task PR merges"
+title: "T104: Every open task PR goes stale on D12 the moment any other task PR merges"
 priority: 5
 requires: [human:gate]
 ---
