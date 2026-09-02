@@ -44,6 +44,11 @@ gate is the reason" this module exists in this shape.
   (spec-v2-process §2's step 7, Sourcing) — `auth: candidate_session` records
   that a site needs a signed-in session, and nothing more; see
   `AuthMode` and `test_authenticated_source_uses_the_candidate_session`.
+  Two places in the schema are free-form enough to carry one anyway — a POST
+  body's keys and a URL's query string — and `names_a_credential` lints both.
+  For a long time it linted only the body, which is half a request: the
+  board that motivated the rule, idealist.org, puts its credentials in the
+  query string.
 * **Run.** See above.
 
 ## What the format does not cover
@@ -76,14 +81,17 @@ stale rather than "quietly returning nothing".
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date
+from functools import lru_cache
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import parse_qsl, urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -200,25 +208,138 @@ CREDENTIAL_KEY_TOKENS = frozenset(
         "cookie",
         "credential",
         "credentials",
+        "csrf",
         "key",
+        "pass",
+        "passphrase",
         "passwd",
         "password",
+        "pwd",
         "secret",
         "session",
         "token",
+        "xsrf",
+        # A signature or a one-time value is a credential the same way a token
+        # is: possession of it is the whole authorisation.
+        "hmac",
+        "jwt",
+        "nonce",
+        "otp",
+        "salt",
+        "sig",
+        "signature",
+        # The identifier half of a credential *pair*. On its own it authorises
+        # nothing, which is exactly why it reads as harmless and gets committed
+        # — idealist.org's Algolia call carries an application id beside its
+        # search key, and both were lifted from someone else's capture.
+        "appid",
+        "applicationid",
+        "clientid",
+        # Session cookies whose names are their own documentation.
+        "aspxauth",
+        "jsessionid",
+        "phpsessid",
+        "sessid",
     }
 )
 
+#: Words that are not a credential on their own but name one when they are
+#: concatenated with a token above — `apitoken`, `privatekey`, `sessionid`.
+#: Kept apart from the tokens so that a key called `id` or `user` is not
+#: refused for existing.
+CREDENTIAL_KEY_QUALIFIERS = frozenset(
+    {
+        "access",
+        "api",
+        "app",
+        "client",
+        "id",
+        "private",
+        "public",
+        "refresh",
+        "user",
+        "x",
+    }
+)
 
-def _names_a_credential(key: str) -> bool:
-    """Does this body key name a credential?
+#: `api_key`, `api-key`, `X-Api-Key`, `apiKey` — the separators a payload key
+#: actually uses, plus the lowercase→uppercase boundary camelCase puts between
+#: two words. A run of capitals (`SECRETKEY`) has no boundary to find, and
+#: `apitoken` has no separator at all, which is what `_spells_a_credential`
+#: below is for.
+_KEY_SEPARATORS = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
-    Split on the separators a payload key actually uses — `api_key`,
-    `api-key`, `X-Api-Key`, `apiKey` — so the list holds words rather than
-    every spelling of every word.
+
+@lru_cache(maxsize=4096)
+def _spells_a_credential(word: str) -> bool:
+    """Does this lowercase run of letters spell out a credential?
+
+    A key may concatenate its words with nothing between them — `apitoken`,
+    `secretkey`, `SECRETKEY` — so a separator-only split reads the whole thing
+    as one unknown word and lets it through. `apikey` was already in the token
+    list, which is the same class of hole patched one member at a time; this
+    breaks the word instead.
+
+    The break must be **total**: every piece has to be a word this module
+    knows, and at least one of them a credential. That is what keeps `monkey`
+    (`mon` is not a word here) and `keywords` (`words` is not) accepted while
+    `secretkey` is refused — the alternative, a substring search, refuses
+    every one of them.
     """
-    parts = re.split(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])", key)
-    return any(part.lower() in CREDENTIAL_KEY_TOKENS for part in parts if part)
+    vocabulary = CREDENTIAL_KEY_TOKENS | CREDENTIAL_KEY_QUALIFIERS
+    # `broken[i]` — the ways `word[:i]` breaks cleanly into known words, as
+    # "did any piece name a credential". Two states, so the walk stays linear
+    # in the number of breakpoints rather than exploring every decomposition.
+    broken: list[set[bool]] = [{False}] + [set() for _ in word]
+    for end in range(1, len(word) + 1):
+        for start in range(end):
+            piece = word[start:end]
+            if broken[start] and piece in vocabulary:
+                names_one = piece in CREDENTIAL_KEY_TOKENS
+                broken[end] |= {seen or names_one for seen in broken[start]}
+    return True in broken[len(word)]
+
+
+def names_a_credential(key: str) -> bool:
+    """Does this key name a credential?
+
+    Every contiguous run of the key's own words is tested, so a credential
+    spelled across separators (`app_id`, `x-algolia-application-id`) is caught
+    as well as one spelled inside a single word (`apitoken`).
+    """
+    words = [part for part in _KEY_SEPARATORS.split(key) if part]
+    return any(
+        _spells_a_credential("".join(words[start:end]).lower())
+        for start in range(len(words))
+        for end in range(start + 1, len(words) + 1)
+    )
+
+
+def credential_keys(node: Any) -> list[str]:
+    """Every key anywhere in a parsed structure that names a credential."""
+    if isinstance(node, dict):
+        named = [key for key in node if isinstance(key, str) and names_a_credential(key)]
+        return named + [key for value in node.values() for key in credential_keys(value)]
+    if isinstance(node, list):
+        return [key for item in node for key in credential_keys(item)]
+    return []
+
+
+def credential_query_keys(url: str) -> list[str]:
+    """Every query-string key in `url` that names a credential.
+
+    `url_pattern` is the *other* place a board's request can carry one, and
+    for a long time nothing looked: the whole rule rested on `body_json`,
+    which is only half of a request. idealist.org is the case that shows the
+    half missing — its Algolia call puts both the application id and the
+    search key in the query string, so a connector naming that URL carried a
+    lifted credential past every check this module makes.
+    """
+    return [
+        key
+        for key, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True)
+        if names_a_credential(key)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -738,7 +859,7 @@ def _literal_body_violations(node: Any, where: str = "body_json") -> list[str]:
                     f"{where}: key {key!r} carries a brace — only values substitute, so a "
                     "body whose shape varies by page is not a literal body"
                 )
-            if _names_a_credential(key):
+            if names_a_credential(key):
                 violations.append(
                     f"{where}: key {key!r} names a credential — a connector may not carry "
                     "one, and a board whose search needs one is a board this tool may not "
@@ -748,16 +869,39 @@ def _literal_body_violations(node: Any, where: str = "body_json") -> list[str]:
     elif isinstance(node, list):
         for index, item in enumerate(node):
             violations.extend(_literal_body_violations(item, f"{where}[{index}]"))
+    elif isinstance(node, float) and not math.isfinite(node):
+        # YAML has `.nan`, `.inf` and `-.inf`; JSON has no spelling for any of
+        # them, and `json.dumps` emits the bare words `NaN` and `Infinity`
+        # anyway — invalid JSON, sent under a `Content-Type` this engine
+        # derived itself. The `date` case below is the same divergence at the
+        # level of *types*; this is it at the level of *values*, and it was
+        # missed because the type check looked like the whole class.
+        violations.append(
+            f"{where}: {node} has no JSON spelling — a request body may hold only finite numbers"
+        )
     elif not isinstance(node, (bool, int, float)) and node is not None:
         # `yaml.safe_load` also produces `date`/`datetime` for an unquoted
-        # date, and `json.dumps` cannot serialise one. Refused here rather
-        # than raised at request-build time, where the connector's author is
-        # no longer in the room.
+        # date (and `bytes` for `!!binary`, and a `set` for `!!set`), none of
+        # which `json.dumps` can serialise. Refused here rather than raised at
+        # request-build time, where the connector's author is no longer in the
+        # room.
         violations.append(
             f"{where}: {type(node).__name__} is not a JSON value — a request body may hold "
             "only objects, arrays, strings, numbers, booleans and null"
         )
     return violations
+
+
+def serialise_body(body: Any) -> bytes:
+    """The bytes a declared request body is sent as.
+
+    One definition, called by the load-time check and by
+    `build_list_requests`, so what a connector may declare is exactly what
+    this engine can put on the wire. `allow_nan=False` because the default
+    emits the bare words `NaN` and `Infinity`, which are Python's spelling of
+    those values and no JSON parser's.
+    """
+    return json.dumps(body, allow_nan=False, ensure_ascii=False).encode("utf-8")
 
 
 def _carries_the_page_placeholder(node: Any) -> bool:
@@ -881,6 +1025,25 @@ class ListPage(Strict):
             )
         return pattern
 
+    @field_validator("url_pattern")
+    @classmethod
+    def _pattern_carries_no_credential(cls, pattern: str) -> str:
+        # The same check `body_json` gets, because a request has two halves
+        # and the rule was only ever applied to one of them. idealist.org's
+        # Algolia call carries its application id and its search key in the
+        # *query string*, so until this existed the ledger's claim that such a
+        # payload "cannot be written into a connector even by accident" was
+        # true of the body and false of the URL.
+        named = credential_query_keys(pattern)
+        if named:
+            raise ValueError(
+                f"url_pattern query key(s) {', '.join(repr(key) for key in named)} name a "
+                "credential — a connector may not carry one, and a board whose search needs "
+                "one is a board this tool may not read (see the module docstring's 'Carry a "
+                "credential')"
+            )
+        return pattern
+
     @field_validator("body_json")
     @classmethod
     def _body_is_literal(cls, body: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -888,6 +1051,17 @@ class ListPage(Strict):
             violations = _literal_body_violations(body)
             if violations:
                 raise ValueError("; ".join(violations))
+            # And then the property the walk above is *for*, asserted directly
+            # rather than inferred from having named every way to break it.
+            # Enumerating members is how `.nan` got through behind a check
+            # that already caught `date`: same divergence, one level down. A
+            # lone surrogate is another — a plain `str` every per-node check
+            # accepts, that cannot be encoded. This is the same call
+            # `build_list_requests` makes, so what loads is what can be sent.
+            try:
+                serialise_body(body)
+            except (TypeError, ValueError, UnicodeEncodeError) as exc:
+                raise ValueError(f"body_json is not serialisable as JSON: {exc}") from exc
         return body
 
     @model_validator(mode="after")
@@ -1251,9 +1425,7 @@ def build_list_requests(
             url=url,
             method=page.method,
             headers={"Content-Type": JSON_CONTENT_TYPE},
-            body=json.dumps(
-                _page_substituted(page.body_json, start + offset), ensure_ascii=False
-            ).encode("utf-8"),
+            body=serialise_body(_page_substituted(page.body_json, start + offset)),
         )
         for offset, url in enumerate(urls)
     ]

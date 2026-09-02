@@ -364,8 +364,17 @@ javascript_rendered:
 
       T89 closed the first of the two: the engine issues POSTs now. The ruling
       is unchanged, because the second reason was never the engine's to fix —
-      and `body_json` refuses a key named like a credential at load, so the
-      Algolia payload cannot be written into a connector even by accident.
+      and both `body_json` and `url_pattern` refuse a key named like a
+      credential at load, so the Algolia payload cannot be written into a
+      connector even by accident.
+
+      That sentence was false when first written. It said `body_json` refused
+      the payload, which was true, and concluded the call could not be written
+      down — but this entry's own text says the credentials are in the QUERY
+      STRING, and nothing checked `url_pattern` at all: a connector naming
+      `…?x-algolia-api-key=…&x-algolia-application-id=…` loaded clean. An
+      audit of T89 found it; the check now covers both halves of a request,
+      which is what makes the claim true rather than narrowing it.
     evidence: >
       Six links on the whole page and every one is a category filter
       (/en/jobs?q=Attorney and similar); zero per-offer hrefs. The 67k characters

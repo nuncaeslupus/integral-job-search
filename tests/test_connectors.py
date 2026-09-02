@@ -28,7 +28,6 @@ from integral.connectors import (
     FieldSelector,
     ListPage,
     _as_float,
-    _names_a_credential,
     assess_staleness,
     build_list_requests,
     build_list_urls,
@@ -40,6 +39,7 @@ from integral.connectors import (
     dig,
     dig_container,
     load_connector,
+    load_connectors,
     parse_connector,
     parse_detail_page,
     parse_html,
@@ -860,17 +860,31 @@ JOB_POSTING = json.dumps(
         "baseSalary": {
             "@type": "MonetaryAmount",
             "currency": "PLN",
-            "value": {"@type": "QuantitativeValue", "unitText": "MONTH", "minValue": 15000,
-                      "maxValue": 21500},
+            "value": {
+                "@type": "QuantitativeValue",
+                "unitText": "MONTH",
+                "minValue": 15000,
+                "maxValue": 21500,
+            },
         },
         "hiringOrganization": {"@type": "Organization", "name": "QED.ai"},
-        "jobLocation": {"@type": "Place",
-                        "address": {"@type": "PostalAddress", "addressCountry": "PL",
-                                    "addressLocality": "Warszawa"}},
+        "jobLocation": {
+            "@type": "Place",
+            "address": {
+                "@type": "PostalAddress",
+                "addressCountry": "PL",
+                "addressLocality": "Warszawa",
+            },
+        },
     }
 )
-BREADCRUMBS = json.dumps({"@context": "https://schema.org", "@type": "BreadcrumbList",
-                          "itemListElement": [{"name": "Python"}]})
+BREADCRUMBS = json.dumps(
+    {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [{"name": "Python"}],
+    }
+)
 
 
 def _ld(*blocks: str) -> str:
@@ -962,8 +976,14 @@ def test_dig_returns_the_scalar_at_the_end_of_the_path() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["baseSalary", "baseSalary.value", "hiringOrganization", "jobLocation.address", "missing",
-     "baseSalary.missing.minValue"],
+    [
+        "baseSalary",
+        "baseSalary.value",
+        "hiringOrganization",
+        "jobLocation.address",
+        "missing",
+        "baseSalary.missing.minValue",
+    ],
 )
 def test_dig_treats_a_container_or_a_miss_as_no_value(path: str) -> None:
     """Landing on an object must read as *absent*, not as `str({...})`.
@@ -992,9 +1012,15 @@ def test_a_json_list_page_reads_its_items_out_of_the_embedded_document() -> None
     connector = parse_connector(JSON_DETAIL_CONNECTOR)
     page = _ld(
         BREADCRUMBS,
-        json.dumps({"@type": "CollectionPage",
-                    "hasPart": [{"url": "https://jsonboard.test/job/1"},
-                                {"url": "https://jsonboard.test/job/2"}]}),
+        json.dumps(
+            {
+                "@type": "CollectionPage",
+                "hasPart": [
+                    {"url": "https://jsonboard.test/job/1"},
+                    {"url": "https://jsonboard.test/job/2"},
+                ],
+            }
+        ),
     )
     assert parse_list_page(connector, page) == [
         {"detail_url": "https://jsonboard.test/job/1"},
@@ -1057,19 +1083,20 @@ def test_a_json_document_is_never_evaluated() -> None:
     stays a string. The YAML loader's `!!python/…` route is closed the same way
     (`yaml.safe_load`) — this is the JSON half of the same promise."""
     connector = parse_connector(JSON_DETAIL_CONNECTOR)
-    hostile = json.dumps({"@type": "JobPosting", "title": "__import__('os').system('id')",
-                          "description": "body"})
+    hostile = json.dumps(
+        {"@type": "JobPosting", "title": "__import__('os').system('id')", "description": "body"}
+    )
     record = parse_detail_page(connector, _ld(hostile))
     assert record["title"] == "__import__('os').system('id')"
 
 
 def test_a_page_that_declares_both_routes_is_refused() -> None:
     both = JSON_DETAIL_CONNECTOR.replace(
-        '  from_json:\n    embedded_in: \'script[type="application/ld+json"]\'\n'
+        "  from_json:\n    embedded_in: 'script[type=\"application/ld+json\"]'\n"
         '    match:\n      "@type": CollectionPage\n    items: hasPart\n'
         "    fields:\n      detail_url: url\n",
         '  item: ".card"\n  fields:\n    detail_url:\n      css: "a.link"\n      attr: href\n'
-        '  from_json:\n    embedded_in: \'script[type="application/ld+json"]\'\n'
+        "  from_json:\n    embedded_in: 'script[type=\"application/ld+json\"]'\n"
         '    match:\n      "@type": CollectionPage\n    items: hasPart\n'
         "    fields:\n      detail_url: url\n",
     )
@@ -1094,8 +1121,11 @@ def test_a_detail_page_json_source_may_not_name_items() -> None:
 
 def test_a_json_field_outside_the_offer_vocabulary_is_refused() -> None:
     with pytest.raises(ConnectorError, match="api_key"):
-        parse_connector(JSON_DETAIL_CONNECTOR.replace("      title: title\n",
-                                                      "      api_key: token\n      title: title\n"))
+        parse_connector(
+            JSON_DETAIL_CONNECTOR.replace(
+                "      title: title\n", "      api_key: token\n      title: title\n"
+            )
+        )
 
 
 def test_a_json_host_selector_outside_the_grammar_is_refused() -> None:
@@ -1393,9 +1423,7 @@ def test_the_usajobs_package_parses_its_fixture_to_offers() -> None:
     # The detail page, which is where the advert body comes from — a list row
     # carries none, so a connector without this block could not produce `text`
     # at all and `_something_produces_the_offer_text` would refuse it.
-    detail = parse_detail_page(
-        connector, (package / "fixture" / "detail.html").read_text("utf-8")
-    )
+    detail = parse_detail_page(connector, (package / "fixture" / "detail.html").read_text("utf-8"))
     assert detail["title"] == "Python Developer"
     assert "Duties" in detail["text"]
 
@@ -1428,20 +1456,10 @@ def test_the_transport_gate_reports_a_post_the_engine_cannot_issue() -> None:
     reasons = connector_transport.why_unreadable(form_post)
     assert reasons and all(reason.startswith("formboard.test:") for reason in reasons)
 
-    # A board whose payload carries a key stays unreadable too, and for the
-    # reason that no engine change can fix — idealist.org's Algolia call is
-    # the live example the task names.
-    keyed = connector_transport.RecordedRequest(
-        site="keyed.test",
-        url="https://keyed.test/search",
-        method="POST",
-        headers={"Content-Type": JSON_CONTENT_TYPE},
-        body='{"apiKey": "abc", "q": "python"}',
-    )
-    assert connector_transport.why_unreadable(keyed)
+    assert connector_transport.why_refused(form_post) == []
 
     # And the plain JSON POST the engine *can* issue reports nothing, so the
-    # two above are a discrimination and not a matcher that says no to
+    # case above is a discrimination and not a matcher that says no to
     # everything.
     fine = connector_transport.RecordedRequest(
         site="other.test",
@@ -1451,6 +1469,71 @@ def test_the_transport_gate_reports_a_post_the_engine_cannot_issue() -> None:
         body='{"q": "python"}',
     )
     assert connector_transport.why_unreadable(fine) == []
+    assert connector_transport.why_refused(fine) == []
+
+
+def test_a_board_refused_on_policy_is_not_a_board_readable_only_by_post(tmp_path: Path) -> None:
+    """A credential refusal is this tool declining a board, not an engine gap.
+
+    Counting the two together made the gate go permanently red on a
+    *legitimate* ledger addition. `ruled-out.yaml`'s own test 3 tells the next
+    surveyor to record the curl a capture revealed; recording idealist.org's
+    Algolia call — a POST whose query string, headers and payload all carry a
+    key — turned `boards_readable_only_by_post` to 1 with the message "the
+    schema cannot express the recorded request: … names a credential". The
+    only route back to green was deleting a measured `retest:` line, which is
+    the one thing that file exists to prevent."""
+    algolia = connector_transport.RecordedRequest(
+        site="idealist.org",
+        url=(
+            "https://nsv3auess7-dsn.algolia.net/1/indexes/jobs/query"
+            "?x-algolia-api-key=abc&x-algolia-application-id=NSV3AUESS7"
+        ),
+        method="POST",
+        headers={"Content-Type": JSON_CONTENT_TYPE, "X-Algolia-API-Key": "abc"},
+        body='{"apiKey": "abc", "params": "query=python"}',
+    )
+    # All three places a credential can ride, each named separately.
+    refused = connector_transport.why_refused(algolia)
+    assert len(refused) == 4, refused
+    assert any("x-algolia-api-key" in reason for reason in refused)
+    assert any("x-algolia-application-id" in reason for reason in refused)
+    assert any("X-Algolia-API-Key" in reason for reason in refused)
+    assert any("apiKey" in reason for reason in refused)
+
+    # And the ledger it is patched into stays green, with the board counted
+    # under its own heading rather than as an engine failure. Patched into a
+    # copy of the *real* ledger, because the whole failure was about what
+    # happens when a surveyor follows the documented process on this file.
+    curl = (
+        "curl -s -X POST -H 'Content-Type: application/json' "
+        "-H 'X-Algolia-API-Key: abc' "
+        '-d \'{"apiKey":"abc","params":"query=python"}\' '
+        f"'{algolia.url}'"
+    )
+    ledger = yaml.safe_load(connector_transport.DEFAULT_LEDGER_PATH.read_text(encoding="utf-8"))
+    for entry in connector_transport._entries(ledger):
+        if entry["site"] == "idealist.org":
+            entry["retest"] = curl
+    patched = tmp_path / "ruled-out.yaml"
+    patched.write_text(yaml.safe_dump(ledger), encoding="utf-8")
+
+    measured = connector_transport.measure(patched)
+    assert measured["gate_status"] == "measured"
+    assert measured["boards_readable_only_by_post"] == 0
+    assert measured["boards_refused_on_policy"] == 1
+    assert measured["boards_readable_only_by_post_evaluated"] == 1
+    assert measured["unreadable"] == []
+
+    # The denominator stays honest in the other direction too: refuse every
+    # POST board and there is nothing left to ask the engine about, so the
+    # gate says `unmeasured` rather than reporting the zero it would report
+    # for a board it can read.
+    for entry in connector_transport._entries(ledger):
+        if isinstance(entry.get("retest"), str) and " -X POST" in entry["retest"]:
+            entry["retest"] = curl
+    patched.write_text(yaml.safe_dump(ledger), encoding="utf-8")
+    assert connector_transport.measure(patched)["gate_status"] == "unmeasured"
 
 
 def test_every_committed_connector_still_builds_a_plain_get() -> None:
@@ -1514,9 +1597,104 @@ def test_a_request_body_may_not_name_a_credential() -> None:
     # Nested just as much as top level.
     with pytest.raises(ConnectorError, match="names a credential"):
         parse_connector(post_board(KEYWORD_LINE, "    Filters:\n      apiKey: leaked"))
-    # And a board's ordinary search vocabulary is not swept up with them.
-    for fine in ("Keyword", "ResultsPerPage", "keywords", "locationName", "monkey"):
-        assert not _names_a_credential(fine)
+
+
+def test_every_committed_credential_key_case_is_judged_the_way_the_rule_says() -> None:
+    """The audit's cases, committed as the gate's own fixtures.
+
+    `tests/fixtures/connectors/credential_keys.yaml` holds both directions and
+    the gate counts them, so the token list cannot regress behind a green
+    suite: `credential_key_cases_checked` is a number `make evidence` records.
+
+    Nearly every `refused` entry was ADMITTED before this — the splitter could
+    break neither a capital run (`SECRETKEY`) nor a lowercase concatenation
+    (`apitoken`), and a dozen ordinary words for a secret were absent from the
+    list (`passwd` was in it; `pwd` and `pass` were not)."""
+    misjudged, checked = connector_transport.credential_key_misjudgements()
+    assert misjudged == []
+    assert checked >= connector_transport.MINIMUM_CREDENTIAL_CASES
+
+    # Both lists are non-trivial, so "no misjudgements" is not a report over
+    # an empty half — a matcher refusing everything, or nothing, fails one.
+    table = yaml.safe_load((_FIXTURES / "credential_keys.yaml").read_text(encoding="utf-8"))
+    assert len(table["refused"]) >= 40
+    assert len(table["accepted"]) >= 40
+
+    # And the refusal reaches a load, not just the predicate: three shapes the
+    # old splitter could not see, refused in a real connector file.
+    for bad in ("apitoken", "SECRETKEY", "pwd", "app_id", "X-Signature"):
+        with pytest.raises(ConnectorError, match="names a credential"):
+            parse_connector(post_board(KEYWORD_LINE, f"    {bad}: leaked"))
+
+
+def test_a_credential_in_the_url_query_is_refused_the_same_as_one_in_the_body() -> None:
+    """A request has two halves and the rule was applied to one of them.
+
+    `connectors/ruled-out.yaml` claimed idealist.org's Algolia payload "cannot
+    be written into a connector even by accident". That was true of
+    `body_json` and false of `url_pattern` — where the ledger's own entry says
+    those credentials actually live: "carries an application id plus a search
+    key in the query string"."""
+    algolia = (
+        "https://nsv3auess7-dsn.algolia.net/1/indexes/jobs/query"
+        "?x-algolia-api-key=abc&x-algolia-application-id=NSV3AUESS7"
+    )
+    with pytest.raises(ConnectorError, match="name a credential") as raised:
+        parse_connector(post_board("https://boards.test/Search/ExecuteSearch", algolia))
+    # Both halves of the pair are named, not just the one spelled "key".
+    assert "'x-algolia-api-key'" in str(raised.value)
+    assert "'x-algolia-application-id'" in str(raised.value)
+
+    # An ordinary query string is untouched — this is a credential check, not
+    # a ban on query strings.
+    fine = "https://boards.test/search?q=python&page={page}&sort=date"
+    assert (
+        parse_connector(
+            post_board("https://boards.test/Search/ExecuteSearch", fine)
+        ).list.url_pattern
+        == fine
+    )
+
+    # Every committed package still loads, which is the other direction: a
+    # check this aggressive would have taken the library down with it.
+    assert len(load_connectors()) >= 10
+
+
+def test_a_body_value_with_no_json_spelling_is_refused_at_load() -> None:
+    """The same YAML/JSON divergence the `date` case catches, one level down.
+
+    A `date` is a *type* JSON has no spelling for, and that was caught. `.nan`
+    and `.inf` are *values* it has no spelling for, and they were not: they
+    loaded, and `json.dumps` emitted the bare words `NaN` and `Infinity`
+    — invalid JSON, on the wire, under a `Content-Type` this engine derived
+    itself. Enumerating members is how the second one got through behind the
+    first, so the class is asserted here too: whatever loads must serialise.
+    """
+    for spelling in (".nan", ".inf", "-.inf"):
+        with pytest.raises(ConnectorError, match="no JSON spelling"):
+            parse_connector(post_board(KEYWORD_LINE, f"    Score: {spelling}"))
+    # Nested and in an array, because a top-level-only walk would miss both.
+    with pytest.raises(ConnectorError, match="no JSON spelling"):
+        parse_connector(post_board(KEYWORD_LINE, "    Filters:\n      Score: .nan"))
+    with pytest.raises(ConnectorError, match="no JSON spelling"):
+        parse_connector(post_board(KEYWORD_LINE, "    Scores:\n      - .inf"))
+
+    # The rest of the class, each a value that passes every per-node check and
+    # then cannot be put on the wire. A lone surrogate is the one no type
+    # check can see: it is an ordinary `str`.
+    for label, line in {
+        "a lone surrogate": '    Note: "\\uD800"',
+        "binary": "    Note: !!binary aGk=",
+        "a set": "    Note: !!set {a, b}",
+    }.items():
+        with pytest.raises(ConnectorError) as raised:
+            parse_connector(post_board(KEYWORD_LINE, line))
+        assert "body_json" in str(raised.value), label
+
+    # A finite number is still a number, so the block above is a refusal of
+    # three values and not of the type.
+    body = parse_connector(post_board(KEYWORD_LINE, "    Score: 1.5")).list.body_json
+    assert body is not None and body["Score"] == 1.5
 
 
 def test_a_connector_cannot_declare_its_own_headers() -> None:
@@ -1557,6 +1735,9 @@ def test_the_transport_evidence_records_both_denominators(tmp_path: Path) -> Non
     assert measured["ledger_entries_scanned"] >= connector_transport.MINIMUM_LEDGER_ENTRIES
     assert measured["get_connectors_evaluated"] >= 10
     assert measured["get_connectors_still_plain_gets"] == measured["get_connectors_evaluated"]
+    assert measured["boards_refused_on_policy"] == 0
+    assert measured["credential_key_misjudged"] == 0
+    assert measured["credential_key_cases_checked"] >= connector_transport.MINIMUM_CREDENTIAL_CASES
     assert json.loads((tmp_path / "T89.json").read_text(encoding="utf-8")) == measured
 
     empty = tmp_path / "empty.yaml"
