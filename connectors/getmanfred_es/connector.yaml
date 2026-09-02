@@ -1,0 +1,177 @@
+# Manfred — a Spanish tech-recruitment board, small and hand-curated: 21 active
+# offers on the day this was written, against tecnoempleo's thousands. What it
+# lacks in volume it makes up for in the one field most boards omit: every
+# offer carries a salary ceiling in euros, and half of them carry a floor.
+#
+# It was ruled out on 2026-08-30 under `javascript_rendered` with the note
+# "there is nothing to select even in principle", which was a true statement
+# about the served HTML and a false conclusion about the board. A browser
+# capture found the list page fetching a public JSON array on load. See
+# `connectors/ruled-out.yaml`, entry `getmanfred.com` under `corrected`.
+#
+# `robots.txt` (fetched live 2026-09-01, in full — nine lines, four of them
+# comments):
+#
+#     # *
+#     User-agent: *
+#     Allow: /
+#     # Host
+#     Host: https://www.getmanfred.com
+#     # Sitemaps
+#     Sitemap: https://www.getmanfred.com/sitemap.xml
+#     Sitemap: https://www.getmanfred.com/sitemap-offers.xml
+#
+# One group, one rule, and the rule is `Allow: /`. No path is disallowed, so
+# neither the API below nor the per-offer pages are. No group names any agent —
+# ClaudeBot, Claude-User, anthropic, GPTBot, CCBot and Bytespider are all
+# absent (grepped). The negative control this repo asks for cannot be produced
+# from this file: there is no path it refuses, which is itself the finding.
+#
+# That check was run TWICE and the second time is the one that matters. Test 1
+# in ruled-out.yaml covers the pages a survey visits; the endpoint below was
+# not one of them, because nobody knew it existed until the capture. remoteok
+# was corrected and then un-corrected on exactly this point the same week — its
+# capture revealed an endpoint its robots.txt names under `# AJAX endpoints`.
+# So robots was re-read against `/api/v2/public/offers` specifically, after the
+# capture, before a line of this file was written.
+site: getmanfred
+locale: es
+version: "1.0.0"
+last_verified: "2026-09-01"
+# Public JSON, public ad pages. No account, no session, no key — the API path
+# is literally `/public/`.
+auth: none
+
+list:
+  # The request the listing page makes on load, verbatim from the capture. It
+  # answers a plain curl under this tool's own product token: no cookies, no
+  # `Referer`, no key.
+  #
+  # `currency=%E2%82%AC` is the euro sign, percent-encoded. The site sends it
+  # raw; encoded is what any correct client does with a non-ASCII query value,
+  # and the response is byte-identical either way (checked). Written encoded
+  # here so the file stays ASCII and `build_list_urls` has nothing to escape.
+  url_pattern: "https://www.getmanfred.com/api/v2/public/offers?lang=ES&onlyActive=true&currency=%E2%82%AC"
+  # `onlyActive=true` returns the whole live board in one response — 21 offers
+  # on 2026-09-01 — so there is no second page to describe. This is a statement
+  # about the board's size, not a limit this connector imposes: `sitemap-offers.xml`
+  # lists 1,642 URLs, and the 1,621 that are not here are closed positions.
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    # No `embedded_in`: the response body *is* the JSON. No `match`: one
+    # document, and it is the one we want.
+    #
+    # `items: "$"` — the response is a bare array of offers with no envelope,
+    # no `data` key, no `totalCount`. `$` says that out loud, because a blank
+    # here would read as a typo.
+    items: "$"
+    # The board publishes an id and a slug and no URL. Composed rather than
+    # read, and verified rather than inferred: all 21 URLs this template builds
+    # from the live API appear VERBATIM in the board's own
+    # `sitemap-offers.xml` (checked 2026-09-01, 21/21 against 1,642 entries).
+    #
+    # The prefix is `/ofertas-empleo/`, which is the trap worth naming. The
+    # detail page's own `offer.url` field is `/8451/centellic-…` — relative to
+    # `/ofertas-empleo/`, not to the site root — so a connector resolving that
+    # against the list URL would build `https://www.getmanfred.com/8451/…`.
+    # That is not a 404. Manfred answers 200 to an unknown offer path and
+    # renders a page whose `pageProps` carries no offer at all, so a wrong
+    # detail URL looks exactly like a successful fetch and yields an advert
+    # with no body. Composing from `id` and `slug` avoids the question.
+    detail_url_template: "https://www.getmanfred.com/ofertas-empleo/{id}/{slug}"
+    fields:
+      # `position`, not `title` — the API's own name for it.
+      title: position
+      # A nested object, so `company.name` rather than `company`. Non-null on
+      # all 21 offers, which keeps `connector_health`'s null-company signal
+      # meaningful for this connector instead of permanently red.
+      company: company.name
+      # THE FIGURES COME FROM HERE AND NOWHERE ELSE. See the `detail:` block
+      # below for why that sentence is in capitals.
+      #
+      # Euros, as JSON numbers. 21 of 21 carry `salaryTo`; 11 of 21 carry a
+      # non-zero `salaryFrom` (2026-09-01 — it was 12 the day before, so expect
+      # this to move). The other ten send `salaryFrom: 0`, which is a sentinel
+      # for "no floor stated" and not a wage: `_as_wage` drops a figure of zero
+      # or less so those offers report a ceiling and no floor, rather than a
+      # job paying from nothing.
+      salary_min: salaryFrom
+      salary_max: salaryTo
+      # The symbol, `€`, because that is what the board sends. Not rewritten to
+      # `EUR`: `Salary.currency` is free text and a connector's job is to
+      # report, not to normalise.
+      salary_currency: currency
+      # No `salary_period`. Every advert's own `offer.jsonld` states
+      # `unitText: YEAR`, and these are plainly annual Spanish tech salaries,
+      # but that string is unreachable — see the detail block — and `fields`
+      # maps paths, not literals. Absent beats invented; the note is here so
+      # the next reader knows it was a decision.
+      #
+      # A percentage, 0 to 100, as a JSON number. `Location.remote` is free
+      # text precisely so a connector can pass through its board's own
+      # vocabulary, and Manfred's vocabulary is a number: `100` is fully
+      # remote, `40` is two days a week. Read it as a percent.
+      location_remote: remotePercentage
+      # No `text` here — the list API carries no advert body at all, only
+      # `highlights`, which is an array of four emoji-prefixed slogans. The
+      # body comes from the detail page, which is what makes that block
+      # mandatory for this board rather than optional.
+
+detail:
+  from_json:
+    # Next.js writes the whole page state into this script tag, server-side, on
+    # every render. Not `_next/data/<BUILD_ID>/…json`, which carries the same
+    # record: that URL embeds a build id that changes on every deploy, so a
+    # connector hard-coding one breaks at the next release.
+    #
+    # There is NO `application/ld+json` on this page. An earlier note in
+    # ruled-out.yaml said there was, at `script[id="jobPostingSchema"]`, and
+    # named it the cleaner surface; the page carries zero such blocks. What
+    # exists is `offer.jsonld`, a *string* of JSON nested inside this document,
+    # with a correct JobPosting inside it — including `baseSalary` in euros and
+    # `unitText: YEAR`. `dig` returns a scalar, and nothing here parses a
+    # field's value as a second document, so that block is visible and
+    # unreadable. It is the reason `salary_period` is left absent above.
+    embedded_in: "script[id=\"__NEXT_DATA__\"]"
+    fields:
+      # Known ceiling, and the honest name for it: THIS IS NOT THE WHOLE
+      # ADVERT. Manfred renders an offer as seven or so markdown blocks —
+      # `heroSectionData.jobDescription` (the company blurb, 516-763 chars over
+      # five sampled offers), `requirementsSectionData.requirementsIntro` (the
+      # role, 534-3,988), `skillsSectionData.intro`, `howSectionData.howIntro`,
+      # `whenSectionData.whenIntro`, `offerSectionData.offerInfo`,
+      # `whereSectionData.jobInfo` — and `fields` maps one path to one field.
+      # There is no way to say "join these seven" today.
+      #
+      # `requirementsIntro` is the choice because it describes the ROLE rather
+      # than the company, and it was present on all five offers sampled on
+      # 2026-09-01 (8389, 8418, 8226, 8458, 8451). `jobDescription` is more
+      # uniform in length but is the employer's about-us paragraph; a candidate
+      # ranking on body text is better served by the role.
+      #
+      # The upgrade path is a field that concatenates several paths, which is
+      # a change to the format and not to this file.
+      text: props.pageProps.offer.requirementsSectionData.requirementsIntro
+      # Same values as the list, taken here too because a detail fetch that
+      # returned the fail-open empty page would otherwise leave these standing
+      # from the list while `text` came back missing — and `build_offer` raises
+      # on a missing `text`, which is the loud failure we want.
+      title: props.pageProps.offer.title
+      company: props.pageProps.offer.company
+      # NO SALARY FIELDS HERE, AND THAT IS THE WHOLE POINT.
+      #
+      # `offer.salaryMin` and `offer.salaryMax` on this page are `50` and `60`
+      # for the same advert the list API reports as `50000` and `60000`. They
+      # are in THOUSANDS. `build_offer` lets detail win on overlap, so mapping
+      # them would publish a fifty-euro job — past every gate, because nothing
+      # in the schema knows what a euro is.
+      #
+      # The fix is not a scale factor in this file. A `x1000` rule would be a
+      # second place where a unit is asserted, it would be silently wrong the
+      # day Manfred fixes its own field, and it would invite the next connector
+      # to multiply something else. Declaring no salary on the detail route
+      # leaves exactly one source of figures for this board, and it is the one
+      # already in euros. Verified on offer 8451, 2026-09-01: list 50000/60000,
+      # detail 50/60, same advert.
