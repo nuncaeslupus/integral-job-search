@@ -1,13 +1,13 @@
 {
   "plan_queue_task_drift": 0,
   "rows_without_a_measurable_gate": 0,
-  "plan_rows": 162,
-  "queue_tasks": 162,
   "in_queue_only": [],
   "in_plan_only": [],
   "duplicate_labels": [],
   "gate_mismatches": [],
   "dependency_mismatches": [],
   "ungated_rows": [],
-  "violations": []
+  "violations": [],
+  "plan_rows_at_least": 100,
+  "queue_tasks_at_least": 100
 }
