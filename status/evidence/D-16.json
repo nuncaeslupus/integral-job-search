@@ -1,8 +1,8 @@
 {
   "undisclosed_connectorless_sourcing": 0,
-  "situations_probed": 5,
-  "connectors_installed": 14,
-  "connectors_usable": 13,
+  "situations_probed": 6,
+  "connectors_installed": 18,
+  "connectors_usable": 17,
   "rule_declared_in_step_spec": true,
   "shortfalls": [],
   "readings": [
@@ -44,10 +44,26 @@
       "connectorless": false,
       "usable": [
         "arbeitnow_en",
+        "himalayas_en",
         "pythonorg_en",
         "remotive_en",
         "wellfound_en",
-        "weworkremotely_en"
+        "weworkremotely_en",
+        "workingnomads_en"
+      ],
+      "example_only": [],
+      "unreadable": [],
+      "disclosed": true,
+      "discloses": null,
+      "counts": false,
+      "reasons": []
+    },
+    {
+      "market": "PL",
+      "connectorless": false,
+      "usable": [
+        "justjoin_en",
+        "nofluffjobs_en"
       ],
       "example_only": [],
       "unreadable": [],
