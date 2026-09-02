@@ -461,3 +461,52 @@ def test_a_record_that_drops_a_key_fails_its_own_denominator(
 
     assert exit_code == 1
     assert "only 3 record key(s) were compared (floor 4)" in capsys.readouterr().err
+
+
+def test_a_board_sensitive_reading_writes_no_evidence_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run whose record is board-sensitive must leave the artefact alone.
+
+    `_main` returns 1, so CI stops — but the file it wrote stays on disk and
+    becomes the baseline the next `make evidence` diffs against. That is the
+    same shape the floor ordering already fixed one branch earlier: the only
+    record this run could write is one whose values move on somebody else's
+    merge, which is precisely what D-12's gate exists to refuse. (#297 review.)
+    """
+    real_record = task_gate.record
+
+    def with_the_census_back(measured: dict[str, Any]) -> dict[str, Any]:
+        return real_record(measured) | {"evidence_gates_read": measured["evidence_gates_read"]}
+
+    monkeypatch.setattr(task_gate, "record", with_the_census_back)
+    target = tmp_path / "D12.json"
+
+    measured = task_gate.write_evidence(target)
+
+    assert measured["board_sensitive_record_keys"] == 1
+    assert not target.exists(), "a board-sensitive run wrote the record the gate refuses"
+
+
+def test_a_thin_sensitivity_comparison_writes_no_evidence_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`board_sensitive_record_keys == 0` over too few keys is a vacuous zero.
+
+    `record_keys_compared` is the denominator that says the comparison spanned
+    the record. Below its floor the zero means "nothing was compared", and
+    committing that artefact commits the vacuity. (#297 review.)
+    """
+    real_record = task_gate.record
+
+    def one_key_only(measured: dict[str, Any]) -> dict[str, Any]:
+        return {"unrecordable_task_gates": real_record(measured)["unrecordable_task_gates"]}
+
+    monkeypatch.setattr(task_gate, "record", one_key_only)
+    target = tmp_path / "D12.json"
+
+    measured = task_gate.write_evidence(target)
+
+    assert measured["board_sensitive_record_keys"] == 0
+    assert measured["record_keys_compared"] < task_gate.MINIMUM_RECORD_KEYS_COMPARED
+    assert not target.exists(), "a run that compared too few keys wrote its vacuous zero"

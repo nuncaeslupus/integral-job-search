@@ -381,10 +381,31 @@ def write_evidence(
 
     A run that breaches either floor writes nothing at all: the only record it
     could write is one that claims the floors held.
+
+    The same argument covers the sensitivity reading, and it is the reason the
+    refusal is not just about floors. `_main` returns 1 for a board-sensitive
+    record, so CI stops — but a written file stays on disk and becomes the
+    baseline the next `make evidence` diffs against, so the failing artefact
+    outlives the failing run. Two readings are refused:
+
+    * `board_sensitive_record_keys` non-zero — the record's own values move when
+      the board's gate census does, which is the single thing D-12's gate
+      exists to refuse. Committing it commits the defect.
+    * `record_keys_compared` under its floor, *when the comparison actually
+      ran* — a zero over too few keys is a vacuous zero, and the artefact
+      cannot tell that apart from a real one.
+
+    An `unmeasured` sensitivity status keeps writing, deliberately: `make
+    evidence` maps exit 3 to "unmeasured (recorded)" and carries on, so a run
+    that could not compare must still leave the record it did measure.
     """
     measured = measure(tasks, history)
     sensitivity = measure_board_sensitivity(tasks, history)
-    if floor_breaches(measured):
+    thin = (
+        sensitivity["board_sensitivity_status"] == "measured"
+        and sensitivity["record_keys_compared"] < MINIMUM_RECORD_KEYS_COMPARED
+    )
+    if floor_breaches(measured) or sensitivity["board_sensitive_record_keys"] or thin:
         return measured | sensitivity
     committed = record(measured) | {
         key: value for key, value in sensitivity.items() if key not in _DIAGNOSTIC_ONLY
