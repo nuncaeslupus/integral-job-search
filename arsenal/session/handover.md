@@ -78,8 +78,23 @@ and every one holds against its rung's own `tell`:
 - **A gold example derived from the cue it exists to check.** `contracted_hours`'s
   English gold was `remotive-1919265`, span *"…prefer consistent contract work **over
   a full-time role**…"*, `value: 0.9`, `derived_from: cue`. That advert says the post
-  is **not** full time. Replaced with an advert whose field reads `Full-time`, and the
-  cue no longer fires on a comparison.
+  is **not** full time. Replaced with an advert whose field reads `Full-time`.
+
+  **The first fix for it was incomplete and I reported it as done** (`7ecf5c3` is the
+  real one). It kept a `full[- ]time\s+(role|position|…)` branch, so the comparison
+  still matched. Two lessons, both general:
+
+  - **`extraction.py:331` compiles cues with `re.IGNORECASE` alone — no
+    `re.MULTILINE`.** A `^…$` branch therefore binds to the whole advert and can never
+    fire. Mine did not, and nothing noticed, because `_gold` runs a pattern against the
+    **isolated span** (`:654`) where the span *is* the whole string. **A cue checked
+    only where its own gold points cannot be caught being dead** — the gold and the cue
+    were agreeing about a string, not about an advert. Write cue fixtures over whole
+    documents.
+  - **Measure what a branch buys before keeping it.** That phrase branch matched
+    exactly **one** advert in the corpus — the comparison itself. Dropping it cost
+    nothing. The instinct to patch a pattern rather than count its matches is what made
+    round one incomplete.
 - **Three language-parity breaks where one slice was already right.**
   `domain_knowledge` scored *"banking clients"* 0.8 in EN while ES/CA split the rungs
   correctly; `hiring_process_burden` had ES at 0.4 for all four cues and CA at 0.8 for
@@ -204,7 +219,7 @@ judgement that goes with it; do not read the surviving ref as a live claim.
 | #312 | T92 salary recovery | `98c9a09` | review on head |
 | #318 | T59 diagnosis — **closes nothing** | `e3db5f3` | first review |
 | #319 | T56 extractor macro-F1 0.774 | `1c248cf` | **19 findings to apply**, above |
-| #320 | T57 ontology hit rate 0.8798 | `ce86416` | the scope call above |
+| #320 | T57 ontology hit rate 0.8798 | `7ecf5c3` | the scope call above |
 
 Both #319 and #320 are subscribed for PR activity in this session.
 
