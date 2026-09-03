@@ -108,13 +108,23 @@ still be measured against T5's hand labels, never against this gold.
 
 ## Groups — how the labelling picker is ordered
 
-`group` sorts the dimensions into five titled sections so the labeller can
-find one without already knowing its name: `dealbreakers`, `terms`, `the_work`,
-`people`, `growth`. It is purely presentational — nothing scores on it — and it
-is declared in the model rather than in the page so a dimension added later
-cannot appear in an unsorted "other" bucket. `dealbreakers` happens to be
-exactly the `kind: hard` set today; that is v0 content, not a rule, so the two
-fields stay independent.
+`group` sorts the dimensions into **seven** titled sections so the labeller can
+find one without already knowing its name: `dealbreakers`, `requirements`,
+`terms`, `the_work`, `people`, `skills`, `growth`. It is purely presentational —
+nothing scores on it — and it is declared in the model rather than in the page so
+a dimension added later cannot appear in an unsorted "other" bucket.
+
+It said **five** until T57, listing the five that existed before `requirements`
+and `skills` were added to keep every group under the eight-row no-scroll cap.
+Prose about the model that no test reads drifts the moment the model changes, so
+`test_the_readme_names_every_group_the_model_declares` now reads this paragraph
+against `load_dimensions()`.
+
+`dealbreakers` is **no longer** the `kind: hard` set: `commute_burden`,
+`english_demand`, `formal_credential`, `local_language_demand`,
+`seniority_expectation` and `work_eligibility` are `hard` and sit under
+`requirements`. That the two ever coincided was v0 content rather than a rule,
+which is why the fields stayed independent — and why the split cost nothing.
 
 `kind: hard` dimensions veto rather than trade off, so they are all `unipolar`:
 a bipolar filter has no defensible cut-off. Direction on them is expressed by

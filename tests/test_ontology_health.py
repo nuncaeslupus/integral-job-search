@@ -386,3 +386,34 @@ def test_every_audited_concept_is_one_the_read_pass_actually_stated() -> None:
     declared = set(payload.get("unmapped") or [])
     assert declared, "the read pass declares no unmapped concepts"
     assert not [concept for concept, _, _ in _AUDITED if concept not in declared]
+
+
+def test_a_stale_dimension_id_falls_through_to_the_concept_map(tmp_path: Path) -> None:
+    """An entry naming a dimension the model dropped must still reach the map.
+
+    `entry.get("dimension") or concept_map.get(…)` short-circuits on any truthy
+    value, so such an entry never consulted the map and was counted unmapped even
+    where the map places it — silently, while `read_concept_map` refuses a map key
+    naming an unknown dimension outright. One half of this module was loud about a
+    stale name and the other was mute. T57 renames and removes dimensions as a
+    matter of course, so this is the widening's own failure mode.
+    """
+    payload = _suggestions(
+        {
+            "ad-1": [
+                {
+                    "dimension": "a_dimension_the_model_dropped",
+                    "note": "some concept — what the advert says",
+                    "quote": "…",
+                }
+            ]
+        },
+        unmapped=["some concept"],
+    )
+    source = read_suggestions(
+        _write(tmp_path, payload),
+        _KNOWN,
+        _map(tmp_path, 'concepts:\n  team_autonomy:\n    - "some concept"\n'),
+    )
+
+    assert tally([source])["mapped_concepts"] == 1

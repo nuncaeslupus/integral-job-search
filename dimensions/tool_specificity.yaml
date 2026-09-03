@@ -44,22 +44,27 @@ elicitation:
           Explica'm quan vas entrar en un equip amb eines que no coneixies. Quant vas
           trigar a ser útil i què va marcar la diferència?
 extraction:
+  # A tool *named* is the 0.5 rung — "several tools named, any of which counts".
+  # 0.8 is "specific named tools stated as **requirements**", so it is carried by
+  # the requirement language (`proficiency in`, `hands-on experience with`,
+  # `dominio de herramientas`) and not by the presence of a technology name: an
+  # advert whose stack paragraph reads "Python, Go and Rust" binds you to nothing.
   cues:
     en:
       - pattern: "\\b(python|java|javascript|typescript|react|angular|kubernetes|terraform|airflow|databricks|postgres|kafka)\\b"
-        value: 0.8
+        value: 0.5
       - pattern: "\\bproficiency\\s+(in|with)\\b|\\bhands[- ]on\\s+experience\\s+with\\b"
         value: 0.8
     es:
       - pattern: "\\b(python|java|javascript|sap|salesforce|autocad|excel|ofim[áa]tica|power\\s?bi|oracle)\\b"
-        value: 0.8
+        value: 0.5
       - pattern: "\\bdominio\\s+de\\s+herramientas\\b"
         value: 0.8
     ca:
       - pattern: "\\b(python|java|javascript|sap|salesforce|autocad|excel|ofim[àa]tica|power\\s?apps|sharepoint)\\b"
-        value: 0.8
-      - pattern: "\\bdomini\\s+de\\s+(les\\s+)?(eines|estrat[èe]gies)\\b"
         value: 0.5
+      - pattern: "\\bdomini\\s+de\\s+(les\\s+)?(eines|estrat[èe]gies)\\b"
+        value: 0.8
   gold:
     - ad_id: manfred-8419
       language: en

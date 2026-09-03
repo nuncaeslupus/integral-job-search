@@ -46,7 +46,13 @@ elicitation:
 extraction:
   cues:
     en:
+      # Split to match what `es` and `ca` already do. Naming the sector is the 0.5
+      # rung — "the employer or client's sector is stated, **nothing required of
+      # you**" — and "banking clients" is exactly that. 0.8 is reserved for the
+      # rung's own words, "prior experience in that sector is a stated requirement".
       - pattern: "\\b(banking|insurance|fintech|healthcare|aerospace|automotive|logistics|gaming)\\s+(sector|industry|domain|clients?)\\b"
+        value: 0.5
+      - pattern: "\\b(experience|expertise|background|knowledge)\\s+(in|of|with)\\s+(the\\s+)?[a-z]+\\s+(sector|industry|domain)\\b|\\bdomain\\s+(expertise|knowledge)\\s+(is\\s+)?(required|essential)\\b"
         value: 0.8
     es:
       - pattern: "\\bsector\\s+(bancario|asegurador|sanitario|industrial|log[íi]stico|p[úu]blico|financiero)\\b"

@@ -84,6 +84,25 @@ def concept_name(entry: dict[str, Any]) -> str:
     return str(entry.get("note", "")).split(" — ", 1)[0].strip()
 
 
+def _resolve(entry: dict[str, Any], known: set[str], concept_map: dict[str, str]) -> str | None:
+    """Which dimension this entry lands on: its own, if the model still has it.
+
+    `entry.get("dimension") or concept_map.get(…)` short-circuits on any truthy
+    value, so an entry naming a dimension the model has since renamed or dropped
+    never reaches the map — it is counted unmapped even when the map places that
+    concept, and nothing says so. The two halves of this module disagreed about a
+    stale name: `read_concept_map` **refuses** a map key naming an unknown
+    dimension, while the reader fell silent on the same fact. Reading the value
+    only when it is one the model declares makes the map the single fallback, and
+    keeps a widening like T57 — which renames and removes dimensions as a matter
+    of course — from quietly losing occurrences the map still covers.
+    """
+    declared = entry.get("dimension")
+    if declared in known:
+        return str(declared)
+    return concept_map.get(concept_name(entry))
+
+
 def read_concept_map(path: Path, known: set[str], declared: set[str]) -> dict[str, str]:
     """Step 2's rule table: which dimension the model would ask each concept under.
 
@@ -146,11 +165,15 @@ def read_suggestions(
     mapped: list[str] = []
     unmapped: list[str] = []
     for entry in entries:
-        dimension = entry.get("dimension") or concept_map.get(concept_name(entry))
+        dimension = _resolve(entry, known, concept_map)
         if dimension in known:
             mapped.append(dimension)
         else:
-            unmapped.append(dimension or entry.get("quote", "<unquoted>"))
+            # Still labelled by the name the source claimed, when it claimed one.
+            # `_resolve` answers *where this lands*; the staleness signal answers
+            # *what could not be named*, and a dropped dimension id is the more
+            # useful of the two — it says which question the model stopped asking.
+            unmapped.append(str(entry.get("dimension") or "") or entry.get("quote", "<unquoted>"))
     return ConceptSource(
         name=str(path.relative_to(_REPO_ROOT)) if path.is_relative_to(_REPO_ROOT) else path.name,
         concepts_read=len(entries),
@@ -226,7 +249,7 @@ def hit_rate_by_language(
     for ad_id, entries in payload["by_ad"].items():
         bucket = counted.setdefault(language.get(ad_id, "unknown"), [0, 0])
         for entry in entries:
-            dimension = entry.get("dimension") or concept_map.get(concept_name(entry))
+            dimension = _resolve(entry, known, concept_map)
             bucket[0 if dimension in known else 1] += 1
     return {
         lang: round(mapped / (mapped + unmapped), 4)

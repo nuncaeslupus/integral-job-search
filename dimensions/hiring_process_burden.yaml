@@ -50,13 +50,22 @@ extraction:
       - pattern: "\\b(hiring|selection|interview)\\s+process\\b"
         value: 0.4
     es:
-      - pattern: "\\b(proceso\\s+de\\s+selecci[óo]n|prueba\\s+t[ée]cnica|portfolio|portafolio)\\b"
+      # `es` had all four at 0.4 and `ca` had all three at 0.8, while `en` splits
+      # them correctly. The tells decide it: 0.8 is "a portfolio, **a test** or an
+      # examination before you are considered", 0.4 is "the stages are named, but
+      # **nothing is asked of you** up front". A técnica test is the first; naming
+      # the selection process is the second.
+      - pattern: "\\b(prueba\\s+t[ée]cnica|portfolio|portafolio)\\b"
+        value: 0.8
+      - pattern: "\\bproceso\\s+de\\s+selecci[óo]n\\b"
         value: 0.4
       - pattern: "\\bentrevistas?\\b"
         value: 0.4
     ca:
-      - pattern: "\\b(proc[ée]s\\s+de\\s+selecci[óo]|prova\\s+t[èe]cnica|portfolio)\\b"
+      - pattern: "\\b(prova\\s+t[èe]cnica|portfolio)\\b"
         value: 0.8
+      - pattern: "\\bproc[ée]s\\s+de\\s+selecci[óo]\\b"
+        value: 0.4
       - pattern: "\\bentrevista\\w*\\b"
         value: 0.4
   gold:

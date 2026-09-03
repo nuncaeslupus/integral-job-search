@@ -318,3 +318,38 @@ def test_a_trait_question_is_behavioural_not_a_self_rating(dimensions: list[Dime
                 assert not SELF_RATING.search(text), (
                     f"{trait.id}.{question.id}[{language}] asks for a self-rating: {text!r}"
                 )
+
+
+def test_the_readme_names_every_group_the_model_declares() -> None:
+    """`dimensions/README.md` said five groups; T57 made it seven.
+
+    The paragraph listed `dealbreakers`, `terms`, `the_work`, `people`, `growth`
+    and was correct until `requirements` and `skills` were added to keep every
+    picker group under the eight-row no-scroll cap. Nothing read it, so it went
+    stale in the same commit that made it stale — prose about the model that no
+    test reads is documentation only until the model moves.
+
+    Reported by review on the PR that introduced the two groups (#320); this is
+    the fixture, so it is caught by the suite rather than by the next reader.
+    """
+    from pathlib import Path
+
+    from integral.dimensions import load_dimensions
+
+    readme = (Path(__file__).resolve().parents[1] / "dimensions" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    paragraph = readme.split("## Groups")[1].split("It is purely presentational")[0]
+    # The list is what follows "without already knowing its name:" — slicing there
+    # rather than over the whole paragraph keeps the field name `group`, which the
+    # sentence necessarily mentions, out of the set of group values.
+    named = set(re.findall(r"`([a-z_]+)`", paragraph.split("its name:")[1]))
+    declared = {dimension.group for dimension in load_dimensions()}
+
+    assert declared == named, f"README names {sorted(named)}, the model declares {sorted(declared)}"
+    # And the count the prose states, which a set comparison cannot see: the
+    # sentence said "five" while listing five stale names, so both halves were
+    # wrong together and either alone would have passed.
+    words = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+    spelled = words.get(len(declared), str(len(declared)))
+    assert spelled in paragraph.lower(), f"the prose does not say there are {spelled} groups"

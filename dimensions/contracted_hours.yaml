@@ -51,7 +51,12 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "\\bfull[- ]time\\b"
+      # Not a bare `full-time`: an advert saying "consistent contract work over a
+      # full-time role" is stating what the post is *not*, and the rung's tell is
+      # "'jornada completa', full time, or the statutory full week" — a statement
+      # about the hours this contract is for. The qualifiers below are the ways
+      # the English corpus states that, and a comparison satisfies none of them.
+      - pattern: "\\bfull[- ]time\\s+(role|position|contract|employment|employee|hours)\\b|^\\s*full[- ]time\\s*$|\\bthis\\s+is\\s+a\\s+full[- ]time\\b"
         value: 0.9
       - pattern: "\\bpart[- ]time\\b|\\b\\d{2}\\s*(hours|h)\\s+(a|per)\\s+week\\b"
         value: 0.5
@@ -70,9 +75,14 @@ extraction:
       - pattern: "\\b\\d{1,2}(,\\d)?\\s*(hores|h)\\s+(a\\s+la\\s+setmana|setmanals)\\b"
         value: 0.5
   gold:
-    - ad_id: remotive-1919265
+    # Was `remotive-1919265`, span "…prefer consistent contract work **over a
+    # full-time role**…", value 0.9. That advert says the post is *not* full time,
+    # and the row carried `derived_from: cue` — the gold recorded what the cue had
+    # matched rather than what the advert states, which is the circularity a gold
+    # example exists to break. Replaced with a span that establishes the hours.
+    - ad_id: wwr-maptiler-location-services-engineer-maps-platform-remote-in-europe
       language: en
-      span: "Those who prefer consistent contract work over a full-time role, who want to create a variety of new products alongside other top-tier builders."
+      span: "Full-time"
       value: 0.9
       derived_from: cue
     - ad_id: feinaactiva-FA92317450

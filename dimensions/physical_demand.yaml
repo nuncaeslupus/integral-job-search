@@ -51,12 +51,20 @@ extraction:
     es:
       - pattern: "\\blimpieza\\b"
         value: 0.5
-      - pattern: "\\b(reposici[óo]n|almacenaje|carga\\s+y\\s+descarga)\\b"
+      # "stock handling" is the 0.5 tell verbatim; `reposición` and `almacenaje`
+      # are that and nothing more. 0.8 is "loads, personal lifting of people,
+      # height or live electrical work", which `carga y descarga` is and shelf
+      # restocking is not.
+      - pattern: "\\b(reposici[óo]n|almacenaje)\\b"
+        value: 0.5
+      - pattern: "\\bcarga\\s+y\\s+descarga\\b"
         value: 0.8
     ca:
       - pattern: "\\bneteja\\b"
         value: 0.5
-      - pattern: "\\b(reposici[óo]|emmagatzematge|c[àa]rrega\\s+i\\s+desc[àa]rrega)\\b"
+      - pattern: "\\b(reposici[óo]|emmagatzematge)\\b"
+        value: 0.5
+      - pattern: "\\bc[àa]rrega\\s+i\\s+desc[àa]rrega\\b"
         value: 0.8
   gold:
     - ad_id: feinaactiva-FA92317540
