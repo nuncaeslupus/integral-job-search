@@ -220,13 +220,61 @@ judgement that goes with it; do not read the surviving ref as a live claim.
 | #318 | T59 diagnosis — **closes nothing** | `e3db5f3` | first review |
 | #319 | T56 extractor macro-F1 0.774 | `1c248cf` | **19 findings to apply**, above |
 | #320 | T57 ontology hit rate 0.8798 | `7ecf5c3` | the scope call above |
+| #322 | T59 capability + this handover | `d18f2c9` | first review |
+| #323 | T94 bulk filter | `10cf105` | **a second reader**, see below |
 
 Both #319 and #320 are subscribed for PR activity in this session.
 
+## T94 is done and is #323 — and it wants a second reader
+
+`src/integral/bulk_filter.py`. 322 offers in, 156 out, every removal naming its rule.
+Bounded to **filter, not rank**.
+
+The design decision everything follows from: this module **deletes rows the
+candidate will never see**, so the costly error is the drop. Every rule fires only
+on a fact the advert *states*; unknown always keeps — an unstated salary (T92's
+subject), an unstated country, a stated remote arrangement, an `eligibility.FLAG`
+(§5.4), an unparseable date. `HardConstraints()` with no countries means **no
+location rule**, not *nothing permitted*: it is the default, and a default that
+deleted every located offer is the worst reachable fail-closed.
+
+**Stated exclusions cannot reach it.** `reduce` has no exclusions parameter, and
+the test asserts the signature as well as the behaviour — a function cannot apply
+a preference it is never handed, which is stronger than a rule saying it must not.
+
+Two things worth carrying forward:
+
+- **The plan's metric refused mine.** I wrote `drops_with_no_rule <= 0` into the
+  gate fence and `test_the_committed_plan_and_queue_agree` rejected it: the plan
+  row already declared `bulk_offers_requiring_manual_triage == 0`, written before
+  the implementation existed. **That refusal is the check working** — a task whose
+  implementer also picks its metric can pick one the code already satisfies. Use
+  the plan's metric; if none is declared, that is the thing to raise, not to fill in.
+- **The archived task carried no ` ```gate ` fence.** `verify_gates.py` reads only
+  that fence; the ` ```bash ` block is a human recipe, and `task_select.py`'s
+  `gate: true` counts the bash block, so the two disagree. Archiving T94 therefore
+  turned `129/129` into `128 of 129`. **Check for a `gate` fence before working any
+  task whose file predates the convention** — the failure only appears after the
+  archive, i.e. after the PR is already open.
+
+**#323 is not merge-ready on its gate alone**, and its own PR body says so. The
+drop-side rules are exactly the shape CLAUDE.md wants an independent reader for: a
+wrong *keep* is invisible in every number recorded, because nothing counts offers
+that should have been dropped and were not. Two judgements named for that reader:
+whether treating **any** stated `remote` string as a keep is too generous, and
+whether `_below_pay_floor` preferring `salary.max` over `salary.min` is the right
+end of a stated band to compare against a floor.
+
+Its probe batch was also wrong twice, and the gate caught both — recorded in the PR
+because it is a fixture failure mode, not a code one. A batch whose adverts vary in
+one sentence over a shared prefix gets collapsed by `find_duplicates` (134 of 322
+rows the first time), and **a reduction ratio measured over a repetitive fixture
+measures the fixture**. `rules_never_exercised` is what made it visible.
+
 ## The queue after this session
 
-`task_select.py` now returns **T94** (`t-506d8fa5`, #273) — *"Hundreds of adverts
-arrive and nothing filters them but a person"*. Not claimed; nothing was started on it.
+T94 was claimed and worked (see above). `task_select.py`'s next answer should be
+re-read at the start of the next session rather than trusted from here.
 
 **#321 is filed and not yet seeded.** It carries `arsenal:queue`, so next session's
 step 4b picks it up. Remember the previous session's lesson: `issue_import.py --apply`
