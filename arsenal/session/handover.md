@@ -7,9 +7,10 @@ the previous session's hold on merging was not lifted.
 
 Three things, in the order the previous handover asked for them.
 
-1. **#320 (T57): the 41 audit findings are applied and are now fixtures** (`43135a6`).
-   That was the outstanding first job. See below — it produced a finding worth more
-   than the number.
+1. **#320 (T57): the 41 audit findings are applied and are now fixtures** (`43135a6`),
+   **and the eight CodeRabbit findings the head had never been reviewed for**
+   (`ce86416`). See below — between them they produced two findings worth more than
+   the number.
 2. **#319 (T56): the independent adversarial read is done and posted**
    (comment `5533210387`). **19 findings, 12 fail-open.** Reported, not pushed —
    the second reader does not push, and the accepted cases have to land in the
@@ -60,6 +61,68 @@ volunteered, and a correct audit broke it. Recording the shortfall + filing #321
 one answer; holding #320 until English clears 0.85 is the other. It is a scope call,
 not a measurement call. CI is green on `43135a6` — lint, 2135 passed, no drift,
 verify-gates 129/129.
+
+## #320's second push — a review that was never on the head
+
+**Read `commit_id`, not the check.** The only review object on #320 carried
+`commit_id: 05f1e04` — the previous head — and its **nine actionable findings had
+never been worked**, while the PR read as reviewed. The later *"No actionable
+comments were generated"* comment covers only the delta `05f1e04..43135a6`, and its
+own `final_review_risk_coverage` still says `coveredCommitId: 05f1e04`. **This is
+D-28 (#313) happening, on our own PR, one day after it was filed.** The handover's
+query is the gate; run it before believing any green CodeRabbit check.
+
+One of the nine was already fixed by the audit push. The other eight are `ce86416`,
+and every one holds against its rung's own `tell`:
+
+- **A gold example derived from the cue it exists to check.** `contracted_hours`'s
+  English gold was `remotive-1919265`, span *"…prefer consistent contract work **over
+  a full-time role**…"*, `value: 0.9`, `derived_from: cue`. That advert says the post
+  is **not** full time. Replaced with an advert whose field reads `Full-time`, and the
+  cue no longer fires on a comparison.
+- **Three language-parity breaks where one slice was already right.**
+  `domain_knowledge` scored *"banking clients"* 0.8 in EN while ES/CA split the rungs
+  correctly; `hiring_process_burden` had ES at 0.4 for all four cues and CA at 0.8 for
+  all three, so the same omission was **fail-closed in Spanish and fail-open in
+  Catalan**; `tool_specificity` scored `domini de les eines` 0.5 in CA and the same
+  statement 0.8 in ES.
+- **`formal_credential` scored `degree or equivalent` 0.9** — on a `hard`
+  admissibility dimension whose definition says *"a candidate without the paper is
+  refused"*. An advert accepting equivalent experience refuses nobody. Bare
+  `titulación`/`titulació` arrive by the same road (they match *"titulación
+  valorable"*) and are split the same way.
+- `physical_demand` scored `reposición`/`almacenaje` 0.8 where *"stock handling"* is
+  the 0.5 tell verbatim; `tool_specificity` scored a bare technology name 0.8 where
+  naming tools is 0.5.
+- **`dimensions/README.md` said five groups**, listing the five that existed before
+  this PR added `requirements` and `skills`, and claimed `dealbreakers` is exactly the
+  `kind: hard` set — six dimensions falsify that.
+  `test_the_readme_names_every_group_the_model_declares` now reads the paragraph
+  against `load_dimensions()`, **including the spelled count**: the sentence said
+  "five" *while listing five stale names*, so either half alone would have passed.
+- **`ontology_health` resolved with `entry.get("dimension") or concept_map.get(…)`**,
+  which short-circuits on any truthy value — an entry naming a dropped dimension never
+  reached the map. The module's two halves disagreed about a stale name:
+  `read_concept_map` refuses a map key naming an unknown dimension, the reader fell
+  silent on the same fact. Not reachable today; it is a widening's own failure mode,
+  so it has a red-first test.
+
+  **The first fix for it was wrong and the suite caught it**, which is worth keeping:
+  routing everything through `_resolve` replaced the unmapped *label* with the quote,
+  breaking `test_unmapped_concepts_are_counted_not_discarded`. That test was right.
+  `_resolve` answers *where a concept lands*; the staleness signal answers *what could
+  not be named*, and a dropped id says which question the model stopped asking.
+
+None of the six dimensions is in T56's scored subset, so `extraction_macro_f1` does
+not move and **#319's measurement is untouched** — nor do the two PRs share a file.
+`ontology_hit_rate` unmoved at 0.8798. Gate green: 2137 passed, no drift, 129/129.
+
+Also answered on the PR, since the pre-merge check asks for a justification: the
+`S6.json` / `T47.json` changes are **not** out-of-scope churn.
+`interviews_refused_for_teaching_nothing` goes **31 → 0** and `sessions_rehearsed`
+177 → 208 because the twelve new dimensions settle on adverts that previously had
+nothing to rehearse. That is the widening working, and `make evidence` requires it
+committed or the drift check is red.
 
 ## #319 — 19 findings, and two of them contradict artefacts already in this repo
 
@@ -141,7 +204,7 @@ judgement that goes with it; do not read the surviving ref as a live claim.
 | #312 | T92 salary recovery | `98c9a09` | review on head |
 | #318 | T59 diagnosis — **closes nothing** | `e3db5f3` | first review |
 | #319 | T56 extractor macro-F1 0.774 | `1c248cf` | **19 findings to apply**, above |
-| #320 | T57 ontology hit rate 0.8798 | `43135a6` | **CI green**; the scope call above |
+| #320 | T57 ontology hit rate 0.8798 | `ce86416` | the scope call above |
 
 Both #319 and #320 are subscribed for PR activity in this session.
 
