@@ -254,6 +254,8 @@ def test_the_recorded_measurement_holds_its_own_invariants() -> None:
     measured = measure()
 
     assert measured["offers_in"] >= measured["offers_in_at_least"]
+    assert measured["bulk_offers_requiring_manual_triage"] == 0
+    assert measured["offers_unaccounted_for"] == 0
     assert measured["drops_with_no_rule"] == 0
     assert measured["soft_preference_drops"] == 0
     assert measured["soft_preference_rows_presented"] > 0

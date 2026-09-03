@@ -536,6 +536,13 @@ def measure(offers: list[Offer] | None = None) -> dict[str, Any]:
         else:
             undeclared += 1
 
+    unexplained = sum(1 for drop in reduction.dropped if not drop.because.strip())
+    # Every row of the batch must land in exactly one bucket. A filter that
+    # silently loses one has reduced nothing — it has hidden a row, and the
+    # candidate is back to reading to find out which.
+    settled = {offer.id for offer in reduction.kept} | {drop.offer_id for drop in reduction.dropped}
+    unaccounted = len({offer.id for offer in batch} - settled)
+
     exclusion_rows = [offer for offer in batch if PROBE_EXCLUSION in offer.text.lower()]
     exclusion_survivors = {offer.id for offer in reduction.kept}
     planted = PLANTED_DUPLICATE_ID(batch)
@@ -551,8 +558,16 @@ def measure(offers: list[Offer] | None = None) -> dict[str, Any]:
         # A rule that never fires is a rule nobody measured. Named, so a batch
         # that stopped exercising one is a value in the record, not a silence.
         "rules_never_exercised": sorted(rule for rule, count in by_rule.items() if not count),
-        # The two keys the task's own gate names, and both must stay 0.
-        "drops_with_no_rule": undeclared + sum(1 for drop in reduction.dropped if not drop.because),
+        # `status/plan.md`'s declared metric for this task, chosen before the
+        # implementation existed. A row "requiring manual triage" is one this
+        # pass did not settle: either it reached neither bucket — nobody knows
+        # what became of it, the `discarded_concepts` shape — or it was dropped
+        # without naming a rule or a reason, which leaves a person to work out
+        # why. Both are the same failure to a candidate: volume arrived and was
+        # handed back for reading.
+        "bulk_offers_requiring_manual_triage": unaccounted + undeclared + unexplained,
+        "offers_unaccounted_for": unaccounted,
+        "drops_with_no_rule": undeclared + unexplained,
         "soft_preference_drops": sum(
             1 for offer in exclusion_rows if offer.id not in exclusion_survivors
         ),
@@ -596,10 +611,12 @@ def _main(argv: list[str]) -> int:
             f"{measured['offers_in_at_least']} — a clean reduction over a small batch "
             "measures the batch, not the filter"
         )
-    if measured["drops_with_no_rule"]:
+    if measured["bulk_offers_requiring_manual_triage"]:
         failures.append(
-            f"{measured['drops_with_no_rule']} drop(s) name no rule or no reason — "
-            "a filter that cannot say why is one nobody can trust or debug"
+            f"{measured['bulk_offers_requiring_manual_triage']} offer(s) still require "
+            f"manual triage — {measured['offers_unaccounted_for']} reached neither bucket "
+            f"and {measured['drops_with_no_rule']} were dropped naming no rule or reason. "
+            "A filter that cannot say why is one nobody can trust or debug"
         )
     if measured["soft_preference_drops"]:
         failures.append(
