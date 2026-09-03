@@ -353,3 +353,45 @@ def test_the_readme_names_every_group_the_model_declares() -> None:
     words = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
     spelled = words.get(len(declared), str(len(declared)))
     assert spelled in paragraph.lower(), f"the prose does not say there are {spelled} groups"
+
+
+_FULL_TIME_CASES: tuple[tuple[str, bool, str], ...] = (
+    ("Employment type: Full-time\nRemote in Europe", True, "the labelled field these boards use"),
+    ("Headquarters:\nZug\n\nFull-time\n\nRemote in Europe", True, "the field on its own line"),
+    ("This is a full-time position based in Barcelona.", True, "stated of the offered role"),
+    (
+        "Those who prefer consistent contract work over a full-time role, who want more.",
+        False,
+        "a comparison — it states what the post is not",
+    ),
+    ("Unlike a full-time job, this engagement is per-deliverable.", False, "a contrast"),
+    ("https://weworkremotely.com/remote-jobs/yooli-full-time-engineer", False, "a URL slug"),
+)
+
+
+@pytest.mark.parametrize(("text", "should_fire", "why"), _FULL_TIME_CASES)
+def test_the_full_time_cue_reads_the_offered_contract_not_a_comparison(
+    text: str, should_fire: bool, why: str
+) -> None:
+    """`contracted_hours` 0.9, run the way extraction runs it — over a document.
+
+    Two defects hid behind the gold row for this cue, and neither was visible to
+    the gold check. `_gold` runs a pattern against the **isolated span**
+    (`extraction.py:654`), so a `^…$` branch matched there — the span is the whole
+    string — while `extraction.py:331` compiles with `re.IGNORECASE` alone and
+    binds those anchors to the whole advert, where the branch could never fire.
+    And the `full[- ]time\\s+(role|position|…)` branch matched exactly one advert
+    in the corpus: the comparison *"…prefer consistent contract work over a
+    full-time role…"* that the review reported. The phrasing reads the same in an
+    offer and in a contrast, so it bought nothing and cost only the false
+    positive.
+
+    These cases therefore search whole documents, with the flags extraction uses.
+    A cue checked only where its own gold points cannot be caught being dead.
+    """
+    from integral.dimensions import load_dimensions
+
+    dimension = next(d for d in load_dimensions() if d.id == "contracted_hours")
+    cue = next(c for c in dimension.extraction.cues["en"] if c.value == 0.9)
+
+    assert bool(re.search(cue.pattern, text, re.IGNORECASE)) is should_fire, why

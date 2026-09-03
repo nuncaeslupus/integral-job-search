@@ -56,7 +56,27 @@ extraction:
       # "'jornada completa', full time, or the statutory full week" — a statement
       # about the hours this contract is for. The qualifiers below are the ways
       # the English corpus states that, and a comparison satisfies none of them.
-      - pattern: "\\bfull[- ]time\\s+(role|position|contract|employment|employee|hours)\\b|^\\s*full[- ]time\\s*$|\\bthis\\s+is\\s+a\\s+full[- ]time\\b"
+      # The line-anchored branch is written with explicit newlines, not `^…$`:
+      # `extraction.py:331` compiles cues with `re.IGNORECASE` alone, so `^` and
+      # `$` bind to the start and end of the **whole advert** and the branch could
+      # never fire on one. It matched anyway where it is checked — `_gold` runs
+      # the pattern against the isolated span (`extraction.py:654`), where the
+      # span *is* the whole string — so the gold row passed while the cue was dead
+      # in extraction. A gold example validated against a span rather than the
+      # document cannot see that, which is why the fixture below runs the cue over
+      # a full advert.
+      # The optional `label:` prefix is how these boards actually state it
+      # ("Employment type: Full-time"); it cannot admit a comparison, because it
+      # requires a colon immediately before the phrase and the line to end there.
+      #
+      # A `full[- ]time\\s+(role|position|contract|…)` branch was tried and dropped.
+      # Measured over the corpus it matches **one** advert — `remotive-1919265`,
+      # "…prefer consistent contract work over a full-time role…" — which is the
+      # comparison the review reported. The phrasing reads the same in an offer and
+      # in a contrast, so the branch bought nothing and cost exactly the false
+      # positive; the first fix for that finding kept it and was therefore
+      # incomplete. What states the offered contract on these boards is the field.
+      - pattern: "(?:^|\\n)(?:[^\\n:]{1,30}:)?\\s*full[- ]time\\s*(?:\\n|$)|\\bthis\\s+is\\s+a\\s+full[- ]time\\b"
         value: 0.9
       - pattern: "\\bpart[- ]time\\b|\\b\\d{2}\\s*(hours|h)\\s+(a|per)\\s+week\\b"
         value: 0.5
