@@ -194,6 +194,17 @@ def tally(sources: list[ConceptSource]) -> dict[str, Any]:
     }
 
 
+LANGUAGE_GATE = 0.85
+"""The per-language floor `ontology_hit_rate_by_language` is read against.
+
+It is reported, not asserted, and the difference is the point. A language under
+the floor is a statement about what the *model* covers, and suppressing it would
+leave the aggregate — which the three languages can carry for each other — as the
+only number. `languages_below_gate` is that shortfall's own key, so a language
+falling under the floor is a value in the record rather than an absence from it.
+"""
+
+
 def hit_rate_by_language(
     suggestions_path: Path,
     known: set[str],
@@ -232,7 +243,11 @@ def measure(
     known = known_dimension_ids(load_dimensions(dimensions_dir))
     measured = tally([read_suggestions(suggestions_path, known)])
     measured["known_dimensions"] = len(known)
-    measured["ontology_hit_rate_by_language"] = hit_rate_by_language(suggestions_path, known)
+    by_language = hit_rate_by_language(suggestions_path, known)
+    measured["ontology_hit_rate_by_language"] = by_language
+    measured["languages_below_gate"] = sorted(
+        lang for lang, rate in by_language.items() if rate < LANGUAGE_GATE
+    )
     return measured
 
 
