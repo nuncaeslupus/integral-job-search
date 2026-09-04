@@ -104,8 +104,10 @@ def test_recall_is_refused_while_the_corpus_cannot_carry_it(
     assert audit["negated_label_count"] == len(expected)
 
 
-def _negated_ad(index: int, text: str, quote: str) -> LabelledAd:
-    """One evaluation-split ad carrying a single negated `on_call_load` label."""
+def _negated_ad(
+    index: int, text: str, quote: str, dimension: str = "on_call_load"
+) -> LabelledAd:
+    """One evaluation-split ad carrying a single negated label on `dimension`."""
     start = text.index(quote)
     return LabelledAd(
         id=f"t59-{index}",
@@ -115,7 +117,7 @@ def _negated_ad(index: int, text: str, quote: str) -> LabelledAd:
         split="evaluation",
         labels=[
             Label(
-                dimension="on_call_load",
+                dimension=dimension,
                 value=0.0,
                 spans=[Span(start=start, end=start + len(quote))],
                 negated=True,
@@ -179,3 +181,123 @@ def test_an_unknown_dimension_lowers_recall_rather_than_the_denominator(
     assert audit["negated_label_count"] == 10
     assert audit["extraction_negation_recall"] == 0.9
     assert audit["negation_recall_misses"] == ["t59-0/on_call_lod: no such dimension"]
+
+
+def test_a_denies_hit_is_not_credited_to_the_scope_rule(
+    dimensions: dict[str, Dimension],
+) -> None:
+    """Perfect recall, half of it earned by vocabulary the cue set already had.
+
+    `sin viajes` is a `denies` cue — the negator is inside the pattern, so
+    matching it proves nothing about T16's backward-looking scope rule. `no hace
+    guardias` reaches the same verdict the other way: the bare `guardias` cue is
+    `negatable` and only the scope rule makes it negative. (`sin guardias` would
+    *not* do — it is its own `denies` cue and `cue_findings` drops the narrower
+    `guardias` match contained inside it, so nothing negatable survives.)
+    Counting both mechanisms as one number is what T59's task file forbids, and
+    this is what stops it: recall is 1.0 and the split says only half of it
+    tested the rule.
+
+    The per-language counts come along because they are the same failure at a
+    different grain — a floor that is a bare total lets ten Spanish labels score
+    a number reported for ES, EN and CA alike.
+    """
+    store = [
+        _negated_ad(i, "Puesto estable. El equipo no hace guardias.", "guardias")
+        for i in range(5)
+    ]
+    store += [
+        _negated_ad(5 + i, "Trabajo estable. Sin viajes.", "Sin viajes", "travel_requirement")
+        for i in range(5)
+    ]
+
+    audit = negation_audit(store, list(dimensions.values()))
+
+    assert audit["extraction_negation_recall"] == 1.0
+    assert audit["negation_recall_hits_by_mechanism"] == {
+        "scope_only": 5,
+        "denies_only": 5,
+        "both": 0,
+    }
+    assert audit["negated_label_count_by_language"] == {"en": 0, "es": 10, "ca": 0}
+
+
+def test_a_hit_both_mechanisms_earn_is_credited_to_neither(
+    dimensions: dict[str, Dimension],
+) -> None:
+    """The case that made `scope` overstate itself, from the second read of #318.
+
+    `"Sin guardias. El equipo no tiene guardias."` carries both: the `denies` cue
+    `sin\\s+guardias` matches the first sentence, and in the second the bare
+    `guardias` cue survives (nothing longer contains it) and `_is_negated` reads
+    the preceding `no`. The scope rule really did fire — and the cue set would
+    have reached the same verdict without it, so crediting the hit to `scope`
+    says the rule recovered a negation the cue could not see, which is false of
+    this advert.
+
+    `both` is the honest row. Before the fix this returned
+    `{"scope": 1, "denies": 0}`; the assertion below is what a regression would
+    have to change.
+    """
+    store = [
+        _negated_ad(i, "Sin guardias. El equipo no tiene guardias.", "guardias")
+        for i in range(10)
+    ]
+
+    audit = negation_audit(store, list(dimensions.values()))
+
+    assert audit["extraction_negation_recall"] == 1.0
+    assert audit["negation_recall_hits_by_mechanism"] == {
+        "scope_only": 0,
+        "denies_only": 0,
+        "both": 10,
+    }
+
+
+def test_the_three_mechanism_rows_sum_to_the_hit_count(
+    dimensions: dict[str, Dimension],
+) -> None:
+    """A partition, asserted as one — nothing checked this before.
+
+    Run over the real store rather than a fixture: the invariant is about the
+    tally, so the value of running it here is that it holds over whatever the
+    corpus becomes, including a shape nobody has written a fixture for.
+    """
+    audit = negation_audit(load_store(STORE), list(dimensions.values()))
+
+    assert sum(audit["negation_recall_hits_by_mechanism"].values()) == (
+        audit["negation_recall_hits"]
+    )
+
+
+def test_a_field_table_negator_is_counted_though_it_answers_another_field(
+    dimensions: dict[str, Dimension],
+) -> None:
+    """`scope_only` counts a FIRING, not a verified recovery — and here it is a coincidence.
+
+    `tecnoempleo-799b12ca520d03c0e743` in the real corpus is a flattened field
+    table with no sentence punctuation anywhere, so `_negation_scope` finds no
+    clause boundary to stop at and the negator it consumes is the `No` that
+    answers the PREVIOUS field. Flip the labelled field's own answer to `Si` and
+    the verdict does not change — which is the whole content of this test, and
+    the reason the evidence comment says the key counts firings.
+
+    `negation_scope_leaks` cannot see this: it counts firings with a boundary
+    inside the scope, and this text has none. Recorded rather than fixed —
+    making the rule field-table-aware is its own task, and a fixture that pins
+    the current behaviour is what stops the next reader assuming it was checked.
+    """
+    table = "Gestión de equipos No Viajes o guardias {answer} Idioma requerido Español"
+    negated = _negated_ad(0, table.format(answer="No"), "guardias")
+    flipped = _negated_ad(1, table.format(answer="Si"), "guardias")
+
+    on_call = dimensions["on_call_load"]
+    from integral.extraction import _normalise_labelled, cue_findings
+
+    for ad in (negated, flipped):
+        found = cue_findings(_normalise_labelled(ad), on_call)
+        assert found is not None
+        assert found.negated, (
+            "the backward rule reads the stray `No` from the preceding field in "
+            "both spellings, so the `Si` row is read as a denial too"
+        )

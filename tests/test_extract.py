@@ -574,7 +574,7 @@ def test_every_denial_in_the_model_reaches_the_store_as_a_denial() -> None:
     half is denials no cue reaches at all, which is a coverage question and
     stays visible in `negation_recall_misses`.
     """
-    _, misses = negation_recall(load_store(), load_dimensions())
+    _, misses, _ = negation_recall(load_store(), load_dimensions())
     mis_encoded = [m for m in misses if "settled, but not as negated" in m]
     assert mis_encoded == []
 
