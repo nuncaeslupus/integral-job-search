@@ -151,6 +151,38 @@ catch what the fifth did. The fix is a second reader, not a more diligent first 
 **A green gate is necessary and is not sufficient.** Every one of those ten defects was
 behind one.
 
+## The review half of `merge-policy` is a second session, not a bot
+
+**CodeRabbit is gone** — the account lost it for private repositories on 2026-09-04, and
+the owner's decision is to go without. `merge-policy` stays `after-ci-and-review`.
+Nothing external satisfies the review half any more, so this says what does.
+
+**A code PR may merge once a session other than its implementer has read it and
+reported on the PR.** That is the same discipline the section above already requires
+for a correctness-critical gate, applied to the whole diff rather than to fixtures —
+and on the evidence it is the stronger reviewer, not the fallback. Measured on the
+PRs open when the bot left: the independent read of `concept_map.yaml` found **41**
+placements wrong in the fail-open direction, and the read of the cue vocabulary found
+**19**, against CodeRabbit's **9** on the same PR that carried the 41.
+
+Three rules keep it from becoming prose nobody reads:
+
+- **The report goes on the PR**, naming for each finding the input, the verdict, and
+  the section of spec or definition it is derived from. A verdict argued from what the
+  code does is the circularity this exists to break.
+- **The implementer never signs it off.** If no other session has read a PR, it is not
+  reviewed — say so and leave it, exactly as `open_task_pr.sh` refuses a PR that would
+  close nothing.
+- **Accepted findings are committed as fixtures before merge**, per the section above.
+  A report that is read and waved through leaves the code as unprotected as it was.
+
+**Docs-only PRs are exempt** — a handover or a task-file edit merges on green CI. The
+rule is about diffs that can be wrong in a way a test does not already catch.
+
+`D-28` (`claude-arsenal#313`) is re-scoped to this: not "read CodeRabbit's signal" but
+"a merge must not proceed until a second-reader report exists for the head commit".
+That is a checkable condition, which the bot's never was.
+
 ## Work each task in a linked worktree — that is the whole branch protocol
 
 `open_task_pr.sh` cuts the branch off `origin/main` itself, commits, pushes and opens
@@ -176,6 +208,99 @@ a bespoke setup, and writing `arsenal/session/worktree_isolation` by hand record
 worktrees are *unavailable* — `worktree_probe.sh` prints `available` here, so that file
 would be a false record, and `task_select.py` reads it to clamp every future round to one
 task. The probe writes it itself when it is true; nothing else should.
+
+## No CI until the billing period turns over — `tools/verified_gate.sh` is the substitute
+
+The account spent its **2000 monthly Actions minutes in four days** and ran dry on
+2026-09-04. Runs still start and still fail, in single-digit seconds with
+unreadable logs, so the section below about reading a red CI does not apply until
+the period turns over: **there is no CI to read.**
+
+`merge-policy` stays `after-ci-and-review`. What replaces the CI half is:
+
+```bash
+bash tools/verified_gate.sh <branch-or-sha>     # prints a verdict block
+```
+
+It resolves the ref to a 40-character SHA, checks **that commit** out into a
+throwaway detached worktree, clears bytecode, and runs `make host-gate` there. It
+delegates — it never lists targets — so it cannot fall behind the Makefile, and
+`integral.repo_gate`'s sibling `integral.verified_gate` (T121) asserts that it
+still does all of the above.
+
+**How that assertion works is the part worth knowing, because three rounds of
+the obvious answer were defeated.** `integral.verified_gate` does not read the
+script's text. Round 1 searched the file for `make\s+host-gate`, which the
+script's own header comments carried twice, so a script running `make lint` and
+a script with the gate deleted and `status=0` hard-coded both scored
+`verified_gate_defects == 0`. Round 2 added a comment-stripper and twelve
+patterns; round 3 put all twelve inside one unused single-quoted string, and
+again in *trailing* comments, and scored 0 both times over a script that
+resolved nothing and ran nothing. A `#`-line filter is not an executability
+test, and no thirteenth pattern fixes that.
+
+So the measurement is **behavioural**: ten named contracts, each of which builds
+a throwaway git repository — one a clone with a real bare `origin` — runs the
+script against it, and reads the verdict block, the exit status and the
+filesystem afterwards. `verified_gate_defects` is the number of contracts the
+script fails. Editing a comment cannot break it; hard-coding a PASS cannot pass
+it. The one thing still read rather than run is that **this file names the
+script**, which is D-22's prose half and not a claim about behaviour.
+
+The practical consequence for anyone editing `tools/verified_gate.sh`: run
+`uv run python -m integral.verified_gate` and read `failed_contracts`. It names
+what broke and what it observed, not which regex stopped matching.
+
+**Give it the ref.** With no argument it measures the local `HEAD`, which is
+usually right and is never the *pushed* commit by construction — and the block's
+`resolved` and `on origin` lines say which of the two you got, so read them before
+pasting. (Until the second-reader round on #333 the no-argument form fetched
+`HEAD` from origin, which git answers with the **default branch**: standing on a
+branch whose gate genuinely failed, a bare run printed `main`'s SHA and `PASS`.
+The fix was a blacklist of the one string `"HEAD"`, and `@` — git's documented
+synonym for it — walked straight through: the same green verdict about `main`,
+reached by a different spelling. Only a plain ref name is now asked of the
+remote; `@`, `HEAD~0`, `HEAD^0`, `@{u}` and `""` all resolve locally.)
+
+Why a clean checkout rather than just running `make host-gate` where you stand:
+the working tree is **not what a reviewer merges**. Uncommitted edits, a staged
+file, and the `.pyc` trap below can each make a local run green over code that is
+not being shipped.
+
+Three rules, and the third is the one that is easy to skip:
+
+- **Paste the verdict block onto the pull request.** CI's value was never only
+  the checking; it was that anyone could see it had happened.
+- **Quote the four results in the merge commit.** A merge whose evidence lives in
+  one session's scrollback is a merge nobody can audit afterwards.
+- **Merge only while the head is still the SHA the block names.** A push after
+  the block was produced makes it evidence about a commit nobody is merging.
+  This was done by hand twice on 2026-09-04 and is exactly the kind of step that
+  gets skipped once it stops feeling new.
+
+**A docs-only PR still needs it.** #331 merged on a local run during the outage;
+the point of the script is that "local run" stops meaning "whatever tree the
+session happened to have".
+
+## A reverted mutation can leave the mutated bytecode running
+
+This repository mandates mutation-verification on every fixture — revert the fix,
+watch the case go red, restore, watch it go green. That cycle has a silent failure
+mode, met on #329 and worth one paragraph here because it points the **wrong way**.
+
+CPython validates a cached `.pyc` against the source's mtime at **seconds**
+resolution and its **size**. A mutation that swaps two string literals of equal
+total length, reverted inside the same second, changes neither — so the restore
+re-runs the *mutated* bytecode. On #329 that showed as three tests red over a
+working tree `git status` called clean, with `inspect.getsource` printing the
+correct source while the wrong code object ran.
+
+The symmetric case is the dangerous one: the same accident can leave a **fixed**
+tree reporting green over code that was never restored, which is a mutation test
+certifying work it did not do — the exact class of failure the discipline exists
+to catch. So delete `src/**/__pycache__/*.pyc` after every write in a
+mutate-restore cycle, and never conclude a mutation round from a run whose source
+edit and test invocation fell in the same second.
 
 ## Spending the context window deliberately
 
@@ -217,6 +342,28 @@ said nothing about the code. That was true, and it cost something: the first run
 with a real conclusion found a job that had been failing since #123 for its own
 reasons, invisible for as long as everything failed. **A red CI is a signal
 again.** Read it.
+
+**Except that it went away again mid-session on 2026-09-04, and the way to tell
+is the clock, not the conclusion.** Measured on #329: two consecutive runs
+completed in **6 and 5 seconds** with every job failed and **every log a 404**,
+against ~95 seconds with real conclusions on #328 twenty minutes earlier. So the
+test is: read `created_at` and `updated_at` on the run. A whole run under ~10
+seconds with unreadable logs is the runner dying before any job body ran, and it
+says nothing about the code; a run of a minute or more is a verdict.
+
+When that happens `make host-gate` is the substitute, because it is **exactly**
+what CI runs — and the substitution has to be written down. #329 merged on it,
+with the four results quoted in the merge commit, the outage named on the PR, and
+the pushed SHA verified equal to the tested one. A merge whose evidence lives only
+in a session's scrollback is a merge nobody can audit afterwards.
+
+**The paragraph above this one was true when written and false four hours later,
+which is the point.** A recorded environment fact is a snapshot, not a standing
+truth — the same shape as the check-in that fired that morning telling this session
+*"RESOLVED — do not re-investigate: CodeRabbit runs on Free and never produces a
+review object"*, which was also true when written, false by 10:12, and whose
+instruction not to look is what would have kept it false. Re-measure before
+trusting either.
 
 **Run the gate locally as well.** These are what CI runs, and all four must
 pass before a merge:
@@ -276,6 +423,15 @@ fails on evidence drift again, the finding is that something *new* is
 archive-sensitive: `status/evidence/T100.json` names it, because
 `archive_sensitive_evidence_keys` compares the whole committed record across a
 simulated archive rather than trusting that one key was the only one.
+
+**One evidence key is now archive-*driven* by design, and it is not that finding.**
+Since D-27, `S8.json`'s `merged_tasks_with_an_unticked_plan_row` requires every task
+archived in `arsenal/tasks/_history/` with `status: merged` to carry a ticked `☑` row
+in `status/plan.md`. So **ticking the row is part of archiving the task**: a task PR
+that moves its file and leaves the plan alone turns `make evidence` red, by
+construction. That red is the check working — tick the row in the same commit. The
+denominator `merged_tasks_compared` is committed as a floor for T100's reason above,
+so it does not move.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is

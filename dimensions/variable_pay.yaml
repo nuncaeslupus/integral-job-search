@@ -1,0 +1,78 @@
+id: variable_pay
+kind: soft
+polarity: unipolar
+group: terms
+label:
+  en: "Variable pay"
+  es: "Retribución variable"
+  ca: "Retribució variable"
+definition: >
+  Pay beyond a fixed base: bonuses, commission, shift and weekend premiums, mileage,
+  profit sharing, equity. `compensation_transparency` asks whether any figure is stated
+  at all; this asks how much of the package moves with something other than time served.
+levels:
+  - value: 0.0
+    label:
+      en: "None named"
+      es: "Ninguna"
+      ca: "Cap"
+    tell: "the ad names only a fixed salary, or no pay at all"
+  - value: 0.5
+    label:
+      en: "A bonus or premium"
+      es: "Bonus o plus"
+      ca: "Bonus o plus"
+    tell: "commission, a weekend plus, mileage, an attendance bonus"
+  - value: 0.9
+    label:
+      en: "Equity or profit sharing"
+      es: "Equity o participación"
+      ca: "Equity o participació"
+    tell: "shares, options, or a share of the profit"
+elicitation:
+  questions:
+    - id: vp_q1
+      text:
+        en: >
+          Tell me about a time part of your pay depended on a result. Did it change what
+          you actually did day to day?
+        es: >
+          Cuéntame una vez en que parte de tu sueldo dependió de un resultado. ¿Cambió
+          lo que hacías realmente cada día?
+        ca: >
+          Explica'm una vegada en què part del teu sou depenia d'un resultat. Va canviar
+          el que feies realment cada dia?
+extraction:
+  cues:
+    en:
+      - pattern: "\\b(stock\\s+options?|equity|rsus?)\\b"
+        value: 0.9
+      - pattern: "\\b(bonus|commission|profit[- ]sharing)\\b"
+        value: 0.5
+    es:
+      - pattern: "\\b(incentivos?|bonus)\\b"
+        value: 0.5
+      - pattern: "\\bplus\\s+(de\\s+)?(fin\\s+de\\s+semana|nocturnidad|festivos?)\\b"
+        value: 0.5
+    ca:
+      - pattern: "\\b(incentius?|bonus)\\b"
+        value: 0.5
+      - pattern: "\\b(retribuci[óo]|salari)\\s+variable\\b|\\bparticipaci[óo]\\s+en\\s+beneficis\\b"
+        value: 0.9
+  gold:
+    - ad_id: wwr-clickhouse-ai-product-engineer-clickstack
+      language: en
+      span: "Equity in the company"
+      value: 0.9
+      derived_from: cue
+    - ad_id: feinaactiva-FA92320502
+      language: es
+      span: "de una empresa sólida, familiar y cercana. Además, tendrás incentivos por tu participación en actividades colectivas, récords de venta y proyección de futuro."
+      value: 0.5
+      derived_from: cue
+    - ad_id: feinaactiva-FA92319865
+      language: ca
+      span: "Pagament de quilometratge + incentius extra a finalització de fases"
+      value: 0.5
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

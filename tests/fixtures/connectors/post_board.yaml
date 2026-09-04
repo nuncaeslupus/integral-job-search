@@ -1,0 +1,34 @@
+# A board whose search is a POST, in the shape `connectors/ruled-out.yaml`
+# records for usajobs.gov: the whole query in a JSON body, and the page number
+# a field of that body rather than anything in the URL.
+#
+# A fixture and not a package. `boards.test` is not a real board, so there is
+# no response to sample and nothing here may claim to be one — what this file
+# exists to exercise is the *request* the engine issues, which needs no
+# fixture to be wrong. The real board's request is asserted separately, out of
+# the `retest:` command committed in the ruled-out ledger
+# (`integral.connector_transport`), so neither half rests on a string the
+# implementer wrote.
+site: postboard
+locale: en
+version: "1.0.0"
+last_verified: "2026-08-31"
+auth: none
+list:
+  url_pattern: "https://boards.test/Search/ExecuteSearch"
+  method: POST
+  body_json:
+    Keyword: python
+    ResultsPerPage: 25
+    Page: "{page}"
+  pagination:
+    mode: body_field
+    param: Page
+    start: 1
+    max_pages: 3
+  from_json:
+    items: Jobs
+    fields:
+      title: Title
+      text: Summary
+      detail_url: PositionURI

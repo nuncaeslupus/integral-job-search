@@ -17,27 +17,45 @@ review that killed eight of nine mutations against the first version:
 from __future__ import annotations
 
 import json
+import unicodedata
 from pathlib import Path
 
 import pytest
 
 from integral.approval import (
+    DEFAULT_D24_EVIDENCE_PATH,
     MINIMUM_PROBES,
+    MINIMUM_RETRACTED_APPROVALS_EVALUATED,
+    MINIMUM_RETRACTION_PROBES,
     ApprovalError,
     PersonalDetails,
     _carries,
+    _main,
+    _retraction_report,
     measure_prepared,
     payload_digest,
     personal_details_in_master,
     prepare,
     probe_boundary,
+    probe_retracted_sends,
     read_payload,
     record_sent,
+    retracted_episodes_sendable,
     sends_without_confirmation,
 )
-from integral.cv_store import CVMaster, Episode, Experience, Skill, SourcedText, write_master
+from integral.cv_store import (
+    ConversationTurn,
+    CVMaster,
+    Episode,
+    Experience,
+    Skill,
+    SourcedText,
+    write_master,
+)
 from integral.generate import GenerationError, read_manifest
 from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog, ProfileError
+from integral.retraction import retract, unretract
 
 ADVERT = (
     "We are hiring a data engineer in Girona. You will own a PostgreSQL estate "
@@ -48,6 +66,13 @@ WIN = "Cut the nightly billing run from six hours to forty minutes by rewriting 
 FAILURE = (
     "Shipped a schema change without a backfill and left invoicing wrong for two days "
     "before anyone noticed."
+)
+
+OWNED = "Owned the client's month end close and cut the handover from three days to one."
+LLEIDA = "Reduje el cierre contable de la vieja delegación de Lleida a cuarenta minutos justos."
+RAW_UTTERANCE = (
+    "Yeah, so basically I cut the nightly billing run from six hours to forty minutes "
+    "by rewriting reconciliation, that was the thing I did there."
 )
 
 DETAILS = PersonalDetails(
@@ -519,3 +544,471 @@ def test_a_planted_episode_is_not_counted_as_withheld(
     assert measured["unapproved_episode_disclosures"] == 1
     assert FAILURE in measured["unapproved_episodes"][0]
     assert measured["episodes_withheld"] == 0, "it is in the document; it was not withheld"
+
+
+# ---------------------------------------------------------------------------
+# D-24 — an approval cannot outlive the evidence it was granted over
+#
+# Every name below carries `retract`, because the task's gate selects these with
+# `-k retract`. A name spelled `…retraction…` still matches; a name with neither
+# is silently not run, which is the one failure a green gate cannot show.
+
+
+def _episode_row(store: ProfileStore, text: str, *, at: str = "2026-01-01T09:00:00+00:00") -> str:
+    """One story-bank row in the evidence log, returning its id."""
+    return (
+        EvidenceLog(store)
+        .append(recorded_at=at, step="history", kind="episode", text=text, source="conversation")
+        .id
+    )
+
+
+def _retract_row(store: ProfileStore, row_id: str, *, at: str = "2026-01-02T09:00:00+00:00") -> str:
+    return retract(EvidenceLog(store), row_id, at=at).id
+
+
+def test_a_retracted_episode_cannot_be_sent(store: ProfileStore, master: CVMaster) -> None:
+    """The defect. Approve, retract the evidence, and the send boundary must refuse."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, row)
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+
+
+def test_an_unretracted_approval_still_sends(store: ProfileStore, master: CVMaster) -> None:
+    """Retracting some *other* episode must not turn every send into a refusal."""
+    _episode_row(store, WIN)
+    other = _episode_row(store, FAILURE)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, other)
+
+    record = record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    assert record.exists()
+
+
+def test_retraction_after_send_does_not_rewrite_the_record(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """An application record is what the candidate answers questions about later."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    record = record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    before = record.read_bytes()
+
+    _retract_row(store, row)
+    assert record.read_bytes() == before
+
+
+def test_an_empty_retraction_check_reports_unmeasured(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """An approval and no retraction checks nothing — and nothing checked is not a pass."""
+    _episode_row(store, WIN)
+    _prepare(store, master, approved=(0,))
+
+    measured = retracted_episodes_sendable(store, master)
+    assert measured["retracted_episodes_evaluated"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["retracted_episodes_still_sendable"] == 0
+
+
+def test_a_populated_retraction_check_reports_measured(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """The denominator assertion — it cannot live in the empty-input test above."""
+    row = _episode_row(store, WIN)
+    _prepare(store, master, approved=(0,))
+    _retract_row(store, row)
+
+    measured = retracted_episodes_sendable(store, master)
+    assert measured["retracted_episodes_evaluated"] > 0
+    assert measured["gate_status"] == "measured"
+    assert measured["retracted_episodes_still_sendable"] == 0
+
+
+def test_retracting_one_of_two_identical_episodes_withdraws_the_approval(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """Two rows, one sentence. The approval names the sentence, so both go.
+
+    Over-refusing on purpose: the approval carries no evidence id, so a text
+    match cannot tell the retracted row from the survivor, and §6.2 prefers the
+    refusal to the send.
+    """
+    _episode_row(store, WIN)
+    twin = _episode_row(store, WIN, at="2026-01-01T10:00:00+00:00")
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, twin)
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+
+
+def test_an_undone_retraction_makes_the_approval_live_again(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """`unretract` puts the row back, so the check must read the log, not a snapshot."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    retraction = _retract_row(store, row)
+    unretract(EvidenceLog(store), retraction, at="2026-01-03T09:00:00+00:00")
+
+    record = record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    assert record.exists()
+
+
+def test_a_retracted_episode_is_refused_before_a_payload_is_written(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """`prepare` routes through the same measurement, so a retracted story never drafts."""
+    row = _episode_row(store, WIN)
+    _retract_row(store, row)
+
+    with pytest.raises(ApprovalError):
+        _prepare(store, master, approved=(0,))
+    assert not store.path("cv", "generated", "girona-1", "v1", "payload.json").exists()
+
+
+def test_the_finding_names_the_retraction_that_withdrew_the_approval(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """ "No per-use approval backs this line" would not tell the candidate their
+    "forget that" was honoured — and the refusal is the one place they can see it."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    _retract_row(store, row)
+
+    measured = measure_prepared(store, master, offer_id, version)
+    assert measured["unapproved_episode_disclosures"] == 1
+    assert "retracted the evidence" in measured["unapproved_episodes"][0]
+
+
+def test_retracting_a_constraint_row_does_not_withdraw_an_episode_approval(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """Only a story-bank row withdraws a story. Fail-closed guard."""
+    log = EvidenceLog(store)
+    constraint = log.append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="constraints",
+        kind="constraint",
+        text=WIN,
+        source="conversation",
+    )
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, constraint.id)
+
+    record = record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    assert record.exists()
+
+
+def test_retracting_a_reaction_row_withdraws_the_approval_naming_that_story(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """A `reaction` row can be a story, so retracting one withdraws the approval.
+
+    `reaction` sat in `_NEVER_A_STORY` beside `constraint`, excluded as "about an
+    advert". That is the reasoning D-2 had already shown to fail for `statement`:
+    the kind names *which step wrote the row*, not *whether the text is a story*.
+    Step 5 captures reactions raw — "extract afterwards — never ask them to
+    categorise their own reaction" — so a reaction is the candidate's own words
+    in response to an advert, and answering one with the experience it brings to
+    mind is the ordinary case, not a corner. Step 10 writes reactions after
+    ranking, where that is likelier still.
+
+    Fail-open if wrong in this direction: an exclusion can only shrink
+    `withdrawn`, and a smaller `withdrawn` lets more sends through. §6.2 would
+    rather refuse a live episode than send a withdrawn one — the same trade the
+    module already makes for duplicate text.
+
+    Found by the second reader on #305 (D-3).
+    """
+    log = EvidenceLog(store)
+    reaction = log.append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="reactions",
+        kind="reaction",
+        text=WIN,
+        source="conversation",
+    )
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, reaction.id)
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+
+
+def test_a_retracted_row_withdraws_the_episode_its_provenance_names(store: ProfileStore) -> None:
+    """The candidate polished the sentence on its way into the CV store.
+
+    The log row and the store episode no longer share a word for word text, so a
+    text match alone reads clean — fail-open. `Episode.provenance` is the join
+    that already exists, and it is exact.
+    """
+    row = _episode_row(store, "Cut the nightly billing run right down. It took six hours.")
+    built = CVMaster(
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(
+            Episode(kind="achievement", text=WIN, provenance=(ConversationTurn(evidence_id=row),)),
+            Episode(kind="failure", text=FAILURE),
+        ),
+    )
+    write_master(store, built)
+    offer_id, version = _prepare(store, built, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, row)
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, built, offer_id, version, confirms=payload_digest(payload))
+
+
+# ---------------------------------------------------------------------------
+# The second reader's cases (#305 audit). Each one is a single edit away from
+# the sentence the approval names, and each one used to send.
+
+
+def _bank(store: ProfileStore, *episodes: Episode) -> CVMaster:
+    """A story bank of exactly these episodes, written to the store."""
+    built = CVMaster(skills=(Skill(name="PostgreSQL", level="strong"),), episodes=episodes)
+    write_master(store, built)
+    return built
+
+
+def _sends_after_retracting(store: ProfileStore, master: CVMaster, row_id: str) -> bool:
+    """Approve episode 0, retract `row_id`, and report whether the send stood."""
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, row_id)
+    try:
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+    except ApprovalError:
+        return False
+    return True
+
+
+def test_a_retracted_row_withdraws_an_approval_punctuated_differently(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """The log row lost its full stop on the way into the story bank."""
+    row = _episode_row(store, WIN.rstrip("."))
+    assert not _sends_after_retracting(store, master, row)
+
+
+def test_a_retracted_row_withdraws_an_approval_with_a_curly_apostrophe(
+    store: ProfileStore,
+) -> None:
+    """One typographic apostrophe, and byte equality reads the story as a different one."""
+    built = _bank(
+        store, Episode(kind="achievement", text=OWNED), Episode(kind="failure", text=FAILURE)
+    )
+    row = _episode_row(store, OWNED.replace("'", "\u2019"))
+    assert not _sends_after_retracting(store, built, row)
+
+
+def test_a_retracted_row_withdraws_an_approval_spaced_differently(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """A doubled space is not a different story."""
+    row = _episode_row(store, WIN.replace("six hours", "six  hours"))
+    assert not _sends_after_retracting(store, master, row)
+
+
+def test_a_retracted_row_withdraws_an_approval_cased_differently(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """Nor is a capital letter."""
+    row = _episode_row(store, WIN.upper())
+    assert not _sends_after_retracting(store, master, row)
+
+
+def test_a_retracted_row_withdraws_an_accented_approval_in_either_normal_form(
+    store: ProfileStore,
+) -> None:
+    """ES/EN/CA parity: a decomposed `ó` is the same letter as a composed one.
+
+    `\\W+` splits NFD `delegación` into `delegacio` and a combining mark, so
+    every eight-word shingle either side of it differs — which is why the
+    shingle fix alone does not close this one and `_words` has to normalise.
+    """
+    composed = unicodedata.normalize("NFC", LLEIDA)
+    built = _bank(
+        store, Episode(kind="achievement", text=composed), Episode(kind="failure", text=FAILURE)
+    )
+    row = _episode_row(store, unicodedata.normalize("NFD", LLEIDA))
+    assert not _sends_after_retracting(store, built, row)
+
+
+def test_a_retracted_row_withdraws_the_polished_sentence_it_became(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """Probe 7 with the provenance crutch removed.
+
+    `Episode.provenance` defaults to `()` and is legitimately empty, so the
+    text match — not the exact join — is what has to hold here.
+    """
+    row = _episode_row(store, RAW_UTTERANCE)
+    assert not _sends_after_retracting(store, master, row)
+
+
+def test_retracting_the_story_bank_row_withdraws_the_cv_store_episode(
+    store: ProfileStore,
+) -> None:
+    """Two rows for one story, and the CV entry is provenanced to the wrong one.
+
+    `add_conversation_entry` attaches its own intake row; the story-bank row is
+    the one the candidate is talking about when they say to forget it.
+    """
+    bank = _episode_row(store, RAW_UTTERANCE)
+    intake = EvidenceLog(store).append(
+        recorded_at="2026-01-01T09:30:00+00:00",
+        step="intake",
+        kind="statement",
+        text=WIN,
+        source="conversation",
+    )
+    built = _bank(
+        store,
+        Episode(
+            kind="achievement", text=WIN, provenance=(ConversationTurn(evidence_id=intake.id),)
+        ),
+        Episode(kind="failure", text=FAILURE),
+    )
+    assert not _sends_after_retracting(store, built, bank)
+
+
+def test_a_retracted_statement_row_carrying_the_episode_withdraws_it(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """`kind="statement"`, `step="intake"` — the shape `add_conversation_entry` writes.
+
+    A whitelist of `episode` skipped the only kind the CV store puts an
+    `Episode` behind, so the production path was the one path not joined.
+    """
+    row = (
+        EvidenceLog(store)
+        .append(
+            recorded_at="2026-01-01T09:00:00+00:00",
+            step="intake",
+            kind="statement",
+            text=WIN,
+            source="conversation",
+        )
+        .id
+    )
+    assert not _sends_after_retracting(store, master, row)
+
+
+def test_a_broken_retraction_chain_refuses_the_send(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """A log that does not settle must stop the send, not be read as no retraction."""
+    _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    cycle = "\n".join(
+        json.dumps(
+            {
+                "id": row_id,
+                "recorded_at": "2026-01-02T09:00:00+00:00",
+                "step": "any",
+                "kind": "retraction",
+                "text": "Forget that.",
+                "source": "conversation",
+                "retracts": retracts,
+            }
+        )
+        for row_id, retracts in (("ev-000900", "ev-000901"), ("ev-000901", "ev-000900"))
+    )
+    evidence = store.path("profile", "evidence.jsonl")
+    evidence.write_text(evidence.read_text(encoding="utf-8") + cycle + "\n", encoding="utf-8")
+
+    with pytest.raises(ProfileError):
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+
+
+def test_a_thrice_nested_retraction_still_withdraws(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """Retract, undo, undo the undo — the third level puts the row back under."""
+    row = _episode_row(store, WIN)
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    first = _retract_row(store, row)
+    second = _retract_row(store, first, at="2026-01-03T09:00:00+00:00")
+    _retract_row(store, second, at="2026-01-04T09:00:00+00:00")
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+
+
+def test_a_whitespace_only_retracted_row_withdraws_nothing(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """The limit of the over-refusal: an empty sentence withdraws no approval."""
+    row = _episode_row(store, "   ")
+    assert _sends_after_retracting(store, master, row)
+
+def test_the_retraction_probes_catch_every_planted_defect(tmp_path: Path) -> None:
+    probed = probe_retracted_sends(tmp_path / "profiles")
+    assert probed["retraction_probe_failures"] == []
+    assert probed["retraction_probes"] >= MINIMUM_RETRACTION_PROBES
+    assert probed["retracted_episodes_still_sendable"] == 0
+    assert probed["retracted_episodes_evaluated"] >= MINIMUM_RETRACTED_APPROVALS_EVALUATED
+    assert probed["gate_status"] == "measured"
+
+
+def test_the_retraction_gate_report_names_the_two_failure_kinds_apart(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A red gate must say which way the boundary broke (#305 review).
+
+    `retraction_probe_failures` carries the over-refusal cases — "a clean send
+    was refused" — which is the *opposite* of a retracted episode getting out.
+    One shared message over both lists told the reader the reverse of what had
+    happened, on the failure that matters most.
+    """
+    failures = _retraction_report(
+        {
+            "retraction_probe_failures": ["a clean send was refused"],
+            "retracted_episodes_sendable": ["ep-000001"],
+            "retraction_probes": MINIMUM_RETRACTION_PROBES,
+            "retracted_episodes_evaluated": MINIMUM_RETRACTED_APPROVALS_EVALUATED,
+            "retracted_episodes_still_sendable": 1,
+            "gate_status": "measured",
+        }
+    )
+    reported = capsys.readouterr().err
+    assert failures == 1  # the exit code, not the count
+    assert reported.count("\u2717") == 2
+    assert "the retraction boundary failed a planted case: a clean send was refused" in reported
+    assert "a retracted episode was still sendable: ep-000001" in reported
+    # The over-refusal line must not wear the fail-open wording.
+    assert "still sendable: a clean send was refused" not in reported
+
+
+def test_a_scratch_retraction_evidence_run_writes_nothing_into_the_repo(tmp_path: Path) -> None:
+    """D-24's evidence must follow the path it was given, as T46's always has.
+
+    `_main` read `argv[1]` for T46 and then called `write_retraction_evidence()`
+    with no argument, so a run pointed at a scratch directory still rewrote the
+    committed `status/evidence/D-24.json` (#305 review).
+    """
+    committed = DEFAULT_D24_EVIDENCE_PATH
+    before = (committed.read_bytes(), committed.stat().st_mtime_ns) if committed.exists() else None
+
+    assert _main(["integral.approval", str(tmp_path / "T46.json")]) == 0
+
+    after = (committed.read_bytes(), committed.stat().st_mtime_ns) if committed.exists() else None
+    assert after == before, "a scratch run rewrote the committed status/evidence/D-24.json"
+    assert (tmp_path / "T46.json").exists()
+    scratch = json.loads((tmp_path / "D-24.json").read_text(encoding="utf-8"))
+    assert scratch["gate_status"] == "measured"

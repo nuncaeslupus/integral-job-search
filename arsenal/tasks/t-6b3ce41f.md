@@ -3,6 +3,24 @@ id: t-6b3ce41f
 title: "T106: Ship a US rule set, and make every tax figure name the authority it came from"
 priority: 5
 deps: []
+# The task's own instruction is "prefer primary sources and nothing else: the
+# IRS revenue procedure that sets the year's brackets and standard deduction,
+# and the SSA announcement that sets the OASDI wage base and rates." Both are
+# unreachable from a cloud session — measured 2026-09-04, `irs.gov` and
+# `ssa.gov` each answer `CONNECT tunnel failed, response 403` to curl and
+# `EGRESS_BLOCKED` to the fetch tool.
+#
+# That is not an inconvenience to work around, it is the task. Writing US
+# figures from memory and citing a revenue procedure with a `read_on` date
+# would fabricate exactly the provenance this task exists to create — an
+# unauditable number wearing a citation is strictly worse than `ES.json`'s
+# honest paragraph, because it looks checked. The same objection applies to
+# backfilling ES and DE: a locator nobody fetched is invented.
+#
+# Same declaration and same reason as T25 (`lo-1af2`), which needs egress to
+# job boards. `/continue EGRESS` on a surface that has it is how this is
+# reached.
+requires: [surface:egress]
 workspace: BACKEND
 tags: [m4]
 ---

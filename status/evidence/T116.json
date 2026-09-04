@@ -1,0 +1,43 @@
+{
+  "robots_adjudications_misrepresenting_their_standing": 0,
+  "robots_adjudications_without_a_competent_second_reader": 19,
+  "controls_checked": 16,
+  "competence_fixtures_checked": 9,
+  "packages_without_an_adjudication_record": 0,
+  "standings": {
+    "two_parsers_agreed": 1,
+    "single_parser": 18,
+    "no_negative_control_possible": 1
+  },
+  "single_parser_cases": {
+    "second_reader_ran_and_could_not_refuse": 3,
+    "second_reader_never_run": 15
+  },
+  "gate_status": "measured",
+  "sites": [
+    "arbeitnow.com",
+    "builtin.com",
+    "examplejobs.test",
+    "getmanfred.com",
+    "himalayas.app",
+    "infojobs.net",
+    "jobfluent.com",
+    "jobs.ac.uk",
+    "justjoin.it",
+    "nofluffjobs.com",
+    "python.org",
+    "remoteok.com",
+    "remotive.com",
+    "tecnoempleo.com",
+    "ticjob.es",
+    "trabajos.com",
+    "usajobs.gov",
+    "wellfound.com",
+    "weworkremotely.com",
+    "workingnomads.com"
+  ],
+  "misclassified_fixtures": [],
+  "violations": [],
+  "robots_adjudications_at_least": 25,
+  "shipped_packages_at_least": 15
+}

@@ -1,0 +1,156 @@
+# USAJOBS — the United States federal government's own job board. Fetched live
+# and read on 2026-09-02; every claim below was checked against those bytes.
+#
+# **This is the board T89 exists for, and the first POST connector in the
+# library.** Its front end searches with
+#
+#     POST https://www.usajobs.gov/Search/ExecuteSearch
+#     Content-Type: application/json
+#     {"Keyword":"python","ResultsPerPage":25}
+#
+# and answers 200 with 25 rows and a `Pager`. Until `ListPage.method` and
+# `ListPage.body_json` landed there was nowhere in this schema to put a method
+# or a body, so this board sat in `connectors/ruled-out.yaml` under `corrected`
+# describing a surface nothing here could fetch.
+#
+# **No key, no cookie, no session.** Measured with a bare curl under this
+# project's own product token, logged out. That is the site's OWN front-end
+# search, not the developer API at data.usajobs.gov — which does 401 without an
+# `Authorization-Key` and is deliberately not used. The ledger's `lesson` on
+# this board is exactly that confusion: an API key on the *developer* API says
+# nothing about the *website's* API, and the front end has to search without one
+# because it searches for logged-out visitors.
+#
+# `robots.txt` (fetched live, same date). Four `Disallow` lines under a single
+# `User-agent: *` group — `/Content/`, `/Scripts/`, `/foresee/` and
+# `/Service References/` — and no group naming any AI agent, so
+# `restated_for_every_named_agent` does not arise. Adjudicated with the repo's
+# own matcher AND stdlib `urllib.robotparser`, which agree, **with a negative
+# control** so a True is not indistinguishable from a matcher that says yes to
+# everything:
+#
+#     /Search/ExecuteSearch  -> True     (this connector's list surface)
+#     /job/856726500         -> True     (this connector's detail surface)
+#     /Content/foo.css       -> False    <- negative control
+#     /Scripts/app.js        -> False    <- negative control
+site: usajobs
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-02"
+# Listings and announcements are public; no account, no session.
+auth: none
+
+list:
+  # A URL with no `{page}` in it, which is the whole point of this connector:
+  # two pages of this board are the SAME URL and differ only in the payload.
+  # `build_list_requests` is what pairs each URL with its own body.
+  url_pattern: "https://www.usajobs.gov/Search/ExecuteSearch"
+  method: POST
+  # Declared as data, not as text. This is a YAML mapping — already a parsed
+  # structure before the schema sees it — so nothing here is ever concatenated
+  # into a string that is then parsed as JSON. `Content-Type: application/json`
+  # follows from the declaration rather than being a third thing to get wrong.
+  #
+  # `Keyword: python` is the query, and it is a SPECIFICATION, not one
+  # candidate's search: the corpus is drawn by specification and never from a
+  # session's harvest.
+  body_json:
+    Keyword: python
+    # The board's own default and the value the capture was taken with.
+    ResultsPerPage: 25
+    Page: "{page}"
+  pagination:
+    # The page number lives in the body, not the URL — the shape T89 added
+    # `body_field` for, and the reason `pagination.param` names a body key here
+    # rather than a query-string key.
+    mode: body_field
+    param: Page
+    # Measured, not assumed: the response's own `Pager` reports
+    # `CurrentPageIndex: 1` and `FirstPageIndex: 1` for this first page, so the
+    # board indexes its pages from 1.
+    start: 1
+    # **1, and the reason is honesty about what was measured.** `Pager` reports
+    # `NumberOfPages: 2` for this query (`Total: 44`, `ItemsPerPage: 25`), so a
+    # second page exists — but only page 1 was captured, and the capture's
+    # request body carried NO page key at all. `Page` is the name the board's
+    # own `Pager` implies (`CurrentPageIndex` / `NextPageIndex`); it is **not
+    # verified as the request key**, and this connector therefore never issues
+    # a request whose page key matters.
+    #
+    # Why the unverified key is nonetheless safe at `max_pages: 1`, in every
+    # branch: if the model binder has no `Page` property the extra key is
+    # ignored and page 1 is returned; if it has one, `Pager.FirstPageIndex: 1`
+    # says 1 is the first page and page 1 is returned. There is no third case.
+    #
+    # Raising this needs one measurement, and only one: POST the same body with
+    # `"Page": 2` and check the rows differ from page 1. Do that before
+    # changing this number, not after.
+    max_pages: 1
+  # The response IS JSON — the board's own endpoint, no markup anywhere — which
+  # is the simpler of the two `from_json` cases and the one this library would
+  # rather have. `Jobs` is the array of adverts; `Total` and `Pager` sit beside
+  # it and are not rows.
+  from_json:
+    items: Jobs
+    fields:
+      # Absolute and always on www.usajobs.gov — checked over all 25 rows.
+      detail_url: PositionURI
+      title: Title
+      # The hiring agency. `SubAgency` and `Department` are also present; the
+      # agency is the one a candidate would name as the employer, and it is
+      # non-null on all 25 rows.
+      company: Agency
+      location_raw: LocationDisplay
+      # **Mapped, and only after counting the spread** — the ledger's test 4
+      # exists because remoteok stamped one identical invented band onto 48 of
+      # 50 adverts. Measured over all 25 rows of the committed fixture on
+      # 2026-09-02: 14 distinct `MinimumRange` values and 18 distinct
+      # `(MinimumRange, SalaryDisplay)` pairs, from $50,460 (GS 7-9) to
+      # $169,279 (GG 15), the most common repeated 5 times. That is the
+      # employer's own figure varying per advert, not a sentinel — and no zeros
+      # anywhere, which is the trap ticjob and weworkremotely both set.
+      salary_min: MinimumRange
+      # **No `salary_max`, deliberately.** Every row's `SalaryDisplay` reads
+      # "Starting at $X Per year (GRADE)" — a floor, not a range. The board
+      # publishes no maximum, and synthesising one from the grade would be
+      # inventing the employer's words.
+      #
+      # No `salary_currency` or `salary_period` either. Both are plainly USD
+      # and per-year in the human-readable `SalaryDisplay` string, but neither
+      # is a field of its own in the payload, and this format maps a JSON path
+      # to a field — it has no way to declare a constant. Leaving them absent
+      # is what arbeitnow/getmanfred already do rather than inventing one.
+      #
+      # No `text` here: a list row carries no advert body at all — title,
+      # salary, location, agency, grade and dates, and nothing else. That is
+      # what makes the detail block below mandatory for this board rather than
+      # optional.
+
+# Declared because it was fetched and read, not because a detail page exists.
+# `https://www.usajobs.gov/job/856726500` — the first row of the recorded
+# listing — returned 200 and 126,012 bytes of server-rendered HTML on
+# 2026-09-02, with the announcement already in the markup; `fixture/detail.html`
+# is that response, excerpted. Test 2 run against those bytes: the advert title
+# `Python Developer` is present in what the server sent, and so are `Duties` and
+# `Summary`, so no headless browser is involved.
+detail:
+  fields:
+    # `h1.usajobs-joa-banner__title` — the announcement banner's own heading,
+    # and the ONLY match on the page. The page carries several other `<h1>`
+    # elements (`h1.text-base.font-bold.text-gray`, used for sidebar cards), so
+    # a bare `h1` would be a coin toss on document order; the class is what
+    # disambiguates.
+    title:
+      css: "h1.usajobs-joa-banner__title"
+    # The announcement's Duties section, `id="joa-duties"` — an id the board
+    # puts there for its own anchor links, unique on the page, and carried by
+    # nothing else. Preferred over `#joa-summary` (also unique) because Duties
+    # is what the advert is actually offering; preferred over
+    # `#joa-requirements` because that section is 11 KB of boilerplate about
+    # citizenship and background checks, identical across federal postings.
+    #
+    # Ids, not classes, for both fields on this page: USAJOBS is
+    # Tailwind-styled, so its classes are presentation and would over-match the
+    # moment anything else on the page wants the same box.
+    text:
+      css: "#joa-duties"

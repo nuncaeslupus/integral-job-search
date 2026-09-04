@@ -1,7 +1,7 @@
 id: english_demand
 kind: hard
 polarity: unipolar
-group: dealbreakers
+group: requirements
 label:
   en: English demand
   es: Exigencia de inglés
@@ -44,36 +44,43 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "fluent\\s+english|native\\s+english|english\\s+is\\s+(our|the)\\s+(working|company)\\s+language"
+      - pattern: "fluent\\s+english|native\\s+english|english\\s+is\\s+(our|the)\\s+(working|company)\\s+language|excellent\\s+(written\\s+and\\s+spoken\\s+)?english|advanced\\s+english"
         value: 1.0
-        negatable: false
-      - pattern: "english\\s*\\(?\\s*(b2|c1|c2)"
+        negatable: true
+      - pattern: "english\\s*\\(?\\s*(b1|b2|c1|c2)|(good|professional|working)\\s+(level\\s+of\\s+)?english|english\\s+(proficiency|skills)"
         value: 0.7
-        negatable: false
-      - pattern: "english\\s+(is\\s+)?not\\s+required"
+        negatable: true
+      - pattern: "english[^.\\n]{0,30}\\b(not|no)\\s+(required|needed|necessary|mandatory)|\\b(no|not)\\b[^.\\n]{0,40}\\benglish\\b[^.\\n]{0,25}\\b(is\\s+)?(required|needed|necessary)|english\\s+(is\\s+)?not\\s+required"
         value: 0.0
         denies: true
       - pattern: "english\\s+(is\\s+)?optional"
         value: 0.0
         negatable: false
+    # `Anglès (parlat Superior, escrit Superior)` is feinaactiva's language
+    # field and appears on Spanish-language adverts too, so both slices read it
+    # — see the note on `contract_stability`.
     es:
-      - pattern: "ingl[ée]s\\s*\\(?\\s*(alto|fluido|c1|c2)"
+      # Both word orders. Spanish and Catalan put the level either side of the
+      # language — "inglés nivel alto" and "nivel avanzado de inglés" are the
+      # same statement — and a cue list that reads only one of them is blind to
+      # half the adverts that make it.
+      - pattern: "ingl[ée]s\\s*[:(]?\\s*(nivel\\s+)?(alto|avanzado|fluido|nativo|biling[üu]e|c1|c2)|nivel\\s+(alto|avanzado|nativo|biling[üu]e|c1|c2)\\s+de\\s+ingl[ée]s|angl[èe]s\\s*[:(]?\\s*(nivell\\s+)?(c1|c2|alt|avan[çc]at|natiu|parlat\\s+superior)|nivell\\s+(alt|avan[çc]at|natiu|c1|c2)\\s+d[e']\\s*angl[èe]s"
         value: 0.9
         negatable: true
-      - pattern: "ingl[ée]s\\s*\\(?\\s*(b1|b2|medio|intermedio)"
+      - pattern: "ingl[ée]s\\s*[:(]?\\s*(nivel\\s+)?(b1|b2|medio|intermedio|suficiente)|nivel\\s+(medio|intermedio|b1|b2|suficiente)\\s+de\\s+ingl[ée]s|nivel\\s+de\\s+ingl[ée]s\\s+(suficiente|medio|intermedio)|angl[èe]s\\s*[:(]?\\s*(nivell\\s+)?(b1|b2|mitj[àa]|parlat\\s+mitj[àa])|nivell\\s+(b1|b2|mitj[àa]|suficient)\\s+d[e']\\s*angl[èe]s|ingl[ée]s\\s+(con\\s+)?capacidad\\s+para\\s+desenvolverse"
         value: 0.6
-        negatable: false
-      - pattern: "ingl[ée]s\\s+no\\s+(necesario|requerido)|no\\s+se\\s+requiere\\s+ingl[ée]s"
+        negatable: true
+      - pattern: "ingl[ée]s[^.\\n]{0,25}\\bno\\s+(es\\s+)?(necesario|requerido|imprescindible)|no\\s+se\\s+(requiere|precisa|necesita)\\s+(el\\s+)?ingl[ée]s|angl[èe]s[^.\\n]{0,25}\\bno\\s+([ée]s\\s+)?(necessari|requerit|imprescindible)|no\\s+es\\s+(requereix|necessita)\\s+(l['’])?angl[èe]s|ingl[ée]s\\s+no\\s+(necesario|requerido)|angl[èe]s\\s+no\\s+(necessari|requerit)"
         value: 0.0
         denies: true
     ca:
-      - pattern: "angl[èe]s\\s*\\(?\\s*(c1|c2|alt|parlat\\s+superior)"
+      - pattern: "angl[èe]s\\s*[:(]?\\s*(nivell\\s+)?(c1|c2|alt|avan[çc]at|natiu|parlat\\s+superior)|nivell\\s+(alt|avan[çc]at|natiu|c1|c2)\\s+d[e']\\s*angl[èe]s|ingl[ée]s\\s*[:(]?\\s*(nivel\\s+)?(alto|avanzado|fluido|nativo|c1|c2)|nivel\\s+(alto|avanzado|nativo|c1|c2)\\s+de\\s+ingl[ée]s"
         value: 0.9
-        negatable: false
-      - pattern: "angl[èe]s\\s*\\(?\\s*(b1|b2|parlat\\s+(mitj[àa]|b[àa]sic))"
+        negatable: true
+      - pattern: "angl[èe]s\\s*[:(]?\\s*(nivell\\s+)?(b1|b2|mitj[àa]|parlat\\s+mitj[àa])|nivell\\s+(b1|b2|mitj[àa]|suficient)\\s+d[e']\\s*angl[èe]s|ingl[ée]s\\s*[:(]?\\s*(nivel\\s+)?(b1|b2|medio|intermedio|suficiente)|nivel\\s+(medio|intermedio|b1|b2|suficiente)\\s+de\\s+ingl[ée]s|nivel\\s+de\\s+ingl[ée]s\\s+(suficiente|medio|intermedio)"
         value: 0.6
-        negatable: false
-      - pattern: "angl[èe]s\\s+no\\s+(necessari|requerit)"
+        negatable: true
+      - pattern: "angl[èe]s[^.\\n]{0,25}\\bno\\s+([ée]s\\s+)?(necessari|requerit|imprescindible)|no\\s+es\\s+(requereix|necessita)\\s+(l['’])?angl[èe]s|ingl[ée]s[^.\\n]{0,25}\\bno\\s+(es\\s+)?(necesario|requerido|imprescindible)|no\\s+se\\s+(requiere|precisa|necesita)\\s+(el\\s+)?ingl[ée]s|angl[èe]s\\s+no\\s+(necessari|requerit)|ingl[ée]s\\s+no\\s+(necesario|requerido)"
         value: 0.0
         denies: true
   gold:

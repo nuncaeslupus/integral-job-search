@@ -4,6 +4,7 @@ title: "T102: Does a robots product token match as a prefix of a longer crawler 
 priority: 5
 tags: [ROBOTS]
 workspace: BACKEND
+status: merged
 ---
 
 Imported from issue #236 — case 22 of the round-2 independent T70 audit, the one
@@ -39,11 +40,28 @@ is a different question and gets its own fixture with its own citation.
 
 ## Acceptance gate
 
+```gate
+uncommitted_audit_cases == 0
+evidence: status/evidence/T102.json
+key: uncommitted_audit_cases
+```
+
+The fence above was added by this task and is the second of its two edits to its
+own gate, recorded here for the same reason as the first. It relaxes nothing: it
+is the metric `status/plan.md` declared for T102 all along, and without it this
+task would merge as the one terminal task in the repository whose gate is a
+prose recipe no tool reads — the exact "a gate that runs nothing passes
+everything" state `AGENTS.md` names. `integral.audit_followup` measures it: an
+audit case that found a defect is red until a gate holds it or the spec says
+there was nothing to hold, which is what left case 22 open across four merges.
+The recipe below stays, because the three test *names* are what the fence
+cannot check.
+
 ```bash
 uv run --extra dev python - <<'PY'
 import subprocess, sys
 REQUIRED = [
-    "test_a_file_token_shorter_than_the_crawler_token_matches_per_rfc_9309",
+    "test_a_file_token_shorter_than_the_crawler_token_does_not_match_per_rfc_9309",
     "test_the_reverse_direction_is_asserted_separately",
     "test_the_case_22_fixture_cites_the_section_it_was_derived_from",
 ]
@@ -68,7 +86,13 @@ tests/test_robots.py` is worse: it is green **today**, over a module in which no
 of the three exists, so it would certify this task before the work started and
 would not notice one of them being deleted afterwards.
 
-- `test_a_file_token_shorter_than_the_crawler_token_matches_per_rfc_9309`
-  (or `..._does_not_match_...` — the name records the verdict the spec gave)
+- `test_a_file_token_shorter_than_the_crawler_token_does_not_match_per_rfc_9309`
+  — the name records the verdict the spec gave, and the spec gave **does not
+  match**: RFC 9309 §2.2.1 relaxes case and nothing else. The `REQUIRED` list
+  above was written with the other branch of that choice spelled out, so it was
+  corrected to the derived name rather than the test being named for a verdict
+  the section does not support. That is the one edit this task made to its own
+  gate, and it is recorded here because a gate edited to pass is otherwise
+  indistinguishable from a gate that passed.
 - `test_the_reverse_direction_is_asserted_separately`
 - `test_the_case_22_fixture_cites_the_section_it_was_derived_from`

@@ -43,34 +43,72 @@ elicitation:
           conèixer i qui et contractava mentre la construïes?
 extraction:
   cues:
+    # Bipolar, so a reading needs two matches that agree (T59). The staffing
+    # cues are split across two patterns for that reason and not by accident:
+    # an advert placing someone with a client says so twice — it names itself a
+    # consultancy *and* describes the placement — and one of the two alone is
+    # the passing mention the corroboration rule exists to distrust.
+    #
+    # Corroboration cannot save a cue that is wrong on its own terms, and the
+    # first cut of this list had three: `nuestros clientes`, `para incorporarse
+    # a un equipo` and `proyecto estable`. Every employer has clients, every
+    # advert asks someone to join something, and a stable project is a promise
+    # about duration — none of the three says *whose* product, which is the
+    # whole of this dimension. Two of them firing together is two agreeing
+    # matches that are both wrong, which is precisely what a second match
+    # cannot detect. The rung is placement, so the cues name placement.
+    #
+    # A second read found two more of the same kind, and they had survived the
+    # first cut because they *looked* like placement language:
+    #
+    #   `nuestros candidatos` — agency **register**, not assertion. It names no
+    #   client, no project and no billing relation, and it appears in the same
+    #   sentence as `profesionales para nuestros clientes`, which does the real
+    #   work — so it could add a second match to a reading it had not earned.
+    #
+    #   `proyecto … dentro de una (entidad|empresa|compañía|organización)` —
+    #   four of those five head nouns are what an employer calls **itself**.
+    #   "Proyecto estable dentro de una empresa líder" is self-promotion, and
+    #   `importante` was in the pattern because one advert said "una importante
+    #   entidad": a cue shaped to a corpus string. Only the `cliente` branch
+    #   states the relation the rung is, and it is the only one kept.
+    #
+    # The measured cost is real and is recorded rather than argued away:
+    # `product_vs_services` F1 falls to `main`'s 0.1667, because all three
+    # adverts it loses state placement **once** and a bipolar dimension needs
+    # two matches. That is the corroboration rule, not a wrong cue — see the
+    # `matches=1` case in `cue_audit.py`.
     en:
-      - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build"
+      - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build|our\\s+(own\\s+)?(platform|saas|product)|we\\s+build\\s+(a|our)\\s+saas"
         value: 0.7
         negatable: false
-      - pattern: "consultanc(y|ies)|client\\s+site|staff(ing|\\s+augmentation)|our\\s+client\\s+is"
+      - pattern: "consultanc(y|ies)|client\\s+site|staff(ing|\\s+augmentation)|our\\s+client\\s+is|systems?\\s+integrator"
         value: -0.7
         negatable: false
       - pattern: "end\\s+users?"
         value: 0.4
         negatable: false
+      - pattern: "join\\s+(one\\s+of\\s+)?our\\s+clients?|placed\\s+with\\s+(a|our)\\s+client|on\\s+behalf\\s+of\\s+our\\s+client"
+        value: -0.5
+        negatable: false
     es:
-      - pattern: "producto\\s+propio|nuestro\\s+producto"
+      - pattern: "producto\\s+propio|nuestro\\s+producto|nuestra\\s+plataforma|nuestro\\s+saas|producte\\s+propi|dise[ñn]o\\s+y\\s+fabricaci[óo]n|somos\\s+fabricantes?"
         value: 0.7
         negatable: false
-      - pattern: "consultora|c[áa]rnica|cliente\\s+final"
+      - pattern: "consultor(a|es|as|ía|ia)\\b|c[áa]rnica|cliente\\s+final|client\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+servicios"
         value: -0.7
         negatable: false
-      - pattern: "asignaci[óo]n\\s+a\\s+proyecto"
+      - pattern: "asignaci[óo]n\\s+a\\s+proyecto|assignaci[óo]\\s+a\\s+projecte|cesi[óo]n\\s+a\\s+cliente|incorporaci[óo]n\\s+a\\s+(un\\s+|nuestro\\s+)?client|en\\s+(las\\s+)?oficinas\\s+del?\\s+client|en\\s+casa\\s+del\\s+cliente|proyectos?\\s+de\\s+nuestros\\s+clientes|en\\s+(uno|una)\\s+de\\s+(sus|nuestros|los)\\s+(principales\\s+)?clientes|(profesionales|perfiles|candidatos?|talento)\\s+para\\s+(nuestros\\s+)?clientes|dependencias\\s+del?\\s+client|proyectos?\\s+(muy\\s+|estable\\s+)*dentro\\s+de\\s+(un[ao]?\\s+)?(importante\\s+)?cliente"
         value: -0.5
         negatable: false
     ca:
-      - pattern: "producte\\s+propi|el\\s+nostre\\s+producte"
+      - pattern: "producte\\s+propi|el\\s+nostre\\s+producte|la\\s+nostra\\s+plataforma|el\\s+nostre\\s+saas|producto\\s+propio|disseny\\s+i\\s+fabricaci[óo]|som\\s+fabricants?"
         value: 0.7
         negatable: false
-      - pattern: "consultora|consultoria|client\\s+final"
+      - pattern: "consultor(a|es|es|ia|ía)\\b|consultoria|client\\s+final|cliente\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+serveis"
         value: -0.7
         negatable: false
-      - pattern: "assignaci[óo]\\s+a\\s+projecte"
+      - pattern: "assignaci[óo]\\s+a\\s+projecte|asignaci[óo]n\\s+a\\s+proyecto|cessi[óo]\\s+a\\s+client|incorporaci[óo]\\s+a\\s+(un\\s+|el\\s+nostre\\s+)?client|a\\s+(les\\s+)?(oficines|instal·lacions)\\s+del?\\s+client|projectes?\\s+dels\\s+nostres\\s+clients|en\\s+(un|una)\\s+dels\\s+(seus\\s+|nostres\\s+|principals\\s+)?clients|(professionals|perfils|candidats?|talent)\\s+per\\s+a\\s+(els\\s+)?clients|depend[èe]ncies\\s+del?\\s+client|projectes?\\s+(molt\\s+|estable\\s+)*dins\\s+d[e']\\s*(un[a]?\\s+)?(important\\s+)?client"
         value: -0.5
         negatable: false
   gold:

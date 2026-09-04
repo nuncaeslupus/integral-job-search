@@ -29,10 +29,20 @@ from integral.dimensions import (
     verify_gold,
 )
 
-# The plan's v0 range: small enough to be designed before seeing every ad,
-# large enough to cover the candidate-zero brief. `ontology_hit_rate` (T17) is
+# The plan's v0 range was 20 to 25: small enough to be designed before seeing every
+# ad, large enough to cover the candidate-zero brief. `ontology_hit_rate` (T17) is
 # what makes a wrong choice visible later; this only holds the size.
-MIN_DIMENSIONS, MAX_DIMENSIONS = 20, 25
+#
+# **T57 is that later.** The corpus broadened past remote programming to six job
+# families (T25), and the read pass measured the v0 model at `ontology_hit_rate`
+# 0.6143 — 648 of 1,680 stated concepts with nowhere in the model to go, and the
+# gap sitting in exactly what v0 never saw: a required vocational title, a driving
+# licence, a Catalan C1, part-time hours, bodily work. Re-reading the v0 model as
+# generously as its own definitions allow reaches 0.6875, so the 20 to 25 band and the
+# 0.85 gate could not both hold. Twelve dimensions were added and the band moved to
+# match. A range still exists, because a model free to coin a dimension per unmapped
+# concept would drive the rate to 1.0 while measuring nothing.
+MIN_DIMENSIONS, MAX_DIMENSIONS = 20, 40
 
 
 @pytest.fixture(scope="module")
@@ -308,3 +318,80 @@ def test_a_trait_question_is_behavioural_not_a_self_rating(dimensions: list[Dime
                 assert not SELF_RATING.search(text), (
                     f"{trait.id}.{question.id}[{language}] asks for a self-rating: {text!r}"
                 )
+
+
+def test_the_readme_names_every_group_the_model_declares() -> None:
+    """`dimensions/README.md` said five groups; T57 made it seven.
+
+    The paragraph listed `dealbreakers`, `terms`, `the_work`, `people`, `growth`
+    and was correct until `requirements` and `skills` were added to keep every
+    picker group under the eight-row no-scroll cap. Nothing read it, so it went
+    stale in the same commit that made it stale — prose about the model that no
+    test reads is documentation only until the model moves.
+
+    Reported by review on the PR that introduced the two groups (#320); this is
+    the fixture, so it is caught by the suite rather than by the next reader.
+    """
+    from pathlib import Path
+
+    from integral.dimensions import load_dimensions
+
+    readme = (Path(__file__).resolve().parents[1] / "dimensions" / "README.md").read_text(
+        encoding="utf-8"
+    )
+    paragraph = readme.split("## Groups")[1].split("It is purely presentational")[0]
+    # The list is what follows "without already knowing its name:" — slicing there
+    # rather than over the whole paragraph keeps the field name `group`, which the
+    # sentence necessarily mentions, out of the set of group values.
+    named = set(re.findall(r"`([a-z_]+)`", paragraph.split("its name:")[1]))
+    declared = {dimension.group for dimension in load_dimensions()}
+
+    assert declared == named, f"README names {sorted(named)}, the model declares {sorted(declared)}"
+    # And the count the prose states, which a set comparison cannot see: the
+    # sentence said "five" while listing five stale names, so both halves were
+    # wrong together and either alone would have passed.
+    words = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+    spelled = words.get(len(declared), str(len(declared)))
+    assert spelled in paragraph.lower(), f"the prose does not say there are {spelled} groups"
+
+
+_FULL_TIME_CASES: tuple[tuple[str, bool, str], ...] = (
+    ("Employment type: Full-time\nRemote in Europe", True, "the labelled field these boards use"),
+    ("Headquarters:\nZug\n\nFull-time\n\nRemote in Europe", True, "the field on its own line"),
+    ("This is a full-time position based in Barcelona.", True, "stated of the offered role"),
+    (
+        "Those who prefer consistent contract work over a full-time role, who want more.",
+        False,
+        "a comparison — it states what the post is not",
+    ),
+    ("Unlike a full-time job, this engagement is per-deliverable.", False, "a contrast"),
+    ("https://weworkremotely.com/remote-jobs/yooli-full-time-engineer", False, "a URL slug"),
+)
+
+
+@pytest.mark.parametrize(("text", "should_fire", "why"), _FULL_TIME_CASES)
+def test_the_full_time_cue_reads_the_offered_contract_not_a_comparison(
+    text: str, should_fire: bool, why: str
+) -> None:
+    """`contracted_hours` 0.9, run the way extraction runs it — over a document.
+
+    Two defects hid behind the gold row for this cue, and neither was visible to
+    the gold check. `_gold` runs a pattern against the **isolated span**
+    (`extraction.py:654`), so a `^…$` branch matched there — the span is the whole
+    string — while `extraction.py:331` compiles with `re.IGNORECASE` alone and
+    binds those anchors to the whole advert, where the branch could never fire.
+    And the `full[- ]time\\s+(role|position|…)` branch matched exactly one advert
+    in the corpus: the comparison *"…prefer consistent contract work over a
+    full-time role…"* that the review reported. The phrasing reads the same in an
+    offer and in a contrast, so it bought nothing and cost only the false
+    positive.
+
+    These cases therefore search whole documents, with the flags extraction uses.
+    A cue checked only where its own gold points cannot be caught being dead.
+    """
+    from integral.dimensions import load_dimensions
+
+    dimension = next(d for d in load_dimensions() if d.id == "contracted_hours")
+    cue = next(c for c in dimension.extraction.cues["en"] if c.value == 0.9)
+
+    assert bool(re.search(cue.pattern, text, re.IGNORECASE)) is should_fire, why

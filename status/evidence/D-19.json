@@ -5,38 +5,38 @@
   "market_reach": {
     "administrative": {
       "ads": 18,
-      "ads_reached": 14,
-      "applicable_dimensions": 10
+      "ads_reached": 18,
+      "applicable_dimensions": 17
     },
     "healthcare": {
       "ads": 18,
-      "ads_reached": 15,
-      "applicable_dimensions": 10
+      "ads_reached": 18,
+      "applicable_dimensions": 16
     },
     "hospitality": {
       "ads": 18,
-      "ads_reached": 10,
-      "applicable_dimensions": 7
+      "ads_reached": 18,
+      "applicable_dimensions": 13
     },
     "programming": {
       "ads": 100,
-      "ads_reached": 96,
-      "applicable_dimensions": 23
+      "ads_reached": 100,
+      "applicable_dimensions": 34
     },
     "retail": {
       "ads": 18,
-      "ads_reached": 17,
-      "applicable_dimensions": 9
+      "ads_reached": 18,
+      "applicable_dimensions": 16
     },
     "teaching": {
       "ads": 18,
-      "ads_reached": 14,
-      "applicable_dimensions": 9
+      "ads_reached": 18,
+      "applicable_dimensions": 17
     },
     "trades": {
       "ads": 18,
-      "ads_reached": 11,
-      "applicable_dimensions": 6
+      "ads_reached": 18,
+      "applicable_dimensions": 11
     }
   },
   "claims_checked": 6,

@@ -57,30 +57,28 @@ def _with_cues(base: Dimension, cues: list[Cue], language: Language = "es") -> D
 
 
 def test_extraction_matches_corpus_labels() -> None:
-    """The named gate test. It asserts a **measured shortfall** — that is the finding.
+    """T56's gate: `extraction_macro_f1 >= 0.75` over the evaluation split.
 
-    This test used to assert a refusal, and said of itself: "when the corpus
-    grows past the floor this test is what should start failing — that is the
-    signal". Round 1 of T56's labelling grew it, and this is that signal
-    arriving. Five dimensions now clear the floor and
-    `extraction_macro_f1 >= 0.75` is finally a question with an answer.
+    This test has asserted three different things, and the sequence is the
+    point. First a *refusal* — no dimension cleared the label floor, so the
+    number did not exist. Then a **measured shortfall**, when round 1 of
+    labelling made it exist at 0.4943: it said of itself "if this fails the
+    extractor got better and the gate can close". T56 is that closing.
 
-    The answer is **no**, and the assertions below say so without softening it:
-    the number exists, it is real, and it is under the threshold. Asserting
-    `>= 0.75` here would make the suite red for a shortfall the evidence file
-    already records honestly, which is the gate's job (`gate_evidence.py`), not
-    this test's. What this test defends is that the number is *computed over
-    what D-2 allows* — evaluation-split labels a person placed, every scored
-    dimension at or above the floor, `n` reported beside it.
+    The threshold is asserted here now, and the rest of the test is unchanged
+    and is still the more important half: what D-2 binds is not the value but
+    *what the value may be computed over* — evaluation-split labels a person
+    placed, every scored dimension at or above the floor, `n` beside it. A 0.77
+    computed over anything else would satisfy the line above and fail the lines
+    below, which is the right way round.
     """
     measured = measure()
 
     assert measured["extraction_status"] == "measured"
     assert isinstance(measured["extraction_macro_f1"], float)
     assert measured["scorable_dimensions"], "five dimensions cleared the floor in round 1"
-    assert measured["extraction_macro_f1"] < 0.75, (
-        "if this fails the extractor got better and the gate can close — "
-        f"macro-F1 is now {measured['extraction_macro_f1']}"
+    assert measured["extraction_macro_f1"] >= 0.75, (
+        f"T56's gate: macro-F1 is {measured['extraction_macro_f1']}, and the threshold is 0.75"
     )
 
     floor = measured["label_floor"]
@@ -106,6 +104,28 @@ def test_a_measured_score_still_names_what_it_could_not_reach() -> None:
     assert measured["dimensions_below_floor"], "twenty dimensions are still unlabelled"
     assert set(measured["scorable_dimensions"]).isdisjoint(measured["dimensions_below_floor"])
     assert measured["declared_subset"], "the round's declaration travels with the number"
+
+
+def test_a_dimension_whose_labels_all_assert_says_its_f1_cannot_fall_for_over_firing() -> None:
+    """Eight of the eleven scored dimensions have no class-0 evaluation label.
+
+    F1 on such a dimension is recall wearing precision's clothes: a cue set that
+    settled it on every advert in the corpus would score 1.0, because there is
+    no negative for a false positive to land on. `seniority_expectation` is the
+    live case — 23 labels, all of them asserting — and it scores 1.0. That is
+    the honest number and it is also the number most likely to be misread, so
+    the evidence names every dimension in that position.
+    """
+    measured = measure()
+    per = measured["extraction_f1_by_dimension"]
+    named = measured["dimensions_with_no_negative_class"]
+
+    assert named, "the corpus's evaluation labels are overwhelmingly assertions"
+    assert set(named) <= set(measured["extraction_scored_dimensions"])
+    for dimension in measured["extraction_scored_dimensions"]:
+        row = per[dimension]
+        has_no_negative = row["true_positives"] + row["false_negatives"] == row["n"]
+        assert (dimension in named) is has_no_negative, dimension
 
 
 def test_unmeasured_is_not_a_zero_score(tmp_path: Path) -> None:
@@ -554,7 +574,7 @@ def test_every_denial_in_the_model_reaches_the_store_as_a_denial() -> None:
     half is denials no cue reaches at all, which is a coverage question and
     stays visible in `negation_recall_misses`.
     """
-    _, misses = negation_recall(load_store(), load_dimensions())
+    _, misses, _ = negation_recall(load_store(), load_dimensions())
     mis_encoded = [m for m in misses if "settled, but not as negated" in m]
     assert mis_encoded == []
 

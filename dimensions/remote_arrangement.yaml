@@ -42,14 +42,37 @@ elicitation:
           Descriu com vas treballar l'últim any: on eres cada dia i quina part d'aquell
           acord vas haver de negociar?
 extraction:
+  # The 0.5 rung is a **split week** — "a stated number of days at home or in
+  # the office" — and nothing else. A bare `remote` / `teletrabajo` /
+  # `teletreball` states that remote work exists and says nothing about how
+  # much, so it was a strict superset of the 1.0 cue in all three languages.
+  # Two things went wrong with that, and the second is invisible to a reader of
+  # one sentence. `cue_findings` drops a match contained in a *longer* one, so
+  # "Fully remote" resolved to 1.0 — but "100% teletreball" matched both rungs
+  # over the **identical span**, which containment does not drop, and averaged
+  # to 0.75; and an advert saying "Fully remote position. We are a remote
+  # company." matched them in two places and averaged the same way. 0.75 is not
+  # a rung this dimension has. So the bare forms are gone: an advert that only
+  # mentions remote work reaches stage 3 unsettled, which is the honest state —
+  # "no cue matched" means *ask the model*, and a 0.5 would be a claim about a
+  # split week the advert never made.
+  #
+  # `teletre?ba[jl][oh]?` went with them: it could never match "teletrabajo"
+  # (the optional `e` leaves `teletrba`/`teletreba`, never `teletraba`). It was
+  # **introduced by this PR's own first commit and never shipped on `main`** —
+  # this note previously read as though the Spanish 1.0 cue had been dead in
+  # released code, which it never was: `main` spells `teletrabajo\s+total` out.
+  # The removal is right; the claim about how long the hole had been open was
+  # not, and a fix credited with more than it did is how the next reader
+  # mis-prices the next one. Both cognates are now spelled out.
   cues:
     en:
-      - pattern: "fully\\s+remote|100%\\s+remote"
+      - pattern: "fully\\s+remote|100%\\s+remote|remote-?first|work\\s+from\\s+anywhere"
         value: 1.0
         negatable: true
-      - pattern: "hybrid"
+      - pattern: "hybrid|\\d\\s+days?\\s+(a|per)\\s+week\\s+(at\\s+home|remote|in\\s+the\\s+office)|\\d\\s+days?\\s+(at\\s+home|remote|in\\s+the\\s+office|on-?site)"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "on-?site[^.\\n]{0,60}(remote|from\\s+home)|(remote|work\\s+from\\s+home)[^.\\n]{0,60}on-?site"
         value: 0.5
         negatable: false
@@ -57,12 +80,12 @@ extraction:
         value: 0.0
         negatable: false
     es:
-      - pattern: "100\\s*%\\s*(en\\s+)?remoto|teletrabajo\\s+total"
+      - pattern: "100\\s*%?\\s*(en\\s+)?remot[oa]?\\b|100\\s*%?\\s*(de\\s+)?(teletrabajo|teletreball)|(teletrabajo|teletreball)\\s+100\\s*%?|teletrabajo\\s+total|teletreball\\s+total|remot[oa]?\\s+total|(completamente|totalmente|[íi]ntegramente)\\s+(en\\s+)?remot[oa]?\\b|trabaj\\w*\\s+desde\\s+(donde\\s+quieras|cualquier\\s+(punto|lugar|parte|sitio))"
         value: 1.0
         negatable: true
-      - pattern: "h[ií]brid[oa]"
+      - pattern: "h[ií]brid[oa]?\\b|modalidad\\s+mixta|modalitat\\s+mixta|\\d{1,2}\\s*d[íi]as?\\s+de\\s+teletrabajo|\\d{1,2}\\s*dies?\\s+de\\s+teletreball|[1-9]\\d?\\s*%\\s*(de\\s+(la\\s+)?(jornada|semana|setmana)\\s+)?(de\\s+)?(teletrabajo|teletreball)"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "presencial[^.\\n]{0,60}(teletrabajo|remoto)|(teletrabajo|remoto)[^.\\n]{0,60}presencial"
         value: 0.5
         negatable: false
@@ -70,12 +93,12 @@ extraction:
         value: 0.0
         negatable: false
     ca:
-      - pattern: "100\\s*%\\s*teletreball|teletreball\\s+total"
+      - pattern: "100\\s*%?\\s*(de\\s+)?(teletreball|teletrabajo)|(teletreball|teletrabajo)\\s+100\\s*%?|teletreball\\s+total|teletrabajo\\s+total|100\\s*%?\\s*(en\\s+)?remot[oa]?\\b|remot[oa]?\\s+total|(completament|totalment|[íi]ntegrament)\\s+(en\\s+)?remot\\b|treball\\w*\\s+des\\s+d[eo]\\s+(on\\s+vulguis|qualsevol\\s+(punt|lloc))"
         value: 1.0
         negatable: true
-      - pattern: "h[ií]brid"
+      - pattern: "h[ií]brid\\w*|modalitat\\s+mixta|modalidad\\s+mixta|\\d{1,2}\\s*dies?\\s+de\\s+teletreball|\\d{1,2}\\s*d[íi]as?\\s+de\\s+teletrabajo|[1-9]\\d?\\s*%\\s*(de\\s+(la\\s+)?(jornada|semana|setmana)\\s+)?(de\\s+)?(teletreball|teletrabajo)"
         value: 0.5
-        negatable: false
+        negatable: true
       - pattern: "presencial[^.\\n]{0,60}(teletreball|remot)|(teletreball|remot)[^.\\n]{0,60}presencial"
         value: 0.5
         negatable: false

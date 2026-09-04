@@ -1,0 +1,40 @@
+{
+  "salary_silent_offers_dropped_without_a_lookup": 0,
+  "salary_silent_offers_dropped_without_a_lookup_evaluated": 624,
+  "gate_status": "measured",
+  "silent_offers_evaluated": 208,
+  "corpus_recovered_by_route": {
+    "advert_text": 17,
+    "duplicate": 1,
+    "detail_page": 0
+  },
+  "wording_cases_misread": 0,
+  "wording_cases_evaluated": 153,
+  "wording_cases_at_least": 120,
+  "corpus_house_estimates_of_our_own": 0,
+  "corpus_ads_evaluated": 208,
+  "corpus_ads_at_least": 150,
+  "corpus_recovery_by_language": {
+    "es": {
+      "read": 93,
+      "mentions_money": 6,
+      "recovered": 1
+    },
+    "ca": {
+      "read": 90,
+      "mentions_money": 15,
+      "recovered": 15
+    },
+    "en": {
+      "read": 25,
+      "mentions_money": 14,
+      "recovered": 2
+    }
+  },
+  "estimate_provenance_failures": 0,
+  "estimate_checks_evaluated": 15,
+  "duplicate_join_failures": 0,
+  "duplicate_join_checks_evaluated": 11,
+  "other_defects_total": 0,
+  "defects": []
+}
