@@ -59,7 +59,7 @@ import sys
 import unicodedata
 from collections import Counter
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -656,10 +656,54 @@ def _cue_reaches_the_cited_span(ad: LabelledAd, label: Label, dimension: Dimensi
     return False
 
 
+def _mechanism_of(ad: NormalisedAd, dimension: Dimension, found: DimensionScore) -> str:
+    """Which mechanism earned this hit: `scope_only`, `denies_only`, or `both`?
+
+    The two mechanisms that reach `negated=True` are not the same claim. A
+    `denies` cue has the negator inside its own pattern — `sin\\s+viajes` — so
+    matching one says the cue set has vocabulary for that denial, and says
+    nothing at all about the backward-looking scope rule T16 built. A
+    `negatable` cue negated by `_is_negated` is that scope rule working.
+
+    Counting them together is what T59's task file forbids: it makes recall look
+    solved while every `negatable` cue stays untested. This does not change the
+    score — a `denies` hit is a real recall hit — it records *which* mechanism
+    earned each one, so the split is visible in the evidence instead of being
+    something a session has to rediscover.
+
+    Restricted to `found.spans`, because `cue_findings` drops a match contained
+    inside a longer one and a dropped match must not be credited here either.
+
+    **Three outcomes, not two.** This returned a bool until the second-reader
+    review of #318, and the bool made `scope` win whenever both were true — so a
+    hit the `denies` cue had already earned outright was reported as the scope
+    rule recovering something the cue set could not see, which is the exact
+    overstatement the key exists to prevent. `"Sin guardias. El equipo no tiene
+    guardias."` is that advert: `sin\\s+guardias` matches and survives, the bare
+    `guardias` also survives and is negated, and the old code called it `scope`.
+    `both` is now its own row, so the two claims stay separable and
+    `scope_only` means what its name says.
+    """
+    kept = {(span.start, span.end) for span in found.spans}
+    scoped = False
+    denied = False
+    for cue in dimension.extraction.cues.get(ad.language, []):
+        for match in re.finditer(cue.pattern, ad.text, re.IGNORECASE):
+            if (match.start(), match.end()) not in kept:
+                continue
+            if cue.denies:
+                denied = True
+            elif cue.negatable and _is_negated(ad.text, match.start(), ad.language):
+                scoped = True
+    if scoped and denied:
+        return "both"
+    return "scope_only" if scoped else "denies_only"
+
+
 def negation_recall(
     store: list[LabelledAd],
     dimensions: list[Dimension],
-) -> tuple[int, list[str]]:
+) -> tuple[int, list[str], dict[str, int]]:
     """T59's score: of the negated evaluation labels, which does the extractor also read as negated?
 
     Recall over the **rules stage**, because that is the only stage a gate can
@@ -673,10 +717,15 @@ def negation_recall(
     counted rather than skipped. There, skipping shrinks a count that is not a
     scored denominator; here it would shrink the denominator of a score, so a
     typo would raise recall.
+
+    Third return value: how many hits each **mechanism** earned — see
+    `_mechanism_of`. Diagnostic only; the score is `hits` over every negated
+    label either way, and the three rows sum to it.
     """
     by_id = {d.id: d for d in dimensions}
     hits = 0
     misses: list[str] = []
+    mechanisms = {"scope_only": 0, "denies_only": 0, "both": 0}
     for ad, label in evaluation_labels(store):
         if not label.negated:
             continue
@@ -684,14 +733,16 @@ def negation_recall(
         if dimension is None:
             misses.append(f"{ad.id}/{label.dimension}: no such dimension")
             continue
-        found = cue_findings(_normalise_labelled(ad), dimension)
+        normalised = _normalise_labelled(ad)
+        found = cue_findings(normalised, dimension)
         if found is None:
             misses.append(f"{ad.id}/{label.dimension}: no cue settled the dimension")
         elif not found.negated:
             misses.append(f"{ad.id}/{label.dimension}: settled, but not as negated")
         else:
             hits += 1
-    return hits, sorted(misses)
+            mechanisms[_mechanism_of(normalised, dimension, found)] += 1
+    return hits, sorted(misses), mechanisms
 
 
 def negation_audit(
@@ -746,10 +797,22 @@ def negation_audit(
     # measurement of the model against itself. The firing audit above is the other
     # kind of number — a property of the cue set, not a score against held-out
     # data — so it reads both splits, for the reason `prefilter_suppression` gives.
-    negated_labels = [
-        f"{ad.id}/{label.dimension}" for ad, label in evaluation_labels(store) if label.negated
-    ]
-    hits, misses = negation_recall(store, dimensions)
+    negated = [(ad, label) for ad, label in evaluation_labels(store) if label.negated]
+    negated_labels = [f"{ad.id}/{label.dimension}" for ad, label in negated]
+    # Every supported language, seeded to zero, because a language with no
+    # negated label is the finding — the floor is a total, so ten Spanish labels
+    # would make `extraction_negation_recall` "measured" with Catalan `no … pas`
+    # and English negators never once scored. A zero that has to be written down
+    # is harder to publish a language-blind number over than one that is absent.
+    # Seeded from `Language` itself, never from `_NEGATORS`: the negator table is
+    # "words that flip a `negatable` cue", and the two coincide only by accident.
+    # A language added to `Language` with no negators would be *absent* from this
+    # key, which is precisely the silent zero it was written to make impossible
+    # (second-reader review of #318).
+    by_language: dict[str, int] = dict.fromkeys(get_args(Language), 0)
+    for ad, _ in negated:
+        by_language[ad.language] += 1
+    hits, misses, mechanisms = negation_recall(store, dimensions)
     measurable = len(negated_labels) >= MIN_EVALUATION_LABELS_PER_DIMENSION
 
     return {
@@ -766,8 +829,26 @@ def negation_audit(
         "extraction_negation_recall": round(hits / len(negated_labels), 4) if measurable else None,
         "negation_status": "measured" if measurable else "unmeasured",
         "negation_recall_hits": hits,
+        # Which mechanism earned each hit, in three rows that sum to
+        # `negation_recall_hits`. `denies_only` is the cue set already having the
+        # phrase; `scope_only` is T16's rule recovering a negation the cue could
+        # not see; `both` is a hit either would have earned alone, and it belongs
+        # to neither. A recall of 1.0 made entirely of `denies_only` would mean
+        # the scope rule is unmeasured, so this is what stops the score from
+        # claiming more than it shows.
+        #
+        # It counts **firings, not verified recoveries**: a `scope_only` hit says
+        # the backward rule fired on the right advert, not that it read the right
+        # words. `tecnoempleo-799b12ca520d03c0e743` is the case that forces the
+        # distinction — a flattened field table with no sentence punctuation,
+        # where the negator the rule consumes answers a different field and the
+        # verdict is unchanged if the labelled field is flipped to `Si`.
+        # `test_a_field_table_negator_is_counted_though_it_answers_another_field`
+        # holds it.
+        "negation_recall_hits_by_mechanism": mechanisms,
         "negation_recall_misses": misses,
         "negated_label_count": len(negated_labels),
+        "negated_label_count_by_language": by_language,
         "negated_labels": sorted(negated_labels),
         "negation_label_floor": MIN_EVALUATION_LABELS_PER_DIMENSION,
     }
@@ -951,6 +1032,12 @@ def _negation_main(argv: list[str]) -> int:
             f"{audited['negation_label_floor']}. Not a pass and not a fail (D-2); T59 owns it.",
             file=sys.stderr,
         )
+    print(
+        f"  negated labels by language: {audited['negated_label_count_by_language']}; "
+        f"hits by mechanism: {audited['negation_recall_hits_by_mechanism']} "
+        "(`denies` is vocabulary the cue set already had; only `scope` scores T16's rule).",
+        file=sys.stderr,
+    )
     for leak in audited["negation_leaks"]:
         print(f"✗ {leak}", file=sys.stderr)
     print(json.dumps(audited, ensure_ascii=False))

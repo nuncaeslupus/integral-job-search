@@ -11,16 +11,22 @@ from __future__ import annotations
 
 import time
 import urllib.error
+from pathlib import Path
 
 import pytest
 
+from integral import robots as robots_module
 from integral.robots import (
+    FIXTURES,
+    FIXTURES_AT_LEAST,
     REFUSAL_FIXTURES,
     USER_AGENT,
     Robots,
     RobotsError,
     _allowed,
     _canon,
+    _Fixture,
+    _main,
     _matches,
     _normalize_rule,
     _product_token,
@@ -302,6 +308,118 @@ def test_a_browser_style_agent_naming_two_products_is_refused() -> None:
 
     with pytest.raises(RobotsError, match="no product token"):
         _product_token("   ")
+
+
+# ---------------------------------------------------------------------------
+# T102 (issue #236) — does a robots product token match as a prefix of a longer
+# crawler token? Case 22 of the round-2 T70 audit, filed rather than committed
+# because its citation was a recollection. The verdict below was read off RFC
+# 9309 §2.2.1 before the implementation was opened, which is the only order
+# that can answer it: deriving it by running the matcher records the matcher's
+# behaviour as the specification, and that circularity is what let T70 take ten
+# defects across five review rounds.
+
+CASE_22_FIXTURE = "a_file_token_that_is_a_prefix_of_the_crawler_token_does_not_match"
+
+
+def _fixture(name: str) -> _Fixture:
+    return next(f for f in FIXTURES if f.name == name)
+
+
+def test_a_file_token_shorter_than_the_crawler_token_does_not_match_per_rfc_9309() -> None:
+    """RFC 9309 §2.2.1: case is the ONLY relaxation, so `Bot` does not match `Botly`.
+
+    "Crawlers MUST use case-insensitive matching to find the group that matches
+    the product token and then obey the rules of the group." No prefix,
+    substring or longest-token rule appears anywhere in the document; the one
+    substring relation it states runs the other way, between a crawler's
+    product token and the identification string it sends. Two of its figures
+    say it from the other side as well — one calls the relation "two groups
+    that match the same product token exactly", the other declares
+    `user-agent: BazBot` a non-match for the crawler `ExampleBot`, two tokens
+    that share the suffix `Bot`.
+
+    So the fetch is permitted, by §2.2.1's last clause: no group matches, there
+    is no `*` group, and "no rules apply". The name of this test records the
+    verdict the spec gave, which is the opposite of the one the audit expected.
+    """
+    robots_txt = "User-agent: Bot\nDisallow: /private\n"
+    robots = _robots({"https://prefix.example/robots.txt": robots_txt}, "Botly/2.0")
+    assert robots.allows("https://prefix.example/private")
+
+    # And the direction that matters: reading it as a match would fail OPEN,
+    # not closed. An explicitly matched group is used exclusively, so a `Bot`
+    # group matched by prefix would displace `*` and permit a path the site
+    # disallowed for every crawler.
+    with_wildcard = "User-agent: Bot\nDisallow: /other\n\nUser-agent: *\nDisallow: /private\n"
+    robots = _robots({"https://prefix2.example/robots.txt": with_wildcard}, "Botly/2.0")
+    assert not robots.allows("https://prefix2.example/private")
+
+
+def test_the_reverse_direction_is_asserted_separately() -> None:
+    """File token `Botly`, crawler `Bot` — a different question, same section.
+
+    RFC 9309 §2.2.1 decides it by the same clause and not by the shape of the
+    two strings: the crawler's token is `Bot`, the file's group is named
+    `Botly`, they are not equal under case folding, so no group matches. With
+    no `*` group to fall back to, no rules apply and the fetch is permitted;
+    with one, the `*` group applies (the fixture table holds both).
+
+    Asserted separately because the two directions can be got right and wrong
+    independently — a matcher doing `file_token in crawler_token` passes the
+    first of these and fails nothing here, and a matcher doing the reverse
+    fails the first while passing this.
+    """
+    robots_txt = "User-agent: Botly\nDisallow: /private\n"
+    robots = _robots({"https://reverse.example/robots.txt": robots_txt}, "Bot/1.0")
+    assert robots.allows("https://reverse.example/private")
+
+    with_wildcard = "User-agent: Botly\nDisallow:\n\nUser-agent: *\nDisallow: /private\n"
+    robots = _robots({"https://reverse2.example/robots.txt": with_wildcard}, "Bot/1.0")
+    assert not robots.allows("https://reverse2.example/private")
+
+
+def test_the_case_22_fixture_cites_the_section_it_was_derived_from() -> None:
+    """The case is committed as a fixture, with the clause it was read off.
+
+    An audit case answered in a comment and waved through leaves the code
+    exactly as unprotected as it was. Being in `FIXTURES` is what makes it
+    measured, and the citation is what lets the next reader check the verdict
+    against the RFC instead of against the matcher.
+    """
+    fixture = _fixture(CASE_22_FIXTURE)
+    assert "§2.2.1" in fixture.citation
+    assert fixture.citation.startswith("RFC 9309")
+    assert fixture.agent == "Botly/2.0"
+    assert fixture.expected_allowed is True
+
+    # Both companions carry their own citation rather than borrowing this one.
+    for name in (
+        "a_prefix_file_token_does_not_displace_the_wildcard_group",
+        "a_file_token_longer_than_the_crawler_token_does_not_match_with_no_wildcard",
+    ):
+        assert "§2.2.1" in _fixture(name).citation
+
+    # The measured denominator rose: 56 fixtures before T102, three cases
+    # accepted, and the floor moved with them.
+    assert FIXTURES_AT_LEAST >= 59
+    assert measure()["robots_verdicts_evaluated"] >= FIXTURES_AT_LEAST
+
+
+def test_a_shrunken_fixture_table_stops_the_build_with_1_not_the_unmeasured_3(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deleted fixture must be a hard stop, and 3 is not one.
+
+    `make evidence` maps exit 3 to "unmeasured (recorded)" and CONTINUES — the
+    right answer for a check that honestly cannot measure yet, and a fail-open
+    for this state, where the check ran over fewer cases than it was signed off
+    on and still reported a clean zero.
+    """
+    assert _main(["robots", str(tmp_path / "full.json")]) == 0
+
+    monkeypatch.setattr(robots_module, "FIXTURES", FIXTURES[:2])
+    assert _main(["robots", str(tmp_path / "shrunk.json")]) == 1
 
 
 # ---------------------------------------------------------------------------
