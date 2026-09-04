@@ -34,9 +34,20 @@ on:
     # 2026-09-04: head `768bdca` produced runs 33865668467 and 33865671756, both
     # named CI, both running lint, test, evidence and verify-gates.
     #
-    # Roughly half the account's 2000 monthly minutes bought nothing, and they
-    # ran out four days into the billing period. A pull-request branch is still
-    # covered — by `pull_request` — so nothing is lost but the duplicate.
+    # That pair is the proof of the DUPLICATION and not of the spend — both ran
+    # in single-digit seconds, because they are two of the runner-dead runs the
+    # outage produced. The spend is the eleven further duplicate pairs on
+    # 2026-09-02 and 2026-09-03, each run ~75-85 s: roughly half the account's
+    # 2000 monthly minutes bought nothing, and they ran out four days into the
+    # billing period. (Second-reader report on #333, F8, correcting a commit
+    # message that cited the 12 s / 5 s pair as the cost.)
+    #
+    # The trade, stated rather than waved past: a pull-request branch is still
+    # covered — by `pull_request` — but `pull_request` builds
+    # `refs/pull/<n>/merge`, a commit git makes by merging the head into the
+    # base. So what returns when the minutes do never measures the pushed head
+    # itself. `tools/verified_gate.sh` does, by SHA, which is the one thing this
+    # change makes more rather than less necessary.
     branches: [main]
   pull_request:
   workflow_dispatch:

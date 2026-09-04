@@ -228,6 +228,13 @@ delegates — it never lists targets — so it cannot fall behind the Makefile, 
 `integral.repo_gate`'s sibling `integral.verified_gate` (T121) asserts that it
 still does all of the above.
 
+**Give it the ref.** With no argument it measures the local `HEAD`, which is
+usually right and is never the *pushed* commit by construction — and the block's
+`resolved` and `on origin` lines say which of the two you got, so read them before
+pasting. (Until the second-reader round on #333 the no-argument form fetched
+`HEAD` from origin, which git answers with the **default branch**: standing on a
+branch whose gate genuinely failed, a bare run printed `main`'s SHA and `PASS`.)
+
 Why a clean checkout rather than just running `make host-gate` where you stand:
 the working tree is **not what a reviewer merges**. Uncommitted edits, a staged
 file, and the `.pyc` trap below can each make a local run green over code that is
