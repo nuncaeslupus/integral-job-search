@@ -616,7 +616,7 @@ def exempt_reader_findings(
     it. A dynamic import — `importlib.import_module("integral.rank")`,
     `__import__(...)`, `sys.modules[...]` — reaches the same module and is not seen
     here; nor is a corpus path assembled from parts (`Path("corpus") / "raw"`).
-    Measured, not assumed: 18 spellings were driven past this scan and past
+    Measured, not assumed: 25 spellings were driven past this scan and past
     `serving_path_corpus_reads` (#307 second-reader F4), and every static form was
     caught, including the four relative ones and a deferred import inside a function
     body. What survives is deliberate evasion, which this check is not built to stop —
@@ -788,8 +788,11 @@ def measure_provenance(
         # T98's own gate with `corpus_rows_without_a_draw_specification` still at zero.
         # Every count stays below, because a violation you cannot name is one nobody can
         # act on, and a sum whose components are not reported is a zero that hides what
-        # it is made of — the defect this repository has now caught four times. Four
-        # components, four keys, and the sum is what makes any one of them fail the gate.
+        # it is made of — the defect this repository has now caught four times. Five
+        # components, five keys, and the sum is what makes any one of them fail the
+        # gate. The arithmetic itself is under test component by component, because
+        # asserting it over the real corpus — where all five are zero — holds for any
+        # subset of them, and `_main` now decides its exit code from this key alone.
         "corpus_measurement_set_violations": (
             len(faults) + len(findings) + len(exempt_findings) + len(overlaps) + len(collisions)
         ),

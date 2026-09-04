@@ -462,6 +462,15 @@ def test_the_module_exits_nonzero_on_a_contaminated_stimulus_pool(
     while the evidence was not regenerated in the same change — and regenerating it
     is exactly what a reseed does.
     """
+    # An overlap cannot be isolated here, and the reason is structural: two rows share
+    # a split only if they share an `offer_id`, and `stimulus_split_findings` reports
+    # that as a text collision unless they also share an `id` — in which case the
+    # duplicate id is a fault. Overlap implies collision-or-fault, both of which are
+    # components of the same sum, so the delta re-read's proposed isolation (N2) does
+    # not exist. The arithmetic is asserted instead, component by component, in
+    # `test_each_component_of_the_sum_is_individually_load_bearing`; what this fixture
+    # holds is that `_main` exits 1 and says why on a reading whose ONLY non-zero
+    # components are the two disjointness ones.
     shared = _row("shared")
     labelled = _corpus(
         tmp_path,
@@ -483,6 +492,31 @@ def test_the_module_exits_nonzero_on_a_contaminated_stimulus_pool(
     assert measured["floor_breaches"] == 0, measured["floor_breach_reasons"]
 
     assert corpus_scope._main(["corpus_scope", str(tmp_path / "d1.json")]) == 1
+
+
+def test_the_module_names_the_violation_it_exits_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Exiting 1 in silence was half of the original complaint: the operator is told
+    the gate failed and not what failed. Silencing both new `_report` calls left the
+    suite green (#307 delta re-read, N3), so the printing is fixtured too — it is the
+    difference between a number and a diagnosis.
+    """
+    shared = _row("shared")
+    labelled = _corpus(
+        tmp_path,
+        [
+            {**shared, "id": "a", "split": "elicitation"},
+            {**shared, "id": "b", "split": "evaluation"},
+        ],
+        "labelled.jsonl",
+    )
+    raw = _corpus(tmp_path, [{**shared, "id": "a"}, {**shared, "id": "b"}])
+    _provenance_over(monkeypatch, tmp_path, raw, labelled, floors=False)
+
+    assert corpus_scope._main(["corpus_scope", str(tmp_path / "d1.json")]) == 1
+    reported = capsys.readouterr().err
+    assert "reachable as a stimulus" in reported, reported
 
 
 def test_a_reading_that_only_breached_a_floor_still_exits_one(

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -684,6 +685,110 @@ def test_the_declared_gate_fails_when_the_exemption_is_widened(tmp_path: Path) -
     assert measured["gate_status"] == "measured", measured.get("unmeasured_reason")
 
 
+
+SUM_COMPONENTS = (
+    "corpus_rows_without_a_draw_specification",
+    "serving_path_corpus_reads",
+    "exempt_reader_serving_imports",
+    "stimulus_pool_evaluation_overlaps",
+    "corpus_text_collisions",
+)
+
+
+def _sum_row(row_id: str, text: str, **overrides: Any) -> dict[str, Any]:
+    """A well-formed corpus row, varied only where a component needs it."""
+    row: dict[str, Any] = {
+        "id": row_id,
+        "source": "exampleboard",
+        "source_url": f"https://example.invalid/{row_id}",
+        "fetched_at": "2026-01-01T00:00:00+00:00",
+        "language": "es",
+        "title": "Programador/a backend",
+        "company": "Example S.L.",
+        "job_family": "programming",
+        "draw": "es-programming",
+        "text": text,
+    }
+    row.update(overrides)
+    return row
+
+
+def _store(directory: Path, name: str, rows: list[dict[str, Any]]) -> Path:
+    path = directory / name
+    path.write_text(
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n", encoding="utf-8"
+    )
+    return path
+
+
+def _draws_file(directory: Path) -> Path:
+    path = directory / "draws.yaml"
+    path.write_text(
+        "draws:\n"
+        "  - id: es-programming\n"
+        '    drawn_at: "2026-01-01"\n'
+        "    purpose: Spanish-language programming adverts, for extraction scoring.\n"
+        "    languages: [es]\n"
+        "    job_families: [programming]\n"
+        "    sources: [exampleboard]\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.parametrize("component", SUM_COMPONENTS)
+def test_each_component_of_the_sum_is_individually_load_bearing(
+    tmp_path: Path, component: str
+) -> None:
+    """The arithmetic, over readings where the component is NOT zero.
+
+    `test_every_component_of_the_sum_is_reported_beside_it` runs over the real corpus,
+    where all five components are zero — and `0 == 0` holds for any subset of them, so
+    dropping `len(overlaps)`, `len(collisions)` or `len(faults)` from the sum left the
+    whole suite green (#307 delta re-read, N1). That matters more since `_main` now
+    derives its exit code from the sum alone: a component missing from the arithmetic is
+    a violation that neither fails the gate nor prints.
+
+    So each component is driven to a non-zero value on its own and the equality is
+    asserted there. A subset sum cannot survive its own component's case.
+    """
+    root = tmp_path / component
+    root.mkdir()
+    text = "Buscamos una persona para trabajar en Python. " * 20
+    other = "Otra oferta distinta, tambien en Python. " * 20
+    src_extra: dict[str, str] = {}
+    raw_rows = [_sum_row("a", text, split="elicitation")]
+    labelled_rows = [_sum_row("a", text, split="elicitation")]
+
+    if component == "corpus_rows_without_a_draw_specification":
+        # A labelled row with no raw row behind it: nothing produced it.
+        labelled_rows.append(_sum_row("orphan", other, split="elicitation"))
+    elif component == "serving_path_corpus_reads":
+        src_extra["rank"] = "from integral.corpus import load_ads\n"
+    elif component == "exempt_reader_serving_imports":
+        src_extra["reaction_elicit"] = "from integral.rank import rank_offers\n"
+    elif component == "stimulus_pool_evaluation_overlaps":
+        # One id, one text, both splits. `seen_ids` dedupes, so `by_text` records the
+        # id once and there is NO collision — the overlap is isolated, which is what
+        # lets this case fail when `len(overlaps)` alone is dropped.
+        raw_rows.append(_sum_row("a", text, split="evaluation"))
+        labelled_rows.append(_sum_row("a", text, split="evaluation"))
+    elif component == "corpus_text_collisions":
+        # Two ids, one text, the SAME split: a collision with no overlap.
+        raw_rows.append(_sum_row("b", text, split="elicitation"))
+        labelled_rows.append(_sum_row("b", text, split="elicitation"))
+
+    measured = measure_provenance(
+        raw_path=_store(root, "ads.jsonl", raw_rows),
+        labelled_path=_store(root, "labelled.jsonl", labelled_rows),
+        draws_path=_draws_file(root),
+        src_dir=_serving_tree(root, src_extra),
+    )
+    assert measured[component] >= 1, measured
+    assert sum(measured[key] for key in SUM_COMPONENTS) == (
+        measured["corpus_measurement_set_violations"]
+    ), measured
+
 def test_every_component_of_the_sum_is_reported_beside_it() -> None:
     """A metric named for more than it counts is the defect this repository has caught
     four times (`status_is_asserted`, `incidental_duplicate_drops`,
@@ -692,14 +797,9 @@ def test_every_component_of_the_sum_is_reported_beside_it() -> None:
     the arithmetic is asserted rather than described.
     """
     measured = measure_provenance()
-    components = (
-        "corpus_rows_without_a_draw_specification",
-        "serving_path_corpus_reads",
-        "exempt_reader_serving_imports",
-        "stimulus_pool_evaluation_overlaps",
-        "corpus_text_collisions",
+    assert sum(measured[key] for key in SUM_COMPONENTS) == (
+        measured["corpus_measurement_set_violations"]
     )
-    assert sum(measured[key] for key in components) == measured["corpus_measurement_set_violations"]
     # And the exemption's reach is a number in the record, not a claim in a comment.
     assert measured["stimulus_reachable_adverts_at_least"] == MINIMUM_STIMULUS_POOL
     assert measured["evaluation_adverts_compared_at_least"] == MINIMUM_EVALUATION_POOL
