@@ -1,7 +1,7 @@
 {
   "gate_modules_outside_the_evidence_run": 0,
-  "gate_modules_outside_the_evidence_run_evaluated": 86,
-  "gate_modules_discovered": 86,
+  "gate_modules_outside_the_evidence_run_evaluated": 88,
+  "gate_modules_discovered": 88,
   "modules_missing": [],
   "gate_status": "measured"
 }

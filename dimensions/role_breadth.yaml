@@ -1,0 +1,76 @@
+id: role_breadth
+kind: soft
+polarity: bipolar
+group: the_work
+label:
+  en: "Role breadth"
+  es: "Amplitud del puesto"
+  ca: "Amplitud del lloc"
+definition: >
+  How many distinct jobs the post actually is. A single specialism at one end; several
+  trades, or two roles advertised as one, at the other. Read from the work the ad
+  describes, not from the job title.
+levels:
+  - value: -0.6
+    label:
+      en: "One specialism"
+      es: "Una especialidad"
+      ca: "Una especialitat"
+    tell: "one named craft, and the ad stays inside it"
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No consta"
+      ca: "No consta"
+    tell: "the ad does not say how wide the work runs"
+  - value: 0.8
+    label:
+      en: "Several jobs in one post"
+      es: "Varios oficios en un puesto"
+      ca: "Diversos oficis en un lloc"
+    tell: "'polivalent', several trades, or two roles in one advert"
+elicitation:
+  questions:
+    - id: rb_q1
+      text:
+        en: >
+          Tell me about a job that turned out to be two or three jobs at once. What did
+          you end up doing that was never in the description?
+        es: >
+          Cuéntame un trabajo que resultó ser dos o tres trabajos a la vez. ¿Qué
+          acabaste haciendo que nunca estuvo en la descripción?
+        ca: >
+          Explica'm una feina que va resultar ser dues o tres feines alhora. Què vas
+          acabar fent que no era enlloc de la descripció?
+extraction:
+  cues:
+    en:
+      - pattern: "\\bfull[- ]stack\\b"
+        value: 0.8
+      - pattern: "\\bwear\\s+many\\s+hats\\b|\\bend[- ]to[- ]end\\b"
+        value: 0.8
+    es:
+      - pattern: "\\bmultitarea\\b|\\bpolivalen(te|cia)\\b"
+        value: 0.8
+      - pattern: "\\bde\\s+principio\\s+a\\s+fin\\b"
+        value: 0.8
+    ca:
+      - pattern: "\\bpolival[èe]n(t|cia)\\b|\\bmultitasca\\b"
+        value: 0.8
+  gold:
+    - ad_id: wwr-gusto-inc-staff-software-engineer-time-and-scheduling
+      language: en
+      span: "We're looking for seasoned full-stack software engineers to join the teams behind Gusto's customer-facing products — the features and experiences that small business owners and their employees rely on every day."
+      value: 0.8
+      derived_from: cue
+    - ad_id: feinaactiva-FA92318009
+      language: es
+      span: "Responsabilidades (POLIVALENTE):"
+      value: 0.8
+      derived_from: cue
+    - ad_id: feinaactiva-FA92317995
+      language: ca
+      span: "Persona polivalent que sàpiga treballar de forma autònoma."
+      value: 0.8
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

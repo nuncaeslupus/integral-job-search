@@ -58,10 +58,23 @@ def test_a_few_hundred_offers_reduce_without_a_human_decision() -> None:
 
     reduction = reduce(batch, bulk_filter._probe_constraints(), now=_NOW)
 
-    assert len(reduction.kept) < len(batch) / 2
+    # **Not a ratio.** This asserted `kept < len(batch) / 2`, which is the
+    # incentive the gate design explicitly refused — "a ratio gate rewards
+    # deleting more, which is the wrong direction for a filter whose costly
+    # error is the drop". It also meant that recovering five wrongly-dropped
+    # rows would have turned this test red: correcting a defect would have
+    # broken the test certifying the module works. What the task actually asks
+    # is that volume reduces without a person, so: it reduced, materially, and
+    # every row is accounted for. How *much* is reported, never asserted.
+    # Found by the second reader on #323.
+    assert reduction.dropped, "nothing was filtered at all"
+    assert reduction.kept, "everything was filtered — that is not a reduction"
     assert len(reduction.kept) + len(reduction.dropped) == len(batch)
     # Nothing invented and nothing lost: every survivor came from the batch.
     assert {offer.id for offer in reduction.kept} <= {offer.id for offer in batch}
+    # And the quality bar the ratio was standing in for, which is about the
+    # drops being *right* rather than numerous.
+    assert bulk_filter.measure()["wrongly_dropped"] == 0
 
 
 def test_every_rejection_records_which_rule_dropped_it() -> None:
@@ -302,3 +315,89 @@ def test_an_empty_batch_reduces_to_nothing_without_dividing_by_zero() -> None:
     assert reduction.kept == ()
     assert reduction.dropped == ()
     assert reduction.ratio == 0.0
+
+
+# --- the wrong-drop classes the second reader found on #323 ------------------
+#
+# Each is a row this module deleted and should not have. They are committed both
+# here and as planted must-keeps in `probe_batch`, counted by `wrongly_dropped` —
+# the fixtures assert the behaviour, the planted rows keep the recorded number
+# from being a statement about bookkeeping rather than about the filter.
+
+
+def test_a_stated_band_with_no_maximum_is_never_below_the_floor() -> None:
+    """ "from EUR 40,000" is an ad-side unknown at the top, not a low figure.
+
+    `candidate._violates_salary` already says so — *"nothing to compare — an
+    unstated ad band, not a candidate unknown"* — and returns None. This module
+    read `salary.min` when `max` was absent, so the two answered differently for
+    the same offer, and the stricter one silently won: the failure this task
+    names for exclusions, arriving through a different door.
+    """
+    floor = HardConstraints(pay_floor=PayFloor(amount=50000, currency="EUR", period="year"))
+    open_ended = _offer(
+        "From EUR 40,000.", salary=Salary(min=40000, currency="EUR", period="year", stated=True)
+    )
+
+    assert [o.id for o in reduce([open_ended], floor, now=_NOW).kept] == [open_ended.id]
+
+
+def test_a_country_written_in_full_is_kept_rather_than_compared() -> None:
+    """`Location.country` has no pattern; the candidate side enforces `^[A-Z]{2}$`.
+
+    Exact membership across two vocabularies deleted every Spanish row for a
+    candidate who permitted `ES` — a whole-connector-wide deletion, not a row.
+    A stated country this rule cannot compare is kept, as an uncomparable
+    currency already is.
+    """
+    constraints = HardConstraints(countries=frozenset({"ES", "PT"}))
+    spelled = _offer("On site.", location=Location(country="Spain", raw="Tarragona"))
+    coded = _offer("On site, coded.", location=Location(country="DE", raw="Berlin"))
+
+    reduction = reduce([spelled, coded], constraints, now=_NOW)
+
+    assert [o.id for o in reduction.kept] == [spelled.id]
+    assert [d.offer_id for d in reduction.dropped] == [coded.id]
+
+
+def test_an_advert_closing_today_survives_its_final_day() -> None:
+    """A date with no time means the whole of that day, not its first instant."""
+    closing = _offer("Closes today.", expires_at="2026-09-03")
+
+    at_noon = reduce([closing], now=datetime(2026, 9, 3, 12, 0, tzinfo=UTC))
+    tomorrow = reduce([closing], now=datetime(2026, 9, 4, 0, 1, tzinfo=UTC))
+
+    assert [o.id for o in at_noon.kept] == [closing.id]
+    assert [d.rule for d in tomorrow.dropped] == ["expired"]
+
+
+def test_the_reason_quotes_the_requirement_that_produced_the_verdict() -> None:
+    """`Reading.quote` is the worst requirement's; the first one carrying a quote
+    may be a clause the candidate satisfies. The rule was right and the reason
+    wrong, which is the half "a filter that cannot say why" is about."""
+    candidate = CandidateEligibility(citizenships=("Argentina",), work_authorisations=("Spain",))
+    both = _offer(
+        "Spanish is a plus for this role. You must have the right to work in Germany "
+        "before you apply, and we cannot sponsor."
+    )
+
+    reduction = reduce([both], HardConstraints(eligibility=candidate), now=_NOW)
+
+    assert [d.rule for d in reduction.dropped] == ["ineligible"]
+    assert "Germany" in reduction.dropped[0].because
+
+
+def test_the_recorded_measurement_can_see_a_wrong_drop() -> None:
+    """The key every other number was blind to.
+
+    Mutation-verified in both directions when it was added: reverting any one of
+    the three fixes above independently drives `wrongly_dropped` to 1, and the
+    planted rows are chosen so each actually trips its bug — the first attempt
+    planted a band above the floor and an expiry compared against midnight, and
+    neither was a case at all until the mutation test said so.
+    """
+    measured = measure()
+
+    assert measured["wrongly_dropped"] == 0
+    assert measured["must_keep_rows_evaluated"] >= measured["must_keep_rows_at_least"]
+    assert measured["incidental_duplicate_drops"] == 0

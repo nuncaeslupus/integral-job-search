@@ -48,18 +48,33 @@ path nobody declared.
 from __future__ import annotations
 
 import json
+import re
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from integral.dedup import find_duplicates
+from integral.dedup import (
+    Liveness,
+    SourceKind,
+    _group_duplicate_ids,
+    find_duplicates,
+    select_survivor,
+)
 from integral.eligibility import UNKNOWN_CANDIDATE, CandidateEligibility, evaluate_offer
 from integral.offers import Offer
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T94.json"
+
+
+#: The candidate side (`candidate._country_field`) enforces `^[A-Z]{2}$`; the ad
+#: side (`offers.Location.country`) enforces nothing. This is the shape a stated
+#: country must have before the two can be compared at all — anything else is
+#: kept rather than guessed at.
+_COMPARABLE_COUNTRY = re.compile(r"[A-Z]{2}")
 
 
 class BulkFilterError(Exception):
@@ -160,7 +175,15 @@ def _parse(stamp: str | None) -> datetime | None:
 
 def _expired(offer: Offer, now: datetime) -> Drop | None:
     expires = _parse(offer.expires_at)
-    if expires is None or expires >= now:
+    if expires is None:
+        return None
+    if len(stamp := (offer.expires_at or "").strip()) == 10 and "T" not in stamp:
+        # A date with no time means the whole of that day. Comparing against
+        # midnight deleted an advert stating it closes on the 4th from 00:00 on
+        # the 4th — a wrong drop, in the costly direction, for its final day.
+        # Found by the second reader on #323.
+        expires = expires.replace(hour=23, minute=59, second=59)
+    if expires >= now:
         return None
     return Drop(offer.id, "expired", f"the advert states it expired at {offer.expires_at}")
 
@@ -169,11 +192,18 @@ def _ineligible(offer: Offer, candidate: CandidateEligibility) -> Drop | None:
     reading = evaluate_offer(offer, candidate)
     if reading.verdict != "FAIL":
         return None  # PASS keeps, and so does FLAG — §5.4 makes a person the tiebreaker
-    quote = next(
-        (requirement.quote for requirement in reading.requirements if requirement.quote), ""
-    )
+    # `reading.quote`, not the first requirement carrying any quote. `Reading`'s
+    # own contract: "when more than one requirement is found, the worst verdict
+    # wins and `reason`/`quote` report the requirement that produced it." Taking
+    # the first meant an advert reading "Spanish is a plus ... you must have the
+    # right to work in Germany" was dropped quoting the Spanish clause — a
+    # requirement the candidate meets. The rule was right and the reason wrong,
+    # which is the half "a filter that cannot say why" is about.
+    # Found by the second reader on #323.
     return Drop(
-        offer.id, "ineligible", quote or "the advert states a requirement the candidate cannot meet"
+        offer.id,
+        "ineligible",
+        reading.quote or "the advert states a requirement the candidate cannot meet",
     )
 
 
@@ -188,7 +218,15 @@ def _below_pay_floor(offer: Offer, floor: PayFloor | None) -> Drop | None:
         return None
     if offer.salary.currency != floor.currency or offer.salary.period != floor.period:
         return None  # not comparable — a conversion this module will not invent
-    best = offer.salary.max if offer.salary.max is not None else offer.salary.min
+    # **Only `max`.** An absent `max` on a stated band is an ad-side unknown — the
+    # top of the band — not a low figure. `candidate._violates_salary` already
+    # says so and returns `None` there: "nothing to compare — an unstated ad
+    # band, not a candidate unknown". This read `salary.min` when `max` was
+    # absent, so "from EUR 40,000" was deleted against a 50,000 floor, and the
+    # two modules answered differently for the same offer — with the stricter one
+    # silently winning, which is the failure this task names for exclusions
+    # arriving through a different door. Found by the second reader on #323.
+    best = offer.salary.max
     if best is None or best >= floor.amount:
         return None
     return Drop(
@@ -213,6 +251,15 @@ def _outside_permitted_countries(offer: Offer, countries: frozenset[str]) -> Dro
     country = (offer.location.country or "").strip()
     if not country or country in countries:
         return None
+    # `Location.country` carries **no pattern** — a connector emitting "Spain",
+    # "es" or "Espana" is schema-valid, while `candidate._country_field` enforces
+    # `^[A-Z]{2}$` on the candidate's side. Exact membership across those two
+    # vocabularies deleted every Spanish row for a candidate who permitted `ES`:
+    # a whole-connector-wide deletion, not a row. So a stated country this rule
+    # cannot compare is **kept**, the same way an uncomparable currency is.
+    # Found by the second reader on #323.
+    if not _COMPARABLE_COUNTRY.fullmatch(country):
+        return None
     if (offer.location.remote or "").strip():
         return None
     return Drop(
@@ -222,7 +269,11 @@ def _outside_permitted_countries(offer: Offer, countries: frozenset[str]) -> Dro
     )
 
 
-def _duplicates(offers: list[Offer]) -> list[Drop]:
+def _duplicates(
+    offers: list[Offer],
+    source_kind: Mapping[str, SourceKind] | None = None,
+    liveness: Mapping[str, Liveness] | None = None,
+) -> list[Drop]:
     """Near-duplicates collapsed to one survivor, the earliest in input order.
 
     Run last, over the offers that already survived every other rule, so the
@@ -233,18 +284,27 @@ def _duplicates(offers: list[Offer]) -> list[Drop]:
     if not matches:
         return []
     position = {offer.id: index for index, offer in enumerate(offers)}
-    survivor: dict[str, str] = {}
-    for match in matches:
-        first, second = sorted((match.offer_a, match.offer_b), key=lambda one: position[one])
-        # Walk to the cluster's earliest member so a chain a→b→c keeps only a.
-        while first in survivor:
-            first = survivor[first]
-        if second != first:
-            survivor[second] = first
-    return [
-        Drop(dropped, "duplicate", f"near-duplicate of {kept}")
-        for dropped, kept in sorted(survivor.items(), key=lambda pair: position[pair[0]])
-    ]
+    by_id = {offer.id: offer for offer in offers}
+    # Union-find from `dedup`, not a hand-rolled parent chain: given matches
+    # (a,c) and (b,c) with no (a,b), the chain overwrote c's parent and left two
+    # survivors in one cluster. And the survivor is `dedup.select_survivor`, not
+    # the earliest in input order — T75 exists to stop exactly that arbitrary
+    # choice, and its rule is that "liveness wins over source rank every time".
+    # Keeping the earliest also re-opened T92: if the earlier copy is
+    # salary-silent and the later one states the band, the band was deleted with
+    # the row and salary recovery lost the donor it is built to find.
+    # Found by the second reader on #323.
+    groups = _group_duplicate_ids(offers, matches)
+    drops: list[Drop] = []
+    for group_ids in groups:
+        members = sorted((by_id[one] for one in group_ids), key=lambda one: position[one.id])
+        kept = select_survivor(members, source_kind=source_kind, liveness=liveness)
+        drops.extend(
+            Drop(one.id, "duplicate", f"near-duplicate of {kept.id}")
+            for one in members
+            if one.id != kept.id
+        )
+    return sorted(drops, key=lambda drop: position[drop.offer_id])
 
 
 def reduce(
@@ -252,6 +312,8 @@ def reduce(
     constraints: HardConstraints | None = None,
     *,
     now: datetime | None = None,
+    source_kind: Mapping[str, SourceKind] | None = None,
+    liveness: Mapping[str, Liveness] | None = None,
 ) -> Reduction:
     """The bulk pass: hard rules only, every drop naming the rule that made it.
 
@@ -276,7 +338,7 @@ def reduce(
         else:
             dropped.append(drop)
 
-    duplicate_drops = _duplicates(kept)
+    duplicate_drops = _duplicates(kept, source_kind, liveness)
     removed = {drop.offer_id for drop in duplicate_drops}
     return Reduction(
         kept=tuple(offer for offer in kept if offer.id not in removed),
@@ -296,6 +358,15 @@ def reduce(
 PROBE_EXCLUSION = "gambling"
 
 PROBE_BATCH = 320
+
+#: The date the expiry must-keep row states. Read at measure time so the row is
+#: always "closing today" — the case that was deleted from 00:00 on its own
+#: final day.
+_TODAY = "2026-09-03"
+
+#: How many rows `probe_batch` plants that no rule may delete. Named so the
+#: denominator of `wrongly_dropped` is a floor rather than a count of the day.
+MUST_KEEP_ROWS = 3
 
 #: A floor, not the count of the day. A denominator committed as an exact value
 #: drifts on an unrelated change; `>=` is what the key actually asserts.
@@ -457,6 +528,17 @@ def probe_batch(size: int = PROBE_BATCH) -> list[Offer]:
             f"{roles[index % 7]} in {cities[index % 11]}, reference {index}. "
             f"{duties[index % 13]} The stack is {stacks[index % 17]} and the post reports "
             f"to the {leads[index % 19]}. {perks[index % 23]} "
+            # Six coprime cycles are not enough on their own: `find_duplicates`
+            # subtracts shingles that are boilerplate **across the batch**, so two
+            # rows agreeing on a subset of clauses — the duty and the perk, say,
+            # which coincide every 13·23 rows — can clear the threshold once the
+            # shared scaffolding is discounted. That is why the first version of
+            # this docstring was wrong to claim the planted pair was the only
+            # near-duplicate, and why the evidence carried five drops nobody had
+            # accounted for. This sentence is near-injective on `index`, so every
+            # row owns several 8-word windows no other row has.
+            f"Internal file {index}-{index * 3}-{index * 7}, desk {index % 97}, "
+            f"batch {index // 7}, intake {index % 89}. "
         )
         if kind == 0:
             add(
@@ -496,6 +578,31 @@ def probe_batch(size: int = PROBE_BATCH) -> list[Offer]:
         else:
             add(seed + "A straightforward posting with nothing here to object to.")
 
+    # --- Rows this pass must NOT delete, each one a wrong drop this module has
+    # actually made. Until these existed, every recorded key was blind to a wrong
+    # drop: nothing counted offers that should have been kept and were not, so
+    # `bulk_offers_requiring_manual_triage == 0` was a statement about bookkeeping
+    # rather than about the filter. Planted by id and asserted by `wrongly_dropped`.
+    # Found by the second reader on #323.
+    from integral.offers import Location as _Loc
+    from integral.offers import Salary as _Sal
+
+    add(
+        "Platform engineer in Sabadell. Owning the ingestion pipeline end to end. "
+        "Compensation starts at twenty five thousand euros with no stated ceiling.",
+        salary=_Sal(min=25000, max=None, currency="EUR", period="year", stated=True),
+    )
+    add(
+        "Ward assistant in Tarragona for a private clinic, days and alternate weekends. "
+        "The employer records its location in full rather than as a code.",
+        location=_Loc(country="Spain", raw="Tarragona"),
+    )
+    add(
+        "Kitchen porter in Mataro for a hotel group, split shifts across the season. "
+        "Applications close at the end of the stated day, not at its start.",
+        expires_at=_TODAY,
+    )
+
     # Two near-duplicate crossposts of one real advert, which collapse to one.
     # `measure` checks this pair by id: "the duplicate rule fired N times" is not
     # evidence that it fired on a real duplicate, and a synthetic batch will
@@ -512,6 +619,23 @@ def probe_batch(size: int = PROBE_BATCH) -> list[Offer]:
     return offers
 
 
+def must_keep_ids(batch: list[Offer]) -> list[str]:
+    """The planted rows no rule may delete, resolved from the batch by their text.
+
+    Each is a wrong drop this module made before the second reader found it: a
+    stated band with no `max` under the floor, a country written in full rather
+    than as a code, and an advert closing at the end of today. Resolved rather
+    than recomputed, so a caller passing its own offers gets an empty list and
+    the assertion simply does not apply.
+    """
+    marks = (
+        "no stated ceiling",
+        "in full rather than as a code",
+        "at the end of the stated day",
+    )
+    return [offer.id for offer in batch if any(mark in offer.text for mark in marks)]
+
+
 def PLANTED_DUPLICATE_ID(batch: list[Offer]) -> str | None:
     """The id of the crosspost copy the batch plants, or `None` if absent.
 
@@ -526,7 +650,7 @@ def measure(offers: list[Offer] | None = None) -> dict[str, Any]:
     """T94's gate over a built batch."""
     batch = probe_batch() if offers is None else offers
     constraints = _probe_constraints()
-    reduction = reduce(batch, constraints, now=datetime(2026, 9, 3, tzinfo=UTC))
+    reduction = reduce(batch, constraints, now=datetime(2026, 9, 3, 12, 0, tzinfo=UTC))
 
     by_rule: dict[str, int] = {rule: 0 for rule in RULES}
     undeclared = 0
@@ -546,6 +670,7 @@ def measure(offers: list[Offer] | None = None) -> dict[str, Any]:
     exclusion_rows = [offer for offer in batch if PROBE_EXCLUSION in offer.text.lower()]
     exclusion_survivors = {offer.id for offer in reduction.kept}
     planted = PLANTED_DUPLICATE_ID(batch)
+    planted_keeps = set(must_keep_ids(batch))
     duplicate_drops = {drop.offer_id for drop in reduction.dropped if drop.rule == "duplicate"}
     return {
         "offers_in": len(batch),
@@ -578,6 +703,13 @@ def measure(offers: list[Offer] | None = None) -> dict[str, Any]:
         # duplicate. The planted crosspost is the assertion; a synthetic batch
         # always has some incidental near-neighbours, and they get their own key
         # rather than inflating the ratio unremarked.
+        # The key every other number here was blind to: rows planted as
+        # must-keeps, and whether the filter deleted any of them. A zero on
+        # everything else is consistent with a filter that deletes the wrong
+        # rows, because nothing else counts a wrong drop.
+        "wrongly_dropped": len(planted_keeps & {drop.offer_id for drop in reduction.dropped}),
+        "must_keep_rows_evaluated": len(planted_keeps),
+        "must_keep_rows_at_least": MUST_KEEP_ROWS,
         "planted_duplicate_collapsed": planted is not None and planted in duplicate_drops,
         "incidental_duplicate_drops": len(duplicate_drops)
         - (1 if planted in duplicate_drops else 0),
@@ -623,6 +755,24 @@ def _main(argv: list[str]) -> int:
             f"{measured['soft_preference_drops']} row(s) were dropped on a stated "
             "exclusion — T90 makes that soft, and it reaches the query, never a "
             "fetched row"
+        )
+    if measured["wrongly_dropped"]:
+        failures.append(
+            f"{measured['wrongly_dropped']} row(s) planted as must-keeps were deleted — "
+            "the costly error for a filter that removes rows a candidate will never see "
+            "is the drop, and every other key here is blind to one"
+        )
+    if measured["must_keep_rows_evaluated"] < measured["must_keep_rows_at_least"]:
+        failures.append(
+            f"only {measured['must_keep_rows_evaluated']} must-keep row(s) resolved; the floor "
+            f"is {measured['must_keep_rows_at_least']} — `wrongly_dropped` over an empty set "
+            "of planted rows is the clean zero an empty scan also reports"
+        )
+    if measured["incidental_duplicate_drops"]:
+        failures.append(
+            f"{measured['incidental_duplicate_drops']} row(s) were dropped as duplicates "
+            "beyond the planted crosspost pair — the batch is built so no other pair is a "
+            "near-duplicate, so this is either that invariant broken or a wrong drop"
         )
     if not measured["planted_duplicate_collapsed"]:
         failures.append(
