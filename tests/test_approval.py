@@ -710,6 +710,43 @@ def test_retracting_a_constraint_row_does_not_withdraw_an_episode_approval(
     assert record.exists()
 
 
+def test_retracting_a_reaction_row_withdraws_the_approval_naming_that_story(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """A `reaction` row can be a story, so retracting one withdraws the approval.
+
+    `reaction` sat in `_NEVER_A_STORY` beside `constraint`, excluded as "about an
+    advert". That is the reasoning D-2 had already shown to fail for `statement`:
+    the kind names *which step wrote the row*, not *whether the text is a story*.
+    Step 5 captures reactions raw — "extract afterwards — never ask them to
+    categorise their own reaction" — so a reaction is the candidate's own words
+    in response to an advert, and answering one with the experience it brings to
+    mind is the ordinary case, not a corner. Step 10 writes reactions after
+    ranking, where that is likelier still.
+
+    Fail-open if wrong in this direction: an exclusion can only shrink
+    `withdrawn`, and a smaller `withdrawn` lets more sends through. §6.2 would
+    rather refuse a live episode than send a withdrawn one — the same trade the
+    module already makes for duplicate text.
+
+    Found by the second reader on #305 (D-3).
+    """
+    log = EvidenceLog(store)
+    reaction = log.append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="reactions",
+        kind="reaction",
+        text=WIN,
+        source="conversation",
+    )
+    offer_id, version = _prepare(store, master, approved=(0,))
+    payload = read_payload(store, offer_id, version)
+    _retract_row(store, reaction.id)
+
+    with pytest.raises(ApprovalError):
+        record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
+
+
 def test_a_retracted_row_withdraws_the_episode_its_provenance_names(store: ProfileStore) -> None:
     """The candidate polished the sentence on its way into the CV store.
 

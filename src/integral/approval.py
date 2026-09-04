@@ -414,12 +414,28 @@ def _approved_texts(store: ProfileStore, offer_id: str, version: int) -> set[str
 # production path putting an `Episode` into `cv/master.json` from a conversation
 # — writes its row as `kind="statement"`, `step="intake"`, so a whitelist skipped
 # the one path that matters (#305 review, D-2). A `constraint` is a fact about
-# what would rule a job out and a `reaction` is about an advert, so neither is a
-# story the candidate told; a `retraction` row is bookkeeping about the log, and
-# its text ("Forget that.") is nobody's episode. Written as an exclusion so a
+# what would rule a job out, and a `retraction` row is bookkeeping about the log
+# whose text ("Forget that.") is nobody's episode. Written as an exclusion so a
 # kind added to `profile.Kind` later joins by default: that over-refuses, which
 # §6.2 prefers, where a whitelist would fail open in silence.
-_NEVER_A_STORY = frozenset({"constraint", "reaction", "retraction"})
+#
+# **`reaction` was in this set and is not any more** (#305 review, D-3, found by
+# the second reader). It was excluded as "about an advert", which is the same
+# reasoning that failed for `statement` in D-2: the kind names *which step wrote
+# the row*, not *whether the text is a story*. Step 5 captures reactions raw —
+# "extract afterwards — never ask them to categorise their own reaction" — so a
+# reaction row is the candidate's unedited utterance in response to an advert,
+# and a candidate reading a job ad routinely answers with the experience it
+# reminds them of. Step 10 writes `reaction` rows too, which is *after* ranking,
+# where narrating relevant experience is likeliest. `scoring.py` already reads
+# `reaction` rows as trait-bearing evidence beside `episode` and `statement`.
+#
+# The direction decides it. An exclusion can only shrink `withdrawn`, and a
+# smaller `withdrawn` permits more sends — so being wrong here is the fail-open
+# §6.2 refuses, while being wrong the other way costs one over-refused episode.
+# That is the same trade `_carries` already makes for duplicate text, and
+# applying it to a `statement` but not to a `reaction` was the inconsistency.
+_NEVER_A_STORY = frozenset({"constraint", "retraction"})
 
 
 def _withdrawn_by(text: str, retracted: frozenset[str]) -> bool:
