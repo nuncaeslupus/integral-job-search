@@ -1,7 +1,7 @@
 {
   "page_placeholders_resolved_inconsistently": 0,
-  "page_placeholder_probes_at_least": 12,
-  "probes_checked": 14,
+  "page_placeholder_probes_at_least": 19,
+  "probes_checked": 21,
   "inconsistencies": [],
   "fail_open": 0,
   "gate_status": "measured"

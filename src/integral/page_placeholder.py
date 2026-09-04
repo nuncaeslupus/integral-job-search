@@ -65,13 +65,15 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T109.json"
 # the job `MINIMUM_SCANNED` does in `naming`: zero disagreements over a probe
 # table somebody emptied is exactly the vacuous pass this module exists to
 # refuse.
-MINIMUM_PROBES = 12
+MINIMUM_PROBES = 19
 
 # The rule, in one place, quoted by every probe's `clause`. Each line is a
 # clause a verdict may cite; nothing below cites the implementation.
 RULE = (
     "R1: `{page}` is legal only as a complete value — a string whose entire "
     "content is the placeholder (`_literal_body_violations`).",
+    "R1b: a KEY may never be a placeholder — only values substitute, so a body "
+    "whose shape varies by page is not a literal body (`_literal_body_violations`).",
     "R2: a body carrying `{page}` must declare `pagination.mode: body_field`.",
     "R3: `pagination.mode: body_field` requires a `{page}` somewhere in the "
     "body — otherwise nothing varies from page to page.",
@@ -82,6 +84,8 @@ RULE = (
     "nothing declared.",
     "R6: exactly the position R4 names varies from page to page, and it "
     "becomes the page NUMBER, not the digits as a string.",
+    "R7: `pagination.param` names a body key only under `mode: body_field`. "
+    "Under any other mode it names a URL key, so no body position varies.",
 )
 
 _DOCUMENT: dict[str, Any] = {
@@ -117,6 +121,11 @@ class Probe:
     loads: bool
     varies: tuple[str, ...]
     clause: str
+    #: What the named key becomes on the first two pages. R6's second half —
+    #: the page NUMBER, not its digits as a string — is not a *position*, so
+    #: `varies` cannot express it and a mutation substituting `str(page)` left
+    #: the metric at zero (#338 second-reader F4). Empty when nothing varies.
+    values: tuple[Any, ...] = ()
     #: `False` builds the connector with `model_copy(update=...)`, which never
     #: meets the validators — the case the module's belt-and-suspenders
     #: posture exists for, and the only way to observe what the request
@@ -134,6 +143,7 @@ PROBES: tuple[Probe, ...] = (
         param="Page",
         loads=True,
         varies=("Page",),
+        values=(1, 2),
         clause="R4+R6 — the named top-level key holds it, and it is the one that varies",
     ),
     Probe(
@@ -215,7 +225,7 @@ PROBES: tuple[Probe, ...] = (
         param="Page",
         loads=False,
         varies=(),
-        clause="R1 — only values substitute; a body whose shape varies by page is not literal",
+        clause="R1b — only values substitute; a body whose shape varies by page is not literal",
     ),
     Probe(
         name="deeply nested placeholder, alone, inside a list",
@@ -242,7 +252,83 @@ PROBES: tuple[Probe, ...] = (
         param="Page",
         loads=False,
         varies=("Page",),
+        values=(1, 2),
         clause="R6 — only the position R4 names varies, whatever else the body holds",
+        validated=False,
+    ),
+    # ---- #338 second-reader F1: a key whose own spelling collides with a nested
+    # position. Paths are compared structurally now; before that both rendered as
+    # the string "Filters.inner" and the second occurrence walked through.
+    Probe(
+        name="top-level key spelled like a nested path, beside that nested path",
+        body_json={"Filters.inner": PAGE_PLACEHOLDER, "Filters": {"inner": PAGE_PLACEHOLDER}},
+        mode="body_field",
+        param="Filters.inner",
+        loads=False,
+        varies=(),
+        clause="R5 — `Filters` → `inner` is a second occurrence, and sharing a "
+        "*rendering* with the named key does not make it the named key; fail-open if it loads",
+    ),
+    Probe(
+        name="top-level key spelled like a list index, beside that list element",
+        body_json={"Sort[0]": PAGE_PLACEHOLDER, "Sort": [PAGE_PLACEHOLDER]},
+        mode="body_field",
+        param="Sort[0]",
+        loads=False,
+        varies=(),
+        clause="R5 — `Sort` → element 0 is a second occurrence; fail-open if it loads",
+    ),
+    Probe(
+        name="empty-string key holding the placeholder beside the named one",
+        body_json={"": PAGE_PLACEHOLDER, "Page": PAGE_PLACEHOLDER},
+        mode="body_field",
+        param="Page",
+        loads=False,
+        varies=(),
+        clause="R5 — the empty key is a second occurrence; fail-open if it loads",
+    ),
+    # ---- #338 second-reader F2: `pagination.param` is a URL key under any mode but
+    # `body_field`, and handing that name to the body substituter put a page number
+    # in a field nothing declared — from a fully validated connector.
+    Probe(
+        name="literal POST body under query_param pagination",
+        body_json={"Keyword": "python", "ResultsPerPage": 25},
+        mode="query_param",
+        param="page",
+        loads=True,
+        varies=(),
+        clause="R7 — `page` names a URL key here, so no body position varies",
+    ),
+    Probe(
+        name="literal POST body under query_param pagination, with a key of that name",
+        body_json={"Keyword": "python", "page": 25},
+        mode="query_param",
+        param="page",
+        loads=True,
+        varies=(),
+        clause="R7 — `page` names a URL key here; the body's own `page` is a "
+        "declared literal and must not be overwritten",
+    ),
+    Probe(
+        name="builder handed a placeholder at the URL param's name under query_param",
+        body_json={"Keyword": "python", "page": PAGE_PLACEHOLDER},
+        mode="query_param",
+        param="page",
+        loads=False,
+        varies=(),
+        clause="R7 — `page` names a URL key under this mode, so the builder must "
+        "vary no body position at all; fail-open if it substitutes",
+        validated=False,
+    ),
+    Probe(
+        name="builder handed a body that lacks the named key at all",
+        body_json={"Keyword": "python"},
+        mode="body_field",
+        param="Page",
+        loads=False,
+        varies=(),
+        clause="R6 — nothing at the named position, so nothing varies; the builder "
+        "must not CREATE the key",
         validated=False,
     ),
     Probe(
@@ -308,12 +394,26 @@ def _unvalidated(probe: Probe) -> Connector:
     builder alone: whatever the load check would have said, only the position
     `pagination.param` names may vary.
     """
-    legal = probe.body_json.get(probe.param) if probe.param else None
+    param = probe.param
+    named = param is not None and param in probe.body_json
     scaffold = parse_connector(
         _document(
             replace(
                 probe,
-                body_json={probe.param: legal} if probe.param and legal else {},
+                # A scaffold that always loads, so the only thing this probe
+                # measures is the builder. Presence, not truthiness: a named key
+                # holding `0`, `""` or `False` built `{}` here, which
+                # `parse_connector` refuses with an UNCAUGHT error that aborts the
+                # whole run rather than reporting a disagreement (#338 F7).
+                # Under any mode but `body_field` a placeholder in the body is
+                # refused at load, so the scaffold carries none — the probe's own
+                # body is grafted on afterwards, which is the whole point.
+                body_json=(
+                    ({param: PAGE_PLACEHOLDER} if named and param else {"x": PAGE_PLACEHOLDER})
+                    if probe.mode == "body_field"
+                    else {"Keyword": "python"}
+                ),
+                param=param if named or probe.mode != "body_field" else "x",
                 validated=True,
                 loads=True,
             )
@@ -323,23 +423,41 @@ def _unvalidated(probe: Probe) -> Connector:
     return scaffold.model_copy(update={"list": page})
 
 
-def _observed(probe: Probe) -> tuple[bool, tuple[str, ...], str]:
-    """What the implementation does with `probe`: loads?, varies where?, why not."""
+def _observed(probe: Probe) -> tuple[bool, tuple[str, ...], tuple[Any, ...], str]:
+    """What the implementation does: loads?, varies where?, becomes what?, why not."""
     if not probe.validated:
         connector = _unvalidated(probe)
         bodies = [
             json.loads(request.body or b"null") for request in build_list_requests(connector)
         ]
-        return probe.loads, tuple(_differing_paths(bodies[0], bodies[1])), ""
+        varies = tuple(_differing_paths(bodies[0], bodies[1]))
+        return probe.loads, varies, _values(probe, bodies), ""
     try:
         connector = parse_connector(_document(probe))
     except ConnectorError as exc:
-        return False, (), str(exc).replace("\n", " ")
+        return False, (), (), str(exc).replace("\n", " ")
     requests = build_list_requests(connector)
     bodies = [json.loads(request.body or b"null") for request in requests]
     if len(bodies) < 2:
-        return True, (), ""
-    return True, tuple(_differing_paths(bodies[0], bodies[1])), ""
+        return True, (), (), ""
+    return True, tuple(_differing_paths(bodies[0], bodies[1])), _values(probe, bodies), ""
+
+
+def _values(probe: Probe, bodies: list[Any]) -> tuple[Any, ...]:
+    """What the named key became on each page.
+
+    R6 has a second half — the placeholder becomes the page NUMBER, not its
+    digits as a string — and that is a *value*, not a position, so `varies`
+    cannot express it: substituting `str(page)` left the metric at zero while
+    the pre-existing T89 test caught it (#338 second-reader F4). Measured here
+    so T109's own gate does not depend on a neighbouring one.
+    """
+    if not probe.values or probe.param is None:
+        return ()
+    return tuple(
+        body.get(probe.param) if isinstance(body, dict) else None
+        for body in bodies[: len(probe.values)]
+    )
 
 
 def measure(probes: tuple[Probe, ...] = PROBES) -> dict[str, Any]:
@@ -360,7 +478,7 @@ def measure(probes: tuple[Probe, ...] = PROBES) -> dict[str, Any]:
 
     inconsistencies: list[dict[str, Any]] = []
     for probe in probes:
-        loads, varies, refusal = _observed(probe)
+        loads, varies, values, refusal = _observed(probe)
         if probe.validated and loads != probe.loads:
             inconsistencies.append(
                 {
@@ -381,6 +499,19 @@ def measure(probes: tuple[Probe, ...] = PROBES) -> dict[str, Any]:
         # this on `loads` alone made the whole belt-and-suspenders half of the
         # measurement dead code, which the mutation round caught: restoring
         # the full-structure walk left the metric at zero.
+        if (loads or not probe.validated) and values != probe.values:
+            inconsistencies.append(
+                {
+                    "probe": probe.name,
+                    "clause": probe.clause,
+                    "rule": f"the named key becomes {list(probe.values)}",
+                    "observed": f"it becomes {list(values)}",
+                    # A page number sent as a string is a body the board reads
+                    # differently from the one the connector declared.
+                    "direction": "fail-open",
+                }
+            )
+            continue
         if (loads or not probe.validated) and varies != probe.varies:
             extra = [path for path in varies if path not in probe.varies]
             inconsistencies.append(

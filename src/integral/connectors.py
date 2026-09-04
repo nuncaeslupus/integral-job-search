@@ -1032,20 +1032,45 @@ def serialise_body(body: Any) -> bytes:
     return json.dumps(body, allow_nan=False, ensure_ascii=False).encode("utf-8")
 
 
-def _page_placeholder_paths(node: Any, where: str = "") -> list[str]:
+def _render_path(path: tuple[Any, ...]) -> str:
+    """A placeholder position, spelled so no two positions share a spelling.
+
+    Keys are quoted and list indices bracketed, because the obvious dotted
+    rendering is ambiguous and the ambiguity was load-bearing: a top-level key
+    literally named `Filters.inner` rendered identically to the nested pair
+    `Filters` → `inner`, so the second-occurrence check compared two different
+    positions as equal and let the nested one through. Positions are compared
+    as tuples now and this exists only for the message — which is the other
+    half of the same fix, since T109 is about a refusal that misleads.
+    """
+    if not path:
+        return "<root>"
+    rendered = ""
+    for segment in path:
+        if isinstance(segment, int):
+            rendered += f"[{segment}]"
+        else:
+            rendered += f".{segment!r}" if rendered else repr(segment)
+    return rendered
+
+
+def _page_placeholder_paths(node: Any, where: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
     """Every position in an already-validated body holding `{page}`.
 
-    Paths, not a boolean, because "is it anywhere" is the question that made
-    T109: a lone nested placeholder was refused at load and the *same* nested
-    placeholder loaded and substituted the moment a legal top-level one sat
-    beside it, so an author who hit the error and added `Page: "{page}"` to
+    Positions, not a boolean, because "is it anywhere" is the question that
+    made T109: a lone nested placeholder was refused at load and the *same*
+    nested placeholder loaded and substituted the moment a legal top-level one
+    sat beside it, so an author who hit the error and added `Page: "{page}"` to
     satisfy it silently acquired a second substitution nothing declared. One
-    function answering *where* lets the load check and `build_list_requests`
-    be derived from a single rule instead of two readings that agree only on
-    the cases somebody happened to test.
+    function answering *where* lets the load check and `build_list_requests` be
+    derived from a single rule instead of two readings that agree only on the
+    cases somebody happened to test.
 
-    A top-level value is reported as its bare key; anything deeper carries the
-    dots and `[index]`es of the walk, which is what the refusal quotes back.
+    Structural — a tuple of keys and list indices — never a rendered string.
+    Every key is walked, including a non-string one: those cannot survive
+    `dict[str, Any]` validation, but this also runs over `model_copy` objects
+    that never met a validator, and dropping a position because its key has the
+    wrong type is the silent miss this function exists to make impossible.
     """
     if isinstance(node, str):
         return [where] if node == PAGE_PLACEHOLDER else []
@@ -1053,16 +1078,16 @@ def _page_placeholder_paths(node: Any, where: str = "") -> list[str]:
         return [
             path
             for key, value in node.items()
-            if isinstance(key, str)
-            for path in _page_placeholder_paths(value, f"{where}.{key}" if where else key)
+            for path in _page_placeholder_paths(value, (*where, key))
         ]
     if isinstance(node, list):
         return [
             path
             for index, item in enumerate(node)
-            for path in _page_placeholder_paths(item, f"{where}[{index}]")
+            for path in _page_placeholder_paths(item, (*where, index))
         ]
     return []
+
 
 
 class ListPage(Strict):
@@ -1289,13 +1314,13 @@ class ListPage(Strict):
             # not. Only one position may hold the placeholder and it is the
             # one `pagination.param` names, which is exactly what the request
             # builder now varies.
-            extra = [path for path in paths if path != param]
+            extra = sorted(_render_path(path) for path in paths if path != (param,))
             if extra:
                 raise ValueError(
-                    f"list.body_json holds {PAGE_PLACEHOLDER} at {', '.join(sorted(extra))} "
-                    f"as well as at {param!r} — the key carrying the page number is the only "
-                    "one that may hold the placeholder, so a nested or second occurrence is "
-                    "a substitution nothing declared"
+                    f"list.body_json holds {PAGE_PLACEHOLDER} at {', '.join(extra)} as well "
+                    f"as at {param!r} — the key carrying the page number is the only one "
+                    "that may hold the placeholder, so a nested or second occurrence is a "
+                    "substitution nothing declared"
                 )
         return self
 
@@ -1622,13 +1647,20 @@ def build_list_requests(
     if page.body_json is None:
         return [ListRequest(url=url, method=page.method, headers={}, body=None) for url in urls]
     start = page.pagination.start
+    # `pagination.param` names a *body* key only under `mode: body_field`; under
+    # `query_param` and `path_segment` it names a URL key, and handing that name to
+    # the body substituter is how a validated POST with a literal body acquired a
+    # `page` field nothing declared (#338 second-reader F2). The coupling is bound
+    # here rather than trusted to the load check, which is the same posture the
+    # rest of this module takes toward its own safety properties.
+    paginating_key = page.pagination.param if page.pagination.mode == "body_field" else None
     return [
         ListRequest(
             url=url,
             method=page.method,
             headers={"Content-Type": JSON_CONTENT_TYPE},
             body=serialise_body(
-                _page_substituted(page.body_json, start + offset, page.pagination.param)
+                _page_substituted(page.body_json, start + offset, paginating_key)
             ),
         )
         for offset, url in enumerate(urls)
