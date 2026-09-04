@@ -82,9 +82,25 @@ GoldProvenance = Literal["cue", "human"]
 # presentation axis — nothing scores on it — but it is declared here rather than
 # in the page because a picker that lists 22 flat options is the thing that made
 # hand-labelling slow: the labeller could not find a dimension without already
-# knowing its name. `dealbreakers` is exactly the `kind: hard` set today; that
-# is a coincidence of v0 content, not a rule, so the two stay independent.
-Group = Literal["dealbreakers", "terms", "the_work", "people", "growth"]
+# knowing its name. `dealbreakers` was exactly the `kind: hard` set in v0; that was
+# a coincidence of content, not a rule, and the two stay independent.
+#
+# `requirements` and `skills` were split out when T57 widened the model to 41
+# dimensions. Five sections cannot hold that many under the picker's own rule that
+# none of them may need scrolling, and the overflow was not evenly spread — most of
+# it was in what an advert demands of the applicant. `english_demand` moved into
+# `requirements` in the same edit: leaving English in one section while
+# `local_language_demand` sat in another would present the two asymmetrically,
+# which is the one thing the three supported languages may never be.
+Group = Literal[
+    "dealbreakers",
+    "requirements",
+    "terms",
+    "the_work",
+    "skills",
+    "people",
+    "growth",
+]
 GROUPS: tuple[Group, ...] = get_args(Group)
 
 # `METHODS.md#<github-style-slug>` — a relative link into the methods register,

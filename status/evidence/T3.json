@@ -1,37 +1,46 @@
 {
   "dimension_extractor_coverage": 1.0,
-  "dimension_count": 29,
-  "gold_example_count": 68,
+  "dimension_count": 41,
+  "gold_example_count": 100,
   "languages_with_cues": {
-    "en": 25,
-    "es": 25,
-    "ca": 25
+    "en": 37,
+    "es": 37,
+    "ca": 37
   },
   "dimensions_without_cues_or_gold": [],
   "gold_violations": [],
   "gold_unmatched_by_own_cues": [],
   "gold_by_provenance": {
-    "cue": 68,
+    "cue": 100,
     "human": 0
   },
   "evaluation_gold_count": 0,
   "cue_derived_gold_in_evaluation_split": 0,
   "dimensions_without_evaluation_gold": [
+    "ai_in_the_work",
     "career_progression",
     "collaboration_mode",
+    "commute_burden",
     "company_stage",
     "compensation_transparency",
     "contract_stability",
+    "contracted_hours",
+    "domain_knowledge",
     "english_demand",
+    "formal_credential",
+    "hiring_process_burden",
     "inclusion_commitment",
     "leadership",
     "learning_support",
+    "local_language_demand",
     "mentoring_culture",
     "mission_alignment",
     "on_call_load",
+    "physical_demand",
     "process_formality",
     "product_vs_services",
     "remote_arrangement",
+    "role_breadth",
     "schedule_flexibility",
     "seniority_expectation",
     "social_intensity",
@@ -39,16 +48,24 @@
     "talking_clients",
     "team_autonomy",
     "technical_depth",
+    "tool_specificity",
     "travel_requirement",
+    "variable_pay",
     "wellbeing_benefits",
+    "work_eligibility",
     "work_intensity"
   ],
   "language_slices_with_no_corpus_hit": [
     "career_progression:en",
+    "commute_burden:en",
+    "english_demand:en",
+    "local_language_demand:en",
     "mentoring_culture:ca",
     "on_call_load:en",
     "on_call_load:ca",
+    "physical_demand:en",
     "social_intensity:es",
-    "travel_requirement:en"
+    "travel_requirement:en",
+    "work_eligibility:ca"
   ]
 }

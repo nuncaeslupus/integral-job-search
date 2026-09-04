@@ -151,6 +151,38 @@ catch what the fifth did. The fix is a second reader, not a more diligent first 
 **A green gate is necessary and is not sufficient.** Every one of those ten defects was
 behind one.
 
+## The review half of `merge-policy` is a second session, not a bot
+
+**CodeRabbit is gone** — the account lost it for private repositories on 2026-09-04, and
+the owner's decision is to go without. `merge-policy` stays `after-ci-and-review`.
+Nothing external satisfies the review half any more, so this says what does.
+
+**A code PR may merge once a session other than its implementer has read it and
+reported on the PR.** That is the same discipline the section above already requires
+for a correctness-critical gate, applied to the whole diff rather than to fixtures —
+and on the evidence it is the stronger reviewer, not the fallback. Measured on the
+PRs open when the bot left: the independent read of `concept_map.yaml` found **41**
+placements wrong in the fail-open direction, and the read of the cue vocabulary found
+**19**, against CodeRabbit's **9** on the same PR that carried the 41.
+
+Three rules keep it from becoming prose nobody reads:
+
+- **The report goes on the PR**, naming for each finding the input, the verdict, and
+  the section of spec or definition it is derived from. A verdict argued from what the
+  code does is the circularity this exists to break.
+- **The implementer never signs it off.** If no other session has read a PR, it is not
+  reviewed — say so and leave it, exactly as `open_task_pr.sh` refuses a PR that would
+  close nothing.
+- **Accepted findings are committed as fixtures before merge**, per the section above.
+  A report that is read and waved through leaves the code as unprotected as it was.
+
+**Docs-only PRs are exempt** — a handover or a task-file edit merges on green CI. The
+rule is about diffs that can be wrong in a way a test does not already catch.
+
+`D-28` (`claude-arsenal#313`) is re-scoped to this: not "read CodeRabbit's signal" but
+"a merge must not proceed until a second-reader report exists for the head commit".
+That is a checkable condition, which the bot's never was.
+
 ## Work each task in a linked worktree — that is the whole branch protocol
 
 `open_task_pr.sh` cuts the branch off `origin/main` itself, commits, pushes and opens

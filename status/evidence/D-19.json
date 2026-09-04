@@ -6,37 +6,37 @@
     "administrative": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 10
+      "applicable_dimensions": 17
     },
     "healthcare": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 12
+      "applicable_dimensions": 15
     },
     "hospitality": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 8
+      "applicable_dimensions": 13
     },
     "programming": {
       "ads": 100,
-      "ads_reached": 99,
-      "applicable_dimensions": 23
+      "ads_reached": 100,
+      "applicable_dimensions": 34
     },
     "retail": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 11
+      "applicable_dimensions": 15
     },
     "teaching": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 10
+      "applicable_dimensions": 17
     },
     "trades": {
       "ads": 18,
-      "ads_reached": 17,
-      "applicable_dimensions": 7
+      "ads_reached": 18,
+      "applicable_dimensions": 10
     }
   },
   "claims_checked": 6,
