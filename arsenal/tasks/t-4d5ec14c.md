@@ -2,8 +2,20 @@
 id: t-4d5ec14c
 title: "T111: T89: get_connectors_evaluated == 13 is an exact package count in committed evidence"
 priority: 5
-requires: [human:gate]
 ---
+
+## Acceptance gate
+
+```gate
+growth_sensitive_evidence_keys == 0
+evidence: status/evidence/T111.json
+key: growth_sensitive_evidence_keys
+```
+
+Transcribed from `status/plan.md`'s row for this task, which declared this
+metric before the task was imported. The name is the plan's, not a new one:
+inventing a second name for a declared metric is a mistake this repository has
+made four times, and `test_the_committed_plan_and_queue_agree` fails it.
 
 Imported from issue #300
 

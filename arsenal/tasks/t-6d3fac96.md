@@ -2,8 +2,20 @@
 id: t-6d3fac96
 title: "T114: D-25: the substance sweep trusts the manifest, so a deleted line whose substance survives in a headline is invisible"
 priority: 5
-requires: [human:gate]
 ---
+
+## Acceptance gate
+
+```gate
+disclosures_unbacked_by_a_generated_document == 0
+evidence: status/evidence/T114.json
+key: disclosures_unbacked_by_a_generated_document
+```
+
+Transcribed from `status/plan.md`'s row for this task, which declared this
+metric before the task was imported. The name is the plan's, not a new one:
+inventing a second name for a declared metric is a mistake this repository has
+made four times, and `test_the_committed_plan_and_queue_agree` fails it.
 
 Imported from issue #306
 

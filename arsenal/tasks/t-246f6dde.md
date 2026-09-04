@@ -2,7 +2,6 @@
 id: t-246f6dde
 title: "D-29: status/plan.md's milestone rows still list 82 merged tasks, and the contract saying they don't is enforced by nothing"
 priority: 5
-requires: [human:gate]
 ---
 
 Imported from issue #314
@@ -28,7 +27,15 @@ M1 and cross-cutting are entirely merged and entirely still listed. The parenthe
 
 This is the third instance of one pattern: **`status/plan.md` states things about the task graph that no gate reads.** The ticks (#308), and now the milestone rows. Both drift silently because the plan is prose to every check that exists, and the archive is the only thing that actually knows a task is done.
 
-**Acceptance gate**
+## Acceptance gate
+
+<!-- `## Acceptance gate`, not `**Acceptance gate**`. `gate_evidence.py:74`
+     matches `##\s+Acceptance gate` and takes the FIRST match; a bold label is
+     not a heading, so the block below was invisible to it and the task passed
+     with nothing read. `verify_gates.py:115` meanwhile decides "declares a
+     gate" from the substring ```` ```gate ````, which was true — so the two
+     readers disagreed and the disagreement resolved to PASS. Found by the
+     second read of #334. -->
 
 ```gate
 milestone_row_membership_violations == 0

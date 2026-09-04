@@ -2,7 +2,6 @@
 id: t-41fda10d
 title: "D-28: `after-ci-and-review` has no reader for the review half — and now no reviewer either"
 priority: 5
-requires: [human:gate]
 ---
 
 Imported from issue #313. **Re-scoped 2026-09-04**: CodeRabbit is gone — the
@@ -95,13 +94,14 @@ Two things are wrong and they are separable:
 
 Worth noting the denominator problem too, since it is what made this visible: pushing a fix to a PR queues a re-review, so N open PRs each taking M review rounds costs N×M reviews against a fixed window. The refresh-main churn (#288) multiplies it further. Whatever this issue produces should make the *cost* of a re-review legible, not only its result.
 
-**Acceptance gate**
+**Acceptance gate, as originally filed** — quoted, not fenced. It named
+`status/evidence/T107.json`, which belongs to T107, and T107's own gate now
+names it too: two tasks, one evidence file. The live gate is the one in the
+front section of this file. Kept as a quotation so the original filing is still
+legible without a second fenced block competing to be read.
 
-```gate
-merges_allowed_without_a_review_of_the_head == 0
-evidence: status/evidence/T107.json
-key: merges_allowed_without_a_review_of_the_head
-```
+> `merges_allowed_without_a_review_of_the_head == 0`,
+> `evidence: status/evidence/T107.json`  ← wrong file, superseded
 
 The measurement is over constructed states, not over live GitHub: a review on an older commit, no review at all, a rate-limited check reporting `pass`, a draft-skipped check reporting `pass`, and a genuine review on the head — the first four must not resolve to allowed, and the fifth must. Denominator is the number of states evaluated, and `gate_status` must be `unmeasured` when the reviewer's availability could not be determined, never a pass.
 

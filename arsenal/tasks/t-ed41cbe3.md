@@ -2,8 +2,20 @@
 id: t-ed41cbe3
 title: "T115: naming._main's files_scanned floor exits 3, which make evidence records and continues"
 priority: 5
-requires: [human:gate]
 ---
+
+## Acceptance gate
+
+```gate
+floors_that_do_not_fail_the_gate == 0
+evidence: status/evidence/T115.json
+key: floors_that_do_not_fail_the_gate
+```
+
+Transcribed from `status/plan.md`'s row for this task, which declared this
+metric before the task was imported. The name is the plan's, not a new one:
+inventing a second name for a declared metric is a mistake this repository has
+made four times, and `test_the_committed_plan_and_queue_agree` fails it.
 
 Imported from issue #309
 
