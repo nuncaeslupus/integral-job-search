@@ -17,7 +17,8 @@ the second host failed identically). Per the proxy runbook, a 403 is not
 retried. Every citation below is therefore from trained knowledge of RFC 9309,
 not a freshly-fetched copy of the text, and should be spot-checked against the
 actual RFC by whoever reads this before treating the one confirmed-discrepancy
-case (#22) as settled.
+case (#22) as settled. **That spot-check was done — see the resolution note on
+case 22: the recollection was wrong and the implementation was right.**
 
 ## Totals
 
@@ -25,7 +26,7 @@ case (#22) as settled.
 |---|---|
 | Cases derived | 35 |
 | Cases the implementation passes | 33 |
-| Fail-OPEN discrepancies | 1 (case 22) |
+| Fail-OPEN discrepancies | 0 (case 22 was resolved by T102: no defect — the recollected citation was wrong) |
 | Fail-CLOSED discrepancies | 0 |
 | Neither (schema mismatch — implementation raises rather than returns a bool; see case 35) | 1 |
 
@@ -200,7 +201,31 @@ Legend: **MATCH** = implementation's verdict equals the spec-required verdict.
 - Required: **blocked** (`*` may expand to zero characters).
 - Actual: blocked.
 
-### 22. `agent-token-is-substring-of-longer-crawler-token` — **DISCREPANCY (fail-open), unverified citation**
+### 22. `agent-token-is-substring-of-longer-crawler-token` — **RESOLVED: no defect; the recollected citation was wrong**
+
+> **Resolution (T102, issue #236).** Two sessions read RFC 9309 §2.2.1
+> independently of each other and of the implementation, and both reached the
+> same verdict: the section grants **one** relaxation — "Crawlers MUST use
+> case-insensitive matching to find the group that matches the product token"
+> — and the only substring relation the RFC states runs the other way, between
+> a crawler's product token and the identification string it sends. There is no
+> prefix rule and no specificity rule; the RFC says only to combine every group
+> whose token matches, which is coherent only under equality. Its own figures
+> agree from the other side: one describes "two groups that match the same
+> product token exactly", and another declares `user-agent: BazBot` a non-match
+> for the crawler `ExampleBot` — two tokens sharing the suffix `Bot`.
+> `_select_rules` is correct and was **not** changed. The `googlebot` /
+> `Googlebot-Image` illustration below is Google's crawler handing the matcher
+> several of its own names, not a rule in the RFC.
+>
+> **The recommendation at the end of this file is retracted.** Acting on it
+> would introduce the fail-open it was filed to prevent: an explicitly matched
+> group is used *exclusively*, so a prefix match can displace the `*` group and
+> unblock a path the site disallowed for every crawler. The fixture
+> `a_prefix_file_token_does_not_displace_the_wildcard_group` is that document.
+> Three fixtures now hold this case in both directions (`robots.py`), and the
+> gate's denominator rose 56 → 59.
+
 - robots.txt: `User-agent: Bot` / `Disallow: /private`
 - agent: `Botly/2.0` (extracted product token: `Botly`)
 - url: `https://example.com/private`
@@ -374,12 +399,14 @@ Legend: **MATCH** = implementation's verdict equals the spec-required verdict.
 
 ## Recommendation summary
 
-- **One item to escalate to a human or a session with working RFC access:**
+- ~~**One item to escalate to a human or a session with working RFC access:**
   case 22 (agent-token substring/prefix matching direction). If §2.2.1 does
   say a rule's product token must match as a prefix of a longer crawler token
   (not just equality), `_select_rules` has a genuine fail-open gap and should
   be extended to try a prefix match when no exact match exists, before falling
-  back to `*`.
+  back to `*`.~~ **RETRACTED — T102 read §2.2.1: it does not say that, matching
+  is case-folded equality, `_select_rules` is correct, and extending it to try a
+  prefix match would *create* a fail-open. See case 22 above.**
 - **One item worth a follow-up audit, not a code change:** whichever code
   calls `Robots.allows()` should be checked for how it handles `RobotsError`
   on network/server failures (case 35) — if it catches and defaults to
