@@ -16,6 +16,7 @@ Transcribed from `status/plan.md`'s row for this task, which declared this
 metric before the task was imported. The name is the plan's, not a new one:
 inventing a second name for a declared metric is a mistake this repository has
 made four times, and `test_the_committed_plan_and_queue_agree` fails it.
+
 Imported from issue #309
 
 Flagged by the session fixing the T104 second-reader findings (#297), which deliberately scoped its own fix to `task_gate` and `plan_v2` rather than widening into this.

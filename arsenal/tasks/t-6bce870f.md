@@ -16,6 +16,7 @@ Transcribed from `status/plan.md`'s row for this task, which declared this
 metric before the task was imported. The name is the plan's, not a new one:
 inventing a second name for a declared metric is a mistake this repository has
 made four times, and `test_the_committed_plan_and_queue_agree` fails it.
+
 Imported from issue #294
 
 Found while drafting the candidate deliverables: a worker went to render a results page in Spanish and discovered the shipped labels are English, with no translation seam at all.

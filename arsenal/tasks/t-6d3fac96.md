@@ -16,6 +16,7 @@ Transcribed from `status/plan.md`'s row for this task, which declared this
 metric before the task was imported. The name is the plan's, not a new one:
 inventing a second name for a declared metric is a mistake this repository has
 made four times, and `test_the_committed_plan_and_queue_agree` fails it.
+
 Imported from issue #306
 
 Found while implementing D-24 (#253, PR #305). Out of scope there — it is T46's behaviour, not the retraction path — so recording it rather than widening that diff.
