@@ -282,6 +282,36 @@ writes the task file and **nothing else** — the plan row is the other half, an
 gate that enforces the pair only runs at the repo level, so a missing row goes red on
 somebody else's branch. Label the issue *and* its task file, then write the plan row.
 
+## `@coderabbitai full review` does not work here any more — the plan changed
+
+**The nudge command is a Chat feature, and Chat is off on the Free plan.** Measured
+on #323 on 2026-09-04, after two correctly-formed attempts into an open window:
+
+> The author of this PR is on the CodeRabbit **Free Plan**. In order to use the
+> **Chat feature**, please upgrade the PR author to CodeRabbit Essentials.
+
+The previous handover recorded *"The working command is `@coderabbitai full
+review`"*, and that was true — on the **Team** plan. The plan is now mixed: #320's
+runs report `Plan: Team`, #322's and #323's report `Plan: Free` with **1 included
+review per hour** rather than 8. Read the `Plan:` line before spending anything on
+a nudge; it is in every CodeRabbit comment's `⚙️ Run configuration` block.
+
+**On Free, the only trigger is a push.** That is what produced every review on #320
+— four pushes, four reviews — and it is why #322 and #323 have **no review object
+at all**: each got one automatic attempt, both bounced off the one-per-hour limit,
+and no comment can ask for another. Note what is *not* the answer: an empty commit
+to kick the reviewer is forbidden, and so is closing and reopening.
+
+So **D-28 (#313) is wider than it was filed as.** It was filed as "a rate-limited
+CodeRabbit reports a green check". On the Free plan the stronger statement holds:
+a review can be **unobtainable**, while `after-ci-and-review` still reads green
+because the check is the only thing it reads. Two of this session's PRs are in
+exactly that state — green, mergeable, and never reviewed by anything.
+
+The cost of learning this was three nudges across two sessions. Run the review
+query first; a `0` means not reviewed whatever the check says, and on Free it also
+means no comment will change that.
+
 ## Mechanics that held this session
 
 The previous handover's list is all still true. Two confirmations worth keeping:
