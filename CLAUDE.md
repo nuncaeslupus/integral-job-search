@@ -270,6 +270,28 @@ with a real conclusion found a job that had been failing since #123 for its own
 reasons, invisible for as long as everything failed. **A red CI is a signal
 again.** Read it.
 
+**Except that it went away again mid-session on 2026-09-04, and the way to tell
+is the clock, not the conclusion.** Measured on #329: two consecutive runs
+completed in **6 and 5 seconds** with every job failed and **every log a 404**,
+against ~95 seconds with real conclusions on #328 twenty minutes earlier. So the
+test is: read `created_at` and `updated_at` on the run. A whole run under ~10
+seconds with unreadable logs is the runner dying before any job body ran, and it
+says nothing about the code; a run of a minute or more is a verdict.
+
+When that happens `make host-gate` is the substitute, because it is **exactly**
+what CI runs — and the substitution has to be written down. #329 merged on it,
+with the four results quoted in the merge commit, the outage named on the PR, and
+the pushed SHA verified equal to the tested one. A merge whose evidence lives only
+in a session's scrollback is a merge nobody can audit afterwards.
+
+**The paragraph above this one was true when written and false four hours later,
+which is the point.** A recorded environment fact is a snapshot, not a standing
+truth — the same shape as the check-in that fired that morning telling this session
+*"RESOLVED — do not re-investigate: CodeRabbit runs on Free and never produces a
+review object"*, which was also true when written, false by 10:12, and whose
+instruction not to look is what would have kept it false. Re-measure before
+trusting either.
+
 **Run the gate locally as well.** These are what CI runs, and all four must
 pass before a merge:
 
