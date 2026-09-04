@@ -265,3 +265,30 @@ map is the number T57 exists to report.
 
 A pre-mark still is not a label. This shortens the round; it does not stand in
 for the person at the end of it.
+
+### What T59 costs — measured 2026-09-03
+
+`extraction_negation_recall` (T59, `lo-4b17`) has its own denominator and its own
+floor: **10 negated labels on the evaluation split**, counted overall rather than
+per dimension. The store carries **9**. One label unblocks the number — and
+unblocking it is not the same as passing it. On today's store the score would
+emit **6/9 = 0.667 against a bar of 0.80**, so the tenth label turns a null into
+a red gate. Read that before planning the round: the work is recall, not one
+more row.
+
+The live values are in `status/evidence/T16.json`. Two of them say what a bare
+count cannot, and both should be read before the round is called done:
+
+| key | today | why it matters |
+|---|---|---|
+| `negated_label_count_by_language` | `{en: 0, es: 9, ca: 0}` | The floor is a **total**. A tenth Spanish label makes the score "measured" with Catalan `no … pas` and every English negator never once scored. |
+| `negation_recall_hits_by_mechanism` | `{scope_only: 3, denies_only: 3, both: 0}` | Half the hits are `denies` cues — the negator is inside the cue's own pattern (`sin\s+viajes`). Only `scope_only` tests the backward-looking rule T16 built; `both` is a hit either mechanism would have earned alone and belongs to neither. **It counts firings, not verified recoveries**: one of today's three `scope_only` hits is `tecnoempleo-799b12ca520d03c0e743`, a flattened field table where the negator the rule consumes answers a *different* field and the verdict is unchanged if the labelled field is flipped to `Si`. |
+
+So the cheap round is not "one more label". It is **one English and one Catalan
+negated label**, on adverts whose denial the cue set does *not* already spell
+out — a `negatable` cue with a negator in front of it, not a `denies` cue. That
+is three labels, and it takes the measurement from Spanish-only to the parity
+the repo requires everywhere else.
+
+A pre-mark still is not a label here either. `negated` is a person's reading of
+a denial, and `suggestions.json` cannot supply one.
