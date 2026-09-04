@@ -1,0 +1,74 @@
+id: local_language_demand
+kind: hard
+polarity: unipolar
+group: requirements
+label:
+  en: "Local language demand"
+  es: "Exigencia de lengua local"
+  ca: "Exigència de llengua local"
+definition: >
+  How much a working language other than English the role requires — Catalan, Spanish,
+  French or another — from none through conversational to a certified level. The
+  counterpart of `english_demand`: without it a Catalan C1 requirement, which decides
+  admissibility for a whole slice of this market, is invisible to the model.
+levels:
+  - value: 0.0
+    label:
+      en: "Not required"
+      es: "No se exige"
+      ca: "No es demana"
+    tell: "no language beyond English is asked for"
+  - value: 0.6
+    label:
+      en: "Conversational"
+      es: "Nivel conversacional"
+      ca: "Nivell conversacional"
+    tell: "the language is expected but no level is named"
+  - value: 1.0
+    label:
+      en: "Certified or native level"
+      es: "Nivel certificado o nativo"
+      ca: "Nivell certificat o natiu"
+    tell: "a documented level — C1, 'nivell alt', native — is required"
+elicitation:
+  questions:
+    - id: lld_q1
+      text:
+        en: >
+          Tell me about a time you worked in a language you were not fully comfortable
+          in. What did you stop being able to do well?
+        es: >
+          Cuéntame alguna vez que trabajaste en una lengua con la que no estabas del
+          todo cómodo. ¿Qué dejaste de poder hacer bien?
+        ca: >
+          Explica'm alguna vegada que vas treballar en una llengua amb la qual no
+          estaves del tot còmode. Què vas deixar de poder fer bé?
+extraction:
+  cues:
+    en:
+      - pattern: "\\b(spanish|catalan|french|german)\\b[^.\\n]{0,30}\\b(required|mandatory|native|fluent)\\b"
+        value: 1.0
+    es:
+      - pattern: "\\bnivel\\s+(alto|medio|nativo|c1|c2|b2)\\b[^.\\n]{0,25}\\b(catal[áa]n|espa[ñn]ol|castellano|franc[ée]s|alem[áa]n|euskera)\\b"
+        value: 1.0
+      - pattern: "\\b(catal[áa]n|castellano|franc[ée]s|alem[áa]n|euskera)\\b[^.\\n]{0,25}\\b(nivel\\s+(alto|nativo)|imprescindible)\\b"
+        value: 1.0
+    ca:
+      - pattern: "\\bcatal[àa]\\b[^.\\n]{0,30}\\b(nivell\\s+(alt|c1|c2)|imprescindible|acreditar)\\b"
+        value: 1.0
+      - pattern: "\\bnivell\\s+(alt|c1|c2)\\b[^.\\n]{0,20}\\b(de\\s+)?catal[àa]\\b"
+        value: 1.0
+      - pattern: "\\b(castell[àa]|franc[èe]s|alemany)\\b[^.\\n]{0,25}\\b(nivell\\s+alt|imprescindible)\\b"
+        value: 1.0
+  gold:
+    - ad_id: tecnoempleo-3acb14d652f72310804e
+      language: es
+      span: "ágiles especialmente Agile/Scrum y herramientas como JIRA. Nivel alto de español y dominio fluido de inglés tanto oral como escrito. Requisitos valorables Experiencia previa en pro"
+      value: 1.0
+      derived_from: cue
+    - ad_id: feinaactiva-09202619998
+      language: ca
+      span: "Català nivell alt."
+      value: 1.0
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal
