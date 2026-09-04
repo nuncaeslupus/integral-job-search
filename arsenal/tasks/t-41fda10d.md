@@ -2,7 +2,6 @@
 id: t-41fda10d
 title: "D-28: `after-ci-and-review` has no reader for the review half — and now no reviewer either"
 priority: 5
-requires: [human:gate]
 ---
 
 Imported from issue #313. **Re-scoped 2026-09-04**: CodeRabbit is gone — the

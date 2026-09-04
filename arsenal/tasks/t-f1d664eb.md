@@ -2,9 +2,20 @@
 id: t-f1d664eb
 title: "T119: a draw re-issued over a full corpus collects nothing and exits 0"
 priority: 5
-requires: [human:gate]
 ---
 
+## Acceptance gate
+
+```gate
+draw_shortages_counted_outside_the_draw == 0
+evidence: status/evidence/T119.json
+key: draw_shortages_counted_outside_the_draw
+```
+
+Transcribed from `status/plan.md`'s row for this task, which declared this
+metric before the task was imported. The name is the plan's, not a new one:
+inventing a second name for a declared metric is a mistake this repository has
+made four times, and `test_the_committed_plan_and_queue_agree` fails it.
 Imported from issue #316
 
 `tools/collect_ads.py` now binds two of a draw's three axes: `sources` and
