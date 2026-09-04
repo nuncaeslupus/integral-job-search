@@ -101,7 +101,11 @@ def test_the_builder_alone_substitutes_one_key_even_past_a_skipped_validator() -
     them: handed a body the load check would have refused, it still varies
     only the key `pagination.param` names.
     """
-    probe = next(probe for probe in page_placeholder.PROBES if not probe.validated)
+    probe = next(
+        probe
+        for probe in page_placeholder.PROBES
+        if probe.name == "second placeholder reaching the builder past a skipped validator"
+    )
     connector = page_placeholder._unvalidated(probe)
     bodies = [json.loads(request.body or b"null") for request in build_list_requests(connector)]
     assert bodies[0]["Filters"] == {"inner": PAGE_PLACEHOLDER}
@@ -127,28 +131,81 @@ def test_the_probe_table_carries_the_fail_open_shapes_and_meets_its_floor() -> N
         "top-level key spelled like a nested path, beside that nested path",
         "top-level key spelled like a list index, beside that list element",
         "empty-string key holding the placeholder beside the named one",
+        # R7's two other modes: `path_segment` was covered by nothing, and the
+        # exact `probes_checked` in the committed evidence was the only thing
+        # stopping any unpinned probe being deleted — which is the "count of the
+        # day" T100 argues against, doing a job a name should do.
+        "literal POST body under query_param pagination",
+        "literal POST body under query_param pagination, with a key of that name",
+        "literal POST body under path_segment pagination",
+        "literal POST body under path_segment pagination, with a key of that name",
+        "builder handed a placeholder at the URL param's name under query_param",
+        "builder handed a placeholder at the URL param's name under path_segment",
+        "builder handed a body that lacks the named key at all",
     } <= names, sorted(names)
     assert {probe.name for probe in page_placeholder.PROBES if not probe.validated}
 
 
-def test_a_deliberately_wrong_probe_table_is_reported(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """The negative control the module lacked.
+@pytest.mark.parametrize("half", ("loads", "varies", "values"))
+def test_a_deliberately_wrong_probe_table_is_reported(half: str) -> None:
+    """The negative control, one arm per half of the comparison.
 
     `measure()` returning zero is only meaningful if the comparison it performs
-    *can* fail. It could not, twice: guarding the load half on `loads != loads`
-    and narrowing the `varies` half back to `if loads and ...` each left the
-    metric at zero with the whole suite green (#338 second-reader F3). Handing
-    it a table whose every expected verdict is inverted must report every
-    validated probe — a check on the measurement rather than on the code it
-    measures.
+    *can* fail, and it could not: guarding the load half on `loads != loads`,
+    narrowing the `varies` half back to `if loads and ...`, and neutering the
+    `values` half each left the metric at zero with the whole suite green.
+
+    One inverted table does not reach all three. Inverting `loads` flips the
+    unvalidated probes to `loads=True`, which re-enables the very guard the
+    `varies` narrowing removes, so that mutation stayed invisible (#338 delta
+    re-read, F3b/F3c). Each half is therefore perturbed on its own, and the
+    count of probes that must be reported is derived from the table rather than
+    written down.
     """
-    inverted = tuple(
-        replace(probe, loads=not probe.loads) for probe in page_placeholder.PROBES
+    probes = page_placeholder.PROBES
+    if half == "loads":
+        wrong = tuple(replace(probe, loads=not probe.loads) for probe in probes)
+        expected = [probe for probe in probes if probe.validated]
+    elif half == "varies":
+        # A position no body holds. Only probes whose `varies` is compared at
+        # all can report — the ones that load, plus every unvalidated one.
+        wrong = tuple(replace(probe, varies=(*probe.varies, "no-such-key")) for probe in probes)
+        expected = [probe for probe in probes if probe.loads or not probe.validated]
+    else:
+        # The digits as a string rather than the number — R6's second half,
+        # which is a value and not a position.
+        wrong = tuple(
+            replace(probe, values=tuple(str(value) for value in probe.values))
+            for probe in probes
+        )
+        expected = [probe for probe in probes if probe.values]
+
+    assert expected, half
+    measured = page_placeholder.measure(wrong)
+    assert measured["page_placeholders_resolved_inconsistently"] == len(expected), (
+        half,
+        measured["inconsistencies"],
     )
-    measured = page_placeholder.measure(inverted)
-    validated = [probe for probe in page_placeholder.PROBES if probe.validated]
-    assert measured["page_placeholders_resolved_inconsistently"] == len(validated)
-    assert measured["fail_open"] >= 1
+
+
+def test_the_value_half_is_armed_on_the_probes_that_can_carry_it() -> None:
+    """`values` is opt-in, and an opt-in assertion is one that can be switched
+    off without a test noticing. Deleting both `values=(1, 2)` lines left `make
+    host-gate` fully green — probes intact, `probes_checked` unchanged,
+    `evidence: no drift` — and a `str(page)` regression invisible to the gate
+    again (#338 delta re-read, N1). Every probe whose named key is expected to
+    vary must carry the value it becomes.
+    """
+    armed = {probe.name for probe in page_placeholder.PROBES if probe.values}
+    assert armed == {
+        probe.name
+        for probe in page_placeholder.PROBES
+        if probe.param is not None and probe.varies == (probe.param,)
+    }, armed
+    assert len(armed) >= 2, armed
+    for probe in page_placeholder.PROBES:
+        if probe.values:
+            assert probe.values == (1, 2), probe.name
 
 
 def test_the_gate_is_measured_and_finds_nothing() -> None:
@@ -165,3 +222,27 @@ def test_an_emptied_probe_table_is_unmeasured_rather_than_a_pass() -> None:
     measured = page_placeholder.measure(page_placeholder.PROBES[:2])
     assert measured["gate_status"] == "unmeasured"
     assert "floor" in measured["unmeasured_reason"]
+
+
+def test_two_positions_never_share_a_refusal_message() -> None:
+    """The message unambiguity as a property, not as two literal regexes.
+
+    A top-level key named `Filters.inner` and the nested pair `Filters` -> `inner`
+    are different positions, and the refusal has to say which one it found — the
+    comparison being structural is only half of T109's fix, because the other half
+    is a message that does not teach the wrong repair. Asserted over pairs rather
+    than by pinning one string, so a rendering change that re-introduces a
+    collision fails here even if it keeps both regexes matching.
+    """
+    collisions = (
+        ({"Filters.inner": PAGE_PLACEHOLDER}, {"Filters": {"inner": PAGE_PLACEHOLDER}}),
+        ({"Sort[0]": PAGE_PLACEHOLDER}, {"Sort": [PAGE_PLACEHOLDER]}),
+        ({"0": PAGE_PLACEHOLDER}, {"": [PAGE_PLACEHOLDER]}),
+    )
+    for left, right in collisions:
+        messages = set()
+        for extra in (left, right):
+            with pytest.raises(ConnectorError) as refused:
+                parse_connector(_document({"Page": PAGE_PLACEHOLDER, **extra}))
+            messages.add(str(refused.value))
+        assert len(messages) == 2, (left, right, messages)

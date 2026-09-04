@@ -65,7 +65,7 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T109.json"
 # the job `MINIMUM_SCANNED` does in `naming`: zero disagreements over a probe
 # table somebody emptied is exactly the vacuous pass this module exists to
 # refuse.
-MINIMUM_PROBES = 19
+MINIMUM_PROBES = 21
 
 # The rule, in one place, quoted by every probe's `clause`. Each line is a
 # clause a verdict may cite; nothing below cites the implementation.
@@ -85,7 +85,8 @@ RULE = (
     "R6: exactly the position R4 names varies from page to page, and it "
     "becomes the page NUMBER, not the digits as a string.",
     "R7: `pagination.param` names a body key only under `mode: body_field`. "
-    "Under any other mode it names a URL key, so no body position varies.",
+    "Under any other mode — `query_param`, `path_segment` — it names a URL key, "
+    "so no body position varies (`Pagination.mode`).",
 )
 
 _DOCUMENT: dict[str, Any] = {
@@ -309,6 +310,41 @@ PROBES: tuple[Probe, ...] = (
         clause="R7 — `page` names a URL key here; the body's own `page` is a "
         "declared literal and must not be overwritten",
     ),
+    # R7 says "any other mode", and there are two of them. Probing only
+    # `query_param` left `path_segment` covered by nothing: widening the
+    # allowlist to `("body_field", "path_segment")` was caught by no test and no
+    # metric, and with the defensive guard also gone a declared literal at that
+    # key was destroyed (#338 delta re-read, N2).
+    Probe(
+        name="literal POST body under path_segment pagination",
+        body_json={"Keyword": "python", "ResultsPerPage": 25},
+        mode="path_segment",
+        param="page",
+        loads=True,
+        varies=(),
+        clause="R7 — `page` names a URL key here, so no body position varies",
+    ),
+    Probe(
+        name="literal POST body under path_segment pagination, with a key of that name",
+        body_json={"Keyword": "python", "page": 25},
+        mode="path_segment",
+        param="page",
+        loads=True,
+        varies=(),
+        clause="R7 — `page` names a URL key here; the body's own `page` is a "
+        "declared literal and must not be overwritten",
+    ),
+    Probe(
+        name="builder handed a placeholder at the URL param's name under path_segment",
+        body_json={"Keyword": "python", "page": PAGE_PLACEHOLDER},
+        mode="path_segment",
+        param="page",
+        loads=False,
+        varies=(),
+        clause="R7 — `page` names a URL key under this mode, so the builder must "
+        "vary no body position at all; fail-open if it substitutes",
+        validated=False,
+    ),
     Probe(
         name="builder handed a placeholder at the URL param's name under query_param",
         body_json={"Keyword": "python", "page": PAGE_PLACEHOLDER},
@@ -395,25 +431,29 @@ def _unvalidated(probe: Probe) -> Connector:
     `pagination.param` names may vary.
     """
     param = probe.param
-    named = param is not None and param in probe.body_json
     scaffold = parse_connector(
         _document(
             replace(
                 probe,
                 # A scaffold that always loads, so the only thing this probe
-                # measures is the builder. Presence, not truthiness: a named key
-                # holding `0`, `""` or `False` built `{}` here, which
-                # `parse_connector` refuses with an UNCAUGHT error that aborts the
-                # whole run rather than reporting a disagreement (#338 F7).
-                # Under any mode but `body_field` a placeholder in the body is
-                # refused at load, so the scaffold carries none — the probe's own
-                # body is grafted on afterwards, which is the whole point.
+                # measures is the builder. The placeholder is the scaffold's own,
+                # never the probe's value at that key: reading the probe's value
+                # meant a named key holding `0`, `""` or `False` built an empty
+                # body, which `parse_connector` refuses with an UNCAUGHT error
+                # that aborts the whole run rather than reporting a disagreement
+                # (#338 F7). Under any mode but `body_field` a placeholder in the
+                # body is refused at load, so the scaffold carries none there.
+                #
+                # `param` is the probe's own throughout. Substituting a different
+                # name when the probe's body lacks the key made the report read
+                # `varies at ['x']` — a key appearing nowhere in the probe (N4),
+                # which is a misdescribed input in a task about a refusal that
+                # misleads.
                 body_json=(
-                    ({param: PAGE_PLACEHOLDER} if named and param else {"x": PAGE_PLACEHOLDER})
-                    if probe.mode == "body_field"
+                    {param: PAGE_PLACEHOLDER}
+                    if probe.mode == "body_field" and param
                     else {"Keyword": "python"}
                 ),
-                param=param if named or probe.mode != "body_field" else "x",
                 validated=True,
                 loads=True,
             )
@@ -495,10 +535,14 @@ def measure(probes: tuple[Probe, ...] = PROBES) -> dict[str, Any]:
             )
             continue
         # An unvalidated probe has no load verdict to compare — it never went
-        # through one — so its `varies` is compared unconditionally. Guarding
-        # this on `loads` alone made the whole belt-and-suspenders half of the
-        # measurement dead code, which the mutation round caught: restoring
-        # the full-structure walk left the metric at zero.
+        # through one — so its `varies` and `values` are compared unconditionally.
+        # Guarding on `loads` alone made the whole belt-and-suspenders half of the
+        # measurement dead code, and restoring the full-structure walk then left
+        # the metric at zero. That was found by running a mutation rather than by
+        # reading the guard — and narrowing it back is not itself detectable by
+        # inverting a probe's load verdict, because the inversion re-enables the
+        # guard being narrowed. Each half of this comparison therefore has its own
+        # arm in `test_a_deliberately_wrong_probe_table_is_reported`.
         if (loads or not probe.validated) and values != probe.values:
             inconsistencies.append(
                 {
