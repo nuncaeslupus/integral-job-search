@@ -282,49 +282,54 @@ writes the task file and **nothing else** — the plan row is the other half, an
 gate that enforces the pair only runs at the repo level, so a missing row goes red on
 somebody else's branch. Label the issue *and* its task file, then write the plan row.
 
-## `@coderabbitai full review` does not work here any more — the plan changed
+## CodeRabbit is gone, and the review half of `merge-policy` is now a second session
 
-**The nudge command is a Chat feature, and Chat is off on the Free plan.** Measured
-on #323 on 2026-09-04, after two correctly-formed attempts into an open window:
+The account **lost CodeRabbit for private repositories** on 2026-09-04 and the owner's
+decision is to go without. Everything below about nudges, quota windows, Free-vs-Team
+plans and `@coderabbitai full review` is now history — do not spend a minute on it.
+The measurement trail is kept on **#313** because it is what justified the re-scope.
 
-> The author of this PR is on the CodeRabbit **Free Plan**. In order to use the
-> **Chat feature**, please upgrade the PR author to CodeRabbit Essentials.
+`merge-policy` **stays** `after-ci-and-review`. What satisfies the review half is now
+written in **CLAUDE.md**, which is the durable place for it:
 
-The previous handover recorded *"The working command is `@coderabbitai full
-review`"*, and that was true — on the **Team** plan. The plan is now mixed: #320's
-runs report `Plan: Team`, #322's and #323's report `Plan: Free` with **1 included
-review per hour** rather than 8. Read the `Plan:` line before spending anything on
-a nudge; it is in every CodeRabbit comment's `⚙️ Run configuration` block.
+> A code PR may merge once a **session other than its implementer** has read it and
+> reported on the PR, naming for each finding the input, the verdict, and the section
+> of spec or definition it derives from. The implementer never signs it off. Accepted
+> findings are committed as fixtures before merge. **Docs-only PRs are exempt** — a
+> handover merges on green CI.
 
-**And a Free-plan run does not produce a review even when it succeeds.** The
-plan's own note, in every one of its comments:
+This is not a downgrade. On the PRs open when the bot left, the independent reads
+found **41** fail-open placements in `concept_map.yaml` and **19** in the cue
+vocabulary, against CodeRabbit's **9** on the same PR that carried the 41.
 
-> Your organization is on the Free plan. CodeRabbit will generate a **high-level
-> summary and a walkthrough** for each pull request. For a **comprehensive
-> line-by-line review**, please upgrade to CodeRabbit Essentials.
+**D-28 (#313) is re-scoped** to give that rule a reader, and it is checkable now in a
+way the bot's signal never was: a second-reader report is *our* artefact — a PR
+comment, by an author other than the PR's author, carrying a marker naming the head
+commit it read. Its metric is unchanged, because `status/plan.md` already declared
+`merges_allowed_without_a_review_of_the_head == 0` and "a review of the head" is
+exactly what such a report is. Only the author changed.
 
-That is the sharpest form of the finding, and it is worse than a quota problem.
-#322's one successful Free run produced a walkthrough comment and **no review
-object**, while #320's Team runs produced review objects carrying nine actionable
-findings. So on Free the review half of `after-ci-and-review` cannot be satisfied
-by CodeRabbit **at all** — not "not yet", not "after the hour resets". The quota
-is a red herring; the plan is the thing.
+**Note the near-miss, which is the same lesson twice in one day.** The first draft of
+the re-scoped issue invented `merges_without_a_second_reader_report`. The plan already
+had a metric; `test_the_committed_plan_and_queue_agree` had caught the identical
+mistake on T94 an hour earlier. **Read the plan row before writing a gate block.**
 
-**The trigger on Free is a push, and it buys a summary.** That is what produced every review on #320
-— four pushes, four reviews — and it is why #322 and #323 have **no review object
-at all**: each got one automatic attempt, both bounced off the one-per-hour limit,
-and no comment can ask for another. Note what is *not* the answer: an empty commit
-to kick the reviewer is forbidden, and so is closing and reopening.
+### What this means for the nine open PRs
 
-So **D-28 (#313) is wider than it was filed as.** It was filed as "a rate-limited
-CodeRabbit reports a green check". On the Free plan the stronger statement holds:
-a review can be **unobtainable**, while `after-ci-and-review` still reads green
-because the check is the only thing it reads. Two of this session's PRs are in
-exactly that state — green, mergeable, and never reviewed by anything.
+Every one of them predates the rule, so **none carries a second-reader report** except
+where a session happened to write one:
 
-The cost of learning this was three nudges across two sessions. Run the review
-query first; a `0` means not reviewed whatever the check says, and on Free it also
-means no comment will change that.
+| PR | second reader? |
+|---|---|
+| #320 T57 | **yes** — the concept-map audit and the cue findings, both applied |
+| #319 T56 | **yes** — 19 findings posted; the implementer has not applied them |
+| #323 T94 | **no**, and I implemented it, so I cannot be its reader |
+| #322 | **exempt** — docs only |
+| #295, #305, #307, #312, #318 | **no** — implemented by earlier sessions, so a later session *can* read them |
+
+That last row is the available work: five PRs whose implementer was a previous
+session, which this or any later session may read and report on. #323 needs a session
+that is not this one.
 
 ## Mechanics that held this session
 

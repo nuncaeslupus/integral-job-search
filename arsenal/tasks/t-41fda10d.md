@@ -1,11 +1,73 @@
 ---
 id: t-41fda10d
-title: "D-28: A rate-limited CodeRabbit reports a green check, and `after-ci-and-review` has no reader for the review half"
+title: "D-28: `after-ci-and-review` has no reader for the review half — and now no reviewer either"
 priority: 5
 requires: [human:gate]
 ---
 
-Imported from issue #313
+Imported from issue #313. **Re-scoped 2026-09-04**: CodeRabbit is gone — the
+account lost it for private repositories and the owner's decision is to go
+without. The original text below is kept because its measurements are the
+evidence, not because the bot still exists.
+
+## Acceptance gate
+
+```gate
+merges_allowed_without_a_review_of_the_head == 0
+evidence: status/evidence/D28.json
+key: merges_allowed_without_a_review_of_the_head
+status-key: review_reader_status
+```
+
+The metric is `status/plan.md`'s own and it survives the re-scope unchanged: "a
+review of the head" is exactly what a second-reader report on the head commit is.
+What changed is only who writes the review.
+
+CLAUDE.md now defines the review half — *a session other than the implementer
+reads the PR and reports on it, naming for each finding the input, the verdict and
+the section it is derived from; the implementer never signs it off; accepted
+findings are committed as fixtures before merge; docs-only PRs are exempt.* That is
+a rule in prose, and a rule in prose that nothing reads is the failure this
+repository has already recorded four times under "`status/plan.md` states things
+about the task graph that no gate reads". **This task gives it a reader.**
+
+Why it is checkable now and was not before: CodeRabbit's signal was unreadable in
+five distinct ways, ending with a Free plan that produces a walkthrough and never a
+review object at all. A second-reader report is **our own artefact** — a PR comment,
+by an author other than the PR's author, carrying a marker naming the head commit it
+read. All three are queryable, and the third is the one that matters, because it is
+the `commit_id == head` discipline that #320 proved the cost of: nine actionable
+findings sat unworked there while the PR read as reviewed, because the only review
+object pointed at a superseded commit.
+
+Requirements, each because its absence is a way to report success over work not done:
+
+- **Both denominators reported as floors** (`*_at_least`, T100) — PRs evaluated, and
+  reports found. A clean zero over an empty scan is the failure mode.
+- **`review_reader_status: unmeasured` and exit 1, never 3**, when the scan cannot
+  resolve PRs or markers. `Makefile:58-70` records 3 and *continues*.
+- **A report on the wrong commit does not count.**
+- **The exempt set has its own counter** — `docs_only_prs_excluded` beside the
+  numerator. An exclusion with no counter is silence, and a code PR misclassified as
+  docs-only would merge unread with nothing to show for it.
+- **Self-review does not count.** A report whose author is the PR author is not a
+  second reader; that check is the point of the rule, not a detail of it.
+
+## What it must not become
+
+**Do not satisfy this by lowering the policy.** Setting `after-ci` makes the gate
+green by removing the requirement — the same move as dropping the concepts a reader
+could not name to raise `ontology_hit_rate`. The owner chose to keep
+`after-ci-and-review` with a human-grade reviewer; this enforces that choice rather
+than reopening it.
+
+**Do not let the marker be free text.** "Reviewed" in a comment body is what a report
+looks like today, and a scan matching prose passes on a comment that says the word and
+fails on a thorough review that does not. Define the marker, and have the writer emit it.
+
+---
+
+### The original filing, kept for its measurements
 
 `merge-policy` is `after-ci-and-review` (T103, #304). T103 gave the **CI** half a mechanical reader: `merge_policy.py` reads the latest `CI` conclusion on `main` from a committed capture and refuses to call a merge allowed while it is not `success`.
 
