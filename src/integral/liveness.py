@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from integral.connectors import SEARCH_SOURCE
+from integral.gate_exit import worst
 from integral.offers import Offer
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -685,7 +686,10 @@ def _main(argv: list[str]) -> int:
         # `python -m integral.liveness` would recurse into itself forever.
         identity_rc = _main([argv[0], "--identity", *(["--check"] if check else [])])
         liveness_rc = _main([argv[0], str(DEFAULT_EVIDENCE_PATH), *(["--check"] if check else [])])
-        return max(identity_rc, liveness_rc)
+        # `worst`, never `max`: `max(1, 3) == 3` would report a failed
+        # identity gate as the liveness gate's `unmeasured`, which `make
+        # evidence` records and continues past (`integral.gate_exit`).
+        return worst(identity_rc, liveness_rc)
 
     if identity:
         target = Path(positional[0]) if positional else DEFAULT_IDENTITY_EVIDENCE_PATH

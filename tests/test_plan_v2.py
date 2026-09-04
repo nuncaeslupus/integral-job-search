@@ -229,9 +229,23 @@ def test_matching_dependencies_are_not_drift(tmp_path: Path) -> None:
 
 
 def test_a_missing_plan_records_minus_one_not_zero(tmp_path: Path) -> None:
-    """A run that could not measure must not look like a run that measured zero."""
+    """A run that could not measure must not look like a run that measured zero.
+
+    **Every** count, not the three that happened to be written that way. A run
+    with no plan to read compared no ticks either, so a `0` beside three `-1`s
+    is a clean count over a scan that never happened — the exact shape this
+    record exists to refuse, sitting in the record that says `unmeasured` in
+    words two keys down. `write_evidence` never commits this dict (the floors
+    stop it before the write), but `measure` is public and is what the tests
+    read, so the sentinel has to be right in the object and not only in the
+    file that is never written.
+    """
     measured = plan_v2.measure(tmp_path / "absent.md", _queue(tmp_path, "T1: Do it"))
     assert measured["plan_queue_task_drift"] == -1
+    assert measured["rows_without_a_measurable_gate"] == -1
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == -1
+    assert measured["ticked_rows_without_a_merged_task"] == -1
+    assert measured["merged_tick_status"] == "unmeasured"
     assert _violations(measured)
 
 
@@ -513,10 +527,15 @@ def test_a_requirement_with_no_block_after_it_records_minus_one(tmp_path: Path) 
 
 
 def _rows(count: int) -> str:
-    """A plan table of `count` agreeing rows, T1..T<count>."""
+    """A plan table of `count` agreeing rows, T1..T<count>.
+
+    Ticked, and `_run` marks the matching tasks `merged`: agreement now has a
+    fourth dimension (D-27), and a control that left every row unticked would
+    breach the tick floor rather than demonstrate the pass it is named for.
+    """
     body = "".join(
         f"| T{n} | Do it | 0 | S | — | `thing_violations == 0` "
-        f"| `test_thing` in `tests/t.py` | ☐ |\n"
+        f"| `test_thing` in `tests/t.py` | ☑ |\n"
         for n in range(1, count + 1)
     )
     return f"## Implementation tasks\n\n{HEADER}\n{DIVIDER}\n{body}"
@@ -534,7 +553,10 @@ def _measuring(monkeypatch: pytest.MonkeyPatch, plan: Path, queue: Path) -> None
 
 def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rows: int) -> tuple[int, Path]:
     plan = _plan(tmp_path, _rows(rows))
-    queue = _queue(tmp_path, *(f"T{n}: Do it" for n in range(1, rows + 1)))
+    merged: list[dict[str, object]] = [
+        {"title": f"T{n}: Do it", "status": "merged"} for n in range(1, rows + 1)
+    ]
+    queue = _queue(tmp_path, *merged)
     _measuring(monkeypatch, plan, queue)
     target = tmp_path / "S8.json"
     return plan_v2.main([str(target)]), target
@@ -594,3 +616,523 @@ def test_a_sub_floor_run_leaves_an_existing_record_untouched(
 
     assert exit_code == 1
     assert healthy.read_bytes() == before
+
+
+# --- the tick: the archive against the plan's `St` box (D-27) --------------
+#
+# A task merges, its file moves into `arsenal/tasks/_history/` with
+# `status: merged`, and nothing ever ticks the plan row. 47 of 123 had drifted
+# when this was filed, so the board was reporting 44% of its finished work as
+# unfinished with every gate green. The cases below are the four shapes that
+# drift takes and the two ways a checker can report agreement it never made.
+
+
+def _tick_row(label: str, status_cell: str) -> str:
+    return (
+        f"| {label} | Do it | 0 | S | — | `thing_violations == 0` "
+        f"| `test_thing` in `tests/t.py` | {status_cell} |"
+    )
+
+
+def _tick_plan(tmp_path: Path, *rows: str) -> Path:
+    body = "".join(row + "\n" for row in rows)
+    return _plan(tmp_path, f"## Implementation tasks\n\n{HEADER}\n{DIVIDER}\n{body}")
+
+
+def test_an_archived_merged_task_with_an_unticked_row_is_reported(tmp_path: Path) -> None:
+    """The defect exactly: merged in the archive, `☐` in the plan."""
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☐")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "merged"}),
+    )
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 1
+    assert measured["merged_tick_status"] == "measured"
+    assert measured["unticked_merged_rows"] == [
+        "T1 is archived as merged and its plan row reads `☐`, not `☑`"
+    ]
+    assert _violations(measured) == measured["unticked_merged_rows"]
+
+
+def test_a_ticked_row_whose_task_is_still_live_is_the_same_fault(tmp_path: Path) -> None:
+    """The converse, and not hypothetical: T15's row carried a tick for weeks
+    while its task file sat `open` in `arsenal/tasks/`.
+
+    A plan that claims a completion the archive does not have misreports in the
+    direction that matters more — a reader trusts the tick and stops looking.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☑"), _tick_row("T2", "☑")),
+        _queue(
+            tmp_path,
+            {"title": "T1: Do it", "status": "merged"},
+            {"title": "T2: Still going", "status": "open"},
+        ),
+    )
+
+    assert measured["ticked_rows_without_a_merged_task"] == 1
+    assert measured["wrongly_ticked_rows"] == [
+        "T2 has a ticked plan row and is still `open` on the board"
+    ]
+    # And the merged direction is clean, so the two counts are independent
+    # rather than one number reported twice.
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 0
+
+
+def test_a_merged_task_whose_row_is_ticked_is_no_drift(tmp_path: Path) -> None:
+    """The control. Without it the two above pass on a checker that always
+    reports one."""
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☑")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "merged"}),
+    )
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 0
+    assert measured["ticked_rows_without_a_merged_task"] == 0
+    assert measured["merged_tasks_compared"] == 1
+
+
+def test_a_merged_task_with_no_plan_row_at_all_is_not_compliant(tmp_path: Path) -> None:
+    """Absent is not ticked.
+
+    The fail-open reading of a checkbox is "there is no box, so nothing is
+    unticked" — which would make the metric satisfiable by *deleting* the row
+    that embarrasses it rather than ticking it. `plan_queue_task_drift` reports
+    the same task from the membership side; both must, because either check
+    could be relaxed on its own.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☑")),
+        _queue(
+            tmp_path,
+            {"title": "T1: Do it", "status": "merged"},
+            {"title": "T9: Merged and unplanned", "status": "merged"},
+        ),
+    )
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 1
+    assert measured["unticked_merged_rows"] == [
+        "T9 is archived as merged and has no row in the plan"
+    ]
+    assert "T9 is in the queue and has no row in the plan" in _violations(measured)
+
+
+def test_an_in_progress_glyph_is_not_a_tick(tmp_path: Path) -> None:
+    """`◐` means in progress in the plan's own legend, and three of the eight
+    rows this landed with had drifted to it rather than to `☐`. Reading it as
+    close enough is how they stayed invisible."""
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "◐")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "merged"}),
+    )
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 1
+
+
+def test_a_cancelled_task_is_not_required_to_carry_a_tick(tmp_path: Path) -> None:
+    """`☒` is cancelled — absorbed or abandoned, never done. Demanding a tick
+    for it would make two real rows permanently red and train a reader to
+    ignore the count."""
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☑"), _tick_row("T2", "☒")),
+        _queue(
+            tmp_path,
+            {"title": "T1: Do it", "status": "merged"},
+            {"title": "T2: Absorbed elsewhere", "status": "cancelled"},
+        ),
+    )
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 0
+    assert measured["ticked_rows_without_a_merged_task"] == 0
+
+
+def test_the_status_column_is_found_by_header_not_by_index(tmp_path: Path) -> None:
+    """A plan that gains a column somewhere must still be measured correctly.
+    A fixed index reads the neighbouring cell and reports every row as
+    unticked — the loudest possible way to be wrong about the quietest cause."""
+    header = "| T# | Note | Description | Step | Size | Depends | Gate | Tests | St |"
+    divider = "|----|------|-------------|------|------|---------|------|-------|----|"
+    row = (
+        "| T1 | n/a | Do it | 0 | S | — | `thing_violations == 0` "
+        "| `test_thing` in `tests/t.py` | ☑ |"
+    )
+    plan = _plan(tmp_path, f"## Implementation tasks\n\n{header}\n{divider}\n{row}\n")
+
+    measured = plan_v2.measure(plan, _queue(tmp_path, {"title": "T1: Do it", "status": "merged"}))
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 0
+
+
+def test_no_merged_task_reports_unmeasured_rather_than_a_clean_zero(tmp_path: Path) -> None:
+    """The vacuous pass this repository keeps catching: zero unticked rows over
+    an archive nobody read.
+
+    Point the scan at a board with nothing merged and the metric must not read
+    `0`. It reads `-1`, the sentinel `_unmeasurable` already uses, and the
+    record says `unmeasured` in words beside it so a reader is not left to
+    infer the difference from a negative number.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☐")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "open"}),
+    )
+
+    assert measured["merged_tasks_compared"] == 0
+    assert measured["merged_tick_status"] == "unmeasured"
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == -1
+    assert plan_v2.record(measured)["merged_tick_status"] == "unmeasured"
+
+
+def test_an_empty_archive_breaches_the_tick_floor(tmp_path: Path) -> None:
+    """And the floor is what makes `unmeasured` cost something.
+
+    `main` exits 1 on a breach and `write_evidence` writes nothing, so a run
+    that compared no archive cannot leave behind a record claiming it did.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☐")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "open"}),
+    )
+
+    assert any("merged_tasks_compared (floor 100)" in b for b in plan_v2.floor_breaches(measured))
+
+
+def test_the_tick_denominator_is_committed_as_a_floor_not_a_count(tmp_path: Path) -> None:
+    """T100's lesson, applied to the third denominator.
+
+    Archiving the task file is exactly what a task PR does, so an exact
+    `merged_tasks_compared` would be wrong on one side of every archive and
+    `make evidence` would go red on a change that is not a finding.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☑")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "merged"}),
+    )
+    committed = plan_v2.record(measured)
+
+    assert "merged_tasks_compared" not in committed
+    assert committed["merged_tasks_compared_at_least"] == plan_v2.MINIMUM_MERGED_TASKS
+    assert committed["merged_tasks_with_an_unticked_plan_row"] == 0
+
+
+def test_the_tick_check_reads_the_archive_and_never_the_plans_own_ticks(
+    tmp_path: Path,
+) -> None:
+    """The direction is the whole point.
+
+    One plan, two boards. The ticks are identical; the verdicts are opposite —
+    so the answer is derived from `status: merged` in the archive, and a check
+    that could be satisfied by editing the document it checks would return the
+    same number twice.
+
+    **Both** metrics, because the gate key is
+    `merged_tasks_with_an_unticked_plan_row` and that is the number the claim
+    is made about — the converse is its sibling. Asserting only the
+    converse leaves the gate key itself resting on a property demonstrated for
+    its sibling — a citation one key wide of what it cites, which is how a
+    stated invariant ends up with nothing measuring it.
+
+    Three rows, held against two archives:
+
+    | label | row | archive A | archive B |
+    |-------|-----|-----------|-----------|
+    | T1    | ☑   | merged    | merged    |
+    | T2    | ☐   | merged    | open      |
+    | T3    | ☑   | merged    | open      |
+
+    T2 is the gate's case — unticked, and only A archives it as merged. T3 is
+    the converse's — ticked, and only B leaves it open. Nothing about the plan
+    changes between the two runs.
+    """
+    plan = _tick_plan(tmp_path, _tick_row("T1", "☑"), _tick_row("T2", "☐"), _tick_row("T3", "☑"))
+    merged = plan_v2.measure(
+        plan,
+        _queue(
+            tmp_path,
+            {"title": "T1: Done and ticked", "status": "merged"},
+            {"title": "T2: Done and unticked", "status": "merged"},
+            {"title": "T3: Also done", "status": "merged"},
+        ),
+    )
+    live = plan_v2.measure(
+        tmp_path / "plan.md",
+        _queue(
+            tmp_path,
+            {"title": "T1: Done and ticked", "status": "merged"},
+            {"title": "T2: Done and unticked", "status": "open"},
+            {"title": "T3: Also done", "status": "open"},
+        ),
+    )
+
+    # The gate metric: same unticked T2 row, opposite verdicts.
+    assert merged["merged_tasks_with_an_unticked_plan_row"] == 1
+    assert merged["unticked_merged_rows"] == [
+        "T2 is archived as merged and its plan row reads `☐`, not `☑`"
+    ]
+    assert live["merged_tasks_with_an_unticked_plan_row"] == 0
+
+    # And the converse: same ticked T3 row, opposite verdicts.
+    assert merged["ticked_rows_without_a_merged_task"] == 0
+    assert live["ticked_rows_without_a_merged_task"] == 1
+    assert live["wrongly_ticked_rows"] == [
+        "T3 has a ticked plan row and is still `open` on the board"
+    ]
+
+    # Both runs measured — neither verdict is the `unmeasured` sentinel wearing
+    # a number, which is the way this pair of assertions could pass vacuously.
+    assert merged["merged_tick_status"] == "measured"
+    assert live["merged_tick_status"] == "measured"
+
+
+# --- the tick, second reading (findings on #329) ---------------------------
+#
+# Four cases an independent read of the check turned up, each committed here
+# rather than answered in a comment: a report that is read and waved through
+# leaves the code exactly as unprotected as it was.
+
+
+def test_an_archived_done_task_is_outside_this_checks_scope(tmp_path: Path) -> None:
+    """The hole this check has, pinned so it is a choice and not a surprise.
+
+    D-27's Scope says "every task with a file in `arsenal/tasks/_history/`
+    carrying `status: merged`", so `done` is out of the numerator by the letter
+    of the task. The consequence is a way to zero the metric without ticking
+    anything: change one word in the front matter of the file being archived,
+    in the very commit that archives it, and an unticked row goes green — the
+    denominator drops by one and the floor of 100 absorbs it.
+
+    Two reasons it is pinned here rather than closed. First, `_TERMINAL` (the
+    wider set this module already uses for dependency satisfaction) would close
+    it, but the plan's own legend has **no glyph for `done`** —
+    ☑ merged · ◐ in progress · ☐ open · ☒ cancelled — so every archived-`done`
+    task would have to be ticked as *merged* or the legend extended, and that
+    is a decision about the document, not about the checker. Second, T29
+    (`arsenal/tasks/_history/lo-2293.md`) is `status: done`, archived, and its
+    plan row reads `◐`: the plan asserts a finished task is in progress, and
+    widening the numerator today would make it red with no honest glyph to fix
+    it with.
+
+    So this test asserts what the narrower reading **does**, and it is written
+    to fail the moment someone widens the scope — at which point the failure
+    is the reminder to settle the legend, which is exactly what it is for.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☑"), _tick_row("T2", "☐")),
+        _queue(
+            tmp_path,
+            {"title": "T1: Merged", "status": "merged"},
+            {"title": "T2: Archived as done, row unticked", "status": "done"},
+        ),
+    )
+
+    # Out of the numerator...
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 0
+    assert measured["unticked_merged_rows"] == []
+    # ...and out of the denominator, which is what makes it silent: the floor
+    # is the only thing watching that number and it is 100 wide.
+    assert measured["merged_tasks_compared"] == 1
+    # Nothing else fires either. `plan_queue_task_drift` sees a task with a row
+    # and a row with a task, so membership is satisfied.
+    assert measured["plan_queue_task_drift"] == 0
+    assert _violations(measured) == []
+
+
+def test_a_ticked_row_over_an_archived_done_task_is_not_reported_either(
+    tmp_path: Path,
+) -> None:
+    """The converse of the same scope, pinned for the same reason.
+
+    `ticked_rows_without_a_merged_task` reads `status != "merged"`, so an
+    archived-`done` task with a **ticked** row *is* a violation today — the
+    stricter direction of the same asymmetry, and the one that would have to
+    be relaxed rather than tightened if `done` were ever admitted. Recorded so
+    that widening the numerator without touching the converse is caught as the
+    inconsistency it would be, instead of quietly leaving one status strict in
+    one direction and lax in the other.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☑"), _tick_row("T2", "☑")),
+        _queue(
+            tmp_path,
+            {"title": "T1: Merged", "status": "merged"},
+            {"title": "T2: Archived as done, row ticked", "status": "done"},
+        ),
+    )
+
+    assert measured["ticked_rows_without_a_merged_task"] == 1
+    assert measured["wrongly_ticked_rows"] == [
+        "T2 has a ticked plan row and is still `done` on the board"
+    ]
+
+
+def test_a_duplicate_ticked_row_does_not_mask_an_unticked_one(tmp_path: Path) -> None:
+    """Appending a compliant row must not answer for the row beside it.
+
+    `by_label` is last-wins, so a checker reading the collapsed mapping sees
+    only whichever row is written last: leave the unticked row in place, append
+    a second ticked one, and the gate key reads 0. That is the same fail-open
+    shape as *deleting* the row — the metric satisfied by editing the plan
+    rather than by doing the work — and this module's own docstring already
+    refuses it for label counting ("collapsing them into a set hides a
+    duplicated row instead of reporting it").
+
+    `plan_queue_task_drift` does catch the duplicate, and that is not enough on
+    its own. It is a **different gate key**, and D-27's argument for counting a
+    missing row here as well as there applies unchanged: either check could be
+    relaxed on its own, and a gate key that leans on a neighbouring key reads
+    green the day the neighbour moves.
+
+    Both counts are asserted below so that a future change moving the finding
+    from one key to the other cannot pass.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☐"), _tick_row("T1", "☑")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "merged"}),
+    )
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 1
+    assert measured["unticked_merged_rows"] == [
+        "T1 is archived as merged and its plan row reads `☐`, not `☑`"
+    ]
+    # The duplicate is still the membership check's finding as well.
+    assert measured["duplicate_labels"] == ["T1 appears 2 times in the plan"]
+    assert measured["plan_queue_task_drift"] == 1
+
+
+def test_the_row_order_of_a_duplicate_does_not_change_the_verdict(tmp_path: Path) -> None:
+    """The ticked row first, the unticked one second — same answer.
+
+    Without this, the case above passes on a checker that merely reads the
+    *first* row rather than the last: one off-by-one collapse swapped for
+    another, with the same hole opened by writing the rows the other way round.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☑"), _tick_row("T1", "☐")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "merged"}),
+    )
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 1
+
+
+def test_every_duplicated_unticked_row_is_counted(tmp_path: Path) -> None:
+    """Counted with multiplicity, like every other label count in this module.
+
+    Two unticked rows for one merged task are two findings, not one: the count
+    is a count of rows that misreport, and collapsing them would report the
+    second as answered by the presence of the first.
+    """
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☐"), _tick_row("T1", "◐")),
+        _queue(tmp_path, {"title": "T1: Do it", "status": "merged"}),
+    )
+
+    assert measured["merged_tasks_with_an_unticked_plan_row"] == 2
+    assert measured["unticked_merged_rows"] == [
+        "T1 is archived as merged and its plan row reads `☐`, not `☑`",
+        "T1 is archived as merged and its plan row reads `◐`, not `☑`",
+    ]
+
+
+def test_a_missing_status_column_and_a_blank_cell_are_the_same_verdict(
+    tmp_path: Path,
+) -> None:
+    """`PlanRow.status_cell` does not tell the two apart, and must not claim to.
+
+    A table with no `St` column and a table whose `St` cell is blank both parse
+    to `""`. `""` is not `☑`, so a merged task is reported either way — the
+    fail-closed direction, and loud: a plan that loses the column reports every
+    merged row rather than none. The docstring on `PlanRow` used to assert the
+    two were distinguishable, which was a claim about a fail-open boundary and
+    was false; this holds the code to the corrected sentence.
+    """
+    no_column_header = "| T# | Description | Step | Size | Depends | Gate | Tests |"
+    no_column_divider = "|----|-------------|------|------|---------|------|-------|"
+    no_column_row = (
+        "| T1 | Do it | 0 | S | — | `thing_violations == 0` | `test_thing` in `tests/t.py` |"
+    )
+    body = f"## Implementation tasks\n\n{no_column_header}\n{no_column_divider}\n{no_column_row}\n"
+    absent = tmp_path / "no-column.md"
+    absent.write_text(body, encoding="utf-8")
+    queue = _queue(tmp_path, {"title": "T1: Do it", "status": "merged"})
+    without_column = plan_v2.measure(absent, queue)
+
+    blank = _tick_plan(tmp_path, _tick_row("T1", ""))
+    with_blank_cell = plan_v2.measure(blank, queue)
+
+    assert plan_v2.plan_rows(absent)[0].status_cell == ""
+    assert plan_v2.plan_rows(blank)[0].status_cell == ""
+    assert (
+        without_column["unticked_merged_rows"]
+        == with_blank_cell["unticked_merged_rows"]
+        == ["T1 is archived as merged and its plan row reads ` `, not `☑`"]
+    )
+    assert without_column["merged_tasks_with_an_unticked_plan_row"] == 1
+    assert with_blank_cell["merged_tasks_with_an_unticked_plan_row"] == 1
+
+
+def test_the_tick_check_reads_a_real_history_directory_on_disk(tmp_path: Path) -> None:
+    """The join the shipped gate actually runs, which no test here exercised.
+
+    Every other tick test writes the board as a JSONL ledger, where `status` is
+    a field the test sets by hand. The real board is a **directory**, and "the
+    archive decides" is implemented one layer down, in `taskboard.load_board`:
+    `arsenal/tasks/` is read with `default_status="open"` and
+    `arsenal/tasks/_history/` with `default_status="merged"`, so a file's
+    *location* is what makes it merged. `load_board` had no callers in `tests/`
+    at all, so every ledger test above could pass with that mapping reversed.
+
+    Two files, identical but for the directory they sit in, and identical
+    unticked rows. Only the archived one is required to carry a tick.
+    """
+    tasks = tmp_path / "tasks"
+    history = tasks / "_history"
+    history.mkdir(parents=True)
+    (tasks / "t-live.md").write_text(
+        '---\nid: t-live\ntitle: "T2: Still going"\n---\n\nbody\n', encoding="utf-8"
+    )
+    # No `status:` line: the directory is what says `merged`, which is the
+    # property under test. A file declaring its own status would prove nothing
+    # about where the answer came from.
+    (history / "t-archived.md").write_text(
+        '---\nid: t-archived\ntitle: "T1: Finished"\n---\n\nbody\n', encoding="utf-8"
+    )
+
+    measured = plan_v2.measure(
+        _tick_plan(tmp_path, _tick_row("T1", "☐"), _tick_row("T2", "☐")), tasks
+    )
+
+    assert measured["merged_tasks_compared"] == 1
+    assert measured["merged_tick_status"] == "measured"
+    assert measured["unticked_merged_rows"] == [
+        "T1 is archived as merged and its plan row reads `☐`, not `☑`"
+    ]
+    # The live task's unticked row is not a finding, and nothing is wrongly
+    # ticked, so neither direction fires on it.
+    assert measured["ticked_rows_without_a_merged_task"] == 0
+
+
+def test_moving_a_task_file_into_the_archive_is_what_turns_its_row_red(
+    tmp_path: Path,
+) -> None:
+    """The same directory board, with one file moved and nothing else changed.
+
+    This is the sentence `CLAUDE.md` now makes to every future task PR —
+    "ticking the row is part of archiving the task" — asserted rather than
+    described. Without it the test above is satisfiable by a `load_board` that
+    reports everything it finds as merged.
+    """
+    tasks = tmp_path / "tasks"
+    history = tasks / "_history"
+    history.mkdir(parents=True)
+    live = tasks / "t-one.md"
+    live.write_text('---\nid: t-one\ntitle: "T1: Do it"\n---\n\nbody\n', encoding="utf-8")
+    plan = _tick_plan(tmp_path, _tick_row("T1", "☐"))
+
+    before = plan_v2.measure(plan, tasks)
+    live.rename(history / "t-one.md")
+    after = plan_v2.measure(plan, tasks)
+
+    assert before["merged_tasks_compared"] == 0
+    assert before["merged_tick_status"] == "unmeasured"
+    assert after["merged_tasks_compared"] == 1
+    assert after["merged_tasks_with_an_unticked_plan_row"] == 1

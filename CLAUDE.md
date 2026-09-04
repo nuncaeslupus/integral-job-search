@@ -209,6 +209,26 @@ worktrees are *unavailable* — `worktree_probe.sh` prints `available` here, so 
 would be a false record, and `task_select.py` reads it to clamp every future round to one
 task. The probe writes it itself when it is true; nothing else should.
 
+## A reverted mutation can leave the mutated bytecode running
+
+This repository mandates mutation-verification on every fixture — revert the fix,
+watch the case go red, restore, watch it go green. That cycle has a silent failure
+mode, met on #329 and worth one paragraph here because it points the **wrong way**.
+
+CPython validates a cached `.pyc` against the source's mtime at **seconds**
+resolution and its **size**. A mutation that swaps two string literals of equal
+total length, reverted inside the same second, changes neither — so the restore
+re-runs the *mutated* bytecode. On #329 that showed as three tests red over a
+working tree `git status` called clean, with `inspect.getsource` printing the
+correct source while the wrong code object ran.
+
+The symmetric case is the dangerous one: the same accident can leave a **fixed**
+tree reporting green over code that was never restored, which is a mutation test
+certifying work it did not do — the exact class of failure the discipline exists
+to catch. So delete `src/**/__pycache__/*.pyc` after every write in a
+mutate-restore cycle, and never conclude a mutation round from a run whose source
+edit and test invocation fell in the same second.
+
 ## Spending the context window deliberately
 
 `.rgignore` excludes the generated trees from every ripgrep-backed search, for the
@@ -308,6 +328,15 @@ fails on evidence drift again, the finding is that something *new* is
 archive-sensitive: `status/evidence/T100.json` names it, because
 `archive_sensitive_evidence_keys` compares the whole committed record across a
 simulated archive rather than trusting that one key was the only one.
+
+**One evidence key is now archive-*driven* by design, and it is not that finding.**
+Since D-27, `S8.json`'s `merged_tasks_with_an_unticked_plan_row` requires every task
+archived in `arsenal/tasks/_history/` with `status: merged` to carry a ticked `☑` row
+in `status/plan.md`. So **ticking the row is part of archiving the task**: a task PR
+that moves its file and leaves the plan alone turns `make evidence` red, by
+construction. That red is the check working — tick the row in the same commit. The
+denominator `merged_tasks_compared` is committed as a floor for T100's reason above,
+so it does not move.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
