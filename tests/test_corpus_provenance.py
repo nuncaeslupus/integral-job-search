@@ -407,6 +407,17 @@ def test_a_floor_breach_is_a_finding_not_an_unmeasured_reading(tmp_path: Path) -
 
 
 
+def _tree(root: Path, extra: dict[str, str] | None = None) -> Path:
+    """A synthetic `src/integral` carrying every serving-path module, all empty."""
+    src = root / "integral"
+    src.mkdir()
+    for name in (*corpus_scope.serving_path_modules(), *corpus_scope.EXEMPT_CORPUS_READERS):
+        (src / f"{name}.py").write_text("", encoding="utf-8")
+    for name, body in (extra or {}).items():
+        (src / f"{name}.py").write_text(body, encoding="utf-8")
+    return src
+
+
 def _provenance_over(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -414,6 +425,7 @@ def _provenance_over(
     labelled: Path,
     *,
     floors: bool = True,
+    src_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Point `_main`'s provenance half at a synthetic corpus, and return the reading.
 
@@ -435,7 +447,10 @@ def _provenance_over(
         ):
             monkeypatch.setattr(corpus_scope, name, 0)
     measured = corpus_scope.measure_provenance(
-        raw_path=raw, labelled_path=labelled, draws_path=_registry(tmp_path)
+        raw_path=raw,
+        labelled_path=labelled,
+        draws_path=_registry(tmp_path),
+        **({"src_dir": src_dir} if src_dir is not None else {}),
     )
     monkeypatch.setattr(
         corpus_scope,
@@ -532,3 +547,27 @@ def test_a_reading_that_only_breached_a_floor_still_exits_one(
     _provenance_over(monkeypatch, tmp_path, raw, labelled)
 
     assert corpus_scope._main(["corpus_scope", str(tmp_path / "d1.json")]) == 1
+
+
+def test_the_module_names_an_exempt_reader_that_left_its_bounds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The other half of the reporting fix, and it was unfixtured.
+
+    `test_the_module_names_the_violation_it_exits_on` asserts a line that comes from
+    the *disjointness* report, so silencing the exempt-reader report left the whole
+    suite green (#307 third read, N4) — the exit code still went to 1 through the sum,
+    and the operator was told a gate failed without being told which module left its
+    bounds. Both reports are driven now, each by a reading whose only violation is the
+    one it reports.
+    """
+    rows = [_row("a", split="elicitation")]
+    raw = _corpus(tmp_path, rows)
+    labelled = _corpus(tmp_path, rows, "labelled.jsonl")
+    src = _tree(tmp_path, {"reaction_elicit": "from integral.rank import rank_offers\n"})
+    measured = _provenance_over(monkeypatch, tmp_path, raw, labelled, floors=False, src_dir=src)
+
+    assert measured["exempt_reader_serving_imports"] == 1
+    assert measured["corpus_measurement_set_violations"] == 1, measured
+    assert corpus_scope._main(["corpus_scope", str(tmp_path / "d1.json")]) == 1
+    assert "reaction_elicit" in capsys.readouterr().err

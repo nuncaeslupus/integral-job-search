@@ -616,11 +616,17 @@ def exempt_reader_findings(
     it. A dynamic import — `importlib.import_module("integral.rank")`,
     `__import__(...)`, `sys.modules[...]` — reaches the same module and is not seen
     here; nor is a corpus path assembled from parts (`Path("corpus") / "raw"`).
-    Measured, not assumed: 25 spellings were driven past this scan and past
-    `serving_path_corpus_reads` (#307 second-reader F4), and every static form was
-    caught, including the four relative ones and a deferred import inside a function
-    body. What survives is deliberate evasion, which this check is not built to stop —
-    it is admission lint against the two-line edit, the same posture
+    Measured, not assumed: every spelling the fixtures below drive was pushed past
+    this scan and past `serving_path_corpus_reads` (#307 second-reader F4), and every
+    static form was caught — absolute and relative, `import` and `from … import`, the
+    laundering route through `reaction_elicit`, and a deferred import inside a function
+    body, which `ast.walk` reaches. No count is quoted here on purpose: the first
+    version of this paragraph said "18", a re-read counted 25, a third counted 30, and a
+    number in prose that three readers disagree about is a number nothing checks. The
+    fixtures are the record. What survives is deliberate evasion — a dynamic
+    `importlib.import_module`, `__import__`, `sys.modules[...]`, or a corpus path
+    assembled from parts — which this check is not built to stop: it is admission
+    lint against the two-line edit, the same posture
     `_literal_body_violations` takes toward a credential key. Said out loud here so
     the ceiling is a known property rather than a hole somebody finds later.
     """

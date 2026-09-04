@@ -13,12 +13,14 @@ today.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from integral import corpus_scope
 from integral.corpus_scope import (
     _REPO_ROOT,
     CATALAN_SCOPE_ANCHOR,
@@ -734,6 +736,41 @@ def _draws_file(directory: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def test_the_component_list_is_the_sum_expression_itself() -> None:
+    """`SUM_COMPONENTS` is a hand-written mirror, so something has to hold it against
+    the expression it mirrors.
+
+    Adding a sixth `len(...)` term to `corpus_measurement_set_violations`, plus its own
+    key, left the whole suite green when that term was zero across every fixture — so
+    the module's claim that "naming the sum means a sixth component cannot be forgotten"
+    was true of `_main`'s exit code and false of everything that checks the sum
+    (#307 third read, N5). Read out of the source rather than re-encoded here: a test
+    that restates the expression is a second copy to drift.
+    """
+    module = ast.parse(Path(corpus_scope.__file__).read_text(encoding="utf-8"))
+    terms: list[str] = []
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values, strict=True):
+            named = isinstance(key, ast.Constant) and (
+                key.value == "corpus_measurement_set_violations"
+            )
+            if not named:
+                continue
+            terms = [
+                call.args[0].id
+                for call in ast.walk(value)
+                if isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Name)
+                and call.func.id == "len"
+                and call.args
+                and isinstance(call.args[0], ast.Name)
+            ]
+    assert terms, "the sum expression was not found — this test has stopped reading it"
+    assert len(terms) == len(SUM_COMPONENTS), (terms, SUM_COMPONENTS)
 
 
 @pytest.mark.parametrize("component", SUM_COMPONENTS)
