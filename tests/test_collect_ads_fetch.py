@@ -82,6 +82,11 @@ def _no_waiting(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _run(monkeypatch: pytest.MonkeyPatch, robots: FakeRobots, session: FakeSession) -> Any:
     monkeypatch.setattr(COLLECT, "ROBOTS", robots)
+    # `board.test` and `otro.test` are boards for the purposes of these fixtures: every
+    # hop is put through the policy ledger, and a host `SOURCE_HOSTS` does not record is
+    # refused before robots.txt is ever asked.
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "board", "board.test")
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "otro", "otro.test")
     return COLLECT.get(session, ALLOWED)
 
 
@@ -150,3 +155,343 @@ def test_the_declared_agent_is_sent_on_every_hop(monkeypatch: pytest.MonkeyPatch
     _run(monkeypatch, FakeRobots(set()), session)
     assert sent == [COLLECT.USER_AGENT, COLLECT.USER_AGENT]
     assert "Mozilla" not in COLLECT.USER_AGENT
+
+
+# T98 — the collector cannot write a row nothing can account for.
+
+
+def _fetched() -> Any:
+    return COLLECT.record(
+        "board-1",
+        "exampleboard",
+        "https://example.invalid/1",
+        "Programador/a",
+        "Example S.L.",
+        "Buscamos una persona para trabajar en Python. " * 20,
+        "programming",
+    )
+
+
+def test_collecting_without_a_draw_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--draw` is required and validated against the registry, but the guard lives on
+    `record` as well: an import-time default of `""` must not silently produce a corpus
+    whose rows name nothing."""
+    monkeypatch.setattr(COLLECT, "DRAW", "")
+    with pytest.raises(RuntimeError, match="no draw set"):
+        _fetched()
+
+
+def test_a_collected_row_carries_the_draw_it_was_collected_against(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(COLLECT, "DRAW", "t4b-programming")
+    assert _fetched()["draw"] == "t4b-programming"
+
+
+# ---------------------------------------------------------------------------
+# T98 — a board the policy ledger refuses is never planned.
+
+
+_LEDGER = """
+policy_refused:
+  - site: refusedboard.test
+    refuses: volume
+    robots_verdict: allowed
+    rule_cited: "Disallow: /*?action=get_jobs"
+    decided_by: owner
+    decided_on: 2026-01-01
+    decision: "Bulk ingestion of this board is not ours to do."
+"""
+
+
+def _ledger(tmp_path: Path, document: str = _LEDGER) -> Path:
+    path = tmp_path / "ruled-out.yaml"
+    path.write_text(document, encoding="utf-8")
+    return path
+
+
+def test_a_policy_refused_board_is_refused_by_the_planner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The defect this exists for: the collector named a board `ruled-out.yaml` refuses,
+    stamped its rows with the selected draw, and the draw did not list it as a source.
+
+    Adding it to the draw would have made the two agree by writing a refusal into a
+    specification. The plan is what was wrong, so the plan is what is checked — and by
+    reading the ledger rather than by deleting one name, so the next refused board is
+    caught the day it is added.
+    """
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "refusedboard.test")
+    refused = COLLECT.plan_refusals(["refusedboard", "manfred"], _ledger(tmp_path))
+    assert list(refused) == ["refusedboard"]
+    assert "policy_refused" in refused["refusedboard"]
+
+
+def test_a_volume_refusal_binds_the_collector_the_same_as_an_access_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`refuses: volume` is the owner's line between a candidate reading a handful of
+    adverts and a tool ingesting a board. A corpus draw is the second by construction,
+    so both kinds bind here — reading `volume` as "collect anyway" is the fail-open
+    version of this check."""
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "refusedboard.test")
+    for kind in ("volume", "access"):
+        ledger = _ledger(tmp_path, _LEDGER.replace("refuses: volume", f"refuses: {kind}"))
+        assert list(COLLECT.plan_refusals(["refusedboard"], ledger)) == ["refusedboard"], kind
+
+
+def test_a_subdomain_of_a_refused_site_is_refused_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refusal names a board, not a hostname spelling. `jobs.refusedboard.test` is the
+    same board, and an exact-match check would wave it through."""
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "jobs.refusedboard.test")
+    assert list(COLLECT.plan_refusals(["refusedboard"], _ledger(tmp_path))) == ["refusedboard"]
+
+
+def test_a_source_with_no_recorded_host_cannot_be_checked_and_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Fail-closed on the unknown. A source added to the plan without a host in
+    `SOURCE_HOSTS` cannot be put through the ledger at all, and "not checkable" reading
+    as "allowed" is exactly how the refused board got planned in the first place."""
+    refused = COLLECT.plan_refusals(["brand_new_board"], _ledger(tmp_path))
+    assert "no host recorded" in refused["brand_new_board"]
+
+
+def test_an_empty_ledger_refuses_nothing(tmp_path: Path) -> None:
+    """The negative control. Without it a check that refuses everything would pass every
+    assertion above."""
+    ledger = _ledger(tmp_path, "policy_refused: []\n")
+    assert COLLECT.plan_refusals(["manfred", "tecnoempleo", "feinaactiva"], ledger) == {}
+
+
+# ---------------------------------------------------------------------------
+# T98 — and a URL handed in on the command line is bound by the same ledger.
+#
+# `plan_refusals` covered the fixed plan only. `--ca-urls` reached `from_urls`
+# without passing the ledger at all, so a refused board's URL in that file was
+# fetched — the refusal routed around by the one input a person types by hand.
+
+
+def test_a_supplied_url_on_a_refused_board_is_never_fetched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hole: the ledger refuses the board, and `--ca-urls` fetched it anyway.
+
+    Asserted over the session rather than over the return value — "refused" has to mean
+    no request left the process, not that the record was discarded after the fetch.
+    """
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "refusedboard.test")
+    urls = ["https://refusedboard.test/oferta/1"]
+    session = FakeSession({})
+
+    allowed = COLLECT.permitted_urls(urls, _ledger(tmp_path))
+    assert allowed == []
+    assert list(COLLECT.from_urls(session, allowed, COLLECT.load_draws()["t4b-programming"])) == []
+    assert session.fetched == []
+
+
+def test_a_supplied_url_on_an_unrecorded_host_is_refused_too(
+    tmp_path: Path,
+) -> None:
+    """Fail-closed on the unknown, the same rule `SOURCE_HOSTS` already gives the plan.
+
+    A host nothing recorded cannot be put through the ledger, and "not checkable"
+    reading as "allowed" would leave the whole check bypassable by typing a URL.
+    """
+    urls = ["https://never-surveyed.invalid/oferta/1"]
+    session = FakeSession({})
+
+    refused = COLLECT.url_refusals(urls, _ledger(tmp_path))
+    assert "not recorded in SOURCE_HOSTS" in refused[urls[0]]
+    assert COLLECT.permitted_urls(urls, _ledger(tmp_path)) == []
+    assert list(COLLECT.from_urls(session, [], COLLECT.load_draws()["t4b-programming"])) == []
+    assert session.fetched == []
+
+
+def test_a_supplied_url_on_a_permitted_board_still_passes(tmp_path: Path) -> None:
+    """The negative control. A guard that refuses everything passes both tests above
+    and silently disables `--ca-urls`."""
+    url = "https://feinaactiva.gencat.cat/oferta/1"
+    assert COLLECT.permitted_urls([url], _ledger(tmp_path)) == [url]
+
+
+def test_a_subdomain_of_a_recorded_board_is_checked_not_waved_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`jobs.refusedboard.test` is the same board under a longer name, in the URL path
+    exactly as in the plan path."""
+    monkeypatch.setitem(COLLECT.SOURCE_HOSTS, "refusedboard", "refusedboard.test")
+    assert COLLECT.permitted_urls(["https://jobs.refusedboard.test/x"], _ledger(tmp_path)) == []
+
+
+def test_the_committed_ledger_refuses_a_remoteok_url_handed_in_by_hand() -> None:
+    """The live reading, over the real ledger: the board the owner refused on
+    2026-08-31 is refused whichever input names it."""
+    assert COLLECT.url_refusals(["https://remoteok.com/remote-jobs/1"])
+    assert COLLECT.permitted_urls(["https://remoteok.com/remote-jobs/1"]) == []
+
+
+# ---------------------------------------------------------------------------
+# T98 — and every redirect hop is bound by the same ledger.
+#
+# The plan is filtered before it is walked and `--ca-urls` before it is read, and
+# neither reaches a redirect: `get()` follows hops by hand and asked only robots.txt
+# about each one. A first hop the ledger allows may land on a board it refuses, and a
+# redirect target is the one URL nobody typed and nobody checked — the refusal routed
+# around by the board itself.
+
+REFUSED_HOP = "https://remoteok.com/remote-jobs/1"
+UNKNOWN_HOP = "https://never-surveyed.invalid/oferta/1"
+
+
+def test_a_redirect_onto_a_ledger_refused_board_is_never_fetched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live reading, over the real ledger: `remoteok.com` carries `refuses: volume`,
+    decided by the owner, and arriving there through a `302` is the same violation as
+    naming it in the plan.
+
+    Asserted over the session rather than over the return value — "refused" has to mean
+    no request left the process.
+    """
+    session = FakeSession({ALLOWED: FakeResponse(location=REFUSED_HOP)})
+    robots = FakeRobots(set())
+
+    with pytest.raises(PermissionError, match="policy ledger"):
+        _run(monkeypatch, robots, session)
+
+    assert session.fetched == [ALLOWED], "the refused board was fetched anyway"
+    assert REFUSED_HOP not in robots.asked, "the ledger is asked before robots.txt, not after"
+
+
+def test_a_redirect_onto_an_unrecorded_host_is_refused_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail-closed on the unknown, the rule the plan path and `--ca-urls` already follow.
+    A board nothing surveyed cannot be put through the ledger, and "not checkable"
+    reading as "allowed" would leave the whole check bypassable by a `Location` header."""
+    session = FakeSession({ALLOWED: FakeResponse(location=UNKNOWN_HOP)})
+    robots = FakeRobots(set())
+
+    with pytest.raises(PermissionError, match="not recorded in SOURCE_HOSTS"):
+        _run(monkeypatch, robots, session)
+
+    assert session.fetched == [ALLOWED], "the unrecorded host was fetched anyway"
+    assert UNKNOWN_HOP not in robots.asked
+
+
+def test_a_redirect_between_two_permitted_boards_still_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The negative control, over two boards the committed ledger permits. Without it a
+    hop check that refuses everything passes both tests above and silently breaks every
+    board that redirects."""
+    first = "https://feinaactiva.gencat.cat/search/offers/detail/1"
+    second = "https://www.tecnoempleo.com/ofertas-trabajo/rf-abc"
+    session = FakeSession({first: FakeResponse(location=second), second: FakeResponse()})
+    monkeypatch.setattr(COLLECT, "ROBOTS", FakeRobots(set()))
+
+    response = COLLECT.get(session, first)
+
+    assert response.raised
+    assert session.fetched == [first, second]
+
+
+def test_the_committed_plan_is_clean_against_the_committed_ledger() -> None:
+    """The live reading, over the real ledger. Every source the collector can plan is
+    one the ledger does not refuse — and `remoteok`, which it does refuse, is named in
+    `SOURCE_HOSTS` so that the refusal is found rather than missed."""
+    assert "remoteok" in COLLECT.SOURCE_HOSTS
+    refused = COLLECT.plan_refusals(COLLECT.SOURCE_HOSTS)
+    assert list(refused) == ["remoteok"], refused
+    survivors = [name for name in COLLECT.SOURCE_HOSTS if name not in refused]
+    assert len(survivors) >= 5, survivors
+
+
+# ---------------------------------------------------------------------------
+# T98 — a draw's specification narrows what is fetched, not only what is stamped.
+
+
+def _plan() -> list[tuple[str, str, Any, int, str]]:
+    """The collector's fixed plan, shaped as `main` builds it. Every fixed adapter
+    stamps `programming`, which is why the family axis has to bind it too."""
+    return [
+        ("es", "manfred", None, 60, "programming"),
+        ("es", "tecnoempleo", None, 60, "programming"),
+        ("en", "weworkremotely", None, 25, "programming"),
+        ("en", "remotive", None, 25, "programming"),
+        ("ca", "feinaactiva", None, 15, "programming"),
+    ]
+
+
+def test_a_draw_that_names_one_board_puts_no_other_board_on_the_wire() -> None:
+    """`t25-families` declares Feina Activa alone. Before this bound the plan, a run
+    against it contacted the remote boards the specification never asked for — real
+    requests to real boards, which is the rule the ledger enforces elsewhere."""
+    spec = COLLECT.load_draws()["t25-families"]
+    plan, _ = COLLECT.draw_scoped(spec, _plan())
+    assert not [row[1] for row in plan if row[1] != "feinaactiva"], plan
+
+
+def test_a_breadth_draw_runs_no_programming_adapter_even_on_a_board_it_names() -> None:
+    """The source axis alone was not enough. `t25-families` names `feinaactiva` and
+    does *not* name `programming`, and every fixed adapter — the Feina Activa one
+    included — searches for programming roles and stamps that family. Filtering on the
+    source alone kept that row, so a breadth draw would have collected programming ads
+    and had every one of them refused by `draw_selects` after the board was read."""
+    spec = COLLECT.load_draws()["t25-families"]
+    plan, _ = COLLECT.draw_scoped(spec, _plan())
+    assert plan == [], plan
+
+    # And the control: T4b names programming, so its plan is not empty.
+    t4b, _ = COLLECT.draw_scoped(COLLECT.load_draws()["t4b-programming"], _plan())
+    assert [row[1] for row in t4b] == [row[1] for row in _plan()], t4b
+
+
+def test_a_programming_draw_issues_no_search_for_a_family_it_does_not_name() -> None:
+    """`t4b-programming` declares `job_families: [programming]`, and no
+    `FAMILY_KEYWORDS` entry is programming — so it searches for none of them."""
+    spec = COLLECT.load_draws()["t4b-programming"]
+    _, families = COLLECT.draw_scoped(spec, _plan())
+    assert families == [], families
+
+
+def test_the_breadth_draw_still_asks_for_every_family_it_declares() -> None:
+    """The negative control: narrowing that refuses everything would pass both tests
+    above. `t25-families` names six families and every one is a keyword set here."""
+    spec = COLLECT.load_draws()["t25-families"]
+    _, families = COLLECT.draw_scoped(spec, _plan())
+    assert sorted(families) == sorted(spec["job_families"]), families
+
+
+def test_every_declared_draw_asks_only_for_boards_the_collector_can_reach() -> None:
+    """The live reading over the committed registry: a draw naming a source the
+    collector has no fetcher for would silently collect nothing for it."""
+    for name, spec in COLLECT.load_draws().items():
+        unreachable = set(spec["sources"]) - set(COLLECT.SOURCE_HOSTS)
+        assert not unreachable, f"draw {name!r} names {sorted(unreachable)}"
+
+
+def test_a_supplied_url_takes_its_source_from_the_board_not_the_language() -> None:
+    """`from_urls` was handed the literal `"ca"` as its source — a *language* written
+    into the field `corpus_scope.draw_selects` tests against the draw's `sources` axis.
+    No draw declares `ca` as a source, so every row `--ca-urls` produced would have been
+    a provenance fault the moment the gate read it (#307 review)."""
+    assert COLLECT.source_of("https://feinaactiva.gencat.cat/oferta/1") == "feinaactiva"
+    assert COLLECT.source_of("https://www.tecnoempleo.com/x") == "tecnoempleo"
+    assert COLLECT.source_of("https://never-surveyed.invalid/x") is None
+
+    declared = {s for spec in COLLECT.load_draws().values() for s in spec["sources"]}
+    assert "ca" not in declared, "the old literal names no board in any draw"
+
+
+def test_a_supplied_url_on_a_board_the_draw_does_not_name_is_never_fetched() -> None:
+    """The `--ca-urls` path is bound by the same two axes as the plan. `t25-families`
+    asks for no programming, and these adapters stamp nothing else."""
+    session = FakeSession({})
+    url = "https://feinaactiva.gencat.cat/oferta/1"
+    breadth = COLLECT.load_draws()["t25-families"]
+    assert list(COLLECT.from_urls(session, [url], breadth)) == []
+    assert session.fetched == [], "a draw asking for no programming still read the board"

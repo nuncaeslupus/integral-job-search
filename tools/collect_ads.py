@@ -23,7 +23,7 @@ import json
 import re
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -33,6 +33,7 @@ import py3langid
 import requests
 from bs4 import BeautifulSoup
 
+from integral.connector_policy import DEFAULT_LEDGER_PATH, refusals
 from integral.corpus import (
     LANGUAGES,
     classify_family,
@@ -43,7 +44,100 @@ from integral.corpus import (
     write_evidence,
     write_family_evidence,
 )
+from integral.corpus_scope import load_draws
 from integral.robots import USER_AGENT, Robots
+
+# The host each named source fetches from, so the plan below can be put through the
+# policy ledger by name. A source with no host here is refused too: an unrecorded host
+# cannot be checked against a refusal, and "not checkable" must not read as "allowed".
+SOURCE_HOSTS = {
+    "manfred": "getmanfred.com",
+    "tecnoempleo": "tecnoempleo.com",
+    "weworkremotely": "weworkremotely.com",
+    "remoteok": "remoteok.com",
+    "remotive": "remotive.com",
+    "feinaactiva": "feinaactiva.gencat.cat",
+}
+
+
+def plan_refusals(sources: Iterable[str], ledger: Path = DEFAULT_LEDGER_PATH) -> dict[str, str]:
+    """Why each named source may not be collected from, by name. Empty is a clean plan.
+
+    `connectors/ruled-out.yaml` is the record of which boards were surveyed and refused,
+    and this collector is the one thing in the repo that fetches a board in bulk. Both
+    kinds of refusal bind it. An `access` refusal removes the board outright; a `volume`
+    refusal is the owner's line between "a candidate looking at a handful of adverts"
+    and "a tool ingesting a board", and a corpus draw is unambiguously the second.
+
+    This is a check rather than a deletion so the *next* refused source is caught the
+    day it is added, and so overturning a refusal in the ledger re-enables the source
+    without anyone having to remember this file. A refused source is dropped from the
+    plan and the reason printed — adding it to a draw's `sources:` axis instead would
+    turn a refusal into a specification, which is the move T98 exists to prevent.
+    """
+    refused = {row.site: row for row in refusals(ledger) if row.site}
+    found: dict[str, str] = {}
+    for name in sources:
+        host = SOURCE_HOSTS.get(name)
+        if not host:
+            found[name] = "no host recorded in SOURCE_HOSTS, so no refusal can be checked"
+            continue
+        for site, row in refused.items():
+            if host == site or host.endswith(f".{site}"):
+                found[name] = (
+                    f"{host} is in connectors/ruled-out.yaml `policy_refused` "
+                    f"(refuses {row.refuses or 'unstated'}, decided by "
+                    f"{row.decided_by or 'unstated'} on {row.decided_on or 'no date'})"
+                )
+                break
+    return found
+
+
+def url_refusals(urls: Iterable[str], ledger: Path = DEFAULT_LEDGER_PATH) -> dict[str, str]:
+    """Why each hand-supplied URL may not be fetched, by URL. Empty is a clean list.
+
+    `plan_refusals` binds the fixed plan; this binds `--ca-urls`, which reached
+    `from_urls` without passing the ledger at all. A `remoteok.com` URL in that file was
+    fetched in bulk despite the owner's `refuses: volume` ruling — the refusal routed
+    around by the one input a person types by hand, which is the input least likely to
+    have been checked against anything.
+
+    A host `SOURCE_HOSTS` does not record is refused as well, the same fail-closed rule
+    the plan path follows: a board nothing surveyed cannot be put through the ledger,
+    and "not checkable" reading as "allowed" is how the refused board got fetched the
+    first time. Overturning that costs one line in `SOURCE_HOSTS`, which is also where
+    the *next* reader looks to find out whether a board was considered at all.
+    """
+    refused = plan_refusals(SOURCE_HOSTS, ledger)
+    found: dict[str, str] = {}
+    for url in urls:
+        # `source_of`, not a second copy of the rule. This match decides whether a
+        # URL is put through the refusal ledger at all, so a divergence between two
+        # implementations of it is a fail-open with no symptom (#307 review).
+        name = source_of(url)
+        if name is None:
+            host = (urlsplit(url).hostname or "").lower()
+            found[url] = (
+                f"host {host or '(none)'} is not recorded in SOURCE_HOSTS, so no refusal "
+                f"can be checked"
+            )
+        elif name in refused:
+            found[url] = refused[name]
+    return found
+
+
+def permitted_urls(urls: list[str], ledger: Path = DEFAULT_LEDGER_PATH) -> list[str]:
+    """The supplied URLs the ledger allows, with every refusal printed.
+
+    Filtering happens here rather than inside `from_urls` so a refused URL is dropped
+    *before* a session ever sees it: "refused" has to mean no request left the process,
+    not that the record was discarded after the fetch.
+    """
+    refused = url_refusals(urls, ledger)
+    for url, why in sorted(refused.items()):
+        print(f"{url}: not fetched — {why}", file=sys.stderr)
+    return [url for url in urls if url not in refused]
+
 
 # ponytail: no rate-limit machinery — a floor, and whatever the site asks for,
 # whichever is slower.
@@ -110,7 +204,7 @@ MAX_REDIRECTS = 5
 
 
 def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
-    """Fetch `url`, or refuse because the site's robots.txt says not to.
+    """Fetch `url`, or refuse because the policy ledger or the site's robots.txt says not to.
 
     The check is here rather than in each board adapter because every fetch
     goes through here: a rule that has to be remembered at each call site is a
@@ -120,12 +214,22 @@ def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
     them itself, which would check the first URL and fetch the last — so a
     board that redirects a permitted path onto a disallowed one, or onto
     another host entirely, would walk straight through the check. Every hop is
-    a fetch, so every hop asks that origin's own robots.txt and waits for that
-    origin's own crawl delay.
+    a fetch, so every hop is put through the refusal ledger, asks that origin's
+    own robots.txt and waits for that origin's own crawl delay.
     """
     for _ in range(MAX_REDIRECTS + 1):
         if urlsplit(url).scheme != "https":
             raise PermissionError(f"the collector reads https only, not {url!r}")
+        # The ledger, before robots and before the request leaves the process. The plan
+        # is filtered before it is walked and `--ca-urls` before it is read; neither
+        # reaches a redirect target, which is the one URL nobody typed — an allowed
+        # first hop landing on a refused board is the refusal routed around by the
+        # board itself. Asking robots.txt first would put a question to a board we may
+        # not fetch at all. `url_refusals` is the same reader the other two paths use,
+        # so there is still exactly one parser of `connectors/ruled-out.yaml`.
+        refused = url_refusals([url])
+        if url in refused:
+            raise PermissionError(f"the policy ledger refuses {url} — {refused[url]}")
         if not ROBOTS.allows(url):
             raise PermissionError(f"robots.txt disallows {USER_AGENT} on {url}")
         # Before, not after: a delay that only follows the final response does
@@ -141,9 +245,18 @@ def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
     raise RuntimeError(f"more than {MAX_REDIRECTS} redirects fetching {url!r}")
 
 
+# T98: the draw this run is executing, set once from `--draw` and stamped onto every row
+# it produces. A module-level value rather than an eighth parameter threaded through
+# eight call sites, because one run *is* one draw — and `record` refuses to build a row
+# while it is empty, so the collector cannot write a corpus nothing can account for.
+DRAW = ""
+
+
 def record(
     ad_id: str, source: str, url: str, title: str, company: str, text: str, job_family: str
 ) -> dict[str, Any] | None:
+    if not DRAW:
+        raise RuntimeError("no draw set — collect against a draw declared in corpus/draws.yaml")
     if len(text) < 400:  # a stub, not an ad
         return None
     return {
@@ -155,6 +268,7 @@ def record(
         "title": title.strip(),
         "company": company.strip(),
         "job_family": job_family,
+        "draw": DRAW,
         "text": text,
     }
 
@@ -561,9 +675,47 @@ def from_feinaactiva_family(
             yield rec
 
 
-def from_urls(session: requests.Session, urls: list[str], source: str) -> Iterator[dict[str, Any]]:
-    """Any board that publishes schema.org JobPosting — used for the hand-picked CA ads."""
+def source_of(url: str) -> str | None:
+    """The board name this URL belongs to, or `None` if no board claims its host.
+
+    The reverse of `SOURCE_HOSTS`, and the only honest answer for a hand-supplied
+    URL: a corpus row's `source` is a board, and `corpus_scope.draw_selects` tests
+    it against the draw's `sources` axis.
+    """
+    host = (urlsplit(url).hostname or "").lower()
+    return next(
+        (name for name, h in SOURCE_HOSTS.items() if host == h or host.endswith("." + h)),
+        None,
+    )
+
+
+def from_urls(
+    session: requests.Session, urls: list[str], spec: Mapping[str, Any]
+) -> Iterator[dict[str, Any]]:
+    """Any board that publishes schema.org JobPosting — used for the hand-picked CA ads.
+
+    Takes the draw's specification rather than a source string. It used to be handed
+    the literal `"ca"`, which is a *language* written into the `source` field: no draw
+    declares `ca` as a source, so every row this produced was a provenance fault the
+    moment `corpus_scope` read it (#307 review). The board is derived from the URL's
+    host instead, and a URL whose board the draw does not name — or which advertises
+    a family the draw did not ask for — is skipped before it is fetched.
+    """
+    if "programming" not in set(spec["job_families"]):
+        print(
+            f"  ca-urls: draw {spec['id']!r} does not ask for programming — none fetched",
+            file=sys.stderr,
+        )
+        return
+    sources = set(spec["sources"])
     for url in urls:
+        source = source_of(url)
+        if source is None:
+            print(f"  no board claims this host: {url}", file=sys.stderr)
+            continue
+        if source not in sources:
+            print(f"  draw {spec['id']!r} does not name {source}: {url}", file=sys.stderr)
+            continue
         posting = jobposting_ld(get(session, url).text)
         if not posting:
             print(f"  no JobPosting block: {url}", file=sys.stderr)
@@ -582,8 +734,48 @@ def from_urls(session: requests.Session, urls: list[str], source: str) -> Iterat
             yield rec
 
 
+def draw_scoped(
+    spec: Mapping[str, Any], plan: list[tuple[str, str, Any, int, str]]
+) -> tuple[list[tuple[str, str, Any, int, str]], list[str]]:
+    """The plan rows and job families a draw's specification asks for.
+
+    Two of a draw's three axes are request-shaped: a `sources` entry decides which
+    boards are contacted, a `job_families` entry which searches are issued. A source
+    or family the specification does not name is a request to a real board that
+    nobody asked for, which is the rule the policy ledger and the redirect guard
+    both enforce by other routes — `t25-families` names Feina Activa alone, and an
+    unconstrained run put three remote boards on the wire.
+
+    **Both axes bind the fixed plan, not just `sources`.** Every fixed adapter
+    searches for programming roles, so under `t25-families` — which names Feina
+    Activa but not `programming` — filtering on the source alone kept the
+    `feinaactiva` row and would have collected programming ads for a breadth draw
+    (#307 review). Those rows would then be refused by `corpus_scope.draw_selects`,
+    after the board had already been read.
+
+    The third axis, the counts, deliberately does not bind here: shortages are read
+    against the whole store, so a draw re-issued over a corpus that already holds
+    enough rows collects nothing. That is a real gap and a separate task —
+    draw-scoped counting changes what `--target-*` means. This function only ever
+    *narrows*, so it can never import a row `corpus_scope.draw_selects` would then
+    refuse.
+    """
+    sources = set(spec["sources"])
+    families = set(spec["job_families"])
+    return (
+        [row for row in plan if row[1] in sources and row[4] in families],
+        [family for family in FAMILY_KEYWORDS if family in families],
+    )
+
+
 def main() -> int:
+    global DRAW
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--draw",
+        required=True,
+        help="id of the draw being executed, declared in corpus/draws.yaml (T98)",
+    )
     ap.add_argument("--target-es", type=int, default=60)
     ap.add_argument("--target-en", type=int, default=25)
     ap.add_argument("--target-ca", type=int, default=15)
@@ -597,6 +789,18 @@ def main() -> int:
     ap.add_argument("--evidence", type=Path, default=Path("status/evidence/T4b.json"))
     ap.add_argument("--family-evidence", type=Path, default=Path("status/evidence/T25.json"))
     args = ap.parse_args()
+
+    # Declared first, collected against second. Accepting an undeclared id here would put
+    # the specification after the fact, which is how a harvest acquires a draw's name.
+    declared = load_draws()
+    if args.draw not in declared:
+        print(
+            f"draw {args.draw!r} is not declared in corpus/draws.yaml "
+            f"(declared: {', '.join(sorted(declared)) or 'none'})",
+            file=sys.stderr,
+        )
+        return 2
+    DRAW = args.draw
 
     ads = {ad["id"]: ad for ad in load_ads()}
     texts = {ad["text"] for ad in ads.values()}
@@ -612,20 +816,37 @@ def main() -> int:
             added += 1
         print(f"{name}: +{added}")
 
+    # Every fixed adapter searches for programming roles and stamps `programming`
+    # on what it returns; the family is carried in the row rather than assumed, so
+    # `draw_scoped` filters on it and a non-programming adapter added later is
+    # handled by declaring its family here.
     plan = [
-        ("es", "manfred", from_manfred, args.target_es),
-        ("es", "tecnoempleo", from_tecnoempleo, args.target_es),
-        ("en", "weworkremotely", from_weworkremotely, args.target_en),
-        ("en", "remoteok", from_remoteok, args.target_en),
-        ("en", "remotive", from_remotive, args.target_en),
-        ("ca", "feinaactiva", from_feinaactiva, args.target_ca),
+        ("es", "manfred", from_manfred, args.target_es, "programming"),
+        ("es", "tecnoempleo", from_tecnoempleo, args.target_es, "programming"),
+        ("en", "weworkremotely", from_weworkremotely, args.target_en, "programming"),
+        ("en", "remoteok", from_remoteok, args.target_en, "programming"),
+        ("en", "remotive", from_remotive, args.target_en, "programming"),
+        ("ca", "feinaactiva", from_feinaactiva, args.target_ca, "programming"),
     ]
-    for lang, name, fetch, target in plan:
+    # Policy before politeness: robots is asked per fetch inside `get()`, but a board
+    # the ledger refuses is never planned in the first place.
+    refused = plan_refusals(name for _, name, _, _, _ in plan)
+    for name, why in sorted(refused.items()):
+        print(f"{name}: not planned — {why}", file=sys.stderr)
+    plan = [row for row in plan if row[1] not in refused]
+    unscoped = plan
+
+    # The draw's two request-shaped axes bind the plan; see `draw_scoped`.
+    plan, families = draw_scoped(declared[args.draw], plan)
+    for name in {row[1] for row in unscoped} - {row[1] for row in plan}:
+        print(f"{name}: not planned — draw {args.draw!r} does not name it", file=sys.stderr)
+
+    for lang, name, fetch, target, _family in plan:
         missing = target - language_counts(list(ads.values()))[lang]
         if missing > 0:
             absorb(name, fetch(session, missing))
 
-    for family in FAMILY_KEYWORDS:
+    for family in families:
         have = job_family_counts(list(ads.values())).get(family, 0)
         if have < args.target_family:
             absorb(
@@ -638,7 +859,7 @@ def main() -> int:
     if args.ca_urls and args.ca_urls.exists():
         lines = args.ca_urls.read_text().splitlines()
         urls = [u.strip() for u in lines if u.strip().startswith("http")]
-        absorb("ca-urls", from_urls(session, urls, "ca"))
+        absorb("ca-urls", from_urls(session, permitted_urls(urls), declared[args.draw]))
 
     all_ads = list(ads.values())
     save_ads(all_ads)

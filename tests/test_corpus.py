@@ -205,6 +205,8 @@ def test_init_preserves_existing_splits_when_the_corpus_grows(tmp_path: Path) ->
             "text": f"ad body {index}",
             "source_url": f"https://example.invalid/{language}/{index}",
             "job_family": "programming",
+            # T98: refused at load without it — see `tests/test_corpus_provenance.py`.
+            "draw": "fixture-draw",
         }
 
     first_batch = [raw_ad(i, "ca") for i in range(6)]

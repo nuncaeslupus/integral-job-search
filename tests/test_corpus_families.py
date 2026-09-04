@@ -25,6 +25,11 @@ def _ad(ad_id: str, family: str | None) -> dict[str, Any]:
         "source_url": f"https://example.invalid/{ad_id}",
         "language": "es",
         "text": "x" * 500,
+        # T98: a row that cannot name the draw that produced it is refused at load, so a
+        # fixture exercising any *other* refusal has to clear this one first. The value is
+        # not looked up here — whether a draw is declared is `integral.corpus_scope`'s
+        # check, and `tests/test_corpus_provenance.py` drives it.
+        "draw": "fixture-draw",
     }
     if family is not None:
         ad["job_family"] = family
