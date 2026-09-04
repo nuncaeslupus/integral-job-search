@@ -458,6 +458,14 @@ def test_the_exempt_reader_may_not_import_the_serving_path(tmp_path: Path) -> No
         "import integral.presentation\n",
         "from .rank import rank_offers\n",
         "from . import presentation\n",
+        # Deferred, inside a function body. The ceiling docstring on
+        # `exempt_reader_findings` claims `ast.walk` reaches this and that "the
+        # fixtures are the record" — and the first attempt at that fixture drove
+        # the OTHER scanner, so mutating this one's `ast.walk` to a top-level
+        # `.body` scan stayed green across 2722 tests (#307 fifth read, N6).
+        # Answering a finding with a fixture on a different function is the exact
+        # failure the rule about committing findings exists to stop.
+        "def later():\n    from integral.rank import rank_offers\n",
     ],
 )
 def test_every_spelling_of_widening_the_exemption_trips_it(tmp_path: Path, body: str) -> None:
@@ -761,8 +769,11 @@ def test_the_component_list_is_the_sum_expression_itself() -> None:
     **The shape it recognises is `len(<Name>)`, and that is the ceiling.** A term
     spelled `sum(1 for _ in x)`, `len(obj.attr)`, or a bare literal is not counted,
     so a sixth component written that way walks through (#307 fourth read, F3).
-    Hoisting the sum into a local, or renaming the key, is caught — by the
-    `assert terms` tripwire, fail-closed. Stated rather than left to be found.
+    Hoisting the sum into a local is caught by the `assert terms` tripwire;
+    renaming the key is caught by `assert len(matches) == 1`, which finds none.
+    Both fail-closed. Stated rather than left to be found — and named correctly,
+    since the first version of this sentence attributed both to `assert terms`
+    (#307 fifth read, N7).
     """
     module = ast.parse(Path(corpus_scope.__file__).read_text(encoding="utf-8"))
     matches: list[list[str]] = []
