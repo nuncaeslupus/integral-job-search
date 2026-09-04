@@ -386,5 +386,12 @@ def test_a_floor_breach_is_a_finding_not_an_unmeasured_reading(tmp_path: Path) -
         draws_path=_registry(tmp_path),
     )
     assert measured["gate_status"] == "unmeasured"
-    assert measured["floor_breaches"] == 1, measured.get("unmeasured_reason")
+    # Three floors breach on a two-row synthetic store — the corpus-row floor and the
+    # two the stimulus exemption added — and the count is what carries the exit code, so
+    # the assertion is that they were counted as breaches rather than as untrusted
+    # readings. It is `>= 1` and names the one this fixture is about: pinning the exact
+    # total would make every future floor a failing test of this one, which is how a
+    # fixture ends up rewritten instead of read.
+    assert measured["floor_breaches"] >= 1, measured.get("unmeasured_reason")
+    assert "below the 400 floor" in measured["unmeasured_reason"]
     assert not measured["faults"], "the floor is the only reason this reading is short"

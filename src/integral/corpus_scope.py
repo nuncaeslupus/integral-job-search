@@ -55,7 +55,7 @@ else entirely.
 candidate's search.** That is the other half of "what is this corpus for", so it is
 measured here, and `write_provenance_evidence` records it as `status/evidence/T98.json`.
 
-Two properties, and neither survives as prose:
+Three properties, and none survives as prose:
 
 * **The serving ban.** No candidate is ever handed a stored advert as an offer. An
   advert is perishable and a stored one is stale by definition; reading offers out of
@@ -67,6 +67,13 @@ Two properties, and neither survives as prose:
   refuses a row that names no draw or carries a candidate-bound key; what it cannot do
   without the registry — is the draw *declared*, and does its stated query shape
   actually account for this row — is `provenance_faults` here.
+* **The one exemption, and its bounds.** Step 5 draws corpus adverts as *stimuli*, and
+  the owner ruled that measurement is not serving. `exempt_reader_findings` keeps that
+  module from widening into serving, `CORPUS_MODULES` keeps a serving module from
+  reaching the corpus *through* it, and `stimulus_split_findings` enforces the
+  condition the ruling came with — the stimuli come from a split disjoint from the
+  evaluation set. `EXEMPT_CORPUS_READERS` below carries the ruling in the owner's own
+  words, beside the list a reader of the ban arrives at.
 
 The second check is what makes provenance a filter rather than a comment. A row copied
 out of a candidate's harvest can trivially be labelled `draw: t4b-programming`; it
@@ -97,6 +104,7 @@ from typing import Any
 import yaml
 
 from integral import corpus
+from integral.offers import compute_offer_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PLAN = _REPO_ROOT / "status" / "plan.md"
@@ -273,12 +281,63 @@ CORE_SERVING_MODULES: tuple[str, ...] = (
     "rank",
 )
 
+# ---------------------------------------------------------------------------------
+# The one exemption to the serving ban, and the three things that bound it.
+#
+# Step 5 (`integral.reaction_elicit`) draws corpus adverts as **stimuli**: adverts shown
+# to the candidate so that a reaction can be captured. That reads the corpus, and it is
+# not serving. The owner ruled on 2026-09-04, and the reason is recorded here — beside
+# the list a reader of the ban actually arrives at — rather than only in the task file:
+#
+#     "reacting to an advert can never contaminate the labels it is scored against."
+#
+# Showing an advert to elicit a reaction is *measurement*. Nothing about a stimulus is a
+# claim that this job suits this person, so the perishability argument that bans serving
+# — a stored advert is stale by definition, and answering a candidate's search from stale
+# rows is what let one live session return three adverts and call the market exhausted —
+# does not reach it. `reaction_elicit` therefore does **not** join `CORE_SERVING_MODULES`.
+#
+# An unbounded exemption is a hole with a comment next to it, so three checks bound this
+# one, and each is measured rather than promised:
+#
+# 1. **Stimuli only, never onward.** The exempt module may depend on the offer *record*
+#    (`integral.offers`) and on the store transition that admits one
+#    (`integral.lifecycle`) — a stimulus is written into the candidate's offer store as
+#    an ordinary `new` offer, and there is no other way to do that. It may depend on
+#    nothing else on the serving path: nothing that orders, presents, explains, ages or
+#    sources offers. An edit importing `integral.rank` or `integral.presentation` into
+#    it — the exact shape of "while we have these adverts, show them as matches" — is
+#    counted as `exempt_reader_serving_imports`.
+# 2. **No laundering.** `integral.reaction_elicit` is itself a corpus module *for
+#    everyone else*, so a serving module importing it reaches the corpus through it and
+#    is counted as `serving_path_corpus_reads` like any direct read. Without that, the
+#    exemption is a one-import detour around the whole ban.
+# 3. **A disjoint split.** An advert a candidate has reacted to is no longer clean
+#    held-out data for any metric computed over the evaluation split, so the stimulus
+#    pool must be disjoint from that split — `stimulus_pool_evaluation_overlaps` and
+#    `corpus_text_collisions` below.
+#
+# The exemption is one module, by name. Widening it is an edit to this line, which is the
+# point: a second exempt reader has to be argued for rather than slipped in.
+EXEMPT_CORPUS_READERS: tuple[str, ...] = ("reaction_elicit",)
+
+# What an exempt reader may touch on the serving path, and nothing else may. Both are
+# structural: `Offer` and `compute_offer_id` are the record a stimulus *is*, and
+# `collect_offer` is the one transition that admits it to the store. Neither ranks,
+# orders, filters or presents anything.
+STIMULUS_STRUCTURAL_DEPENDENCIES: tuple[str, ...] = ("offers", "lifecycle")
+
 # Reading any of these *is* reading the corpus, whichever name it arrives under.
 # `integral.corpus_scope` is in the set because this module reads both stores itself —
 # `_read_rows`, `provenance_faults`, and `DEFAULT_RAW_ADS` as a plain path — so leaving
 # it out made the detector blind to the shortest route through itself, and the ban's own
-# count would have stayed at zero while a serving module used it. Fail-open.
-CORPUS_MODULES = frozenset({"integral.corpus", "integral.corpus_scope", "integral.harness"})
+# count would have stayed at zero while a serving module used it. Fail-open. Every exempt
+# reader is in it for the same reason: the exemption is for the module itself, never for
+# a serving module that imports it.
+CORPUS_MODULES = frozenset(
+    {"integral.corpus", "integral.corpus_scope", "integral.harness"}
+    | {f"integral.{name}" for name in EXEMPT_CORPUS_READERS}
+)
 _CORPUS_PATH_RE = re.compile(r"corpus/(?:raw|labelled)")
 
 # Floors, not counts of the day (T100's lesson): the evidence records what the scan must
@@ -287,6 +346,14 @@ _CORPUS_PATH_RE = re.compile(r"corpus/(?:raw|labelled)")
 # instead of a clean zero over nothing.
 MINIMUM_CORPUS_ROWS = 400
 MINIMUM_SERVING_MODULES = 12
+
+# The exemption's reach, and the set it must stay disjoint from. Two floors, not one,
+# because the disjointness reading has **two** vacuous passes and a floor on one side
+# refuses only one of them: an empty stimulus pool overlaps nothing, and an empty
+# evaluation split is overlapped by nothing. Either produces a clean zero over an empty
+# set, which is the reading this pair exists to refuse.
+MINIMUM_STIMULUS_POOL = 80
+MINIMUM_EVALUATION_POOL = 80
 
 
 def load_draws(path: Path = DEFAULT_DRAWS) -> dict[str, dict[str, Any]]:
@@ -516,16 +583,146 @@ def serving_path_findings(
     return findings, absent
 
 
+def exempt_reader_findings(
+    src_dir: Path = DEFAULT_SRC_DIR,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Bound 1: every serving-path module an exempt corpus reader imports, and every
+    exempt reader that is not in the tree.
+
+    This is the check that keeps the exemption narrow. `reaction_elicit` is allowed to
+    read the corpus *because it makes stimuli*, and the observable difference between a
+    stimulus and a served offer is what the module does with it afterwards. Importing
+    `integral.rank`, `integral.presentation`, `integral.explain` or a `sourcing_*` module
+    is that difference arriving as a two-line edit — the exemption widened into general
+    serving, with the ban's own count still reading zero because the exempt module is not
+    scanned by `serving_path_findings`.
+
+    `STIMULUS_STRUCTURAL_DEPENDENCIES` is what a stimulus structurally needs and is
+    listed rather than inferred: `offers` gives the record and its content-addressed id,
+    `lifecycle` admits it to the store. Allowing the two by name and refusing the other
+    six-plus is what makes this a boundary rather than a shrug.
+
+    An exempt reader absent from the tree is returned separately, exactly as an absent
+    serving module is: it makes the reading untrusted rather than a violation, because a
+    renamed exempt module scanned as nothing is a clean zero over an empty set.
+    """
+    findings: list[dict[str, str]] = []
+    absent: list[str] = []
+    permitted = set(STIMULUS_STRUCTURAL_DEPENDENCIES)
+    out_of_bounds = {
+        f"integral.{name}" for name in serving_path_modules(src_dir) if name not in permitted
+    }
+    for name in EXEMPT_CORPUS_READERS:
+        path = src_dir / f"{name}.py"
+        if not path.is_file():
+            absent.append(name)
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            reached: set[str] = set()
+            if isinstance(node, ast.ImportFrom):
+                module = _imported_module(node)
+                if module in out_of_bounds:
+                    reached.add(module)
+                elif module == "integral":
+                    reached |= {
+                        f"integral.{alias.name}"
+                        for alias in node.names
+                        if f"integral.{alias.name}" in out_of_bounds
+                    }
+            elif isinstance(node, ast.Import):
+                reached |= {alias.name for alias in node.names if alias.name in out_of_bounds}
+            findings.extend(
+                {
+                    "module": name,
+                    "reason": f"imports {reach}, which is on the serving path and is not "
+                    f"one of {sorted(permitted)}",
+                }
+                for reach in sorted(reached)
+            )
+    return findings, absent
+
+
+def stimulus_split_findings(
+    labelled_path: Path = DEFAULT_LABELLED_ADS,
+) -> tuple[list[dict[str, str]], list[dict[str, str]], int, int]:
+    """Bound 3: every advert reachable as a stimulus that the evaluation split also
+    holds, every corpus text carried by more than one row, and the size of each side.
+
+    The owner's exemption is conditional — *"the stimuli must come from a split disjoint
+    from the evaluation set"* — and this is the condition, measured over the store rather
+    than asserted at the moment a candidate is shown something. `reaction_elicit` already
+    refuses an evaluation-split ad per call; that check fires only for an advert somebody
+    actually drew. This one fires over the whole reachable pool, before anyone draws.
+
+    **The bridge is the text, not the split field.** `corpus_stimuli` selects on
+    `split == "elicitation"`, but an offer is addressed by `compute_offer_id(text)` —
+    the same function `reaction_elicit` and the T9 gate use, deliberately not a second
+    implementation of the same hash. Two rows with different corpus ids and identical
+    text land on one offer id, so a row *marked* elicitation can carry an evaluation
+    advert's content and contaminate a metric quoted as held-out. That is the fail-open
+    direction and it is the one this counts.
+
+    `corpus_text_collisions` is the same defect one step earlier: a text under two ids is
+    the mechanism by which a future re-split puts one copy either side. It is reported
+    separately rather than folded in, because a collision inside one split is not yet a
+    contamination and a reader must be able to tell the two apart.
+
+    Returns `(overlaps, collisions, stimulus_pool, evaluation_pool)`. The two sizes are
+    what `MINIMUM_STIMULUS_POOL` and `MINIMUM_EVALUATION_POOL` are floors on: a zero from
+    an empty pool and a zero from a disjoint one are the same number and not the same
+    verdict.
+    """
+    rows = _read_rows(labelled_path)
+    evaluation: dict[str, str] = {}
+    stimulus: dict[str, str] = {}
+    by_text: dict[str, list[str]] = {}
+    seen_ids: set[str] = set()
+    for row in rows:
+        identifier = str(row.get("id") or "?")
+        offer_id = compute_offer_id(str(row.get("text") or ""))
+        if identifier not in seen_ids:
+            by_text.setdefault(offer_id, []).append(identifier)
+            seen_ids.add(identifier)
+        if row.get("split") == "evaluation":
+            evaluation.setdefault(offer_id, identifier)
+        elif row.get("split") == "elicitation":
+            stimulus.setdefault(offer_id, identifier)
+
+    overlaps = [
+        {
+            "row": stimulus[offer_id],
+            "where": "labelled",
+            "reason": f"reachable as a stimulus, and its text is also evaluation-split row "
+            f"{evaluation[offer_id]} — a reaction to it contaminates every metric "
+            f"computed over the evaluation split",
+        }
+        for offer_id in sorted(set(stimulus) & set(evaluation))
+    ]
+    collisions = [
+        {
+            "row": ", ".join(sorted(ids)),
+            "where": "labelled",
+            "reason": "these rows carry byte-identical text, so a re-split can place one "
+            "copy in each half",
+        }
+        for _, ids in sorted(by_text.items())
+        if len(ids) > 1
+    ]
+    return overlaps, collisions, len(stimulus), len(evaluation)
+
+
 def measure_provenance(
     raw_path: Path = DEFAULT_RAW_ADS,
     labelled_path: Path = DEFAULT_LABELLED_ADS,
     draws_path: Path = DEFAULT_DRAWS,
     src_dir: Path = DEFAULT_SRC_DIR,
 ) -> dict[str, Any]:
-    """T98's gate reading: rows the declared draws do not account for, and serving-path
-    modules that read the corpus."""
+    """T98's gate reading: rows the declared draws do not account for, serving-path
+    modules that read the corpus, and the bounds on the one exemption to that ban."""
     faults, rows_examined = provenance_faults(raw_path, labelled_path, draws_path)
     findings, absent = serving_path_findings(src_dir)
+    exempt_findings, exempt_absent = exempt_reader_findings(src_dir)
+    overlaps, collisions, stimulus_pool, evaluation_pool = stimulus_split_findings(labelled_path)
     scanned = len(serving_path_modules(src_dir)) - len(absent)
 
     # Two verdicts wear the same word and must not share an exit code. A scan that
@@ -545,9 +742,24 @@ def measure_provenance(
         )
     if absent:
         untrusted.append(f"serving-path modules not found: {', '.join(absent)}")
+    if exempt_absent:
+        untrusted.append(f"exempt corpus readers not found: {', '.join(exempt_absent)}")
     if scanned < MINIMUM_SERVING_MODULES:
         breached.append(
             f"{scanned} serving-path modules scanned, below the {MINIMUM_SERVING_MODULES} floor"
+        )
+    # Both sides of the disjointness reading, because zero overlaps is what an empty
+    # stimulus pool and an empty evaluation split each produce. A floor on one alone
+    # leaves the other as a vacuous pass over the exemption's own condition.
+    if stimulus_pool < MINIMUM_STIMULUS_POOL:
+        breached.append(
+            f"{stimulus_pool} adverts reachable as stimuli, below the "
+            f"{MINIMUM_STIMULUS_POOL} floor"
+        )
+    if evaluation_pool < MINIMUM_EVALUATION_POOL:
+        breached.append(
+            f"{evaluation_pool} evaluation-split adverts compared, below the "
+            f"{MINIMUM_EVALUATION_POOL} floor"
         )
     unmeasured = breached + untrusted
 
@@ -556,18 +768,35 @@ def measure_provenance(
         # exactly one. T98 states two properties and the block declared only the first,
         # so a serving-cache regression — the half the task is named after — passed
         # T98's own gate with `corpus_rows_without_a_draw_specification` still at zero.
-        # Both counts stay below, because a violation you cannot name is one nobody can
-        # act on; the sum is what makes either of them fail the gate.
-        "corpus_measurement_set_violations": len(faults) + len(findings),
+        # Every count stays below, because a violation you cannot name is one nobody can
+        # act on, and a sum whose components are not reported is a zero that hides what
+        # it is made of — the defect this repository has now caught four times. Four
+        # components, four keys, and the sum is what makes any one of them fail the gate.
+        "corpus_measurement_set_violations": (
+            len(faults) + len(findings) + len(exempt_findings) + len(overlaps) + len(collisions)
+        ),
         "corpus_rows_without_a_draw_specification": len(faults),
         "serving_path_corpus_reads": len(findings),
+        "exempt_reader_serving_imports": len(exempt_findings),
+        "stimulus_pool_evaluation_overlaps": len(overlaps),
+        "corpus_text_collisions": len(collisions),
         "gate_status": "unmeasured" if unmeasured else "measured",
         "floor_breaches": len(breached),
         "corpus_rows_evaluated_at_least": MINIMUM_CORPUS_ROWS,
         "serving_path_modules_scanned_at_least": MINIMUM_SERVING_MODULES,
+        # The exemption's reach, as a measured quantity rather than a claim: how many
+        # adverts `reaction_elicit` can put in front of a candidate. A floor, not the
+        # count of the day (T100), so a re-drawn corpus does not rewrite the record —
+        # and a pool that has collapsed below it makes the disjointness zero
+        # `unmeasured` instead of clean.
+        "stimulus_reachable_adverts_at_least": MINIMUM_STIMULUS_POOL,
+        "evaluation_adverts_compared_at_least": MINIMUM_EVALUATION_POOL,
+        "exempt_corpus_readers": list(EXEMPT_CORPUS_READERS),
         "declared_draws": sorted(load_draws(draws_path)),
         "faults": faults,
         "serving_path_findings": findings,
+        "exempt_reader_findings": exempt_findings,
+        "stimulus_split_findings": overlaps + collisions,
     }
     if unmeasured:
         measured["unmeasured_reason"] = "; ".join(unmeasured)

@@ -2,14 +2,24 @@
   "corpus_measurement_set_violations": 0,
   "corpus_rows_without_a_draw_specification": 0,
   "serving_path_corpus_reads": 0,
+  "exempt_reader_serving_imports": 0,
+  "stimulus_pool_evaluation_overlaps": 0,
+  "corpus_text_collisions": 0,
   "gate_status": "measured",
   "floor_breaches": 0,
   "corpus_rows_evaluated_at_least": 400,
   "serving_path_modules_scanned_at_least": 12,
+  "stimulus_reachable_adverts_at_least": 80,
+  "evaluation_adverts_compared_at_least": 80,
+  "exempt_corpus_readers": [
+    "reaction_elicit"
+  ],
   "declared_draws": [
     "t25-families",
     "t4b-programming"
   ],
   "faults": [],
-  "serving_path_findings": []
+  "serving_path_findings": [],
+  "exempt_reader_findings": [],
+  "stimulus_split_findings": []
 }

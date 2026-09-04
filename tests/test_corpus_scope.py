@@ -13,6 +13,7 @@ today.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -20,13 +21,23 @@ import pytest
 from integral.corpus_scope import (
     _REPO_ROOT,
     CATALAN_SCOPE_ANCHOR,
+    CORE_SERVING_MODULES,
+    CORPUS_MODULES,
     DEFAULT_PLAN,
+    DEFAULT_SRC_DIR,
+    EXEMPT_CORPUS_READERS,
+    MINIMUM_EVALUATION_POOL,
     MINIMUM_SERVING_MODULES,
+    MINIMUM_STIMULUS_POOL,
+    STIMULUS_STRUCTURAL_DEPENDENCIES,
     TARGET_MIX,
+    _corpus_reads,
+    exempt_reader_findings,
     measure,
     measure_provenance,
     serving_path_findings,
     serving_path_modules,
+    stimulus_split_findings,
     t4b_row,
 )
 from integral.task_gate import parse_gate_block
@@ -185,7 +196,7 @@ def _serving_tree(tmp_path: Path, extra: dict[str, str] | None = None) -> Path:
     """
     src = tmp_path / "integral"
     src.mkdir()
-    for name in serving_path_modules():
+    for name in (*serving_path_modules(), *EXEMPT_CORPUS_READERS):
         (src / f"{name}.py").write_text("", encoding="utf-8")
     for name, body in (extra or {}).items():
         (src / f"{name}.py").write_text(body, encoding="utf-8")
@@ -304,3 +315,356 @@ def test_a_missing_serving_module_makes_the_reading_unmeasured_not_zero(tmp_path
     # without the absent-module detection existing at all — a gate testing something
     # other than what it claims.
     assert measured["unmeasured_reason"] == "serving-path modules not found: rank"
+
+
+# --------------------------------------------------------------------------------
+# T98 — the one exemption to that ban, and the three things that bound it.
+#
+# Step 5 (`integral.reaction_elicit`) draws corpus adverts as **stimuli**. The owner
+# ruled on 2026-09-04 that this is exempt — "reacting to an advert can never contaminate
+# the labels it is scored against" — *provided* the stimuli come from a split disjoint
+# from the evaluation set. An exemption with no boundary is a hole with a comment next
+# to it, so what follows drives each boundary until it trips.
+
+
+def _labelled(tmp_path: Path, rows: list[dict[str, str]], name: str = "labelled.jsonl") -> Path:
+    """A synthetic labelled store: id, text, split, and nothing else this reads."""
+    path = tmp_path / name
+    path.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
+    )
+    return path
+
+
+def _pool(prefix: str, split: str, count: int) -> list[dict[str, str]]:
+    """`count` distinct adverts in one split, none of them sharing text."""
+    return [
+        {"id": f"{prefix}{i}", "text": f"{prefix} advert {i}", "split": split}
+        for i in range(count)
+    ]
+
+
+def _clean_store(tmp_path: Path, name: str = "labelled.jsonl") -> list[dict[str, str]]:
+    """Both halves, comfortably clear of both floors, and disjoint."""
+    del tmp_path, name
+    return _pool("e", "elicitation", MINIMUM_STIMULUS_POOL + 5) + _pool(
+        "v", "evaluation", MINIMUM_EVALUATION_POOL + 5
+    )
+
+
+def test_the_exemption_is_a_named_module_that_is_exempt_for_itself_alone() -> None:
+    """Deliverable 1, asserted structurally before it is asserted as prose.
+
+    Two memberships carry the whole ruling. `reaction_elicit` is **not** in
+    `CORE_SERVING_MODULES`, which is the exemption: showing an advert to capture a
+    reaction is measurement, not a search result. And it **is** in `CORPUS_MODULES`,
+    which is the exemption's second bound: a serving module importing it reaches the
+    corpus through it, and that is a corpus read like any other. Exempt for itself,
+    never for anyone who imports it.
+    """
+    for name in EXEMPT_CORPUS_READERS:
+        assert name not in CORE_SERVING_MODULES, name
+        assert f"integral.{name}" in CORPUS_MODULES, name
+
+
+def test_the_owners_reason_is_recorded_beside_the_serving_ban() -> None:
+    """The rest of deliverable 1: a reader of `CORE_SERVING_MODULES` finds *why* one
+    module is missing from it, so the next session does not re-litigate the ruling from
+    scratch or, worse, close the "hole" by adding it.
+
+    This is a prose check and is named as one — it asserts a sentence is present, not
+    that anything behaves. The behaviour is the test above and the four below.
+    """
+    source = (DEFAULT_SRC_DIR / "corpus_scope.py").read_text(encoding="utf-8")
+    ruling = "reacting to an advert can never contaminate the labels it is scored against"
+    assert ruling in source
+    # And beside the list, not in some appendix: between the serving-path census and the
+    # corpus-module set is where somebody reading the ban is standing.
+    assert source.index("CORE_SERVING_MODULES: tuple") < source.index(ruling)
+    assert source.index(ruling) < source.index("CORPUS_MODULES = frozenset")
+
+
+def test_the_exemption_covers_something_real() -> None:
+    """An exemption for a module that does not read the corpus is a dead entry that
+    nothing would notice going stale. `reaction_elicit` must actually be a corpus
+    reader, or the entry — and the laundering bound built on it — protects nothing."""
+    for name in EXEMPT_CORPUS_READERS:
+        source = (DEFAULT_SRC_DIR / f"{name}.py").read_text(encoding="utf-8")
+        assert _corpus_reads(source), name
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "from integral.reaction_elicit import corpus_stimuli\n",
+        "from integral import reaction_elicit\n",
+        "import integral.reaction_elicit\n",
+        "from .reaction_elicit import corpus_stimuli\n",
+        "from . import reaction_elicit\n",
+    ],
+)
+def test_a_serving_module_reaching_the_corpus_through_the_exemption_is_caught(
+    tmp_path: Path, body: str
+) -> None:
+    """Bound 2, the laundering route, and the one that made the exemption dangerous.
+
+    `reaction_elicit` is not scanned by `serving_path_findings` — that is what being
+    exempt means — so before this, `rank` importing it read the corpus with the ban's
+    own count still at zero. One import is a shorter detour than any of the direct
+    spellings above, and it arrives looking like reuse.
+    """
+    src = _serving_tree(tmp_path, {"rank": body})
+    findings, absent = serving_path_findings(src)
+    assert absent == []
+    assert [f["module"] for f in findings] == ["rank"]
+
+
+def test_the_exempt_reader_may_not_import_the_serving_path(tmp_path: Path) -> None:
+    """Bound 1, driven the other way: the exemption widened from inside.
+
+    A stimulus and a served offer differ in what happens to the advert next. Importing
+    `integral.rank` into the exempt module is that difference as a two-line edit — "while
+    we have these adverts, show them as matches" — and nothing else in this file would
+    see it, because the exempt module is deliberately outside the serving-path scan.
+    """
+    src = _serving_tree(tmp_path, {"reaction_elicit": "from integral.rank import rank_offers\n"})
+    findings, absent = exempt_reader_findings(src)
+    assert absent == []
+    assert [f["module"] for f in findings] == ["reaction_elicit"]
+    assert "integral.rank" in findings[0]["reason"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "from integral.presentation import render\n",
+        "from integral.explain import explain\n",
+        "from integral.feedback import record\n",
+        "from integral.freshness import age\n",
+        "from integral.dedup import dedupe\n",
+        "from integral import rank\n",
+        "import integral.presentation\n",
+        "from .rank import rank_offers\n",
+        "from . import presentation\n",
+    ],
+)
+def test_every_spelling_of_widening_the_exemption_trips_it(tmp_path: Path, body: str) -> None:
+    """Catching one route and missing eight is a fail-open check. The relative forms are
+    here for the reason they are in the serving-ban fixtures above: a sibling import is
+    the shortest thing to type, and it was the spelling that scan originally missed."""
+    src = _serving_tree(tmp_path, {"reaction_elicit": body})
+    findings, _ = exempt_reader_findings(src)
+    assert [f["module"] for f in findings] == ["reaction_elicit"], body
+
+
+@pytest.mark.parametrize("name", STIMULUS_STRUCTURAL_DEPENDENCIES)
+def test_the_structural_dependencies_of_a_stimulus_are_permitted(
+    tmp_path: Path, name: str
+) -> None:
+    """The boundary has to be narrow *and* usable, or it is not a boundary — it is a ban
+    the real module already violates, which gets deleted the first time it is red.
+
+    `integral.offers` is the record a stimulus is (and `compute_offer_id`, which is what
+    makes provenance checkable at all); `integral.lifecycle` is the single transition
+    that admits one to the candidate's store. Neither orders, filters or presents
+    anything, which is why these two and no others.
+    """
+    src = _serving_tree(tmp_path, {"reaction_elicit": f"from integral.{name} import thing\n"})
+    findings, _ = exempt_reader_findings(src)
+    assert findings == [], findings
+
+
+def test_the_real_exempt_reader_stays_inside_its_bounds() -> None:
+    """The tree that ships."""
+    findings, absent = exempt_reader_findings()
+    assert findings == [], findings
+    assert absent == [], absent
+
+
+def test_a_missing_exempt_reader_makes_the_reading_unmeasured_not_zero(tmp_path: Path) -> None:
+    """Renaming the exempt module must not read as one fewer place a violation could be.
+    Same verdict as a missing serving module, for the same reason: the scan shrinking is
+    a reason to distrust the number rather than a number."""
+    src = _serving_tree(tmp_path)
+    (src / "reaction_elicit.py").unlink()
+
+    findings, absent = exempt_reader_findings(src)
+    assert findings == []
+    assert absent == ["reaction_elicit"]
+
+    measured = measure_provenance(src_dir=src)
+    assert measured["exempt_reader_serving_imports"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["unmeasured_reason"] == "exempt corpus readers not found: reaction_elicit"
+
+
+def test_no_advert_reachable_as_a_stimulus_is_in_the_evaluation_split() -> None:
+    """Bound 3 on the tree that ships — the owner's condition on the exemption.
+
+    An advert a candidate has reacted to is no longer clean held-out data, so a metric
+    computed over the evaluation split and quoted as held-out would be contaminated by
+    the very act the exemption permits.
+    """
+    overlaps, collisions, stimulus_pool, evaluation_pool = stimulus_split_findings()
+    assert overlaps == [], overlaps
+    assert collisions == [], collisions
+    assert stimulus_pool >= MINIMUM_STIMULUS_POOL
+    assert evaluation_pool >= MINIMUM_EVALUATION_POOL
+
+
+def test_an_advert_in_both_the_stimulus_pool_and_the_evaluation_split_is_named(
+    tmp_path: Path,
+) -> None:
+    """The planted advert. Without it the committed zero is equally consistent with a
+    check that cannot return anything else.
+
+    It is planted under a *different corpus id* and identical text, which is the shape
+    that matters: `corpus_stimuli` selects on the `split` field, but an offer is
+    addressed by its text, so a row marked `elicitation` can carry an evaluation
+    advert's content and every split-field check in the system reads clean. That is the
+    fail-open direction — the contamination is silent and the metric is still quoted as
+    held-out.
+    """
+    rows = _clean_store(tmp_path)
+    rows.append({"id": "planted", "text": "v advert 0", "split": "elicitation"})
+    overlaps, _, _, _ = stimulus_split_findings(_labelled(tmp_path, rows))
+
+    assert [f["row"] for f in overlaps] == ["planted"]
+    assert "v0" in overlaps[0]["reason"]
+
+
+def test_removing_the_planted_advert_returns_the_pool_to_zero(tmp_path: Path) -> None:
+    """The other half of the mutation: the check is not simply always red."""
+    overlaps, _, _, _ = stimulus_split_findings(_labelled(tmp_path, _clean_store(tmp_path)))
+    assert overlaps == []
+
+
+def test_the_split_field_alone_is_not_what_is_compared(tmp_path: Path) -> None:
+    """The same planted row, kept honest about *why* it is a finding.
+
+    Marked `elicitation`, it satisfies every `split == "elicitation"` filter in the
+    repository. It is a finding because its **text** is an evaluation advert's, and the
+    bridge is `compute_offer_id` — the same function `reaction_elicit` addresses offers
+    with, deliberately not a second implementation of the same hash.
+    """
+    rows = _clean_store(tmp_path)
+    rows.append({"id": "planted", "text": "v advert 0", "split": "elicitation"})
+    overlaps, _, stimulus_pool, _ = stimulus_split_findings(_labelled(tmp_path, rows))
+
+    # The planted row is inside the reach, so the denominator moves with it: reach is
+    # counted in distinct adverts (by text), which is what "reachable as a stimulus"
+    # means once two ids can carry one advert.
+    assert stimulus_pool == MINIMUM_STIMULUS_POOL + 6
+    assert len(overlaps) == 1
+
+
+def test_two_rows_carrying_identical_text_are_a_collision(tmp_path: Path) -> None:
+    """The same defect one step earlier, and reported under its own name.
+
+    Two ids on one text is the mechanism by which a re-split puts one copy in each half.
+    Inside a single split it is not yet a contamination, which is exactly why it is a
+    separate key: folding it into `stimulus_pool_evaluation_overlaps` would report a
+    contamination that has not happened, and omitting it would let one arrive later with
+    nothing watching.
+    """
+    rows = _clean_store(tmp_path)
+    rows.append({"id": "twin", "text": "e advert 0", "split": "elicitation"})
+    overlaps, collisions, _, _ = stimulus_split_findings(_labelled(tmp_path, rows))
+
+    assert overlaps == []
+    assert [f["row"] for f in collisions] == ["e0, twin"]
+
+
+def test_a_repeated_row_id_is_not_counted_as_a_collision_with_itself(tmp_path: Path) -> None:
+    """A duplicated *line* is `provenance_faults`' finding, not this one. Counting it
+    here would put one defect in two keys and make the sum wrong in the direction that
+    looks like diligence."""
+    rows = _clean_store(tmp_path)
+    rows.append({"id": "e0", "text": "e advert 0", "split": "elicitation"})
+    _, collisions, _, _ = stimulus_split_findings(_labelled(tmp_path, rows))
+    assert collisions == []
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        # An empty stimulus pool overlaps nothing …
+        (_pool("v", "evaluation", MINIMUM_EVALUATION_POOL + 5), "reachable as stimuli"),
+        # … and an empty evaluation split is overlapped by nothing. Two vacuous passes,
+        # two floors: a floor on one side alone leaves the other reading a clean zero.
+        (_pool("e", "elicitation", MINIMUM_STIMULUS_POOL + 5), "evaluation-split adverts"),
+    ],
+)
+def test_a_disjointness_zero_over_an_empty_side_is_unmeasured(
+    tmp_path: Path, rows: list[dict[str, str]], expected: str
+) -> None:
+    """The vacuous pass this pair of floors exists to refuse.
+
+    Both readings return zero overlaps, and neither is evidence that the stimulus pool
+    is disjoint from the evaluation split. The reading is checked for the *specific*
+    floor rather than merely for `unmeasured`: a synthetic store also sits below
+    `MINIMUM_CORPUS_ROWS`, so asserting the verdict alone would pass with these two
+    floors deleted entirely.
+    """
+    measured = measure_provenance(labelled_path=_labelled(tmp_path, rows))
+
+    assert measured["stimulus_pool_evaluation_overlaps"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert expected in measured["unmeasured_reason"], measured["unmeasured_reason"]
+    assert measured["floor_breaches"] >= 1
+
+
+def test_the_declared_gate_fails_on_a_contaminated_stimulus_pool(tmp_path: Path) -> None:
+    """The sum T98's gate block names has to move on the half added for the exemption.
+
+    It was `corpus_rows_without_a_draw_specification + serving_path_corpus_reads`, and
+    both stay at zero over a pool contaminated by text: the planted row names a declared
+    draw and no serving module imports anything. So the gate T98 declares would have
+    passed the regression the exemption's own condition exists to prevent.
+    """
+    rows = _clean_store(tmp_path)
+    rows.append({"id": "planted", "text": "v advert 0", "split": "elicitation"})
+    labelled = _labelled(tmp_path, rows)
+    measured = measure_provenance(labelled_path=labelled)
+
+    assert measured["stimulus_pool_evaluation_overlaps"] == 1
+    assert measured["corpus_measurement_set_violations"] >= 1
+
+    fields = parse_gate_block(T98_PAYLOAD.read_text(encoding="utf-8"))
+    assert fields is not None
+    assert fields["key"] == "corpus_measurement_set_violations", fields
+
+
+def test_the_declared_gate_fails_when_the_exemption_is_widened(tmp_path: Path) -> None:
+    """And on the other new half. A synthetic tree keeps every other component at zero,
+    so the sum moving is this component moving and not something else."""
+    src = _serving_tree(tmp_path, {"reaction_elicit": "from integral.rank import rank_offers\n"})
+    measured = measure_provenance(src_dir=src)
+
+    assert measured["serving_path_corpus_reads"] == 0
+    assert measured["stimulus_pool_evaluation_overlaps"] == 0
+    assert measured["exempt_reader_serving_imports"] == 1
+    assert measured["corpus_measurement_set_violations"] == 1
+    assert measured["gate_status"] == "measured", measured.get("unmeasured_reason")
+
+
+def test_every_component_of_the_sum_is_reported_beside_it() -> None:
+    """A metric named for more than it counts is the defect this repository has caught
+    four times (`status_is_asserted`, `incidental_duplicate_drops`,
+    `negation_recall_hits_by_mechanism`, `robots_adjudications_without_a_competent_second_reader`).
+    `corpus_measurement_set_violations` is a sum of five, so all five are named keys and
+    the arithmetic is asserted rather than described.
+    """
+    measured = measure_provenance()
+    components = (
+        "corpus_rows_without_a_draw_specification",
+        "serving_path_corpus_reads",
+        "exempt_reader_serving_imports",
+        "stimulus_pool_evaluation_overlaps",
+        "corpus_text_collisions",
+    )
+    assert sum(measured[key] for key in components) == measured["corpus_measurement_set_violations"]
+    # And the exemption's reach is a number in the record, not a claim in a comment.
+    assert measured["stimulus_reachable_adverts_at_least"] == MINIMUM_STIMULUS_POOL
+    assert measured["evaluation_adverts_compared_at_least"] == MINIMUM_EVALUATION_POOL
+    assert measured["exempt_corpus_readers"] == list(EXEMPT_CORPUS_READERS)

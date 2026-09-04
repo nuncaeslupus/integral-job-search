@@ -24,6 +24,24 @@ A harness that constructs both sides of its own equality certifies nothing (the
 lesson T46 paid for), so the number the gate reads is computed from evidence
 that would still show a breach if every guard above were deleted.
 
+## Why this module may read the corpus at all
+
+T98 bans serving a candidate from the corpus: a stored advert is stale by
+definition, and answering a search from stale rows is what let one live session
+return three adverts and call the market exhausted. This module reads the corpus
+anyway, and the owner ruled on 2026-09-04 that it is exempt — *"reacting to an
+advert can never contaminate the labels it is scored against"*. A stimulus is
+measurement, not a search result.
+
+The exemption is bounded, and the bounds are measured in
+`integral.corpus_scope` — `EXEMPT_CORPUS_READERS` and the comment above it are
+where the ruling and its three conditions are written down. Two of them
+constrain this file directly: it may import `integral.offers` and
+`integral.lifecycle` and nothing else on the serving path, and the pool it draws
+from must stay disjoint from the evaluation split. Both are counted into
+`corpus_measurement_set_violations`, so widening this module into general
+serving fails T98's gate rather than passing quietly.
+
 ## Ceilings, stated rather than implied
 
 - The permitted-source list is a **pinned allowlist**, not a live robots.txt
