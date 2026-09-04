@@ -25,6 +25,7 @@ from typing import Any
 
 import pytest
 
+from integral import corpus_scope
 from integral.corpus import CANDIDATE_BOUND_KEYS, load_ads
 from integral.corpus_scope import (
     DEFAULT_DRAWS,
@@ -393,5 +394,107 @@ def test_a_floor_breach_is_a_finding_not_an_unmeasured_reading(tmp_path: Path) -
     # total would make every future floor a failing test of this one, which is how a
     # fixture ends up rewritten instead of read.
     assert measured["floor_breaches"] >= 1, measured.get("unmeasured_reason")
+    # Against `floor_breach_reasons`, not against `unmeasured_reason`. The latter joins
+    # breaches and untrusted readings, so the message appearing in it is true whichever
+    # list the floor was appended to — and moving that append from `breached` to
+    # `untrusted`, which is precisely the defect this fixture is named for, left the
+    # whole suite green (#307 second-reader F1).
+    assert any(
+        "below the 400 floor" in reason for reason in measured["floor_breach_reasons"]
+    ), measured["floor_breach_reasons"]
     assert "below the 400 floor" in measured["unmeasured_reason"]
     assert not measured["faults"], "the floor is the only reason this reading is short"
+
+
+
+def _provenance_over(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    raw: Path,
+    labelled: Path,
+    *,
+    floors: bool = True,
+) -> dict[str, Any]:
+    """Point `_main`'s provenance half at a synthetic corpus, and return the reading.
+
+    `write_provenance_evidence`'s paths are default arguments, bound at definition
+    time, so rebinding the module constants does not reach them — the substitution
+    has to be of the function. What is under test here is `_main`'s exit decision
+    over a given reading, which this leaves untouched.
+    """
+    if not floors:
+        # A synthetic corpus breaches every floor by being synthetic, and a floor
+        # breach alone already exits 1 — so a fixture about *another* component's
+        # effect on the exit code has to clear them, or it passes for the wrong
+        # reason and the mutation it exists to catch survives (it did, first try).
+        for name in (
+            "MINIMUM_CORPUS_ROWS",
+            "MINIMUM_SERVING_MODULES",
+            "MINIMUM_STIMULUS_POOL",
+            "MINIMUM_EVALUATION_POOL",
+        ):
+            monkeypatch.setattr(corpus_scope, name, 0)
+    measured = corpus_scope.measure_provenance(
+        raw_path=raw, labelled_path=labelled, draws_path=_registry(tmp_path)
+    )
+    monkeypatch.setattr(
+        corpus_scope,
+        "write_provenance_evidence",
+        lambda *args, **kwargs: measured,
+    )
+    return measured
+
+# --------------------------------------------------------------------------------
+# The exit code — the half `make evidence` reads
+
+
+def test_the_module_exits_nonzero_on_a_contaminated_stimulus_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_main` decided its exit code from three of the five components of
+    `corpus_measurement_set_violations`, so a stimulus reachable in the evaluation
+    split — the contamination this whole task exists to refuse — printed nothing and
+    returned **0** (#307 second-reader F3). No test drove `_main` at all, which is
+    why the omission survived being reasoned about carefully in the docstring above
+    it.
+
+    `make host-gate` would still have caught it through the evidence diff, but only
+    while the evidence was not regenerated in the same change — and regenerating it
+    is exactly what a reseed does.
+    """
+    shared = _row("shared")
+    labelled = _corpus(
+        tmp_path,
+        [
+            {**shared, "id": "a", "split": "elicitation"},
+            {**shared, "id": "b", "split": "evaluation"},
+        ],
+        "labelled.jsonl",
+    )
+    raw = _corpus(tmp_path, [{**shared, "id": "a"}, {**shared, "id": "b"}])
+    measured = _provenance_over(monkeypatch, tmp_path, raw, labelled, floors=False)
+    assert measured["stimulus_pool_evaluation_overlaps"] == 1
+    assert measured["corpus_text_collisions"] == 1
+    assert measured["faults"] == [], measured["faults"]
+    assert measured["serving_path_findings"] == []
+    # The overlap is the ONLY reason left to exit non-zero: no faults, no serving-path
+    # reads, and the floors are out of the way. That is what makes the next line a
+    # test of the exit condition rather than of the floors.
+    assert measured["floor_breaches"] == 0, measured["floor_breach_reasons"]
+
+    assert corpus_scope._main(["corpus_scope", str(tmp_path / "d1.json")]) == 1
+
+
+def test_a_reading_that_only_breached_a_floor_still_exits_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sibling case, and the reason `floor_breaches` is separate from the
+    violation count: a scan that ran and came back short is a finding, not an
+    untrusted reading, because `make evidence` maps exit 3 to
+    "unmeasured (recorded)" and carries on."""
+    rows = [_row("only", split="elicitation")]
+    raw = _corpus(tmp_path, rows)
+    labelled = _corpus(tmp_path, rows, "labelled.jsonl")
+    _provenance_over(monkeypatch, tmp_path, raw, labelled)
+
+    assert corpus_scope._main(["corpus_scope", str(tmp_path / "d1.json")]) == 1

@@ -512,6 +512,11 @@ def provenance_faults(
             )
         labelled_seen.add(identifier)
 
+    # Rows, across both stores — an advert present in raw and in labelled counts once
+    # in each, so 208 distinct adverts read as 416. That is what the name says and what
+    # the floor is set against (`corpus_rows_evaluated_at_least`), but the headroom is
+    # thinner than it looks: 400 is cleared by 208 adverts, not by 400 of them
+    # (#307 second-reader F6).
     return faults, len(raw_seen) + len(labelled_seen)
 
 
@@ -605,6 +610,19 @@ def exempt_reader_findings(
     An exempt reader absent from the tree is returned separately, exactly as an absent
     serving module is: it makes the reading untrusted rather than a violation, because a
     renamed exempt module scanned as nothing is a clean zero over an empty set.
+
+    **The stated ceiling.** This reads `import` and `from … import` statements out of
+    the AST, plus corpus path literals out of the source text, and that is the whole of
+    it. A dynamic import — `importlib.import_module("integral.rank")`,
+    `__import__(...)`, `sys.modules[...]` — reaches the same module and is not seen
+    here; nor is a corpus path assembled from parts (`Path("corpus") / "raw"`).
+    Measured, not assumed: 18 spellings were driven past this scan and past
+    `serving_path_corpus_reads` (#307 second-reader F4), and every static form was
+    caught, including the four relative ones and a deferred import inside a function
+    body. What survives is deliberate evasion, which this check is not built to stop —
+    it is admission lint against the two-line edit, the same posture
+    `_literal_body_violations` takes toward a credential key. Said out loud here so
+    the ceiling is a known property rather than a hole somebody finds later.
     """
     findings: list[dict[str, str]] = []
     absent: list[str] = []
@@ -782,6 +800,14 @@ def measure_provenance(
         "corpus_text_collisions": len(collisions),
         "gate_status": "unmeasured" if unmeasured else "measured",
         "floor_breaches": len(breached),
+        # The reasons, not only the count. `unmeasured_reason` joins breaches and
+        # untrusted readings into one string, so a fixture asserting a message is in
+        # *that* proves only that the message exists somewhere — not that it was
+        # classified as a breach, which is the whole distinction (a breach exits 1, an
+        # untrusted reading exits 3 and `make evidence` continues). Moving the
+        # corpus-row floor from `breached` to `untrusted` left the suite green until
+        # this key existed to assert against (#307 second-reader F1).
+        "floor_breach_reasons": breached,
         "corpus_rows_evaluated_at_least": MINIMUM_CORPUS_ROWS,
         "serving_path_modules_scanned_at_least": MINIMUM_SERVING_MODULES,
         # The exemption's reach, as a measured quantity rather than a claim: how many
@@ -833,11 +859,26 @@ def _main(argv: list[str]) -> int:
     _report([f"{m['document']}: {m['reason']}" for m in measured["mismatches"]])
     _report([f"{f['where']} {f['row']}: {f['reason']}" for f in provenance["faults"]])
     _report([f"{f['module']}: {f['reason']}" for f in provenance["serving_path_findings"]])
+    # The exempt reader's own breaches and the disjointness findings are two of the five
+    # components of `corpus_measurement_set_violations`, and this reported neither and
+    # exited 0 over both — a contaminated stimulus pool printed nothing and passed
+    # (#307 second-reader F3). `make host-gate` still caught it through the evidence
+    # diff, but only while the evidence was not being regenerated in the same change,
+    # which is exactly the reseed flow this task creates.
+    _report([f"{f['module']}: {f['reason']}" for f in provenance["exempt_reader_findings"]])
+    _report(
+        [
+            f"{f['where']} {f['row']}: {f['reason']}"
+            for f in provenance["stimulus_split_findings"]
+        ]
+    )
 
+    # The declared gate key, not a hand-listed subset of what it sums. A subset is how
+    # two of five components went unreported; naming the sum means a sixth component
+    # added later cannot be forgotten here.
     if (
         measured["mismatches"]
-        or provenance["faults"]
-        or provenance["serving_path_findings"]
+        or provenance["corpus_measurement_set_violations"]
         or provenance["floor_breaches"]
     ):
         return 1

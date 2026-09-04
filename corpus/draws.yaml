@@ -15,6 +15,13 @@
 # Every candidate's adverts are fetched for them, at the moment, through the
 # connectors.
 #
+# One exemption, named here rather than only where it is enforced: step 5 shows a
+# candidate adverts drawn from this corpus deliberately, because reaction
+# elicitation asks what they think of a job rather than offering them one.
+# `integral.reaction_elicit` is the only module permitted to read the corpus, and
+# its stimuli must be disjoint from the `evaluation` split — see
+# `integral.corpus_scope`, which enforces both halves.
+#
 # The other half of the ruling points the other way and matters just as much.
 # **The corpus must not be built from one candidate's harvest either.** A live
 # session harvested ~2,755 adverts against one person's profile; landing them

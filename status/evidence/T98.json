@@ -7,6 +7,7 @@
   "corpus_text_collisions": 0,
   "gate_status": "measured",
   "floor_breaches": 0,
+  "floor_breach_reasons": [],
   "corpus_rows_evaluated_at_least": 400,
   "serving_path_modules_scanned_at_least": 12,
   "stimulus_reachable_adverts_at_least": 80,

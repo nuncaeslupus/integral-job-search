@@ -29,6 +29,15 @@ are fetched for them, at the moment, through the connectors. `integral.corpus_sc
 asserts this over the code: the sourcing, offer-store, ranking and presentation modules
 may not reach the corpus at all.
 
+**With one exemption, and it is stated here because a rule stated in three documents
+drifts.** Step 5 — reaction elicitation (T9) — shows a candidate adverts drawn from
+this corpus on purpose: it is asking what they think of a job, not offering them one.
+`integral.reaction_elicit` is the only module permitted to read the corpus, its
+stimuli must come from the `elicitation` split, and that split must be disjoint from
+the `evaluation` split every metric is computed over. The bound is enforced in
+`integral.corpus_scope` (`EXEMPT_CORPUS_READERS`,
+`stimulus_pool_evaluation_overlaps`), not by this paragraph.
+
 **And this corpus is never one candidate's harvest.** A sample drawn against one
 person's profile is the shape of that person's queries and exclusions, so a number
 measured on it would be quoted as a number for everyone. So every row names the

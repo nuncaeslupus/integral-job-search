@@ -457,7 +457,43 @@ def test_every_spelling_of_widening_the_exemption_trips_it(tmp_path: Path, body:
     assert [f["module"] for f in findings] == ["reaction_elicit"], body
 
 
-@pytest.mark.parametrize("name", STIMULUS_STRUCTURAL_DEPENDENCIES)
+def test_the_permitted_dependencies_are_pinned_by_name(tmp_path: Path) -> None:
+    """The allowlist's *contents*, written out, so widening it is a failing test.
+
+    Before this the positive fixture was `@parametrize`d over
+    `STIMULUS_STRUCTURAL_DEPENDENCIES` itself, so adding `sourcing_market` and
+    `sourcing_strategy` to the tuple left the suite green and *added two passing
+    tests* — the widening manufacturing its own certificate. A fixture parametrised
+    over the thing it pins asserts nothing about that thing (#307 second-reader F2).
+    """
+    assert STIMULUS_STRUCTURAL_DEPENDENCIES == ("offers", "lifecycle")
+
+
+def test_every_serving_module_outside_the_allowlist_trips_the_exemption(
+    tmp_path: Path,
+) -> None:
+    """The negative half, derived from the census rather than from a hand-written
+    list — so a serving module that exists today and was never fixtured is inside
+    this test the day it appears.
+
+    `sourcing_*` is the half that matters and the half the old fixtures missed
+    entirely: they drove six `CORE_SERVING_MODULES` and no module that issues a
+    search. An import of one of those from `reaction_elicit` is the exemption
+    widening until step 5 is sourcing in all but name.
+    """
+    outside = sorted(set(serving_path_modules()) - set(STIMULUS_STRUCTURAL_DEPENDENCIES))
+    assert len(outside) >= 6, outside
+    assert any(name.startswith("sourcing_") for name in outside), outside
+    for name in outside:
+        # One tree per module: `_serving_tree` creates `integral/` and would collide.
+        root = tmp_path / name
+        root.mkdir()
+        src = _serving_tree(root, {"reaction_elicit": f"from integral.{name} import thing\n"})
+        findings, _ = exempt_reader_findings(src)
+        assert [f["module"] for f in findings] == ["reaction_elicit"], name
+
+
+@pytest.mark.parametrize("name", ("offers", "lifecycle"))
 def test_the_structural_dependencies_of_a_stimulus_are_permitted(
     tmp_path: Path, name: str
 ) -> None:
