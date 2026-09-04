@@ -39,7 +39,20 @@
     "wellbeing_benefits": 6,
     "work_intensity": 2
   },
-  "dimensions_without_labels": [],
+  "dimensions_without_labels": [
+    "ai_in_the_work",
+    "commute_burden",
+    "contracted_hours",
+    "domain_knowledge",
+    "formal_credential",
+    "hiring_process_burden",
+    "local_language_demand",
+    "physical_demand",
+    "role_breadth",
+    "tool_specificity",
+    "variable_pay",
+    "work_eligibility"
+  ],
   "languages": {
     "ca": 90,
     "en": 25,

@@ -1,0 +1,73 @@
+id: commute_burden
+kind: hard
+polarity: unipolar
+group: requirements
+label:
+  en: "Commute burden"
+  es: "Carga de desplazamiento"
+  ca: "Càrrega de desplaçament"
+definition: >
+  What the advert requires of you in order to reach the work at all: living locally,
+  holding a driving licence, or providing your own vehicle. A condition on the person,
+  distinct from `travel_requirement`, which is travel done as part of the job.
+levels:
+  - value: 0.0
+    label:
+      en: "No condition stated"
+      es: "Sin condición"
+      ca: "Sense condició"
+    tell: "nothing is said about where you live or how you get there"
+  - value: 0.5
+    label:
+      en: "Local residence expected"
+      es: "Residencia en la zona"
+      ca: "Residència a la zona"
+    tell: "living in the area is required or preferred"
+  - value: 0.9
+    label:
+      en: "Own vehicle or licence required"
+      es: "Vehículo o carnet propio"
+      ca: "Vehicle o carnet propi"
+    tell: "a driving licence or your own vehicle is stated as required"
+elicitation:
+  questions:
+    - id: cb_q1
+      text:
+        en: >
+          Describe the commute of the job you liked most and the one you liked least —
+          what did getting there actually cost you each day?
+        es: >
+          Describe el desplazamiento del trabajo que más te gustó y el del que menos:
+          ¿qué te costaba realmente llegar cada día?
+        ca: >
+          Descriu el desplaçament de la feina que més t'ha agradat i el de la que menys:
+          què et costava realment arribar-hi cada dia?
+extraction:
+  cues:
+    en:
+      - pattern: "\\b(driving|driver'?s)\\s+licen[cs]e\\b|\\bown\\s+(car|vehicle)\\b"
+        value: 0.9
+    es:
+      - pattern: "\\b(carn[ée]t?|permiso)\\s+de\\s+conducir\\b"
+        value: 0.9
+      - pattern: "\\bresidir\\s+(en|cerca)\\b|\\bresidencia\\s+en\\s+(la\\s+zona|alrededores)\\b"
+        value: 0.5
+    ca:
+      - pattern: "\\b(carnet|perm[íi]s)\\s+de\\s+conduir\\b"
+        value: 0.9
+      - pattern: "\\b(vehicle|cotxe)\\s+propi\\b|\\bdisponibilitat\\s+de\\s+vehicle\\b"
+        value: 0.9
+      - pattern: "\\bresidir\\s+(a|prop)\\b|\\bresid[èe]ncia\\s+a\\s+la\\s+(zona|comarca)\\b"
+        value: 0.5
+  gold:
+    - ad_id: feinaactiva-FA92317495
+      language: es
+      span: "Imprescindible carnet de conducir"
+      value: 0.9
+      derived_from: cue
+    - ad_id: feinaactiva-09202624665
+      language: ca
+      span: "Permís de conduir: B-AUTOMÒBIL <= 3.500 KG, SEIENTS <=9, AMB REMOLC <= 750 KG, I TRICICLES I QUATRICICLES DE MOTOR"
+      value: 0.9
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

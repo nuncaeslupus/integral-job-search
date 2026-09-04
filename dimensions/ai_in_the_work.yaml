@@ -1,0 +1,81 @@
+id: ai_in_the_work
+kind: soft
+polarity: unipolar
+group: skills
+label:
+  en: "AI in the work"
+  es: "IA en el trabajo"
+  ca: "IA en la feina"
+definition: >
+  How much artificial intelligence is part of the daily work: assistants and agent
+  frameworks named in the workflow, AI features as the product, or AI fluency stated as
+  a requirement of everyone. Newly common market wording, which is exactly what
+  `ontology_hit_rate` exists to surface.
+levels:
+  - value: 0.0
+    label:
+      en: "Not mentioned"
+      es: "No se menciona"
+      ca: "No es menciona"
+    tell: "the ad says nothing about AI"
+  - value: 0.5
+    label:
+      en: "Tools available or encouraged"
+      es: "Herramientas disponibles"
+      ca: "Eines disponibles"
+    tell: "assistants are provided, or their use is welcomed"
+  - value: 0.9
+    label:
+      en: "The work is AI work"
+      es: "El trabajo es de IA"
+      ca: "La feina és d'IA"
+    tell: "AI-native product, agent frameworks, or AI fluency required"
+elicitation:
+  questions:
+    - id: aiw_q1
+      text:
+        en: >
+          Tell me about the last piece of work where you used an AI tool. What did it
+          actually change about how you worked that day?
+        es: >
+          Cuéntame el último trabajo en el que usaste una herramienta de IA. ¿Qué cambió
+          realmente en cómo trabajaste ese día?
+        ca: >
+          Explica'm l'última feina en què vas fer servir una eina d'IA. Què va canviar
+          realment en com vas treballar aquell dia?
+extraction:
+  cues:
+    en:
+      - pattern: "\\b(ai|llm)s?[- ]?(assisted|powered|native|driven)\\b"
+        value: 0.9
+      - pattern: "\\b(copilot|cursor|claude|chatgpt)\\b"
+        value: 0.5
+      - pattern: "\\b(generative\\s+ai|large\\s+language\\s+models?|machine\\s+learning)\\b"
+        value: 0.5
+    es:
+      - pattern: "\\b(IA|inteligencia\\s+artificial)\\b"
+        value: 0.5
+      - pattern: "\\b(copilot|cursor|claude|chatgpt)\\b"
+        value: 0.5
+      - pattern: "\\b(aprendizaje\\s+autom[áa]tico|machine\\s+learning)\\b"
+        value: 0.5
+    ca:
+      - pattern: "\\b(IA|intel·lig[èe]ncia\\s+artificial)\\b"
+        value: 0.5
+  gold:
+    - ad_id: remotive-1919266
+      language: en
+      span: "AI-native products built from 0→1"
+      value: 0.9
+      derived_from: cue
+    - ad_id: manfred-8379
+      language: es
+      span: "ran reto es desarrollar un **asistente de compras basado en IA** que entienda lo que quieres… incluso antes de que termines la frase."
+      value: 0.5
+      derived_from: cue
+    - ad_id: feinaactiva-FA92320073
+      language: ca
+      span: "processos i iniciatives d’Intel·ligència Artificial aplicada a l’àmbit del diagnòstic biomèdic i per"
+      value: 0.5
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -1,0 +1,95 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. `connector.yaml` says what to fetch; this says whether anyone is still
+# looking after it.
+site: usajobs.gov
+# The board is the United States federal government's own, and every recorded
+# row is a US posting — `LocationDisplay` names US cities, states and
+# "Multiple Locations", and the hiring paths are US-citizen ones.
+country: US
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-09-02"
+
+# Checked, not assumed, on the date above: https://www.usajobs.gov/robots.txt
+# is a single `User-agent: *` group with four Disallow lines — `/Content/`,
+# `/Scripts/`, `/foresee/` and `/Service References/`. No group anywhere in the
+# file names an AI agent (ClaudeBot, Claude-User, Claude-SearchBot, anthropic,
+# GPTBot, CCBot, Bytespider — all absent), so the `restated_for_every_named_agent`
+# rule does not arise.
+#
+# Adjudicated with TWO parsers that agree — this repo's `integral.robots` and
+# stdlib `urllib.robotparser` — and with a NEGATIVE CONTROL, because a True with
+# no False beside it is indistinguishable from a matcher that says yes to
+# everything:
+#
+#     /Search/ExecuteSearch  -> True      (the list surface this connector POSTs)
+#     /job/856726500         -> True      (the detail surface it reads)
+#     /Content/foo.css       -> False     <- negative control
+#     /Scripts/app.js        -> False     <- negative control
+#
+# The developer API at data.usajobs.gov is NOT read by this connector: it
+# refuses a request without an `Authorization-Key`, and a connector may not
+# carry a credential. The website's own search needs none, which is why this
+# package exists at all.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose — one POST of `{"Keyword":"python","ResultsPerPage":25}`
+# to the board's own search, and the announcement the first row links to, taken
+# on the date below. Never an advert a candidate was reading: the set of ads a
+# person opens carries their field, level, city and the fact that they are
+# looking, and a fixture in a public repository carries that forever. The query
+# is a specification, not a session's harvest.
+fixture:
+  provenance: sampled
+  recorded: "2026-09-02"
+  # **`fixture/list.html` holds JSON, and the name is not a mistake.**
+  # `connector_contract.check_fixture` reads the list response from
+  # `fixture/list.html` by name, and that name predates the `from_json` route
+  # (#259) — this is the library's first package whose listing is not markup.
+  # Renaming it to `list.json` would need a contract change, which is not this
+  # task; the file is the response exactly as served.
+  #
+  # The listing is committed BYTE-IDENTICAL: 35,067 bytes, all 25 rows. Nothing
+  # was trimmed because there is nothing to trim — a `Jobs` row carries title,
+  # salary, location, agency, grade and dates and no advert body at all, which
+  # is precisely why this connector needs a detail page. Keeping all 25 is also
+  # what makes the salary-spread measurement in `connector.yaml` checkable by a
+  # reader instead of taken on trust.
+  #
+  # `fixture/detail.html` IS excerpted. `tools/excerpt_fixture.py` could not do
+  # it — the tool locates the body by the first *class* named in the `text`
+  # selector, and this connector's body selector is `#joa-duties`, which names
+  # no class — so the same rule was applied by hand and with the same
+  # discipline: the cut is made in the raw bytes, at a tag boundary (`</li>`),
+  # and everything kept is byte-identical to what the server sent. Nothing was
+  # parsed and re-serialised, because that would repair markup the fixture
+  # exists to preserve. The announcement's Duties list is cut to its first item
+  # and closed by the usual truncation marker, with the `<ul>`/`<li>` nesting
+  # kept so the parser is still exercised on it; the page's 126 KB of Tailwind,
+  # navigation, the 11 KB `#joa-requirements` boilerplate and the analytics are
+  # dropped entirely, and the retained elements are wrapped in a minimal
+  # <html><body> shell.
+  bodies: excerpted
+  # Nothing to redact. Grepped both captures for an IPv4 literal — none in
+  # either. The response's `UniqueSearchID` is a GUID the board mints per
+  # search; it identifies the request, not whoever made it, and it is not a
+  # session token — the capture carried no cookie in either direction.
+  client_ip: redacted
+
+# `probe/list.html` is a SECOND read of the same POST, taken on 2026-09-02 at
+# 09:10:01Z — same URL, same body, same 200 — and it is a genuinely separate
+# response, not a copy of the fixture: 34,737 bytes against the fixture's
+# 35,067, `Total` 43 against the fixture's 44 an hour earlier, and a different
+# `UniqueSearchID`. Two announcements had closed and two more had opened
+# between the reads, so the `Jobs` arrays are not equal while both still carry
+# 25 rows. That is what makes the rot stage mean something here: it compares
+# two readings of the board, so a selector that silently stopped matching shows
+# up as a drop, and a board that quietly changed its payload shape shows up as
+# a parse failure. `probe/captured.json` records the date in the one spelling
+# `connector_health.probe_captured_at` accepts (`%Y-%m-%d`), so the exact
+# capture time lives in this comment rather than in a field that would be read
+# as `None`. The probe is stored verbatim and unexcerpted, for the same reason
+# `fixture/list.html` is.

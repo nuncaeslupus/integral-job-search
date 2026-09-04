@@ -72,8 +72,10 @@ DEFAULT_OUTPUT_PATH = _REPO_ROOT / "corpus" / "labelled" / "label.html"
 # most sit where the thumb already is.
 GROUP_TITLES: dict[str, str] = {
     "dealbreakers": "Deal-breakers",
+    "requirements": "What you must bring",
     "terms": "Terms & load",
     "the_work": "The work itself",
+    "skills": "Skills & tools",
     "people": "People & team",
     "growth": "Growth & meaning",
 }
@@ -381,6 +383,7 @@ _HEAD = """<!doctype html>
   --warn-bg: #fff4e0; --warn-border: #d9a441;
   --g-dealbreakers: #b5453c; --g-terms: #9a6a1e; --g-the_work: #2f6f4f;
   --g-people: #2b5f8f; --g-growth: #6b4694;
+  --g-requirements: #8a4a86; --g-skills: #1f6c73;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -389,6 +392,7 @@ _HEAD = """<!doctype html>
     --warn-bg: #3a3016; --warn-border: #b98b2c;
     --g-dealbreakers: #e08a84; --g-terms: #dcb463; --g-the_work: #7fd0a3;
     --g-people: #8fb8e0; --g-growth: #bda3e0;
+    --g-requirements: #d8a0d4; --g-skills: #7cc7cf;
   }
 }
 * { box-sizing: border-box; }

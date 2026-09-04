@@ -1,0 +1,85 @@
+id: domain_knowledge
+kind: soft
+polarity: unipolar
+group: skills
+label:
+  en: "Domain knowledge"
+  es: "Conocimiento del sector"
+  ca: "Coneixement del sector"
+definition: >
+  How much the role is tied to one business domain — a named sector, a client's
+  industry, or domain expertise stated as a requirement — as against work that transfers
+  between sectors unchanged. `mission_alignment` asks what the work is for; this asks
+  what you must already know about it.
+levels:
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No consta"
+      ca: "No consta"
+    tell: "no sector or domain appears"
+  - value: 0.5
+    label:
+      en: "A sector named"
+      es: "Sector nombrado"
+      ca: "Sector anomenat"
+    tell: "the employer or client's sector is stated, nothing required of you"
+  - value: 0.8
+    label:
+      en: "Domain expertise required"
+      es: "Se exige conocimiento del sector"
+      ca: "Es demana coneixement del sector"
+    tell: "prior experience in that sector is a stated requirement"
+elicitation:
+  questions:
+    - id: dk_q1
+      text:
+        en: >
+          Tell me about a sector you know from the inside. What did knowing it let you
+          do that a good outsider could not?
+        es: >
+          Cuéntame un sector que conozcas por dentro. ¿Qué te permitía hacer conocerlo
+          que alguien bueno pero de fuera no podía?
+        ca: >
+          Explica'm un sector que coneguis per dins. Què et permetia fer conèixer-lo que
+          algú bo però de fora no podia?
+extraction:
+  cues:
+    en:
+      # Split to match what `es` and `ca` already do. Naming the sector is the 0.5
+      # rung — "the employer or client's sector is stated, **nothing required of
+      # you**" — and "banking clients" is exactly that. 0.8 is reserved for the
+      # rung's own words, "prior experience in that sector is a stated requirement".
+      - pattern: "\\b(banking|insurance|fintech|healthcare|aerospace|automotive|logistics|gaming)\\s+(sector|industry|domain|clients?)\\b"
+        value: 0.5
+      - pattern: "\\b(experience|expertise|background|knowledge)\\s+(in|of|with)\\s+(the\\s+)?[a-z]+\\s+(sector|industry|domain)\\b|\\bdomain\\s+(expertise|knowledge)\\s+(is\\s+)?(required|essential)\\b"
+        value: 0.8
+    es:
+      - pattern: "\\bsector\\s+(bancario|asegurador|sanitario|industrial|log[íi]stico|p[úu]blico|financiero)\\b"
+        value: 0.5
+      - pattern: "\\bexperiencia\\s+en\\s+el\\s+sector\\b"
+        value: 0.8
+    ca:
+      - pattern: "\\bsector\\s+(banc[àa]ri|sanitari|industrial|log[íi]stic|p[úu]blic|social)\\b"
+        value: 0.5
+      - pattern: "\\bexperi[èe]ncia\\s+en\\s+el\\s+sector\\b"
+        value: 0.8
+      - pattern: "\\bconeixement\\s+del\\s+sector\\b"
+        value: 0.8
+  gold:
+    - ad_id: wwr-azumo-data-engineer-databricks-aws-gaming-liveops-latin-america
+      language: en
+      span: "Gaming industry experience"
+      value: 0.8
+      derived_from: cue
+    - ad_id: tecnoempleo-17da1920025ad37df94f
+      language: es
+      span: "parte del equipo de desarrollo de nuestro cliente líder del sector bancario. Colaboración 100 remoto desde España Funciones y responsabolidades Diseñar desarrollar y mantener"
+      value: 0.5
+      derived_from: cue
+    - ad_id: feinaactiva-09202623802
+      language: ca
+      span: "u en ciències o enginyeria. Experiència de 3 a 5 anys en el sector bancari (Analítica de dades/Bussiness Inteligence). Nivell alt en SQL i fuidesa en Data Discovery, anàlisis"
+      value: 0.5
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

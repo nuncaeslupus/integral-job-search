@@ -249,6 +249,15 @@ def _main(argv: list[str]) -> int:
     violation, 0 otherwise.
     """
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
+    if "--bulk" in argv[1:]:
+        # T94's gate names `python -m integral.sourcing_cycles --bulk`, because
+        # the bulk pass is what makes a cycle's volume tractable. It is its own
+        # module — `make evidence` discovers and runs it directly through
+        # `repo_gate --list-evidence-modules` — so this is an alias for the
+        # gate's convenience, not a second implementation.
+        from integral.bulk_filter import _main as bulk_main
+
+        return bulk_main([argv[0], *positional])
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_cycle_evidence(target)
     print(json.dumps(measured, ensure_ascii=False))
