@@ -1,0 +1,8 @@
+{
+  "retracted_episodes_still_sendable": 0,
+  "retracted_episodes_sendable": [],
+  "retracted_episodes_evaluated": 16,
+  "gate_status": "measured",
+  "retraction_probes": 21,
+  "retraction_probe_failures": []
+}
