@@ -127,6 +127,11 @@ class Probe:
     #: `varies` cannot express it and a mutation substituting `str(page)` left
     #: the metric at zero (#338 second-reader F4). Empty when nothing varies.
     values: tuple[Any, ...] = ()
+    #: `pagination.start`. A probe could not express anything but the default,
+    #: so mutating `start + offset` to `1 + offset` left the metric at zero and
+    #: was caught only by a neighbouring gate's test — the dependency `values`
+    #: was added to remove, still standing one field along (#338 third read, NF3).
+    start: int = 1
     #: `False` builds the connector with `model_copy(update=...)`, which never
     #: meets the validators — the case the module's belt-and-suspenders
     #: posture exists for, and the only way to observe what the request
@@ -146,6 +151,18 @@ PROBES: tuple[Probe, ...] = (
         varies=("Page",),
         values=(1, 2),
         clause="R4+R6 — the named top-level key holds it, and it is the one that varies",
+    ),
+    Probe(
+        name="named top-level placeholder, starting at a page other than the first",
+        body_json={"Keyword": "python", "Page": PAGE_PLACEHOLDER},
+        mode="body_field",
+        param="Page",
+        loads=True,
+        varies=("Page",),
+        values=(5, 6),
+        start=5,
+        clause="R6 — the named key becomes the page number, counted from "
+        "`pagination.start` rather than from one",
     ),
     Probe(
         name="nested placeholder, alone",
@@ -389,6 +406,7 @@ def _document(probe: Probe) -> str:
         pagination["param"] = probe.param
     if probe.mode != "none":
         pagination["max_pages"] = 2
+        pagination["start"] = probe.start
     document["list"]["pagination"] = pagination
     return yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
 
