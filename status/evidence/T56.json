@@ -1,8 +1,10 @@
 {
-  "cue_audit_cases": 54,
-  "cue_audit_cases_at_least": 54,
-  "cue_audit_fail_open_cases": 34,
-  "cue_audit_fail_open_cases_at_least": 34,
+  "cue_audit_cases": 113,
+  "cue_audit_cases_at_least": 113,
+  "cue_audit_fail_open_cases": 64,
+  "cue_audit_fail_open_cases_at_least": 64,
+  "cue_audit_cases_pinning_mechanism": 28,
+  "cue_audit_cases_pinning_mechanism_at_least": 28,
   "cue_audit_failures": 0,
   "cue_audit_failing_cases": [],
   "cue_audit_dimensions": [
@@ -16,6 +18,7 @@
     "remote_arrangement",
     "schedule_flexibility",
     "seniority_expectation",
+    "talking_clients",
     "travel_requirement"
   ]
 }

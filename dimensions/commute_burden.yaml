@@ -47,16 +47,20 @@ extraction:
     en:
       - pattern: "\\b(driving|driver'?s)\\s+licen[cs]e\\b|\\bown\\s+(car|vehicle)\\b"
         value: 0.9
+        negatable: true
     es:
       - pattern: "\\b(carn[ée]t?|permiso)\\s+de\\s+conducir\\b|\\bveh[íi]culo\\s+propio\\b|\\bcoche\\s+propio\\b|\\bdisponibilidad\\s+de\\s+veh[íi]culo\\b"
         value: 0.9
+        negatable: true
       - pattern: "\\bresidir\\s+(en|cerca)\\b|\\bresidencia\\s+en\\s+(la\\s+zona|alrededores)\\b"
         value: 0.5
     ca:
       - pattern: "\\b(carnet|perm[íi]s)\\s+de\\s+conduir\\b"
         value: 0.9
+        negatable: true
       - pattern: "\\b(vehicle|cotxe)\\s+propi\\b|\\bdisponibilitat\\s+de\\s+vehicle\\b"
         value: 0.9
+        negatable: true
       - pattern: "\\bresidir\\s+(a|prop)\\b|\\bresid[èe]ncia\\s+a\\s+la\\s+(zona|comarca)\\b"
         value: 0.5
   gold:

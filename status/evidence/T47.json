@@ -1,14 +1,12 @@
 {
   "mock_interview_character_breaks": 0,
-  "sessions_rehearsed": 207,
+  "sessions_rehearsed": 208,
   "character_breaks": [],
   "sessions_not_announced": [],
   "sessions_never_closed": [],
   "turns_after_the_end_that_are_not_feedback": [],
   "sessions_over_the_question_cap": [],
   "adverts_seen": 208,
-  "adverts_with_nothing_to_rehearse": [
-    "feinaactiva-FA92318598"
-  ],
+  "adverts_with_nothing_to_rehearse": [],
   "adverts_at_the_question_cap": 32
 }

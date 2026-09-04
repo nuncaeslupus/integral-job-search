@@ -1,5 +1,5 @@
 {
-  "extraction_macro_f1": 0.7698,
+  "extraction_macro_f1": 0.7567,
   "extraction_status": "measured",
   "label_floor": 10,
   "evaluation_label_count": 206,
@@ -88,11 +88,11 @@
       "false_negatives": 2
     },
     "contract_stability": {
-      "f1": 0.8571,
+      "f1": 0.9744,
       "n": 20,
-      "true_positives": 15,
+      "true_positives": 19,
       "false_positives": 0,
-      "false_negatives": 5
+      "false_negatives": 1
     },
     "english_demand": {
       "f1": 1.0,
@@ -109,11 +109,11 @@
       "false_negatives": 1
     },
     "product_vs_services": {
-      "f1": 0.4286,
+      "f1": 0.1667,
       "n": 11,
-      "true_positives": 3,
+      "true_positives": 1,
       "false_positives": 0,
-      "false_negatives": 8
+      "false_negatives": 10
     },
     "remote_arrangement": {
       "f1": 0.9655,

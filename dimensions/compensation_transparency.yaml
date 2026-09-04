@@ -48,7 +48,7 @@ extraction:
         value: 0.9
         negatable: false
       - pattern: "competitive\\s+(salary|compensation|pay|package)"
-        value: 0.1
+        value: 0.2
         negatable: false
       - pattern: "depending\\s+on\\s+experience|commensurate\\s+with\\s+experience|according\\s+to\\s+experience"
         value: 0.2
@@ -57,23 +57,23 @@ extraction:
     # Spanish-language adverts too, so both slices carry it — see the note on
     # `contract_stability`.
     es:
-      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|forquilla\\s+salarial|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*[-–]\\s*\\d{1,3}[.,]\\d{3}|(salari|sueldo|sou|retribuci|remuneraci|n[óo]mina)\\w*[^.\\n]{0,30}\\d{1,3}[.,]\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*(brutos?|bruts?|anuales?|anuals?|/\\s*a[ñn]o|/\\s*any)|\\d{2,3}\\s*k\\s*[-–a]\\s*\\d{2,3}\\s*k\\b"
+      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|forquilla\\s+salarial|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*[-–]\\s*\\d{1,3}[.,]\\d{3}|(salari|sueldo|sou|retribuci|remuneraci|n[óo]mina)\\w*[^.\\n]{0,30}\\d{1,3}[.,]\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*(brutos?|bruts?)(\\s*(anuales?|anuals?|mensuales?|mensuals?|/\\s*a[ñn]o|/\\s*any))?|\\d{2,3}\\s*k\\s*[-–a]\\s*\\d{2,3}\\s*k\\b"
         value: 0.9
         negatable: false
       - pattern: "salari[oe]?\\s+competitiv[oa]|retribuci[óo]n?\\s+competitiva|paquete\\s+retributivo"
-        value: 0.1
+        value: 0.2
         negatable: false
-      - pattern: "seg[úu]n\\s+(val[ií]a|experiencia|convenio)|segons\\s+(v[àa]lua|experi[èe]ncia|conveni)|a\\s+convenir|salario\\s+acorde"
+      - pattern: "seg[úu]n\\s+(val[ií]a|experiencia|convenio)|segons\\s+(v[àa]lua|experi[èe]ncia|conveni)|(salari|salario|sueldo|sou|retribuci[óo]n?|remuneraci[óo]n?|honorarios)\\s*:?\\s*a\\s+convenir|salario\\s+acorde"
         value: 0.2
         negatable: false
     ca:
-      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|forquilla\\s+salarial|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*[-–]\\s*\\d{1,3}[.,]\\d{3}|(salari|sueldo|sou|retribuci|remuneraci|n[óo]mina)\\w*[^.\\n]{0,30}\\d{1,3}[.,]\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*(brutos?|bruts?|anuales?|anuals?|/\\s*a[ñn]o|/\\s*any)|\\d{2,3}\\s*k\\s*[-–a]\\s*\\d{2,3}\\s*k\\b"
+      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|forquilla\\s+salarial|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*[-–]\\s*\\d{1,3}[.,]\\d{3}|(salari|sueldo|sou|retribuci|remuneraci|n[óo]mina)\\w*[^.\\n]{0,30}\\d{1,3}[.,]\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*(brutos?|bruts?)(\\s*(anuales?|anuals?|mensuales?|mensuals?|/\\s*a[ñn]o|/\\s*any))?|\\d{2,3}\\s*k\\s*[-–a]\\s*\\d{2,3}\\s*k\\b"
         value: 0.9
         negatable: false
       - pattern: "salari\\s+competitiu|retribuci[óo]\\s+competitiva|salario\\s+competitivo"
-        value: 0.1
+        value: 0.2
         negatable: false
-      - pattern: "a\\s+convenir|segons\\s+(v[àa]lua|experi[èe]ncia|conveni)|seg[úu]n\\s+(val[ií]a|experiencia|convenio)"
+      - pattern: "(salari|salario|sou|sueldo|retribuci[óo]n?|remuneraci[óo]n?|honoraris)\\s*:?\\s*a\\s+convenir|segons\\s+(v[àa]lua|experi[èe]ncia|conveni)|seg[úu]n\\s+(val[ií]a|experiencia|convenio)"
         value: 0.2
         negatable: false
   gold:

@@ -1,8 +1,9 @@
 {
   "negation_scope_leaks": 0,
   "negation_leaks": [],
-  "negation_firings_count": 7,
+  "negation_firings_count": 8,
   "negation_firings": [
+    "feinaactiva-FA92320052/seniority_expectation: 'sense experiència'",
     "manfred-8379/process_formality: 'sprint'",
     "manfred-8383/process_formality: 'sprint'",
     "manfred-8389/on_call_load: 'guardias'",
@@ -11,10 +12,11 @@
     "tecnoempleo-98201f7d82b073d32d45/on_call_load: 'guardias'",
     "tecnoempleo-b57e13f992dc636ab549/on_call_load: 'guardias'"
   ],
-  "negation_window_only_count": 5,
+  "negation_window_only_count": 6,
   "negation_window_only": [
     "feinaactiva-09202618331/contract_stability: 'Contracte laboral indefinit'",
     "feinaactiva-09202618331/contract_stability: 'Contracte laboral indefinit'",
+    "feinaactiva-09202624665/commute_burden: 'Permís de conduir'",
     "manfred-8392/english_demand: 'inglés bilingüe'",
     "manfred-8392/english_demand: 'inglés fluido'",
     "remotive-2091075/collaboration_mode: 'work autonomously'"

@@ -58,9 +58,13 @@ extraction:
   # split week the advert never made.
   #
   # `teletre?ba[jl][oh]?` went with them: it could never match "teletrabajo"
-  # (the optional `e` leaves `teletrba`/`teletreba`, never `teletraba`), so the
-  # Spanish 1.0 cue did not read "100% teletrabajo" at all. Both cognates are
-  # now spelled out.
+  # (the optional `e` leaves `teletrba`/`teletreba`, never `teletraba`). It was
+  # **introduced by this PR's own first commit and never shipped on `main`** —
+  # this note previously read as though the Spanish 1.0 cue had been dead in
+  # released code, which it never was: `main` spells `teletrabajo\s+total` out.
+  # The removal is right; the claim about how long the hole had been open was
+  # not, and a fix credited with more than it did is how the next reader
+  # mis-prices the next one. Both cognates are now spelled out.
   cues:
     en:
       - pattern: "fully\\s+remote|100%\\s+remote|remote-?first|work\\s+from\\s+anywhere"

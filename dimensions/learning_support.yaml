@@ -47,7 +47,7 @@ extraction:
       - pattern: "(training|learning|certification|education)\\s+(budget|allowance|stipend|reimbursement)|paid\\s+(training|certifications?|conferences?)|conference\\s+days"
         value: 0.8
         negatable: true
-      - pattern: "continuous\\s+learning|free\\s+(english|language)\\s+lessons|professional\\s+(development|growth)|learning\\s+opportunities"
+      - pattern: "continuous\\s+learning|free\\s+(english|language)\\s+lessons|professional\\s+development|learning\\s+opportunities"
         value: 0.5
         negatable: false
       - pattern: "(we|they)\\s+(pay|fund|sponsor)\\s+[^.]{0,30}(training|certification|conference)"
@@ -65,7 +65,7 @@ extraction:
       - pattern: "\\bformaci\\w*\\s+(continua|continuada|cont[íi]nua|internas?|permanentes?)|acceso\\s+(continuo\\s+)?a\\s+(la\\s+)?\\bformaci|acc[ée]s\\s+(continu\\s+)?a\\s+(la\\s+)?\\bformaci|\\bformaci\\w*\\s+(personalizad|personalitzad|t[éeè]cnic|a\\s+medida|a\\s+mida)"
         value: 0.7
         negatable: false
-      - pattern: "clases\\s+de\\s+ingl[ée]s|classes\\s+d['’]angl[èe]s|certificacions?\\s+(pagadas|financiadas|pagades|finan[çc]ades)|desarrollo\\s+profesional|desenvolupament\\s+professional|crecimiento\\s+profesional|creixement\\s+professional"
+      - pattern: "clases\\s+de\\s+ingl[ée]s|classes\\s+d['’]angl[èe]s|certificacions?\\s+(pagadas|financiadas|pagades|finan[çc]ades)|desarrollo\\s+profesional|desenvolupament\\s+professional"
         value: 0.5
         negatable: false
     ca:
@@ -75,7 +75,7 @@ extraction:
       - pattern: "\\bformaci\\w*\\s+(cont[íi]nua|continuada|continua|internes?|internas?|permanents?|permanentes?)|acc[ée]s\\s+(continu\\s+)?a\\s+(la\\s+)?\\bformaci|acceso\\s+(continuo\\s+)?a\\s+(la\\s+)?\\bformaci|\\bformaci\\w*\\s+(personalitzad|personalizad|t[éeè]cnic|a\\s+mida|a\\s+medida)"
         value: 0.7
         negatable: false
-      - pattern: "classes\\s+d['’]angl[èe]s|clases\\s+de\\s+ingl[ée]s|certificacions?\\s+(pagades|finan[çc]ades|pagadas|financiadas)|desenvolupament\\s+professional|desarrollo\\s+profesional|creixement\\s+professional|crecimiento\\s+profesional"
+      - pattern: "classes\\s+d['’]angl[èe]s|clases\\s+de\\s+ingl[ée]s|certificacions?\\s+(pagades|finan[çc]ades|pagadas|financiadas)|desenvolupament\\s+professional|desarrollo\\s+profesional"
         value: 0.5
         negatable: false
   gold:
