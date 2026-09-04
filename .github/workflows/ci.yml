@@ -25,7 +25,19 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    # `main` only. This read `branches: ["**"]`, and every push to a branch with
+    # an open pull request therefore fired BOTH this event and `pull_request`
+    # for the same commit — two complete runs of all four jobs. The concurrency
+    # group below could not collapse them, because `github.ref` is
+    # `refs/heads/<branch>` for one and `refs/pull/<n>/merge` for the other, so
+    # they land in different groups and neither cancels the other. Measured on
+    # 2026-09-04: head `768bdca` produced runs 33865668467 and 33865671756, both
+    # named CI, both running lint, test, evidence and verify-gates.
+    #
+    # Roughly half the account's 2000 monthly minutes bought nothing, and they
+    # ran out four days into the billing period. A pull-request branch is still
+    # covered — by `pull_request` — so nothing is lost but the duplicate.
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
