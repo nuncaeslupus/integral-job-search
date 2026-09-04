@@ -344,6 +344,51 @@ def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
     return best_allow
 
 
+def allows_text(text: str, agent: str, target: str) -> bool:
+    """The RFC 9309 verdict for `target` under a robots.txt already in hand.
+
+    `Robots.allows` fetches; this is the same decision over text, so a caller
+    adjudicating a *recorded* file — or a constructed one — gets the module's
+    real answer rather than a re-implementation of it. `target` may be a full
+    URL or a bare request target (`/jobs?page=2`).
+    """
+    rules, _ = _select_rules(_parse_groups(text), agent)
+    return _allowed(rules, _request_path(target))
+
+
+def disallow_patterns(text: str, agent: str) -> tuple[str, ...]:
+    """The `Disallow` patterns of the group that binds `agent`, in file order.
+
+    §2.2.1 selection is applied first, so a `Disallow: /` written for another
+    crawler is not returned here: it is not a restriction on this agent, and a
+    caller looking for a path this file refuses *us* would otherwise be handed
+    one it does not.
+    """
+    rules, _ = _select_rules(_parse_groups(text), agent)
+    return tuple(pattern for is_allow, pattern in rules if not is_allow)
+
+
+def sample_path(pattern: str) -> str | None:
+    """One concrete request target that `pattern` matches, or `None`.
+
+    A rule is a pattern, and a parser is asked about paths — so a file's own
+    `Disallow` lines only become negative controls once each is turned back
+    into something fetchable. §2.2.3's two metacharacters are the whole of the
+    translation: `$` anchors the end and is dropped, and `*` stands for any
+    sequence, for which one literal octet is the shortest witness.
+
+    `x` rather than the empty string, because a pattern is allowed to end in
+    `*` and an empty expansion would silently shorten the sample below the
+    rule that produced it.
+    """
+    body = pattern[:-1] if pattern.endswith("$") else pattern
+    if not body.startswith("/"):
+        # RFC 9309 §2.2.2: matching starts at the first octet of the path, so a
+        # pattern that does not is not a path rule this module can witness.
+        return None
+    return body.replace("*", "x")
+
+
 class Robots:
     """One robots.txt per host, fetched once and remembered."""
 

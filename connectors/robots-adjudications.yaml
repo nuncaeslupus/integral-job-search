@@ -1,0 +1,303 @@
+# Every robots adjudication this repository stands on, and — the part that was
+# missing — whether the SECOND reader in it could have said no.
+#
+# `ruled-out.yaml`'s header states the rule: a path is admitted when the repo's
+# own audited matcher (`integral.robots`, T70) says True, a second independent
+# parser agrees, and a negative control shows some path on the same file coming
+# back False. The second parser is stdlib `urllib.robotparser`.
+#
+# **CPython's `robotparser` returns the FIRST matching rule in file order, not
+# RFC 9309 §2.2.2's longest match** — `Entry.allowance` iterates `rulelines` and
+# returns on the first `applies_to` hit. So on any robots.txt that opens with
+# `Allow: /`, it answers True for every path in the file, including every path a
+# later, longer `Disallow` covers. It cannot refuse. Two matchers agreeing means
+# something only when both can disagree, so on those files the rule silently
+# became "the repo matcher decided" while the record said two parsers had.
+#
+# That is fail-open in the exact component that exists as the independent check,
+# which is why competence is now recorded rather than assumed. Each entry below
+# carries a `standing`:
+#
+#   two_parsers_agreed          the second reader returned False for at least
+#                               one path on THIS file that RFC 9309 also
+#                               refuses. The only standing that counts as an
+#                               agreement, and it must name where that refusal
+#                               is written down.
+#
+#   single_parser               the second reader could not refuse anything on
+#                               this file, or was never run. The adjudication is
+#                               one parser's and is recorded as one parser's. Not
+#                               a defect in the verdict — the repo matcher is
+#                               strictly the stricter of the two — a defect in
+#                               calling it an agreement.
+#
+#   no_negative_control_possible  the file disallows nothing this agent could be
+#                               refused, so NO parser can produce a negative
+#                               control on it. Distinct from "no control was
+#                               run", which is what it used to be indistinguish-
+#                               able from.
+#
+# `integral.connector_policy` reads this file (T116). Every directory under
+# `connectors/` must appear here: a shipped package with no entry is a fetch
+# admitted with no second reader at all, which is counted, not skipped — the
+# metric must not be reachable by deleting rows.
+#
+# `checked` is the day the STANDING was determined, and `source` is the
+# committed file the underlying reading is written in, so every row can be
+# argued with rather than taken on trust.
+
+adjudications:
+  # ---------------------------------------------------------------------
+  # The one standing that is an agreement.
+  # ---------------------------------------------------------------------
+  - site: usajobs.gov
+    package: connectors/usajobs_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: two_parsers_agreed
+    second_reader: "urllib.robotparser"
+    source: connectors/usajobs_en/meta.yaml
+    allowed:
+      - /Search/ExecuteSearch
+      - /job/856726500
+    second_reader_refused:
+      - /Content/foo.css
+      - /Scripts/app.js
+    reason: >
+      The file is one `User-agent: *` group with four Disallow lines and no
+      `Allow` at all, so first-match order and longest-match precedence cannot
+      diverge on it: `/Content/foo.css` meets `Disallow: /Content/` under either
+      rule. The second reader returned False there, so it demonstrably can
+      refuse on this file, and the True verdicts beside it are an agreement.
+
+  # ---------------------------------------------------------------------
+  # The file admits no negative control at all.
+  # ---------------------------------------------------------------------
+  - site: workingnomads.com
+    package: connectors/workingnomads_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: no_negative_control_possible
+    second_reader: "urllib.robotparser"
+    source: connectors/workingnomads_en/meta.yaml
+    reason: >
+      The whole of https://www.workingnomads.com/robots.txt is `User-agent: *`
+      followed by a bare `Disallow:`. RFC 9309 §2.2.2 gives an empty pattern no
+      path to match, so the group carries no restriction and no path on this
+      host is refused to this agent by any correct parser. A negative control
+      cannot exist here. Recorded as its own verdict because "no control is
+      possible" and "no control was run" were previously the same silence.
+
+  # ---------------------------------------------------------------------
+  # Single-parser: the second reader could not refuse, or never ran.
+  # The two measured in #310 come first, with what was measured.
+  # ---------------------------------------------------------------------
+  - site: himalayas.app
+    package: connectors/himalayas_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: "urllib.robotparser"
+    source: connectors/himalayas_en/meta.yaml
+    reason: >
+      The file opens with `Allow: /`, so the first-match second reader returns
+      True for every path in it. Measured while capturing the #260 probes and
+      reported in #310: the repo matcher refuses `/apply` and `/jobs?page=2`,
+      and `urllib.robotparser` allowed both. It never returned False on this
+      file, so it is not a second opinion on `/jobs/api?limit=20` — the
+      adjudication is the repo matcher's alone and is recorded as such.
+
+  - site: nofluffjobs.com
+    package: connectors/nofluffjobs_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: "urllib.robotparser"
+    source: connectors/nofluffjobs_en/meta.yaml
+    reason: >
+      Same shape, same measurement (#310): the file opens with `Allow: /`, the
+      repo matcher refuses `/api/posting/123` and `/posting/abc`, and
+      `urllib.robotparser` allowed both. No False on this file, so the True for
+      `/Python?page=1` is one parser's.
+
+  - site: remoteok.com
+    package: null
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: "urllib.robotparser"
+    source: connectors/ruled-out.yaml
+    reason: >
+      `policy_refused` records "Python's stdlib `urllib.robotparser` agrees with
+      our matcher on all three URLs, which is the negative control this file
+      asks for". Three agreeing Trues are an agreement, not a control: no path
+      on that file is recorded as coming back False from either parser, so the
+      second reader's ability to refuse was never shown. The entry's verdict is
+      unaffected — remoteok is refused on policy, not on robots — but its
+      adjudication is single-parser and is now recorded as one.
+
+  # ---------------------------------------------------------------------
+  # Admitted before a second reader was part of the record at all. Each of
+  # these packages documents ONE parser's verdict — the repo's own audited
+  # matcher — and no second reading. That is what they say, and it is what
+  # they are recorded as; nothing here is a claim that the verdict is wrong.
+  # ---------------------------------------------------------------------
+  - site: arbeitnow.com
+    package: connectors/arbeitnow_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/arbeitnow_en/meta.yaml
+    reason: >
+      The package records `integral.robots`' verdict only. No second parser was
+      run and no path is recorded as refused, so there is no agreement to count.
+
+  - site: builtin.com
+    package: connectors/builtin_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/builtin_en/meta.yaml
+    reason: >
+      The package records `integral.robots`' verdict over a 305-line file, with
+      no second reading beside it.
+
+  - site: examplejobs.test
+    package: connectors/examplejobs_es
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/examplejobs_es/meta.yaml
+    reason: >
+      The library's worked example. `examplejobs.test` is in the reserved `.test`
+      TLD (RFC 2606), so there is no host to serve a robots.txt and nothing was
+      adjudicated by any parser. Recorded rather than skipped: a package that
+      drops out of the denominator is how a scan reports a clean zero over
+      nothing.
+
+  - site: getmanfred.com
+    package: connectors/getmanfred_es
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/getmanfred_es/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.
+
+  - site: infojobs.net
+    package: connectors/infojobs_es
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/infojobs_es/meta.yaml
+    reason: >
+      One parser's verdict recorded — explicitly the repo's audited matcher and
+      not a grep — with no second reading.
+
+  - site: jobfluent.com
+    package: connectors/jobfluent_es
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/jobfluent_es/meta.yaml
+    reason: >
+      Five `Disallow: /` groups for named crawlers and a permissive `*` group;
+      the record carries `Robots.allows()` verdicts only, with no second reading.
+
+  - site: jobs.ac.uk
+    package: connectors/jobsacuk_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/jobsacuk_en/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.
+
+  - site: justjoin.it
+    package: connectors/justjoin_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/justjoin_en/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.
+
+  - site: python.org
+    package: connectors/pythonorg_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/pythonorg_en/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.
+
+  - site: remotive.com
+    package: connectors/remotive_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/remotive_en/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.
+
+  - site: tecnoempleo.com
+    package: connectors/tecnoempleo_es
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/tecnoempleo_es/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading. The file's nine named
+      AI-crawler `Disallow: /` groups do not bind this agent under §2.2.1, which
+      is a group-selection question and not a second-reader one.
+
+  - site: ticjob.es
+    package: connectors/ticjob_es
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/ticjob_es/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.
+
+  - site: trabajos.com
+    package: connectors/trabajos_es
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/trabajos_es/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.
+
+  - site: wellfound.com
+    package: connectors/wellfound_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/wellfound_en/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.
+
+  - site: weworkremotely.com
+    package: connectors/weworkremotely_en
+    checked: 2026-09-04
+    agent: "integral-job-search/0.1"
+    standing: single_parser
+    second_reader: not_run
+    source: connectors/weworkremotely_en/meta.yaml
+    reason: >
+      One parser's verdict recorded; no second reading.

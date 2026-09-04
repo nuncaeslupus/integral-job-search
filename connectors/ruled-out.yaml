@@ -43,6 +43,20 @@
 #    Always run a NEGATIVE CONTROL: show some path returning False, or a True
 #    answer is indistinguishable from a matcher that says yes to everything.
 #
+#    **And the control must come from the SECOND reader, not from the two
+#    agreeing.** stdlib `urllib.robotparser` returns the FIRST matching rule in
+#    file order, not RFC 9309 §2.2.2's longest match, so on any robots.txt
+#    opening with `Allow: /` it answers True for every path in the file and
+#    cannot refuse at all. Two matchers agreeing means something only when both
+#    can disagree. `connectors/robots-adjudications.yaml` records, per board,
+#    whether the second reader was shown refusing one path on that same file —
+#    and where it could not, the adjudication is recorded as single-parser
+#    rather than counted as an agreement (T116,
+#    `integral.connector_policy --second-readers`). A file that disallows
+#    nothing at all, like www.workingnomads.com's bare `Disallow:`, gets its own
+#    verdict there, because "no control is possible" and "no control was run"
+#    were previously the same silence.
+#
 #    `restated_for_every_named_agent` — the one case where a True is not
 #    enough. A path the `*` group does not reach, but which the SAME file
 #    disallows for every named AI agent it lists, is not fetched, and the board
@@ -681,9 +695,14 @@ policy_refused:
       lines sit after `User-agent: AhrefsBot / Disallow: /`, so under RFC 9309 a
       group ends at the next user-agent line and they belong to AhrefsBot rather
       than to `*`. Python's stdlib `urllib.robotparser` agrees with our matcher
-      on all three URLs, which is the negative control this file asks for: two
-      independent parsers, same verdict, so the True is the file's meaning and
-      not our bug. The operator's *intent* is unmistakable all the same — they
+      on all three URLs — **but that is an agreement, not the negative control
+      this file asks for**, which T116 corrected in
+      `connectors/robots-adjudications.yaml`. Three agreeing Trues do not show
+      the second reader able to say no, and a reader that cannot say no cannot
+      disagree, so its agreement adds nothing. This adjudication is recorded
+      there as `single_parser`. The verdict is unchanged and does not depend on
+      it: remoteok is refused on policy, not on robots, and the repo matcher —
+      the audited one — is what carried the True. The operator's *intent* is unmistakable all the same — they
       captioned the block `# AJAX endpoints`, and the file's own AI/LLM section
       restates `Disallow: /*?action=get_jobs` and `Disallow: /?tags` verbatim
       for GPTBot, ClaudeBot, anthropic-ai, Claude-Web, PerplexityBot and six
