@@ -238,6 +238,12 @@ def test_the_serving_ban_is_measured_over_a_scan_that_covered_something() -> Non
         "from .harness import load_store\n",
         "from . import corpus\n",
         "from . import harness\n",
+        # Deferred, inside a function body. `ast.walk` reaches it and the ceiling
+        # docstring says so — but no fixture drove it, so replacing `ast.walk` with
+        # a top-level `.body` scan was green (#307 fourth read, F1). A claim whose
+        # only evidence is a reader's ad-hoc run is the shape that paragraph now
+        # exists to refuse, so it is driven here.
+        "def later():\n    from integral.corpus import load_ads\n",
         # This module. The detector was blind to itself: `corpus_scope` reads both
         # stores (`_read_rows`, `provenance_faults`) and exports `DEFAULT_RAW_ADS`,
         # so a serving module could reach the corpus through the very file that
@@ -404,6 +410,9 @@ def test_the_exemption_covers_something_real() -> None:
         "import integral.reaction_elicit\n",
         "from .reaction_elicit import corpus_stimuli\n",
         "from . import reaction_elicit\n",
+        # Deferred, as above — the laundering route is the one that matters most
+        # here, because it is the two-line edit the exemption invites.
+        "def later():\n    from integral.reaction_elicit import corpus_stimuli\n",
     ],
 )
 def test_a_serving_module_reaching_the_corpus_through_the_exemption_is_caught(
@@ -748,9 +757,15 @@ def test_the_component_list_is_the_sum_expression_itself() -> None:
     was true of `_main`'s exit code and false of everything that checks the sum
     (#307 third read, N5). Read out of the source rather than re-encoded here: a test
     that restates the expression is a second copy to drift.
+
+    **The shape it recognises is `len(<Name>)`, and that is the ceiling.** A term
+    spelled `sum(1 for _ in x)`, `len(obj.attr)`, or a bare literal is not counted,
+    so a sixth component written that way walks through (#307 fourth read, F3).
+    Hoisting the sum into a local, or renaming the key, is caught — by the
+    `assert terms` tripwire, fail-closed. Stated rather than left to be found.
     """
     module = ast.parse(Path(corpus_scope.__file__).read_text(encoding="utf-8"))
-    terms: list[str] = []
+    matches: list[list[str]] = []
     for node in ast.walk(module):
         if not isinstance(node, ast.Dict):
             continue
@@ -760,7 +775,7 @@ def test_the_component_list_is_the_sum_expression_itself() -> None:
             )
             if not named:
                 continue
-            terms = [
+            matches.append([
                 call.args[0].id
                 for call in ast.walk(value)
                 if isinstance(call, ast.Call)
@@ -768,7 +783,12 @@ def test_the_component_list_is_the_sum_expression_itself() -> None:
                 and call.func.id == "len"
                 and call.args
                 and isinstance(call.args[0], ast.Name)
-            ]
+            ])
+    # Accumulated and required to be unique. Assigning inside the loop measured
+    # only the LAST matching dict, so a decoy literal carrying the same key later
+    # in the file masked a sixth term in the real sum (#307 fourth read, F2).
+    assert len(matches) == 1, matches
+    terms = matches[0]
     assert terms, "the sum expression was not found — this test has stopped reading it"
     assert len(terms) == len(SUM_COMPONENTS), (terms, SUM_COMPONENTS)
 

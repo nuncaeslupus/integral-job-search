@@ -408,7 +408,14 @@ def test_a_floor_breach_is_a_finding_not_an_unmeasured_reading(tmp_path: Path) -
 
 
 def _tree(root: Path, extra: dict[str, str] | None = None) -> Path:
-    """A synthetic `src/integral` carrying every serving-path module, all empty."""
+    """A synthetic `src/integral` carrying every serving-path module, all empty.
+
+    A sibling of `_serving_tree` in `tests/test_corpus_scope.py`, which carries the
+    reasoning: the module list is read from the census rather than hand-written,
+    because a hand-listed set of eleven sat below `MINIMUM_SERVING_MODULES` and made
+    every reading over it `unmeasured` — so the fixtures passed for the wrong reason.
+    Fix one and look at the other (#307 fourth read, F5).
+    """
     src = root / "integral"
     src.mkdir()
     for name in (*corpus_scope.serving_path_modules(), *corpus_scope.EXEMPT_CORPUS_READERS):
@@ -570,4 +577,9 @@ def test_the_module_names_an_exempt_reader_that_left_its_bounds(
     assert measured["exempt_reader_serving_imports"] == 1
     assert measured["corpus_measurement_set_violations"] == 1, measured
     assert corpus_scope._main(["corpus_scope", str(tmp_path / "d1.json")]) == 1
-    assert "reaction_elicit" in capsys.readouterr().err
+    reported = capsys.readouterr().err
+    assert "reaction_elicit" in reported, reported
+    # And the reason, not only the name. `EXEMPT_CORPUS_READERS` has one member, so
+    # no fixture here can tell a derived name from a hard-coded one — asserting the
+    # module it reached costs nothing and does bind (#307 fourth read, F4).
+    assert "integral.rank" in reported, reported
