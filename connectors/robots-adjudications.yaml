@@ -63,6 +63,22 @@ adjudications:
     second_reader_refused:
       - /Content/foo.css
       - /Scripts/app.js
+    # RECONSTRUCTED from the reading committed in `connectors/usajobs_en/meta.yaml`
+    # — "a single `User-agent: *` group with four Disallow lines — `/Content/`,
+    # `/Scripts/`, `/foresee/` and `/Service References/`", checked against the
+    # live file on 2026-09-02. It is that reading written back out as a robots.txt,
+    # not a capture of the response body, and it is here so this row's standing and
+    # both of its path lists are checked against a document instead of against its
+    # own prose: `problems()` classifies it and requires the standing to match.
+    # The other nineteen rows carry no snapshot because their files are not in this
+    # repository and egress is blocked from the sessions that would fetch them —
+    # which is why `_classify` had never run against a single real board.
+    robots_txt: |
+      User-agent: *
+      Disallow: /Content/
+      Disallow: /Scripts/
+      Disallow: /foresee/
+      Disallow: /Service References/
     reason: >
       The file is one `User-agent: *` group with four Disallow lines and no
       `Allow` at all, so first-match order and longest-match precedence cannot

@@ -73,9 +73,9 @@ So competence is measured here rather than assumed, in two halves:
   running either parser. `_classify` samples the file's OWN `Disallow` patterns
   (§2.2.3's `*` and `$` are the whole of the translation back into paths), asks
   both readers, and reports `competent` only when the second reader refuses a
-  path RFC 9309 also refuses. Refusing a path the RFC *allows* is not
-  competence — it is the same parser being wrong in the other direction — and
-  one fixture exists for exactly that.
+  path RFC 9309 also refuses **and allows none that it refuses**. Refusing a
+  path the RFC *allows* is not competence — it is the same parser being wrong
+  in the other direction — and one fixture exists for exactly that.
 * **the record**, over `connectors/robots-adjudications.yaml` — every
   adjudication this repository stands on, each carrying a `standing` of
   `two_parsers_agreed`, `single_parser`, or `no_negative_control_possible`. A
@@ -89,12 +89,50 @@ whatsoever, and excluding it would make the metric reachable by deleting rows.
 And the denominator is floored, so a scan that finds nothing reports
 `unmeasured` rather than a clean zero.
 
-An honest `single_parser` is **not** counted. The task's own scope says so —
-"where it cannot, the adjudication is single-parser and must be recorded as
-such rather than counted as agreement" — and a metric that counted it could
-only reach zero by re-running every board with a parser that does not exist
-yet, which would make the gate unpassable and therefore unread. What is
-forbidden is *calling it an agreement*.
+**Two metrics, because one name was carrying two meanings.**
+
+`robots_adjudications_without_a_competent_second_reader` is the plan's name for
+this task and it says something specific: how many adjudications do not stand
+on a second reader that could refuse. The first implementation gave that name
+to a *structural* count — rows failing their own checks, malformed controls
+accepted, packages with no row, fixtures misclassified — which reads **0** while
+**19 of the 20 rows have no competent second reader at all**. A zero under that
+name teaches the next session the opposite of the truth, which is `T108`'s
+`status_is_asserted` and `#323`'s `incidental_duplicate_drops` a third time.
+
+The defence offered was that the task's Scope excludes it. It does not: Scope's
+second bullet is *"or replace the stdlib as the second reader with one that
+implements longest-match, and keep the competence check anyway"*, so the literal
+metric is reachable in principle and the name was never a synonym for the
+structural one.
+
+So the name keeps its meaning and loses the gate:
+
+* `robots_adjudications_without_a_competent_second_reader` — **19** today, of
+  20 rows. One row (usajobs.gov) stands on a second reader that demonstrably
+  refuses on its own file; every other row is an honest `single_parser` or the
+  one file admitting no control at all. What would reduce it is not better
+  bookkeeping: it is a second reader that implements §2.2.2's longest match,
+  run over each board's robots.txt. That is a task of its own, seeded as
+  `t-9d41c7f5`, and it needs those files — 18 of which are not committed here
+  and cannot be fetched, egress being blocked.
+* `robots_adjudications_misrepresenting_their_standing` — **0**, and the gate.
+  It counts records that claim more than the file under them supports, which is
+  the property this module can actually enforce and the one a regression would
+  break. The four inputs are ways one record misstates its standing: a row
+  whose claim it does not establish (including one its own committed
+  `robots_txt` contradicts), a malformed control accepted, a shipped package
+  with no row — the record standing silently for a fetch it never adjudicated —
+  and a competence fixture the classifier gets wrong, which is the machine that
+  assigns standings being broken.
+
+An honest `single_parser` is **not** a misrepresentation. The task's own scope
+says so — "where it cannot, the adjudication is single-parser and must be
+recorded as such rather than counted as agreement" — and a gate that counted it
+could only reach zero by re-running every board with a parser that does not
+exist yet, which would make the gate unpassable and therefore unread. What is
+forbidden is *calling it an agreement*. What is now also refused is *reporting
+zero of them*.
 """
 
 from __future__ import annotations
@@ -110,6 +148,7 @@ from typing import Any
 import yaml
 
 from integral import robots
+from integral.gate_exit import worst
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LEDGER_PATH = _REPO_ROOT / "connectors" / "ruled-out.yaml"
@@ -346,8 +385,36 @@ STANDINGS = (TWO_PARSERS_AGREED, SINGLE_PARSER, NO_NEGATIVE_CONTROL_POSSIBLE)
 
 #: What `_classify` can find about a second reader on one file.
 COMPETENT = "competent"
+#: It refused a path RFC 9309 refuses, and ALLOWED another one — so it is a
+#: second opinion on some of this file and fail-open on the rest. Competence is
+#: a property of a (file, target) pair before it is a property of a file, and
+#: this verdict is what keeps a per-file `competent` from being read as a claim
+#: about every target on it.
+PARTIALLY_COMPETENT = "partially_competent"
 INCOMPETENT = "incompetent"
 NO_CONTROL_POSSIBLE = "no_control_possible"
+CLASSIFICATIONS = (COMPETENT, PARTIALLY_COMPETENT, INCOMPETENT, NO_CONTROL_POSSIBLE)
+
+#: Which standings a row may carry, given what `_classify` says about the
+#: robots.txt it snapshots. `single_parser` is permitted under every
+#: classification because it claims nothing — under-claiming is never the
+#: defect. `two_parsers_agreed` needs full competence, and
+#: `no_negative_control_possible` needs a file on which no control exists.
+STANDINGS_FOR_CLASSIFICATION: dict[str, tuple[str, ...]] = {
+    COMPETENT: (TWO_PARSERS_AGREED, SINGLE_PARSER),
+    PARTIALLY_COMPETENT: (SINGLE_PARSER,),
+    INCOMPETENT: (SINGLE_PARSER,),
+    NO_CONTROL_POSSIBLE: (NO_NEGATIVE_CONTROL_POSSIBLE, SINGLE_PARSER),
+}
+
+#: The literal that says a second reader was never run, as opposed to run and
+#: unable to refuse. `single_parser` covered both and the two are different
+#: findings; this is the discriminator, and it is validated rather than assumed.
+NOT_RUN = "not_run"
+
+#: The second readers this repository knows how to name. A free-text field here
+#: makes `second_reader: "checked it myself"` indistinguishable from a parser.
+KNOWN_SECOND_READERS = ("urllib.robotparser",)
 
 #: The denominator's floor. A count of the day would move whenever a connector
 #: is added and make every such PR an evidence drift; a floor says what the
@@ -379,6 +446,12 @@ class Competence:
     #: Paths the second reader refused that RFC 9309 allows. Not competence —
     #: the opposite error — and kept so the two are never confused.
     second_reader_false_refusals: tuple[str, ...]
+    #: Paths RFC 9309 refuses that the second reader ALLOWED. The fail-open
+    #: discrepancy, and the one that decides whether an agreement on this file
+    #: means anything: it was computed and discarded, while its fail-closed
+    #: mirror above was recorded — backwards, on a repository whose stated
+    #: weighting is fail-open over fail-closed.
+    second_reader_false_allows: tuple[str, ...]
 
 
 def second_reader_allows(text: str, agent: str, target: str) -> bool:
@@ -406,36 +479,64 @@ def _classify(text: str, agent: str) -> Competence:
     refuses. Refusing a path the RFC allows does not count and is recorded
     separately: a parser wrong in the fail-closed direction looks exactly like
     a competent one to a check that only asks whether some `False` came back.
+
+    **Competence is per target before it is per file**, which is why there are
+    four verdicts and not three:
+
+        User-agent: *
+        Disallow: /admin
+        Allow: /
+        Disallow: /apply
+
+    §2.2.2 refuses both `/admin` and `/apply` — each disallow is six octets
+    against the allow's one. A first-match reader refuses `/admin` (it meets it
+    first) and **allows** `/apply` (its first match there is `Allow: /`). One
+    `competent` for the whole file would let a row claim `two_parsers_agreed`
+    on the strength of `/admin` while the adjudicated target is `/apply`, where
+    the second reader is fail-open. So a reader that refuses one refused path
+    and allows another is `partially_competent`, which no agreement may rest
+    on.
+
+    Each pattern is sampled through its whole witness family and stops at the
+    first target the group refuses (`robots.sample_paths`): one witness per
+    pattern let a competing `Allow` capture it and made a file that refuses
+    `/ay` report that no negative control was possible at all.
     """
     tried: list[str] = []
     rfc_refused: list[str] = []
     agreed: list[str] = []
     false_refusals: list[str] = []
+    false_allows: list[str] = []
     for pattern in robots.disallow_patterns(text, agent):
-        target = robots.sample_path(pattern)
-        if target is None or target in tried:
-            continue
-        tried.append(target)
-        rfc_allows = robots.allows_text(text, agent, target)
-        second_allows = second_reader_allows(text, agent, target)
-        if not rfc_allows:
-            rfc_refused.append(target)
+        for target in robots.sample_paths(pattern):
+            if target in tried:
+                continue
+            tried.append(target)
+            rfc_allows = robots.allows_text(text, agent, target)
+            second_allows = second_reader_allows(text, agent, target)
+            if not rfc_allows:
+                rfc_refused.append(target)
+                (false_allows if second_allows else agreed).append(target)
+                # This pattern has produced its negative control; the rest of
+                # its family witnesses the same rule and says the same thing.
+                break
             if not second_allows:
-                agreed.append(target)
-        elif not second_allows:
-            false_refusals.append(target)
+                false_refusals.append(target)
     if not rfc_refused:
         verdict = NO_CONTROL_POSSIBLE
-    elif agreed:
-        verdict = COMPETENT
-    else:
+    elif not agreed:
         verdict = INCOMPETENT
+    elif false_allows:
+        verdict = PARTIALLY_COMPETENT
+    else:
+        verdict = COMPETENT
     return Competence(
         verdict=verdict,
         controls_tried=tuple(tried),
         rfc_refused=tuple(rfc_refused),
         second_reader_refused=tuple(agreed),
         second_reader_false_refusals=tuple(false_refusals),
+        second_reader_false_allows=tuple(false_allows),
     )
 
 
@@ -591,6 +692,54 @@ Disallow: /*.pdf$
             "silently report `no_control_possible` and look like good news."
         ),
     ),
+    _CompetenceFixture(
+        name="a_competing_allow_captures_the_only_witness_a_pattern_produced",
+        robots_txt="""
+User-agent: *
+Disallow: /a*
+Allow: /ax
+""",
+        agent="integral-job-search/0.1",
+        expected=INCOMPETENT,
+        section="RFC 9309 §2.2.3",
+        why=(
+            "§2.2.3 gives `*` 'any sequence of characters', so `Disallow: /a*` covers "
+            "`/ay`, and `Allow: /ax` — a literal — does not match `/ay` at all. One "
+            "matching rule, so §2.2.2 refuses `/ay`: a negative control DOES exist on "
+            "this file. The stdlib reader has no wildcard support, matches `/a*` as a "
+            "literal prefix, finds no rule applying to `/ay` and allows it — so the "
+            "verdict is `incompetent`, not `no_control_possible`. The sampler used to "
+            "produce exactly one witness per pattern, `/ax`, which §2.2.2 ALLOWS on "
+            "the equal-length tie ('if an allow rule and a disallow rule are "
+            "equivalent, then the allow rule SHOULD be used'), and the file therefore "
+            "reported that no parser could ever refuse anything on it. That is the "
+            "standing which excuses a board entirely, handed to a file that plainly "
+            "refuses a path — the worst direction to be wrong in."
+        ),
+    ),
+    _CompetenceFixture(
+        name="a_reader_refusing_one_refused_path_and_allowing_another_is_only_partly_competent",
+        robots_txt="""
+User-agent: *
+Disallow: /admin
+Allow: /
+Disallow: /apply
+""",
+        agent="integral-job-search/0.1",
+        expected=PARTIALLY_COMPETENT,
+        section="RFC 9309 §2.2.2",
+        why=(
+            "§2.2.2's most-octets rule refuses BOTH `/admin` and `/apply`: each "
+            "disallow is six octets against `Allow: /`'s one. A first-match reader "
+            "refuses `/admin`, whose rule it meets first, and ALLOWS `/apply`, whose "
+            "first matching rule is `Allow: /`. A single per-file verdict would call "
+            "this reader competent on the strength of `/admin` — and the path a row "
+            "adjudicates could be `/apply`, where the same reader is fail-open. "
+            "Competence is a property of a (file, target) pair before it is a "
+            "property of a file, so this file's verdict is `partially_competent` and "
+            "no `two_parsers_agreed` may rest on it."
+        ),
+    ),
 )
 
 
@@ -608,12 +757,17 @@ class RobotsAdjudication:
     allowed: tuple[str, ...]
     second_reader_refused: tuple[str, ...]
     reason: str
+    #: The robots.txt this row was read off, when the row commits one. Optional
+    #: because most of these boards' files are not in the repository and egress
+    #: is blocked here — but where it IS present, every claim the row makes
+    #: becomes checkable against the text instead of taken from its prose.
+    robots_txt: str
 
     @classmethod
     def from_mapping(cls, payload: Any) -> RobotsAdjudication:
         """Read one row, tolerating everything — the reading is the check."""
         if not isinstance(payload, dict):
-            return cls("", "", None, "", "", "", "", (), (), "")
+            return cls("", "", None, "", "", "", "", (), (), "", "")
 
         def _paths(key: str) -> tuple[str, ...]:
             raw = payload.get(key) or []
@@ -632,6 +786,7 @@ class RobotsAdjudication:
             allowed=_paths("allowed"),
             second_reader_refused=_paths("second_reader_refused"),
             reason=str(payload.get("reason") or "").strip(),
+            robots_txt=str(payload.get("robots_txt") or ""),
         )
 
     def problems(self, repo_root: Path = _REPO_ROOT) -> list[str]:
@@ -649,6 +804,29 @@ class RobotsAdjudication:
             found.append(
                 f"{where}: no agent — robots.txt is addressed to whoever the client "
                 "says it is, so a verdict with no agent names no group (§2.2.1)"
+            )
+        else:
+            # §2.2.1 selects the group by product token, so an agent string
+            # from which no single token can be read names no group at all and
+            # the row's verdict is about nothing. `robots._product_token` is
+            # the module's own rule — asked, not re-implemented, so this cannot
+            # drift back into the prefix matching T102 removed.
+            try:
+                robots._product_token(self.agent)
+            except robots.RobotsError as exc:
+                found.append(f"{where}: agent {self.agent!r} names no decidable group: {exc}")
+        if self.second_reader and self.second_reader not in (NOT_RUN, *KNOWN_SECOND_READERS):
+            found.append(
+                f"{where}: `second_reader` is {self.second_reader!r}, which is neither "
+                f"{NOT_RUN!r} nor one of {', '.join(KNOWN_SECOND_READERS)} — free text "
+                "here makes 'a parser read it' and 'somebody looked' the same record"
+            )
+        both = [path for path in self.allowed if path in self.second_reader_refused]
+        if both:
+            found.append(
+                f"{where}: {', '.join(both)} listed as both admitted and refused by the "
+                "second reader — the row contradicts itself on the one path that would "
+                "decide it"
             )
         if not self.source:
             found.append(f"{where}: no `source` — nothing says where this reading is written")
@@ -673,12 +851,23 @@ class RobotsAdjudication:
                     f"{where}: claims an agreement and names no path it admitted — "
                     "there is nothing for the agreement to be about"
                 )
-            if not self.second_reader or self.second_reader == "not_run":
+            if not self.second_reader or self.second_reader == NOT_RUN:
                 found.append(
                     f"{where}: claims two parsers agreed while `second_reader` is "
                     f"{self.second_reader or 'unset'!r}"
                 )
         else:
+            if self.standing == SINGLE_PARSER and not self.second_reader:
+                # `single_parser` covers two different findings — the reader
+                # ran and could not refuse anything on this file, or it was
+                # never run — and `second_reader` is the only thing that says
+                # which. An unset value collapses them back into one silence,
+                # which is the distinction the third standing exists to make.
+                found.append(
+                    f"{where}: standing {SINGLE_PARSER!r} with `second_reader` unset — "
+                    f"'ran and could not refuse' and 'never run' are different findings, "
+                    f"and only this field distinguishes them ({NOT_RUN!r} says the second)"
+                )
             if not self.reason:
                 found.append(
                     f"{where}: standing {self.standing!r} with no reason — "
@@ -690,7 +879,67 @@ class RobotsAdjudication:
                     f"{where}: standing {self.standing!r} while naming paths the second "
                     "reader refused — a row that contradicts its own standing"
                 )
+        found += self._snapshot_problems(where)
         return found
+
+    def _snapshot_problems(self, where: str) -> list[str]:
+        """What the committed robots.txt says about the claims of this row.
+
+        Everything above validates the row's **shape**: that a
+        `two_parsers_agreed` names some path, that a standing is spelled from
+        the vocabulary. None of it connects the row to a robots.txt, so a row
+        claiming an agreement over invented paths passed every check, and
+        `_classify` — the whole competence mechanism — was never run against a
+        single real board. The record's only agreement was unverified prose.
+
+        A row that commits `robots_txt` is checked against it three ways:
+
+        * its standing must be one `_classify` permits for that file
+          (`STANDINGS_FOR_CLASSIFICATION`) — under-claiming is always allowed,
+          over-claiming never is;
+        * every path in `second_reader_refused` must be refused by RFC 9309
+          **and** by the second reader over that text — a claimed refusal that
+          neither reader makes is the fail-open shape of this whole task;
+        * every path in `allowed` must be RFC-allowed over that text, since
+          the admission is what the row exists to justify.
+
+        A row with no snapshot is not faulted for it: most of these files are
+        not in this repository and egress is blocked here. What is faulted is a
+        snapshot that contradicts the row beside it.
+        """
+        if not self.robots_txt.strip():
+            return []
+        try:
+            found = _classify(self.robots_txt, self.agent)
+        except robots.RobotsError as exc:
+            return [f"{where}: `robots_txt` could not be classified for {self.agent!r}: {exc}"]
+        problems: list[str] = []
+        permitted = STANDINGS_FOR_CLASSIFICATION.get(found.verdict, ())
+        if self.standing in STANDINGS and self.standing not in permitted:
+            problems.append(
+                f"{where}: standing {self.standing!r}, but its own `robots_txt` "
+                f"classifies {found.verdict!r} — that standing needs one of "
+                f"{', '.join(permitted) or '(none)'}"
+            )
+        for path in self.second_reader_refused:
+            if robots.allows_text(self.robots_txt, self.agent, path):
+                problems.append(
+                    f"{where}: names {path!r} as a second-reader refusal, but RFC 9309 "
+                    "ALLOWS it on this file — a refusal the RFC does not make is not a "
+                    "negative control, it is the second reader being wrong"
+                )
+            elif second_reader_allows(self.robots_txt, self.agent, path):
+                problems.append(
+                    f"{where}: names {path!r} as a second-reader refusal, and the second "
+                    "reader ALLOWS it on this file — the agreement this row rests on is "
+                    "not there"
+                )
+        for path in self.allowed:
+            if not robots.allows_text(self.robots_txt, self.agent, path):
+                problems.append(
+                    f"{where}: admits {path!r}, which RFC 9309 REFUSES on this file"
+                )
+        return problems
 
 
 #: Rows malformed by construction, put through the same reader every run. Each
@@ -802,6 +1051,95 @@ MALFORMED_ADJUDICATIONS: tuple[tuple[str, dict[str, Any]], ...] = (
             "reason": "one parser only",
         },
     ),
+    (
+        "an agreement whose own robots.txt shows the second reader cannot refuse on it",
+        {
+            "site": "i.test",
+            "checked": "2026-09-04",
+            "agent": "integral-job-search/0.1",
+            "standing": TWO_PARSERS_AGREED,
+            "second_reader": "urllib.robotparser",
+            "source": "connectors/robots-adjudications.yaml",
+            "allowed": ["/jobs"],
+            "second_reader_refused": ["/apply"],
+            "robots_txt": "User-agent: *\nAllow: /\nDisallow: /apply\n",
+        },
+    ),
+    (
+        "no negative control possible, on a file that refuses one",
+        {
+            "site": "j.test",
+            "checked": "2026-09-04",
+            "agent": "integral-job-search/0.1",
+            "standing": NO_NEGATIVE_CONTROL_POSSIBLE,
+            "second_reader": "urllib.robotparser",
+            "source": "connectors/robots-adjudications.yaml",
+            "reason": "claimed to refuse nothing",
+            "robots_txt": "User-agent: *\nDisallow: /a*\nAllow: /ax\n",
+        },
+    ),
+    (
+        "a row admitting a path its own robots.txt refuses",
+        {
+            "site": "k.test",
+            "checked": "2026-09-04",
+            "agent": "integral-job-search/0.1",
+            "standing": TWO_PARSERS_AGREED,
+            "second_reader": "urllib.robotparser",
+            "source": "connectors/robots-adjudications.yaml",
+            "allowed": ["/admin/x"],
+            "second_reader_refused": ["/admin/"],
+            "robots_txt": "User-agent: *\nDisallow: /admin/\n",
+        },
+    ),
+    (
+        "an agent naming no decidable product token",
+        {
+            "site": "l.test",
+            "checked": "2026-09-04",
+            "agent": "Mozilla/5.0 (compatible; integral-job-search/0.1)",
+            "standing": SINGLE_PARSER,
+            "second_reader": NOT_RUN,
+            "source": "connectors/robots-adjudications.yaml",
+            "reason": "one parser only",
+        },
+    ),
+    (
+        "a second reader that is prose rather than a parser",
+        {
+            "site": "m.test",
+            "checked": "2026-09-04",
+            "agent": "integral-job-search/0.1",
+            "standing": SINGLE_PARSER,
+            "second_reader": "read it myself",
+            "source": "connectors/robots-adjudications.yaml",
+            "reason": "one parser only",
+        },
+    ),
+    (
+        "one path listed as both admitted and refused",
+        {
+            "site": "n.test",
+            "checked": "2026-09-04",
+            "agent": "integral-job-search/0.1",
+            "standing": TWO_PARSERS_AGREED,
+            "second_reader": "urllib.robotparser",
+            "source": "connectors/robots-adjudications.yaml",
+            "allowed": ["/admin/"],
+            "second_reader_refused": ["/admin/"],
+        },
+    ),
+    (
+        "a single-parser row that does not say whether the reader ever ran",
+        {
+            "site": "o.test",
+            "checked": "2026-09-04",
+            "agent": "integral-job-search/0.1",
+            "standing": SINGLE_PARSER,
+            "source": "connectors/robots-adjudications.yaml",
+            "reason": "one parser only",
+        },
+    ),
 )
 
 
@@ -836,12 +1174,20 @@ def measure_second_readers(
     controls: tuple[tuple[str, dict[str, Any]], ...] = MALFORMED_ADJUDICATIONS,
     repo_root: Path = _REPO_ROOT,
 ) -> dict[str, Any]:
-    """T116's gate: `robots_adjudications_without_a_competent_second_reader`.
+    """T116's gate: `robots_adjudications_misrepresenting_their_standing`.
 
-    Three things go through one number, because all three are ways the same
-    claim can be empty: a recorded agreement that cannot show a refusal, a
-    shipped package with no record at all, and a constructed file the
-    classifier gets wrong.
+    Four things go through one number, because all four are ways one record can
+    say something the file underneath it does not support: a row whose claim it
+    cannot establish (including one its own committed `robots_txt` contradicts),
+    a malformed control accepted, a shipped package with no record at all — the
+    record silently standing for a fetch it never adjudicated — and a
+    constructed file the classifier itself gets wrong, which is the machine that
+    assigns standings being broken.
+
+    **`robots_adjudications_without_a_competent_second_reader` is measured here
+    too, and it is not this gate.** It is the honest count of adjudications
+    whose second reader is not competent, which is 19 of 20 today and which no
+    amount of correct recording can reduce — see the module docstring.
     """
     live = adjudications(path)
     violations = [problem for row in live for problem in row.problems(repo_root)]
@@ -889,11 +1235,30 @@ def measure_second_readers(
     standings = {
         standing: sum(1 for row in live if row.standing == standing) for standing in STANDINGS
     }
+    # The two findings `single_parser` used to hold at once. `not_run` is the
+    # discriminator, and until it was validated it was also unnamed: the record
+    # said "one parser" for a reader that ran and could not refuse and for one
+    # nobody ever invoked, which are different things to fix.
+    ran = [row for row in live if row.standing == SINGLE_PARSER and row.second_reader != NOT_RUN]
+    single_parser_cases = {
+        "second_reader_ran_and_could_not_refuse": len(ran),
+        "second_reader_never_run": standings[SINGLE_PARSER] - len(ran),
+    }
+    # The literal count the metric's name has always described: an adjudication
+    # stands on a competent second reader only when it claims an agreement AND
+    # establishes it. Everything else — every honest `single_parser`, the file
+    # admitting no control, and any row that fails its own checks — does not.
+    without_a_competent_second_reader = sum(
+        1 for row in live if row.standing != TWO_PARSERS_AGREED or row.problems(repo_root)
+    )
     return {
-        "robots_adjudications_without_a_competent_second_reader": (
+        "robots_adjudications_misrepresenting_their_standing": (
             unearned + len(accepted) + len(uncovered) + len(misclassified)
         ),
-        "robots_adjudications_without_a_competent_second_reader_evaluated": checked,
+        "robots_adjudications_misrepresenting_their_standing_evaluated": checked,
+        "robots_adjudications_without_a_competent_second_reader": (
+            without_a_competent_second_reader
+        ),
         "robots_adjudications_checked": checked,
         "live_adjudications": len(live),
         "shipped_packages": len(packages),
@@ -901,6 +1266,7 @@ def measure_second_readers(
         "competence_fixtures_checked": len(fixtures),
         "packages_without_an_adjudication_record": len(uncovered),
         "standings": standings,
+        "single_parser_cases": single_parser_cases,
         # `unmeasured` is the honest reading of a scan too small to mean
         # anything — not a pass, and not a fail.
         "gate_status": "measured" if floored else "unmeasured",
@@ -919,7 +1285,7 @@ def record_second_readers(measured: dict[str, Any]) -> dict[str, Any]:
     assert — they are just not the thing a committed record has to hold still.
     """
     moving = (
-        "robots_adjudications_without_a_competent_second_reader_evaluated",
+        "robots_adjudications_misrepresenting_their_standing_evaluated",
         "robots_adjudications_checked",
         "live_adjudications",
         "shipped_packages",
@@ -956,11 +1322,11 @@ def _run_second_readers(target: Path) -> int:
     print(json.dumps(record_second_readers(measured), ensure_ascii=False))
     for violation in measured["violations"]:
         print(violation, file=sys.stderr)
-    if measured["robots_adjudications_without_a_competent_second_reader"]:
+    if measured["robots_adjudications_misrepresenting_their_standing"]:
         return 1
     if measured["gate_status"] == "unmeasured":
         print(
-            "robots_adjudications_without_a_competent_second_reader: UNMEASURED — the "
+            "robots_adjudications_misrepresenting_their_standing: UNMEASURED — the "
             "scan is under its floor. Not a pass and not a fail.",
             file=sys.stderr,
         )
@@ -1024,7 +1390,11 @@ def _main(argv: list[str]) -> int:
         )
     if positional:
         return _run_owner_decisions(Path(positional[0]))
-    return max(
+    # `worst`, never `max`: `max(1, 3) == 3`, and 3 is what `make evidence`
+    # prints as `unmeasured (recorded)` before continuing — so a real T99
+    # failure was swallowed whenever T116's scan happened to be under its
+    # floor. Failure outranks unmeasured (`integral.gate_exit`).
+    return worst(
         _run_owner_decisions(DEFAULT_EVIDENCE_PATH),
         _run_second_readers(DEFAULT_T116_EVIDENCE_PATH),
     )

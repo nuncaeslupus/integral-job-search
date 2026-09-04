@@ -42,6 +42,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
+from integral.gate_exit import worst
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T70.json"
 DEFAULT_T71_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T71.json"
@@ -390,6 +392,22 @@ def disallow_patterns(text: str, agent: str) -> tuple[str, ...]:
     return tuple(pattern for is_allow, pattern in rules if not is_allow)
 
 
+#: The octet a `*` is expanded into, and the alternate `sample_paths` falls
+#: back to. Neither is special: they are two octets that differ.
+_WITNESS_OCTET = "x"
+_ALTERNATE_OCTET = "y"
+
+
+def _witness(pattern: str, expansion: str) -> str | None:
+    """`pattern` with `$` dropped and every `*` expanded to `expansion`."""
+    body = pattern[:-1] if pattern.endswith("$") else pattern
+    if not body.startswith("/"):
+        # RFC 9309 §2.2.2: matching starts at the first octet of the path, so a
+        # pattern that does not is not a path rule this module can witness.
+        return None
+    return body.replace("*", expansion)
+
+
 def sample_path(pattern: str) -> str | None:
     """One concrete request target that `pattern` matches, or `None`.
 
@@ -402,13 +420,68 @@ def sample_path(pattern: str) -> str | None:
     `x` rather than the empty string, because a pattern is allowed to end in
     `*` and an empty expansion would silently shorten the sample below the
     rule that produced it.
+
+    **One witness is not enough to decide whether a file refuses anything** —
+    see `sample_paths`, which is what a caller looking for a negative control
+    should ask for. This returns the first of that family and is kept because
+    "one path this pattern covers" is its own question.
     """
-    body = pattern[:-1] if pattern.endswith("$") else pattern
-    if not body.startswith("/"):
-        # RFC 9309 §2.2.2: matching starts at the first octet of the path, so a
-        # pattern that does not is not a path rule this module can witness.
-        return None
-    return body.replace("*", "x")
+    return _witness(pattern, _WITNESS_OCTET)
+
+
+def sample_paths(pattern: str) -> tuple[str, ...]:
+    """Every request target this module offers as a witness for `pattern`.
+
+    The reason there is more than one is §2.2.2 rather than §2.2.3: a witness
+    only becomes a *negative control* when the whole group refuses it, and a
+    competing `Allow` in the same group can capture the single witness a
+    pattern produces while leaving the rest of what that pattern covers
+    refused.
+
+        User-agent: *
+        Disallow: /a*
+        Allow: /ax
+
+    `/ax` — the one witness `sample_path` yields — matches both rules at three
+    octets each, and §2.2.2 gives an equal-length tie to the allow. So a caller
+    with that witness alone concludes the file refuses nothing, when `/ay` is
+    refused by it: §2.2.3 makes `*` "any sequence of characters", so
+    `Disallow: /a*` covers `/ay` while `Allow: /ax` does not. Reporting "no
+    negative control is possible" for a file that plainly refuses a path is the
+    fail-open direction of the error this sampling exists to prevent.
+
+    The family, in order, each still matched by `pattern` itself:
+
+    1. the `x` expansion — `sample_path`'s answer;
+    2. that witness with one octet appended, for an **unanchored** pattern
+       only: §2.2.2 matches against the beginning of the path, so the pattern
+       still matches the longer string, while a competing `Allow` anchored with
+       `$` no longer does. An anchored pattern matches nothing longer than its
+       own body, so it is never extended;
+    3. a different expansion octet, when the pattern carries `*` — this is what
+       separates `/ay` from a literal, unanchored `Allow: /ax`;
+    4. the empty expansion, when the pattern carries `*` — §2.2.3's "any
+       sequence" includes the empty one, so it is the shortest witness the
+       pattern admits, and it escapes an `Allow` whose literal body is longer.
+
+    Order is for reporting only: a caller takes the first witness the group
+    actually refuses, and each is a genuine consequence of `pattern`, so none
+    of them can manufacture a refusal the file does not contain.
+    """
+    first = _witness(pattern, _WITNESS_OCTET)
+    if first is None:
+        return ()
+    found = [first]
+    if not pattern.endswith("$"):
+        found.append(first + _WITNESS_OCTET)
+    if "*" in pattern:
+        for expansion in (_ALTERNATE_OCTET, ""):
+            other = _witness(pattern, expansion)
+            if other is not None:
+                found.append(other)
+    # `dict.fromkeys` rather than a set: the order above is the report order,
+    # and `/a*` with an empty expansion can collide with a literal `/a`.
+    return tuple(dict.fromkeys(found))
 
 
 class Robots:
@@ -1400,7 +1473,10 @@ def _main(argv: list[str]) -> int:
         # recurse into itself forever.
         recovery_rc = _main([argv[0], "--browser-recovery"])
         verdicts_rc = _main([argv[0], str(DEFAULT_EVIDENCE_PATH)])
-        return max(recovery_rc, verdicts_rc)
+        # `worst`, never `max`: `max(1, 3) == 3` reported a failed T70 as
+        # T71's `unmeasured`, which `make evidence` records and continues
+        # past. Numeric order is not severity order (`integral.gate_exit`).
+        return worst(recovery_rc, verdicts_rc)
 
     if browser_recovery:
         target = Path(positional[0]) if positional else DEFAULT_T71_EVIDENCE_PATH
