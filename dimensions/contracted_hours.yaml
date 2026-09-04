@@ -1,0 +1,118 @@
+id: contracted_hours
+kind: hard
+polarity: unipolar
+group: dealbreakers
+label:
+  en: "Contracted hours"
+  es: "Jornada contratada"
+  ca: "Jornada contractada"
+definition: >
+  How many hours the contract is for, from a few hours a week through part time to a
+  full working week. A property of the contract's size, not of when the hours fall nor
+  of how far they can be moved — those are `schedule_flexibility`.
+levels:
+  - value: 0.0
+    label:
+      en: "Not stated"
+      es: "No consta"
+      ca: "No consta"
+    tell: "the ad never says how many hours the post is"
+  - value: 0.2
+    label:
+      en: "Very short part time"
+      es: "Jornada muy reducida"
+      ca: "Jornada molt reduïda"
+    tell: "a handful of hours — under about fifteen a week"
+  - value: 0.5
+    label:
+      en: "Part time"
+      es: "Jornada parcial"
+      ca: "Jornada parcial"
+    tell: "explicitly part time, or an hours figure well under full"
+  - value: 0.9
+    label:
+      en: "Full time"
+      es: "Jornada completa"
+      ca: "Jornada completa"
+    tell: "'jornada completa', full time, or the statutory full week"
+elicitation:
+  questions:
+    - id: ch_q1
+      text:
+        en: >
+          Have you ever worked fewer hours than you wanted, or more? Tell me what that
+          did to the rest of your life at the time.
+        es: >
+          ¿Has trabajado alguna vez menos horas de las que querías, o más? Cuéntame qué
+          le hizo eso al resto de tu vida en ese momento.
+        ca: >
+          Has treballat mai menys hores de les que volies, o més? Explica'm què li va
+          fer això a la resta de la teva vida en aquell moment.
+extraction:
+  cues:
+    en:
+      # Not a bare `full-time`: an advert saying "consistent contract work over a
+      # full-time role" is stating what the post is *not*, and the rung's tell is
+      # "'jornada completa', full time, or the statutory full week" — a statement
+      # about the hours this contract is for. The qualifiers below are the ways
+      # the English corpus states that, and a comparison satisfies none of them.
+      # The line-anchored branch is written with explicit newlines, not `^…$`:
+      # `extraction.py:331` compiles cues with `re.IGNORECASE` alone, so `^` and
+      # `$` bind to the start and end of the **whole advert** and the branch could
+      # never fire on one. It matched anyway where it is checked — `_gold` runs
+      # the pattern against the isolated span (`extraction.py:654`), where the
+      # span *is* the whole string — so the gold row passed while the cue was dead
+      # in extraction. A gold example validated against a span rather than the
+      # document cannot see that, which is why the fixture below runs the cue over
+      # a full advert.
+      # The optional `label:` prefix is how these boards actually state it
+      # ("Employment type: Full-time"); it cannot admit a comparison, because it
+      # requires a colon immediately before the phrase and the line to end there.
+      #
+      # A `full[- ]time\\s+(role|position|contract|…)` branch was tried and dropped.
+      # Measured over the corpus it matches **one** advert — `remotive-1919265`,
+      # "…prefer consistent contract work over a full-time role…" — which is the
+      # comparison the review reported. The phrasing reads the same in an offer and
+      # in a contrast, so the branch bought nothing and cost exactly the false
+      # positive; the first fix for that finding kept it and was therefore
+      # incomplete. What states the offered contract on these boards is the field.
+      - pattern: "(?:^|\\n)(?:[^\\n:]{1,30}:)?\\s*full[- ]time\\s*(?:\\n|$)|\\bthis\\s+is\\s+a\\s+full[- ]time\\b"
+        value: 0.9
+      - pattern: "\\bpart[- ]time\\b|\\b\\d{2}\\s*(hours|h)\\s+(a|per)\\s+week\\b"
+        value: 0.5
+    es:
+      - pattern: "\\bjornada\\s+completa\\b"
+        value: 0.9
+      - pattern: "\\bjornada\\s+parcial\\b|\\bmedia\\s+jornada\\b"
+        value: 0.5
+      - pattern: "\\b\\d{1,2}(,\\d)?\\s*(horas|h)\\s+(a\\s+la\\s+semana|semanales)\\b"
+        value: 0.5
+    ca:
+      - pattern: "\\bjornada\\s+completa\\b"
+        value: 0.9
+      - pattern: "\\bjornada\\s+parcial\\b|\\bmitja\\s+jornada\\b"
+        value: 0.5
+      - pattern: "\\b\\d{1,2}(,\\d)?\\s*(hores|h)\\s+(a\\s+la\\s+setmana|setmanals)\\b"
+        value: 0.5
+  gold:
+    # Was `remotive-1919265`, span "…prefer consistent contract work **over a
+    # full-time role**…", value 0.9. That advert says the post is *not* full time,
+    # and the row carried `derived_from: cue` — the gold recorded what the cue had
+    # matched rather than what the advert states, which is the circularity a gold
+    # example exists to break. Replaced with a span that establishes the hours.
+    - ad_id: wwr-maptiler-location-services-engineer-maps-platform-remote-in-europe
+      language: en
+      span: "Full-time"
+      value: 0.9
+      derived_from: cue
+    - ad_id: feinaactiva-FA92317450
+      language: es
+      span: "Jornada completa"
+      value: 0.9
+      derived_from: cue
+    - ad_id: feinaactiva-09202618154
+      language: ca
+      span: "Jornada completa"
+      value: 0.9
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

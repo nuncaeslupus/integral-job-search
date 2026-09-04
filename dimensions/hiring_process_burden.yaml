@@ -1,0 +1,87 @@
+id: hiring_process_burden
+kind: soft
+polarity: unipolar
+group: terms
+label:
+  en: "Hiring process burden"
+  es: "Carga del proceso de selección"
+  ca: "Càrrega del procés de selecció"
+definition: >
+  What the advert asks of you before it will consider you at all: a portfolio, a
+  technical test, unpaid work, a competitive public examination, or a described multi-
+  stage process. A cost paid by every applicant, including the ones not hired.
+levels:
+  - value: 0.0
+    label:
+      en: "Nothing stated"
+      es: "No consta"
+      ca: "No consta"
+    tell: "the ad says nothing about how it selects"
+  - value: 0.4
+    label:
+      en: "A described process"
+      es: "Proceso descrito"
+      ca: "Procés descrit"
+    tell: "the stages are named, but nothing is asked of you up front"
+  - value: 0.8
+    label:
+      en: "An artefact or test required"
+      es: "Prueba o material exigido"
+      ca: "Prova o material exigit"
+    tell: "a portfolio, a test or an examination before you are considered"
+elicitation:
+  questions:
+    - id: hpb_q1
+      text:
+        en: >
+          Tell me about the most demanding hiring process you have been through. Was
+          what it asked of you worth it in the end?
+        es: >
+          Cuéntame el proceso de selección más exigente por el que has pasado. ¿Mereció
+          la pena al final lo que te pidió?
+        ca: >
+          Explica'm el procés de selecció més exigent pel qual has passat. Va valer la
+          pena al final el que et va demanar?
+extraction:
+  cues:
+    en:
+      - pattern: "\\b(portfolio|code\\s+challenge|technical\\s+test|take[- ]home)\\b"
+        value: 0.8
+      - pattern: "\\b(hiring|selection|interview)\\s+process\\b"
+        value: 0.4
+    es:
+      # `es` had all four at 0.4 and `ca` had all three at 0.8, while `en` splits
+      # them correctly. The tells decide it: 0.8 is "a portfolio, **a test** or an
+      # examination before you are considered", 0.4 is "the stages are named, but
+      # **nothing is asked of you** up front". A técnica test is the first; naming
+      # the selection process is the second.
+      - pattern: "\\b(prueba\\s+t[ée]cnica|portfolio|portafolio)\\b"
+        value: 0.8
+      - pattern: "\\bproceso\\s+de\\s+selecci[óo]n\\b"
+        value: 0.4
+      - pattern: "\\bentrevistas?\\b"
+        value: 0.4
+    ca:
+      - pattern: "\\b(prova\\s+t[èe]cnica|portfolio)\\b"
+        value: 0.8
+      - pattern: "\\bproc[ée]s\\s+de\\s+selecci[óo]\\b"
+        value: 0.4
+      - pattern: "\\bentrevista\\w*\\b"
+        value: 0.4
+  gold:
+    - ad_id: wwr-yooli-full-time-software-engineer-position-react-and-rest-1
+      language: en
+      span: "A portfolio demonstrating relevant projects."
+      value: 0.8
+      derived_from: cue
+    - ad_id: feinaactiva-FA92318028
+      language: es
+      span: "en vigor para que la candidatura pueda ser evaluada en este proceso de selección."
+      value: 0.4
+      derived_from: cue
+    - ad_id: feinaactiva-FA92317375
+      language: ca
+      span: "Retribució segons experiència i resultat prova tècnica."
+      value: 0.8
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

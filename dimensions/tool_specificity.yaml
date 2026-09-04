@@ -1,0 +1,84 @@
+id: tool_specificity
+kind: soft
+polarity: unipolar
+group: skills
+label:
+  en: "Tool specificity"
+  es: "Concreción de herramientas"
+  ca: "Concreció d'eines"
+definition: >
+  How prescriptive the advert is about tools: whether it names the exact stack you must
+  already know, offers a broad list of which any one counts, or names nothing at all.
+  `stack_modernity` asks whether the named technology is current; this asks how tightly
+  the ad binds you to it.
+levels:
+  - value: 0.0
+    label:
+      en: "No tool named"
+      es: "Sin herramientas nombradas"
+      ca: "Sense eines anomenades"
+    tell: "the ad describes the work without naming any tool"
+  - value: 0.5
+    label:
+      en: "A broad list"
+      es: "Una lista amplia"
+      ca: "Una llista àmplia"
+    tell: "several tools named, any of which counts"
+  - value: 0.8
+    label:
+      en: "A named stack required"
+      es: "Una pila concreta exigida"
+      ca: "Una pila concreta exigida"
+    tell: "specific named tools stated as requirements"
+elicitation:
+  questions:
+    - id: ts_q1
+      text:
+        en: >
+          Tell me about joining a team whose tools you did not know. How long was it
+          before you were useful, and what made the difference?
+        es: >
+          Cuéntame cuando entraste en un equipo cuyas herramientas no conocías. ¿Cuánto
+          tardaste en ser útil y qué marcó la diferencia?
+        ca: >
+          Explica'm quan vas entrar en un equip amb eines que no coneixies. Quant vas
+          trigar a ser útil i què va marcar la diferència?
+extraction:
+  # A tool *named* is the 0.5 rung — "several tools named, any of which counts".
+  # 0.8 is "specific named tools stated as **requirements**", so it is carried by
+  # the requirement language (`proficiency in`, `hands-on experience with`,
+  # `dominio de herramientas`) and not by the presence of a technology name: an
+  # advert whose stack paragraph reads "Python, Go and Rust" binds you to nothing.
+  cues:
+    en:
+      - pattern: "\\b(python|java|javascript|typescript|react|angular|kubernetes|terraform|airflow|databricks|postgres|kafka)\\b"
+        value: 0.5
+      - pattern: "\\bproficiency\\s+(in|with)\\b|\\bhands[- ]on\\s+experience\\s+with\\b"
+        value: 0.8
+    es:
+      - pattern: "\\b(python|java|javascript|sap|salesforce|autocad|excel|ofim[áa]tica|power\\s?bi|oracle)\\b"
+        value: 0.5
+      - pattern: "\\bdominio\\s+de\\s+herramientas\\b"
+        value: 0.8
+    ca:
+      - pattern: "\\b(python|java|javascript|sap|salesforce|autocad|excel|ofim[àa]tica|power\\s?apps|sharepoint)\\b"
+        value: 0.5
+      - pattern: "\\bdomini\\s+de\\s+(les\\s+)?(eines|estrat[èe]gies)\\b"
+        value: 0.8
+  gold:
+    - ad_id: manfred-8419
+      language: en
+      span: "* Their ecosystem revolves around **Python, FastAPI, and SQLAlchemy** on the backend."
+      value: 0.8
+      derived_from: cue
+    - ad_id: feinaactiva-FA92317450
+      language: es
+      span: "Buscamos administrativo/va con conocimientos en ofimática y experiencia demostrable."
+      value: 0.8
+      derived_from: cue
+    - ad_id: feinaactiva-09202620052
+      language: ca
+      span: "anuals, coneixements del programa Sage Despachos o similar, Excel, català i espanyol, 10 anys d’experiència, títol de Formació Professional. S’ofereix: Contracte ind"
+      value: 0.8
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

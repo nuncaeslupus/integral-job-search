@@ -1,0 +1,80 @@
+id: physical_demand
+kind: soft
+polarity: unipolar
+group: requirements
+label:
+  en: "Physical demand"
+  es: "Exigencia física"
+  ca: "Exigència física"
+definition: >
+  How much of the work is bodily — lifting and carrying, cleaning, personal care,
+  standing all day, working at height or on live installations — as against work done
+  seated. Zero of the model's first twenty-five dimensions could read a care or trades
+  advert on this, which is what the broadened corpus made visible.
+levels:
+  - value: 0.0
+    label:
+      en: "None stated"
+      es: "No consta"
+      ca: "No consta"
+    tell: "nothing in the ad describes bodily work"
+  - value: 0.5
+    label:
+      en: "Some handling or standing"
+      es: "Algo de manipulación"
+      ca: "Alguna manipulació"
+    tell: "stock handling, cleaning rounds, time on your feet"
+  - value: 0.8
+    label:
+      en: "Heavy or hazardous"
+      es: "Pesada o peligrosa"
+      ca: "Pesada o perillosa"
+    tell: "loads, personal lifting of people, height or live electrical work"
+elicitation:
+  questions:
+    - id: pd_q1
+      text:
+        en: >
+          Tell me about the most physically demanding work you have done. How did you
+          feel at the end of a week of it?
+        es: >
+          Cuéntame el trabajo más exigente físicamente que has hecho. ¿Cómo acababas
+          después de una semana así?
+        ca: >
+          Explica'm la feina més exigent físicament que has fet. Com acabaves després
+          d'una setmana així?
+extraction:
+  cues:
+    en:
+      - pattern: "\\b(lifting|manual\\s+handling|physically\\s+demanding|on\\s+your\\s+feet)\\b"
+        value: 0.8
+    es:
+      - pattern: "\\blimpieza\\b"
+        value: 0.5
+      # "stock handling" is the 0.5 tell verbatim; `reposición` and `almacenaje`
+      # are that and nothing more. 0.8 is "loads, personal lifting of people,
+      # height or live electrical work", which `carga y descarga` is and shelf
+      # restocking is not.
+      - pattern: "\\b(reposici[óo]n|almacenaje)\\b"
+        value: 0.5
+      - pattern: "\\bcarga\\s+y\\s+descarga\\b"
+        value: 0.8
+    ca:
+      - pattern: "\\bneteja\\b"
+        value: 0.5
+      - pattern: "\\b(reposici[óo]|emmagatzematge)\\b"
+        value: 0.5
+      - pattern: "\\bc[àa]rrega\\s+i\\s+desc[àa]rrega\\b"
+        value: 0.8
+  gold:
+    - ad_id: feinaactiva-FA92317540
+      language: es
+      span: "- Limpieza de los utensilios"
+      value: 0.5
+      derived_from: cue
+    - ad_id: feinaactiva-09202620080
+      language: ca
+      span: "Neteja del lloc de treball"
+      value: 0.5
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal

@@ -1,0 +1,74 @@
+id: work_eligibility
+kind: hard
+polarity: unipolar
+group: requirements
+label:
+  en: "Work eligibility"
+  es: "Elegibilidad legal"
+  ca: "Elegibilitat legal"
+definition: >
+  Where you must be legally and physically able to work for the application to stand: a
+  work permit, a country or state list, a timezone band, an export-control clearance. A
+  gate on the person's eligibility — `remote_arrangement` describes where the work
+  happens, this describes who is allowed to do it.
+levels:
+  - value: 0.0
+    label:
+      en: "No restriction stated"
+      es: "Sin restricción"
+      ca: "Sense restricció"
+    tell: "the ad places no condition on where you may work from"
+  - value: 0.5
+    label:
+      en: "A region or timezone band"
+      es: "Región o franja horaria"
+      ca: "Regió o franja horària"
+    tell: "a continent, a timezone overlap, a welcome rather than a gate"
+  - value: 0.9
+    label:
+      en: "A permit or country required"
+      es: "Permiso o país exigido"
+      ca: "Permís o país exigit"
+    tell: "a work permit, a named country, or an export-control restriction"
+elicitation:
+  questions:
+    - id: we_q1
+      text:
+        en: >
+          Has a job ever been closed to you for a reason that had nothing to do with the
+          work — a permit, a country, a timezone? What happened?
+        es: >
+          ¿Alguna vez te han cerrado un trabajo por algo que no tenía que ver con el
+          trabajo: un permiso, un país, un huso horario? ¿Qué pasó?
+        ca: >
+          Alguna vegada t'han tancat una feina per alguna cosa que no tenia a veure amb
+          la feina: un permís, un país, un fus horari? Què va passar?
+extraction:
+  cues:
+    en:
+      - pattern: "\\bmust\\s+(be\\s+)?(based|located|reside)\\s+in\\b"
+        value: 0.9
+      - pattern: "\\btime\\s?zone\\b"
+        value: 0.5
+    es:
+      - pattern: "\\bpermiso\\s+de\\s+trabajo\\b"
+        value: 0.9
+      - pattern: "\\b(DNI|NIE)\\b"
+        value: 0.9
+      - pattern: "\\bhuso\\s+horario\\b|\\bzona\\s+horaria\\b"
+        value: 0.5
+    ca:
+      - pattern: "\\bperm[íi]s\\s+de\\s+(treball|resid[èe]ncia)\\b"
+        value: 0.9
+  gold:
+    - ad_id: remotive-1919265
+      language: en
+      span: "You must be located in the Americas, Europe, or Israel to apply."
+      value: 0.9
+      derived_from: cue
+    - ad_id: manfred-8400
+      language: es
+      span: "**Siempre y cuando estés dentro de la UE o UK, y cuentes con el pasaporte y el permiso de trabajo.** Por temas administrativos, laborales y de huso horario."
+      value: 0.9
+      derived_from: cue
+methods_ref: METHODS.md#26-ad-wording-as-signal
