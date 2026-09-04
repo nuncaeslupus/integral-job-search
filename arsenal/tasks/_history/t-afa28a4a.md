@@ -40,6 +40,23 @@ is a different question and gets its own fixture with its own citation.
 
 ## Acceptance gate
 
+```gate
+uncommitted_audit_cases == 0
+evidence: status/evidence/T102.json
+key: uncommitted_audit_cases
+```
+
+The fence above was added by this task and is the second of its two edits to its
+own gate, recorded here for the same reason as the first. It relaxes nothing: it
+is the metric `status/plan.md` declared for T102 all along, and without it this
+task would merge as the one terminal task in the repository whose gate is a
+prose recipe no tool reads — the exact "a gate that runs nothing passes
+everything" state `AGENTS.md` names. `integral.audit_followup` measures it: an
+audit case that found a defect is red until a gate holds it or the spec says
+there was nothing to hold, which is what left case 22 open across four merges.
+The recipe below stays, because the three test *names* are what the fence
+cannot check.
+
 ```bash
 uv run --extra dev python - <<'PY'
 import subprocess, sys
