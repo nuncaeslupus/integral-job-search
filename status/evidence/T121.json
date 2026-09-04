@@ -1,0 +1,20 @@
+{
+  "verified_gate_defects": 0,
+  "verified_gate_contracts_checked": 10,
+  "verified_gate_contracts_at_least": 10,
+  "gate_status": "measured",
+  "contracts_checked_by_name": [
+    "a_failing_gate_is_reported_as_FAIL",
+    "the_commit_is_measured_not_the_callers_tree",
+    "the_verdict_names_the_commit_it_measured",
+    "nothing_survives_the_run_pass_or_fail",
+    "the_resolution_line_is_true",
+    "the_origin_reachability_line_is_true",
+    "caller_relative_refs_measure_the_caller",
+    "an_unmeasurable_ref_refuses_with_2",
+    "the_aggregate_target_is_what_runs",
+    "the_verdict_reports_the_command_that_ran"
+  ],
+  "failed_contracts": [],
+  "undocumented": []
+}

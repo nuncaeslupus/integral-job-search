@@ -209,6 +209,79 @@ worktrees are *unavailable* — `worktree_probe.sh` prints `available` here, so 
 would be a false record, and `task_select.py` reads it to clamp every future round to one
 task. The probe writes it itself when it is true; nothing else should.
 
+## No CI until the billing period turns over — `tools/verified_gate.sh` is the substitute
+
+The account spent its **2000 monthly Actions minutes in four days** and ran dry on
+2026-09-04. Runs still start and still fail, in single-digit seconds with
+unreadable logs, so the section below about reading a red CI does not apply until
+the period turns over: **there is no CI to read.**
+
+`merge-policy` stays `after-ci-and-review`. What replaces the CI half is:
+
+```bash
+bash tools/verified_gate.sh <branch-or-sha>     # prints a verdict block
+```
+
+It resolves the ref to a 40-character SHA, checks **that commit** out into a
+throwaway detached worktree, clears bytecode, and runs `make host-gate` there. It
+delegates — it never lists targets — so it cannot fall behind the Makefile, and
+`integral.repo_gate`'s sibling `integral.verified_gate` (T121) asserts that it
+still does all of the above.
+
+**How that assertion works is the part worth knowing, because three rounds of
+the obvious answer were defeated.** `integral.verified_gate` does not read the
+script's text. Round 1 searched the file for `make\s+host-gate`, which the
+script's own header comments carried twice, so a script running `make lint` and
+a script with the gate deleted and `status=0` hard-coded both scored
+`verified_gate_defects == 0`. Round 2 added a comment-stripper and twelve
+patterns; round 3 put all twelve inside one unused single-quoted string, and
+again in *trailing* comments, and scored 0 both times over a script that
+resolved nothing and ran nothing. A `#`-line filter is not an executability
+test, and no thirteenth pattern fixes that.
+
+So the measurement is **behavioural**: ten named contracts, each of which builds
+a throwaway git repository — one a clone with a real bare `origin` — runs the
+script against it, and reads the verdict block, the exit status and the
+filesystem afterwards. `verified_gate_defects` is the number of contracts the
+script fails. Editing a comment cannot break it; hard-coding a PASS cannot pass
+it. The one thing still read rather than run is that **this file names the
+script**, which is D-22's prose half and not a claim about behaviour.
+
+The practical consequence for anyone editing `tools/verified_gate.sh`: run
+`uv run python -m integral.verified_gate` and read `failed_contracts`. It names
+what broke and what it observed, not which regex stopped matching.
+
+**Give it the ref.** With no argument it measures the local `HEAD`, which is
+usually right and is never the *pushed* commit by construction — and the block's
+`resolved` and `on origin` lines say which of the two you got, so read them before
+pasting. (Until the second-reader round on #333 the no-argument form fetched
+`HEAD` from origin, which git answers with the **default branch**: standing on a
+branch whose gate genuinely failed, a bare run printed `main`'s SHA and `PASS`.
+The fix was a blacklist of the one string `"HEAD"`, and `@` — git's documented
+synonym for it — walked straight through: the same green verdict about `main`,
+reached by a different spelling. Only a plain ref name is now asked of the
+remote; `@`, `HEAD~0`, `HEAD^0`, `@{u}` and `""` all resolve locally.)
+
+Why a clean checkout rather than just running `make host-gate` where you stand:
+the working tree is **not what a reviewer merges**. Uncommitted edits, a staged
+file, and the `.pyc` trap below can each make a local run green over code that is
+not being shipped.
+
+Three rules, and the third is the one that is easy to skip:
+
+- **Paste the verdict block onto the pull request.** CI's value was never only
+  the checking; it was that anyone could see it had happened.
+- **Quote the four results in the merge commit.** A merge whose evidence lives in
+  one session's scrollback is a merge nobody can audit afterwards.
+- **Merge only while the head is still the SHA the block names.** A push after
+  the block was produced makes it evidence about a commit nobody is merging.
+  This was done by hand twice on 2026-09-04 and is exactly the kind of step that
+  gets skipped once it stops feeling new.
+
+**A docs-only PR still needs it.** #331 merged on a local run during the outage;
+the point of the script is that "local run" stops meaning "whatever tree the
+session happened to have".
+
 ## A reverted mutation can leave the mutated bytecode running
 
 This repository mandates mutation-verification on every fixture — revert the fix,
