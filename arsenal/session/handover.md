@@ -1,352 +1,243 @@
 # Session handover
 
-Board: **163 tasks, 127 merged**. Seven PRs open. **Nothing merged this session** —
-the previous session's hold on merging was not lifted.
+**2026-09-04.** Board: **138 tasks merged**, `verify-gates` 137/137. This session
+merged **seven** PRs and left nothing in flight. Its whole subject is the
+merge-policy change the previous session made: *the review half is a second
+session, not a bot*. That policy was exercised four times here and it found, every
+time, something the implementer and CI both missed.
 
-## What this session did
+## The headline: what independent reads actually found
 
-Three things, in the order the previous handover asked for them.
+Four PRs got a second-session read. Across them:
 
-1. **#320 (T57): the 41 audit findings are applied and are now fixtures** (`43135a6`),
-   **and the eight CodeRabbit findings the head had never been reviewed for**
-   (`ce86416`). See below — between them they produced two findings worth more than
-   the number.
-2. **#319 (T56): the independent adversarial read is done and posted**
-   (comment `5533210387`). **19 findings, 12 fail-open.** Reported, not pushed —
-   the second reader does not push, and the accepted cases have to land in the
-   gate's own fixtures before it merges.
-3. **T59's task file now declares `requires: [access:human]`.** It cannot be
-   finished by any session without a person at the keyboard, and the selector had
-   been handing it out anyway.
-
-## #320 — the audit is in the fixtures, and English fell out of the floor
-
-All 41 placements corrected: 33 unmapped, 8 moved, `company_stage` left with no
-concept so its key is removed rather than left `null`. One addition on the same
-spec-first reading: `evaluation practice required` → `ai_in_the_work`, on *"Strong
-evals practice: golden sets, LLM-as-judge, regression detection"*.
-
-`tests/test_ontology_health.py` goes **12 tests → 50**. Each accepted case is a
-parametrized `(concept, the dimension the definitions require or None, why)` row
-asserted against the map the gate reads, with the citing definition inline. Plus a
-**vacuity guard**: a row naming a concept the read pass never stated asserts `None`
-and passes for the same reason an empty scan does, so every audited name is checked
-against the source's own `unmapped` list. That guard is the half that is easy to
-skip and is the whole protection.
-
-```
-ontology_hit_rate              0.9071 -> 0.8798     gate is >= 0.85 — passes
-ontology_hit_rate_by_language  ca 0.8942   es 0.8803   en 0.8423
-```
-
-**Nine accepted findings fall on English adverts**, and English was already the
-weakest at 0.8731, so `test_no_language_falls_below_the_gate` — written by the
-session that measured it — no longer holds. That is the circularity the second
-reader exists to break, showing up one layer out from where it was expected.
-
-I did not hunt for three occurrences to clear it. A second pass took the 42
-remaining unmapped English occurrences (39 names, all but three singletons) back to
-the 41 `definition:` blocks: **exactly one is reachable without stretching a
-definition**, and it is the `evaluation practice required` case above. English is
-short by 3 and there is no honest remapping that closes it.
-
-So the shortfall gets its own reported key — `languages_below_gate: ["en"]` — pinned
-by `test_the_per_language_shortfall_is_recorded_rather_than_averaged_away`, which
-fails if English **recovers** as loudly as if a second language falls under. Neither
-drifts silently. Raising English is **#321**, filed against this measurement.
-
-**The open question, and it is the owner's:** T57's declared gate is the aggregate
-and it passes at 0.8798. The per-language floor is an extra invariant this PR
-volunteered, and a correct audit broke it. Recording the shortfall + filing #321 is
-one answer; holding #320 until English clears 0.85 is the other. It is a scope call,
-not a measurement call. CI is green on `43135a6` — lint, 2135 passed, no drift,
-verify-gates 129/129.
-
-## #320's second push — a review that was never on the head
-
-**Read `commit_id`, not the check.** The only review object on #320 carried
-`commit_id: 05f1e04` — the previous head — and its **nine actionable findings had
-never been worked**, while the PR read as reviewed. The later *"No actionable
-comments were generated"* comment covers only the delta `05f1e04..43135a6`, and its
-own `final_review_risk_coverage` still says `coveredCommitId: 05f1e04`. **This is
-D-28 (#313) happening, on our own PR, one day after it was filed.** The handover's
-query is the gate; run it before believing any green CodeRabbit check.
-
-One of the nine was already fixed by the audit push. The other eight are `ce86416`,
-and every one holds against its rung's own `tell`:
-
-- **A gold example derived from the cue it exists to check.** `contracted_hours`'s
-  English gold was `remotive-1919265`, span *"…prefer consistent contract work **over
-  a full-time role**…"*, `value: 0.9`, `derived_from: cue`. That advert says the post
-  is **not** full time. Replaced with an advert whose field reads `Full-time`.
-
-  **The first fix for it was incomplete and I reported it as done** (`7ecf5c3` is the
-  real one). It kept a `full[- ]time\s+(role|position|…)` branch, so the comparison
-  still matched. Two lessons, both general:
-
-  - **`extraction.py:331` compiles cues with `re.IGNORECASE` alone — no
-    `re.MULTILINE`.** A `^…$` branch therefore binds to the whole advert and can never
-    fire. Mine did not, and nothing noticed, because `_gold` runs a pattern against the
-    **isolated span** (`:654`) where the span *is* the whole string. **A cue checked
-    only where its own gold points cannot be caught being dead** — the gold and the cue
-    were agreeing about a string, not about an advert. Write cue fixtures over whole
-    documents.
-  - **Measure what a branch buys before keeping it.** That phrase branch matched
-    exactly **one** advert in the corpus — the comparison itself. Dropping it cost
-    nothing. The instinct to patch a pattern rather than count its matches is what made
-    round one incomplete.
-- **Three language-parity breaks where one slice was already right.**
-  `domain_knowledge` scored *"banking clients"* 0.8 in EN while ES/CA split the rungs
-  correctly; `hiring_process_burden` had ES at 0.4 for all four cues and CA at 0.8 for
-  all three, so the same omission was **fail-closed in Spanish and fail-open in
-  Catalan**; `tool_specificity` scored `domini de les eines` 0.5 in CA and the same
-  statement 0.8 in ES.
-- **`formal_credential` scored `degree or equivalent` 0.9** — on a `hard`
-  admissibility dimension whose definition says *"a candidate without the paper is
-  refused"*. An advert accepting equivalent experience refuses nobody. Bare
-  `titulación`/`titulació` arrive by the same road (they match *"titulación
-  valorable"*) and are split the same way.
-- `physical_demand` scored `reposición`/`almacenaje` 0.8 where *"stock handling"* is
-  the 0.5 tell verbatim; `tool_specificity` scored a bare technology name 0.8 where
-  naming tools is 0.5.
-- **`dimensions/README.md` said five groups**, listing the five that existed before
-  this PR added `requirements` and `skills`, and claimed `dealbreakers` is exactly the
-  `kind: hard` set — six dimensions falsify that.
-  `test_the_readme_names_every_group_the_model_declares` now reads the paragraph
-  against `load_dimensions()`, **including the spelled count**: the sentence said
-  "five" *while listing five stale names*, so either half alone would have passed.
-- **`ontology_health` resolved with `entry.get("dimension") or concept_map.get(…)`**,
-  which short-circuits on any truthy value — an entry naming a dropped dimension never
-  reached the map. The module's two halves disagreed about a stale name:
-  `read_concept_map` refuses a map key naming an unknown dimension, the reader fell
-  silent on the same fact. Not reachable today; it is a widening's own failure mode,
-  so it has a red-first test.
-
-  **The first fix for it was wrong and the suite caught it**, which is worth keeping:
-  routing everything through `_resolve` replaced the unmapped *label* with the quote,
-  breaking `test_unmapped_concepts_are_counted_not_discarded`. That test was right.
-  `_resolve` answers *where a concept lands*; the staleness signal answers *what could
-  not be named*, and a dropped id says which question the model stopped asking.
-
-None of the six dimensions is in T56's scored subset, so `extraction_macro_f1` does
-not move and **#319's measurement is untouched** — nor do the two PRs share a file.
-`ontology_hit_rate` unmoved at 0.8798. Gate green: 2137 passed, no drift, 129/129.
-
-Also answered on the PR, since the pre-merge check asks for a justification: the
-`S6.json` / `T47.json` changes are **not** out-of-scope churn.
-`interviews_refused_for_teaching_nothing` goes **31 → 0** and `sessions_rehearsed`
-177 → 208 because the twelve new dimensions settle on adverts that previously had
-nothing to rehearse. That is the widening working, and `make evidence` requires it
-committed or the drift check is red.
-
-## #319 — 19 findings, and two of them contradict artefacts already in this repo
-
-Full report in the PR comment. The ones that matter most:
-
-- **`remote_arrangement`'s 0.5 cue is a strict superset of its own 1.0 cue**, in all
-  three languages: bare `\bremote\b`, `teletrabajo`, `teletreball`. A fully-remote
-  advert fires both rungs. The non-overlap discipline is **stated in this same PR**,
-  in `seniority_expectation`'s new comment, and was not applied here. `hard`
-  dealbreaker.
-- **A driving licence is scored as `travel_requirement` 0.4.** `commute_burden`'s
-  definition claims it by name — *"holding a driving licence, or providing your own
-  vehicle… distinct from `travel_requirement`, which is travel done as part of the
-  job."*
-- **`movilidad nacional e internacional` is added at 0.8 — the exact string #320's
-  audit unmapped** from `travel_requirement` because the read pass annotated it
-  *"offered as a benefit"*. Two sessions, one string, opposite verdicts, and #319
-  holds the fail-open one. **Both PRs must not merge carrying both answers.**
-- **`english (proficiency|skills)` at 0.7, `negatable: false`**: `English skills not
-  required` returns 0.7, because the deny cue is `english (is )?not required` and the
-  intervening `skills` defeats it. Same shape for `advanced english` at 1.0.
-- **`\bresponsable\s+de\b` at 0.8 on `seniority_expectation`** — that phrase opens a
-  duties list on a large share of Spanish adverts. Highest firing rate in the diff.
-- **`\d{1,2}\s*pagas\b` at 0.9 on `compensation_transparency`** — a payment count is
-  neither a band nor a figure, and `12 o 14 pagas` is boilerplate.
-
-The structural one: **negation coverage is asymmetric by construction.** The positive
-cues were widened into long alternations, the deny cues stayed narrow literals, and
-most new positive cues are `negatable: false` — which `extraction.py:340` reads as
-*never consult the negator*. Every widened dimension therefore has a family of adverts
-that state the negative in wording only the positive cue carries.
-
-**Why the gate cannot see any of this:** eight of eleven scored dimensions have no
-negative class, which this PR reports itself. Over-firing cannot lower F1 there. The
-0.774 is not evidence against the report.
-
-Clean on inspection: `talking_clients`, the `jornada intensiva` **tightening** (the
-best change in the diff, correctly reasoned from its rung's tell), the `\bformaci`
-guard against `información`, `diseño y fabricación`, and the
-`dimensions_with_no_negative_class` key.
-
-## T59 needs a person, and the selector did not know
-
-`arsenal/tasks/lo-4b17.md` now carries `requires: [access:human]`.
-
-Its own *"What it must not become"* carries D-2's first requirement unchanged:
-**"Score only what a person decided. Negated `Label` rows whose `source` is `human`,
-`confirmed` or `edited`."** The shortfall is 9 labels against a floor of 10 and it is
-labels, not code — so no autonomous session can finish it, and each one handed it
-spends an attempt discovering that. **It has now happened twice**: the dispatched
-worker whose diagnosis is #318, and this session, which `task_select.py` handed it as
-the top of the queue.
-
-Verified both ways: a bare `task_select.py` now returns **T94** (`t-506d8fa5`), and
-`--capability access:human` still returns T59. `/continue HUMAN` is how the owner
-reaches it.
-
-**When a person does sit down to it, the previous session's finding stands and is the
-whole of the job**: the cheap unblock is **three labels, not one** — one EN, one CA,
-one more ES on a `negatable` cue. `negated_label_count_by_language` is
-`{en: 0, es: 9, ca: 0}` and `negation_recall_hits_by_mechanism` is
-`{scope: 3, denies: 3}`. A tenth *Spanish* label alone clears the floor and turns the
-gate green over a measurement in which Catalan `no … pas` and every English negator
-were never once scored, and in which half the hits never exercise the scope rule T59
-exists to score. Worse than the current silence.
-
-Also worth knowing: **the claim ref `arsenal/claims/lo-4b17` still exists** (at
-`235c757`) from the released attempt, because remote ref deletion is a no-op on this
-surface. It is stale. A retry needs `ARSENAL_CLAIM_STALE_OK=1` and the honest
-judgement that goes with it; do not read the surviving ref as a live claim.
-
-## Open PRs
-
-| PR | task | head | waiting on |
-|---|---|---|---|
-| #295 | T89 usajobs POST connector | `cbf881b` | review on head |
-| #305 | D-24 retraction (+ D-26 task file) | `a7d809d` | review on head |
-| #307 | T98 corpus is a measurement set | `499eb3e` | review on head |
-| #312 | T92 salary recovery | `98c9a09` | review on head |
-| #318 | T59 diagnosis — **closes nothing** | `e3db5f3` | first review |
-| #319 | T56 extractor macro-F1 0.774 | `1c248cf` | **19 findings to apply**, above |
-| #320 | T57 ontology hit rate 0.8798 | `7ecf5c3` | the scope call above |
-| #322 | T59 capability + this handover | `d18f2c9` | first review |
-| #323 | T94 bulk filter | `10cf105` | **a second reader**, see below |
-
-Both #319 and #320 are subscribed for PR activity in this session.
-
-## T94 is done and is #323 — and it wants a second reader
-
-`src/integral/bulk_filter.py`. 322 offers in, 156 out, every removal naming its rule.
-Bounded to **filter, not rank**.
-
-The design decision everything follows from: this module **deletes rows the
-candidate will never see**, so the costly error is the drop. Every rule fires only
-on a fact the advert *states*; unknown always keeps — an unstated salary (T92's
-subject), an unstated country, a stated remote arrangement, an `eligibility.FLAG`
-(§5.4), an unparseable date. `HardConstraints()` with no countries means **no
-location rule**, not *nothing permitted*: it is the default, and a default that
-deleted every located offer is the worst reachable fail-closed.
-
-**Stated exclusions cannot reach it.** `reduce` has no exclusions parameter, and
-the test asserts the signature as well as the behaviour — a function cannot apply
-a preference it is never handed, which is stronger than a rule saying it must not.
-
-Two things worth carrying forward:
-
-- **The plan's metric refused mine.** I wrote `drops_with_no_rule <= 0` into the
-  gate fence and `test_the_committed_plan_and_queue_agree` rejected it: the plan
-  row already declared `bulk_offers_requiring_manual_triage == 0`, written before
-  the implementation existed. **That refusal is the check working** — a task whose
-  implementer also picks its metric can pick one the code already satisfies. Use
-  the plan's metric; if none is declared, that is the thing to raise, not to fill in.
-- **The archived task carried no ` ```gate ` fence.** `verify_gates.py` reads only
-  that fence; the ` ```bash ` block is a human recipe, and `task_select.py`'s
-  `gate: true` counts the bash block, so the two disagree. Archiving T94 therefore
-  turned `129/129` into `128 of 129`. **Check for a `gate` fence before working any
-  task whose file predates the convention** — the failure only appears after the
-  archive, i.e. after the PR is already open.
-
-**#323 is not merge-ready on its gate alone**, and its own PR body says so. The
-drop-side rules are exactly the shape CLAUDE.md wants an independent reader for: a
-wrong *keep* is invisible in every number recorded, because nothing counts offers
-that should have been dropped and were not. Two judgements named for that reader:
-whether treating **any** stated `remote` string as a keep is too generous, and
-whether `_below_pay_floor` preferring `salary.max` over `salary.min` is the right
-end of a stated band to compare against a floor.
-
-Its probe batch was also wrong twice, and the gate caught both — recorded in the PR
-because it is a fixture failure mode, not a code one. A batch whose adverts vary in
-one sentence over a shared prefix gets collapsed by `find_duplicates` (134 of 322
-rows the first time), and **a reduction ratio measured over a repetitive fixture
-measures the fixture**. `rules_never_exercised` is what made it visible.
-
-## The queue after this session
-
-T94 was claimed and worked (see above). `task_select.py`'s next answer should be
-re-read at the start of the next session rather than trusted from here.
-
-**#321 is filed and not yet seeded.** It carries `arsenal:queue`, so next session's
-step 4b picks it up. Remember the previous session's lesson: `issue_import.py --apply`
-writes the task file and **nothing else** — the plan row is the other half, and the
-gate that enforces the pair only runs at the repo level, so a missing row goes red on
-somebody else's branch. Label the issue *and* its task file, then write the plan row.
-
-## CodeRabbit is gone, and the review half of `merge-policy` is now a second session
-
-The account **lost CodeRabbit for private repositories** on 2026-09-04 and the owner's
-decision is to go without. Everything below about nudges, quota windows, Free-vs-Team
-plans and `@coderabbitai full review` is now history — do not spend a minute on it.
-The measurement trail is kept on **#313** because it is what justified the re-scope.
-
-`merge-policy` **stays** `after-ci-and-review`. What satisfies the review half is now
-written in **CLAUDE.md**, which is the durable place for it:
-
-> A code PR may merge once a **session other than its implementer** has read it and
-> reported on the PR, naming for each finding the input, the verdict, and the section
-> of spec or definition it derives from. The implementer never signs it off. Accepted
-> findings are committed as fixtures before merge. **Docs-only PRs are exempt** — a
-> handover merges on green CI.
-
-This is not a downgrade. On the PRs open when the bot left, the independent reads
-found **41** fail-open placements in `concept_map.yaml` and **19** in the cue
-vocabulary, against CodeRabbit's **9** on the same PR that carried the 41.
-
-**D-28 (#313) is re-scoped** to give that rule a reader, and it is checkable now in a
-way the bot's signal never was: a second-reader report is *our* artefact — a PR
-comment, by an author other than the PR's author, carrying a marker naming the head
-commit it read. Its metric is unchanged, because `status/plan.md` already declared
-`merges_allowed_without_a_review_of_the_head == 0` and "a review of the head" is
-exactly what such a report is. Only the author changed.
-
-**Note the near-miss, which is the same lesson twice in one day.** The first draft of
-the re-scoped issue invented `merges_without_a_second_reader_report`. The plan already
-had a metric; `test_the_committed_plan_and_queue_agree` had caught the identical
-mistake on T94 an hour earlier. **Read the plan row before writing a gate block.**
-
-### What this means for the nine open PRs
-
-Every one of them predates the rule, so **none carries a second-reader report** except
-where a session happened to write one:
-
-| PR | second reader? |
+| | |
 |---|---|
-| #320 T57 | **yes** — the concept-map audit and the cue findings, both applied |
-| #319 T56 | **yes** — 19 findings posted; the implementer has not applied them |
-| #323 T94 | **no**, and I implemented it, so I cannot be its reader |
-| #322 | **exempt** — docs only |
-| #295, #305, #307, #312, #318 | **no** — implemented by earlier sessions, so a later session *can* read them |
+| metrics whose **name did not match what they counted** | 4 |
+| **fail-opens** | 8, four of them on `hard` dealbreaker dimensions |
+| PRs whose **own prose was factually wrong** about their numbers | 2 |
+| findings caught by **CI** | 0 |
 
-That last row is the available work: five PRs whose implementer was a previous
-session, which this or any later session may read and report on. #323 needs a session
-that is not this one.
+Two of those are worth carrying forward as patterns, because the repository has
+now hit each of them three times:
 
-## Mechanics that held this session
+- **A metric named for a property it does not measure.** `status_is_asserted`
+  (T108), `incidental_duplicate_drops` (#323), `negation_recall_hits_by_mechanism`
+  (#318), and `robots_adjudications_without_a_competent_second_reader` (#328) are
+  the same defect four times. The tell is always that the implementer *can state
+  the discrepancy in one sentence* and has decided it is acceptable. It is not:
+  the next session quotes the name.
+- **A fixture one word away from passing.** On #319 four separate committed
+  fixtures were the failing string with the qualifier removed — the author wrote
+  the sentence that passes. That is the second-reader rule's own prediction, met.
 
-The previous handover's list is all still true. Two confirmations worth keeping:
+## Merged this session
 
-- **`make evidence` regenerates but does not stage.** Hit once here, exactly as
-  described: `git add -A && make evidence && git add -A && make host-gate`.
-- **Confirm the worktree's branch is the PR's head branch before pushing.** #320's
-  head is `arsenal/lo-7c14-…`; the worktree branch was `t57-review`, pushed as
-  `git push origin t57-review:arsenal/lo-7c14-…`. The explicit refspec is what makes
-  that safe.
+| PR | task | what it actually was |
+|---|---|---|
+| #327 | **T102** | Case 22 of the round-2 robots audit: does a file's product token match as a **prefix** of a longer crawler token? Two sessions read RFC 9309 §2.2.1 independently — of each other and of the code — and both said **no**: matching is case-folded equality, no prefix rule, no specificity rule. `_select_rules` was already correct; the audit's recommendation was a **recollection**, and acting on it would have *created* a fail-open (an explicitly matched group is used exclusively, so a prefix match can displace `*` and unblock a path the site disallowed for everyone). Retracted in place. |
+| #318 | **T59 diag** | Negation is one label short of measurable (9 of 10, all Spanish) and the number it would unblock is **0.667 against a bar of 0.80**. Does **not** close T59. |
+| #328 | **T116** | The second robots parser cannot refuse, so "two matchers must agree" was **one matcher** for the whole life of `ruled-out.yaml`. Of 20 adjudications exactly **one** was ever really two-parser. |
+| #329 | **D-27** | A merged task's plan row is never ticked. **9 drifted, not the filed 47** — and the recompute says the filed figure was really 52 of 125 and that `e32a541` itself **missed five**. The sweep was incomplete, which is the argument for a gate rather than a sweep, made by the sweep. |
+| #326 | T106 | Declared `requires: [surface:egress]`. |
+| #324 | hotfix | `T85.gate_modules_discovered`. |
 
-One new one, small: **`ruff format` before `make host-gate`** on a file with long
-table rows. Six E501s in a fixture table cost a whole gate run.
+### What the second reads added to each
 
-## Candidate deliverables
+**#327 (T102)** — the worker's branch would have merged as the **only** terminal
+task with no machine-readable gate (`verify-gates` 133/134). Its gate metric had
+to be `uncommitted_audit_cases`, the name `status/plan.md` already declared. New
+module `integral.audit_followup` measures it: an audit case that found a defect is
+**red until a gate holds it**, and a `RESOLVED` heading must cite a spec section
+*and* name a fixture that really exists in the committed table. That closes the
+hole that let case 22 sit open across four merges — a finding in a markdown file
+was invisible to every target in the `Makefile`.
 
-Unchanged: both Spanish reports are complete in the previous session's scratchpad and
-await owner review. Step-0 `.active.json` binding is per-session and must be re-run.
-Nothing goes out before the owner reads it.
+**#318 (T59)** — three fail-opens, all fixed. `scope` was credited on hits a
+`denies` cue had already earned outright (now a three-way partition with `both` as
+its own row; `both` is 0 on today's corpus, so the defect was **latent** and the
+fixture is what makes that a measurement rather than luck). `scope_only` counts a
+*firing*, not a verified recovery — one of today's three is a flattened field table
+with no punctuation, where the negator the rule consumes answers a **different
+field**, and flipping the labelled field to `Si` does not change the verdict.
+`by_language` was seeded from `_NEGATORS` ("words that flip a cue") rather than
+from `Language`, so a new language with no negators would have been **silently
+absent** from the one key written to make a zero impossible to miss.
+
+**#328 (T116)** — five blockers. Two were **new RFC-derived fail-opens the
+implementer missed**: `no_control_possible` (the standing that excuses a board
+entirely) returned for files that plainly refuse a path, because the witness
+sampler produced one candidate per pattern; and a file could be `competent` on
+`/admin` while the reader was fail-open on `/apply`, with the fail-*closed*
+discrepancy recorded and the fail-*open* one discarded. Also: `_main` returned
+`max(t99, t116)` and `max(1, 3) == 3`, which `make evidence` records as
+"unmeasured" and **continues** — so a real T99 failure was swallowed.
+`liveness._main` had the identical defect and was in no report.
+
+## Three process facts, each learned the expensive way
+
+**1. The reviewer can be wrong, and the fixer must check.** #328's report
+prescribed "retry with the sample extended by one octet". That does not work —
+`Allow: /ax` matches `/axx` as a prefix too, both patterns still score 3 octets,
+the tie still goes to the allow. Taking the instruction literally would have
+shipped a fix that looked right and left the fixture red. **A report is a finding,
+not a patch.**
+
+**2. A resolved finding recorded where nothing re-checks it goes stale and lies.**
+A scheduled check-in fired carrying *"RESOLVED — do not re-investigate: CodeRabbit
+runs on Free and never produces a review object"*. That was true when written and
+false by 10:12. The instruction not to look is what would have kept it false.
+Rewritten.
+
+**3. CodeRabbit is not gone, and its output is inconsistent.** On #319 it reported
+`Plan: Team` and posted **five verified real findings**; twenty minutes later on
+#328 it reported `Plan: Free` and posted a walkthrough with none. Its
+`✅ Addressed` markers are **unreliable** — it marked a finding addressed that was
+not, because its risk verdict was stamped against an older `coveredCommitId`.
+
+**The two reviewers catch different classes.** The bot is good at *"this regex
+matches this string it should not"*. The second session is good at *"this metric's
+name lies"* and *"this whole check is one-way in the wrong direction"*. Neither
+subsumes the other. **Working rule: CodeRabbit findings are bug reports to verify
+and fix; the second-session read stays the gate.** `CLAUDE.md`'s section still says
+CodeRabbit is gone — that needs correcting, though the 41-vs-9 comparison in it
+still stands.
+
+## CI died mid-session, and #329 merged without it
+
+Measured: two consecutive runs on #329 finished in **6 and 5 seconds** with every
+job failed and **every log a 404**, against ~95 seconds with real conclusions on
+#328 twenty minutes earlier. That is the runner dying before any job body ran.
+**The tell is the clock, not the conclusion** — read `created_at`/`updated_at` on
+the run; under ~10 seconds with unreadable logs says nothing about the code.
+
+`merge-policy` is `after-ci-and-review` and the CI half became unavailable, so
+#329 merged on `make host-gate` — which is *exactly* what CI runs — with the four
+results quoted in the merge commit, the outage named on the PR, and the pushed SHA
+verified equal to the tested one. **The owner was asked and was away.** The
+standing instruction was "merge when green and continue taking issues", and the
+previous outage lasted thirteen days. If that call was wrong, #319 is the only one
+that followed it.
+
+`CLAUDE.md`'s "a red CI is a signal again" paragraph now carries the correction.
+It was true when written and false four hours later — the same shape as the
+check-in described below.
+
+## D-27's residue, left open deliberately
+
+Changing **one word** in an archived task file — `status: merged` → `done` —
+zeroes `merged_tasks_with_an_unticked_plan_row` and fires nothing: no violation,
+no drift, exit 0, with the denominator's fall absorbed by the floor. It is
+reachable **in the same commit that archives the file**.
+
+It is pinned with fixtures rather than closed, because closing it demands either
+that archived-`done` tasks be ticked as *merged* (false of them) or that
+`status/plan.md`'s legend grow a `done` glyph — **a decision about the document,
+not about the checker, and the owner's to make**. Widening the numerator to
+`_TERMINAL` now fails those fixtures *and* the shipped board, so the coupling is
+visible rather than latent. T29 is the live instance: archived `status: done`,
+plan row `◐`, so the plan asserts a finished task is in progress.
+
+## D-27 earned its place on the very next PR
+
+#319's gate went red on `T56 is archived as merged and its plan row reads `☐`,
+not `☑``. That branch was cut before the check existed, so nothing ticked the row
+when the task file was archived — the exact drift D-27 was filed about, caught on
+its first encounter rather than found in a sweep 52 rows later. Had #319 merged
+first it would have been row 53.
+
+## #319 (T56) — what actually happened to the number
+
+`extraction_macro_f1` gates at 0.75. The chain matters more than the endpoint:
+
+```
+origin/main                                     0.4943
+first pass (19 findings applied)                0.7698   <- not honest
+  minus the two label-derived cues              0.746    <- red
+  plus the cognate-stem repair                  0.7567   <- honest, green, merged
+```
+
+The implementer disclosed that it found two `product_vs_services` cues **by
+reading the false negatives**, and that without them the gate was red. Both fail
+on the −0.7 tell, and **the route disqualified them anyway**: D-2 with the arrow
+reversed. They are gone.
+
+What replaced that gain is a repair the PR **claimed and had not made**:
+`contrat\w*` cannot match `Contracte` (Spanish *contrato* stems to `contrat`,
+Catalan *contracte* to `contract`), while the file's own comment says the ES list
+must tolerate the cognate. **33 Spanish adverts carry that field; 29 got no
+`contract_stability` reading at all.**
+
+**The most useful finding is what the fall to 0.1667 turned out to be.** All three
+lost readings state placement *once* — the owner's own label on the two Arelance
+adverts cites exactly the *surviving* clause — and a bipolar dimension needs
+**two** matches to settle. So they are lost to the **corroboration rule**, not to
+a wrong cue, and `product_vs_services` is back at main's 0.1667: the first pass
+delivered **zero** real gain there. Recorded as a live `matches=1` fixture with
+the corroboration rule named as the defect, rather than recovered with another
+cue — which would have been the corpus-fitting T56's own task file forbids.
+
+### Still open in the cue set, recorded not fixed
+
+- **F9 is broader than either review said.** Averaged values that are not rungs:
+  `contract_stability` 0.6; `schedule_flexibility` **0.65 on its own committed ES
+  gold span**, where the gold says 0.7 (pre-existing); `compensation_transparency`
+  **0.55** on the nine adverts saying "Salario Competitivo" beside a band;
+  `product_vs_services` **−0.6** for any properly corroborated placement advert.
+  `remote_arrangement` names this defect in its own comment and it is alive in at
+  least four other files.
+- **Two fail-opens neither review raised:** `trasllat` reads 0.9 on
+  `feinaactiva-FA92319865`'s *"trasllat i emmagatzematge de materials"* (moving
+  stock, not the person), and `relocation package` reads 0.9 on six adverts
+  offering it as a **benefit**.
+- `_matched_cue_hits` takes `negated = all(...)` across language slices. Cognate
+  pairs agree today so nothing flips; the ES/CA widening made the duplication
+  systematic and nothing tests it.
+- `suficiente` at 0.6 in `english_demand` holds weakly.
+
+## Held for the owner
+
+**#307 (T98)** — unchanged, and it is a decision only the owner can make: **are
+step-5 corpus stimuli exempt from the serving ban?** Yes → state and bound the
+exemption with its own counter. No → `reaction_elicit` joins `CORE_SERVING_MODULES`
+and the gate goes red immediately.
+
+## Mechanics worth keeping
+
+- **The board fetch.** `list_issues` with `fields: [number,title,state,labels,assignees]`
+  and `perPage: 100` needs two pages (114 issues). Writing only the **open** rows to
+  `/tmp/arsenal-issues.json` makes `task_select.py` return an **archived** task —
+  it cannot see terminal state without the closed issues, so filter its output on
+  `path` not containing `_history/`, or fetch both pages.
+- **Sixteen open tasks carry `requires: [human:gate]`** — imported from issues, gate
+  is the issue's prose, "visible but never dispatched". Writing a real fenced
+  ```gate block and deleting that line is what makes one claimable.
+  `queue-seeding.md` says that is a human's call; the task files' own placeholder
+  comments instruct the implementer to do it. **The two texts conflict** — worth the
+  owner's eye.
+- **`make evidence` compares the working tree against the index**, so a legitimately
+  changed evidence file reads as drift until `git add -A`. Not a defect; costs five
+  minutes each time it is rediscovered.
+- **Read the plan row before writing a gate block.** Inventing a metric name is now
+  a four-time mistake, and `test_the_committed_plan_and_queue_agree` catches it
+  every time.
+- Adding a `T`-numbered task **forces a `status/plan.md` row** — `plan_v2` counts
+  `in_queue_only` as drift.
+
+## Queue
+
+**A `ruff format --check` gate is not in the repo gate, and 19 files are
+unformatted.** #329 regressed two hunks in one file and fixed only those, filing
+the reasoning: the gate would need a 19-file reformat as a rider on an unrelated
+PR. It is its own task and is not seeded yet.
+
+**T120** seeded (`t-9d41c7f5`): replace the stdlib second robots reader with a
+longest-match parser written from RFC 9309. `deps: [t-4c88b302]`. That is what
+would make `robots_adjudications_without_a_competent_second_reader` fall from
+**19**; it cannot be done here because the 18 boards' robots.txt are not committed
+and egress is blocked.
+
+Two tasks stay declared-unreachable on this surface: **T59** (`requires:
+[access:human]` — needs a person to label) and **T106** (`requires:
+[surface:egress]` — needs irs.gov and ssa.gov, both `EGRESS_BLOCKED`). Writing US
+tax figures from memory with a `read_on` date would fabricate exactly the
+provenance T106 exists to create.
