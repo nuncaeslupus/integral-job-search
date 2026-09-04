@@ -296,7 +296,21 @@ runs report `Plan: Team`, #322's and #323's report `Plan: Free` with **1 include
 review per hour** rather than 8. Read the `Plan:` line before spending anything on
 a nudge; it is in every CodeRabbit comment's `⚙️ Run configuration` block.
 
-**On Free, the only trigger is a push.** That is what produced every review on #320
+**And a Free-plan run does not produce a review even when it succeeds.** The
+plan's own note, in every one of its comments:
+
+> Your organization is on the Free plan. CodeRabbit will generate a **high-level
+> summary and a walkthrough** for each pull request. For a **comprehensive
+> line-by-line review**, please upgrade to CodeRabbit Essentials.
+
+That is the sharpest form of the finding, and it is worse than a quota problem.
+#322's one successful Free run produced a walkthrough comment and **no review
+object**, while #320's Team runs produced review objects carrying nine actionable
+findings. So on Free the review half of `after-ci-and-review` cannot be satisfied
+by CodeRabbit **at all** — not "not yet", not "after the hour resets". The quota
+is a red herring; the plan is the thing.
+
+**The trigger on Free is a push, and it buys a summary.** That is what produced every review on #320
 — four pushes, four reviews — and it is why #322 and #323 have **no review object
 at all**: each got one automatic attempt, both bounced off the one-per-hour limit,
 and no comment can ask for another. Note what is *not* the answer: an empty commit
