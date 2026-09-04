@@ -57,7 +57,7 @@ extraction:
     # Spanish-language adverts too, so both slices carry it — see the note on
     # `contract_stability`.
     es:
-      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|\\d{1,3}[.,]\\d{3}\\s*€|€\\s*\\d{3,}|\\d{3,6}\\s*(€|euros?)\\b|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,2}\\s*pagas\\b|\\d{1,2}\\s*pagues\\b"
+      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|forquilla\\s+salarial|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*[-–]\\s*\\d{1,3}[.,]\\d{3}|(salari|sueldo|sou|retribuci|remuneraci|n[óo]mina)\\w*[^.\\n]{0,30}\\d{1,3}[.,]\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*(brutos?|bruts?|anuales?|anuals?|/\\s*a[ñn]o|/\\s*any)|\\d{2,3}\\s*k\\s*[-–a]\\s*\\d{2,3}\\s*k\\b"
         value: 0.9
         negatable: false
       - pattern: "salari[oe]?\\s+competitiv[oa]|retribuci[óo]n?\\s+competitiva|paquete\\s+retributivo"
@@ -67,7 +67,7 @@ extraction:
         value: 0.2
         negatable: false
     ca:
-      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|\\d{1,3}[.,]\\d{3}\\s*€|€\\s*\\d{3,}|\\d{3,6}\\s*(€|euros?)\\b|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,2}\\s*pagues\\b|\\d{1,2}\\s*pagas\\b"
+      - pattern: "salari?[oa]?\\s+mensual\\s+(brut[oa]?|segons|seg[úu]n)|\\bsou\\b\\s*:?\\s*\\d|retribuci[óo]n?\\s*:?\\s*\\d|banda\\s+salarial|forquilla\\s+salarial|\\d{2}\\.\\d{3}\\s*[-–a]\\s*\\d{2}\\.\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*[-–]\\s*\\d{1,3}[.,]\\d{3}|(salari|sueldo|sou|retribuci|remuneraci|n[óo]mina)\\w*[^.\\n]{0,30}\\d{1,3}[.,]\\d{3}|\\d{1,3}[.,]\\d{3}\\s*(€|euros?)?\\s*(brutos?|bruts?|anuales?|anuals?|/\\s*a[ñn]o|/\\s*any)|\\d{2,3}\\s*k\\s*[-–a]\\s*\\d{2,3}\\s*k\\b"
         value: 0.9
         negatable: false
       - pattern: "salari\\s+competitiu|retribuci[óo]\\s+competitiva|salario\\s+competitivo"

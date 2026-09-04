@@ -60,7 +60,7 @@ extraction:
         value: 0.0
         negatable: false
     es:
-      - pattern: "horario\\s+flexible|jornada\\s+flexible|flexibilidad\\s+horaria|horari\\s+flexible|flexibilitat\\s+hor[àa]ria|entrada\\s+y\\s+salida\\s+flexible|horario\\s+a\\s+convenir"
+      - pattern: "horario\\s+flexible|jornada\\s+flexible|flexibilidad\\s+horaria|horari\\s+flexible|flexibilitat\\s+hor[àa]ria|entrada\\s+y\\s+salida\\s+flexible"
         value: 0.7
         negatable: true
       - pattern: "jornada\\s+intensiva\\s+(en\\s+|els\\s+|los\\s+|de\\s+)?(verano|estiu|julio|agosto|juliol|agost|viernes|divendres)"
@@ -70,7 +70,7 @@ extraction:
         value: 0.0
         negatable: false
     ca:
-      - pattern: "horari\\s+flexible|jornada\\s+flexible|flexibilitat\\s+hor[àa]ria|horario\\s+flexible|flexibilidad\\s+horaria|entrada\\s+i\\s+sortida\\s+flexible|horari\\s+a\\s+convenir"
+      - pattern: "horari\\s+flexible|jornada\\s+flexible|flexibilitat\\s+hor[àa]ria|horario\\s+flexible|flexibilidad\\s+horaria|entrada\\s+i\\s+sortida\\s+flexible"
         value: 0.7
         negatable: true
       - pattern: "jornada\\s+intensiva\\s+(a\\s+l['’]|en\\s+|els\\s+|los\\s+|de\\s+)?(estiu|verano|juliol|agost|julio|agosto|divendres|viernes)"

@@ -6,9 +6,10 @@
   "ads_with_suggestions": 176,
   "blind_control_count": 32,
   "suggestion_count": 1032,
-  "suggestion_cue_agreement": 0.4322,
-  "cue_unreachable": 586,
+  "suggestion_cue_agreement": 0.4225,
+  "cue_unreachable": 596,
   "cue_unreachable_examples": [
+    "feinaactiva-09202618331:compensation_transparency",
     "feinaactiva-09202618331:schedule_flexibility",
     "feinaactiva-09202618331:schedule_flexibility",
     "feinaactiva-09202618331:remote_arrangement",
@@ -17,7 +18,6 @@
     "feinaactiva-09202619629:collaboration_mode",
     "feinaactiva-09202619629:company_stage",
     "feinaactiva-09202619629:process_formality",
-    "feinaactiva-09202619998:schedule_flexibility",
-    "feinaactiva-09202619998:collaboration_mode"
+    "feinaactiva-09202619998:schedule_flexibility"
   ]
 }

@@ -50,7 +50,7 @@ extraction:
     # them: months 0–11 and "0 years" are junior, 1–4 years and 12–59 months are
     # mid, 5+ years and 60+ months are senior.
     en:
-      - pattern: "\\bsenior\\b|\\bstaff\\b|\\bprincipal\\b|\\blead\\b|\\bhead\\s+of\\b"
+      - pattern: "\\bsenior\\b|\\bstaff\\b|\\bprincipal\\b|\\b(tech(nical)?|team|squad|engineering)\\s+lead\\b|\\blead\\s+(\\w+\\s+){0,2}(engineer|developer|architect|designer|analyst|scientist|consultant|programmer)\\b|\\bhead\\s+of\\b"
         value: 0.8
         negatable: false
       - pattern: "\\b([5-9]|[1-9][0-9])\\+?\\s*years?\\b|\\b\\d+\\s*(to|-)\\s*([5-9]|[1-9][0-9])\\s*years?\\b"
@@ -63,7 +63,7 @@ extraction:
         value: 0.5
         negatable: false
     es:
-      - pattern: "\\bsenior\\b|\\bs[èe]nior\\b|\\bjefe\\b|\\bjefa\\b|\\bresponsable\\s+de\\b|\\bcap\\s+de\\b|oficial\\s+de\\s+1|\\blead\\b"
+      - pattern: "\\bsenior\\b|\\bs[èe]nior\\b|oficial\\s+de\\s+1|\\b(buscamos|busquem|seleccionamos|seleccionem|precisamos|incorporamos|incorporem|se\\s+busca|es\\s+busca|se\\s+precisa|es\\s+precisa|se\\s+necesita|es\\s+necessita)\\s+[^.\\n]{0,25}\\b(jefe|jefa|cap|responsable)\\s+de\\b|\\b(tech(nical)?|team|squad|engineering)\\s+lead\\b|\\blead\\s+(\\w+\\s+){0,2}(engineer|developer|architect|designer|analyst|scientist|consultant|programmer)\\b"
         value: 0.8
         negatable: false
       - pattern: "(m[áa]s\\s+de\\s+)?([5-9]|[1-9][0-9])\\s*a[ñn]os\\s+de\\s+experiencia|experiencia\\s+(m[íi]nima\\s+)?(de\\s+)?([5-9]|[1-9][0-9])\\s*a[ñn]os|experi[èe]ncia\\s+(de\\s+)?([5-9]|[1-9][0-9])\\s*anys|experi[èe]ncia\\s+([6-9][0-9]|[1-9][0-9]{2,})\\s*mesos|experi\\w+\\s+de\\s+\\d+\\s+a\\s+([5-9]|[1-9][0-9])\\s*(anys|a[ñn]os)"
@@ -72,11 +72,11 @@ extraction:
       - pattern: "\\bjunior\\b|\\bj[úu]nior\\b|reci[ée]n\\s+titulad|sin\\s+experiencia\\s+previa|no\\s+se\\s+requiere\\s+experiencia|experi[èe]ncia\\s+0\\s*(anys|mesos)|experi[èe]ncia\\s+([0-9]|1[01])\\s*mesos\\b|\\bbecari|\\bpr[áa]cticas\\b"
         value: 0.2
         negatable: false
-      - pattern: "experiencia\\s+(m[íi]nima\\s+)?(de\\s+)?[1-4]\\s*a[ñn]os|experi[èe]ncia\\s+(de\\s+)?[1-4]\\s*anys|experi[èe]ncia\\s+(1[2-9]|[2-5][0-9])\\s*mesos\\b|experiencia\\s+(previa\\s+|m[íi]nima\\s+)?demostrable|se\\s+(requiere|valorar[áa])\\s+experiencia|experiencia\\s+previa\\s+en|experi\\w+\\s+de\\s+\\d+\\s+a\\s+[1-4]\\s*(anys|a[ñn]os)"
+      - pattern: "experiencia\\s+(m[íi]nima\\s+)?(de\\s+)?[1-4]\\s*a[ñn]os|experi[èe]ncia\\s+(de\\s+)?[1-4]\\s*anys|experi[èe]ncia\\s+(1[2-9]|[2-5][0-9])\\s*mesos\\b|experiencia\\s+(previa\\s+|m[íi]nima\\s+)?demostrable|se\\s+requiere\\s+experiencia|experi\\w+\\s+de\\s+\\d+\\s+a\\s+[1-4]\\s*(anys|a[ñn]os)"
         value: 0.5
         negatable: false
     ca:
-      - pattern: "\\bs[èe]nior\\b|\\bsenior\\b|\\bcap\\s+de\\b|\\bresponsable\\s+de\\b|oficial\\s+de\\s+1|\\blead\\b"
+      - pattern: "\\bs[èe]nior\\b|\\bsenior\\b|oficial\\s+de\\s+1|\\b(buscamos|busquem|seleccionamos|seleccionem|precisamos|incorporamos|incorporem|se\\s+busca|es\\s+busca|se\\s+precisa|es\\s+precisa|se\\s+necesita|es\\s+necessita)\\s+[^.\\n]{0,25}\\b(jefe|jefa|cap|responsable)\\s+de\\b|\\b(tech(nical)?|team|squad|engineering)\\s+lead\\b|\\blead\\s+(\\w+\\s+){0,2}(engineer|developer|architect|designer|analyst|scientist|consultant|programmer)\\b"
         value: 0.8
         negatable: false
       - pattern: "experi[èe]ncia\\s+(de\\s+)?([5-9]|[1-9][0-9])\\s*anys|experi[èe]ncia\\s+([6-9][0-9]|[1-9][0-9]{2,})\\s*mesos|m[ée]s\\s+de\\s+([5-9]|[1-9][0-9])\\s*anys\\s+d[e']\\s*experi[èe]ncia|experi\\w+\\s+de\\s+\\d+\\s+a\\s+([5-9]|[1-9][0-9])\\s*(anys|a[ñn]os)"
@@ -85,7 +85,7 @@ extraction:
       - pattern: "\\bj[úu]nior\\b|\\bjunior\\b|sense\\s+experi[èe]ncia|acabat\\s+de\\s+titular|experi[èe]ncia\\s+0\\s*(anys|mesos)|experi[èe]ncia\\s+([0-9]|1[01])\\s*mesos\\b|\\bbecari|\\bpr[àa]ctiques\\b"
         value: 0.2
         negatable: false
-      - pattern: "experi[èe]ncia\\s+(de\\s+)?[1-4]\\s*anys|experi[èe]ncia\\s+(1[2-9]|[2-5][0-9])\\s*mesos\\b|experi[èe]ncia\\s+(pr[èe]via\\s+)?demostrable|es\\s+(requereix|valorar[àa])\\s+experi[èe]ncia|experi[èe]ncia\\s+pr[èe]via\\s+en|experi\\w+\\s+de\\s+\\d+\\s+a\\s+[1-4]\\s*(anys|a[ñn]os)"
+      - pattern: "experi[èe]ncia\\s+(de\\s+)?[1-4]\\s*anys|experi[èe]ncia\\s+(1[2-9]|[2-5][0-9])\\s*mesos\\b|experi[èe]ncia\\s+(pr[èe]via\\s+)?demostrable|es\\s+requereix\\s+experi[èe]ncia|experi\\w+\\s+de\\s+\\d+\\s+a\\s+[1-4]\\s*(anys|a[ñn]os)"
         value: 0.5
         negatable: false
   gold:

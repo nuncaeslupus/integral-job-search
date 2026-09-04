@@ -48,11 +48,20 @@ extraction:
     # an advert placing someone with a client says so twice — it names itself a
     # consultancy *and* describes the placement — and one of the two alone is
     # the passing mention the corroboration rule exists to distrust.
+    #
+    # Corroboration cannot save a cue that is wrong on its own terms, and the
+    # first cut of this list had three: `nuestros clientes`, `para incorporarse
+    # a un equipo` and `proyecto estable`. Every employer has clients, every
+    # advert asks someone to join something, and a stable project is a promise
+    # about duration — none of the three says *whose* product, which is the
+    # whole of this dimension. Two of them firing together is two agreeing
+    # matches that are both wrong, which is precisely what a second match
+    # cannot detect. The rung is placement, so the cues name placement.
     en:
-      - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build|our\\s+(platform|saas)|\\bsaas\\b"
+      - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build|our\\s+(own\\s+)?(platform|saas|product)|we\\s+build\\s+(a|our)\\s+saas"
         value: 0.7
         negatable: false
-      - pattern: "consultanc(y|ies)|client\\s+site|staff(ing|\\s+augmentation)|our\\s+client\\s+is|\\bconsultants?\\b|systems?\\s+integrator"
+      - pattern: "consultanc(y|ies)|client\\s+site|staff(ing|\\s+augmentation)|our\\s+client\\s+is|systems?\\s+integrator"
         value: -0.7
         negatable: false
       - pattern: "end\\s+users?"
@@ -62,23 +71,23 @@ extraction:
         value: -0.5
         negatable: false
     es:
-      - pattern: "producto\\s+propio|nuestro\\s+producto|nuestra\\s+plataforma|producte\\s+propi|\\bsaas\\b|dise[ñn]o\\s+y\\s+fabricaci[óo]n|somos\\s+fabricantes?"
+      - pattern: "producto\\s+propio|nuestro\\s+producto|nuestra\\s+plataforma|nuestro\\s+saas|producte\\s+propi|dise[ñn]o\\s+y\\s+fabricaci[óo]n|somos\\s+fabricantes?"
         value: 0.7
         negatable: false
-      - pattern: "consultor(a|es|as|ía|ia)\\b|c[áa]rnica|cliente\\s+final|client\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+servicios|partner\\s+(estrat[ée]gico|tecnol[óo]gico)"
+      - pattern: "consultor(a|es|as|ía|ia)\\b|c[áa]rnica|cliente\\s+final|client\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+servicios"
         value: -0.7
         negatable: false
-      - pattern: "asignaci[óo]n\\s+a\\s+proyecto|para\\s+incorporar(se|te)?\\s+a\\s+(un|una|uno)\\b|nuestros\\s+clientes|els\\s+nostres\\s+clients|principales\\s+clientes|proyecto\\s+estable"
+      - pattern: "asignaci[óo]n\\s+a\\s+proyecto|assignaci[óo]\\s+a\\s+projecte|cesi[óo]n\\s+a\\s+cliente|incorporaci[óo]n\\s+a\\s+(un\\s+|nuestro\\s+)?client|en\\s+(las\\s+)?oficinas\\s+del?\\s+client|en\\s+casa\\s+del\\s+cliente|proyectos?\\s+de\\s+nuestros\\s+clientes|en\\s+(uno|una)\\s+de\\s+(sus|nuestros|los)\\s+(principales\\s+)?clientes|(profesionales|perfiles|candidatos?|talento)\\s+para\\s+(nuestros\\s+)?clientes|dependencias\\s+del?\\s+client|proyectos?\\s+(muy\\s+|estable\\s+)*dentro\\s+de\\s+(un[ao]?\\s+)?(importante\\s+)?(entidad|empresa|compa[ñn][íi]a|organizaci[óo]n|cliente)|nuestros\\s+candidatos"
         value: -0.5
         negatable: false
     ca:
-      - pattern: "producte\\s+propi|el\\s+nostre\\s+producte|la\\s+nostra\\s+plataforma|producto\\s+propio|\\bsaas\\b|disseny\\s+i\\s+fabricaci[óo]|som\\s+fabricants?"
+      - pattern: "producte\\s+propi|el\\s+nostre\\s+producte|la\\s+nostra\\s+plataforma|el\\s+nostre\\s+saas|producto\\s+propio|disseny\\s+i\\s+fabricaci[óo]|som\\s+fabricants?"
         value: 0.7
         negatable: false
-      - pattern: "consultor(a|es|es|ia|ía)\\b|consultoria|client\\s+final|cliente\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+serveis|partner\\s+(estrat[èe]gic|tecnol[òo]gic)"
+      - pattern: "consultor(a|es|es|ia|ía)\\b|consultoria|client\\s+final|cliente\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+serveis"
         value: -0.7
         negatable: false
-      - pattern: "assignaci[óo]\\s+a\\s+projecte|per\\s+incorporar(-se|-te)?\\s+a\\s+(un|una)\\b|els\\s+nostres\\s+clients|nuestros\\s+clientes|principals\\s+clients|projecte\\s+estable"
+      - pattern: "assignaci[óo]\\s+a\\s+projecte|asignaci[óo]n\\s+a\\s+proyecto|cessi[óo]\\s+a\\s+client|incorporaci[óo]\\s+a\\s+(un\\s+|el\\s+nostre\\s+)?client|a\\s+(les\\s+)?(oficines|instal·lacions)\\s+del?\\s+client|projectes?\\s+dels\\s+nostres\\s+clients|en\\s+(un|una)\\s+dels\\s+(seus\\s+|nostres\\s+|principals\\s+)?clients|(professionals|perfils|candidats?|talent)\\s+per\\s+a\\s+(els\\s+)?clients|depend[èe]ncies\\s+del?\\s+client|projectes?\\s+(molt\\s+|estable\\s+)*dins\\s+d[e']\\s*(un[a]?\\s+)?(important\\s+)?(entitat|empresa|companyia|organitzaci[óo]|client)|els\\s+nostres\\s+candidats"
         value: -0.5
         negatable: false
   gold:

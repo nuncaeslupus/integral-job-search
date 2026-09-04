@@ -48,7 +48,7 @@ extraction:
       - pattern: "\\b(driving|driver'?s)\\s+licen[cs]e\\b|\\bown\\s+(car|vehicle)\\b"
         value: 0.9
     es:
-      - pattern: "\\b(carn[ée]t?|permiso)\\s+de\\s+conducir\\b"
+      - pattern: "\\b(carn[ée]t?|permiso)\\s+de\\s+conducir\\b|\\bveh[íi]culo\\s+propio\\b|\\bcoche\\s+propio\\b|\\bdisponibilidad\\s+de\\s+veh[íi]culo\\b"
         value: 0.9
       - pattern: "\\bresidir\\s+(en|cerca)\\b|\\bresidencia\\s+en\\s+(la\\s+zona|alrededores)\\b"
         value: 0.5
