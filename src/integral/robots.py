@@ -208,6 +208,28 @@ def _select_rules(groups: list[_Group], agent: str) -> tuple[list[tuple[bool, st
     more than once (`Disallow` and `Crawl-delay` split across two blocks is
     still one set of rules for one crawler). Only when no explicit token
     matches does the wildcard group apply.
+
+    The token comparison is **equality**, case-folded, and nothing else (T102,
+    issue #236). §2.2.1 grants exactly one relaxation — "Crawlers MUST use
+    case-insensitive matching to find the group that matches the product token"
+    — and the only substring relation the RFC states runs the other way, between
+    a crawler's product token and the identification string it sends. So
+    `User-agent: Bot` does not govern a crawler whose token is `Botly`, and that
+    is not a fail-open: it is what the file said. Two of the RFC's own figures
+    say the same thing from the other side — one calls the relation "two groups
+    that match the same product token exactly", the other declares
+    `user-agent: BazBot` a non-match for the crawler `ExampleBot`, two tokens
+    sharing the suffix `Bot`.
+
+    Reading it as a prefix match is not a merely-conservative deviation, either.
+    An explicitly matched group is used EXCLUSIVELY, so a prefix match can
+    suppress the `*` group and *unblock* a path the site disallowed for
+    everyone — the `a_prefix_file_token_does_not_displace_the_wildcard_group`
+    fixture is exactly that document, permitted under the prefix reading and
+    blocked under this one. A `googlebot` group governing `Googlebot-Image` is
+    Google's crawler handing the matcher several of its own names, not a rule in
+    the RFC; the reference implementation compares each of them with
+    `EqualsIgnoreCase`.
     """
     agent_lower = _product_token(agent).lower()
     explicit = [group for group in groups if any(a.lower() == agent_lower for a in group.agents)]
@@ -415,6 +437,13 @@ class _Fixture:
     agent: str
     url: str
     expected_allowed: bool
+    # The clause the expected verdict was READ OFF — not the clause the code
+    # happens to agree with. A contested case is only worth committing if the
+    # next reader can check the citation without re-deriving it, which is the
+    # whole point of T102: case 22 of the round-2 audit was filed rather than
+    # committed because its citation was a recollection. Empty on the fixtures
+    # that predate this field; retrofitting the rest is its own pass.
+    citation: str = ""
 
 
 # A fixture table of robots.txt documents paired with their RFC 9309 verdict
@@ -933,22 +962,26 @@ Disallow: /search?
         expected_allowed=False,
     ),
     _Fixture(
-        # RFC 9309 SS2.2.1 -- when a crawler token matches more than one group's
-        # product token, the crawler MUST use the most specific (longest) matching
-        # token. 'Botly' is more specific than 'Bot' for the crawler token
-        # 'Botly/2.0', so the Botly group's Disallow applies even though the Bot
-        # group alone would permit everything.
-        name="most_specific_agent_group_wins_over_shorter_token",
+        # RFC 9309 SS2.2.1 -- the crawler token 'Botly' matches the 'Botly' group
+        # and only that one, so its Disallow applies. The comment here used to
+        # read "the crawler MUST use the most specific (longest) matching token";
+        # no such rule exists in the RFC, which says only to combine every group
+        # whose token matches. The verdict is unchanged and the reason is not:
+        # under equality the 'Bot' group is not a match to rank, it is a
+        # non-match (T102).
+        name="an_exactly_matching_group_applies_where_a_shorter_token_does_not",
         robots_txt="User-agent: Bot\nDisallow:\n\nUser-agent: Botly\nDisallow: /private\n",
         agent="Botly/2.0",
         url="https://example.com/private",
         expected_allowed=False,
     ),
     _Fixture(
-        # RFC 9309 SS2.2.1 -- the match direction is one-way: the rule's product
-        # token must be a substring of the crawler's token, not the reverse. 'Botly'
-        # is not a substring of the crawler token 'Bot', so that group does not
-        # apply and the crawler falls back to the wildcard '*' group.
+        # RFC 9309 SS2.2.1 -- 'Botly' is not the crawler's token 'Bot', so that
+        # group does not apply and the crawler falls back to the wildcard '*'
+        # group. The comment here used to justify that by a substring rule ("the
+        # rule's product token must be a substring of the crawler's token"),
+        # which the RFC does not state in either direction; T102 read the section
+        # and replaced the reason. The verdict is unchanged.
         name="agent_token_longer_than_crawler_token_does_not_match",
         robots_txt="User-agent: Botly\nDisallow:\n\nUser-agent: *\nDisallow: /private\n",
         agent="Bot/1.0",
@@ -1051,7 +1084,73 @@ Disallow: /search?
         url="https://example.com/b",
         expected_allowed=False,
     ),
+    # T102 (issue #236) -- case 22 of the round-2 T70 audit, the one case of 33
+    # that was filed rather than committed because the auditor could not reach
+    # the RFC and recorded a recollection ("a file token matches as a prefix of
+    # a longer crawler token") instead of a citation. Read from the text, it
+    # does not. The three below settle the question in both directions and in
+    # the configuration where getting it wrong would fail OPEN.
+    _Fixture(
+        # The filed case, unchanged: file token 'Bot', crawler token 'Botly'.
+        # SS2.2.1 relaxes case and nothing else, so 'Bot' does not match; there
+        # is no '*' group; and the section's last clause -- "If no group matches
+        # the product token and there is no group with a user-agent line with
+        # the '*' value ... no rules apply" -- permits the fetch. Recording this
+        # as ALLOWED is not a fail-open being blessed: the site named a crawler
+        # that is not us.
+        name="a_file_token_that_is_a_prefix_of_the_crawler_token_does_not_match",
+        robots_txt="User-agent: Bot\nDisallow: /private\n",
+        agent="Botly/2.0",
+        url="https://example.com/private",
+        expected_allowed=True,
+        citation=(
+            "RFC 9309 §2.2.1 — case-insensitive matching of the product token is the only "
+            "relaxation granted; with no matching group and no `*` group, no rules apply"
+        ),
+    ),
+    _Fixture(
+        # The same non-match, in the configuration where the prefix reading
+        # fails OPEN instead of closed. An explicitly matched group is used
+        # exclusively, so under that reading the 'Bot' group would displace '*'
+        # and permit '/private' -- a path this site disallowed for every
+        # crawler. Under SS2.2.1 as written there is no match to displace it
+        # with, '*' applies, and the path stays blocked. This is the fixture
+        # that makes "the prefix reading is merely more conservative" false.
+        name="a_prefix_file_token_does_not_displace_the_wildcard_group",
+        robots_txt="User-agent: Bot\nDisallow: /other\n\nUser-agent: *\nDisallow: /private\n",
+        agent="Botly/2.0",
+        url="https://example.com/private",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.1 — a group whose token does not match is not selected, so the "
+            "`*` group is still the one that applies"
+        ),
+    ),
+    _Fixture(
+        # The reverse direction, with its own citation, and deliberately with no
+        # '*' group: `agent_token_longer_than_crawler_token_does_not_match` above
+        # covers the same direction where a wildcard absorbs the non-match, so
+        # its verdict would hold even if the non-match were wrong. Here nothing
+        # absorbs it, and the verdict is the RFC's own last clause.
+        name="a_file_token_longer_than_the_crawler_token_does_not_match_with_no_wildcard",
+        robots_txt="User-agent: Botly\nDisallow: /private\n",
+        agent="Bot/1.0",
+        url="https://example.com/private",
+        expected_allowed=True,
+        citation=(
+            "RFC 9309 §2.2.1 — the crawler's token `Bot` is not the file's token `Botly`; "
+            "no group matches and there is no `*` group, so no rules apply"
+        ),
+    ),
 )
+
+# The denominator of `robots_verdicts_misread`, asserted as a FLOOR and never as
+# the count of the day. Adding fixtures is what the audits are for and must
+# never turn this red; removing them must, because a clean zero over a shrunken
+# table is the failure this module keeps finding one level up. Raise it
+# deliberately when a round of cases lands -- T102 raised it from the 56 the
+# round-2 audit left to the 59 it now measures.
+FIXTURES_AT_LEAST = 59
 
 
 def _verdict(fixture: _Fixture) -> bool:
@@ -1075,6 +1174,7 @@ def measure(fixtures: tuple[_Fixture, ...] = FIXTURES) -> dict[str, Any]:
             "url": fixture.url,
             "expected_allowed": fixture.expected_allowed,
             "actual_allowed": actual,
+            "citation": fixture.citation,
         }
         for fixture in fixtures
         if (actual := _verdict(fixture)) != fixture.expected_allowed
@@ -1083,6 +1183,7 @@ def measure(fixtures: tuple[_Fixture, ...] = FIXTURES) -> dict[str, Any]:
     return {
         "robots_verdicts_misread": len(misread),
         "robots_verdicts_evaluated": evaluated,
+        "robots_verdicts_evaluated_at_least": FIXTURES_AT_LEAST,
         "gate_status": "measured" if evaluated else "unmeasured",
         "misread_cases": misread,
     }
@@ -1278,7 +1379,11 @@ def _main(argv: list[str]) -> int:
     # `integral.ontology_health` use, so a misread fixture is reported here
     # (loudly, on stderr) without halting every other module's `make
     # evidence` regeneration.
-    measured = write_evidence(Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH)
+    # `FIXTURES` is passed rather than defaulted so the table is read at call
+    # time: the floor below is only a guard if a test can shrink it.
+    measured = write_evidence(
+        Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH, FIXTURES
+    )
     if measured["robots_verdicts_misread"]:
         print(
             f"robots_verdicts_misread: {measured['robots_verdicts_misread']} of "
@@ -1287,6 +1392,19 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
     print(json.dumps(measured, ensure_ascii=False))
+    # A table that has shrunk below the floor is a hard stop, and the exit code
+    # says so: `make evidence` maps 3 to "unmeasured (recorded)" and CONTINUES,
+    # which would let a deleted fixture pass as an honest "cannot measure yet".
+    # This is the opposite state -- the check ran, over fewer cases than it was
+    # signed off on -- so it exits 1, the code that stops the build.
+    if measured["robots_verdicts_evaluated"] < FIXTURES_AT_LEAST:
+        print(
+            f"robots_verdicts_evaluated: {measured['robots_verdicts_evaluated']} is below the "
+            f"floor of {FIXTURES_AT_LEAST}: fixtures have been removed, so the misread count "
+            "above is measured over a smaller table than this gate was signed off on",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
