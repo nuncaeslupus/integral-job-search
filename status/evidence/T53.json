@@ -1,6 +1,6 @@
 {
   "connector_contract_violations": 0,
-  "packages_checked": 18,
+  "packages_checked": 19,
   "evidence_writes_for_a_foreign_library": 0,
   "violations": []
 }
