@@ -59,7 +59,7 @@ import sys
 import unicodedata
 from collections import Counter
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -656,10 +656,8 @@ def _cue_reaches_the_cited_span(ad: LabelledAd, label: Label, dimension: Dimensi
     return False
 
 
-def _recovered_by_the_scope_rule(
-    ad: NormalisedAd, dimension: Dimension, found: DimensionScore
-) -> bool:
-    """Of the matches that survived into `found`, did a **`negatable`** one carry the negation?
+def _mechanism_of(ad: NormalisedAd, dimension: Dimension, found: DimensionScore) -> str:
+    """Which mechanism earned this hit: `scope_only`, `denies_only`, or `both`?
 
     The two mechanisms that reach `negated=True` are not the same claim. A
     `denies` cue has the negator inside its own pattern — `sin\\s+viajes` — so
@@ -675,15 +673,31 @@ def _recovered_by_the_scope_rule(
 
     Restricted to `found.spans`, because `cue_findings` drops a match contained
     inside a longer one and a dropped match must not be credited here either.
+
+    **Three outcomes, not two.** This returned a bool until the second-reader
+    review of #318, and the bool made `scope` win whenever both were true — so a
+    hit the `denies` cue had already earned outright was reported as the scope
+    rule recovering something the cue set could not see, which is the exact
+    overstatement the key exists to prevent. `"Sin guardias. El equipo no tiene
+    guardias."` is that advert: `sin\\s+guardias` matches and survives, the bare
+    `guardias` also survives and is negated, and the old code called it `scope`.
+    `both` is now its own row, so the two claims stay separable and
+    `scope_only` means what its name says.
     """
     kept = {(span.start, span.end) for span in found.spans}
-    return any(
-        cue.negatable
-        and (match.start(), match.end()) in kept
-        and _is_negated(ad.text, match.start(), ad.language)
-        for cue in dimension.extraction.cues.get(ad.language, [])
-        for match in re.finditer(cue.pattern, ad.text, re.IGNORECASE)
-    )
+    scoped = False
+    denied = False
+    for cue in dimension.extraction.cues.get(ad.language, []):
+        for match in re.finditer(cue.pattern, ad.text, re.IGNORECASE):
+            if (match.start(), match.end()) not in kept:
+                continue
+            if cue.denies:
+                denied = True
+            elif cue.negatable and _is_negated(ad.text, match.start(), ad.language):
+                scoped = True
+    if scoped and denied:
+        return "both"
+    return "scope_only" if scoped else "denies_only"
 
 
 def negation_recall(
@@ -705,13 +719,13 @@ def negation_recall(
     typo would raise recall.
 
     Third return value: how many hits each **mechanism** earned — see
-    `_recovered_by_the_scope_rule`. Diagnostic only; the score is `hits` over
-    every negated label either way.
+    `_mechanism_of`. Diagnostic only; the score is `hits` over every negated
+    label either way, and the three rows sum to it.
     """
     by_id = {d.id: d for d in dimensions}
     hits = 0
     misses: list[str] = []
-    mechanisms = {"scope": 0, "denies": 0}
+    mechanisms = {"scope_only": 0, "denies_only": 0, "both": 0}
     for ad, label in evaluation_labels(store):
         if not label.negated:
             continue
@@ -727,8 +741,7 @@ def negation_recall(
             misses.append(f"{ad.id}/{label.dimension}: settled, but not as negated")
         else:
             hits += 1
-            scoped = _recovered_by_the_scope_rule(normalised, dimension, found)
-            mechanisms["scope" if scoped else "denies"] += 1
+            mechanisms[_mechanism_of(normalised, dimension, found)] += 1
     return hits, sorted(misses), mechanisms
 
 
@@ -791,7 +804,12 @@ def negation_audit(
     # would make `extraction_negation_recall` "measured" with Catalan `no … pas`
     # and English negators never once scored. A zero that has to be written down
     # is harder to publish a language-blind number over than one that is absent.
-    by_language = dict.fromkeys(_NEGATORS, 0)
+    # Seeded from `Language` itself, never from `_NEGATORS`: the negator table is
+    # "words that flip a `negatable` cue", and the two coincide only by accident.
+    # A language added to `Language` with no negators would be *absent* from this
+    # key, which is precisely the silent zero it was written to make impossible
+    # (second-reader review of #318).
+    by_language: dict[str, int] = dict.fromkeys(get_args(Language), 0)
     for ad, _ in negated:
         by_language[ad.language] += 1
     hits, misses, mechanisms = negation_recall(store, dimensions)
@@ -811,11 +829,22 @@ def negation_audit(
         "extraction_negation_recall": round(hits / len(negated_labels), 4) if measurable else None,
         "negation_status": "measured" if measurable else "unmeasured",
         "negation_recall_hits": hits,
-        # Which mechanism earned each hit. `denies` is the cue set already having
-        # the phrase; `scope` is T16's rule recovering a negation the cue could
-        # not see. A recall of 1.0 made entirely of `denies` would mean the scope
-        # rule is unmeasured, so this is what stops the score from claiming more
-        # than it shows.
+        # Which mechanism earned each hit, in three rows that sum to
+        # `negation_recall_hits`. `denies_only` is the cue set already having the
+        # phrase; `scope_only` is T16's rule recovering a negation the cue could
+        # not see; `both` is a hit either would have earned alone, and it belongs
+        # to neither. A recall of 1.0 made entirely of `denies_only` would mean
+        # the scope rule is unmeasured, so this is what stops the score from
+        # claiming more than it shows.
+        #
+        # It counts **firings, not verified recoveries**: a `scope_only` hit says
+        # the backward rule fired on the right advert, not that it read the right
+        # words. `tecnoempleo-799b12ca520d03c0e743` is the case that forces the
+        # distinction — a flattened field table with no sentence punctuation,
+        # where the negator the rule consumes answers a different field and the
+        # verdict is unchanged if the labelled field is flipped to `Si`.
+        # `test_a_field_table_negator_is_counted_though_it_answers_another_field`
+        # holds it.
         "negation_recall_hits_by_mechanism": mechanisms,
         "negation_recall_misses": misses,
         "negated_label_count": len(negated_labels),

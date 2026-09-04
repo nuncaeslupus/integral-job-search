@@ -20,8 +20,9 @@
   "negation_status": "unmeasured",
   "negation_recall_hits": 6,
   "negation_recall_hits_by_mechanism": {
-    "scope": 3,
-    "denies": 3
+    "scope_only": 3,
+    "denies_only": 3,
+    "both": 0
   },
   "negation_recall_misses": [
     "manfred-8386/process_formality: no cue settled the dimension",
