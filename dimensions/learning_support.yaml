@@ -44,33 +44,38 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "(training|learning|certification|education)\\s+(budget|allowance|stipend|reimbursement)"
+      - pattern: "(training|learning|certification|education)\\s+(budget|allowance|stipend|reimbursement)|paid\\s+(training|certifications?|conferences?)|conference\\s+days"
         value: 0.8
         negatable: true
-      - pattern: "continuous\\s+learning|free\\s+(english|language)\\s+lessons"
-        value: 0.7
+      - pattern: "continuous\\s+learning|free\\s+(english|language)\\s+lessons|professional\\s+development|learning\\s+opportunities"
+        value: 0.5
         negatable: false
       - pattern: "(we|they)\\s+(pay|fund|sponsor)\\s+[^.]{0,30}(training|certification|conference)"
         value: 0.6
         negatable: false
+    # `\bformaci` and not `formaci`: `informació` / `información` contains it,
+    # and this dimension is not evidenced by an advert mentioning information.
+    # `formació professional` is likewise excluded below — on these boards it
+    # names the qualification the candidate must already hold, not anything the
+    # employer offers.
     es:
-      - pattern: "presupuesto\\s+de\\s+formaci[óo]n|plan\\s+de\\s+formaci[óo]n"
+      - pattern: "presupuesto\\s+de\\s+\\bformaci[óo]n|plan\\s+de\\s+\\bformaci[óo]n|pla\\s+de\\s+\\bformaci[óo]|\\bformaci[óo]n?\\s+(a\\s+cargo\\s+de\\s+la\\s+empresa|a\\s+c[àa]rrec\\s+de\\s+l['’]?\\s*empresa|financiada|finan[çc]ada|pagada|especializada|especialitzada)|\\bformacions\\s+especialitzades|\\bformaci\\w*\\s+(i|y)\\s+certificaci"
         value: 0.8
         negatable: true
-      - pattern: "formaci[óo]n\\s+(continua|financiada|pagada|a\\s+cargo\\s+de\\s+la\\s+empresa)"
+      - pattern: "\\bformaci\\w*\\s+(continua|continuada|cont[íi]nua|internas?|permanentes?)|acceso\\s+(continuo\\s+)?a\\s+(la\\s+)?\\bformaci|acc[ée]s\\s+(continu\\s+)?a\\s+(la\\s+)?\\bformaci|\\bformaci\\w*\\s+(personalizad|personalitzad|t[éeè]cnic|a\\s+medida|a\\s+mida)"
         value: 0.7
         negatable: false
-      - pattern: "clases\\s+de\\s+ingl[ée]s|certificaciones?\\s+(pagadas|financiadas)"
+      - pattern: "clases\\s+de\\s+ingl[ée]s|classes\\s+d['’]angl[èe]s|certificacions?\\s+(pagadas|financiadas|pagades|finan[çc]ades)|desarrollo\\s+profesional|desenvolupament\\s+professional"
         value: 0.5
         negatable: false
     ca:
-      - pattern: "pla\\s+de\\s+formaci[óo]|formaci[óo]\\s+cont[ií]nua"
+      - pattern: "pla\\s+de\\s+\\bformaci[óo]|pressupost\\s+de\\s+\\bformaci[óo]|presupuesto\\s+de\\s+\\bformaci[óo]n|\\bformaci[óo]n?\\s+(a\\s+c[àa]rrec\\s+de\\s+l['’]?\\s*empresa|a\\s+cargo\\s+de\\s+la\\s+empresa|finan[çc]ada|financiada|pagada|especialitzada|especializada)|\\bformacions\\s+especialitzades|\\bformaci\\w*\\s+(i|y)\\s+certificaci"
         value: 0.8
         negatable: true
-      - pattern: "formaci[óo]\\s+(a\\s+c[àa]rrec\\s+de\\s+l'empresa|finançada)"
+      - pattern: "\\bformaci\\w*\\s+(cont[íi]nua|continuada|continua|internes?|internas?|permanents?|permanentes?)|acc[ée]s\\s+(continu\\s+)?a\\s+(la\\s+)?\\bformaci|acceso\\s+(continuo\\s+)?a\\s+(la\\s+)?\\bformaci|\\bformaci\\w*\\s+(personalitzad|personalizad|t[éeè]cnic|a\\s+mida|a\\s+medida)"
         value: 0.7
         negatable: false
-      - pattern: "classes\\s+d'angl[èe]s"
+      - pattern: "classes\\s+d['’]angl[èe]s|clases\\s+de\\s+ingl[ée]s|certificacions?\\s+(pagades|finan[çc]ades|pagadas|financiadas)|desenvolupament\\s+professional|desarrollo\\s+profesional"
         value: 0.5
         negatable: false
   gold:

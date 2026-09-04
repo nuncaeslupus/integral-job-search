@@ -53,6 +53,9 @@ extraction:
       - pattern: "progression\\s+framework|levelling"
         value: 0.7
         negatable: false
+      - pattern: "professional\\s+growth|opportunit(y|ies)\\s+to\\s+grow|opportunities\\s+for\\s+growth"
+        value: 0.5
+        negatable: false
     es:
       - pattern: "plan\\s+de\\s+carrera"
         value: 0.8
@@ -60,7 +63,7 @@ extraction:
       - pattern: "promoci[óo]n\\s+interna"
         value: 0.6
         negatable: false
-      - pattern: "desarrollo\\s+profesional"
+      - pattern: "desarrollo\\s+profesional|crecimiento\\s+profesional|creixement\\s+professional"
         value: 0.5
         negatable: false
     ca:
@@ -70,7 +73,7 @@ extraction:
       - pattern: "promoci[óo]\\s+interna"
         value: 0.6
         negatable: false
-      - pattern: "desenvolupament\\s+professional"
+      - pattern: "desenvolupament\\s+professional|creixement\\s+professional|crecimiento\\s+profesional"
         value: 0.5
         negatable: false
   gold:

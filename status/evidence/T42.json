@@ -3,7 +3,7 @@
   "leaks": [],
   "profile_strings_planted": 2,
   "outbound_payloads_scanned": 12,
-  "outbound_bytes_scanned": 21737,
+  "outbound_bytes_scanned": 21381,
   "annotations_computed": 12,
   "extraction_schema_forbids_a_candidate_field": true
 }

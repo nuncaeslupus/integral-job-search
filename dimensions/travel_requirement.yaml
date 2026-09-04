@@ -43,36 +43,64 @@ elicitation:
           vida personal?
 extraction:
   cues:
+    # The top cue reads 0.9 and not 0.8. 0.8 is not a rung this dimension has,
+    # and the committed gold below already records **0.9** for the advert that
+    # says "Disponibilidad para viajar" — so the cue had been disagreeing with
+    # the dimension's own gold, and one audit case had copied the 0.8 out of the
+    # code and called it the expected value.
+    #
+    # `puntual` sits on the 0.4 rung in every language now. It had been read as
+    # 0.8 for `viajes` and 0.4 for `desplazamientos` four lines apart in this one
+    # file, and the 0.4 tell — "framed as now and then" — is what the word means.
     en:
-      - pattern: "willing(ness)?\\s+to\\s+travel|travel\\s+required"
-        value: 0.8
+      - pattern: "willing(ness)?\\s+to\\s+travel|travel\\s+required|business\\s+trips?"
+        value: 0.9
         negatable: true
       - pattern: "relocat(e|ion)"
         value: 0.9
         negatable: false
-      - pattern: "no\\s+travel"
+      - pattern: "no\\s+travel|travel\\s+is\\s+not\\s+required|\\bno\\b[^.\\n]{0,30}\\btravel\\s+(is\\s+)?(required|needed|expected)|(travel|business\\s+trips?)[^.\\n]{0,20}\\bnot\\s+(required|needed|expected)|\\bno\\b[^.\\n]{0,30}\\brelocat(e|ion)\\b|relocat(e|ion)[^.\\n]{0,20}\\bnot\\s+(required|needed|expected)"
         value: 0.0
         denies: true
+      - pattern: "occasional\\s+(business\\s+)?(travel|trips?)|client\\s+(site\\s+)?visits|periodic\\s+(office\\s+)?presence|\\d{1,2}\\s*([-–]|to)?\\s*\\d{0,2}\\s*(business\\s+)?trips?\\s+(a|per)\\s+(year|month|quarter)"
+        value: 0.4
+        negatable: true
+    # Rung 0.4 is "client visits, or periodic presence at an office, framed as
+    # now and then". A driving licence or an own vehicle is **not** read here:
+    # `commute_burden.definition` claims exactly those words — "living locally,
+    # holding a driving licence, or providing your own vehicle. A condition on
+    # the person, distinct from `travel_requirement`, which is travel done as
+    # part of the job" — and carries its own 0.9 rung for them. Two dimensions
+    # reading one statement is not corroboration, it is a dealbreaker fired
+    # twice. Bare `desplazamientos` went with them: a *desplazamiento* is as
+    # often the daily commute as a work trip, and neither the 0.4 nor the 0.9
+    # tell is satisfied by a word that does not say which.
     es:
-      - pattern: "disponibilidad\\s+para\\s+viajar|viajes\\s+(frecuentes|puntuales)"
-        value: 0.8
+      - pattern: "disponibilidad\\s+para\\s+viajar|disponibilitat\\s+per\\s+(a\\s+)?viatjar|viajes\\s+frecuentes|viatges\\s+freq[üu]ents"
+        value: 0.9
         negatable: true
-      - pattern: "traslado|reubicaci[óo]n"
+      - pattern: "traslado|reubicaci[óo]n|trasllat"
         value: 0.9
         negatable: false
-      - pattern: "sin\\s+viajes|no\\s+viajes"
+      - pattern: "sin\\s+viajes|no\\s+viajes|sense\\s+viatges|sin\\s+despla[zç]amientos|sense\\s+despla[çc]aments|no\\s+se\\s+(requieren?|precisan?|necesitan?)\\s+(viajes|desplazamientos)|no\\s+es\\s+(requereixen|necessiten)\\s+(viatges|despla[çc]aments)|sin\\s+necesidad\\s+de\\s+viajar|sense\\s+necessitat\\s+de\\s+viatjar|\\bno\\b[^.\\n]{0,30}\\b(traslado|trasllat|reubicaci[óo]n?)\\b|sin\\s+(traslado|reubicaci[óo]n)|sense\\s+(trasllat|reubicaci[óo])"
         value: 0.0
         denies: true
+      - pattern: "disponibilidad\\s+para\\s+desplaz|disponibilitat\\s+per\\s+(a\\s+)?despla[çc]|desplazamientos?\\s+(puntuales|ocasionales|a\\s+clientes)|despla[çc]aments?\\s+(puntuals|ocasionals|a\\s+clients)|viajes\\s+puntuales|viatges\\s+puntuals|visitas\\s+a\\s+clientes|visites\\s+a\\s+clients|\\d{1,2}\\s*[-–a]?\\s*\\d{0,2}\\s*viajes?\\s+al?\\s+(a[ñn]o|mes|trimestre)|\\d{1,2}\\s*[-–a]?\\s*\\d{0,2}\\s*viat[gj]es?\\s+a\\s+l['’]?\\s*any"
+        value: 0.4
+        negatable: true
     ca:
-      - pattern: "disponibilitat\\s+per\\s+viatjar|viatges"
-        value: 0.8
+      - pattern: "disponibilitat\\s+per\\s+(a\\s+)?viatjar|viatges\\s+freq[üu]ents|disponibilidad\\s+para\\s+viajar|viajes\\s+frecuentes"
+        value: 0.9
         negatable: true
-      - pattern: "trasllat"
+      - pattern: "trasllat|traslado|reubicaci[óo]"
         value: 0.9
         negatable: false
-      - pattern: "sense\\s+viatges"
+      - pattern: "sense\\s+viatges|sin\\s+viajes|sense\\s+despla[çc]aments|sin\\s+despla[zç]amientos|no\\s+es\\s+(requereixen|necessiten)\\s+(viatges|despla[çc]aments)|no\\s+se\\s+(requieren?|precisan?|necesitan?)\\s+(viajes|desplazamientos)|sense\\s+necessitat\\s+de\\s+viatjar|sin\\s+necesidad\\s+de\\s+viajar|\\bno\\b[^.\\n]{0,30}\\b(trasllat|traslado|reubicaci[óo]n?)\\b|sense\\s+(trasllat|reubicaci[óo])|sin\\s+(traslado|reubicaci[óo]n)"
         value: 0.0
         denies: true
+      - pattern: "disponibilitat\\s+per\\s+(a\\s+)?despla[çc]|disponibilidad\\s+para\\s+desplaz|despla[çc]aments?\\s+(puntuals|ocasionals|a\\s+clients)|desplazamientos?\\s+(puntuales|ocasionales|a\\s+clientes)|viatges\\s+puntuals|viajes\\s+puntuales|visites\\s+a\\s+clients|visitas\\s+a\\s+clientes|\\d{1,2}\\s*[-–a]?\\s*\\d{0,2}\\s*viajes?\\s+al?\\s+(a[ñn]o|mes|trimestre)|\\d{1,2}\\s*[-–a]?\\s*\\d{0,2}\\s*viat[gj]es?\\s+a\\s+l['’]?\\s*any"
+        value: 0.4
+        negatable: true
   gold:
     - ad_id: tecnoempleo-450515d772aac3661b41
       language: es

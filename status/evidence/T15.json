@@ -1,5 +1,5 @@
 {
-  "extraction_macro_f1": 0.4943,
+  "extraction_macro_f1": 0.7567,
   "extraction_status": "measured",
   "label_floor": 10,
   "evaluation_label_count": 206,
@@ -81,32 +81,32 @@
   ],
   "extraction_f1_by_dimension": {
     "compensation_transparency": {
-      "f1": 0.6452,
+      "f1": 0.95,
       "n": 21,
-      "true_positives": 10,
+      "true_positives": 19,
       "false_positives": 0,
-      "false_negatives": 11
+      "false_negatives": 2
     },
     "contract_stability": {
-      "f1": 0.5185,
+      "f1": 0.9744,
       "n": 20,
-      "true_positives": 7,
+      "true_positives": 19,
       "false_positives": 0,
-      "false_negatives": 13
+      "false_negatives": 1
     },
     "english_demand": {
-      "f1": 0.7059,
+      "f1": 1.0,
       "n": 11,
-      "true_positives": 6,
+      "true_positives": 11,
       "false_positives": 0,
-      "false_negatives": 5
+      "false_negatives": 0
     },
     "learning_support": {
-      "f1": 0.4615,
+      "f1": 0.9474,
       "n": 10,
-      "true_positives": 3,
+      "true_positives": 9,
       "false_positives": 0,
-      "false_negatives": 7
+      "false_negatives": 1
     },
     "product_vs_services": {
       "f1": 0.1667,
@@ -116,32 +116,32 @@
       "false_negatives": 10
     },
     "remote_arrangement": {
-      "f1": 0.6957,
+      "f1": 0.9655,
       "n": 21,
-      "true_positives": 8,
+      "true_positives": 14,
       "false_positives": 0,
-      "false_negatives": 7
+      "false_negatives": 1
     },
     "schedule_flexibility": {
-      "f1": 0.5714,
+      "f1": 0.8,
       "n": 14,
       "true_positives": 2,
-      "false_positives": 2,
+      "false_positives": 0,
       "false_negatives": 1
     },
     "seniority_expectation": {
-      "f1": 0.6061,
+      "f1": 1.0,
       "n": 23,
-      "true_positives": 10,
+      "true_positives": 23,
       "false_positives": 0,
-      "false_negatives": 13
+      "false_negatives": 0
     },
     "talking_clients": {
-      "f1": 0.6667,
+      "f1": 0.75,
       "n": 10,
-      "true_positives": 5,
+      "true_positives": 6,
       "false_positives": 0,
-      "false_negatives": 5
+      "false_negatives": 4
     },
     "team_autonomy": {
       "f1": 0.0,
@@ -151,11 +151,11 @@
       "false_negatives": 10
     },
     "travel_requirement": {
-      "f1": 0.4,
+      "f1": 0.7692,
       "n": 10,
-      "true_positives": 2,
+      "true_positives": 5,
       "false_positives": 0,
-      "false_negatives": 6
+      "false_negatives": 3
     }
   },
   "dimensions_without_positives": [],
@@ -188,5 +188,15 @@
     "talking_clients",
     "team_autonomy",
     "travel_requirement"
+  ],
+  "dimensions_with_no_negative_class": [
+    "compensation_transparency",
+    "contract_stability",
+    "english_demand",
+    "learning_support",
+    "product_vs_services",
+    "seniority_expectation",
+    "talking_clients",
+    "team_autonomy"
   ]
 }
