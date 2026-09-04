@@ -12,10 +12,41 @@ sorted by `id`:
 | `language` | `es` / `en` / `ca`, detected with `py3langid` over the ad text |
 | `title`, `company` | as published |
 | `job_family` | the family the ad advertises for; `programming` is T4b's slice, the rest are T25's |
+| `draw` | the draw that produced the row, declared in [`corpus/draws.yaml`](../draws.yaml) |
 | `text` | the ad body, verbatim apart from HTML→text and whitespace collapsing |
 
 **No labels.** Labelling is T5, and it covers the `programming` 100 only — the six
 families T25 added are unlabelled raw text, which T26 sequences.
+
+## This is a measurement set, not a serving cache (T98)
+
+Two rules, both owner rulings, and neither is enforced by this document.
+
+**No candidate is ever served from these adverts.** An advert is perishable and a
+stored one is stale by definition; reading offers out of a cache is what let one live
+session return three adverts and call the market exhausted. Every candidate's adverts
+are fetched for them, at the moment, through the connectors. `integral.corpus_scope`
+asserts this over the code: the sourcing, offer-store, ranking and presentation modules
+may not reach the corpus at all.
+
+**With one exemption, and it is stated here because a rule stated in three documents
+drifts.** Step 5 — reaction elicitation (T9) — shows a candidate adverts drawn from
+this corpus on purpose: it is asking what they think of a job, not offering them one.
+`integral.reaction_elicit` is the only module permitted to read the corpus, its
+stimuli must come from the `elicitation` split, and that split must be disjoint from
+the `evaluation` split every metric is computed over. The bound is enforced in
+`integral.corpus_scope` (`EXEMPT_CORPUS_READERS`,
+`stimulus_pool_evaluation_overlaps`), not by this paragraph.
+
+**And this corpus is never one candidate's harvest.** A sample drawn against one
+person's profile is the shape of that person's queries and exclusions, so a number
+measured on it would be quoted as a number for everyone. So every row names the
+**draw** that produced it — a stated query shape, issued through the connectors with no
+candidate in the loop, and re-issuable, which a session harvest never is.
+`integral.corpus.load_ads` refuses a row that names no draw or carries a key tying it to
+a person; `integral.corpus_scope` checks that the draw is declared and that its
+specification still selects the row. `corpus/draws.yaml` is where a new draw is declared
+*before* it is collected.
 
 ## Provenance
 
@@ -142,14 +173,25 @@ Reading the corpus needs nothing but the stdlib:
 ```python
 from integral.corpus import load_ads, job_family_counts, language_counts
 
-ads = load_ads()  # raises on any entry without a resolvable source_url or a job_family
+ads = load_ads()  # every row is validated on the way in — see below
 job_family_counts(ads)  # {'administrative': 18, ..., 'programming': 100, ...}
 ```
 
-Collecting more needs the scraping stack and egress to the boards:
+`load_ads` raises `ValueError`, naming the file, the line and the ad, on a row that:
+
+* has no `source_url` beginning `https://` — http is refused at load rather than at the
+  gate, so a corpus cannot load here and fail the acceptance test there;
+* has no `text`, or only whitespace;
+* declares no `job_family` — it would count towards no family and block none;
+* names no `draw` — the corpus is drawn by specification, never saved from a search;
+* carries any key tying it to a person (`candidate`, `candidate_id`, `drawn_for`,
+  `for_candidate`, `profile`, `profile_id`, `search_id`, `session`, `session_id`).
+
+Collecting more needs the scraping stack and egress to the boards, and a draw declared
+in [`corpus/draws.yaml`](../draws.yaml) *before* the run:
 
 ```bash
-uv run --extra collect python tools/collect_ads.py \
+uv run --extra collect python tools/collect_ads.py --draw t4b-programming \
     --target-es 60 --target-en 25 --target-ca 15 --target-family 18
 uv run python -m integral.corpus     # recount → status/evidence/T4b.json and T25.json
 make test
