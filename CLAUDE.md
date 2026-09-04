@@ -309,6 +309,15 @@ archive-sensitive: `status/evidence/T100.json` names it, because
 `archive_sensitive_evidence_keys` compares the whole committed record across a
 simulated archive rather than trusting that one key was the only one.
 
+**One evidence key is now archive-*driven* by design, and it is not that finding.**
+Since D-27, `S8.json`'s `merged_tasks_with_an_unticked_plan_row` requires every task
+archived in `arsenal/tasks/_history/` with `status: merged` to carry a ticked `☑` row
+in `status/plan.md`. So **ticking the row is part of archiving the task**: a task PR
+that moves its file and leaves the plan alone turns `make evidence` red, by
+construction. That red is the check working — tick the row in the same commit. The
+denominator `merged_tasks_compared` is committed as a floor for T100's reason above,
+so it does not move.
+
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
 reached by it — so a fifth line added above cannot quietly go unrun (D-22).
