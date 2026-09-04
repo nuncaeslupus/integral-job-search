@@ -1032,15 +1032,37 @@ def serialise_body(body: Any) -> bytes:
     return json.dumps(body, allow_nan=False, ensure_ascii=False).encode("utf-8")
 
 
-def _carries_the_page_placeholder(node: Any) -> bool:
-    """Is `{page}` anywhere in this already-validated body?"""
+def _page_placeholder_paths(node: Any, where: str = "") -> list[str]:
+    """Every position in an already-validated body holding `{page}`.
+
+    Paths, not a boolean, because "is it anywhere" is the question that made
+    T109: a lone nested placeholder was refused at load and the *same* nested
+    placeholder loaded and substituted the moment a legal top-level one sat
+    beside it, so an author who hit the error and added `Page: "{page}"` to
+    satisfy it silently acquired a second substitution nothing declared. One
+    function answering *where* lets the load check and `build_list_requests`
+    be derived from a single rule instead of two readings that agree only on
+    the cases somebody happened to test.
+
+    A top-level value is reported as its bare key; anything deeper carries the
+    dots and `[index]`es of the walk, which is what the refusal quotes back.
+    """
     if isinstance(node, str):
-        return node == PAGE_PLACEHOLDER
+        return [where] if node == PAGE_PLACEHOLDER else []
     if isinstance(node, dict):
-        return any(_carries_the_page_placeholder(value) for value in node.values())
+        return [
+            path
+            for key, value in node.items()
+            if isinstance(key, str)
+            for path in _page_placeholder_paths(value, f"{where}.{key}" if where else key)
+        ]
     if isinstance(node, list):
-        return any(_carries_the_page_placeholder(item) for item in node)
-    return False
+        return [
+            path
+            for index, item in enumerate(node)
+            for path in _page_placeholder_paths(item, f"{where}[{index}]")
+        ]
+    return []
 
 
 class ListPage(Strict):
@@ -1232,7 +1254,8 @@ class ListPage(Strict):
         # `body_field` mode over a body with nothing to vary — and every page
         # is the same request, which is the duplicate fetch `mode: none`
         # already guards against, one layer down.
-        placeholder = self.body_json is not None and _carries_the_page_placeholder(self.body_json)
+        paths = [] if self.body_json is None else _page_placeholder_paths(self.body_json)
+        placeholder = bool(paths)
         if placeholder and self.pagination.mode != "body_field":
             raise ValueError(
                 f"list.body_json carries the {PAGE_PLACEHOLDER} placeholder but "
@@ -1256,6 +1279,23 @@ class ListPage(Strict):
                     f"pagination.param is {self.pagination.param!r} but that is not a "
                     f"top-level key of list.body_json holding {PAGE_PLACEHOLDER} — the key "
                     "carrying the page number is the one the pagination must name"
+                )
+            # T109. The check above is satisfied by the *named* key alone, so
+            # before this it passed over a body carrying a second placeholder
+            # somewhere else — and `build_list_requests` then substituted that
+            # one too, because it walked the whole structure. Same nested
+            # value, opposite verdict, decided by whether a legal sibling
+            # happened to be present: refused when alone, substituted when
+            # not. Only one position may hold the placeholder and it is the
+            # one `pagination.param` names, which is exactly what the request
+            # builder now varies.
+            extra = [path for path in paths if path != param]
+            if extra:
+                raise ValueError(
+                    f"list.body_json holds {PAGE_PLACEHOLDER} at {', '.join(sorted(extra))} "
+                    f"as well as at {param!r} — the key carrying the page number is the only "
+                    "one that may hold the placeholder, so a nested or second occurrence is "
+                    "a substitution nothing declared"
                 )
         return self
 
@@ -1533,24 +1573,33 @@ class ListRequest:
     body: bytes | None
 
 
-def _page_substituted(node: Any, page: int) -> Any:
-    """`node` with every `{page}` value replaced by the page **number**.
+def _page_substituted(body: Any, page: int, param: str | None) -> Any:
+    """`body` with the **one** declared page key replaced by the page number.
 
     The substitution is on the parsed structure, never on the serialised text.
     A string whose entire content is `"{page}"` becomes a JSON *number*, so a
     board expecting `{"Page": 2}` gets that and not `{"Page": "2"}`; nothing a
     connector wrote is ever concatenated into a string that is then parsed as
-    JSON, so the body's *shape* cannot vary by page. Everything else is
-    returned untouched — `_literal_body_violations` already refused any other
-    brace at load, so there is no second placeholder to miss here.
+    JSON, so the body's *shape* cannot vary by page.
+
+    Exactly one position varies, and it is the one `pagination.param` names.
+    This used to walk the whole structure replacing every `{page}` it found,
+    which read as harmless because `ListPage` was thought to refuse a body
+    with any other occurrence — it did not (T109), so a nested placeholder
+    beside a legal top-level one was substituted while the same nested
+    placeholder alone was refused at load. Both readers now come from
+    `_page_placeholder_paths`: the load check requires the named key to be the
+    only position, and this replaces that key and nothing else, so the two
+    cannot drift apart again by one being widened.
+
+    Defensive rather than trusting for the same reason `build_list_urls`
+    repeats its clamp: a `model_copy(update=...)` object never met the
+    validator, so the key is replaced only when it really holds the
+    placeholder.
     """
-    if isinstance(node, str):
-        return page if node == PAGE_PLACEHOLDER else node
-    if isinstance(node, dict):
-        return {key: _page_substituted(value, page) for key, value in node.items()}
-    if isinstance(node, list):
-        return [_page_substituted(item, page) for item in node]
-    return node
+    if param is None or not isinstance(body, dict) or body.get(param) != PAGE_PLACEHOLDER:
+        return body
+    return {**body, param: page}
 
 
 def build_list_requests(
@@ -1578,7 +1627,9 @@ def build_list_requests(
             url=url,
             method=page.method,
             headers={"Content-Type": JSON_CONTENT_TYPE},
-            body=serialise_body(_page_substituted(page.body_json, start + offset)),
+            body=serialise_body(
+                _page_substituted(page.body_json, start + offset, page.pagination.param)
+            ),
         )
         for offset, url in enumerate(urls)
     ]
