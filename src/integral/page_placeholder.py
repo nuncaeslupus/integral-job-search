@@ -84,6 +84,9 @@ RULE = (
     "nothing declared.",
     "R6: exactly the position R4 names varies from page to page, and it "
     "becomes the page NUMBER, not the digits as a string.",
+    "R6b: the page numbers substituted are counted from `pagination.start`, "
+    "which defaults to 1 — so the first two requests carry `start` and `start + 1` "
+    "(`Pagination.start`, `build_list_requests`).",
     "R7: `pagination.param` names a body key only under `mode: body_field`. "
     "Under any other mode — `query_param`, `path_segment` — it names a URL key, "
     "so no body position varies (`Pagination.mode`).",
@@ -161,8 +164,8 @@ PROBES: tuple[Probe, ...] = (
         varies=("Page",),
         values=(5, 6),
         start=5,
-        clause="R6 — the named key becomes the page number, counted from "
-        "`pagination.start` rather than from one",
+        clause="R6b — the page numbers are counted from `pagination.start`, "
+        "so the first two requests carry 5 and 6",
     ),
     Probe(
         name="nested placeholder, alone",

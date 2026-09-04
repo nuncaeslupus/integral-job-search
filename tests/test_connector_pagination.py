@@ -13,6 +13,7 @@ and not only the evidence run.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from typing import Any
 
@@ -157,12 +158,21 @@ def test_every_clause_of_the_rule_is_cited_by_some_probe() -> None:
     against, so the coverage is asserted by clause instead.
     """
     cited = " ".join(probe.clause for probe in page_placeholder.PROBES)
+    missing = []
     for clause in page_placeholder.RULE:
         identifier = clause.split(":", 1)[0]
-        assert identifier in cited, identifier
+        # Boundary-aware. A bare `in` made "R1" a prefix of "R1b", so deleting the
+        # ONLY R1 probe still passed on the R1b probe's citation — the exact probe
+        # this test was written to protect, satisfied for the other one
+        # (#338 fourth read, F-B). The lookarounds still tolerate a compound
+        # citation like "R4+R6 — …".
+        pattern = rf"(?<![0-9A-Za-z]){re.escape(identifier)}(?![0-9A-Za-z])"
+        if not re.search(pattern, cited):
+            missing.append(identifier)
+    assert not missing, missing
 
 
-@pytest.mark.parametrize("half", ("loads", "varies", "values"))
+@pytest.mark.parametrize("half", ("loads", "varies", "varies-missing", "values"))
 def test_a_deliberately_wrong_probe_table_is_reported(half: str) -> None:
     """The negative control, one arm per half of the comparison.
 
@@ -187,6 +197,18 @@ def test_a_deliberately_wrong_probe_table_is_reported(half: str) -> None:
         # all can report — the ones that load, plus every unvalidated one.
         wrong = tuple(replace(probe, varies=(*probe.varies, "no-such-key")) for probe in probes)
         expected = [probe for probe in probes if probe.loads or not probe.validated]
+    elif half == "varies-missing":
+        # The other direction, and the one the three arms left unasserted:
+        # emptying `varies` makes the implementation vary at a position the rule
+        # does not name, which is T109's originating defect and the most
+        # fail-open row this metric can emit. With only the arm above, hard-coding
+        # that branch's label to "fail-closed" was green (#338 fourth read, F-A).
+        wrong = tuple(replace(probe, varies=()) for probe in probes)
+        expected = [
+            probe
+            for probe in probes
+            if probe.varies and (probe.loads or not probe.validated)
+        ]
     else:
         # The digits as a string rather than the number — R6's second half,
         # which is a value and not a position.
@@ -221,6 +243,9 @@ def test_a_deliberately_wrong_probe_table_is_reported(half: str) -> None:
     elif half == "varies":
         fail_open = []
     else:
+        # `varies-missing` and `values` are both wholly fail-open: the first
+        # varies a position nothing declared, the second sends the page number as
+        # the wrong type.
         fail_open = expected
     assert measured["fail_open"] == len(fail_open), (half, measured["inconsistencies"])
 
