@@ -19,6 +19,16 @@
 # enumerates. (It is not `integral.repo_gate`, which is about the Makefile; this
 # header claimed `repo_gate` until the second-reader report on #333, F6.)
 #
+# HOW THAT ASSERTION WORKS, because it changes what an edit here has to survive:
+# `integral.verified_gate` no longer reads this file's text. Three rounds of
+# regex properties were defeated — the last by putting all twelve patterns in one
+# unused single-quoted string, and again in trailing `#` comments, both scoring
+# `verified_gate_defects: 0` over a script that ran nothing. It now RUNS this
+# script against throwaway git repositories and reads the verdict block, the exit
+# status and the filesystem afterwards. So nothing you write here satisfies it;
+# only what the script does when executed. Adding a comment cannot break it, and
+# hard-coding a PASS cannot pass it.
+#
 #   bash tools/verified_gate.sh <branch-or-sha>
 #   bash tools/verified_gate.sh                 # default: the local `HEAD` commit
 #
@@ -30,30 +40,44 @@
 set -uo pipefail
 
 # THE one place the gate command is written. `${gate_command}` is what runs and
-# what the verdict block reports, so those two cannot disagree — and the checker
-# anchors its "delegates to the aggregate target" property on this ASSIGNMENT,
-# not on the string appearing somewhere in the file. Second-reader report on
-# #333, F1: the pattern `make\s+host-gate` was satisfied by the header comments
-# alone, so a script whose run line said `make lint` — and a script that ran no
-# gate at all and hard-coded a PASS — both scored `verified_gate_defects == 0`,
-# while the block still printed the aggregate's name as the command it ran.
+# what the verdict block reports, so those two cannot disagree. The checker no
+# longer takes that on trust from the assignment: its probe Makefile makes every
+# target announce itself, and two contracts compare what the block SAYS ran with
+# what the probe SAW run. Declaring one command and running another is caught
+# from outside, which is where round 1's F1 mutation was invisible from inside.
 gate_command="make host-gate"
 
 ref="${1:-HEAD}"
 repo_root="$(git rev-parse --show-toplevel)"
 
-# `HEAD` is never asked of the remote. `git fetch origin HEAD` SUCCEEDS and sets
-# FETCH_HEAD to origin's DEFAULT BRANCH, and FETCH_HEAD is preferred below — so
-# the no-argument form used to measure `main` and print PASS while the branch the
-# caller was standing on had a genuinely failing gate (#333, F2, measured). The
-# guard also stops a FETCH_HEAD left by some earlier fetch being read as this
-# run's answer, since a fetch that never runs truncates nothing.
+# Only a ref that is a PLAIN NAME is ever asked of the remote. Everything else
+# is resolved locally, which is fail-CLOSED: the worst an over-strict rule does
+# is label a genuinely pushed commit "local ref", while the failure it replaces
+# was a green verdict about a commit the caller never named.
 #
-# `--` before the ref: without it a ref beginning with `-` is parsed by
-# `git fetch` as an option (#333, F9).
+# The rule this replaces was `[ "${ref}" != "HEAD" ]`, a blacklist of one string,
+# and a blacklist of one string is what `@` walked straight through. `@` is git's
+# documented synonym for `HEAD`; `git fetch origin -- @` SUCCEEDS and sets
+# FETCH_HEAD to origin's DEFAULT BRANCH, and FETCH_HEAD is preferred below. So on
+# 316cd6c, standing on a branch whose gate genuinely failed, `verified_gate.sh @`
+# printed origin/main's SHA and `PASS`, exit 0 — the same defect as #333's F2,
+# reached by a different spelling. `HEAD~0`, `HEAD^0`, `@{u}`, `HEAD@{1}` and `""`
+# are all the same shape.
+#
+# So: no leading `-`, and nothing outside `[A-Za-z0-9._/-]`, which excludes every
+# ref *expression* character (`@ ~ ^ : { }`) and the empty string, and admits
+# branch names, tags, `refs/…` and a bare SHA. The `--` before the ref stays as
+# defence in depth (#333, F9) even though nothing option-shaped now reaches it.
+case "${ref}" in
+  "" | HEAD) fetchable="no" ;;
+  -*) fetchable="no" ;;
+  *[!A-Za-z0-9._/-]*) fetchable="no" ;;
+  *) fetchable="yes" ;;
+esac
+
 sha=""
 resolved_from="local ref"
-if [ "${ref}" != "HEAD" ] && git -C "${repo_root}" fetch --quiet origin -- "${ref}" 2>/dev/null; then
+if [ "${fetchable}" = "yes" ] && git -C "${repo_root}" fetch --quiet origin -- "${ref}" 2>/dev/null; then
   sha="$(git -C "${repo_root}" rev-parse --verify --quiet "FETCH_HEAD^{commit}" 2>/dev/null || true)"
   [ -n "${sha}" ] && resolved_from="origin, fetched just now"
 fi
@@ -81,13 +105,22 @@ else
 fi
 
 tree="$(mktemp -d -t verified-gate-XXXXXX)"
+# Declared before `cleanup` reads it: `set -u` makes an unset variable inside the
+# trap an error, and an EXIT trap that errors is a cleanup that does not run.
+log=""
 # `worktree remove` alone leaves both the mktemp directory and the
-# `.git/worktrees/` registration behind when it fails (#333, F10). The two lines
-# after it are what make the cleanup unconditional rather than best-effort.
+# `.git/worktrees/` registration behind when it fails (#333, F10). The lines
+# after it are what make the cleanup unconditional rather than best-effort — and
+# the log joins them because the `rm -f` at the end of the happy path is not
+# reached when the gate command is interrupted. `nothing_survives_the_run_pass_or_fail`
+# runs the script with TMPDIR pointed at an empty directory of its own and fails
+# on any surviving `verified-gate*` entry, which is the log as much as the tree.
 cleanup() {
   git -C "${repo_root}" worktree remove --force "${tree}" >/dev/null 2>&1 || true
   rm -rf "${tree}" 2>/dev/null || true
   git -C "${repo_root}" worktree prune >/dev/null 2>&1 || true
+  [ -n "${log}" ] && rm -f "${log}" 2>/dev/null
+  return 0
 }
 trap cleanup EXIT
 
@@ -101,7 +134,7 @@ fi
 # staleness this script exists to rule out.
 find "${tree}" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
-log="$(mktemp -t verified-gate-log-XXXXXX)"
+log="$(mktemp -t verified-gate-log-XXXXXX)"  # removed by `cleanup`, on every path
 ( cd "${tree}" && ${gate_command} ) >"${log}" 2>&1
 status=$?
 
@@ -137,7 +170,6 @@ fi
 echo
 echo "Merge only while the pull request head is still \`${sha}\`. A push after this"
 echo "block was produced makes it evidence about a commit nobody is merging."
-rm -f "${log}"
 
 # Normalised, not passed through. `make` exits 2 when a recipe fails, and 2 is
 # this script's "cannot resolve the ref" — so passing the status through made a

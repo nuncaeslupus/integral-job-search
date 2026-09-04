@@ -228,12 +228,39 @@ delegates — it never lists targets — so it cannot fall behind the Makefile, 
 `integral.repo_gate`'s sibling `integral.verified_gate` (T121) asserts that it
 still does all of the above.
 
+**How that assertion works is the part worth knowing, because three rounds of
+the obvious answer were defeated.** `integral.verified_gate` does not read the
+script's text. Round 1 searched the file for `make\s+host-gate`, which the
+script's own header comments carried twice, so a script running `make lint` and
+a script with the gate deleted and `status=0` hard-coded both scored
+`verified_gate_defects == 0`. Round 2 added a comment-stripper and twelve
+patterns; round 3 put all twelve inside one unused single-quoted string, and
+again in *trailing* comments, and scored 0 both times over a script that
+resolved nothing and ran nothing. A `#`-line filter is not an executability
+test, and no thirteenth pattern fixes that.
+
+So the measurement is **behavioural**: ten named contracts, each of which builds
+a throwaway git repository — one a clone with a real bare `origin` — runs the
+script against it, and reads the verdict block, the exit status and the
+filesystem afterwards. `verified_gate_defects` is the number of contracts the
+script fails. Editing a comment cannot break it; hard-coding a PASS cannot pass
+it. The one thing still read rather than run is that **this file names the
+script**, which is D-22's prose half and not a claim about behaviour.
+
+The practical consequence for anyone editing `tools/verified_gate.sh`: run
+`uv run python -m integral.verified_gate` and read `failed_contracts`. It names
+what broke and what it observed, not which regex stopped matching.
+
 **Give it the ref.** With no argument it measures the local `HEAD`, which is
 usually right and is never the *pushed* commit by construction — and the block's
 `resolved` and `on origin` lines say which of the two you got, so read them before
 pasting. (Until the second-reader round on #333 the no-argument form fetched
 `HEAD` from origin, which git answers with the **default branch**: standing on a
-branch whose gate genuinely failed, a bare run printed `main`'s SHA and `PASS`.)
+branch whose gate genuinely failed, a bare run printed `main`'s SHA and `PASS`.
+The fix was a blacklist of the one string `"HEAD"`, and `@` — git's documented
+synonym for it — walked straight through: the same green verdict about `main`,
+reached by a different spelling. Only a plain ref name is now asked of the
+remote; `@`, `HEAD~0`, `HEAD^0`, `@{u}` and `""` all resolve locally.)
 
 Why a clean checkout rather than just running `make host-gate` where you stand:
 the working tree is **not what a reviewer merges**. Uncommitted edits, a staged
