@@ -495,9 +495,7 @@ def retracted_episode_texts(store: ProfileStore, master: CVMaster) -> frozenset[
     if not suppressed:
         return frozenset()
     texts = {
-        row.text
-        for row in log.rows()
-        if row.id in suppressed and row.kind not in _NEVER_A_STORY
+        row.text for row in log.rows() if row.id in suppressed and row.kind not in _NEVER_A_STORY
     }
     texts |= {
         episode.text

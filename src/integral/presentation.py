@@ -125,9 +125,7 @@ def _card_column(language: str | None = None) -> int:
 
 def _card_template(language: str | None = None) -> Template:
     column = _card_column(language)
-    rows = "\n".join(
-        f"  {_t(f'card_{row}', language) + ':':<{column}}${row}" for row in _CARD_ROWS
-    )
+    rows = "\n".join(f"  {_t(f'card_{row}', language) + ':':<{column}}${row}" for row in _CARD_ROWS)
     return Template(f"$marker$title — $company\n{rows}\n\n  $matters\n$outside")
 
 
@@ -233,16 +231,14 @@ def _salary(offer: Offer, language: str | None = None) -> str:
     period = ""
     if salary.period:
         key = f"period_{salary.period}"
-        period = "/" + (
-            _t(key, language) if key in _CATALOGUE["entries"] else salary.period
-        )
+        period = "/" + (_t(key, language) if key in _CATALOGUE["entries"] else salary.period)
     figures = _t("salary_range_join", language).join(
         f"{value:,.0f}" for value in (low, high) if value is not None
     )
     shown = f"{figures} {currency}{period}".strip()
     if salary.stated:
         return shown
-    return f'{shown} {_t("estimated_marker", language)} ({_t("estimate_basis", language)})'
+    return f"{shown} {_t('estimated_marker', language)} ({_t('estimate_basis', language)})"
 
 
 def _location(offer: Offer, language: str | None = None) -> str:
@@ -272,10 +268,7 @@ def _matters(explanation: Mapping[str, Any] | None, language: str | None = None)
 
 
 def _phrase(driver: Mapping[str, Any], language: str | None = None) -> str:
-    span = (
-        driver["evidence_span"]
-        or f"{driver['dimension']} ({_t('wording_not_kept', language)})"
-    )
+    span = driver["evidence_span"] or f"{driver['dimension']} ({_t('wording_not_kept', language)})"
     return f'"{span}" ({driver["contribution_eur_month"]:+,.0f} EUR/mo)'
 
 
@@ -309,7 +302,7 @@ def card(
         # whole card, and a card that is *not* flagged carries no empty row —
         # "nothing to weigh up" and "this row was left blank" are different
         # claims, the same distinction `_outside_block` draws.
-        marker=f'{_t("flag_marker", language)}\n' if flagged else "",
+        marker=f"{_t('flag_marker', language)}\n" if flagged else "",
         title=offer.title or _t("unknown", language),
         company=offer.company or _t("unknown", language),
         pay=pay,
@@ -379,8 +372,8 @@ def _excluded_block(
         return ""
     lines = [_excluded_line(entry, by_id, language) for entry in excluded]
     heading = (
-        f'{_t("excluded_heading", language)} ({len(excluded)}) '
-        f'{_t("excluded_explanation", language)}'
+        f"{_t('excluded_heading', language)} ({len(excluded)}) "
+        f"{_t('excluded_explanation', language)}"
     )
     return "\n".join(["", heading, *lines])
 
@@ -450,9 +443,7 @@ def render(
         # were the whole answer. The rest exists and is one word away, which is
         # the difference between a short list and a short *first* group.
         further = len(groups) - offset - 1
-        lines.append(
-            _t("more_groups", language).format(remaining=remaining, further=further)
-        )
+        lines.append(_t("more_groups", language).format(remaining=remaining, further=further))
     excluded = list(ranking.get("excluded", ()))
     if excluded:
         lines.append(_excluded_block(excluded, by_id, language))

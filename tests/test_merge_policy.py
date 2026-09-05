@@ -55,9 +55,7 @@ def test_the_configured_merge_policy_requires_ci() -> None:
     measured = merge_policy.measure()
     assert measured["gate_status"] == "measured", measured.get("unmeasured_reason")
     assert measured["merge_policy"] == "after-ci-and-review"
-    assert measured["merge_policy_ignores_ci"] == 0, measured[
-        "readings_that_say_ci_does_not_block"
-    ]
+    assert measured["merge_policy_ignores_ci"] == 0, measured["readings_that_say_ci_does_not_block"]
     assert measured["merge_policy_ignores_ci_evaluated"] == 8
 
 

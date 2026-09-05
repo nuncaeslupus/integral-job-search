@@ -89,7 +89,7 @@ def test_a_declined_recommendation_is_still_honoured(measured: dict[str, Any]) -
     coercive = read_close(
         "control",
         (
-            '"I\'d do traits next, because it reads your episodes — shall we? '
+            "\"I'd do traits next, because it reads your episodes — shall we? "
             'You need to answer these first."',
         ),
     )

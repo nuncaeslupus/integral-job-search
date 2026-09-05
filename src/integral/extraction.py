@@ -988,9 +988,7 @@ def measure(
     # it is named rather than left to be inferred from `true_positives == n`.
     # `false_positives` is still counted for these, and is still 0.
     measured["dimensions_with_no_negative_class"] = sorted(
-        d
-        for d, s in scored.items()
-        if s["true_positives"] + s["false_negatives"] == s["n"]
+        d for d, s in scored.items() if s["true_positives"] + s["false_negatives"] == s["n"]
     )
     if scored:
         measured["extraction_macro_f1"] = round(

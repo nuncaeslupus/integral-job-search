@@ -348,9 +348,7 @@ def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tasks: Path) -> tuple[
     return task_gate._main(["task_gate", "--write-evidence", str(target)]), target
 
 
-def test_a_healthy_synthetic_board_passes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_healthy_synthetic_board_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The control. Without it the three failures below could all be the harness."""
     exit_code, target = _run(monkeypatch, tmp_path, _board_of(tmp_path, 105, status_key_gates=25))
 

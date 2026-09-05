@@ -28,7 +28,7 @@ def test_a_failure_outranks_an_unmeasured_gate() -> None:
 
 
 def test_unmeasured_outranks_a_pass() -> None:
-    """"Cannot be scored yet" is not a pass — the reason `make evidence` prints
+    """ "Cannot be scored yet" is not a pass — the reason `make evidence` prints
     it rather than `ok`."""
     assert worst(0, 3) == 3
     assert worst(3, 0) == 3

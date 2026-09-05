@@ -104,9 +104,7 @@ def test_recall_is_refused_while_the_corpus_cannot_carry_it(
     assert audit["negated_label_count"] == len(expected)
 
 
-def _negated_ad(
-    index: int, text: str, quote: str, dimension: str = "on_call_load"
-) -> LabelledAd:
+def _negated_ad(index: int, text: str, quote: str, dimension: str = "on_call_load") -> LabelledAd:
     """One evaluation-split ad carrying a single negated label on `dimension`."""
     start = text.index(quote)
     return LabelledAd(
@@ -203,8 +201,7 @@ def test_a_denies_hit_is_not_credited_to_the_scope_rule(
     a number reported for ES, EN and CA alike.
     """
     store = [
-        _negated_ad(i, "Puesto estable. El equipo no hace guardias.", "guardias")
-        for i in range(5)
+        _negated_ad(i, "Puesto estable. El equipo no hace guardias.", "guardias") for i in range(5)
     ]
     store += [
         _negated_ad(5 + i, "Trabajo estable. Sin viajes.", "Sin viajes", "travel_requirement")
@@ -240,8 +237,7 @@ def test_a_hit_both_mechanisms_earn_is_credited_to_neither(
     have to change.
     """
     store = [
-        _negated_ad(i, "Sin guardias. El equipo no tiene guardias.", "guardias")
-        for i in range(10)
+        _negated_ad(i, "Sin guardias. El equipo no tiene guardias.", "guardias") for i in range(10)
     ]
 
     audit = negation_audit(store, list(dimensions.values()))
@@ -265,8 +261,8 @@ def test_the_three_mechanism_rows_sum_to_the_hit_count(
     """
     audit = negation_audit(load_store(STORE), list(dimensions.values()))
 
-    assert sum(audit["negation_recall_hits_by_mechanism"].values()) == (
-        audit["negation_recall_hits"]
+    assert (
+        sum(audit["negation_recall_hits_by_mechanism"].values()) == (audit["negation_recall_hits"])
     )
 
 

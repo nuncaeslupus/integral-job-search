@@ -1092,6 +1092,7 @@ def import_document(store: ProfileStore, path: Path) -> ImportResult:
     makes those two distinguishable after the call that could tell them apart
     has returned.
     """
+
     def logged(result: ImportResult) -> ImportResult:
         """Record the attempt, then hand it back. Every exit from this function
         goes through here — a `return ImportResult(...)` that skipped it would
@@ -1118,9 +1119,7 @@ def import_document(store: ProfileStore, path: Path) -> ImportResult:
             ImportResult(status="unavailable", doc_id=None, blocks_added=0, detail=str(exc))
         )
     except CVStoreError as exc:
-        return logged(
-            ImportResult(status="corrupt", doc_id=None, blocks_added=0, detail=str(exc))
-        )
+        return logged(ImportResult(status="corrupt", doc_id=None, blocks_added=0, detail=str(exc)))
 
     spans = _nonblank_spans(text)
     if not spans:

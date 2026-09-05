@@ -14,7 +14,8 @@ build:  ## build the wheel and sdist
 # through to whatever is on PATH — which silently works on a machine that has
 # one installed globally and fails on a clean one. The flag makes each target
 # self-contained from a fresh clone.
-lint:  ## ruff check + strict mypy
+lint:  ## ruff format --check + ruff check + strict mypy
+	uv run --extra dev ruff format --check .
 	uv run --extra dev ruff check .
 	uv run --extra dev mypy .
 

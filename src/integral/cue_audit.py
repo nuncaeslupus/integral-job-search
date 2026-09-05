@@ -135,12 +135,18 @@ CASES: tuple[AuditCase, ...] = (
     # ---------------------------------------------------------------- finding 1
     # remote_arrangement 0.5 was a strict superset of 1.0 in all three languages.
     AuditCase(
-        "remote_arrangement", "en", "Fully remote — anywhere in the EU.", 1.0,
+        "remote_arrangement",
+        "en",
+        "Fully remote — anywhere in the EU.",
+        1.0,
         "1.0 tell: 'the whole role is worked away from any company site'",
         "fail-open",
     ),
     AuditCase(
-        "remote_arrangement", "es", "Teletrabajo total desde cualquier lugar.", 1.0,
+        "remote_arrangement",
+        "es",
+        "Teletrabajo total desde cualquier lugar.",
+        1.0,
         "1.0 tell: 'the whole role is worked away from any company site'",
         "fail-open",
     ),
@@ -148,65 +154,98 @@ CASES: tuple[AuditCase, ...] = (
         # Returned 0.75 before the fix — the 1.0 and 0.5 cues matched the
         # *identical* span, which `cue_findings` containment does not drop
         # (it drops a match inside a strictly longer one). 0.75 is not a rung.
-        "remote_arrangement", "ca", "100% teletreball des de casa.", 1.0,
+        "remote_arrangement",
+        "ca",
+        "100% teletreball des de casa.",
+        1.0,
         "1.0 label: '100% teletreball'; the 0.5 tell asks for 'a split week'",
         "fail-open",
     ),
     AuditCase(
         # Returned 0.75 before the fix: two spans, in two sentences, neither
         # containing the other.
-        "remote_arrangement", "en", "Fully remote position. We are a remote company.", 1.0,
+        "remote_arrangement",
+        "en",
+        "Fully remote position. We are a remote company.",
+        1.0,
         "1.0 tell: 'the whole role is worked away from any company site'",
         "fail-open",
     ),
     AuditCase(
-        "remote_arrangement", "es", "Se ofrece teletrabajo.", None,
+        "remote_arrangement",
+        "es",
+        "Se ofrece teletrabajo.",
+        None,
         "0.5 tell: 'a split week — a stated number of days at home or in the office'",
         "fail-open",
     ),
     AuditCase(
-        "remote_arrangement", "en", "This is not a remote role.", None,
+        "remote_arrangement",
+        "en",
+        "This is not a remote role.",
+        None,
         "0.5 tell: 'a split week — a stated number of days at home or in the office'",
         "fail-open",
     ),
     AuditCase(
-        "remote_arrangement", "es", "2 días de teletrabajo a la semana.", 0.5,
+        "remote_arrangement",
+        "es",
+        "2 días de teletrabajo a la semana.",
+        0.5,
         "0.5 tell: 'a split week — a stated number of days at home or in the office'",
         "fail-closed",
     ),
     AuditCase(
-        "remote_arrangement", "ca", "Més del 50% de la jornada de teletreball.", 0.5,
+        "remote_arrangement",
+        "ca",
+        "Més del 50% de la jornada de teletreball.",
+        0.5,
         "0.5 tell: 'a split week — a stated number of days at home or in the office'",
         "fail-closed",
     ),
     AuditCase(
         # tecnoempleo strips the per-cent sign. Six evaluation-split adverts say
         # it this way and were being read one rung down.
-        "remote_arrangement", "es", "Modalidad 100 remoto, estable y a largo plazo.", 1.0,
+        "remote_arrangement",
+        "es",
+        "Modalidad 100 remoto, estable y a largo plazo.",
+        1.0,
         "1.0 tell: 'the whole role is worked away from any company site'",
         "fail-closed",
     ),
     AuditCase(
-        "remote_arrangement", "es", "Modalidad de trabajo: presencial.", 0.0,
+        "remote_arrangement",
+        "es",
+        "Modalidad de trabajo: presencial.",
+        0.0,
         "0.0 tell: 'the ad names an office, a work city, or full presence'",
         "correct",
     ),
     # ---------------------------------------------------------------- finding 2
     # A driving licence is `commute_burden`'s by that dimension's own definition.
     AuditCase(
-        "travel_requirement", "es", "Imprescindible carnet de conducir y vehículo propio.", None,
+        "travel_requirement",
+        "es",
+        "Imprescindible carnet de conducir y vehículo propio.",
+        None,
         "commute_burden.definition: 'holding a driving licence, or providing your own "
         "vehicle. A condition on the person, distinct from `travel_requirement`, which "
         "is travel done as part of the job'",
         "fail-open",
     ),
     AuditCase(
-        "commute_burden", "es", "Imprescindible carnet de conducir y vehículo propio.", 0.9,
+        "commute_burden",
+        "es",
+        "Imprescindible carnet de conducir y vehículo propio.",
+        0.9,
         "commute_burden 0.9 tell: 'a driving licence or your own vehicle is stated as required'",
         "fail-closed",
     ),
     AuditCase(
-        "travel_requirement", "es", "Se ofrece plus de desplazamiento.", None,
+        "travel_requirement",
+        "es",
+        "Se ofrece plus de desplazamiento.",
+        None,
         "0.4 tell: 'client visits, or periodic presence at an office, framed as now and then'",
         "fail-open",
     ),
@@ -214,25 +253,34 @@ CASES: tuple[AuditCase, ...] = (
     # `movilidad nacional` is offered as a benefit; PR #320's audit of
     # `concept_map.yaml` left "internal mobility across countries" unmapped.
     AuditCase(
-        "travel_requirement", "es",
-        "Beneficios: movilidad nacional e internacional dentro del grupo.", None,
+        "travel_requirement",
+        "es",
+        "Beneficios: movilidad nacional e internacional dentro del grupo.",
+        None,
         "0.9 tell: 'travel is part of the job, or the role requires moving to a stated place'",
         "fail-open",
     ),
     AuditCase(
-        "travel_requirement", "ca",
-        "Beneficis: mobilitat nacional i internacional dins del grup.", None,
+        "travel_requirement",
+        "ca",
+        "Beneficis: mobilitat nacional i internacional dins del grup.",
+        None,
         "0.9 tell: 'travel is part of the job, or the role requires moving to a stated place'",
         "fail-open",
     ),
     AuditCase(
-        "travel_requirement", "es",
-        "Disponibilidad para realizar 3-4 viajes al año, de 2-3 días máximo.", 0.4,
+        "travel_requirement",
+        "es",
+        "Disponibilidad para realizar 3-4 viajes al año, de 2-3 días máximo.",
+        0.4,
         "0.4 tell: 'client visits, or periodic presence at an office, framed as now and then'",
         "fail-closed",
     ),
     AuditCase(
-        "travel_requirement", "en", "Occasional business trips.", 0.4,
+        "travel_requirement",
+        "en",
+        "Occasional business trips.",
+        0.4,
         "0.4 tell: 'client visits, or periodic presence at an office, framed as now and then'",
         "fail-open",
     ),
@@ -246,12 +294,18 @@ CASES: tuple[AuditCase, ...] = (
         # "Disponibilidad para viajar" already recorded 0.9 for that same cue, so
         # the cue was disagreeing with the dimension's own gold. Cue and case now
         # both say 0.9, which is what the tell describes.
-        "travel_requirement", "en", "Frequent business trips to client offices.", 0.9,
+        "travel_requirement",
+        "en",
+        "Frequent business trips to client offices.",
+        0.9,
         "0.9 tell: 'travel is part of the job, or the role requires moving to a stated place'",
         "correct",
     ),
     AuditCase(
-        "travel_requirement", "es", "No se requieren desplazamientos.", 0.0,
+        "travel_requirement",
+        "es",
+        "No se requieren desplazamientos.",
+        0.0,
         "0.0 tell: 'the ad asks for no travel and names no relocation'",
         "fail-open",
     ),
@@ -260,22 +314,34 @@ CASES: tuple[AuditCase, ...] = (
     # `_is_negated` only looks *backwards* — so a negator that follows the cue is
     # reachable by nothing but the deny cue, which must span the positive match.
     AuditCase(
-        "english_demand", "en", "English skills not required.", 0.0,
+        "english_demand",
+        "en",
+        "English skills not required.",
+        0.0,
         "0.0 tell: 'the ad says English is not needed, or asks for none at all'",
         "fail-open",
     ),
     AuditCase(
-        "english_demand", "en", "No advanced English is required for this role.", 0.0,
+        "english_demand",
+        "en",
+        "No advanced English is required for this role.",
+        0.0,
         "0.0 tell: 'the ad says English is not needed, or asks for none at all'",
         "fail-open",
     ),
     AuditCase(
-        "english_demand", "es", "No se requiere inglés.", 0.0,
+        "english_demand",
+        "es",
+        "No se requiere inglés.",
+        0.0,
         "0.0 tell: 'the ad says English is not needed, or asks for none at all'",
         "fail-open",
     ),
     AuditCase(
-        "english_demand", "en", "Fluent English is required.", 1.0,
+        "english_demand",
+        "en",
+        "Fluent English is required.",
+        1.0,
         "1.0 tell: 'C1/fluent/native, or English named as the working language'",
         "fail-closed",
     ),
@@ -284,19 +350,28 @@ CASES: tuple[AuditCase, ...] = (
     # tell says "asks for none at all", which an ad asking for basic English does
     # not. Neither rung fits, so no cue may claim one.
     AuditCase(
-        "english_demand", "es", "Inglés nivel básico.", None,
+        "english_demand",
+        "es",
+        "Inglés nivel básico.",
+        None,
         "0.6 tell: 'B1/B2, or enough to read documentation and follow written threads'",
         "fail-open",
     ),
     AuditCase(
-        "english_demand", "ca", "Anglès bàsic.", None,
+        "english_demand",
+        "ca",
+        "Anglès bàsic.",
+        None,
         "0.6 tell: 'B1/B2, or enough to read documentation and follow written threads'",
         "fail-open",
     ),
     AuditCase(
         # The `suficiente` half of the finding is rejected: the 0.6 tell says in
         # its own words "enough to read documentation".
-        "english_demand", "es", "Nivel de inglés suficiente para leer documentación.", 0.6,
+        "english_demand",
+        "es",
+        "Nivel de inglés suficiente para leer documentación.",
+        0.6,
         "0.6 tell: 'B1/B2, or enough to read documentation and follow written threads'",
         "correct",
     ),
@@ -305,27 +380,42 @@ CASES: tuple[AuditCase, ...] = (
     # `ad.text`, never `ad.title`, so a body-text cue cannot tell the offered role
     # from a duty line or from somebody else's job.
     AuditCase(
-        "seniority_expectation", "es", "Será responsable de mantener la documentación.", None,
+        "seniority_expectation",
+        "es",
+        "Será responsable de mantener la documentación.",
+        None,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-open",
     ),
     AuditCase(
-        "seniority_expectation", "es", "Reportarás al jefe de equipo.", None,
+        "seniority_expectation",
+        "es",
+        "Reportarás al jefe de equipo.",
+        None,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-open",
     ),
     AuditCase(
-        "seniority_expectation", "es", "Buscamos un/a Jefe de Obra para la zona norte.", 0.8,
+        "seniority_expectation",
+        "es",
+        "Buscamos un/a Jefe de Obra para la zona norte.",
+        0.8,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-closed",
     ),
     AuditCase(
-        "seniority_expectation", "en", "Experience with lead generation campaigns.", None,
+        "seniority_expectation",
+        "en",
+        "Experience with lead generation campaigns.",
+        None,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-open",
     ),
     AuditCase(
-        "seniority_expectation", "en", "Lead Data Engineer, Barcelona.", 0.8,
+        "seniority_expectation",
+        "en",
+        "Lead Data Engineer, Barcelona.",
+        0.8,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-closed",
     ),
@@ -334,34 +424,52 @@ CASES: tuple[AuditCase, ...] = (
     # rung; and *valorará* (desirable) was folded into the same alternation as
     # *requiere* (required), erasing the distinction the two rungs exist to draw.
     AuditCase(
-        "seniority_expectation", "es", "Sin experiencia previa en el sector.", 0.2,
+        "seniority_expectation",
+        "es",
+        "Sin experiencia previa en el sector.",
+        0.2,
         "0.2 tell: 'no experience required, or an explicit junior/graduate/trainee opening'",
         "fail-open",
     ),
     AuditCase(
-        "seniority_expectation", "es", "Se valorará experiencia en Python.", None,
+        "seniority_expectation",
+        "es",
+        "Se valorará experiencia en Python.",
+        None,
         "0.5 tell: 'a few years asked for, or a plain practitioner title with no seniority word'",
         "fail-open",
     ),
     AuditCase(
-        "seniority_expectation", "es", "Experiencia mínima de 2 años en el puesto.", 0.5,
+        "seniority_expectation",
+        "es",
+        "Experiencia mínima de 2 años en el puesto.",
+        0.5,
         "0.5 tell: 'a few years asked for, or a plain practitioner title with no seniority word'",
         "fail-closed",
     ),
     AuditCase(
-        "seniority_expectation", "ca", "Sense experiència prèvia.", 0.2,
+        "seniority_expectation",
+        "ca",
+        "Sense experiència prèvia.",
+        0.2,
         "0.2 tell: 'no experience required, or an explicit junior/graduate/trainee opening'",
         "correct",
     ),
     # ---------------------------------------------------------------- finding 8
     AuditCase(
-        "compensation_transparency", "es", "Se ofrecen 12 o 14 pagas.", None,
+        "compensation_transparency",
+        "es",
+        "Se ofrecen 12 o 14 pagas.",
+        None,
         "definition: 'a stated band, a figure, or nothing but competitive. A property of "
         "the ad's wording, not of the amount'; 0.9 tell: 'an actual amount or range'",
         "fail-open",
     ),
     AuditCase(
-        "compensation_transparency", "ca", "Salari en 12 pagues.", None,
+        "compensation_transparency",
+        "ca",
+        "Salari en 12 pagues.",
+        None,
         "0.9 tell: 'an actual amount or range the reader can act on'",
         "fail-open",
     ),
@@ -369,23 +477,34 @@ CASES: tuple[AuditCase, ...] = (
     # Any euro amount anywhere scored 0.9. The English band cue was already
     # anchored as a *band*; the Spanish figure branches now are too.
     AuditCase(
-        "compensation_transparency", "es",
-        "Ayuda de 1.000 € para material de teletrabajo.", None,
+        "compensation_transparency",
+        "es",
+        "Ayuda de 1.000 € para material de teletrabajo.",
+        None,
         "0.9 tell: 'an actual amount or range the reader can act on' — of what the role pays",
         "fail-open",
     ),
     AuditCase(
-        "compensation_transparency", "es", "Seguro de vida de 30.000 euros.", None,
+        "compensation_transparency",
+        "es",
+        "Seguro de vida de 30.000 euros.",
+        None,
         "0.9 tell: 'an actual amount or range the reader can act on' — of what the role pays",
         "fail-open",
     ),
     AuditCase(
-        "compensation_transparency", "es", "Salario 35.000 € brutos anuales.", 0.9,
+        "compensation_transparency",
+        "es",
+        "Salario 35.000 € brutos anuales.",
+        0.9,
         "0.9 tell: 'an actual amount or range the reader can act on'",
         "fail-closed",
     ),
     AuditCase(
-        "compensation_transparency", "es", "Banda salarial de 30.000 a 40.000 €.", 0.9,
+        "compensation_transparency",
+        "es",
+        "Banda salarial de 30.000 a 40.000 €.",
+        0.9,
         "0.9 tell: 'an actual amount or range the reader can act on'",
         "fail-closed",
     ),
@@ -393,9 +512,12 @@ CASES: tuple[AuditCase, ...] = (
         # The mild finding asking for more than 0.2 here is rejected: the
         # definition's second sentence settles it — this is a property of the
         # ad's wording, and the wording carries a word where a number should be.
-        "compensation_transparency", "es", "Salario según convenio.", 0.2,
+        "compensation_transparency",
+        "es",
+        "Salario según convenio.",
+        0.2,
         "0.2 tell: \"'competitive salary', 'salary according to experience' — a word "
-        "where a number should be\"",
+        'where a number should be"',
         "correct",
     ),
     # --------------------------------------------------------------- finding 10
@@ -403,34 +525,42 @@ CASES: tuple[AuditCase, ...] = (
     # has clients; being placed *with* them is the rung. Corroboration cannot see
     # two agreeing matches that are both wrong.
     AuditCase(
-        "product_vs_services", "es",
+        "product_vs_services",
+        "es",
         "Buscamos una persona para incorporarse a un equipo en crecimiento. Proyecto estable.",
         None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
         "fail-open",
     ),
     AuditCase(
-        "product_vs_services", "es",
-        "Nuestros clientes confían en nosotros. Proyecto estable y a largo plazo.", None,
+        "product_vs_services",
+        "es",
+        "Nuestros clientes confían en nosotros. Proyecto estable y a largo plazo.",
+        None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
         "fail-open",
     ),
     AuditCase(
-        "product_vs_services", "en",
+        "product_vs_services",
+        "en",
         "We are a product company. Hiring a Solutions Consultant. Our consultants love it.",
         None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
         "fail-open",
     ),
     AuditCase(
-        "product_vs_services", "en",
-        "Experience integrating SaaS platforms for our clients is a plus.", None,
+        "product_vs_services",
+        "en",
+        "Experience integrating SaaS platforms for our clients is a plus.",
+        None,
         "0.7 tell: 'the thing you build is the thing the employer sells'",
         "fail-open",
     ),
     AuditCase(
-        "product_vs_services", "es",
-        "Somos partner estratégico de Microsoft y partner tecnológico de SAP.", None,
+        "product_vs_services",
+        "es",
+        "Somos partner estratégico de Microsoft y partner tecnológico de SAP.",
+        None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
         "fail-open",
     ),
@@ -447,33 +577,48 @@ CASES: tuple[AuditCase, ...] = (
         # refused to settle on it. The owner's label on
         # `tecnoempleo-5daa18bff2393309c941` cites exactly this clause, so the cost
         # of A1 is recorded here rather than left to be inferred from a macro-F1.
-        "product_vs_services", "es",
+        "product_vs_services",
+        "es",
         "Buscamos los mejores profesionales para nuestros clientes y ofrecemos a nuestros "
-        "candidatos los mejores proyectos.", None,
+        "candidatos los mejores proyectos.",
+        None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their "
         "projects' — met once; corroboration (T59) withholds it on a single match",
-        "fail-closed", matches=1,
+        "fail-closed",
+        matches=1,
     ),
     # --------------------------------------------------------------- finding 11
     AuditCase(
-        "learning_support", "es", "Plan de carrera dentro de la compañía.", None,
+        "learning_support",
+        "es",
+        "Plan de carrera dentro de la compañía.",
+        None,
         "learning_support.definition: 'What the employer puts behind learning'; "
         "career_progression.definition: 'a named path upward — levels, a career plan'",
         "fail-open",
     ),
     AuditCase(
-        "learning_support", "en", "Career path and promotion criteria are defined.", None,
+        "learning_support",
+        "en",
+        "Career path and promotion criteria are defined.",
+        None,
         "learning_support.definition: 'What the employer puts behind learning'; "
         "career_progression 0.8 tell: 'levels, a career plan, or stated promotion criteria'",
         "fail-open",
     ),
     AuditCase(
-        "career_progression", "es", "Plan de carrera dentro de la compañía.", 0.8,
+        "career_progression",
+        "es",
+        "Plan de carrera dentro de la compañía.",
+        0.8,
         "career_progression 0.8 tell: 'levels, a career plan, or stated promotion criteria'",
         "fail-closed",
     ),
     AuditCase(
-        "learning_support", "es", "Acceso continuo a formación técnica.", 0.7,
+        "learning_support",
+        "es",
+        "Acceso continuo a formación técnica.",
+        0.7,
         "definition: 'What the employer puts behind learning: paid training, certification "
         "budgets, conference or language classes'",
         "fail-closed",
@@ -482,7 +627,10 @@ CASES: tuple[AuditCase, ...] = (
     AuditCase(
         # "To be agreed with the employer" is nothing stated — which is exactly
         # how `compensation_transparency` reads the identical idiom.
-        "schedule_flexibility", "es", "Horario a convenir.", None,
+        "schedule_flexibility",
+        "es",
+        "Horario a convenir.",
+        None,
         "0.7 tell: 'asynchronous work, compressed weeks, or hours the person genuinely sets'",
         "fail-open",
     ),
@@ -492,7 +640,10 @@ CASES: tuple[AuditCase, ...] = (
         # its own words, and what this dimension measures is "how durable the
         # engagement is", which a contract that stops every year is not. The
         # error direction is fail-closed either way, and that is the cheaper one.
-        "contract_stability", "es", "Contrato fijo discontinuo.", 0.3,
+        "contract_stability",
+        "es",
+        "Contrato fijo discontinuo.",
+        0.3,
         "0.3 tell: 'a contract with a stated end — a project, a cover, a season'",
         "correct",
     ),
@@ -510,39 +661,55 @@ CASES: tuple[AuditCase, ...] = (
         # The load-bearing case: two agreeing matches, both wrong, which is exactly
         # what this file's own header says corroboration cannot detect. It settled
         # at -0.5 on wording that never says whose product you would build.
-        "product_vs_services", "es",
+        "product_vs_services",
+        "es",
         "Ofrecemos a nuestros candidatos un proceso ágil. Proyecto estable dentro de "
-        "una empresa líder en su sector.", None,
+        "una empresa líder en su sector.",
+        None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "product_vs_services", "es",
-        "Ofrecemos a nuestros candidatos un proceso de selección ágil.", None,
+        "product_vs_services",
+        "es",
+        "Ofrecemos a nuestros candidatos un proceso de selección ágil.",
+        None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "product_vs_services", "es", "Proyecto estable dentro de una empresa líder.", None,
+        "product_vs_services",
+        "es",
+        "Proyecto estable dentro de una empresa líder.",
+        None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "product_vs_services", "ca",
+        "product_vs_services",
+        "ca",
         "Oferim als nostres candidats un procés àgil. Projecte estable dins d'una "
-        "empresa líder del sector.", None,
+        "empresa líder del sector.",
+        None,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
         # And the half a deletion never proves on its own: the legitimate placement
         # cue is still there and still reads placement when an advert states it
         # twice, which is what the bipolar rule asks for.
-        "product_vs_services", "es",
+        "product_vs_services",
+        "es",
         "En Arelance buscamos los mejores profesionales para nuestros clientes. "
-        "Trabajarás en las oficinas del cliente.", -0.5,
+        "Trabajarás en las oficinas del cliente.",
+        -0.5,
         "-0.7 tell: 'you are placed with the employer's clients, or billed into their projects'",
-        "fail-closed", matches=2,
+        "fail-closed",
+        matches=2,
     ),
     # -------------------------------------------------------------------- A2
     # feinaactiva renders "Contracte laboral indefinit" on Spanish-body adverts,
@@ -551,22 +718,34 @@ CASES: tuple[AuditCase, ...] = (
     # neither stem reaches the other spelling. 33 Spanish-language corpus adverts
     # carry that field and 29 got no reading at all.
     AuditCase(
-        "contract_stability", "es", "Contracte laboral indefinit", 0.9,
+        "contract_stability",
+        "es",
+        "Contracte laboral indefinit",
+        0.9,
         "0.9 tell: 'an open-ended employment contract, stated as such'",
         "fail-closed",
     ),
     AuditCase(
-        "contract_stability", "ca", "Contrato indefinido", 0.9,
+        "contract_stability",
+        "ca",
+        "Contrato indefinido",
+        0.9,
         "0.9 tell: 'an open-ended employment contract, stated as such'",
         "fail-closed",
     ),
     AuditCase(
-        "contract_stability", "es", "Contracte temporal per substitució.", 0.3,
+        "contract_stability",
+        "es",
+        "Contracte temporal per substitució.",
+        0.3,
         "0.3 tell: 'a contract with a stated end — a project, a cover, a season'",
         "fail-closed",
     ),
     AuditCase(
-        "contract_stability", "ca", "Contrato temporal.", 0.3,
+        "contract_stability",
+        "ca",
+        "Contrato temporal.",
+        0.3,
         "0.3 tell: 'a contract with a stated end — a project, a cover, a season'",
         "fail-closed",
     ),
@@ -574,7 +753,10 @@ CASES: tuple[AuditCase, ...] = (
         # `feinaactiva-FA92318598` in miniature — a Spanish-language trades advert
         # whose only structured fields are Catalan. It read *nothing at all* on the
         # branch head, which is what took `D-19.trades.ads_reached` to 17 of 18.
-        "contract_stability", "es", "Contracte laboral indefinit\n\nJornada intensiva", 0.9,
+        "contract_stability",
+        "es",
+        "Contracte laboral indefinit\n\nJornada intensiva",
+        0.9,
         "0.9 tell: 'an open-ended employment contract, stated as such'",
         "fail-closed",
     ),
@@ -585,17 +767,26 @@ CASES: tuple[AuditCase, ...] = (
     # narrowed `lead` to `lead <role-noun>` in the same pattern string, for
     # exactly this reason.
     AuditCase(
-        "seniority_expectation", "en", "Join our staff of 200 engineers.", None,
+        "seniority_expectation",
+        "en",
+        "Join our staff of 200 engineers.",
+        None,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-open",
     ),
     AuditCase(
-        "seniority_expectation", "en", "We provide staff augmentation for banks.", None,
+        "seniority_expectation",
+        "en",
+        "We provide staff augmentation for banks.",
+        None,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-open",
     ),
     AuditCase(
-        "seniority_expectation", "en", "Staff discount and free lunch.", None,
+        "seniority_expectation",
+        "en",
+        "Staff discount and free lunch.",
+        None,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-open",
     ),
@@ -604,18 +795,27 @@ CASES: tuple[AuditCase, ...] = (
         # leads from — somebody else's job. `head of` still claims it, which is a
         # separate finding already recorded above; what must not happen is `Chief
         # of Staff` adding a second match to it.
-        "seniority_expectation", "en", "Titles such as Head of People or Chief of Staff.", 0.8,
+        "seniority_expectation",
+        "en",
+        "Titles such as Head of People or Chief of Staff.",
+        0.8,
         "0.8 tell: 'senior/lead/principal in the title' — reached by 'head of' alone",
-        "fail-open", matches=1,
+        "fail-open",
+        matches=1,
     ),
     AuditCase(
-        "seniority_expectation", "en",
-        "As a Staff Software Engineer you will operate across teams.", 0.8,
+        "seniority_expectation",
+        "en",
+        "As a Staff Software Engineer you will operate across teams.",
+        0.8,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-closed",
     ),
     AuditCase(
-        "seniority_expectation", "en", "Senior Backend Engineer, Madrid.", 0.8,
+        "seniority_expectation",
+        "en",
+        "Senior Backend Engineer, Madrid.",
+        0.8,
         "0.8 tell: 'senior/lead/principal in the title, or a stated floor of many years'",
         "fail-closed",
     ),
@@ -623,26 +823,37 @@ CASES: tuple[AuditCase, ...] = (
     # The junior cue carried `sin experiencia previa` with `negatable: false`, so
     # an advert *refusing* candidates without experience read as a junior opening.
     AuditCase(
-        "seniority_expectation", "es",
-        "No se valorarán perfiles sin experiencia previa en el sector.", -0.2,
+        "seniority_expectation",
+        "es",
+        "No se valorarán perfiles sin experiencia previa en el sector.",
+        -0.2,
         "0.2 tell: 'no experience required, or an explicit junior/graduate/trainee "
         "opening' — this advert denies it, and a negated match is evidence against",
-        "fail-open", negated=True,
+        "fail-open",
+        negated=True,
     ),
     AuditCase(
         # The same defect in Catalan, and there it is live: `feinaactiva-FA92320052`
         # says this and also states "Experiència 2 anys".
-        "seniority_expectation", "ca", "No s'entrevistarà candidats sense experiència.", -0.2,
+        "seniority_expectation",
+        "ca",
+        "No s'entrevistarà candidats sense experiència.",
+        -0.2,
         "0.2 tell: 'no experience required, or an explicit junior/graduate/trainee "
         "opening' — this advert denies it, and a negated match is evidence against",
-        "fail-open", negated=True,
+        "fail-open",
+        negated=True,
     ),
     AuditCase(
         # And the one that must not flip: the negator is the cue's own first word,
         # with nothing before it to govern the match.
-        "seniority_expectation", "ca", "Experiència en restauració o sense experiència.", 0.2,
+        "seniority_expectation",
+        "ca",
+        "Experiència en restauració o sense experiència.",
+        0.2,
         "0.2 tell: 'no experience required, or an explicit junior/graduate/trainee opening'",
-        "correct", negated=False,
+        "correct",
+        negated=False,
     ),
     # ---------------------------------------------------------------- A3 / F6
     # This PR rewrote travel's denial cues and did not extend them to relocation,
@@ -651,33 +862,51 @@ CASES: tuple[AuditCase, ...] = (
     # this dimension already answers a stated denial with its 0.0 rung — which the
     # 0.0 tell names in its own words — and -0.9 is not a rung it has.
     AuditCase(
-        "travel_requirement", "en", "No relocation is required.", 0.0,
+        "travel_requirement",
+        "en",
+        "No relocation is required.",
+        0.0,
         "0.0 tell: 'the ad asks for no travel and names no relocation'",
-        "fail-open", negated=True,
+        "fail-open",
+        negated=True,
     ),
     AuditCase(
-        "travel_requirement", "es", "No se requiere traslado.", 0.0,
+        "travel_requirement",
+        "es",
+        "No se requiere traslado.",
+        0.0,
         "0.0 tell: 'the ad asks for no travel and names no relocation'",
-        "fail-open", negated=True,
+        "fail-open",
+        negated=True,
     ),
     AuditCase(
-        "travel_requirement", "ca", "No es requereix trasllat.", 0.0,
+        "travel_requirement",
+        "ca",
+        "No es requereix trasllat.",
+        0.0,
         "0.0 tell: 'the ad asks for no travel and names no relocation'",
-        "fail-open", negated=True,
+        "fail-open",
+        negated=True,
     ),
     AuditCase(
         # Unchanged, and pinned so the denial above cannot swallow it.
-        "travel_requirement", "en", "Relocation to Barcelona is required.", 0.9,
+        "travel_requirement",
+        "en",
+        "Relocation to Barcelona is required.",
+        0.9,
         "0.9 tell: 'travel is part of the job, or the role requires moving to a stated place'",
-        "fail-closed", negated=False,
+        "fail-closed",
+        negated=False,
     ),
     # ---------------------------------------------------------------- A3 / F8
     # The English 0.4 rung had no numeric-frequency alternative though both its ES
     # and CA twins do — and the Spanish equivalent of this sentence is already a
     # committed fixture at 0.4, twenty cases above.
     AuditCase(
-        "travel_requirement", "en",
-        "The role involves 3-4 business trips a year of 2-3 days each.", 0.4,
+        "travel_requirement",
+        "en",
+        "The role involves 3-4 business trips a year of 2-3 days each.",
+        0.4,
         "0.4 tell: 'client visits, or periodic presence at an office, framed as now and then'",
         "fail-open",
     ),
@@ -687,29 +916,42 @@ CASES: tuple[AuditCase, ...] = (
     # The audit table already held this exact string — tested against
     # `schedule_flexibility`, not against the dimension it broke.
     AuditCase(
-        "compensation_transparency", "es", "Horario a convenir.", None,
+        "compensation_transparency",
+        "es",
+        "Horario a convenir.",
+        None,
         "definition: 'Whether the ad states what the role pays'; 0.2 tell: 'a word "
         "where a number should be'",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "compensation_transparency", "ca", "Horari a convenir.", None,
+        "compensation_transparency",
+        "ca",
+        "Horari a convenir.",
+        None,
         "definition: 'Whether the ad states what the role pays'; 0.2 tell: 'a word "
         "where a number should be'",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
         # `feinaactiva-FA92317986`, verbatim — the legitimate use, kept.
-        "compensation_transparency", "ca", "Sou: A convenir", 0.2,
+        "compensation_transparency",
+        "ca",
+        "Sou: A convenir",
+        0.2,
         "0.2 tell: \"'competitive salary', 'salary according to experience' — a word "
-        "where a number should be\"",
+        'where a number should be"',
         "fail-closed",
     ),
     AuditCase(
-        "compensation_transparency", "es",
-        "Retribución a convenir según valía y experiencia aportada.", 0.2,
+        "compensation_transparency",
+        "es",
+        "Retribución a convenir según valía y experiencia aportada.",
+        0.2,
         "0.2 tell: \"'competitive salary', 'salary according to experience' — a word "
-        "where a number should be\"",
+        'where a number should be"',
         "correct",
     ),
     # ---------------------------------------------------------------- A4 / F3
@@ -720,30 +962,46 @@ CASES: tuple[AuditCase, ...] = (
     # fixtures finding 9 committed are these same sentences with the qualifier
     # removed — they passed, and the realistic forms did not.
     AuditCase(
-        "compensation_transparency", "es", "Ayuda de 1.000 euros anuales para material.", None,
+        "compensation_transparency",
+        "es",
+        "Ayuda de 1.000 euros anuales para material.",
+        None,
         "0.9 tell: 'an actual amount or range the reader can act on' — of what the role pays",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "compensation_transparency", "es",
-        "Presupuesto de 1.000 euros anuales para formación.", None,
+        "compensation_transparency",
+        "es",
+        "Presupuesto de 1.000 euros anuales para formación.",
+        None,
         "0.9 tell: 'an actual amount or range the reader can act on' — of what the role pays",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "compensation_transparency", "es", "Seguro de vida de 30.000 euros anuales.", None,
+        "compensation_transparency",
+        "es",
+        "Seguro de vida de 30.000 euros anuales.",
+        None,
         "0.9 tell: 'an actual amount or range the reader can act on' — of what the role pays",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
         # `feinaactiva-09202622315`, verbatim: the recall this must not cost.
-        "compensation_transparency", "ca", "Sou: 1.850 € bruts mensuals per 14 pagues.", 0.9,
+        "compensation_transparency",
+        "ca",
+        "Sou: 1.850 € bruts mensuals per 14 pagues.",
+        0.9,
         "0.9 tell: 'an actual amount or range the reader can act on'",
         "fail-closed",
     ),
     AuditCase(
-        "compensation_transparency", "es",
-        "Banda salarial entre 33.000 y 40.000 brutos anuales.", 0.9,
+        "compensation_transparency",
+        "es",
+        "Banda salarial entre 33.000 y 40.000 brutos anuales.",
+        0.9,
         "0.9 tell: 'an actual amount or range the reader can act on'",
         "fail-closed",
     ),
@@ -754,43 +1012,67 @@ CASES: tuple[AuditCase, ...] = (
     # to the `plan de carrera` finding already above, left standing one
     # alternative away from it.
     AuditCase(
-        "learning_support", "es", "Ofrecemos crecimiento profesional.", None,
+        "learning_support",
+        "es",
+        "Ofrecemos crecimiento profesional.",
+        None,
         "learning_support 0.5 tell: \"'continuous learning' or 'professional development' "
-        "with nothing attached\"; career_progression 0.5 tell: \"'opportunities to grow'\"",
-        "fail-open", matches=0,
+        'with nothing attached"; career_progression 0.5 tell: "\'opportunities to grow\'"',
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "career_progression", "es", "Ofrecemos crecimiento profesional.", 0.5,
+        "career_progression",
+        "es",
+        "Ofrecemos crecimiento profesional.",
+        0.5,
         "career_progression 0.5 tell: \"'opportunities to grow' with no criteria attached to it\"",
         "fail-closed",
     ),
     AuditCase(
-        "learning_support", "en", "We offer professional growth.", None,
+        "learning_support",
+        "en",
+        "We offer professional growth.",
+        None,
         "learning_support 0.5 tell: \"'continuous learning' or 'professional development' "
-        "with nothing attached\"; career_progression 0.5 tell: \"'opportunities to grow'\"",
-        "fail-open", matches=0,
+        'with nothing attached"; career_progression 0.5 tell: "\'opportunities to grow\'"',
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "career_progression", "en", "We offer professional growth.", 0.5,
+        "career_progression",
+        "en",
+        "We offer professional growth.",
+        0.5,
         "career_progression 0.5 tell: \"'opportunities to grow' with no criteria attached to it\"",
         "fail-closed",
     ),
     AuditCase(
-        "learning_support", "ca", "Oferim creixement professional.", None,
+        "learning_support",
+        "ca",
+        "Oferim creixement professional.",
+        None,
         "learning_support 0.5 tell: \"'continuous learning' or 'professional development' "
-        "with nothing attached\"; career_progression 0.5 tell: \"'opportunities to grow'\"",
-        "fail-open", matches=0,
+        'with nothing attached"; career_progression 0.5 tell: "\'opportunities to grow\'"',
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "career_progression", "ca", "Oferim creixement professional.", 0.5,
+        "career_progression",
+        "ca",
+        "Oferim creixement professional.",
+        0.5,
         "career_progression 0.5 tell: \"'opportunities to grow' with no criteria attached to it\"",
         "fail-closed",
     ),
     AuditCase(
         # And what the learning 0.5 tell *does* name, which must stay where it is.
-        "learning_support", "en", "We offer professional development.", 0.5,
+        "learning_support",
+        "en",
+        "We offer professional development.",
+        0.5,
         "learning_support 0.5 tell: \"'continuous learning' or 'professional development' "
-        "with nothing attached\"",
+        'with nothing attached"',
         "fail-closed",
     ),
     # -------------------------------------------------------------------- B1
@@ -800,53 +1082,82 @@ CASES: tuple[AuditCase, ...] = (
     # `sin`, `nunca` / `no`, `sense`, `mai`, and every negator here precedes the
     # match, so `negatable` reaches it and `denies` is not needed.
     AuditCase(
-        "commute_burden", "es", "No se requiere carnet de conducir.", -0.9,
+        "commute_burden",
+        "es",
+        "No se requiere carnet de conducir.",
+        -0.9,
         "0.9 tell: 'a driving licence or your own vehicle is stated as required' — "
         "this advert states the opposite",
-        "fail-open", negated=True,
+        "fail-open",
+        negated=True,
     ),
     AuditCase(
-        "commute_burden", "ca", "No es requereix carnet de conduir.", -0.9,
+        "commute_burden",
+        "ca",
+        "No es requereix carnet de conduir.",
+        -0.9,
         "0.9 tell: 'a driving licence or your own vehicle is stated as required' — "
         "this advert states the opposite",
-        "fail-open", negated=True,
+        "fail-open",
+        negated=True,
     ),
     AuditCase(
-        "commute_burden", "en", "No driving licence is required.", -0.9,
+        "commute_burden",
+        "en",
+        "No driving licence is required.",
+        -0.9,
         "0.9 tell: 'a driving licence or your own vehicle is stated as required' — "
         "this advert states the opposite",
-        "fail-open", negated=True,
+        "fail-open",
+        negated=True,
     ),
     AuditCase(
         # The residency rung is deliberately untouched, and pinned so it stays so.
-        "commute_burden", "es", "Residencia en la zona.", 0.5,
+        "commute_burden",
+        "es",
+        "Residencia en la zona.",
+        0.5,
         "0.5 tell: 'living in the area is required or preferred'",
-        "correct", negated=False,
+        "correct",
+        negated=False,
     ),
     AuditCase(
-        "commute_burden", "ca", "Permís de conduir: B", 0.9,
+        "commute_burden",
+        "ca",
+        "Permís de conduir: B",
+        0.9,
         "0.9 tell: 'a driving licence or your own vehicle is stated as required'",
-        "correct", negated=False,
+        "correct",
+        negated=False,
     ),
     # -------------------------------------------------------------------- B2
     # The 0.2 rung's tell names `'competitive salary'` as its own example, in its
     # own words. The cues scored 0.1, which is not a rung this dimension has.
     AuditCase(
-        "compensation_transparency", "en", "We offer a competitive salary.", 0.2,
+        "compensation_transparency",
+        "en",
+        "We offer a competitive salary.",
+        0.2,
         "0.2 tell: \"'competitive salary', 'salary according to experience' — a word "
-        "where a number should be\"",
+        'where a number should be"',
         "fail-closed",
     ),
     AuditCase(
-        "compensation_transparency", "es", "Salario competitivo.", 0.2,
+        "compensation_transparency",
+        "es",
+        "Salario competitivo.",
+        0.2,
         "0.2 tell: \"'competitive salary', 'salary according to experience' — a word "
-        "where a number should be\"",
+        'where a number should be"',
         "fail-closed",
     ),
     AuditCase(
-        "compensation_transparency", "ca", "Salari competitiu.", 0.2,
+        "compensation_transparency",
+        "ca",
+        "Salari competitiu.",
+        0.2,
         "0.2 tell: \"'competitive salary', 'salary according to experience' — a word "
-        "where a number should be\"",
+        'where a number should be"',
         "fail-closed",
     ),
     # -------------------------------------------------------------------- B3
@@ -854,29 +1165,44 @@ CASES: tuple[AuditCase, ...] = (
     # `desplazamientos puntuales` scored 0.4 four lines away, and the 0.4 tell is
     # "framed as now and then" — which is what *puntual* means.
     AuditCase(
-        "travel_requirement", "es", "Viajes puntuales a clientes.", 0.4,
+        "travel_requirement",
+        "es",
+        "Viajes puntuales a clientes.",
+        0.4,
         "0.4 tell: 'client visits, or periodic presence at an office, framed as now and then'",
         "fail-open",
     ),
     AuditCase(
-        "travel_requirement", "ca", "Viatges puntuals a clients.", 0.4,
+        "travel_requirement",
+        "ca",
+        "Viatges puntuals a clients.",
+        0.4,
         "0.4 tell: 'client visits, or periodic presence at an office, framed as now and then'",
         "fail-open",
     ),
     AuditCase(
-        "travel_requirement", "es", "Desplazamientos puntuales a clientes.", 0.4,
+        "travel_requirement",
+        "es",
+        "Desplazamientos puntuales a clientes.",
+        0.4,
         "0.4 tell: 'client visits, or periodic presence at an office, framed as now and then'",
         "correct",
     ),
     AuditCase(
         # `frecuentes` stays at the top rung — that tell opens "travel is part of
         # the job", which a frequent trip schedule is.
-        "travel_requirement", "es", "Viajes frecuentes por Europa.", 0.9,
+        "travel_requirement",
+        "es",
+        "Viajes frecuentes por Europa.",
+        0.9,
         "0.9 tell: 'travel is part of the job, or the role requires moving to a stated place'",
         "correct",
     ),
     AuditCase(
-        "travel_requirement", "ca", "Viatges freqüents per Europa.", 0.9,
+        "travel_requirement",
+        "ca",
+        "Viatges freqüents per Europa.",
+        0.9,
         "0.9 tell: 'travel is part of the job, or the role requires moving to a stated place'",
         "correct",
     ),
@@ -885,18 +1211,27 @@ CASES: tuple[AuditCase, ...] = (
     # fixed frame" — the phrase almost verbatim. The 0.7 rung asks for
     # asynchronous work, compressed weeks, or hours the person genuinely sets.
     AuditCase(
-        "schedule_flexibility", "es", "Entrada y salida flexible.", 0.4,
+        "schedule_flexibility",
+        "es",
+        "Entrada y salida flexible.",
+        0.4,
         "0.4 tell: 'flexible start and finish, or an intensive summer, inside a fixed frame'",
         "fail-open",
     ),
     AuditCase(
-        "schedule_flexibility", "ca", "Entrada i sortida flexible.", 0.4,
+        "schedule_flexibility",
+        "ca",
+        "Entrada i sortida flexible.",
+        0.4,
         "0.4 tell: 'flexible start and finish, or an intensive summer, inside a fixed frame'",
         "fail-open",
     ),
     AuditCase(
         # And what 0.7 is for, unchanged.
-        "schedule_flexibility", "es", "Horario flexible.", 0.7,
+        "schedule_flexibility",
+        "es",
+        "Horario flexible.",
+        0.7,
         "0.7 tell: 'asynchronous work, compressed weeks, or hours the person genuinely sets'",
         "correct",
     ),
@@ -906,20 +1241,30 @@ CASES: tuple[AuditCase, ...] = (
     # halves; the **English** half was added in the same commit and was never
     # cleared. `help\s?desk` at 1.0 read a ticketing tool as an account role.
     AuditCase(
-        "talking_clients", "en", "Helpdesk ticketing experience required.", None,
+        "talking_clients",
+        "en",
+        "Helpdesk ticketing experience required.",
+        None,
         "1.0 tell: 'the role IS the interface — account management, solutions "
         "engineering, support, training or pre-sales'",
-        "fail-open", matches=0,
+        "fail-open",
+        matches=0,
     ),
     AuditCase(
-        "talking_clients", "en", "Help desk agent for our support team.", 1.0,
+        "talking_clients",
+        "en",
+        "Help desk agent for our support team.",
+        1.0,
         "1.0 tell: 'the role IS the interface — account management, solutions "
         "engineering, support, training or pre-sales'",
         "fail-closed",
     ),
     AuditCase(
         # The ES/CA half the first read cleared — pinned rather than assumed.
-        "talking_clients", "es", "Atención al público en tienda.", 1.0,
+        "talking_clients",
+        "es",
+        "Atención al público en tienda.",
+        1.0,
         "1.0 tell: 'the role IS the interface — account management, solutions "
         "engineering, support, training or pre-sales'",
         "correct",

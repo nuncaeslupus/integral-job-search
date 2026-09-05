@@ -1100,7 +1100,6 @@ def _page_placeholder_paths(node: Any, where: tuple[Any, ...] = ()) -> list[tupl
     return []
 
 
-
 class ListPage(Strict):
     """The search-results page: how to reach it, how it continues, and one
     selector per item container plus per field within it."""
@@ -1690,9 +1689,7 @@ def build_list_requests(
             url=url,
             method=page.method,
             headers={"Content-Type": JSON_CONTENT_TYPE},
-            body=serialise_body(
-                _page_substituted(page.body_json, start + offset, paginating_key)
-            ),
+            body=serialise_body(_page_substituted(page.body_json, start + offset, paginating_key)),
         )
         for offset, url in enumerate(urls)
     ]

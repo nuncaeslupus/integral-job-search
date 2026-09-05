@@ -128,9 +128,10 @@ def test_the_gate_counts_what_it_checked() -> None:
     assert measured["policy_refusals_without_an_owner_decision_evaluated"] >= len(
         cp.MALFORMED_CONTROLS
     )
-    assert measured["policy_refusals_checked"] == measured[
-        "policy_refusals_without_an_owner_decision_evaluated"
-    ]
+    assert (
+        measured["policy_refusals_checked"]
+        == measured["policy_refusals_without_an_owner_decision_evaluated"]
+    )
     assert measured["live_refusals"] >= 1
 
 
@@ -874,7 +875,7 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
 
 
 def test_single_parser_names_which_of_its_two_findings_each_row_is() -> None:
-    """"The reader ran and could not refuse" and "the reader was never run" are
+    """ "The reader ran and could not refuse" and "the reader was never run" are
     different findings with different fixes, and `single_parser` carried both.
     `second_reader: not_run` is the discriminator; it is now validated, counted
     separately, and named in the evidence."""

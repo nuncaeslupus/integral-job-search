@@ -207,7 +207,5 @@ def test_the_probe_counts_each_presentation_once() -> None:
     own comment rules out."""
     measured = se.probe_exclusions()
 
-    assert measured["presentations_checked"] == measured[
-        "restated_exclusions_resurfaced_evaluated"
-    ]
+    assert measured["presentations_checked"] == measured["restated_exclusions_resurfaced_evaluated"]
     assert measured["presentations_checked"] >= se.MINIMUM_PRESENTATIONS

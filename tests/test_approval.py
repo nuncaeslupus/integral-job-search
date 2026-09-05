@@ -907,9 +907,7 @@ def test_a_retracted_statement_row_carrying_the_episode_withdraws_it(
     assert not _sends_after_retracting(store, master, row)
 
 
-def test_a_broken_retraction_chain_refuses_the_send(
-    store: ProfileStore, master: CVMaster
-) -> None:
+def test_a_broken_retraction_chain_refuses_the_send(store: ProfileStore, master: CVMaster) -> None:
     """A log that does not settle must stop the send, not be read as no retraction."""
     _episode_row(store, WIN)
     offer_id, version = _prepare(store, master, approved=(0,))
@@ -935,9 +933,7 @@ def test_a_broken_retraction_chain_refuses_the_send(
         record_sent(store, master, offer_id, version, confirms=payload_digest(payload))
 
 
-def test_a_thrice_nested_retraction_still_withdraws(
-    store: ProfileStore, master: CVMaster
-) -> None:
+def test_a_thrice_nested_retraction_still_withdraws(store: ProfileStore, master: CVMaster) -> None:
     """Retract, undo, undo the undo — the third level puts the row back under."""
     row = _episode_row(store, WIN)
     offer_id, version = _prepare(store, master, approved=(0,))
@@ -956,6 +952,7 @@ def test_a_whitespace_only_retracted_row_withdraws_nothing(
     """The limit of the over-refusal: an empty sentence withdraws no approval."""
     row = _episode_row(store, "   ")
     assert _sends_after_retracting(store, master, row)
+
 
 def test_the_retraction_probes_catch_every_planted_defect(tmp_path: Path) -> None:
     probed = probe_retracted_sends(tmp_path / "profiles")

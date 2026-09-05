@@ -97,10 +97,7 @@ def _why_uncommitted(heading: str, body: str, fixture_names: set[str]) -> str | 
             return "resolved without citing a section of the spec it was derived from"
         named = any(name in section for name in fixture_names)
         if not named and "no defect" not in section.lower():
-            return (
-                "resolved without naming a committed fixture or stating that there "
-                "was no defect"
-            )
+            return "resolved without naming a committed fixture or stating that there was no defect"
         return None
     if "DISCREPANCY" in upper:
         return "an open discrepancy: the audit found something and no gate holds it yet"
@@ -143,7 +140,7 @@ def write_evidence(
 def _main(argv: list[str]) -> int:
     """Write T102's gate evidence. Exit 1 while any audit finding is unheld.
 
-        python -m integral.audit_followup [evidence-path]
+    python -m integral.audit_followup [evidence-path]
     """
     positional = [a for a in argv[1:] if not a.startswith("-")]
     measured = write_evidence(Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH)

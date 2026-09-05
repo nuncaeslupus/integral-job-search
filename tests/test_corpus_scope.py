@@ -348,8 +348,7 @@ def _labelled(tmp_path: Path, rows: list[dict[str, str]], name: str = "labelled.
 def _pool(prefix: str, split: str, count: int) -> list[dict[str, str]]:
     """`count` distinct adverts in one split, none of them sharing text."""
     return [
-        {"id": f"{prefix}{i}", "text": f"{prefix} advert {i}", "split": split}
-        for i in range(count)
+        {"id": f"{prefix}{i}", "text": f"{prefix} advert {i}", "split": split} for i in range(count)
     ]
 
 
@@ -514,9 +513,7 @@ def test_every_serving_module_outside_the_allowlist_trips_the_exemption(
 
 
 @pytest.mark.parametrize("name", ("offers", "lifecycle"))
-def test_the_structural_dependencies_of_a_stimulus_are_permitted(
-    tmp_path: Path, name: str
-) -> None:
+def test_the_structural_dependencies_of_a_stimulus_are_permitted(tmp_path: Path, name: str) -> None:
     """The boundary has to be narrow *and* usable, or it is not a boundary — it is a ban
     the real module already violates, which gets deleted the first time it is red.
 
@@ -704,7 +701,6 @@ def test_the_declared_gate_fails_when_the_exemption_is_widened(tmp_path: Path) -
     assert measured["gate_status"] == "measured", measured.get("unmeasured_reason")
 
 
-
 SUM_COMPONENTS = (
     "corpus_rows_without_a_draw_specification",
     "serving_path_corpus_reads",
@@ -786,15 +782,17 @@ def test_the_component_list_is_the_sum_expression_itself() -> None:
             )
             if not named:
                 continue
-            matches.append([
-                call.args[0].id
-                for call in ast.walk(value)
-                if isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Name)
-                and call.func.id == "len"
-                and call.args
-                and isinstance(call.args[0], ast.Name)
-            ])
+            matches.append(
+                [
+                    call.args[0].id
+                    for call in ast.walk(value)
+                    if isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Name)
+                    and call.func.id == "len"
+                    and call.args
+                    and isinstance(call.args[0], ast.Name)
+                ]
+            )
     # Accumulated and required to be unique. Assigning inside the loop measured
     # only the LAST matching dict, so a decoy literal carrying the same key later
     # in the file masked a sixth term in the real sum (#307 fourth read, F2).
@@ -853,9 +851,11 @@ def test_each_component_of_the_sum_is_individually_load_bearing(
         src_dir=_serving_tree(root, src_extra),
     )
     assert measured[component] >= 1, measured
-    assert sum(measured[key] for key in SUM_COMPONENTS) == (
-        measured["corpus_measurement_set_violations"]
+    assert (
+        sum(measured[key] for key in SUM_COMPONENTS)
+        == (measured["corpus_measurement_set_violations"])
     ), measured
+
 
 def test_every_component_of_the_sum_is_reported_beside_it() -> None:
     """A metric named for more than it counts is the defect this repository has caught
@@ -865,8 +865,9 @@ def test_every_component_of_the_sum_is_reported_beside_it() -> None:
     the arithmetic is asserted rather than described.
     """
     measured = measure_provenance()
-    assert sum(measured[key] for key in SUM_COMPONENTS) == (
-        measured["corpus_measurement_set_violations"]
+    assert (
+        sum(measured[key] for key in SUM_COMPONENTS)
+        == (measured["corpus_measurement_set_violations"])
     )
     # And the exemption's reach is a number in the record, not a claim in a comment.
     assert measured["stimulus_reachable_adverts_at_least"] == MINIMUM_STIMULUS_POOL

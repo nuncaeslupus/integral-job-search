@@ -210,8 +210,7 @@ class PolicyRefusal:
         found: list[str] = []
         if not self.site:
             found.append(
-                "a policy refusal naming no site cannot be argued with, retested "
-                "or overturned"
+                "a policy refusal naming no site cannot be argued with, retested or overturned"
             )
         if self.decided_by != OWNER:
             found.append(
@@ -282,46 +281,87 @@ def refusals(ledger: Path = DEFAULT_LEDGER_PATH) -> list[PolicyRefusal]:
 MALFORMED_CONTROLS: tuple[tuple[str, dict[str, Any]], ...] = (
     (
         "no decision at all",
-        {"site": "a.test", "refuses": "access", "robots_verdict": "allowed",
-         "rule_cited": "x"},
+        {"site": "a.test", "refuses": "access", "robots_verdict": "allowed", "rule_cited": "x"},
     ),
     (
         "the implementing session recorded as the decider",
-        {"site": "b.test", "refuses": "access", "robots_verdict": "allowed",
-         "rule_cited": "x", "decided_by": "implementing session",
-         "decided_on": "2026-08-31", "decision": "the intent is legible"},
+        {
+            "site": "b.test",
+            "refuses": "access",
+            "robots_verdict": "allowed",
+            "rule_cited": "x",
+            "decided_by": "implementing session",
+            "decided_on": "2026-08-31",
+            "decision": "the intent is legible",
+        },
     ),
     (
         "an owner decision with no date",
-        {"site": "c.test", "refuses": "volume", "robots_verdict": "allowed",
-         "rule_cited": "x", "decided_by": "owner", "decision": "throttle it"},
+        {
+            "site": "c.test",
+            "refuses": "volume",
+            "robots_verdict": "allowed",
+            "rule_cited": "x",
+            "decided_by": "owner",
+            "decision": "throttle it",
+        },
     ),
     (
         "volume and access not distinguished",
-        {"site": "d.test", "robots_verdict": "allowed", "rule_cited": "x",
-         "decided_by": "owner", "decided_on": "2026-08-31", "decision": "no"},
+        {
+            "site": "d.test",
+            "robots_verdict": "allowed",
+            "rule_cited": "x",
+            "decided_by": "owner",
+            "decided_on": "2026-08-31",
+            "decision": "no",
+        },
     ),
     (
         "allowed by robots, refused with no rule cited",
-        {"site": "e.test", "refuses": "access", "robots_verdict": "allowed",
-         "decided_by": "owner", "decided_on": "2026-08-31", "decision": "no"},
+        {
+            "site": "e.test",
+            "refuses": "access",
+            "robots_verdict": "allowed",
+            "decided_by": "owner",
+            "decided_on": "2026-08-31",
+            "decision": "no",
+        },
     ),
     (
         "a row naming no board",
-        {"refuses": "access", "robots_verdict": "allowed", "rule_cited": "x",
-         "decided_by": "owner", "decided_on": "2026-08-31", "decision": "no"},
+        {
+            "refuses": "access",
+            "robots_verdict": "allowed",
+            "rule_cited": "x",
+            "decided_by": "owner",
+            "decided_on": "2026-08-31",
+            "decision": "no",
+        },
     ),
     (
         "a YAML timestamp where the day was the record",
-        {"site": "f.test", "refuses": "access", "robots_verdict": "allowed",
-         "rule_cited": "x", "decided_by": "owner",
-         "decided_on": datetime(2026, 8, 31, 14, 30), "decision": "no"},
+        {
+            "site": "f.test",
+            "refuses": "access",
+            "robots_verdict": "allowed",
+            "rule_cited": "x",
+            "decided_by": "owner",
+            "decided_on": datetime(2026, 8, 31, 14, 30),
+            "decision": "no",
+        },
     ),
     (
         "an unpadded date that is not what the ledger says it holds",
-        {"site": "g.test", "refuses": "volume", "robots_verdict": "allowed",
-         "rule_cited": "x", "decided_by": "owner", "decided_on": "2026-8-1",
-         "decision": "throttle it"},
+        {
+            "site": "g.test",
+            "refuses": "volume",
+            "robots_verdict": "allowed",
+            "rule_cited": "x",
+            "decided_by": "owner",
+            "decided_on": "2026-8-1",
+            "decision": "throttle it",
+        },
     ),
 )
 
@@ -342,9 +382,7 @@ def measure(
     incomplete = sum(1 for refusal in live if refusal.problems())
 
     accepted = [
-        name
-        for name, payload in controls
-        if not PolicyRefusal.from_mapping(payload).problems()
+        name for name, payload in controls if not PolicyRefusal.from_mapping(payload).problems()
     ]
     violations += [f"accepted a malformed control: {name}" for name in accepted]
 
@@ -795,8 +833,7 @@ class RobotsAdjudication:
         found: list[str] = []
         if not self.site:
             found.append(
-                "an adjudication naming no site cannot be argued with, retested "
-                "or overturned"
+                "an adjudication naming no site cannot be argued with, retested or overturned"
             )
         if self.checked is None:
             found.append(f"{where}: no `checked` date — an undated standing reads as settled")
@@ -936,9 +973,7 @@ class RobotsAdjudication:
                 )
         for path in self.allowed:
             if not robots.allows_text(self.robots_txt, self.agent, path):
-                problems.append(
-                    f"{where}: admits {path!r}, which RFC 9309 REFUSES on this file"
-                )
+                problems.append(f"{where}: admits {path!r}, which RFC 9309 REFUSES on this file")
         return problems
 
 

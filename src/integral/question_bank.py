@@ -292,9 +292,7 @@ def measure_monotone(
     offending = level_rating_items(bank, dimensions, elicitables)
     monotone = monotone_ids(dimensions, elicitables)
     unrouted = [
-        elicitable
-        for elicitable in sorted(elicitables)
-        if trade_off_route(elicitable) is None
+        elicitable for elicitable in sorted(elicitables) if trade_off_route(elicitable) is None
     ]
     considered = len(bank.entries) + len(monotone)
     probe: dict[str, Any] = (

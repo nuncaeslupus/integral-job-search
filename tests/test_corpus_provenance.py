@@ -399,12 +399,11 @@ def test_a_floor_breach_is_a_finding_not_an_unmeasured_reading(tmp_path: Path) -
     # list the floor was appended to — and moving that append from `breached` to
     # `untrusted`, which is precisely the defect this fixture is named for, left the
     # whole suite green (#307 second-reader F1).
-    assert any(
-        "below the 400 floor" in reason for reason in measured["floor_breach_reasons"]
-    ), measured["floor_breach_reasons"]
+    assert any("below the 400 floor" in reason for reason in measured["floor_breach_reasons"]), (
+        measured["floor_breach_reasons"]
+    )
     assert "below the 400 floor" in measured["unmeasured_reason"]
     assert not measured["faults"], "the floor is the only reason this reading is short"
-
 
 
 def _tree(root: Path, extra: dict[str, str] | None = None) -> Path:
@@ -465,6 +464,7 @@ def _provenance_over(
         lambda *args, **kwargs: measured,
     )
     return measured
+
 
 # --------------------------------------------------------------------------------
 # The exit code — the half `make evidence` reads
