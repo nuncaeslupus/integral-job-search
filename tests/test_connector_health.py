@@ -472,9 +472,7 @@ def _refused_package(tmp_path: Path, *, body: str, status: int | None) -> Path:
     capture: dict[str, object] = {"captured_at": "2026-09-01"}
     if status is not None:
         capture["status"] = status
-    (package / PROBE_DIRNAME / PROBE_CAPTURE_FILE).write_text(
-        json.dumps(capture), encoding="utf-8"
-    )
+    (package / PROBE_DIRNAME / PROBE_CAPTURE_FILE).write_text(json.dumps(capture), encoding="utf-8")
     return package
 
 

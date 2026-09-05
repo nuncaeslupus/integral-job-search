@@ -777,8 +777,7 @@ def measure_provenance(
     # leaves the other as a vacuous pass over the exemption's own condition.
     if stimulus_pool < MINIMUM_STIMULUS_POOL:
         breached.append(
-            f"{stimulus_pool} adverts reachable as stimuli, below the "
-            f"{MINIMUM_STIMULUS_POOL} floor"
+            f"{stimulus_pool} adverts reachable as stimuli, below the {MINIMUM_STIMULUS_POOL} floor"
         )
     if evaluation_pool < MINIMUM_EVALUATION_POOL:
         breached.append(
@@ -876,10 +875,7 @@ def _main(argv: list[str]) -> int:
     # which is exactly the reseed flow this task creates.
     _report([f"{f['module']}: {f['reason']}" for f in provenance["exempt_reader_findings"]])
     _report(
-        [
-            f"{f['where']} {f['row']}: {f['reason']}"
-            for f in provenance["stimulus_split_findings"]
-        ]
+        [f"{f['where']} {f['row']}: {f['reason']}" for f in provenance["stimulus_split_findings"]]
     )
 
     # The declared gate key, not a hand-listed subset of what it sums. A subset is how

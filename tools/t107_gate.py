@@ -40,8 +40,10 @@ def main() -> int:
         print("an unserved language did not report its fallbacks", file=sys.stderr)
         return 1
     if strings.fallbacks(catalogue, "es"):
-        print(f"es reported fallbacks it should not have: {strings.fallbacks(catalogue, 'es')}",
-              file=sys.stderr)
+        print(
+            f"es reported fallbacks it should not have: {strings.fallbacks(catalogue, 'es')}",
+            file=sys.stderr,
+        )
         return 1
 
     # The English page is byte-identical to what it was before the seam, so

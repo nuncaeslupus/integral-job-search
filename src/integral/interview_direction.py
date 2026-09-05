@@ -505,35 +505,35 @@ NEGATIVE_CONTROLS: tuple[tuple[str, str, bool, bool], ...] = (
     ),
     (
         "a recommendation that took the choice away",
-        '"I\'d do traits next, because it reads your episodes — shall we? You need to answer '
+        "\"I'd do traits next, because it reads your episodes — shall we? You need to answer "
         'these first."',
         True,
         True,
     ),
     (
         "a recommendation the question does not answer",
-        '"I\'d turn that into weights next, because it is what lets me price a shorter commute. '
+        "\"I'd turn that into weights next, because it is what lets me price a shorter commute. "
         'How did it feel?"',
         False,
         False,
     ),
     (
         "a question asked before the recommendation, not about it",
-        '"Does that sound like you? I\'d go and look at real jobs now, because the weights only '
+        "\"Does that sound like you? I'd go and look at real jobs now, because the weights only "
         'prove themselves against adverts you can take or leave."',
         False,
         False,
     ),
     (
         "a question that answers the recommendation in its own words",
-        '"I\'d mark the Girona role shortlisted now, because that is what records you wanting '
+        "\"I'd mark the Girona role shortlisted now, because that is what records you wanting "
         'it. Mark it shortlisted?"',
         True,
         False,
     ),
     (
         "an application recommended off the rank alone",
-        '"The Girona role is top of the list now. I\'d apply to it next, because it has stayed '
+        "\"The Girona role is top of the list now. I'd apply to it next, because it has stayed "
         'there through two rounds of your corrections. Shall I?"',
         True,
         True,

@@ -97,6 +97,7 @@ DEFAULT_RATE_LIMIT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T73.jso
 #: draws with `unverified` and the gate layer with `unmeasured`.
 Health = Literal["healthy", "broken", "inconclusive"]
 
+
 class ConnectorHealthError(Exception):
     """A health-check action was asked for in a way this module refuses."""
 

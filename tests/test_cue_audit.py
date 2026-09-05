@@ -83,9 +83,7 @@ def test_the_audit_denominator_is_a_floor_and_never_falls() -> None:
     assert audited["cue_audit_cases_at_least"] == MINIMUM_CASES
     assert audited["cue_audit_fail_open_cases_at_least"] == MINIMUM_FAIL_OPEN_CASES
     assert audited["cue_audit_cases_pinning_mechanism"] >= MINIMUM_MECHANISM_PINNED_CASES
-    assert (
-        audited["cue_audit_cases_pinning_mechanism_at_least"] == MINIMUM_MECHANISM_PINNED_CASES
-    )
+    assert audited["cue_audit_cases_pinning_mechanism_at_least"] == MINIMUM_MECHANISM_PINNED_CASES
 
 
 def test_every_case_cites_the_text_it_was_decided_from() -> None:

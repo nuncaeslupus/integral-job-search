@@ -205,16 +205,13 @@ def test_a_deliberately_wrong_probe_table_is_reported(half: str) -> None:
         # that branch's label to "fail-closed" was green (#338 fourth read, F-A).
         wrong = tuple(replace(probe, varies=()) for probe in probes)
         expected = [
-            probe
-            for probe in probes
-            if probe.varies and (probe.loads or not probe.validated)
+            probe for probe in probes if probe.varies and (probe.loads or not probe.validated)
         ]
     else:
         # The digits as a string rather than the number — R6's second half,
         # which is a value and not a position.
         wrong = tuple(
-            replace(probe, values=tuple(str(value) for value in probe.values))
-            for probe in probes
+            replace(probe, values=tuple(str(value) for value in probe.values)) for probe in probes
         )
         expected = [probe for probe in probes if probe.values]
 

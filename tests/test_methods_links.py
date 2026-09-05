@@ -203,9 +203,7 @@ def test_the_gate_does_not_pass_on_an_empty_input_set(tmp_path: Path) -> None:
     # against a register naming nothing, and counting them would be right.
     # The question here is the denominator, so the input set is empty on both
     # sides.
-    measured = methods_links.measure_attribution(
-        root=tmp_path, methods_path=empty, borrowed=()
-    )
+    measured = methods_links.measure_attribution(root=tmp_path, methods_path=empty, borrowed=())
 
     assert measured["borrowed_techniques_without_attribution"] == 0
     assert measured["borrowed_techniques_without_attribution_evaluated"] == 0

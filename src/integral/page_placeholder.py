@@ -488,9 +488,7 @@ def _observed(probe: Probe) -> tuple[bool, tuple[str, ...], tuple[Any, ...], str
     """What the implementation does: loads?, varies where?, becomes what?, why not."""
     if not probe.validated:
         connector = _unvalidated(probe)
-        bodies = [
-            json.loads(request.body or b"null") for request in build_list_requests(connector)
-        ]
+        bodies = [json.loads(request.body or b"null") for request in build_list_requests(connector)]
         varies = tuple(_differing_paths(bodies[0], bodies[1]))
         return probe.loads, varies, _values(probe, bodies), ""
     try:

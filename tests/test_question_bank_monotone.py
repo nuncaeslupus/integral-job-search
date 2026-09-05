@@ -202,9 +202,10 @@ def test_the_gate_counts_the_items_it_checked() -> None:
     measured = qb.measure_monotone(load_dimensions())
 
     assert measured["monotone_dimensions_asked_as_level_ratings_evaluated"] > 0
-    assert measured["items_checked"] == measured[
-        "monotone_dimensions_asked_as_level_ratings_evaluated"
-    ]
+    assert (
+        measured["items_checked"]
+        == measured["monotone_dimensions_asked_as_level_ratings_evaluated"]
+    )
     assert measured["monotone_elicitables_checked"] >= 1
 
 

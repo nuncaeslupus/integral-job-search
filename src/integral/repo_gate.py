@@ -315,9 +315,7 @@ def _control_readings() -> tuple[int, list[str]]:
     evaluated = 0
     failures: list[str] = []
     for label, document, expected in CI_READER_CONTROLS:
-        read = tuple(
-            t for s in _run_scripts(yaml.safe_load(document)) for t in _make_targets_in(s)
-        )
+        read = tuple(t for s in _run_scripts(yaml.safe_load(document)) for t in _make_targets_in(s))
         evaluated += len(expected)
         if read != expected:
             failures.append(f"accepted: {label} — read {list(read)}, expected {list(expected)}")
