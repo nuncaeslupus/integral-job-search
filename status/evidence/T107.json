@@ -1,0 +1,14 @@
+{
+  "candidate_facing_strings_without_a_translation": 0,
+  "stale_translations": 0,
+  "candidate_facing_strings_evaluated": 48,
+  "strings_scanned": 24,
+  "languages_served": [
+    "es",
+    "ca"
+  ],
+  "source_language": "en",
+  "gate_status": "measured",
+  "missing": [],
+  "stale": []
+}

@@ -2,6 +2,7 @@
 id: t-6bce870f
 title: "T107: The candidate-facing strings are English-only in a Spanish-facing product"
 priority: 5
+status: merged
 ---
 
 ## Acceptance gate
@@ -43,15 +44,55 @@ Whether the fix is a message catalogue or per-language constants is a design cal
 
 `presentation.PROVISIONAL_LABEL` was rewritten in **#290 (T95)**, which is open at the time of filing. Whoever takes this should branch off main after #290 merges, or the string will move under them.
 
+## What landed
+
+`strings/catalogue.json` — every string the candidate reads on the ranked page,
+in `en` (the source), `es` and `ca`. `src/integral/strings.py` reads it;
+`presentation.py` looks strings up through `_t(key, language)` instead of
+holding them as English literals, and `render()`, `card()` and every helper
+below them take a `language`.
+
+Three properties, and only two of them are claimed:
+
+1. **Completeness** — 24 strings x 2 non-source languages = 48 evaluated, 0
+   missing. Countable.
+2. **Staleness** — each translation records `of`: the sha256 of the source text
+   it was made from. Change the English and every translation of it stops
+   matching, so *"when we change a report we update all the languages"* stops
+   being a promise somebody has to keep and becomes a check that fails. A
+   translation with **no** recorded provenance counts as stale, not fresh — an
+   unstamped entry is exactly the state this replaces, and must not be able to
+   opt out by omitting its stamp.
+3. **Quality is not claimed anywhere.** No gate here says a translation is
+   correct. Nothing can tell whether a contributed German pack is good German,
+   so a pack records who made it and when, and that is the whole of the honest
+   offer. This is the one place the repo's usual "measure it" answer does not
+   apply, and saying so is better than a metric that implies otherwise.
+
+**A missing or stale string falls back to the source and is named.** Silent
+English is the defect this task exists to close; announced English is a partial
+feature honestly reported. `presentation.untranslated(language)` returns exactly
+which strings a language could not serve, so a session says so once rather than
+the page apologising in every sentence. A stale translation falls back too —
+text translated from English that has since changed is confidently wrong, which
+is worse than visibly foreign.
+
+The card column is **derived** from the label widths rather than typed as
+spaces: `ubicación` is longer than `location`, and a hardcoded column renders
+one of the two ragged. The pay period is rendered too — without it a Spanish
+card reads `EUR/year`.
+
+**Out of scope, named rather than silently left:** `enrichment.NOT_FROM_THE_ADVERT`
+and `pay.NetEstimate.label()` are candidate-facing and still English-only, as is
+`connector_health.BLOCK_PAGE_MARKERS` — whose English-only block-page detection
+means a Spanish interstitial reads as a real empty result. The step skills' prose
+is untouched. Each is the same shape as this task; none is in this diff.
+
 ## Acceptance gate
 
-<!-- This task came from an issue, so its "gate" is prose. Write a real check
-     below, then DELETE the `requires: [human:gate]` line in the front matter.
-     Until that line is gone the selector will not offer this task, which is
-     deliberate: a prose gate runs nothing, and a gate that runs nothing passes
-     everything. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-false
+set -euo pipefail
+uv run pytest tests/test_strings.py tests/test_presentation.py -q
+uv run python -m integral.strings
+uv run python tools/t107_gate.py
 ```

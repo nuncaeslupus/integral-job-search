@@ -1,0 +1,300 @@
+{
+  "_comment": [
+    "Every string the candidate reads on the ranked-offers page.",
+    "",
+    "`en` is the source: it is the text that was written first and the text a",
+    "reviewer argues about. Every other language records `of` — the sha256 of the",
+    "English it was translated from — so changing the English makes each",
+    "translation *provably* stale rather than quietly wrong. That is the whole",
+    "mechanism: `strings.stale()` compares the recorded sha against the current",
+    "source and the gate fails on any mismatch. Nobody has to remember.",
+    "",
+    "One file rather than one per language, on purpose: a wording change and the",
+    "translations it invalidates then appear in the same diff hunk, which is what",
+    "makes the rule reviewable instead of merely stated.",
+    "",
+    "A language this repo does not maintain arrives as a pack — same entry shape,",
+    "its own file — and is checked for completeness and staleness by the same",
+    "gate. It is never checked for quality: no machine can tell whether the German",
+    "is good German, so a pack carries who translated it and when, and says so."
+  ],
+  "source_language": "en",
+  "languages": [
+    "en",
+    "es",
+    "ca"
+  ],
+  "entries": {
+    "provisional_label": {
+      "note": "Said once per page when the ranking is L1, never when it is not.",
+      "en": "Provisional: I have put these in an order — the ranking — using only the things you said are non-negotiable and the pay, because I do not yet know how much each thing is worth to you. Working through step 6's paired choices is what would sharpen it.",
+      "es": {
+        "text": "Provisional: he puesto estas ofertas en un orden — el ranking — usando solo lo que dijiste que es innegociable y el sueldo, porque todavía no sé cuánto vale cada cosa para ti. Trabajar las elecciones por parejas del paso 6 es lo que lo afinaría.",
+        "of": "6cd4d145d2abe476b525eeb84c76f8c06877ea0a8571379b403c50d4dd9ab5db"
+      },
+      "ca": {
+        "text": "Provisional: he posat aquestes ofertes en un ordre — el rànquing — fent servir només allò que vas dir que és innegociable i el sou, perquè encara no sé quant val cada cosa per a tu. Treballar les eleccions per parelles del pas 6 és el que ho afinaria.",
+        "of": "6cd4d145d2abe476b525eeb84c76f8c06877ea0a8571379b403c50d4dd9ab5db"
+      }
+    },
+    "excluded_heading": {
+      "en": "Excluded",
+      "es": {
+        "text": "Descartadas",
+        "of": "bef1fd9e5caea8b51aab74a9db1cde99164263ed7d076225d7829faae9737d90"
+      },
+      "ca": {
+        "text": "Descartades",
+        "of": "bef1fd9e5caea8b51aab74a9db1cde99164263ed7d076225d7829faae9737d90"
+      }
+    },
+    "excluded_explanation": {
+      "note": "Follows the heading and its count on the same line.",
+      "en": "— you cannot apply for these, and this is the wording each was removed for:",
+      "es": {
+        "text": "— no puedes optar a estas, y esta es la frase por la que se descartó cada una:",
+        "of": "734eee5b5cc09033047b1823dfdbcca281b4225d0632c8003c7cfbfc6b5f1d81"
+      },
+      "ca": {
+        "text": "— no pots optar a aquestes, i aquesta és la frase per la qual es va descartar cadascuna:",
+        "of": "734eee5b5cc09033047b1823dfdbcca281b4225d0632c8003c7cfbfc6b5f1d81"
+      }
+    },
+    "flag_marker": {
+      "en": "[flagged — your call]",
+      "es": {
+        "text": "[marcada — tú decides]",
+        "of": "8ee7724c617de2ad0c5280da50e4038818677ce1713a0d1bb1b2b101fe52d444"
+      },
+      "ca": {
+        "text": "[marcada — tu decideixes]",
+        "of": "8ee7724c617de2ad0c5280da50e4038818677ce1713a0d1bb1b2b101fe52d444"
+      }
+    },
+    "no_reason_given": {
+      "note": "An exclusion that arrived with no wording behind it. Never omitted.",
+      "en": "(no reason was recorded — this is a defect, please report it)",
+      "es": {
+        "text": "(no se registró ningún motivo — esto es un fallo, por favor comunícalo)",
+        "of": "9461bc1dcfe48a5f8a68d848eec0e805c6085860af75d52d9c706547ee675e20"
+      },
+      "ca": {
+        "text": "(no s'ha registrat cap motiu — això és una errada, si us plau comunica-ho)",
+        "of": "9461bc1dcfe48a5f8a68d848eec0e805c6085860af75d52d9c706547ee675e20"
+      }
+    },
+    "estimated_marker": {
+      "en": "(estimated — the advert did not say)",
+      "es": {
+        "text": "(estimado — el anuncio no lo decía)",
+        "of": "9a018a96f0a4610dd834913b5151ca0b45137635c93ee68a06511cb816ff0d70"
+      },
+      "ca": {
+        "text": "(estimat — l'anunci no ho deia)",
+        "of": "9a018a96f0a4610dd834913b5151ca0b45137635c93ee68a06511cb816ff0d70"
+      }
+    },
+    "estimate_basis": {
+      "en": "from the range this role and level pays on comparable adverts",
+      "es": {
+        "text": "según el rango que este puesto y nivel pagan en anuncios comparables",
+        "of": "718adf4caa2feb1e6906367c433fbd20d7d82de431c63f59da4cd1f9b2e2c3d2"
+      },
+      "ca": {
+        "text": "segons el rang que aquest lloc i nivell paguen en anuncis comparables",
+        "of": "718adf4caa2feb1e6906367c433fbd20d7d82de431c63f59da4cd1f9b2e2c3d2"
+      }
+    },
+    "unknown": {
+      "en": "unknown",
+      "es": {
+        "text": "no consta",
+        "of": "b23a6a8439c0dde5515893e7c90c1e3233b8616e634470f20dc4928bcf3609bc"
+      },
+      "ca": {
+        "text": "no consta",
+        "of": "b23a6a8439c0dde5515893e7c90c1e3233b8616e634470f20dc4928bcf3609bc"
+      }
+    },
+    "card_pay": {
+      "en": "pay",
+      "es": {
+        "text": "sueldo",
+        "of": "9350872d712a127c494d7dc35e46b0bc9e62e288239708e581dfc3a1400154a4"
+      },
+      "ca": {
+        "text": "sou",
+        "of": "9350872d712a127c494d7dc35e46b0bc9e62e288239708e581dfc3a1400154a4"
+      }
+    },
+    "card_hours": {
+      "en": "hours",
+      "es": {
+        "text": "jornada",
+        "of": "404314b1f4bd8fa2ff42a84cd851ddc011c76fb64e12dfe3748101b03ed8ce7c"
+      },
+      "ca": {
+        "text": "jornada",
+        "of": "404314b1f4bd8fa2ff42a84cd851ddc011c76fb64e12dfe3748101b03ed8ce7c"
+      }
+    },
+    "card_location": {
+      "en": "location",
+      "es": {
+        "text": "ubicación",
+        "of": "e6eaea18e885e1078829b56df34896be5ab51439e8f0ba00cb1624b2c572c10e"
+      },
+      "ca": {
+        "text": "ubicació",
+        "of": "e6eaea18e885e1078829b56df34896be5ab51439e8f0ba00cb1624b2c572c10e"
+      }
+    },
+    "card_contract": {
+      "en": "contract",
+      "es": {
+        "text": "contrato",
+        "of": "cc8321d6375c494d043fdd0260f21bc0ec51dacc9f6abb7f909cdcd3041b78bf"
+      },
+      "ca": {
+        "text": "contracte",
+        "of": "cc8321d6375c494d043fdd0260f21bc0ec51dacc9f6abb7f909cdcd3041b78bf"
+      }
+    },
+    "card_link": {
+      "en": "link",
+      "es": {
+        "text": "enlace",
+        "of": "b1b1bdb480c61d075300d9bff7d9cb69cf31695ea048e478facadf426e8d0fb0"
+      },
+      "ca": {
+        "text": "enllaç",
+        "of": "b1b1bdb480c61d075300d9bff7d9cb69cf31695ea048e478facadf426e8d0fb0"
+      }
+    },
+    "nothing_priced": {
+      "note": "No drivers: nothing priced moved this offer, and saying so is a sentence.",
+      "en": "Nothing the advert says has been priced yet, so there is no reason to give.",
+      "es": {
+        "text": "Todavía no se ha valorado nada de lo que dice el anuncio, así que no hay ningún motivo que dar.",
+        "of": "8a534889f28a04bca7edd15c08134326cb1b4c5afac70bdb1cce8b239c655577"
+      },
+      "ca": {
+        "text": "Encara no s'ha valorat res del que diu l'anunci, així que no hi ha cap motiu a donar.",
+        "of": "8a534889f28a04bca7edd15c08134326cb1b4c5afac70bdb1cce8b239c655577"
+      }
+    },
+    "wording_not_kept": {
+      "en": "the advert's wording was not kept",
+      "es": {
+        "text": "no se conservó la frase del anuncio",
+        "of": "45509d3702b237cc5ec3d03e46580e024665a1b3a7cfd5c2349c77302832fa97"
+      },
+      "ca": {
+        "text": "no s'ha conservat la frase de l'anunci",
+        "of": "45509d3702b237cc5ec3d03e46580e024665a1b3a7cfd5c2349c77302832fa97"
+      }
+    },
+    "salary_range_join": {
+      "note": "Joins the two ends of a pay band. Spaces are significant.",
+      "en": " to ",
+      "es": {
+        "text": " a ",
+        "of": "87721689ee42f4415e4afe0d0f0a84d4cd837dd0c66635bd0734127ee0e0b5b7"
+      },
+      "ca": {
+        "text": " a ",
+        "of": "87721689ee42f4415e4afe0d0f0a84d4cd837dd0c66635bd0734127ee0e0b5b7"
+      }
+    },
+    "term_ranking": {
+      "note": "INTERNAL_TERMS. The plain words that must appear before the jargon does.",
+      "en": "I have put these in an order",
+      "es": {
+        "text": "he puesto estas ofertas en un orden",
+        "of": "ce9ec210e7a8d5863a9ddb24093770689b84dfd1bf5e24616113748b74ed89b9"
+      },
+      "ca": {
+        "text": "he posat aquestes ofertes en un ordre",
+        "of": "ce9ec210e7a8d5863a9ddb24093770689b84dfd1bf5e24616113748b74ed89b9"
+      }
+    },
+    "term_weights": {
+      "en": "how much each thing is worth to you",
+      "es": {
+        "text": "cuánto vale cada cosa para ti",
+        "of": "166e58e9f530678ac66bbd3ef3f929512df91abf81aca99683f87f37f7b24608"
+      },
+      "ca": {
+        "text": "quant val cada cosa per a tu",
+        "of": "166e58e9f530678ac66bbd3ef3f929512df91abf81aca99683f87f37f7b24608"
+      }
+    },
+    "term_part_worth": {
+      "en": "what one step of a trade-off is worth in money",
+      "es": {
+        "text": "lo que vale en dinero un paso de un intercambio",
+        "of": "de169bd98749c32acbd2b8e11b69a8b4da63138eb076dab1145abf9849c3ac8e"
+      },
+      "ca": {
+        "text": "el que val en diners un pas d'un intercanvi",
+        "of": "de169bd98749c32acbd2b8e11b69a8b4da63138eb076dab1145abf9849c3ac8e"
+      }
+    },
+    "term_corpus": {
+      "en": "the adverts I have collected",
+      "es": {
+        "text": "los anuncios que he recogido",
+        "of": "328752e0aa34b9088fea1ad6d3af5711ad68400ea5a08ae1d74dbdc4f38bf2bd"
+      },
+      "ca": {
+        "text": "els anuncis que he recollit",
+        "of": "328752e0aa34b9088fea1ad6d3af5711ad68400ea5a08ae1d74dbdc4f38bf2bd"
+      }
+    },
+    "term_connector": {
+      "en": "the piece that reads one job board",
+      "es": {
+        "text": "la pieza que lee un portal de empleo",
+        "of": "94a3a4e19f8af25e74822716e0ad8e7c1a4a381e7255b67ad0f03ba3bb832bb3"
+      },
+      "ca": {
+        "text": "la peça que llegeix un portal de feina",
+        "of": "94a3a4e19f8af25e74822716e0ad8e7c1a4a381e7255b67ad0f03ba3bb832bb3"
+      }
+    },
+    "more_groups": {
+      "note": "Interpolates {remaining} and {further}. Not 'not shown' — the rest exists and is one word away.",
+      "en": "({remaining} more, in {further} further group(s) — say the word and I'll show the next.)",
+      "es": {
+        "text": "({remaining} más, en {further} grupo(s) más — dímelo y te enseño el siguiente.)",
+        "of": "903e27fbc64e3c0f2b000caa2ceec70e300a7d09da8f912903dc225ad8ba0c62"
+      },
+      "ca": {
+        "text": "({remaining} més, en {further} grup(s) més — digue-m'ho i t'ensenyo el següent.)",
+        "of": "903e27fbc64e3c0f2b000caa2ceec70e300a7d09da8f912903dc225ad8ba0c62"
+      }
+    },
+    "period_year": {
+      "en": "year",
+      "es": {
+        "text": "año",
+        "of": "4cb4ea25583c25647247ae96fc90225d99ad7a6fabc3e2c2fd13c502e323cd9e"
+      },
+      "ca": {
+        "text": "any",
+        "of": "4cb4ea25583c25647247ae96fc90225d99ad7a6fabc3e2c2fd13c502e323cd9e"
+      }
+    },
+    "period_month": {
+      "en": "month",
+      "es": {
+        "text": "mes",
+        "of": "a5c7d1719e284f2c9485405d44f62d152cde9e6ede83e1a79a2442b65f6a8735"
+      },
+      "ca": {
+        "text": "mes",
+        "of": "a5c7d1719e284f2c9485405d44f62d152cde9e6ede83e1a79a2442b65f6a8735"
+      }
+    }
+  }
+}
