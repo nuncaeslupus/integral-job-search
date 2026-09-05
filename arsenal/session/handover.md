@@ -1,100 +1,123 @@
 # Session handover
 
-**2026-09-04 (evening).** Board: **140 tasks merged**, `verify-gates` 140/140,
-2767 tests. This session merged **13** PRs and left nothing in flight. Two things
-changed about how work gets checked here, and both are load-bearing for the next
-session.
+**2026-09-05.** Board: **142 terminal tasks**, `verify-gates` 141/142, 2793
+tests. Two PRs merged (#346, #347), four issues queued (#343, #344, #345, #348).
+The session began as "get a live candidate session ready" and ended having found
+that a live session is not possible yet — for a reason no checkpoint reports.
 
-## 1. There is no CI, and the substitute has to be named in the merge commit
+## 1. Step 7 has no implementation that fetches — #348
 
-The account spent its **2000 monthly Actions minutes in four days** and ran dry
-today. Runs still fire and still fail — in **4 to 6 seconds**, with every log a
-404. That is the runner dying before any job body ran, and it says nothing about
-the code. **Read `created_at` and `updated_at`, not the conclusion.**
+The two ends of sourcing exist and have never been connected. Measured on
+`main` at 1fbf836:
 
-`tools/verified_gate.sh <sha>` is the substitute, and CLAUDE.md now says so. It
-resolves the ref, checks that commit into a throwaway detached worktree, clears
-bytecode, runs `make host-gate` and prints a verdict block. Three rules, and the
-third is the one that gets skipped:
+- `load_connectors` / `usable_connectors` are imported by exactly two modules,
+  `connectors.py` and `connector_exchange.py`. Neither touches a `ProfileStore`.
+- `build_offer` / `build_search_offer` are called from exactly two places and
+  **both are gates** — `connector_contract.py`, `connector_coverage.py`.
+- `collect_offer`, the only writer into a candidate's tree, is called from
+  `reaction_elicit.py` (handed its offers by the caller) and from `lifecycle.py`'s
+  own probe fixtures. Nowhere else.
+- `build_list_urls` / `build_list_requests` have **no production caller at all**.
 
-- paste the block on the PR;
-- quote the four results in the merge commit;
-- **merge only while the head is still the SHA the block names.**
+There is no path from `constraints.json` to a live board to
+`profiles/<handle>/offers/`. The `ivan` profile's 106 offers were placed by a
+session by hand, and are dated 2026-08-15.
 
-Both merges today did all three. #307 and #338 each carry their block and their
-numbers in the squash message.
+**Why nothing reported it.** Step 7's `run_checkpoint.py` returns
+`artefacts_present: true`, `coverage_met: true`, `runnable: true`. It checks that
+offer files exist, not that anything can produce them — so a step whose artefacts
+were placed by hand is indistinguishable from one whose implementation works. The
+same fail-open shape this repo keeps finding, one layer further out than usual:
+not a metric that counts the wrong thing, but a *coverage check* satisfied by
+artefacts nobody produced.
 
-## 2. The second-reader rule now costs four or five rounds, and earns them
+`tools/collect_ads.py` is **not** this and was briefly mistaken for it here. It
+writes `corpus/raw/ads.jsonl` from hand-written `from_<board>` functions with
+hardcoded URLs and never touches the connector engine. It is the corpus
+collector.
 
-`merge-policy` is still `after-ci-and-review` and CodeRabbit is gone (Free plan:
-walkthroughs only, no findings). Every review round today was an independent
-session. The measured result:
+## 2. What merged
 
-| PR | rounds | findings fixed with a committed fixture |
+**#346 (T124)** — `url_pattern` admitted only `{page}`, so every candidate got
+the query its YAML author wrote: `?te=python` on tecnoempleo,
+`atencion_al_cliente` on trabajos. Adds `{query}` as a second allowed literal
+(the brace check still refuses `{0.__class__}`, `{query!r}`, `{}`, `{QUERY}`),
+refuses to substitute an empty query, adds `accepts_query()`, and records the
+terms in `candidate.Aim` — deliberately **outside** `FIELD_MODELS`, because
+D-20's gate says a pinned constraint nothing filters on is a lie and the aim
+steers the fetch rather than narrowing the result.
+
+Two boards wired, four left alone, each decided by a **differential live fetch**
+rather than by reading a form's `name` attribute:
+
+| board | param | verdict |
 |---|---|---|
-| #307 (T98) | 5 | 8 |
-| #338 (T109) | 4 | 9 |
+| tecnoempleo | `te` | wired — 30/27/29 cards for three queries, titles matching |
+| jobfluent | `q` | wired — different first cards per query |
+| trabajos | `BUSCAR` | ignored — byte-identical 40 items for both queries |
+| ticjob | `keywords` | GET returns 3 and 2 items whose titles do not match; real form is POST |
+| infojobs | — | no form inputs in 1.2 MB; JS-rendered |
+| getmanfred | — | no slot by design; the API returns the whole active list |
 
-**Every round found something, including rounds reviewing the previous round's
-fix.** What each round found, though, changed shape — and that is the useful
-part:
+**#347 (T107)** — 24 candidate-facing strings, `en` (source) / `es` / `ca`, in
+`strings/catalogue.json`. Each translation records `of`: the sha256 of the source
+text it was made from, so editing the English makes its translations *provably*
+stale. `presentation.py` looks strings up through `_t(key, language)`; `render()`,
+`card()` and every helper take a `language`. Card columns are **derived** from
+label widths (`ubicación` is longer than `location`); the pay period is rendered
+(without it a Spanish card read `EUR/year`).
 
-- **Rounds 1–2 found defects in shipped behaviour.** #338's F1 was live: a
-  top-level key literally named `Filters.inner` rendered identically to the
-  nested pair `Filters` → `inner`, so the second-occurrence check compared two
-  different positions as equal and sent the literal text `{page}` on the wire.
-- **Rounds 3–5 found defects in the *previous round's fixtures*.** Nothing in
-  shipped behaviour. `corpus_scope.py` was AST-identical for two rounds and
-  `connectors.py` byte-identical for one before each merged.
+**Completeness and staleness are gated. Quality is not, and is not claimed** —
+nothing can tell whether a contributed German pack is good German, so a pack
+records who made it and when. An unserved language falls back on every string and
+`untranslated(language)` names every one: silent English was the defect, announced
+English is the feature.
 
-**The stopping rule used, and it is a proposal not a ruling:** merge when a
-round's findings are confined to fixtures and prose, the shipped behaviour is
-provably unchanged from a commit an earlier read cleared, and every named
-finding is fixed and mutation-verified. The owner was asked to confirm this and
-has not yet answered — the question stands.
+## 3. Merged without CI, and the evidence trail was repaired late
 
-### The three failure shapes worth carrying forward
+Actions is still dry (checks fail in 2–4s, `runner_id: 0`). The owner instructed
+merging anyway. `make host-gate` was green over each tree before its PR opened —
+but `tools/verified_gate.sh` was **not** run, its block **not** pasted before the
+merge, and the results **not** quoted in either squash message. All three are the
+procedure the 2026-09-04 handover records. The block was produced afterwards over
+the merged tip and posted on both PRs, which is weaker evidence than the
+procedure asks for. Next session: run it first.
 
-Each was met more than once today, by me, in the act of fixing the previous one.
+Note `CLAUDE.md`'s "Known environment state" still says Actions recovered on
+2026-09-01 and that a red CI is a signal again. **That is stale** — a session
+trusting it will chase a phantom failure.
 
-1. **A fixture that passes in the exact state it was written to catch.** #307's
-   F1 asserted a message was in `unmeasured_reason`, which joins breaches and
-   untrusted readings — so it held whichever list the floor was appended to, and
-   the classification was the whole point.
-2. **A fixture parametrised over the thing it pins.** #307's F2: widening
-   `STIMULUS_STRUCTURAL_DEPENDENCIES` left the suite green *and added two
-   passing tests*. The widening manufactured its own certificate.
-3. **A finding answered with a fixture on the wrong function.** #307's fifth
-   round: the deferred-import claim lives on `exempt_reader_findings`, and both
-   fixtures I added drove the *other* scanner. Mutating the one the docstring
-   talks about stayed green across 2722 tests.
+## 4. Two costs worth not paying twice
 
-And one rule that keeps recurring: **an assertion taken over an all-zero reading
-holds for any subset of what it sums.** `corpus_measurement_set_violations` was
-asserted over the real corpus, where all five components are zero — so dropping
-three of the five was green. Each component is driven non-zero on its own now.
+- **Seeding a task needs its `status/plan.md` row already marked `☑`.** The gate
+  runs *after* `open_task_pr.sh` archives the task file, so a `☐` row fails
+  post-archive while a `☑` row fails pre-archive. Check instantly with
+  `plan_v2.measure()['violations']` instead of discovering it through a
+  four-minute helper run. Cost here: three wasted runs across two PRs.
+- **`make evidence` diffs the working tree against the *index*.** A regenerated
+  evidence file must be `git add`ed before `open_task_pr.sh`, or the gate reports
+  drift about a change that is already correct. Adding `strings.py` bumped
+  `gate_modules_discovered` 92 → 93 — a growth-sensitive key of exactly the shape
+  T111 flags.
+- **`make format` is a repo-wide rewrite.** `make lint` never checked formatting,
+  so `ruff format .` on a clean checkout rewrites **33 files** (`cue_audit.py`
+  alone by 683 lines). It swept a third of `src/` into T124's diff and had to be
+  reverted file by file. Queued as #345 — do it when no PR is open.
 
-## What is open
+## 5. Queued, in the order they unblock each other
 
-| | |
-|---|---|
-| **#336** T122 | the two gate readers disagree about what declaring a gate means, and the disagreement resolves to pass |
-| **#337** T123 | a metric named after a category is satisfiable by there being none of them |
-| **#339** (queue) | 28 elicitation-split adverts from a robots-blocked board are reachable as stimuli — `check_stimulus` early-returns for `source == "corpus"` |
-| **#340** (queue) | `build_list_urls` ignores `pagination.start` with no test noticing; a 0-indexed board's URLs silently start at page 1 |
-| **#124** T59 | reopened — it was closed-as-completed while its task file is live and `requires: [access:human]`. Needs a person at the keyboard to label. |
+- **#348** — the sourcing driver. Blocks any live session.
+- **#345** — format once, add `ruff format --check` to `make lint`. Small, and
+  wants a moment with no PR open.
+- **#344** — the corpus ships 208 verbatim adverts, full text, 485k characters.
+  The excerpting rule the *fixtures* obey ("the adverts are the board's content,
+  not ours") was never applied to it. Blocks making the repo public — which in
+  turn is what would end the Actions problem, since Actions is free and unlimited
+  on public repositories.
+- **#343** — contributed connectors and language packs should arrive
+  review-ready: generate the PR body from `meta.yaml`, guard the paths in CI.
 
-#339 and #340 carry the `arsenal:queue` label, so **run step 4b** (`issue_import.py
---apply`) before selecting work, or `handle_sync.py` will propose duplicates.
+## 6. Housekeeping
 
-## Small things that cost time today
-
-- **`open_task_pr.sh` runs `make evidence`, which diffs against the index.** A
-  legitimately-changed committed evidence file therefore reads as drift and the
-  script refuses. `git add -A` first, then run it — the script's own `git add -A`
-  is idempotent.
-- **`uv sync --all-extras` in a worktree breaks `make lint`.** It installs
-  `pypdf`, which makes `cv_store.py`'s `type: ignore[import-not-found]` unused
-  and mypy fails. Use `uv sync --extra dev` — that is what CI ran.
-- **A `pkill` on pytest does not kill its bash parent**, which keeps running the
-  4-minute gate. Kill the shell.
+**63 claim refs** on the remote and a dozen stale worktrees, including several
+under `.claude/worktrees/`. Noise in every `git worktree list`; nobody's task yet.
