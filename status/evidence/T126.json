@@ -1,0 +1,9 @@
+{
+  "sourced_offers_without_a_recorded_fetch": 0,
+  "sourced_offers_evaluated": 34,
+  "boards_consulted": 6,
+  "boards_with_a_committed_capture": 6,
+  "boards_steered": 2,
+  "unrecorded_offers_detected_by_the_control": 1,
+  "gate_status": "measured"
+}
