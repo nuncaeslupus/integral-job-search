@@ -83,11 +83,14 @@ import yaml
 from integral.connector_contract import check_package
 from integral.connectors import (
     CONNECTOR_FILENAME,
+    FIXTURE_DIRNAME,
     META_FILENAME,
+    PROBE_DIRNAME,
     SITE_NAME,
     Connector,
     ConnectorError,
     load_connector,
+    parse_connector,
 )
 from integral.state_home import candidate_root
 
@@ -488,7 +491,119 @@ def approve(disclosure: Disclosure, answer: str, *, at: str | None = None) -> Ap
     return Approval(disclosure_digest=disclosure.digest, answer=answer, at=at or _now())
 
 
-def _submission_command(disclosure: Disclosure) -> list[str]:
+def contribution_body(disclosure: Disclosure, contents: Mapping[str, str]) -> str:
+    """The pull request body, **rendered from the bundle** rather than retyped.
+
+    What this replaced was one line — `Contributed by <user>. Files: …` — which
+    gave a reviewer no gate, no provenance, and no statement of what was
+    checked. All of it already exists in the package, so the body is generated
+    from `meta.yaml`: retyped provenance drifts from the file it describes, and
+    a reviewer cannot tell which of the two is stale.
+
+    `contents` is the bytes that were **approved and re-hashed**, not a fresh
+    read of the directory. `contribute` re-reads the bundle and refuses a file
+    edited between the question and the answer; building the body from a second
+    read would put text into the pull request that no yes ever covered.
+
+    The divergence line is the one a reviewer cannot derive by eye. A probe
+    naming the same offers as the fixture makes the rot check compare a page
+    with itself, and it stays invisible in a diff — `getmanfred_es`'s probe was
+    14 bytes from its fixture and named the same three offers (T127).
+    """
+    meta = yaml.safe_load(contents.get(META_FILENAME, "")) or {}
+    policy = meta.get("policy") or {}
+    fixture = meta.get("fixture") or {}
+
+    def row(label: str, value: Any) -> str:
+        return f"| {label} | {value if value not in (None, '') else '—'} |"
+
+    lines = [
+        f"Adds a connector for **{disclosure.site}**.",
+        "",
+        f"Contributed by @{disclosure.github_username.lstrip('@')}.",
+        "",
+        "## Provenance",
+        "",
+        "Generated from `meta.yaml`. Nothing here is retyped.",
+        "",
+        "| | |",
+        "|---|---|",
+        row("site", meta.get("site")),
+        row("country", meta.get("country")),
+        row("language", meta.get("language")),
+        row("maintainer", meta.get("maintainer")),
+        row("last verified", meta.get("last_verified")),
+        row("listings", policy.get("listings")),
+        row("robots.txt", policy.get("robots_txt")),
+        row("authentication", policy.get("authentication")),
+        row("fixture provenance", fixture.get("provenance")),
+        row("fixture recorded", fixture.get("recorded")),
+        row("ad bodies", fixture.get("bodies")),
+        row("client IP", fixture.get("client_ip")),
+        "",
+        "## Acceptance gate",
+        "",
+        "`install()` runs this before the connector is used for the first time, so",
+        "whether it works is a command rather than an opinion:",
+        "",
+        "```bash",
+        f"uv run --extra dev pytest tests/test_connector_contract.py -k {disclosure.package_name}",
+        "```",
+        "",
+        "## Fixture and probe",
+        "",
+        _divergence_line(disclosure, contents),
+        "",
+        "## Files",
+        "",
+        *(f"- `{name}`" for name in disclosure.files),
+    ]
+    return "\n".join(lines)
+
+
+def _divergence_line(disclosure: Disclosure, contents: Mapping[str, str]) -> str:
+    """One sentence saying whether the rot check compares two different reads.
+
+    Imported here rather than at module scope: `connector_health` pulls in the
+    whole coverage layer, and this module is loaded on the candidate's path
+    where none of that is wanted.
+    """
+    from integral.connector_health import list_references
+
+    fixture = contents.get(f"{FIXTURE_DIRNAME}/list.html")
+    probe = contents.get(f"{PROBE_DIRNAME}/list.html")
+    if fixture is None or probe is None:
+        return (
+            "No `probe/list.html` in the bundle, so the rot check does not run for "
+            "this connector — `connector_health` reports it unmeasured rather than "
+            "healthy. See `CONTRIBUTING.md`."
+        )
+    try:
+        connector = parse_connector(contents[CONNECTOR_FILENAME])
+        fixture_refs = list_references(connector, fixture)
+        probe_refs = list_references(connector, probe)
+    except Exception as error:
+        return f"Divergence could not be computed: {type(error).__name__}: {error}"
+    if not fixture_refs or not probe_refs:
+        return (
+            f"One side parsed to no offers (fixture {len(fixture_refs)}, probe "
+            f"{len(probe_refs)}), so divergence is **unmeasured** — not zero."
+        )
+    shared = fixture_refs & probe_refs
+    if shared == probe_refs:
+        return (
+            f"**The probe repeats the fixture**: all {len(probe_refs)} of its offers "
+            f"also appear in `fixture/list.html`, so the rot check compares the same "
+            f"markup twice and cannot fail. Re-capture the probe from a different "
+            f"query or a later day — see `CONTRIBUTING.md`."
+        )
+    return (
+        f"The probe shares {len(shared)} of its {len(probe_refs)} offers with the "
+        f"fixture, so the rot check compares two genuinely different reads."
+    )
+
+
+def _submission_command(disclosure: Disclosure, contents: Mapping[str, str]) -> list[str]:
     """The `gh` invocation that would open the pull request.
 
     Private, and reachable only from `contribute`. It was public, which made it
@@ -511,7 +626,7 @@ def _submission_command(disclosure: Disclosure) -> list[str]:
         "--title",
         f"Add a connector for {disclosure.site}",
         "--body",
-        f"Contributed by {disclosure.github_username}. Files: " + ", ".join(disclosure.files),
+        contribution_body(disclosure, contents),
     ]
 
 
@@ -565,7 +680,7 @@ def contribute(
         destination = outbox / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(text, encoding="utf-8")
-    command = _submission_command(disclosure)
+    command = _submission_command(disclosure, contents)
     (outbox / SUBMISSION_NOTE).write_text(
         "This bundle has not been sent. To open the pull request:\n\n"
         + " ".join(command)

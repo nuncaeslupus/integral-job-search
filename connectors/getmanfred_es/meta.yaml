@@ -52,13 +52,20 @@ policy:
 #   * offer 8467 `updatedAt`: 2026-08-27T13:45:48.821Z -> 2026-09-01T09:05:26.911Z
 #   * offer 8464 `offerLanguages`: ["EN","ES"] -> ["ES","EN"] (order only)
 #
-# 14 differing bytes, and none of them in a field this connector maps — which
-# is the healthy reading rather than a weak one. The rot check asks whether the
-# same selectors still find the same items in a genuinely later response, and
-# they do: three records, each still yielding title, company, both figures and
-# a composed detail_url. The board itself moved in the same interval (21 live
-# offers on 09-01, 20 on 09-02), so the two files being nearly equal is a fact
-# about the three offers kept, not about the capture.
+# **Retracted, and the probe re-captured on 2026-09-06.** What stood here
+# argued that the probe being 14 bytes from the fixture was "the healthy
+# reading rather than a weak one" — the capture was genuine, the board really
+# had moved, and the near-equality was "a fact about the three offers kept, not
+# about the capture". Every clause of that is true and the conclusion does not
+# follow. The rot check does not ask whether the capture was honest; it asks
+# whether the selectors still find items in markup they have not already seen.
+# Both files named the SAME three offers, so the comparison ran over the same
+# markup twice and a parser that broke on anything new would still have been
+# called healthy. `connector_health.probe_divergence` (T127) measures this
+# directly and named this package alongside `ticjob_es`.
+#
+# The replacement is three offers from the 2026-09-06 response that appear in
+# neither the fixture nor its cut: overlap 0 of 3.
 fixture:
   provenance: sampled
   recorded: "2026-09-01"

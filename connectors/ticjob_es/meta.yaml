@@ -78,3 +78,21 @@ fixture:
   # `tests/test_connector_contract.py` re-checks it for every recorded page in
   # the library anyway.
   client_ip: redacted
+
+# `probe/list.html` was **byte-identical to `fixture/list.html`** until
+# 2026-09-06 — the same file committed twice, so the rot stage compared a
+# string with itself and `silent_connector_failures` could only ever be 0 for
+# this package. `connector_health.py`'s own header records the module being
+# fixed for exactly this once before, in the *code*; nobody checked the data.
+#
+# Re-captured 2026-09-06 from the same URL. Three `<li>` cards sliced whole
+# from the live 764 KB response in the raw bytes on tag boundaries — never
+# parsed and re-serialised, which would repair the markup the capture exists to
+# preserve — and dropped into the same minimal shell. The three share **zero**
+# references with the fixture's three. 764,748 bytes served -> 17 KB committed.
+#
+# `rrhh@sixtema.es` appears in one card. It is a company recruitment inbox
+# printed on a public board, the same kind of address `jobs@python.org` and
+# `people@azumo.co` already are in this library's committed captures, and not
+# a private individual's. No IPv4 literal, session token or personal name is
+# present.

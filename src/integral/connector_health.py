@@ -81,6 +81,7 @@ from integral.connectors import (
     PROBE_DIRNAME,
     Connector,
     ConnectorError,
+    connector_packages,
     load_connector,
     parse_list_page,
 )
@@ -91,6 +92,9 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T72.json"
 #: questions of the same readings and a reader must be able to fail one
 #: without the other going quiet.
 DEFAULT_RATE_LIMIT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T73.json"
+#: T127. A third question of the same packages: whether the probe the rot
+#: check reads is a second read of the board or a restatement of the first.
+DEFAULT_DIVERGENCE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T127.json"
 
 #: T73. `inconclusive` is the third verdict, and it is not a soft `broken`:
 #: it says the question was not answered, the same distinction `liveness`
@@ -851,6 +855,7 @@ def _main(argv: list[str]) -> int:
     # one record to a scratch directory is not asking to have the other
     # written into the repository.
     rate_limits = write_rate_limit_evidence(Path(args.path).parent / "T73.json")
+    divergence = write_divergence_evidence(Path(args.path).parent / "T127.json")
     print(json.dumps(measured, ensure_ascii=False))
     for reading in measured["readings"]:
         for reason in reading["reasons"]:
@@ -867,6 +872,26 @@ def _main(argv: list[str]) -> int:
         for case in rate_limits["reported_as_broken"]:
             print(f"rate-limited run reported as broken: {case}", file=sys.stderr)
         return 1
+
+    # T127, before T72's own reading. A tautological probe makes T72's answer
+    # meaningless for that package — it compared a page with itself — so
+    # reporting `silent_connector_failures: 0` first would be answering with a
+    # number this finding says not to trust.
+    if divergence["connectors_whose_probe_repeats_its_fixture"]:
+        for package in divergence["tautological_probes"]:
+            print(
+                f"{package}: the probe names no offer the fixture does not — "
+                "the rot check compares the same markup twice and cannot fail",
+                file=sys.stderr,
+            )
+        return 1
+    if divergence["gate_status"] == "unmeasured":
+        print(
+            f"probe divergence unmeasured: {divergence['probes_compared']} probe(s) "
+            f"compared, the floor is {divergence['probes_compared_floor']}",
+            file=sys.stderr,
+        )
+        return 3
 
     # A violation the free signals actually FOUND is a measured failure, and it
     # outranks any missing probe. Testing `unmeasured` first meant one unprobed
@@ -909,6 +934,117 @@ def _main(argv: list[str]) -> int:
         )
         return 3
     return 1 if measured["silent_connector_failures"] else 0
+
+
+#: A package whose probe repeats its fixture is compared against nothing, so a
+#: library that lost every real probe must fail rather than pass over an empty
+#: set. Seventeen packages carry a probe today; the floor sits below that with
+#: room for one to be withdrawn without the gate going quiet.
+MINIMUM_PROBES_COMPARED = 12
+
+
+def list_references(connector: Connector, html: str) -> set[str]:
+    """The offers a list page names, keyed the way a reader would tell them apart.
+
+    `detail_url` first because it is the board's own identifier; `title` only
+    where a connector publishes no detail link. Anything else — company, date,
+    the teaser — repeats across offers and would understate divergence.
+    """
+    references: set[str] = set()
+    for item in parse_list_page(connector, html):
+        reference = item.get("detail_url") or item.get("title")
+        if reference:
+            references.add(reference)
+    return references
+
+
+def probe_divergence(package: Path, connector: Connector) -> dict[str, Any]:
+    """Whether this package's probe is a second read or a restatement of the first.
+
+    `assess_package` compares the probe against the fixture and calls a parser
+    healthy when both yield offers. That comparison is only worth something if
+    the two pages carry **different offers**: a probe holding the same adverts
+    exercises the same markup, so a parser that broke on anything new would
+    still be called healthy.
+
+    This module's own header records fixing that once — an earlier revision
+    pointed the probe at `fixture/list.html`, so the production path compared a
+    string with itself. The fix was made in the *code*, and the **data** was
+    never checked. Measured 2026-09-05, two packages were still tautological:
+    `ticjob_es`, whose probe is byte-identical to its fixture, and
+    `getmanfred_es`, whose probe is byte-*different* and names the same three
+    offers — which no byte comparison would ever have caught.
+
+    `repeats_the_fixture` is true when **every** offer the probe names also
+    appears in the fixture. Not a threshold on the overlap: a probe that adds
+    one new advert does compare something, and one is the honest boundary.
+    """
+    fixture, probe = package / "fixture" / "list.html", package / "probe" / "list.html"
+    reading: dict[str, Any] = {"package": package.name, "compared": False, "reason": None}
+    if not fixture.exists() or not probe.exists():
+        reading["reason"] = "no probe" if fixture.exists() else "no fixture"
+        return reading
+    fixture_refs = list_references(connector, fixture.read_text(encoding="utf-8"))
+    probe_refs = list_references(connector, probe.read_text(encoding="utf-8"))
+    # A side that parses to nothing is not a divergence of zero, it is a
+    # question that was not asked — the `unmeasured` distinction, per package.
+    # Scoring it as 100% overlap would report the parser's own failure as a
+    # tautology and send a reader to re-capture a probe that was fine.
+    if not fixture_refs or not probe_refs:
+        reading["reason"] = (
+            f"parsed no offers (fixture={len(fixture_refs)}, probe={len(probe_refs)})"
+        )
+        return reading
+    shared = fixture_refs & probe_refs
+    return {
+        "package": package.name,
+        "compared": True,
+        "reason": None,
+        "fixture_offers": len(fixture_refs),
+        "probe_offers": len(probe_refs),
+        "shared_offers": len(shared),
+        "overlap": round(len(shared) / len(probe_refs), 4),
+        "repeats_the_fixture": shared == probe_refs,
+        "byte_identical": fixture.read_bytes() == probe.read_bytes(),
+    }
+
+
+def measure_probe_divergence(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
+    """T127's gate reading: `connectors_whose_probe_repeats_its_fixture`."""
+    readings = []
+    for package in connector_packages(directory):
+        try:
+            connector = load_connector(package / "connector.yaml")
+        except Exception as error:
+            readings.append(
+                {"package": package.name, "compared": False, "reason": f"unloadable: {error}"}
+            )
+            continue
+        readings.append(probe_divergence(package, connector))
+    compared = [r for r in readings if r["compared"]]
+    tautological = [r["package"] for r in compared if r["repeats_the_fixture"]]
+    return {
+        "connectors_whose_probe_repeats_its_fixture": len(tautological),
+        "probes_compared": len(compared),
+        # The floor is what stops a clean zero resting on an empty scan: a
+        # library that lost every probe would otherwise report 0 tautologies
+        # and pass, which is the exact reading it must not be able to give.
+        "probes_compared_floor": MINIMUM_PROBES_COMPARED,
+        "gate_status": "measured" if len(compared) >= MINIMUM_PROBES_COMPARED else "unmeasured",
+        "tautological_probes": sorted(tautological),
+        "readings": sorted(readings, key=lambda r: str(r["package"])),
+    }
+
+
+def write_divergence_evidence(
+    evidence: Path = DEFAULT_DIVERGENCE_EVIDENCE_PATH,
+    directory: Path = DEFAULT_CONNECTORS_DIR,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T127.json`."""
+    measured = measure_probe_divergence(directory)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
 
 
 if __name__ == "__main__":
