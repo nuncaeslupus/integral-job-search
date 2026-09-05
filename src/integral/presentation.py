@@ -48,6 +48,7 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
+from integral import strings
 from integral.eligibility import Reading
 from integral.enrichment import NOT_FROM_THE_ADVERT, OutsideFinding
 from integral.explain import explain
@@ -63,17 +64,38 @@ DEFAULT_T87_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T87.json"
 #: What an advert did not say. One token, so a reader learns it once and a test
 #: can count it — "not stated", "n/a" and "—" scattered across four bullets are
 #: four things to recognise, and one of them will eventually read as a value.
-UNKNOWN = "unknown"
+#: T107. Every candidate-facing string below is the catalogue's **source**
+#: text, kept as a module constant so nothing importing one has to change and
+#: so the gates that match exact bytes keep matching. `_t(key, language)` is
+#: what a page rendered in the candidate's own language calls instead — it
+#: returns the same bytes for the source language, so `render()` with no
+#: `language` behaves exactly as it did before this seam existed.
+_CATALOGUE = strings.load()
+SOURCE_LANGUAGE: str = _CATALOGUE["source_language"]
+
+
+def _t(key: str, language: str | None = None) -> str:
+    """The candidate-facing string `key`, in `language` (default: the source).
+
+    Falls back to the source text when a language has no fresh translation —
+    silently in the string and loudly in `untranslated()`, because splicing an
+    apology into a sentence corrupts the very bytes the page's own checks match
+    on. Ask once, tell the candidate once.
+    """
+    return strings.text(_CATALOGUE, key, language or SOURCE_LANGUAGE)
+
+
+def untranslated(language: str) -> list[str]:
+    """Which strings this language cannot serve, so a session can say so once."""
+    return strings.fallbacks(_CATALOGUE, language)
+
+
+UNKNOWN = _t("unknown")
 
 #: Said once per page when the ranking is L1, and never when it is not — the
 #: label is a claim about *this* ranking, so it is as wrong when untrue as its
 #: absence is when true. Step 9 also asks what would sharpen it, in the same line.
-PROVISIONAL_LABEL = (
-    "Provisional: I have put these in an order — the ranking — using only the things "
-    "you said are non-negotiable and the pay, because I do not yet know how much each "
-    "thing is worth to you. Working through step 6's paired choices is what would "
-    "sharpen it."
-)
+PROVISIONAL_LABEL = _t("provisional_label")
 
 #: "Show a handful at a time, not forty."
 DEFAULT_LIMIT = 5
@@ -82,33 +104,42 @@ DEFAULT_LIMIT = 5
 #: carries. Both are constants for the same reason `PROVISIONAL_LABEL` is: the
 #: gate looks for the exact bytes the page shows, so the check cannot drift
 #: from the wording by paraphrasing it.
-EXCLUDED_HEADING = "Excluded"
-FLAG_MARKER = "[flagged — your call]"
+EXCLUDED_HEADING = _t("excluded_heading")
+FLAG_MARKER = _t("flag_marker")
 
 #: What an exclusion renders as when it arrived with no wording behind it.
 #: Never silently omitted: an exclusion with no reason is the defect this
 #: section's gate counts, and hiding it would make the page look correct.
-NO_REASON_GIVEN = "(no reason was recorded — this is a defect, please report it)"
+NO_REASON_GIVEN = _t("no_reason_given")
 
-_CARD = Template(
-    """$marker$title — $company
-  pay:       $pay
-  hours:     $hours
-  location:  $location
-  contract:  $contract
-  link:      $link
+#: The rows a card carries, in the order it shows them. The column the values
+#: start at is **derived** from the widest label rather than typed as spaces,
+#: because "ubicación" and "location" are not the same width and a card whose
+#: alignment was hardcoded in English renders ragged in every other language.
+_CARD_ROWS: tuple[str, ...] = ("pay", "hours", "location", "contract", "link")
 
-  $matters
-$outside"""
-)
+
+def _card_column(language: str | None = None) -> int:
+    return max(len(_t(f"card_{row}", language)) + 1 for row in _CARD_ROWS) + 2
+
+
+def _card_template(language: str | None = None) -> Template:
+    column = _card_column(language)
+    rows = "\n".join(
+        f"  {_t(f'card_{row}', language) + ':':<{column}}${row}" for row in _CARD_ROWS
+    )
+    return Template(f"$marker$title — $company\n{rows}\n\n  $matters\n$outside")
+
+
+_CARD = _card_template()
 
 
 #: T95. How an unstated figure is marked, and what it rests on. Two constants
 #: because the gate looks for the exact bytes the card shows — the same reason
 #: `PROVISIONAL_LABEL` and `FLAG_MARKER` are constants — so a paraphrase cannot
 #: drift away from the check.
-ESTIMATED_MARKER = "(estimated — the advert did not say)"
-ESTIMATE_BASIS = "from the range this role and level pays on comparable adverts"
+ESTIMATED_MARKER = _t("estimated_marker")
+ESTIMATE_BASIS = _t("estimate_basis")
 
 #: T95. Our machinery, and the plain words that must come first.
 #:
@@ -122,11 +153,11 @@ ESTIMATE_BASIS = "from the range this role and level pays on comparable adverts"
 #: occurrence. Explaining it afterwards is explaining it to somebody who has
 #: already been confused by it, which is what happened.
 INTERNAL_TERMS: dict[str, str] = {
-    "ranking": "I have put these in an order",
-    "weights": "how much each thing is worth to you",
-    "part-worth": "what one step of a trade-off is worth in money",
-    "corpus": "the adverts I have collected",
-    "connector": "the piece that reads one job board",
+    "ranking": _t("term_ranking"),
+    "weights": _t("term_weights"),
+    "part-worth": _t("term_part_worth"),
+    "corpus": _t("term_corpus"),
+    "connector": _t("term_connector"),
 }
 
 #: Every row a card carries, so a decision does not need a second turn to be
@@ -176,7 +207,7 @@ def chunks(sequence: Sequence[Any], size: int = DEFAULT_LIMIT) -> list[list[Any]
     return [list(sequence[start : start + size]) for start in range(0, len(sequence), size)]
 
 
-def _salary(offer: Offer) -> str:
+def _salary(offer: Offer, language: str | None = None) -> str:
     """§5.2's salary, said as what it is: stated, estimated, or unknown.
 
     T95. Suppressing an unstated figure to `unknown` honoured T92 — an estimate
@@ -190,27 +221,38 @@ def _salary(offer: Offer) -> str:
     """
     salary = offer.salary
     if salary is None:
-        return UNKNOWN
+        return _t("unknown", language)
     low, high = salary.min, salary.max
     if low is None and high is None:
-        return UNKNOWN
+        return _t("unknown", language)
     currency = salary.currency or ""
-    period = f"/{salary.period}" if salary.period else ""
-    figures = " to ".join(f"{value:,.0f}" for value in (low, high) if value is not None)
+    # The period is a data value (`year`/`month`), not a label, so it needs a
+    # rendering of its own — without one a Spanish card reads "EUR/year". An
+    # unrecognised period is shown as it came rather than dropped: a figure
+    # whose period is unknown is worse than one whose period is foreign.
+    period = ""
+    if salary.period:
+        key = f"period_{salary.period}"
+        period = "/" + (
+            _t(key, language) if key in _CATALOGUE["entries"] else salary.period
+        )
+    figures = _t("salary_range_join", language).join(
+        f"{value:,.0f}" for value in (low, high) if value is not None
+    )
     shown = f"{figures} {currency}{period}".strip()
     if salary.stated:
         return shown
-    return f"{shown} {ESTIMATED_MARKER} ({ESTIMATE_BASIS})"
+    return f'{shown} {_t("estimated_marker", language)} ({_t("estimate_basis", language)})'
 
 
-def _location(offer: Offer) -> str:
+def _location(offer: Offer, language: str | None = None) -> str:
     if offer.location is None:
-        return UNKNOWN
+        return _t("unknown", language)
     parts = [part for part in (offer.location.raw, offer.location.remote) if part]
-    return " · ".join(parts) if parts else UNKNOWN
+    return " · ".join(parts) if parts else _t("unknown", language)
 
 
-def _matters(explanation: Mapping[str, Any] | None) -> str:
+def _matters(explanation: Mapping[str, Any] | None, language: str | None = None) -> str:
     """The one plain line, with the bad part in it.
 
     No drivers means nothing priced moved this offer, and saying so is a
@@ -219,18 +261,21 @@ def _matters(explanation: Mapping[str, Any] | None) -> str:
     """
     drivers = list(explanation["drivers"]) if explanation else []
     if not drivers:
-        return "Nothing the advert says has been priced yet, so there is no reason to give."
+        return _t("nothing_priced", language)
 
     best = max(drivers, key=lambda d: d["contribution_eur_month"])
     worst = min(drivers, key=lambda d: d["contribution_eur_month"])
-    line = _phrase(best)
+    line = _phrase(best, language)
     if worst is not best and worst["contribution_eur_month"] < 0:
-        line += f" — but {_phrase(worst)}"
+        line += f" — but {_phrase(worst, language)}"
     return line + "."
 
 
-def _phrase(driver: Mapping[str, Any]) -> str:
-    span = driver["evidence_span"] or f"{driver['dimension']} (the advert's wording was not kept)"
+def _phrase(driver: Mapping[str, Any], language: str | None = None) -> str:
+    span = (
+        driver["evidence_span"]
+        or f"{driver['dimension']} ({_t('wording_not_kept', language)})"
+    )
     return f'"{span}" ({driver["contribution_eur_month"]:+,.0f} EUR/mo)'
 
 
@@ -240,6 +285,7 @@ def card(
     net: NetEstimate | None = None,
     outside: Sequence[OutsideFinding] = (),
     flagged: bool = False,
+    language: str | None = None,
 ) -> str:
     """One offer, as the candidate sees it. Pure: same input, same bytes.
 
@@ -251,32 +297,34 @@ def card(
     rather than empty — "the lookup found nothing" and "no lookup ran" are
     different answers, and an empty heading asserts the first.
     """
-    pay = _salary(offer)
+    pay = _salary(offer, language)
     if net is not None:
-        pay = f"{pay}\n             {net.label()}"
-    return _CARD.substitute(
+        # The continuation lines up under the value column, which moves with
+        # the label widths — see `_card_column`.
+        pay = f"{pay}\n{' ' * (_card_column(language) + 2)}{net.label()}"
+    return _card_template(language).substitute(
         # T87/§5.4: a FLAG is "ranked, marked, and the human is the
         # tiebreaker". Ranked was T79's half; marked is this one. The marker
         # sits above the title rather than in a bullet because it qualifies the
         # whole card, and a card that is *not* flagged carries no empty row —
         # "nothing to weigh up" and "this row was left blank" are different
         # claims, the same distinction `_outside_block` draws.
-        marker=f"{FLAG_MARKER}\n" if flagged else "",
-        title=offer.title or UNKNOWN,
-        company=offer.company or UNKNOWN,
+        marker=f'{_t("flag_marker", language)}\n' if flagged else "",
+        title=offer.title or _t("unknown", language),
+        company=offer.company or _t("unknown", language),
         pay=pay,
         # Step 9 asks for these bullets; §5.2's offer has no field for either.
         # See the module docstring — the honest cell is the only one available.
-        hours=UNKNOWN,
-        contract=UNKNOWN,
-        location=_location(offer),
+        hours=_t("unknown", language),
+        contract=_t("unknown", language),
+        location=_location(offer, language),
         # D-17: the store had `url` all along and the card dropped it, so seven
         # offers were shown with nothing to click. Absent renders as `unknown`
         # like every other bullet — a row left out reads as "there was nothing
         # to show", which the candidate cannot tell from a card with no link
         # field at all.
-        link=offer.url or UNKNOWN,
-        matters=_matters(explanation),
+        link=offer.url or _t("unknown", language),
+        matters=_matters(explanation, language),
         outside=_outside_block(outside),
     )
 
@@ -290,7 +338,9 @@ def _outside_block(findings: Sequence[OutsideFinding]) -> str:
     return f"\n  {NOT_FROM_THE_ADVERT.capitalize()}:\n{lines}\n"
 
 
-def _excluded_line(entry: Mapping[str, Any], by_id: Mapping[str, Offer]) -> str:
+def _excluded_line(
+    entry: Mapping[str, Any], by_id: Mapping[str, Offer], language: str | None = None
+) -> str:
     """The one line `_excluded_block` renders for a single exclusion.
 
     Shared with the gate check so both readings agree by construction: a
@@ -300,12 +350,16 @@ def _excluded_line(entry: Mapping[str, Any], by_id: Mapping[str, Offer]) -> str:
     offer = by_id.get(str(entry.get("offer_id")))
     name = (offer.title if offer is not None else None) or str(entry.get("offer_id"))
     quote = (entry.get("quote") or "").strip()
-    reason = entry.get("reason") or UNKNOWN
-    cited = f'"{quote}"' if quote else NO_REASON_GIVEN
+    reason = entry.get("reason") or _t("unknown", language)
+    cited = f'"{quote}"' if quote else _t("no_reason_given", language)
     return f"  - {name} ({reason}): {cited}"
 
 
-def _excluded_block(excluded: Sequence[Mapping[str, Any]], by_id: Mapping[str, Offer]) -> str:
+def _excluded_block(
+    excluded: Sequence[Mapping[str, Any]],
+    by_id: Mapping[str, Offer],
+    language: str | None = None,
+) -> str:
     """The **Excluded** section: what was removed, and the advert's own sentence
     it was removed for.
 
@@ -323,15 +377,12 @@ def _excluded_block(excluded: Sequence[Mapping[str, Any]], by_id: Mapping[str, O
     """
     if not excluded:
         return ""
-    lines = [_excluded_line(entry, by_id) for entry in excluded]
-    return "\n".join(
-        [
-            "",
-            f"{EXCLUDED_HEADING} ({len(excluded)}) — you cannot apply for these, "
-            "and this is the wording each was removed for:",
-            *lines,
-        ]
+    lines = [_excluded_line(entry, by_id, language) for entry in excluded]
+    heading = (
+        f'{_t("excluded_heading", language)} ({len(excluded)}) '
+        f'{_t("excluded_explanation", language)}'
     )
+    return "\n".join(["", heading, *lines])
 
 
 def render(
@@ -343,8 +394,14 @@ def render(
     outside: Mapping[str, Sequence[OutsideFinding]] | None = None,
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
+    language: str | None = None,
 ) -> str:
     """The page: the provisional line when it is true, then a handful of cards.
+
+    `language` is the candidate's, defaulting to the catalogue's source. A
+    language with no fresh translation for a string falls back to the source
+    for that string alone — `untranslated(language)` names which, so a session
+    can say so once rather than the page apologising in every sentence.
 
     Raises `KeyError` on a frontier offer nobody supplied. Skipping it would
     render a shorter list than the ranking says it ranked, which is the one
@@ -372,7 +429,7 @@ def render(
 
     lines: list[str] = []
     if ranking["level"] == "L1":
-        lines += [PROVISIONAL_LABEL, ""]
+        lines += [_t("provisional_label", language), ""]
     lines += [
         card(
             by_id[offer_id],
@@ -384,6 +441,7 @@ def render(
             # reads — could never show what the lookup found.
             (outside or {}).get(offer_id, ()),
             offer_id in flagged,
+            language,
         )
         for offer_id in shown
     ]
@@ -393,12 +451,11 @@ def render(
         # the difference between a short list and a short *first* group.
         further = len(groups) - offset - 1
         lines.append(
-            f"({remaining} more, in {further} further group(s) — say the word and "
-            "I'll show the next.)"
+            _t("more_groups", language).format(remaining=remaining, further=further)
         )
     excluded = list(ranking.get("excluded", ()))
     if excluded:
-        lines.append(_excluded_block(excluded, by_id))
+        lines.append(_excluded_block(excluded, by_id, language))
     return "\n".join(lines)
 
 
