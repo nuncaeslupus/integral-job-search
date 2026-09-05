@@ -347,6 +347,39 @@ class Reach(ConstraintField):
     _required_when_stated = ("modes",)
 
 
+class Aim(ConstraintField):
+    """What the candidate is looking for — the terms the search actually runs.
+
+    Deliberately **not** in `FIELD_MODELS`, and the reason is D-20's gate.
+    Every pinned field is a hard constraint, and `unfilterable_stated_
+    constraints` says a constraint a candidate can state but nothing filters
+    on is a lie. The aim filters nothing: it decides what gets **fetched**,
+    upstream of the offer set the hard filter narrows. Registering it would
+    have meant either a checker that never vetoes — the exact silence that
+    gate exists to catch — or a text match between the candidate's words and
+    an advert's title, whose failure mode is the wrong *removal*: "Data
+    Engineer" does not contain "ingeniero de datos", and nobody ever learns
+    about the ad the filter ate.
+
+    It borrows `ConstraintField`'s state discipline because the shape rule is
+    the same one — `stated` must state something, `unknown` may not smuggle a
+    value — and that rule is worth having wherever a candidate's answer is
+    recorded, pinned field or not.
+
+    Nothing needs to police whether it was asked: `build_list_urls` refuses to
+    build a URL for a board carrying `{query}` without one, so a steerable
+    board cannot be searched until the candidate has said what for.
+    """
+
+    terms: tuple[str, ...] = ()
+    _required_when_stated = ("terms",)
+
+    @property
+    def query(self) -> str | None:
+        """The terms as one search string, or `None` when nothing is stated."""
+        return " ".join(self.terms) if self.terms else None
+
+
 # The pinned field set — the whole point of this module. Order matches the
 # payload's table, v1 six then v2 four, so a diff against the payload is easy
 # to eyeball.

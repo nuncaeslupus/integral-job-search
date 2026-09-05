@@ -69,7 +69,12 @@ list:
   # connector's selectors work against any of the three. This one is pinned
   # because a connector is a saved query, and an unfiltered national feed of
   # every IT vacancy is 30 rows of noise per page.
-  url_pattern: "https://www.tecnoempleo.com/ofertas-trabajo/?te=python&pagina={page}"
+  # `te` is the board's own search box. Measured live 2026-09-05 with three
+  # queries — "python" (30 cards), "ingeniero de datos" (27), "product manager"
+  # (29) — each returning titles matching its terms, so the slot is the board
+  # filtering and not a parameter it ignores. Percent-encoded by
+  # `build_list_urls`; the space in a two-word query rides as `%20`.
+  url_pattern: "https://www.tecnoempleo.com/ofertas-trabajo/?te={query}&pagina={page}"
   pagination:
     # Measured, not assumed, on 2026-08-30: pages 1, 2 and 3 were fetched and
     # their per-offer references compared. 30 / 30 / 30 cards, and the three
