@@ -1,0 +1,212 @@
+{
+  "connectors_whose_probe_repeats_its_fixture": 0,
+  "probes_compared": 18,
+  "probes_compared_floor": 12,
+  "gate_status": "measured",
+  "tautological_probes": [],
+  "readings": [
+    {
+      "package": "arbeitnow_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 6,
+      "shared_offers": 3,
+      "overlap": 0.5,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "builtin_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "examplejobs_es",
+      "compared": false,
+      "reason": "no probe"
+    },
+    {
+      "package": "getmanfred_es",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "himalayas_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "infojobs_es",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "jobfluent_es",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "jobsacuk_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 25,
+      "shared_offers": 3,
+      "overlap": 0.12,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "justjoin_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 5,
+      "probe_offers": 5,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "nofluffjobs_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "pythonorg_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 25,
+      "shared_offers": 3,
+      "overlap": 0.12,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "remotive_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 2,
+      "probe_offers": 18,
+      "shared_offers": 2,
+      "overlap": 0.1111,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "tecnoempleo_es",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "ticjob_es",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "trabajos_es",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 40,
+      "probe_offers": 40,
+      "shared_offers": 19,
+      "overlap": 0.475,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "usajobs_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 25,
+      "probe_offers": 25,
+      "shared_offers": 23,
+      "overlap": 0.92,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "wellfound_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "weworkremotely_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 25,
+      "shared_offers": 3,
+      "overlap": 0.12,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "workingnomads_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 3,
+      "probe_offers": 3,
+      "shared_offers": 1,
+      "overlap": 0.3333,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    }
+  ]
+}

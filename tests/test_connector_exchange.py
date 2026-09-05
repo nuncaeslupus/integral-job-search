@@ -23,6 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import yaml
 
 from integral.connector_exchange import (
     DEFAULT_EVIDENCE_PATH,
@@ -37,11 +38,13 @@ from integral.connector_exchange import (
     Fetch,
     ManifestEntry,
     _main,
+    _read_bundle,
     approve,
     audit,
     bundle_files,
     candidate_data_in_output,
     contribute,
+    contribution_body,
     decline,
     directory_fetcher,
     disclose,
@@ -57,6 +60,7 @@ from integral.connector_exchange import (
     verdict,
     write_evidence,
 )
+from integral.connectors import DEFAULT_CONNECTORS_DIR
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _REFERENCE = _REPO_ROOT / "connectors" / "examplejobs_es"
@@ -556,3 +560,96 @@ def test_the_committed_evidence_is_current() -> None:
     committed = json.loads(DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8"))
     assert committed["unconsented_contributions"] == 0
     assert committed["contribution_attempts"] > 1
+
+
+# --- #343: the body a reviewer actually reads -------------------------------
+#
+# What stood here was one line — `Contributed by <user>. Files: …` — giving a
+# reviewer no gate, no provenance and no statement of what was checked, while
+# all three already existed in `meta.yaml`. These pin that it is *generated*
+# from the bundle: retyped provenance drifts from the file it describes, and a
+# reviewer cannot tell which of the two is stale.
+
+
+def _bundle(package: Path) -> tuple[Disclosure, dict[str, str]]:
+    disclosure = disclose(package, github_username="@someone")
+    contents, _ = _read_bundle(package, bundle_files(package))
+    return disclosure, contents
+
+
+def test_the_pull_request_body_is_rendered_from_meta_yaml(installed: Path) -> None:
+    disclosure, contents = _bundle(installed)
+    body = contribution_body(disclosure, contents)
+
+    meta = yaml.safe_load(contents["meta.yaml"])
+    assert f"| site | {meta['site']} |" in body
+    assert f"| last verified | {meta['last_verified']} |" in body
+    assert f"| robots.txt | {meta['policy']['robots_txt']} |" in body
+    assert "```bash" in body, "the gate is a command, not an opinion"
+
+
+def test_the_body_follows_meta_yaml_rather_than_repeating_a_stale_copy(
+    installed: Path,
+) -> None:
+    """The point of generating it. Edit the file, the body changes."""
+    disclosure, contents = _bundle(installed)
+    edited = dict(contents)
+    edited["meta.yaml"] = contents["meta.yaml"].replace(
+        "robots_txt: respected", "robots_txt: unread"
+    )
+
+    assert "| robots.txt | unread |" in contribution_body(disclosure, edited)
+
+
+def test_the_body_reports_a_probe_that_repeats_its_fixture(installed: Path) -> None:
+    """The line a reviewer cannot derive by eye — `getmanfred_es`'s defect."""
+    disclosure, contents = _bundle(installed)
+    tautological = dict(contents)
+    tautological["probe/list.html"] = contents["fixture/list.html"]
+
+    body = contribution_body(disclosure, tautological)
+
+    assert "**The probe repeats the fixture**" in body
+    assert "cannot fail" in body
+
+
+def test_the_body_says_unmeasured_when_a_side_parses_to_nothing(installed: Path) -> None:
+    disclosure, contents = _bundle(installed)
+    empty = dict(contents)
+    empty["probe/list.html"] = "<html><body></body></html>"
+
+    body = contribution_body(disclosure, empty)
+
+    assert "**unmeasured**" in body and "not zero" in body
+
+
+def test_a_diverging_probe_is_stated_as_such() -> None:
+    """A real package with a real probe. `examplejobs_es` has none, and the
+    body says *that* instead — which is the other reading this must not
+    conflate with a pass."""
+    disclosure, contents = _bundle(DEFAULT_CONNECTORS_DIR / "tecnoempleo_es")
+    assert "two genuinely different reads" in contribution_body(disclosure, contents)
+
+
+def test_a_bundle_with_no_probe_is_not_reported_as_diverging(installed: Path) -> None:
+    """`examplejobs_es` ships no probe, so the rot check does not run for it."""
+    disclosure, contents = _bundle(installed)
+    body = contribution_body(disclosure, contents)
+    assert "No `probe/list.html` in the bundle" in body
+    assert "unmeasured rather than\nhealthy" in body or "unmeasured" in body
+
+
+def test_the_prepared_submission_carries_the_generated_body(home: Path, installed: Path) -> None:
+    """End to end: the argv written to the outbox holds the rendered body.
+
+    Built from the bytes `contribute` re-hashed, not a second read of the
+    directory — a file edited between the question and the answer must not
+    reach the pull request under the old yes.
+    """
+    disclosure = disclose(installed, github_username="@someone")
+    record = contribute(disclosure, _yes(disclosure), home=home)
+
+    body = record["submission"][record["submission"].index("--body") + 1]
+    assert "## Provenance" in body
+    assert "## Fixture and probe" in body
+    assert body.startswith("Adds a connector for")
