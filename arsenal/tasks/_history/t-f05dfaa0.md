@@ -9,6 +9,14 @@ Imported from issue #345
 
 _(no issue body)_
 
+## Acceptance gate
+
+```gate
+unformatted_files == 0
+evidence: status/evidence/T125.json
+key: unformatted_files
+```
+
 ## What landed
 
 `ruff format .` once over the tree — **31 files**, 30 of them Python — and

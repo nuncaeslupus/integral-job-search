@@ -342,3 +342,52 @@ def test_the_ci_reading_does_not_pass_over_a_workflow_tree_that_runs_no_make(
 
     # D-22's own reading survives both, because it does not depend on them.
     assert repo_gate.measure(workflows=empty)["required_gates_with_no_enforcement_point"] == 0
+
+
+# ---------------------------------------------------------------------------
+# T125 — the formatting metric, and the control that proves it is not vacuous.
+
+
+def test_the_formatting_metric_moves_when_a_file_is_unformatted(tmp_path: Path) -> None:
+    """The first version of this metric counted `^Would reformat: ` lines, which
+    `ruff format --check` never emits — it prints a diff and one summary line. It
+    reported `unformatted_files: 0` with a genuinely unformatted file in the
+    tree, and only a negative control caught it. This is that control, kept."""
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "Makefile").write_text("lint:\n\truff format --check .\n", encoding="utf-8")
+    for name in ("a", "b", "c"):
+        (repo / "src" / f"{name}.py").write_text("x = 1\n", encoding="utf-8")
+
+    clean = repo_gate.measure_formatting(repo)
+    assert clean["unformatted_files"] == 0
+    assert clean["files_checked"] == 3
+
+    (repo / "src" / "b.py").write_text("def f( a,b ):\n    return   a+b\n", encoding="utf-8")
+    dirty = repo_gate.measure_formatting(repo)
+    assert dirty["unformatted_files"] == 1, dirty
+    assert dirty["files_checked"] == 3, dirty
+
+
+def test_a_formatted_tree_with_no_check_in_lint_is_still_a_finding(tmp_path: Path) -> None:
+    """`unformatted_files == 0` is satisfiable by a tree nobody will check again.
+    The formatting is the state; the check in `make lint` is what keeps it."""
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "Makefile").write_text("lint:\n\truff check .\n", encoding="utf-8")
+    (repo / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
+
+    measured = repo_gate.measure_formatting(repo)
+    assert measured["unformatted_files"] == 0
+    assert measured["lint_runs_the_check"] is False
+
+
+def test_a_scan_that_found_almost_nothing_is_unmeasured(tmp_path: Path) -> None:
+    """A zero over three files is what a broken invocation also reports."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "Makefile").write_text("lint:\n\truff format --check .\n", encoding="utf-8")
+    (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+    measured = repo_gate.measure_formatting(repo)
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["files_checked"] < repo_gate.MINIMUM_FILES_FORMATTED

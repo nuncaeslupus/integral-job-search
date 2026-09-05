@@ -671,6 +671,94 @@ def write_evidence_reach(
     return measured
 
 
+DEFAULT_T125_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T125.json"
+
+
+def measure_formatting(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
+    """T125: how many files `ruff format` would still rewrite.
+
+    Lives here rather than in a module of its own because it is the same
+    question this file already asks — whether the repo's own checking machinery
+    is wired up — and a whole module for one `subprocess.run` would be more
+    scaffolding than measurement.
+
+    Two numbers, not one. `unformatted_files` alone is satisfiable by a repo
+    that cannot run the formatter at all, so `files_checked` is the denominator
+    and `lint_runs_the_check` records whether anything would *notice* a
+    regression: a formatted tree with no check in `make lint` drifts back within
+    one session, which is exactly how this task came to exist.
+    """
+    try:
+        result = subprocess.run(
+            ["uv", "run", "--extra", "dev", "ruff", "format", "--check", "."],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            check=False,
+        )
+    except OSError as exc:
+        return {
+            "unformatted_files": -1,
+            "files_checked": 0,
+            "lint_runs_the_check": False,
+            "gate_status": "unmeasured",
+            "reasons": [f"ruff could not be run: {exc}"],
+        }
+    output = result.stdout + result.stderr
+    # ruff's summary line, not a per-file marker. An earlier version of this
+    # counted `^Would reformat: ` lines, which `--check` does not emit at all —
+    # it prints a diff and one summary — so the metric read 0 with a genuinely
+    # unformatted file in the tree. Caught by a negative control, which is the
+    # only reason it is not still reading 0.
+    summary = re.search(
+        r"(?:(\d+) files? would be reformatted(?:, (\d+) files? already formatted)?"
+        r"|(\d+) files? already formatted)",
+        output,
+    )
+    if summary is None:
+        return {
+            "unformatted_files": -1,
+            "files_checked": 0,
+            "lint_runs_the_check": False,
+            "gate_status": "unmeasured",
+            "reasons": [f"ruff printed no summary line to parse: {output[-200:]!r}"],
+        }
+    would_reformat = int(summary.group(1) or 0)
+    already = int(summary.group(2) or summary.group(3) or 0)
+    files_checked = would_reformat + already
+    lint_checks = "ruff format --check" in (repo_root / "Makefile").read_text(encoding="utf-8")
+    measured: dict[str, Any] = {
+        "unformatted_files": would_reformat,
+        "files_checked": files_checked,
+        "lint_runs_the_check": lint_checks,
+        "gate_status": "measured",
+    }
+    if files_checked < MINIMUM_FILES_FORMATTED:
+        # A zero over a scan that found almost nothing is what a broken
+        # invocation also reports.
+        measured["gate_status"] = "unmeasured"
+        measured["reasons"] = [
+            f"only {files_checked} file(s) checked (floor {MINIMUM_FILES_FORMATTED}) — "
+            "a pass over nothing is not a pass"
+        ]
+    return measured
+
+
+#: The tree held 427 files when T125 landed. The floor sits well below that so
+#: deleting a module never trips it, and a broken invocation reporting two does.
+MINIMUM_FILES_FORMATTED = 300
+
+
+def write_formatting_evidence(
+    evidence: Path = DEFAULT_T125_EVIDENCE_PATH, repo_root: Path = _REPO_ROOT
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T125.json`."""
+    measured = measure_formatting(repo_root)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.repo_gate [--check] [--list-evidence-modules]`.
 
@@ -712,8 +800,9 @@ def _main(argv: list[str]) -> int:
 
     d22 = measure() if args.check else write_evidence(Path(args.write_evidence))
     t85 = measure_evidence_reach() if args.check else write_evidence_reach()
+    t125 = measure_formatting() if args.check else write_formatting_evidence()
 
-    print(json.dumps({"D-22": d22, "T85": t85}, ensure_ascii=False))
+    print(json.dumps({"D-22": d22, "T85": t85, "T125": t125}, ensure_ascii=False))
     for reason in d22["unenforced"]:
         print(reason, file=sys.stderr)
     if "ci_unmeasured_reason" in d22:
@@ -731,9 +820,25 @@ def _main(argv: list[str]) -> int:
     d22_unenforced = d22["required_gates_with_no_enforcement_point"]
     ci_missing = d22["ci_targets_missing_from_makefile"]
     t85_unreached = t85["gate_modules_outside_the_evidence_run"]
-    if d22_unenforced == -1 or ci_missing == -1 or t85["gate_status"] == "unmeasured":
+    if t125["unformatted_files"]:
+        print(
+            f"{t125['unformatted_files']} file(s) would be reformatted — run `make format`",
+            file=sys.stderr,
+        )
+    if not t125["lint_runs_the_check"]:
+        print(
+            "make lint does not run `ruff format --check` — formatting will drift", file=sys.stderr
+        )
+    if (
+        d22_unenforced == -1
+        or ci_missing == -1
+        or t85["gate_status"] == "unmeasured"
+        or t125["gate_status"] == "unmeasured"
+    ):
         return 3
-    if d22_unenforced or ci_missing or t85_unreached:
+    if d22_unenforced or ci_missing or t85_unreached or t125["unformatted_files"]:
+        return 1
+    if not t125["lint_runs_the_check"]:
         return 1
     return 0
 
