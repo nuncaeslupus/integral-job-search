@@ -185,6 +185,17 @@ LIST_FIELD_NAMES = ALLOWED_OFFER_FIELDS | {"detail_url"}
 # brace in the string and substituted literally.
 PAGE_PLACEHOLDER = "{page}"
 
+# The candidate's own search terms. Same substitution posture as `{page}` —
+# `str.replace`, never `str.format` — and percent-encoded with `safe=""` at
+# substitution so one encoder is correct whether the slot sits in a path
+# segment or a query string. Without this a board's query is whatever its
+# `url_pattern` was written with, so every candidate gets the same search.
+QUERY_PLACEHOLDER = "{query}"
+# ponytail: URL slot only. `list.body_json` still admits `{page}` alone, so a
+# POST board carrying its search in the body (only `usajobs_en` today) cannot
+# be steered yet — widen `_body_uses_only_the_page_placeholder` when a second
+# one lands.
+
 #: The `Content-Type` a JSON request body implies. Derived from the body's
 #: declared form (`ListPage.body_json`) rather than being a header a connector
 #: may set: a connector that could name headers could name `Authorization`,
@@ -1211,11 +1222,11 @@ class ListPage(Strict):
         # though it stops short of code execution — refusing any brace other
         # than the literal `{page}` closes that off structurally, rather than
         # trusting every future caller to keep using `str.replace`.
-        if pattern.replace(PAGE_PLACEHOLDER, "").count("{") or pattern.replace(
-            PAGE_PLACEHOLDER, ""
-        ).count("}"):
+        bare = pattern.replace(PAGE_PLACEHOLDER, "").replace(QUERY_PLACEHOLDER, "")
+        if bare.count("{") or bare.count("}"):
             raise ValueError(
-                f"url_pattern may only use the literal {{page}} placeholder: {pattern!r}"
+                "url_pattern may only use the literal {page} and {query} "
+                f"placeholders: {pattern!r}"
             )
         return pattern
 
@@ -1541,7 +1552,21 @@ def load_connectors(directory: Path = DEFAULT_CONNECTORS_DIR) -> list[Connector]
 # interpretation — parsing recorded markup with a loaded connector
 
 
-def build_list_urls(connector: Connector, *, page_count: int | None = None) -> list[str]:
+def accepts_query(connector: Connector) -> bool:
+    """Whether this board's listing URL has a slot for the candidate's terms.
+
+    A board without one is not broken — `getmanfred_es` returns its whole
+    active list and is filtered afterwards. It is reported rather than
+    assumed, because "searched for what you asked" and "returned everything
+    it had" are different results and a caller that cannot tell them apart
+    will describe the second as the first.
+    """
+    return QUERY_PLACEHOLDER in connector.list.url_pattern
+
+
+def build_list_urls(
+    connector: Connector, *, page_count: int | None = None, query: str | None = None
+) -> list[str]:
     """The sequence of list-page URLs `connector.list` describes.
 
     `pagination.mode` is honoured, not just `max_pages`: `mode: "none"`
@@ -1574,10 +1599,16 @@ def build_list_urls(connector: Connector, *, page_count: int | None = None) -> l
         if connector.list.pagination.mode == "none":
             pages = min(pages, 1)
     start = connector.list.pagination.start
-    return [
-        connector.list.url_pattern.replace(PAGE_PLACEHOLDER, str(start + offset))
-        for offset in range(pages)
-    ]
+    pattern = connector.list.url_pattern
+    if QUERY_PLACEHOLDER in pattern:
+        if query is None or not query.strip():
+            raise ConnectorError(
+                f"{connector.site}: url_pattern carries {QUERY_PLACEHOLDER} but no "
+                "search terms were supplied — a board that asks what to search "
+                "for must not be searched for nothing"
+            )
+        pattern = pattern.replace(QUERY_PLACEHOLDER, quote(query, safe=""))
+    return [pattern.replace(PAGE_PLACEHOLDER, str(start + offset)) for offset in range(pages)]
 
 
 @dataclass(frozen=True)
@@ -1628,7 +1659,7 @@ def _page_substituted(body: Any, page: int, param: str | None) -> Any:
 
 
 def build_list_requests(
-    connector: Connector, *, page_count: int | None = None
+    connector: Connector, *, page_count: int | None = None, query: str | None = None
 ) -> list[ListRequest]:
     """The sequence of list-page **requests** `connector.list` describes.
 
@@ -1643,7 +1674,7 @@ def build_list_requests(
     package rather than trusting to review.
     """
     page = connector.list
-    urls = build_list_urls(connector, page_count=page_count)
+    urls = build_list_urls(connector, page_count=page_count, query=query)
     if page.body_json is None:
         return [ListRequest(url=url, method=page.method, headers={}, body=None) for url in urls]
     start = page.pagination.start

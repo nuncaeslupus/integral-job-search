@@ -138,6 +138,13 @@ MINIMUM_LEDGER_ENTRIES = 10
 MINIMUM_CREDENTIAL_CASES = 50
 
 
+#: Any terms will do: these checks measure a request's *shape* — method, body,
+#: headers — never what it searched for. A connector whose `url_pattern` carries
+#: `{query}` refuses to build a URL without one, so a shape check has to hand it
+#: something rather than quietly skip every board that can be steered.
+PROBE_QUERY = "python"
+
+
 @dataclass(frozen=True)
 class RecordedRequest:
     """The request a ledger entry's `retest:` command actually makes."""
@@ -368,7 +375,7 @@ def why_unreadable(recorded: RecordedRequest) -> list[str]:
     except (ConnectorError, ValueError) as exc:
         return [f"{recorded.site}: the schema cannot express the recorded request: {exc}"]
 
-    requests = build_list_requests(connector)
+    requests = build_list_requests(connector, query=PROBE_QUERY)
     if not requests:
         return [f"{recorded.site}: the engine builds no request at all"]
     built = requests[0]
@@ -407,7 +414,7 @@ def get_packages_that_changed(directory: Path = DEFAULT_CONNECTORS_DIR) -> tuple
         if connector.list.method != "GET":
             continue
         checked += 1
-        for request in build_list_requests(connector):
+        for request in build_list_requests(connector, query=PROBE_QUERY):
             if request.method != "GET" or request.body or request.headers:
                 changed.append(package.name)
                 break

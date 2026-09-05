@@ -22,6 +22,7 @@ from integral import stated_constraints
 from integral.candidate import (
     CONSTRAINT_FIELD_NAMES,
     STATES,
+    Aim,
     Availability,
     CandidateConstraints,
     CandidateError,
@@ -566,3 +567,34 @@ def test_a_pinned_field_with_no_probe_records_minus_one() -> None:
 
     assert measured["unfilterable_stated_constraints"] == -1
     assert "salary" in measured["unfilterable"][0]
+
+
+# ---------------------------------------------------------------------------
+# `Aim` — what the search asks for, which is not a constraint.
+
+
+def test_the_aim_is_not_a_pinned_hard_constraint() -> None:
+    """D-20's gate reads every pinned field and calls one that filters nothing
+    a lie. The aim filters nothing on purpose — it steers the fetch — so it
+    must stay out of the set rather than be excused inside it."""
+    assert "aim" not in CONSTRAINT_FIELD_NAMES
+    assert "role" not in CONSTRAINT_FIELD_NAMES
+
+
+def test_a_stated_aim_joins_its_terms_into_one_query() -> None:
+    assert Aim(state="stated", terms=("ingeniero", "de datos")).query == "ingeniero de datos"
+
+
+def test_an_unstated_aim_yields_no_query() -> None:
+    assert Aim(state="unknown").query is None
+
+
+def test_a_stated_aim_with_no_terms_is_refused() -> None:
+    """`ConstraintField`'s shape rule, borrowed: `stated` must state something."""
+    with pytest.raises(ValidationError):
+        Aim(state="stated")
+
+
+def test_an_unknown_aim_may_not_smuggle_terms() -> None:
+    with pytest.raises(ValidationError):
+        Aim(state="unknown", terms=("python",))

@@ -63,7 +63,15 @@ list:
   # `mode: none`. `max_pages: 3` is a floor somebody measured, not a guess:
   # pages 1-3 were fetched and each yielded 25 offers. Raise it after fetching
   # the pages you raise it to.
-  url_pattern: "https://www.jobfluent.com/es/empleos-barcelona?page={page}"
+  # `q` is the header search form's own parameter (`<form id="search-form"
+  # method="get">`). Measured live 2026-09-05: "python" and "product manager"
+  # return different first cards with titles matching their terms.
+  #
+  # ponytail: the city is still in the path. `empleos-barcelona` is one
+  # candidate's commutable region baked into a shared package — the same class
+  # of defect `{query}` just fixed for the search term. A `{location}` slot is
+  # the upgrade; nothing needs it until a candidate outside Barcelona arrives.
+  url_pattern: "https://www.jobfluent.com/es/empleos-barcelona?q={query}&page={page}"
   pagination:
     mode: query_param
     param: page

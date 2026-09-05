@@ -28,6 +28,7 @@ from integral.connectors import (
     FieldSelector,
     ListPage,
     _as_float,
+    accepts_query,
     assess_staleness,
     build_list_requests,
     build_list_urls,
@@ -1652,7 +1653,7 @@ def test_every_committed_connector_still_builds_a_plain_get() -> None:
         connector = load_connector(path)
         if connector.list.method != "GET":
             continue
-        for request in build_list_requests(connector):
+        for request in build_list_requests(connector, query="python"):
             assert request.method == "GET", path.parent.name
             assert request.body is None, path.parent.name
             assert request.headers == {}, path.parent.name
@@ -2149,3 +2150,76 @@ def test_the_long_spellings_of_the_credential_options_are_refused_too() -> None:
         assert recorded is not None
         assert recorded.credential_options == (option,)
         assert connector_transport.why_refused(recorded) != []
+
+
+# ---------------------------------------------------------------------------
+# `{query}` — the candidate's own search terms reaching the board's search box.
+
+
+def _with_query_slot() -> str:
+    """The worked example, its listing URL given a `{query}` slot."""
+    connector = parse_connector(VALID)
+    return VALID.replace(
+        connector.list.url_pattern,
+        connector.list.url_pattern + "&q={query}",
+    )
+
+
+def test_a_query_slot_is_filled_with_the_candidates_terms() -> None:
+    connector = parse_connector(_with_query_slot())
+    assert accepts_query(connector)
+    urls = build_list_urls(connector, page_count=1, query="python")
+    assert urls[0].endswith("&q=python")
+
+
+def test_a_query_is_percent_encoded_rather_than_pasted() -> None:
+    """One encoder, `safe=""`, so the slot is correct in a path or a query
+    string. A space must not arrive as a space, and `&` must not start a
+    parameter the candidate did not ask for."""
+    connector = parse_connector(_with_query_slot())
+    url = build_list_urls(connector, page_count=1, query="ingeniero de datos & ML")[0]
+    assert url.endswith("&q=ingeniero%20de%20datos%20%26%20ML")
+    assert " " not in url
+
+
+def test_a_board_that_asks_what_to_search_for_is_not_searched_for_nothing() -> None:
+    """Substituting an empty query would fetch the board's unfiltered list and
+    present it as the candidate's search — the silent wrong answer, not an
+    empty one."""
+    connector = parse_connector(_with_query_slot())
+    for nothing in (None, "", "   "):
+        with pytest.raises(ConnectorError):
+            build_list_urls(connector, page_count=1, query=nothing)
+
+
+def test_a_board_with_no_query_slot_reports_that_rather_than_pretending() -> None:
+    connector = parse_connector(VALID)
+    assert not accepts_query(connector)
+    assert build_list_urls(connector, page_count=1, query="python") == build_list_urls(
+        connector, page_count=1
+    )
+
+
+def test_the_second_placeholder_does_not_reopen_the_first_ones_hole() -> None:
+    """`{query}` is a second *literal*, not permission for a template."""
+    connector = parse_connector(VALID)
+    for hostile in ("{0.__class__}", "{query!r}", "{}", "{QUERY}"):
+        body = VALID.replace(connector.list.url_pattern, connector.list.url_pattern + hostile)
+        with pytest.raises((ConnectorError, ValidationError, ValueError)):
+            parse_connector(body)
+
+
+def test_every_shipped_connector_that_takes_a_query_still_builds_a_url() -> None:
+    """The library's own packages, not a fixture: a `{query}` written into a
+    committed `url_pattern` must be reachable through the real builder."""
+    steered = []
+    for package in sorted(_CONNECTOR_LIBRARY.iterdir()):
+        if not (package / "connector.yaml").is_file():
+            continue
+        connector = parse_connector((package / "connector.yaml").read_text(encoding="utf-8"))
+        if not accepts_query(connector):
+            continue
+        steered.append(package.name)
+        url = build_list_urls(connector, page_count=1, query="ingeniero de datos")[0]
+        assert "{query}" not in url and "%20" in url
+    assert steered, "no shipped connector takes a query — the aim is baked in again"
