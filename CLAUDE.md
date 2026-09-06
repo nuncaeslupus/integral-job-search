@@ -444,6 +444,55 @@ reached by it — so a fifth line added above cannot quietly go unrun (D-22).
 Note `make gate` is a different thing: it records T1's lint exit code, one
 check, and is not the repo gate.
 
+## A `ClaudeBot` disallow does not bind this tool — and this has been re-litigated twice
+
+**The rule, in one line: a group named for a training crawler is not a group
+named for this tool, and only a `*`-group disallow rules a board out.**
+
+Under RFC 9309 a crawler matches the group for its own product token and falls
+back to `User-agent: *`. Our token is `integral-job-search/0.1`. So a
+`ClaudeBot` / `GPTBot` / `CCBot` / `Google-Extended` group **does not bind us**
+and must not be read as if it did. Those bans target bulk training crawls; a
+connector fetch is *one candidate's search*, run for a person who asked for it.
+Some operators spell the distinction out themselves — academictransfer.com
+disallows `ClaudeBot` while its robots.txt says AI assistants may access pages
+for search and reference answers.
+
+The owner has stated this position directly, and it is quoted in
+`connector_policy.py`'s own docstring:
+
+> It is the user who will use the scraper, not you, and most of them did not
+> allow massive scraping for AI, but they allow it for making some searches.
+
+**Adjudicate with the repo's matcher, never by reading the file.**
+
+```bash
+uv run python3 -c "from integral.robots import Robots, USER_AGENT; print(USER_AGENT); print(Robots().allows('<url>'))"
+```
+
+Two things a `True` still does not settle, both already written out at length in
+`connectors/ruled-out.yaml`'s header — read it before ruling any board out:
+
+- **`restated_for_every_named_agent`** — a path the `*` group leaves alone but
+  which the *same file* disallows for **every** named AI agent, under its own
+  plain-language caption. That is a permission read out of an omission, and the
+  bar is deliberately high: the same path, in the same file, for every named
+  agent — not a Claude-shaped subset. `remoteok.com`'s `?action=get_jobs` under
+  `# AJAX endpoints` is the one board that meets it, and **its listing pages are
+  allowed** — the refusal is about that endpoint, not about the board.
+- **Whose call it was.** `robots_refused` is what the board said; `policy_refused`
+  is what *we* decided about a board the matcher allows. T99 requires an owner's
+  decision, dated, next to any `policy_refused` entry — a session recording its
+  own judgement there is the defect wearing the fix's clothes.
+
+**Why this section exists rather than only the ledger header.** The reasoning
+above was already correct and already written down — in a module docstring and
+in a YAML header. It was still restated wrongly to the candidate on 2026-09-06
+("RemoteOK prohibits ClaudeBot and every AI agent it names, so it is out"),
+because neither of those files is read *before* a session forms an opinion.
+CLAUDE.md is in context on every turn; the ledger is not. That asymmetry, not
+the argument, is what needed fixing.
+
 ## Read on demand — `docs/repo-playbook.md`
 
 Installing and updating the arsenal plugins, the skill-listing budget, parking a
