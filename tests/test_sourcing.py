@@ -361,7 +361,7 @@ def test_robots_is_consulted_for_the_detail_page_too(store: ProfileStore) -> Non
         return _one_board(
             store,
             package,
-            Aim(state="stated", terms=("python",)),
+            "python",
             fetch=_answer_with_detail(seen=seen),
             at=AT,
             directory=_CONNECTORS,
@@ -485,7 +485,7 @@ def test_the_advert_page_gets_its_own_clients_headers(store: ProfileStore) -> No
     outcome = _one_board(
         store,
         package,
-        Aim(state="stated", terms=("agentic",)),
+        "agentic",
         fetch=answer,
         at=AT,
         directory=_CONNECTORS,

@@ -581,12 +581,22 @@ def test_the_aim_is_not_a_pinned_hard_constraint() -> None:
     assert "role" not in CONSTRAINT_FIELD_NAMES
 
 
-def test_a_stated_aim_joins_its_terms_into_one_query() -> None:
-    assert Aim(state="stated", terms=("ingeniero", "de datos")).query == "ingeniero de datos"
+def test_a_term_is_a_phrase_and_is_never_joined_with_another() -> None:
+    """The replacement for `Aim.query`, and the reason it is gone.
+
+    It joined every term into one string, which every board reads as AND, so
+    two phrases asked for an advert containing both — measured on a real log
+    where 50 of 62 requests went out as one ANDed query and the boards that
+    AND their terms returned nearly nothing. A term is a phrase; several
+    phrases are searched one at a time and merged.
+    """
+    aim = Aim(state="stated", terms=("ingeniero de datos", "agentic ai"))
+    assert aim.terms == ("ingeniero de datos", "agentic ai")
+    assert not hasattr(aim, "query")
 
 
-def test_an_unstated_aim_yields_no_query() -> None:
-    assert Aim(state="unknown").query is None
+def test_an_unstated_aim_carries_no_terms() -> None:
+    assert Aim(state="unknown").terms == ()
 
 
 def test_a_stated_aim_with_no_terms_is_refused() -> None:

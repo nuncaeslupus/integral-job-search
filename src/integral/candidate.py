@@ -369,15 +369,23 @@ class Aim(ConstraintField):
     Nothing needs to police whether it was asked: `build_list_urls` refuses to
     build a URL for a board carrying `{query}` without one, so a steerable
     board cannot be searched until the candidate has said what for.
+
+    A term is a **phrase**, not a word: `"agentic ai"` is one term and
+    `"python developer"` is another. There is deliberately no property joining
+    them into one search string. Every board reads a multi-word query as
+    **AND**, so asking for both at once asks for an advert containing both,
+    and almost none does — measured on this repository owner's own fetch log,
+    where 50 of 62 recorded requests went out as `agentic python engineer` and
+    the boards that AND their terms returned nearly nothing.
+
+    Searching several phrases means searching each and merging, which is what
+    `sourcing.source` does. It is also what makes an advert attributable: the
+    fetch log stamps `query` on every row, so one phrase per request turns a
+    column nobody could read into the record of which phrase found what.
     """
 
     terms: tuple[str, ...] = ()
     _required_when_stated = ("terms",)
-
-    @property
-    def query(self) -> str | None:
-        """The terms as one search string, or `None` when nothing is stated."""
-        return " ".join(self.terms) if self.terms else None
 
 
 # The pinned field set — the whole point of this module. Order matches the
