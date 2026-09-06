@@ -1,0 +1,97 @@
+# foorilla.com — the board that `ai-jobs.net` and `aijobs.net` both 301 to.
+# 259,753 adverts in the last 60 days by the site's own count, heavily remote,
+# and one of the few boards with a real search parameter rather than a listing
+# you take whole.
+#
+# `robots.txt` (fetched live 2026-09-06, and it is the *only* robots this board
+# has — `ai-jobs.net/robots.txt` 301s to the app and serves no rules of its
+# own). Adjudicated with this repo's own RFC 9309 matcher, never a grep:
+#
+#     User-agent: *
+#     Allow: /
+#     Disallow: /account/  /clear/  /regions/  /topics/
+#     Disallow: /hiring/companies/
+#     Disallow: /hiring/jobs/*/apply/
+#     …
+#     # LLM discovery hint
+#     Allow: /api/llms.txt
+#
+# One group, `*`, and it allows the two paths this connector reads:
+#
+#     /hiring/jobs/?job_search=…   True
+#     /hiring/jobs/<slug>-<id>/    True
+#     /hiring/companies/x          False   ← the negative control
+#     /hiring/jobs/x/apply/        False   ← and a second one
+#
+# Two refusals from the same file, so the True above is a verdict and not a
+# matcher saying yes to everything. No group names any AI agent, so the
+# CLAUDE.md rule about `ClaudeBot` does not arise here at all.
+#
+# **Why `client: htmx`.** The board is server-rendered but serves its listing
+# only to an htmx request. Measured 2026-09-06 from a browser capture the owner
+# recorded, then reproduced from a cold shell with no cookie of any kind:
+#
+#     plain GET                              200, 10,836 bytes, zero adverts
+#     HX-Request: true                       400
+#     HX-Request: true + HX-Target: mc_1     200, 46,905 bytes, 48 adverts
+#
+# No account, no CSRF token, no session. The site is public; the request has a
+# shape, and T133 is what lets a connector name that shape without naming a
+# header. The advert's own page takes the same two headers with `mc_2`, which
+# is the column htmx swaps it into.
+#
+# **The paid API is deliberately not used.** `/api/v1/` requires an `Api-Key`
+# and an active PRO+ subscription (`/api/llms.txt`, same date). There is no
+# field in this schema for a credential and there should not be one.
+site: foorilla
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-06"
+auth: none
+
+list:
+  # `job_search` is the board's own parameter, taken from the recorded capture
+  # rather than guessed: `?job_search=agentic` returns 48 rows against the
+  # unsearched listing's 50, and `?job_search=agentic spain` narrows further.
+  url_pattern: "https://foorilla.com/hiring/jobs/?job_search={query}"
+  client: htmx
+  client_target: "mc_1"
+  item: "li.list-group-item"
+  fields:
+    title:
+      css: "a.stretched-link"
+    # `hx-get`, not `href`: every row's anchor carries `href=""` and puts the
+    # real destination in the htmx attribute, so reading `href` would give
+    # every offer the listing's own URL — 48 rows collapsing to one offer.
+    detail_url:
+      css: "a.stretched-link"
+      attr: "hx-get"
+    # No `text` here on purpose, and no salary either. A row carries a band and
+    # a location, but the body lives on the advert's own page, which is what
+    # `detail` below is for.
+
+detail:
+  client: htmx
+  client_target: "mc_2"
+  fields:
+    title:
+      css: "h1"
+    # The one `pb-2` on the page: the block holding Tasks, Requirements and the
+    # rest of the advert. Verified against the recorded capture rather than
+    # assumed — `px-1 border-bottom` occurs twice and would have matched the
+    # header instead.
+    text:
+      css: ".pb-2"
+    # `CAD 150K-190K` — one text node holding both ends of the band and the
+    # currency, which is what T132's `take:` exists for. The `K` is a
+    # multiplier: reading this as 150 to 190 is a 1000x error that looks
+    # perfectly reasonable in a ranking.
+    salary_min:
+      css: "span.text-bg-success"
+      take: "range_low"
+    salary_max:
+      css: "span.text-bg-success"
+      take: "range_high"
+    salary_currency:
+      css: "span.text-bg-success"
+      take: "currency"

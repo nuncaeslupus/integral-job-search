@@ -1,8 +1,8 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 18,
-  "silent_connector_failures_evaluated": 18,
-  "connector_runs_probed": 18,
+  "connector_runs_evaluated": 20,
+  "silent_connector_failures_evaluated": 20,
+  "connector_runs_probed": 20,
   "disabled": [],
   "gate_status": "measured",
   "readings": [
@@ -26,6 +26,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30",
+      "rate_limited": null
+    },
+    {
+      "connector": "foorilla",
+      "site": "foorilla.com",
+      "health": "healthy",
+      "baseline_items": 50,
+      "probe_items": 50,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-06",
       "rate_limited": null
     },
     {
@@ -92,6 +103,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-09-02",
+      "rate_limited": null
+    },
+    {
+      "connector": "landingjobs",
+      "site": "landing.jobs",
+      "health": "healthy",
+      "baseline_items": 15,
+      "probe_items": 4,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-06",
       "rate_limited": null
     },
     {

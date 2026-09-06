@@ -1,0 +1,78 @@
+# landing.jobs — a European board that hires into the EU as a matter of course
+# and, unusually, publishes a salary band. Measured 2026-09-06 over 251 offers
+# in a live candidate tree, 2 of 13 installed sources published a band at all;
+# this is the third, and the only one writing it in euros.
+#
+# `robots.txt` (fetched live 2026-09-06, in full — it is eight rules), and
+# adjudicated with this repo's RFC 9309 matcher rather than read by eye:
+#
+#     User-agent: *
+#     Disallow: /job_closed.html  /backoffice/  /employers/request_info
+#     Disallow: /employers/request_source_access  /employers/search
+#     Disallow: /api/
+#     Disallow: /jobs/search
+#     Sitemap: https://landing.jobs/sitemap.xml
+#
+#     /jobs?q=python                   True
+#     /at/<company>/<slug>             True
+#     /jobs/search                     False   ← the negative control
+#     /api/v1/jobs                     False   ← and a second one
+#
+# Two refusals from the same file, so the two Trues are verdicts rather than a
+# matcher answering yes to everything. No group names any AI agent. `/api/` is
+# disallowed and is therefore not read, even though it would be the cleaner
+# surface — the board's answer about its own API is no.
+#
+# **`?q=` is the board's search and it works**: unsearched the listing returns
+# 50 cards, `?q=python` returns 15, `?q=artificial intelligence` returns 4.
+# Server-rendered throughout; no client, no headers.
+site: landingjobs
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-06"
+auth: none
+
+list:
+  url_pattern: "https://landing.jobs/jobs?q={query}"
+  item: "article.lj-jobcard-static"
+  fields:
+    title:
+      css: "a.lj-jobcard-static__link"
+    company:
+      css: ".lj-jobcard-static__company"
+    detail_url:
+      css: "a.lj-jobcard-static__link"
+      attr: "href"
+    location_raw:
+      css: ".lj-jobcard-static__location"
+    location_remote:
+      css: ".lj-jobcard-static__badge--remote"
+    # `€50.000 - €65.000`, both ends and the currency in one span. Present on
+    # some cards and absent on others, which is the honest state of the board:
+    # a card without one yields no salary rather than a guessed one.
+    salary_min:
+      css: ".lj-jobcard-static__salary"
+      take: "range_low"
+    salary_max:
+      css: ".lj-jobcard-static__salary"
+      take: "range_high"
+    salary_currency:
+      css: ".lj-jobcard-static__salary"
+      take: "currency"
+    # No `text`: the card carries a title, a company and a badge row, and
+    # nothing of the advert itself. `detail` below is where the body is.
+
+detail:
+  fields:
+    title:
+      css: ".lj-job-summary__title"
+    company:
+      css: ".lj-job-summary__company"
+    # The whole server-rendered summary: pitch, location and timezone
+    # tolerance, contract, category, experience, work-permit requirement,
+    # languages and the required/nice-to-have skill lists. The board renders
+    # its long-form description client-side from a React prop, which this
+    # format cannot reach and must not pretend to — so the body is what the
+    # server actually sends, and it is the part a candidate is filtered on.
+    text:
+      css: ".lj-job-summary"

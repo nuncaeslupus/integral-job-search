@@ -1,0 +1,29 @@
+site: landing.jobs
+# Portugal-run and Portugal-heavy, but the listing spans the EU and the board's
+# whole premise is hiring across borders — the recorded capture names Lisbon,
+# Porto, Cologne and remote-anywhere on one page. GLOBAL rather than PT, which
+# would claim a scope narrower than the pages return.
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-09-06"
+
+# Checked on the date above with this repo's RFC 9309 matcher, with two paths
+# from the same file shown refusing so the permission is a verdict rather than
+# a matcher that says yes to everything. `/api/` is among the refusals and is
+# not read, though it would be the cleaner surface: the board's answer about
+# its own API is no. Full rules quoted in `connector.yaml`'s header.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+fixture:
+  provenance: sampled
+  recorded: "2026-09-06"
+  # Committed as served. Never an advert a candidate was reading: the set of
+  # ads a person opens carries their field, level, city and the fact that they
+  # are looking, and a fixture in a public repository carries that forever.
+  bodies: verbatim
+  # Grepped for an IPv4 literal across both captures: none.
+  client_ip: redacted

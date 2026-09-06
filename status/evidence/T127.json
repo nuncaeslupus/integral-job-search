@@ -1,6 +1,6 @@
 {
   "connectors_whose_probe_repeats_its_fixture": 0,
-  "probes_compared": 18,
+  "probes_compared": 20,
   "probes_compared_floor": 12,
   "gate_status": "measured",
   "tautological_probes": [],
@@ -31,6 +31,17 @@
       "package": "examplejobs_es",
       "compared": false,
       "reason": "no probe"
+    },
+    {
+      "package": "foorilla_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 50,
+      "probe_offers": 50,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
     },
     {
       "package": "getmanfred_es",
@@ -95,6 +106,17 @@
       "probe_offers": 5,
       "shared_offers": 0,
       "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "landingjobs_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 15,
+      "probe_offers": 4,
+      "shared_offers": 2,
+      "overlap": 0.5,
       "repeats_the_fixture": false,
       "byte_identical": false
     },

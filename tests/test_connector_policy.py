@@ -862,16 +862,16 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
     """
     measured = cp.measure_second_readers()
 
-    assert measured["robots_adjudications_without_a_competent_second_reader"] == 19
+    assert measured["robots_adjudications_without_a_competent_second_reader"] == 20
     assert measured["robots_adjudications_misrepresenting_their_standing"] == 0
-    # The 19 is the 20 rows minus the one standing on a demonstrated agreement.
+    # The 20 is the 22 rows minus the two standing on a demonstrated agreement.
     live = cp.adjudications()
     earned = [row for row in live if row.standing == cp.TWO_PARSERS_AGREED and not row.problems()]
-    assert len(live) - len(earned) == 19
+    assert len(live) - len(earned) == 20
     # Both survive into the committed record: hiding the honest count behind
     # the gate's zero is the defect, so it is committed beside it.
     committed = cp.record_second_readers(measured)
-    assert committed["robots_adjudications_without_a_competent_second_reader"] == 19
+    assert committed["robots_adjudications_without_a_competent_second_reader"] == 20
 
 
 def test_single_parser_names_which_of_its_two_findings_each_row_is() -> None:
@@ -882,7 +882,7 @@ def test_single_parser_names_which_of_its_two_findings_each_row_is() -> None:
     measured = cp.measure_second_readers()
     cases = measured["single_parser_cases"]
 
-    assert cases["second_reader_ran_and_could_not_refuse"] == 3
+    assert cases["second_reader_ran_and_could_not_refuse"] == 4
     assert cases["second_reader_never_run"] == 15
     assert sum(cases.values()) == measured["standings"][cp.SINGLE_PARSER]
 

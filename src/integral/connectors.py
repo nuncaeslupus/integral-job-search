@@ -637,12 +637,21 @@ _CURRENCIES: dict[str, str] = {
     "SEK": "SEK",
     "NOK": "NOK",
     "DKK": "DKK",
+    "CAD": "CAD",
+    "AUD": "AUD",
 }
 
-#: A run that could be one number in either thousands convention. Deliberately
-#: not anchored to a currency: boards write `€50.000`, `50.000€` and
-#: `50.000 EUR`, and the number is the same in all three.
-_NUMBER = re.compile(r"\d[\d.,]*")
+#: A run that could be one number in either thousands convention, with an
+#: optional magnitude suffix. Deliberately not anchored to a currency: boards
+#: write `€50.000`, `50.000€` and `50.000 EUR`, and the number is the same in
+#: all three.
+_NUMBER = re.compile(r"(\d[\d.,]*)\s*([KkMm])?")
+
+#: `CAD 150K-190K` — foorilla.com's whole salary column is written this way, and
+#: reading it as 150 to 190 is the 1000x error `_as_float` exists to refuse,
+#: arriving by a different door. Only these two, and only immediately after the
+#: figure: a `k` elsewhere in the sentence is not a multiplier.
+_MAGNITUDE = {"k": 1_000, "m": 1_000_000}
 
 
 def _numbers_in(text: str) -> list[float]:
@@ -653,14 +662,15 @@ def _numbers_in(text: str) -> list[float]:
     conventions resolves to fewer than two numbers and the field is left empty.
     """
     found = []
-    for run in _NUMBER.findall(text):
+    for run, magnitude in _NUMBER.findall(text):
         # A trailing separator is the sentence's punctuation, not the number's:
         # `hasta €65.000, desde €50.000` matches `65.000,`, which `_as_float`
         # rightly refuses as an unresolvable convention — and a refusal here
         # silently costs the whole band, since "exactly two" then finds one.
         number = _as_float(run.rstrip(".,"))
-        if number is not None:
-            found.append(number)
+        if number is None:
+            continue
+        found.append(number * _MAGNITUDE[magnitude.lower()] if magnitude else number)
     return found
 
 
@@ -2461,10 +2471,20 @@ PARTIAL_EXTRACTION_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
         None,
         "two currencies is a conversion — FAIL-CLOSED",
     ),
+    ("range_low", "CAD 150K-190K", "150000", "foorilla.com writes every band this way"),
+    ("range_high", "CAD 150K-190K", "190000", "the K is a multiplier, not decoration"),
+    ("currency", "CAD 150K-190K", "CAD", "an ISO code with no symbol"),
+    ("range_low", "$1.2M - $1.5M", "1200000", "M as well as K"),
+    (
+        "range_low",
+        "40k hires, \u20ac50.000 - \u20ac65.000",
+        None,
+        "a k elsewhere makes three figures — FAIL-CLOSED",
+    ),
 )
 
 #: Floor. A table that shrank reports `unmeasured` rather than a clean zero.
-MINIMUM_PARTIAL_EXTRACTION_CONTRACTS = 11
+MINIMUM_PARTIAL_EXTRACTION_CONTRACTS = 16
 
 
 def partial_extraction_defects() -> list[str]:

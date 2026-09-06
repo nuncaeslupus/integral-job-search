@@ -45,7 +45,13 @@ A POST route that quietly changed what a GET connector sends would break every
 existing package silently, and a count of zero POST-only boards would still
 read green. So `get_connectors_still_plain_gets` enumerates every committed
 package from disk — not a list anybody has to remember to extend — and asserts
-each still builds a plain GET with no body and no headers.
+each still builds a plain GET with no body, and with exactly the headers its
+own declaration derives: none for a connector with no `client`, and that
+client's fixed set for one that names one (T133). Comparing against the empty
+dict was right while no package declared a client, and the first one that did
+would have forced the check to be relaxed to "some headers are allowed", which
+asserts nothing. What must never happen is a package acquiring a header nobody
+declared, and that is what the derived expectation still catches.
 """
 
 from __future__ import annotations
@@ -65,6 +71,7 @@ from integral.connectors import (
     Connector,
     ConnectorError,
     build_list_requests,
+    client_headers,
     connector_packages,
     credential_keys,
     credential_query_keys,
@@ -414,8 +421,15 @@ def get_packages_that_changed(directory: Path = DEFAULT_CONNECTORS_DIR) -> tuple
         if connector.list.method != "GET":
             continue
         checked += 1
+        # T133. A connector declaring a `client` sends that client's fixed
+        # headers, and its own and nothing else — so the expectation is
+        # *derived* from the declaration rather than being the empty dict.
+        # Relaxing this to "any headers are fine once one package has some"
+        # would retire the check the paragraph above exists to keep: what must
+        # never happen is a package acquiring a header nobody declared.
+        expected = client_headers(connector.list.client, connector.list.client_target)
         for request in build_list_requests(connector, query=PROBE_QUERY):
-            if request.method != "GET" or request.body or request.headers:
+            if request.method != "GET" or request.body or request.headers != expected:
                 changed.append(package.name)
                 break
     return changed, checked
