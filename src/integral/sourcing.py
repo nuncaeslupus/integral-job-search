@@ -94,6 +94,14 @@ MINIMUM_OFFERS_COLLECTED = 3
 #: `detail_needed`.
 DETAIL_FETCH_CEILING = 40
 
+#: How many of the candidate's phrases one run may search for. Each phrase is
+#: its own request to every steerable board, which is what searching several
+#: phrases *means* — they cannot be ANDed into one query — so the fetch count
+#: is phrases x boards x pages and this is what stops it running away. The
+#: phrases beyond it are reported, never dropped silently: a run that quietly
+#: searched four of nine looks exactly like a run that searched all nine.
+PHRASE_CEILING = 6
+
 
 @dataclass(frozen=True)
 class Response:
@@ -121,6 +129,11 @@ class BoardOutcome:
     connector: str
     url: str | None
     steered: bool
+    #: The phrase this outcome is about, `None` on a board that does not
+    #: search. A run holds one outcome per board **per phrase**, so without
+    #: this the rows are indistinguishable and the log they produce cannot be
+    #: read back per phrase — which is the whole of what `search_terms` reads.
+    query: str | None = None
     status: int | None = None
     items: int = 0
     added: int = 0
@@ -146,33 +159,69 @@ class Run:
     """A whole sourcing pass, reported rather than summed into one number."""
 
     outcomes: list[BoardOutcome] = field(default_factory=list)
+    #: Phrases past `PHRASE_CEILING`, kept so the summary can say them. A run
+    #: that searched six of nine and reported "6 boards searched" describes a
+    #: partial pass as a whole one.
+    unsearched: tuple[str, ...] = ()
+
+    @property
+    def searched(self) -> list[str]:
+        """The phrases this run actually asked for, in order, without repeats."""
+        seen: list[str] = []
+        for outcome in self.outcomes:
+            if outcome.query and outcome.query not in seen:
+                seen.append(outcome.query)
+        return seen
 
     @property
     def added(self) -> int:
         return sum(o.added for o in self.outcomes)
 
+    def _boards(self, matching: Callable[[BoardOutcome], bool]) -> list[str]:
+        """Board names, in order, without repeats.
+
+        A steerable board now has one outcome **per phrase**, so a plain
+        comprehension names it once per phrase — "searched: foorilla,
+        foorilla, foorilla" for one board and three terms, which reads as
+        three boards. Deduped here rather than at each call site so a fifth
+        property added later cannot reintroduce it.
+        """
+        seen: list[str] = []
+        for outcome in self.outcomes:
+            if matching(outcome) and outcome.connector not in seen:
+                seen.append(outcome.connector)
+        return seen
+
     @property
     def steered(self) -> list[str]:
         """Boards asked the candidate's question."""
-        return [o.connector for o in self.outcomes if o.steered and o.reached_the_board]
+        return self._boards(lambda o: o.steered and o.reached_the_board)
 
     @property
     def unsteered(self) -> list[str]:
         """Boards that returned whatever they had. Not a failure — a different result."""
-        return [o.connector for o in self.outcomes if not o.steered and o.reached_the_board]
+        return self._boards(lambda o: not o.steered and o.reached_the_board)
 
     @property
     def refused(self) -> list[str]:
         """Boards that refused the read. Never to be read as "no jobs there"."""
-        return [o.connector for o in self.outcomes if o.refused]
+        return self._boards(lambda o: o.refused is not None)
 
     @property
     def untrusted(self) -> list[str]:
         """Boards whose connector is stale, so their emptiness proves nothing."""
-        return [o.connector for o in self.outcomes if o.stale]
+        return self._boards(lambda o: o.stale)
 
     def summary(self) -> str:
-        lines = [f"{self.added} offer(s) added from {len(self.outcomes)} board(s)"]
+        boards = len({o.connector for o in self.outcomes})
+        lines = [f"{self.added} offer(s) added from {boards} board(s)"]
+        if self.searched:
+            lines.append(f"  searched, one phrase at a time: {', '.join(self.searched)}")
+        if self.unsearched:
+            lines.append(
+                f"  NOT searched this run (over the {PHRASE_CEILING}-phrase ceiling): "
+                f"{', '.join(self.unsearched)}"
+            )
         if self.steered:
             lines.append(f"  searched for your terms: {', '.join(self.steered)}")
         if self.unsteered:
@@ -233,22 +282,43 @@ def source(
     mean "skip the check", which would make the safe path the one you have to
     opt into.
     """
+    from integral.search_terms import save_aim  # circular at module scope
+
     directory = directory or DEFAULT_CONNECTORS_DIR
     adjudicator = Robots() if robots is None else robots
-    run = Run()
+    # Recorded by the act of searching, not by a caller remembering to.
+    # The phrases used to survive a session only as an evidence row, so the
+    # next session did not know what had worked — and a persistence step that
+    # has to be called separately is one that is skipped exactly when the
+    # session ends badly, which is when it was most needed.
+    if aim.terms:
+        save_aim(store, aim)
+    run = Run(unsearched=aim.terms[PHRASE_CEILING:])
+    phrases = aim.terms[:PHRASE_CEILING]
     for package in packages_for(constraints, directory):
-        run.outcomes.append(
-            _one_board(
-                store,
-                package,
-                aim,
-                fetch=fetch,
-                at=at,
-                directory=directory,
-                page_count=page_count,
-                robots=adjudicator,
+        # A board that does not search returns the same list whatever was
+        # asked, so asking it once per phrase is N identical requests for one
+        # answer. Deciding here rather than inside `_one_board` is what makes
+        # that visible; the load failure is still reported there, once, in the
+        # one place that already knows how to phrase it.
+        try:
+            steerable = accepts_query(_connector_of(package, directory))
+        except (ConnectorError, OSError):
+            steerable = False
+        queries: tuple[str | None, ...] = phrases if steerable and phrases else (None,)
+        for query in queries:
+            run.outcomes.append(
+                _one_board(
+                    store,
+                    package,
+                    query,
+                    fetch=fetch,
+                    at=at,
+                    directory=directory,
+                    page_count=page_count,
+                    robots=adjudicator,
+                )
             )
-        )
     return run
 
 
@@ -304,7 +374,7 @@ def _detail_record(connector: Connector, url: str, *, fetch: Fetch) -> dict[str,
 def _one_board(
     store: ProfileStore,
     package: Package,
-    aim: Aim,
+    query: str | None,
     *,
     fetch: Fetch,
     at: str,
@@ -315,22 +385,25 @@ def _one_board(
     try:
         connector = _connector_of(package, directory)
     except (ConnectorError, OSError) as exc:
-        return BoardOutcome(package.name, None, False, error=f"the package would not load: {exc}")
+        return BoardOutcome(
+            package.name, None, False, query, error=f"the package would not load: {exc}"
+        )
 
     steerable = accepts_query(connector)
-    if steerable and not aim.query:
+    if steerable and not query:
         # `build_list_urls` would refuse, and rightly. Reported rather than
         # raised: one un-aimed board must not end a run over five others.
         return BoardOutcome(
             package.name,
             None,
             True,
+            query,
             skipped="the board searches, and no terms are recorded — say what you are looking for",
         )
     try:
-        requests = build_list_requests(connector, page_count=page_count, query=aim.query)
+        requests = build_list_requests(connector, page_count=page_count, query=query)
     except ConnectorError as exc:
-        return BoardOutcome(package.name, None, steerable, error=str(exc))
+        return BoardOutcome(package.name, None, steerable, query, error=str(exc))
 
     items_seen = 0
     added = 0
@@ -352,6 +425,7 @@ def _one_board(
                     package.name,
                     request.url,
                     steerable,
+                    query,
                     skipped=f"robots.txt disallows {request.url}",
                 )
         except (RobotsError, OSError) as exc:
@@ -359,20 +433,21 @@ def _one_board(
                 package.name,
                 request.url,
                 steerable,
+                query,
                 skipped=f"robots.txt could not be read, so the path is not permitted: {exc}",
             )
         response = fetch(request)
         last = response
         if response.error is not None:
             return BoardOutcome(
-                package.name, request.url, steerable, response.status, error=response.error
+                package.name, request.url, steerable, query, response.status, error=response.error
             )
         result = collect_listing(connector, response.body)
         stale = stale or result.stale
         refusal = rate_limited(response.body, response.status, parsed_items=len(result.items))
         if refusal is not None:
             return BoardOutcome(
-                package.name, request.url, steerable, response.status, refused=refusal
+                package.name, request.url, steerable, query, response.status, refused=refusal
             )
         items_seen += len(result.items)
         collected: list[str] = []
@@ -406,7 +481,7 @@ def _one_board(
             status=response.status,
             items=len(result.items),
             steered=steerable,
-            query=aim.query,
+            query=query,
             at=at,
             offer_ids=collected,
         )
@@ -414,6 +489,7 @@ def _one_board(
         package.name,
         requests[-1].url if requests else None,
         steerable,
+        query,
         last.status if last else None,
         items=items_seen,
         added=added,
@@ -584,8 +660,9 @@ def measure_fixture() -> dict[str, Any]:
         # Which paths are listings, so the answerer can tell the two apart. A
         # board's adverts live on its own host, so the host alone cannot.
         connector = _connector_of(package, DEFAULT_CONNECTORS_DIR)
-        for url in build_list_urls(connector, query=aim.query):
-            list_paths.add(urlsplit(url).path)
+        for phrase in aim.terms:
+            for url in build_list_urls(connector, query=phrase):
+                list_paths.add(urlsplit(url).path)
 
     def answer(request: ListRequest) -> Response:
         host = (urlsplit(request.url).hostname or "").removeprefix("www.")
