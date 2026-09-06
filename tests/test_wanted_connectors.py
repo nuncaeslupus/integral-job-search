@@ -65,11 +65,57 @@ def test_every_entry_is_marked_unsurveyed() -> None:
     assert len(unsurveyed) == len(_wanted())
 
 
-def test_the_backlog_is_not_empty_and_names_the_uncovered_countries() -> None:
-    """A floor, so an emptied file cannot pass as a satisfied backlog."""
-    wanted = _wanted()
-    assert len(wanted) >= 10
-    covered = {"DE", "FR", "IT", "NL", "PT"}
-    assert covered <= {str(e["country"]) for e in wanted}, (
-        "the five countries measured at zero coverage are the reason this file exists"
-    )
+def test_a_board_blocked_on_the_engine_has_its_writeup() -> None:
+    """The invariant that actually protects this file.
+
+    `blocked_on_engine` says a board passed robots and served its adverts, and
+    that only this repository stands in the way. That is a strong claim and it
+    is worthless without the evidence, which lives in `ruled-out.yaml` under an
+    `engine_gap_*` section. A row here with no writeup there is a board nobody
+    can act on and nobody can check — the shape of an entry that quietly
+    becomes false.
+    """
+    document = yaml.safe_load(WANTED.read_text(encoding="utf-8"))
+    blocked = {str(e["site"]) for e in document.get("blocked_on_engine", [])}
+    assert blocked, "the two boards this survey found are the reason this list exists"
+
+    ruled_out = yaml.safe_load(RULED_OUT.read_text(encoding="utf-8"))
+    written_up = {
+        str(entry["site"])
+        for name, section in ruled_out.items()
+        if name.startswith("engine_gap") and isinstance(section, list)
+        for entry in section
+        if isinstance(entry, dict) and "site" in entry
+    }
+    assert blocked <= written_up, f"claimed blocked with no writeup: {sorted(blocked - written_up)}"
+
+
+def test_the_backlog_is_not_empty() -> None:
+    """A floor, so an emptied file cannot pass as a satisfied backlog.
+
+    Deliberately low, and lower than it was. The 2026-09-06 survey turned nine
+    of fourteen entries into rulings, which is the file working rather than the
+    file shrinking — but a floor that tracks the list downwards protects
+    nothing, so this one asserts only that the backlog and the engine-blocked
+    list have not both gone empty.
+    """
+    document = yaml.safe_load(WANTED.read_text(encoding="utf-8"))
+    assert len(document["wanted"]) + len(document.get("blocked_on_engine", [])) >= 4
+
+
+def test_the_countries_with_no_candidate_left_are_named() -> None:
+    """FR and NL ran out of candidates, and silence would read as coverage.
+
+    Every board this file listed for them is refused — robots, an empty shell,
+    an Oracle login, a 403. A reader scanning the rows would see no FR entry
+    and conclude nobody had looked. The header has to say it, because the
+    absence of a row cannot.
+    """
+    header = WANTED.read_text(encoding="utf-8")
+    assert "FR and NL are exhausted" in header
+    for country in ("DE", "PT", "IT", "EU"):
+        rows = yaml.safe_load(header)
+        listed = {str(e["country"]) for e in rows["wanted"]} | {
+            str(e["country"]) for e in rows.get("blocked_on_engine", [])
+        }
+        assert country in listed, f"{country} has zero connectors and no candidate row"
