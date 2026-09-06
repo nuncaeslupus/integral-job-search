@@ -1,0 +1,16 @@
+{
+  "skill": "connector-new",
+  "canary": "connector-new-loaded-2026-09-06-29f87839-dfd5ad39b00f7693",
+  "negative_control": "a connector may declare an Authorization header when the board requires one",
+  "load_prompts": [
+    "Add a connector for landing.jobs",
+    "Can we read stepstone.de? Build a connector if so",
+    "This board isn't in our connector list — connect it",
+    "Why can't we fetch adverts from this site?"
+  ],
+  "no_load_prompts": [
+    "Search the boards we already have for Python jobs",
+    "getmanfred stopped returning offers this week — what broke?",
+    "Rank the offers you already collected"
+  ]
+}

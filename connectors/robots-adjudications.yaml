@@ -196,6 +196,10 @@ adjudications:
     standing: single_parser
     second_reader: "urllib.robotparser"
     source: connectors/foorilla_en/meta.yaml
+    allowed:
+      - /hiring/jobs/?job_search=python
+      - /hiring/jobs/engineering-manager-agentic-insights-3647226/
+    second_reader_refused: []
     reason: >
       The second reader RAN, on 2026-09-06, and could not refuse: it returned
       True for all four paths tried, including `/hiring/companies/x` and

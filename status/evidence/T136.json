@@ -1,0 +1,6 @@
+{
+  "connector_probe_misclassifications": 0,
+  "connector_probe_cases": 3,
+  "connector_probe_defects": [],
+  "gate_status": "measured"
+}
