@@ -2223,3 +2223,217 @@ def test_every_shipped_connector_that_takes_a_query_still_builds_a_url() -> None
         url = build_list_urls(connector, page_count=1, query="ingeniero de datos")[0]
         assert "{query}" not in url and "%20" in url
     assert steered, "no shipped connector takes a query — the aim is baked in again"
+
+
+# ---------------------------------------------------------------------------
+# T132 / #356 — taking part of a text node without an expression language
+
+
+def _one_item(item_html: str, fields: dict[str, dict[str, str]]) -> dict[str, str]:
+    """One list row parsed by a connector declaring `fields`, and nothing else."""
+    from integral.connectors import parse_list_page
+
+    connector = parse_connector(
+        f"""
+site: exampleboard
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-06"
+auth: none
+list:
+  url_pattern: "https://exampleboard.test/jobs"
+  item: "article.card"
+  fields:
+{_fields_yaml({"text": {"css": "article.card"}, **fields})}
+"""
+    )
+    return parse_list_page(connector, f"<html><body>{item_html}</body></html>")[0]
+
+
+def _fields_yaml(fields: dict[str, dict[str, str]]) -> str:
+    lines = []
+    for name, spec in fields.items():
+        lines.append(f"    {name}:")
+        for key, value in spec.items():
+            lines.append(f'      {key}: "{value}"')
+    return "\n".join(lines)
+
+
+CARD = (
+    '<article class="card">'
+    '<a class="link" href="/at/acme/staff-python-engineer">Staff Python Engineer</a>'
+    '<span class="salary">€50.000 - €65.000</span>'
+    "</article>"
+)
+
+
+def test_a_salary_band_in_one_text_node_becomes_a_range() -> None:
+    """`landing.jobs` writes the whole band into one span. Before this the
+    connector could name the span and take nothing but the whole string, so the
+    only board reachable through this format that publishes pay in euros could
+    not have its pay read."""
+    record = _one_item(
+        CARD,
+        {
+            "title": {"css": "a.link"},
+            "salary_min": {"css": "span.salary", "take": "range_low"},
+            "salary_max": {"css": "span.salary", "take": "range_high"},
+            "salary_currency": {"css": "span.salary", "take": "currency"},
+        },
+    )
+    assert record["salary_min"] == "50000"
+    assert record["salary_max"] == "65000"
+    assert record["salary_currency"] == "EUR"
+
+
+def test_the_range_survives_the_round_trip_into_an_offer() -> None:
+    """The vocabulary emits text, `build_offer` re-reads it with `_as_float`.
+    A thousands separator rendered back into that text would be re-read in the
+    other convention, turning 50000 into 50."""
+    from integral.connectors import build_offer
+
+    connector = parse_connector(
+        """
+site: exampleboard
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-06"
+auth: none
+list:
+  url_pattern: "https://exampleboard.test/jobs"
+  item: "article.card"
+  fields:
+    text: {css: "article.card"}
+    title: {css: "a.link"}
+"""
+    )
+    offer = build_offer(
+        connector,
+        list_fields={
+            "title": "Staff Python Engineer",
+            "text": "an advert body",
+            "salary_min": "50000",
+            "salary_max": "65000",
+            "salary_currency": "EUR",
+        },
+        url="https://example.test/at/acme/staff-python-engineer",
+    )
+    assert offer.salary is not None
+    assert (offer.salary.min, offer.salary.max) == (50000.0, 65000.0)
+    assert offer.salary.currency == "EUR"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "€60.000",  # one figure is not a band
+        "Competitive",  # no figures at all
+        "€250 - €350 per day, 40 hours",  # three, and nobody can say which two
+        "€1.2.3 - €65.000",  # a run `_as_float` refuses leaves one number, not two
+    ],
+)
+def test_text_that_is_not_a_band_yields_nothing_not_the_whole_string(text: str) -> None:
+    """#356's negative control, in the direction that matters. A missing salary
+    is a gap the candidate can see; `€250 - €350 per day, 40 hours` landing in
+    `salary_min` is a number that is wrong and looks fine."""
+    record = _one_item(
+        CARD.replace("€50.000 - €65.000", text),
+        {
+            "title": {"css": "a.link"},
+            "salary_min": {"css": "span.salary", "take": "range_low"},
+        },
+    )
+    assert "salary_min" not in record, record
+
+
+def test_two_currencies_in_one_string_is_no_currency() -> None:
+    """A conversion or a comparison. Either way nobody can say which one the
+    pay is in, and picking the first is picking by document order."""
+    record = _one_item(
+        CARD.replace("€50.000 - €65.000", "€50.000 - €65.000 (about $54,000 - $70,000)"),
+        {"title": {"css": "a.link"}, "salary_currency": {"css": "span.salary", "take": "currency"}},
+    )
+    assert "salary_currency" not in record, record
+
+
+def test_last_text_node_drops_a_prefix_that_is_a_sibling_piece() -> None:
+    """#356's own board: `arbeitsagentur.de` offers three elements holding the
+    title and every one carries `1.` in front of it. In all three the title is
+    the final text piece, which is why this member adds no syntax — no prefix
+    string, no index, nothing a connector supplies."""
+    record = _one_item(
+        '<article class="card">'
+        '<h2 class="titel"><span>1.&nbsp;</span><span>Python Entwickler (m/w/d)</span></h2>'
+        "</article>",
+        {"title": {"css": "h2.titel", "take": "last_text_node"}},
+    )
+    assert record["title"] == "Python Entwickler (m/w/d)"
+
+    plain = _one_item(
+        '<article class="card"><h2 class="titel">1.&nbsp;Python Entwickler (m/w/d)</h2></article>',
+        {"title": {"css": "h2.titel", "take": "last_text_node"}},
+    )
+    # One text piece, so there is nothing to drop — and the value is returned
+    # whole rather than emptied. A connector must not be able to lose a title
+    # by declaring a take the markup does not need.
+    assert "Python Entwickler (m/w/d)" in plain["title"]
+
+
+def test_a_take_this_vocabulary_does_not_name_is_refused_at_load() -> None:
+    """The whole point of a closed vocabulary. A connector naming `regex` or
+    `slice` must fail to load, not be ignored at parse time and read as a plain
+    selector — which is how a field silently returns the unedited string."""
+    with pytest.raises((ValidationError, ConnectorError)):
+        parse_connector(
+            """
+site: exampleboard
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-06"
+auth: none
+list:
+  url_pattern: "https://exampleboard.test/jobs"
+  item: "article.card"
+  fields:
+    text: {css: "article.card"}
+    title: {css: "a.link", take: "regex:(.*)"}
+"""
+        )
+
+
+def test_last_text_node_and_attr_cannot_be_combined() -> None:
+    """They read different things, and silently preferring one would make the
+    file say something it does not do."""
+    with pytest.raises((ValidationError, ConnectorError)):
+        parse_connector(
+            """
+site: exampleboard
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-06"
+auth: none
+list:
+  url_pattern: "https://exampleboard.test/jobs"
+  item: "article.card"
+  fields:
+    text: {css: "article.card"}
+    title: {css: "a.link", attr: "href", take: "last_text_node"}
+"""
+        )
+
+
+def test_the_low_end_is_the_smaller_figure_not_the_first_one() -> None:
+    """Document order is not the band's order. `hasta €65.000, desde €50.000`
+    reads the same way to a person and backwards to `numbers[0]`, and a
+    `salary_min` above its `salary_max` is refused by `Salary` — so the mistake
+    surfaces as a dropped offer rather than as a wrong number, which is worse
+    to diagnose and just as lossy."""
+    record = _one_item(
+        CARD.replace("€50.000 - €65.000", "hasta €65.000, desde €50.000"),
+        {
+            "title": {"css": "a.link"},
+            "salary_min": {"css": "span.salary", "take": "range_low"},
+            "salary_max": {"css": "span.salary", "take": "range_high"},
+        },
+    )
+    assert (record["salary_min"], record["salary_max"]) == ("50000", "65000")

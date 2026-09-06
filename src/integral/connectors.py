@@ -599,6 +599,106 @@ def select_all(root: Node, selector: SimpleSelector) -> list[Node]:
 AuthMode = Literal["none", "candidate_session"]
 
 
+#: The closed vocabulary of *partial* extractions (T132, issue #356).
+#:
+#: A selector could already name an element and an attribute, and neither can
+#: name a **part** of what it found. Two boards are blocked on exactly that:
+#: `landing.jobs` writes a whole salary band into one span
+#: (`€50.000 - €65.000`) and `arbeitsagentur.de` writes `1.&nbsp;Python
+#: Entwickler (m/w/d)` into every title it offers.
+#:
+#: The obvious answer — let the connector supply a regex — is the one thing
+#: this grammar exists to exclude: it is connector-supplied code, and a
+#: pathological pattern is a denial of service before it is anything else. So
+#: every member below is a **name** whose behaviour lives in `_take`, and the
+#: connector supplies no pattern, no template and no index.
+#:
+#: Each is fail-closed. Text that does not have the shape the name describes
+#: yields **nothing**, never the unparsed string — the negative control #356
+#: asks for, and the direction that matters: a missing salary is a gap a
+#: candidate can see, while `50.000 - 65.000` landing in `salary_min` is a
+#: number that is simply wrong and looks fine.
+Take = Literal["range_low", "range_high", "currency", "last_text_node"]
+
+#: Currency tokens recognised by `take: currency`, symbol or ISO code. A closed
+#: table for the same reason the vocabulary is closed, and deliberately small:
+#: a board using something absent from it reports no currency, which
+#: `build_offer` reads as no stated salary — not a guess.
+_CURRENCIES: dict[str, str] = {
+    "€": "EUR",
+    "EUR": "EUR",
+    "$": "USD",
+    "USD": "USD",
+    "£": "GBP",
+    "GBP": "GBP",
+    "ZŁ": "PLN",
+    "PLN": "PLN",
+    "CHF": "CHF",
+    "SEK": "SEK",
+    "NOK": "NOK",
+    "DKK": "DKK",
+}
+
+#: A run that could be one number in either thousands convention. Deliberately
+#: not anchored to a currency: boards write `€50.000`, `50.000€` and
+#: `50.000 EUR`, and the number is the same in all three.
+_NUMBER = re.compile(r"\d[\d.,]*")
+
+
+def _numbers_in(text: str) -> list[float]:
+    """Every number in `text` that `_as_float` can resolve **without guessing**.
+
+    A run it refuses is dropped rather than approximated, which is what makes
+    "exactly two" a real test: a band whose halves are written in different
+    conventions resolves to fewer than two numbers and the field is left empty.
+    """
+    found = []
+    for run in _NUMBER.findall(text):
+        # A trailing separator is the sentence's punctuation, not the number's:
+        # `hasta €65.000, desde €50.000` matches `65.000,`, which `_as_float`
+        # rightly refuses as an unresolvable convention — and a refusal here
+        # silently costs the whole band, since "exactly two" then finds one.
+        number = _as_float(run.rstrip(".,"))
+        if number is not None:
+            found.append(number)
+    return found
+
+
+def _take(take: Take, value: str) -> str | None:
+    """Apply one member of the vocabulary. `None` means "this text is not that".
+
+    Never returns `value` unchanged: a `take` that cannot do its job must not
+    look like a `take` that was not asked for.
+    """
+    if take in ("range_low", "range_high"):
+        numbers = _numbers_in(value)
+        # Exactly two. One number is a single figure and not a band; three or
+        # more is a string this vocabulary does not understand — an hourly rate
+        # beside an annual band, a date, a headcount. Guessing which two were
+        # meant is how a wrong salary reaches a ranking.
+        if len(numbers) != 2:
+            return None
+        low, high = min(numbers), max(numbers)
+        return _number_text(low if take == "range_low" else high)
+    if take == "currency":
+        seen = {code for token, code in _CURRENCIES.items() if token in value.upper()}
+        # One currency, or none. A text naming two is a conversion or a
+        # comparison, and either way nobody can say which one the pay is in.
+        return seen.pop() if len(seen) == 1 else None
+    return value
+
+
+def _number_text(number: float) -> str:
+    """A parsed number back as the plain text the field vocabulary carries.
+
+    Every extraction in this module is `str`; `build_offer` is what turns the
+    salary fields into numbers, and it re-reads them with the same `_as_float`.
+    Rendering without a thousands separator is what keeps that round trip
+    lossless in either convention.
+    """
+    return str(int(number)) if number == int(number) else repr(number)
+
+
 class FieldSelector(Strict):
     """One field's extraction rule: where to look, and what to take from the
     match. This is the entire per-field vocabulary — a selector plus an
@@ -608,6 +708,19 @@ class FieldSelector(Strict):
 
     css: str = Field(min_length=1)
     attr: str | None = None
+    #: Which *part* of the matched value to keep. A closed vocabulary, not an
+    #: expression: every member is implemented here, so a connector names one
+    #: and supplies no pattern of its own. See `Take` and `_take`.
+    take: Take | None = None
+
+    @model_validator(mode="after")
+    def _take_and_attr_are_compatible(self) -> FieldSelector:
+        if self.take == "last_text_node" and self.attr is not None:
+            raise ValueError(
+                "take: last_text_node reads the element's text, so it cannot be "
+                "combined with attr — pick one"
+            )
+        return self
 
     @field_validator("css")
     @classmethod
@@ -1842,9 +1955,18 @@ def _extract(node: Node, selector: FieldSelector, compiled: SimpleSelector) -> s
         return None
     if selector.attr is not None:
         value = match.attrs.get(selector.attr)
-        return value or None
-    text = match.text_content()
-    return text or None
+    elif selector.take == "last_text_node":
+        # The element's final text piece rather than the concatenation of all
+        # of them. #356's own suggestion, and it adds no syntax: on every one
+        # of arbeitsagentur.de's three title elements the title is the last
+        # piece and the ordinal prefix is an earlier one.
+        pieces = [piece.strip() for piece in match._iter_text() if piece.strip()]
+        value = " ".join(pieces[-1].split()) if pieces else None
+    else:
+        value = match.text_content()
+    if not value:
+        return None
+    return _take(selector.take, value) if selector.take else value
 
 
 def parse_list_page(connector: Connector, html: str) -> list[dict[str, str]]:
@@ -2217,6 +2339,53 @@ class ProbeReport:
 
     probes_run: int
     violations: tuple[str, ...]
+
+
+#: T132 — what `take:` must do, as a table read before the implementation and
+#: kept beside it. Each row cites the reason its verdict is what it is, and the
+#: fail-closed ones are the point: they are the direction where a wrong answer
+#: is invisible. `None` means "this text is not that shape".
+PARTIAL_EXTRACTION_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
+    ("range_low", "\u20ac50.000 - \u20ac65.000", "50000", "landing.jobs, the band this exists for"),
+    ("range_high", "\u20ac50.000 - \u20ac65.000", "65000", "the same span, other end"),
+    ("currency", "\u20ac50.000 - \u20ac65.000", "EUR", "symbol, not code"),
+    ("range_low", "1,234.56 - 2,345.67", "1234.56", "US convention, decimals kept"),
+    ("range_high", "1.234,56 - 2.345,67", "2345.67", "continental convention, same figure"),
+    (
+        "range_low",
+        "hasta \u20ac65.000, desde \u20ac50.000",
+        "50000",
+        "low is the smaller, not the first",
+    ),
+    ("range_low", "\u20ac60.000", None, "one figure is not a band — FAIL-CLOSED"),
+    ("range_high", "Competitive", None, "no figures at all — FAIL-CLOSED"),
+    (
+        "range_low",
+        "\u20ac250 - \u20ac350 per day, 40 hours",
+        None,
+        "three figures, nobody can say which two — FAIL-CLOSED",
+    ),
+    ("currency", "50000 - 65000", None, "no currency token — FAIL-CLOSED"),
+    (
+        "currency",
+        "\u20ac50.000 (about $54,000)",
+        None,
+        "two currencies is a conversion — FAIL-CLOSED",
+    ),
+)
+
+#: Floor. A table that shrank reports `unmeasured` rather than a clean zero.
+MINIMUM_PARTIAL_EXTRACTION_CONTRACTS = 11
+
+
+def partial_extraction_defects() -> list[str]:
+    """Every contract in `PARTIAL_EXTRACTION_CONTRACTS` whose verdict is wrong."""
+    failures = []
+    for take, text, expected, why in PARTIAL_EXTRACTION_CONTRACTS:
+        actual = _take(take, text)  # type: ignore[arg-type]
+        if actual != expected:
+            failures.append(f"take:{take} on {text!r} -> {actual!r}, expected {expected!r} ({why})")
+    return failures
 
 
 def probe_connector_isolation() -> ProbeReport:
@@ -2632,11 +2801,26 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     pass, because `_main` refuses to report it at all when too few probes ran.
     """
     report = probe_connector_isolation()
+    defects = partial_extraction_defects()
     measured: dict[str, Any] = {
         "connector_executes_no_shared_code": 1 if not report.violations else 0,
         "probes_run": report.probes_run,
         "violations": list(report.violations),
+        # T132. The `take:` vocabulary is this file's answer to "read part of a
+        # text node without running anything the connector wrote", so its
+        # contracts are measured beside the isolation probes rather than in a
+        # file of their own.
+        "partial_extraction_contracts_failing": len(defects),
+        "partial_extraction_contracts_run": len(PARTIAL_EXTRACTION_CONTRACTS),
+        "partial_extraction_defects": defects,
     }
+    if len(PARTIAL_EXTRACTION_CONTRACTS) < MINIMUM_PARTIAL_EXTRACTION_CONTRACTS:
+        measured["gate_status"] = "unmeasured"
+        measured["reasons"] = [
+            f"only {len(PARTIAL_EXTRACTION_CONTRACTS)} partial-extraction contract(s) "
+            f"(floor {MINIMUM_PARTIAL_EXTRACTION_CONTRACTS}) — a zero over a shrunken "
+            "table says nothing"
+        ]
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return measured
