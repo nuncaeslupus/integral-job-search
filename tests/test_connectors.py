@@ -2437,3 +2437,93 @@ def test_the_low_end_is_the_smaller_figure_not_the_first_one() -> None:
         },
     )
     assert (record["salary_min"], record["salary_max"]) == ("50000", "65000")
+
+
+# ---------------------------------------------------------------------------
+# T133 — a named client, never a header the connector writes
+
+
+_HTMX_BOARD = """
+site: htmxboard
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-06"
+auth: none
+list:
+  url_pattern: "https://htmxboard.test/hiring/jobs/?job_search={query}"
+  client: htmx
+  client_target: "mc_1"
+  item: "li.list-group-item"
+  fields:
+    title: {css: "a.stretched-link"}
+    text: {css: "li.list-group-item"}
+    detail_url: {css: "a.stretched-link", attr: "hx-get"}
+"""
+
+
+def test_a_named_client_sends_its_fixed_headers() -> None:
+    """foorilla.com serves its listing only to an htmx request. Measured
+    2026-09-06 from a browser capture and reproduced from a cold shell:
+    `HX-Request: true` alone answers 400; with `HX-Target` it answers 200 and
+    the full fragment. No cookie, no CSRF token, no account — the site is
+    public and the request has a shape."""
+    connector = parse_connector(_HTMX_BOARD)
+    request = build_list_requests(connector, query="agentic")[0]
+    assert request.headers == {"HX-Request": "true", "HX-Target": "mc_1"}
+
+
+def test_a_connector_with_no_client_sends_no_headers() -> None:
+    """Every connector written before this one is unchanged."""
+    connector = parse_connector(
+        _HTMX_BOARD.replace("  client: htmx\n", "").replace('  client_target: "mc_1"\n', "")
+    )
+    assert build_list_requests(connector, query="agentic")[0].headers == {}
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "mc_1: x\\r\\nAuthorization",  # a second header by concatenation
+        "mc 1",  # whitespace
+        "Authorization: Bearer x",
+        "1mc",  # an id does not start with a digit
+        "",
+    ],
+)
+def test_a_target_that_is_not_an_element_id_is_refused_at_load(target: str) -> None:
+    """The single value crossing the file boundary. It is an id, validated as
+    one — no colon-space, no newline, nothing that could terminate this header
+    and begin an `Authorization`."""
+    with pytest.raises((ValidationError, ConnectorError)):
+        parse_connector(_HTMX_BOARD.replace('client_target: "mc_1"', f'client_target: "{target}"'))
+
+
+def test_a_client_this_vocabulary_does_not_name_is_refused_at_load() -> None:
+    """The property being preserved is that header *names* are this module's.
+    A connector naming an unknown client must fail to load, not be ignored and
+    silently send nothing — which reads as "the board returned an empty page"."""
+    with pytest.raises((ValidationError, ConnectorError)):
+        parse_connector(_HTMX_BOARD.replace("client: htmx", "client: curl"))
+
+
+def test_a_target_without_a_client_is_refused() -> None:
+    """A file that declares a target and no client says something it does not
+    do: the target would be silently dropped and the board would answer 400."""
+    with pytest.raises((ValidationError, ConnectorError)):
+        parse_connector(_HTMX_BOARD.replace("  client: htmx\n", ""))
+
+
+def test_no_client_can_name_a_header() -> None:
+    """The rule this relaxes, asserted rather than described: every header name
+    the engine can emit is a literal in `connectors.py`. A connector declaring
+    `headers:` is refused by `Strict` for not being a field at all."""
+    from integral.connectors import client_headers
+
+    for client in ("htmx",):
+        for name in client_headers(client, "mc_1"):
+            assert name.lower().startswith("hx-"), name
+    assert client_headers(None, "mc_1") == {}
+    with pytest.raises((ValidationError, ConnectorError)):
+        parse_connector(
+            _HTMX_BOARD.replace("  client: htmx\n", '  headers: {"Authorization": "Bearer x"}\n')
+        )

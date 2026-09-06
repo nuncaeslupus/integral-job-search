@@ -1213,9 +1213,72 @@ def _page_placeholder_paths(node: Any, where: tuple[Any, ...] = ()) -> list[tupl
     return []
 
 
+#: T133 — the closed client vocabulary.
+#:
+#: The rule this relaxes is a real one and stays: **a connector cannot name a
+#: header.** `headers` on `ListRequest` is derived, never declared, precisely so
+#: there is nowhere for an `Authorization` to be written even by a contributor
+#: who wants one. `names_a_credential` lints the two places a connector *can*
+#: put free text (a POST body's keys, a URL's query string) for the same reason.
+#:
+#: What that rule also excluded is a board like `foorilla.com` — 259,753 live
+#: adverts, robots-allowed, with a real `?job_search=` parameter — whose listing
+#: is served only to an htmx request. Measured 2026-09-06 from a browser
+#: capture: `HX-Request: true` alone answers **400**, and `HX-Request: true` +
+#: `HX-Target: <id>` answers 200 with the full fragment. No cookie, no CSRF
+#: token, no account. The site is public; the request simply has a shape.
+#:
+#: So a connector names a **client**, not a header. The header names below are
+#: this file's, not the connector's; the single value that crosses the boundary
+#: is `client_target`, which is a DOM element id — validated to a shape with no
+#: colon, no whitespace and no newline, so it cannot become a header of its own
+#: even by concatenation. There is still nowhere to write a credential.
+Client = Literal["htmx"]
+
+#: The id `client_target` may hold: what an HTML `id` attribute looks like, and
+#: nothing that could terminate a header or start a second one.
+CLIENT_TARGET = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,63}$")
+
+
+def client_headers(client: Client | None, target: str | None) -> dict[str, str]:
+    """The fixed header set one named client sends. Empty for no client.
+
+    Every name here is a literal in this module. A caller cannot reach this
+    with a name of its own, which is the whole property being preserved.
+    """
+    if client is None:
+        return {}
+    if client == "htmx":
+        headers = {"HX-Request": "true"}
+        if target is not None:
+            headers["HX-Target"] = target
+        return headers
+    raise ConnectorError(f"unknown client: {client!r}")  # pragma: no cover - Literal
+
+
 class ListPage(Strict):
     """The search-results page: how to reach it, how it continues, and one
     selector per item container plus per field within it."""
+
+    #: T133. A named client whose fixed headers this engine sends, never a
+    #: header the file names. See `Client` and `client_headers`.
+    client: Client | None = None
+    #: The DOM id an htmx request targets. Site-specific, so it comes from the
+    #: file — as an id, validated as one, and never as a header name or value
+    #: of the connector's choosing.
+    client_target: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def _a_target_needs_a_client(self):  # type: ignore[no-untyped-def]
+        if self.client_target is not None:
+            if self.client is None:
+                raise ValueError("client_target names a target for no client — declare `client`")
+            if not CLIENT_TARGET.match(self.client_target):
+                raise ValueError(
+                    f"client_target {self.client_target!r} is not an element id: it must start "
+                    "with a letter and hold only letters, digits, _ . : or -"
+                )
+        return self
 
     url_pattern: str = Field(min_length=1)
     #: The HTTP method the engine issues for this listing. `GET` by default,
@@ -1450,6 +1513,26 @@ class ListPage(Strict):
 
 class DetailPage(Strict):
     """The single-ad page reached from a list item's `detail_url`."""
+
+    #: T133. A named client whose fixed headers this engine sends, never a
+    #: header the file names. See `Client` and `client_headers`.
+    client: Client | None = None
+    #: The DOM id an htmx request targets. Site-specific, so it comes from the
+    #: file — as an id, validated as one, and never as a header name or value
+    #: of the connector's choosing.
+    client_target: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def _a_target_needs_a_client(self):  # type: ignore[no-untyped-def]
+        if self.client_target is not None:
+            if self.client is None:
+                raise ValueError("client_target names a target for no client — declare `client`")
+            if not CLIENT_TARGET.match(self.client_target):
+                raise ValueError(
+                    f"client_target {self.client_target!r} is not an element id: it must start "
+                    "with a letter and hold only letters, digits, _ . : or -"
+                )
+        return self
 
     fields: dict[str, FieldSelector] = Field(default_factory=dict)
     from_json: JsonSource | None = None
@@ -1929,7 +2012,10 @@ def build_list_requests(
     page = connector.list
     urls = build_list_urls(connector, page_count=page_count, query=query)
     if page.body_json is None:
-        return [ListRequest(url=url, method=page.method, headers={}, body=None) for url in urls]
+        derived = client_headers(page.client, page.client_target)
+        return [
+            ListRequest(url=url, method=page.method, headers=derived, body=None) for url in urls
+        ]
     start = page.pagination.start
     # `pagination.param` names a *body* key only under `mode: body_field`; under
     # `query_param` and `path_segment` it names a URL key, and handing that name to
@@ -1942,7 +2028,10 @@ def build_list_requests(
         ListRequest(
             url=url,
             method=page.method,
-            headers={"Content-Type": JSON_CONTENT_TYPE},
+            headers={
+                "Content-Type": JSON_CONTENT_TYPE,
+                **client_headers(page.client, page.client_target),
+            },
             body=serialise_body(_page_substituted(page.body_json, start + offset, paginating_key)),
         )
         for offset, url in enumerate(urls)
