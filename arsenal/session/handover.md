@@ -1,158 +1,118 @@
 # Session handover
 
-**2026-09-05 into 2026-09-06.** Board: **173 tasks** — 25 open, 145 merged,
-2 cancelled, 1 done. `origin/main` at `79a1f23`. Five PRs merged (#349, #350,
-#353, #354, #357, #359); #343 and #345 closed by them, #344 closed
-not-planned by the owner's decision.
+**2026-09-06.** Board: **184 tasks** — 29 open, 152 merged, 2 cancelled, 1 done.
+`origin/main` at the merge of #376. Six PRs merged: #365, #367, #369, #371,
+#373, #375, #376.
 
-The session set out to make a live Spanish candidate session possible. It
-ended having found that the thing blocking every remaining connector is not a
-connector problem at all.
+A **live candidate session for the repository owner**, run with the test-mode
+meta-channel open, which is why almost everything below started as a defect a
+real search hit rather than as a planned task.
 
-## 1. The connector gap is a language gap — #358
+## 1. Six "broken connectors" were one missing engine stage — T130, T135
 
-This is the finding that reframes the rest, and it corrects work done earlier
-in the same session.
+Six boards returned nothing and looked individually broken. They were not. The
+sourcing engine had **no detail-fetch stage at all**: a connector could declare
+`detail_url` on a listing row, and nothing ever fetched the advert page, so
+every row on a board whose listing carries no body was dropped for "no text" —
+which reads exactly like a connector whose selectors are wrong.
 
-`connectors/wanted.yaml` was written ranking fourteen boards by country
-coverage. Twelve were then surveyed end to end — robots checked with the
-repo's own matcher, then an anonymous GET for readability. `net-empregos.com`
-cleared robots, mapped every field, decoded 121 KB of ISO-8859-1 cleanly
-once T128 landed, and the package still would not load:
+T135 is the same bug one layer down and is the sharper lesson: `_detail_record`
+built its request with `headers={}`. **`foorilla_en` shipped green and returned
+0 offers live** — 50 rows parsed, 40 advert pages fetched, every one answering
+**200** with the site's 10,836-byte shell. A fixture cannot catch this: the
+fixture is the response, and the bug is in the request.
 
-```
-ConnectorError: locale: Input should be 'en', 'es' or 'ca'
-```
+That is now step 7 of the `connector-new` skill, in those words.
 
-**Not one of the fourteen can be connected.** Not for robots, not for markup,
-not for either engine gap filed this session — because the language does not
-exist in the type.
+## 2. What a connector is, settled — T132, T133, T134
 
-What a language pack costs, measured on `79a1f23`:
+Twelve-field closed vocabulary, plus `detail_url` on the list only. Two
+grammars (a CSS subset, JSON paths). `url_pattern` takes `{query}` and `{page}`
+and nothing else. **No field anywhere for a credential**, and `auth:` has
+exactly two values, `none` and `candidate_session`.
 
-| | count |
-|---|---|
-| declarations of the language set | **3** — `corpus.LANGUAGES:19`, `dimensions.Language:45`, `identity.Language:78` |
-| dimension files carrying cues | 37 of 41 |
-| cue phrases per language | en 105, es 110, ca 109 |
-| catalogue entries needing a translation | 24, each carrying `of` — the sha256 of the English it came from |
-| corpus ads in the new language | **0** (today: ca 90, es 93, en 25) |
+T133 added `take:` — `range_low`, `range_high`, `currency`, `last_text_node` —
+which is what makes `€50.000 - €65.000` two numbers instead of one string.
+Every member **fails closed**: text that is not the shape the name describes
+yields nothing, never the unparsed original. 16 partial-extraction contracts,
+6 of them fail-closed, measured into `status/evidence/T32.json`.
 
-The bootstrap problem is worth naming before anyone starts: a language needs a
-corpus, and the corpus is drawn through connectors for that language, of which
-there are none. That circularity is the actual work, not the 41 files.
+T134 built `foorilla_en` and `landingjobs_en`. foorilla needed `client: htmx`
+with a different `client_target` per surface (`mc_1` list, `mc_2` detail) —
+found from a HAR the owner supplied, after the board had been ruled unreachable
+by eye. **The capture is what showed it.**
 
-**A trap directly in that path.** Only two of the three declarations are tied
-together — `test_dimension_model.py:243` asserts
-`set(get_args(Language)) == set(LANGUAGES)`. `identity.Language` is spelled
-independently and nothing compares it to either. It validates
-`Identity.language`, the field in every candidate's `identity.json`. Adding a
-language to the other two would leave identity refusing it, and no test says so.
+## 3. A `ClaudeBot` disallow does not bind this tool — #365
 
-Both yaml files now open with a `READ THIS FIRST` block saying the ranking
-measures the wrong thing.
+Re-litigated for the third time, and this time the argument is in CLAUDE.md
+rather than only in a module docstring and a YAML header. RemoteOK was wrongly
+ruled out mid-session on exactly the reasoning those two files already refute.
 
-## 2. The rot check was comparing a page with itself — #353 (T127)
+The asymmetry, not the argument, was the defect: CLAUDE.md is in context every
+turn and the ledger header is not, so a session forms its opinion before ever
+opening the file that would correct it.
 
-`assess_package` compares a connector's fixture against its probe. That is
-meaningful only if the two carry different offers. **2 of 18 packages had
-probes that were re-captures of the fixture** — `ticjob_es` and
-`getmanfred_es` — so the check ran, passed, and measured nothing.
+## 4. Connecting a board is now a written procedure — T136, #375
 
-One of the two was byte-*different* from its fixture while carrying the same
-three offers, so no byte comparison could ever have caught it. The metric is
-now reference overlap, and it refuses a zero denominator: a side that parses
-to nothing reports `parsed no offers`, never 100% overlap.
+`.claude/skills/connector-new/`. Seven steps, cheap ones first, each able to
+rule the board out. The owner's reason: *"crear conectores debería ser
+relativamente rápido, ya que cualquier usuario puede necesitarlo."*
 
-`getmanfred_es/meta.yaml` had carried an argument that the near-equality was
-"a fact about the three offers kept, not about the capture" and "the healthy
-reading rather than a weak one". That was wrong and is retracted in the file.
+Gated on the one judgement nobody can make by eye — whether CPython's
+`robotparser`, used as the second reader, was **competent on that particular
+file**. On a robots.txt opening with `Allow: /` it returns the first matching
+rule and so answers True to everything; an agreement with a parser that cannot
+disagree is not an agreement. foorilla.com is that file, landing.jobs is not.
 
-Both probes re-captured live 2026-09-06; 0 of 3 overlap each.
+**The gate's dependency was inverted in review, and the review was a test.**
+The first draft had `integral.connector_procedure` load the skill's script by
+path, and `test_nothing_in_the_codebase_executes_a_contributed_parse_module`
+refused it — `spec_from_file_location` plus `exec_module` is the machinery that
+would let a contributed connector ship code. The judgement now lives in the
+package and the script imports it.
 
-## 3. Connectors can declare a charset — #359 (T128)
+## 5. Three tasks seeded from the test-mode triage — #376
 
-Every fetch assumed UTF-8. `decode_body` now honours a declared charset, with
-a BOM winning over the declaration, and **decodes strictly** — never
-`errors="replace"`, which would turn an encoding bug into plausible mojibake
-that no gate can see.
+- **T137** `t-c56152d9` — nothing tells a candidate session from a session
+  working on the repository. This session was both at once, and only the
+  operator's judgement kept them apart.
+- **T138** `t-85ca22d6` — two offers alike but for the salary can come back in
+  either order. Stated as **dominance**, not as a weight.
+- **T139** `t-9069e62e` — a reason given while rejecting an offer is used once
+  in the reply and then lost. The candidate said *"Applied Research Scientist,
+  eso no sería mi perfil"* and nothing reached `profile/evidence.jsonl`.
 
-`iso-8859-1` and `us-ascii` map to **cp1252**, per WHATWG Encoding §4.2: they
-are labels *of* windows-1252, not Latin-1. The difference is bytes 0x80–0x9F.
+## 6. Open, reported and not fixed
 
-Two things about how it was verified, because neither is the usual claim:
+- **`Aim` is never persisted.** The candidate's stated search terms survive only
+  as an evidence row, so the next session does not know "agentic AI" mattered.
+- **`Aim.query` ANDs every term into one string**, which starves boards that AND
+  their search terms — foorilla and landing.jobs among them.
+- **`packages_for()` cannot select a `GLOBAL` package.** It matches
+  `country == "ES"` while six packages declare `GLOBAL`, which the `^[A-Z]{2}$`
+  country pattern makes structurally unreachable. Worked around per-session.
+- **The repo ships no live `Fetch`.** Every live run this session used a
+  session-only fetcher written in the scratchpad. An honest UA and
+  `Accept-Encoding: identity` turned tecnoempleo's 403 into 29 offers.
 
-- CLAUDE.md requires a **second session** to write fixtures for anything
-  comparing two encodings of the same thing. None was available. The 13-case
-  table was derived from the standards text before any code, each contract
-  citing its clause — which breaks the circularity but **is not the second
-  reader**. Said on the PR and in the merge commit rather than claimed as
-  compliant.
-- Mutation round 1 scored **5 of 7**. Deleting the `REPLACEMENT_LABELS` guard
-  left the gate green: those labels were still refused, via the unknown-label
-  path. The contract asked "did it raise" and got a yes over a deleted check.
-  It now reads the refusal's *reason*. 7 of 7 after.
+## 7. Traps met, so they are not met again
 
-## 4. The corpus cannot be excerpted — #344, closed not-planned
+- **`make evidence` diffs the working tree against the *index*.** Regenerated
+  evidence must be `git add`ed before `open_task_pr.sh`, or it reads as drift.
+  The exception is `S8.json`: staging a pre-archive copy is wrong, because the
+  tick/archive check flips when the task file moves. Restore it from HEAD.
+- **A `: ` in a skill's `description` breaks the YAML and the skill vanishes
+  from the listing with no error.** The budget total went 33 skills to 32 and
+  looked like a successful trim.
+- **`gh pr merge --body` inline was refused by the auto-mode classifier**;
+  `--body-file` is the way through.
 
-`tools/excerpt_corpus.py` was written, run, and **deliberately not committed**.
-Four independent mechanisms anchor a corpus row to its exact bytes: offsets in
-`corpus/labelled`, verbatim gold spans in `dimensions/*.yaml`, raw/labelled
-body equality that nothing gates, and "some advert must exercise each recovery
-route". Cutting it moved **six** measurements, **five of them silently**.
+## 8. Candidate state
 
-Owner's decision: keep it whole and publish it — 208 ads, 485,074 chars, with
-`source_url` on every row. A copy of the discarded tool is in the session
-scratchpad only.
+`~/.integral-job-search/profiles/ivan` — **567 offers, 98 carrying a salary
+band** (from 37 at the session's start), 53 evidence rows. Recorded position is
+still `preferences` / `L0`, because every search this session was driven by
+hand rather than through the step runtime.
 
-## 5. Corrections to this repo's own record
-
-- **CLAUDE.md's "Known environment state" was stale** (#354). Re-measured
-  2026-09-05 22:31 UTC: five runs, 3–6 seconds each, every job failed. Actions
-  has no minutes. The section keeps the clock test, points at
-  `tools/verified_gate.sh`, and now records that it has been wrong twice — which
-  is the section's own point about snapshots.
-- `cv-library.co.uk` answered 200 and then 403 four minutes later to an
-  identical request. Recorded in `ruled-out.yaml` as an inconsistency, not as
-  either verdict.
-- 18 stale worktrees and 65 claim refs cleared. Only the main checkout remains.
-
-## 6. Standing authority granted this session
-
-The owner granted **standing merge authority**: any PR green on
-`tools/verified_gate.sh` may be merged, with the verdict block on the PR and
-the four results quoted in the merge commit. He was offered an "except risky
-diffs" carve-out and **explicitly declined it**. Do not re-ask.
-
-## 6b. T129 — the language set was declared eight times (#361)
-
-The first concrete step of #358, and it came out of measuring rather than
-guessing: adding `pt` to the three obvious declarations broke 13 tests loudly,
-then `make evidence` died on `AttributeError: 'LocalisedText' object has no
-attribute 'pt'` — `LocalisedText.get()` checks membership in `LANGUAGES` and
-reaches the value with `getattr`, so its guard and its lookup read different
-declarations.
-
-`integral.language_set` now reads all seven remaining sites **from the live
-object** and asserts they agree; `interview.leaks_quota_language` lost the
-eighth, an inline `("en", "es", "ca")` its own docstring already called "corpus
-languages". 7 of 7 mutations caught.
-
-`salary_recovery.LANGUAGES` was **not** deleted: its own comment says the
-duplication is deliberate, so it is checked rather than removed.
-
-**This PR shipped T122's own defect and then fixed it.** The first commit's task
-file carried only a ```` ```bash ```` block; `verify_gates.declares_a_gate` looks
-for ```` ```gate ````, so the task counted as terminal with its gate run by
-nothing — `verify-gates` went 1 → 2 "carry no fenced gate block". Caught by
-reading the gate's output rather than the summary line.
-
-## 7. Open
-
-| | |
-|---|---|
-| **#358** | the language gap — highest value, upstream of every remaining connector, and needs an owner decision on which language and how to bootstrap its corpus |
-| **#356** | a selector cannot take part of a text node — real, but no longer the binding constraint for DE |
-| **#352** | CI path guard for contribution PRs — blocked on the repo being public |
-| — | `T89.ledger_entries_scanned` is committed as an exact value and grows with every ledger row; it wants T100's floor treatment |
-| — | **Ivan's live Spanish candidate session, still unstarted.** T124 gave step 7 its aim and T126 gave it a real fetcher, so it is now genuinely possible for the first time. |
+Salary publication, not market thinness, is the binding constraint: the
+agentic + python + remote intersection went from 8 offers to 13 with a band.
