@@ -48,6 +48,24 @@ In this step that sounds like:
 - Never show what is unknown about an offer as neutral — an advert silent on hours is not an advert promising good ones.
 - Never assemble the card's prose a paragraph at a time by a model — it is a template filled from the normalised JSON.
 
+## Record what was shown, and say what was held back
+
+Showing a batch is itself a fact, and it is the one that later turns into a
+question worth asking. Two calls, around the list:
+
+```python
+from integral.presentation_log import partition, present, withheld_line
+
+show, held = partition(store, ranked_ids)      # never `show` alone
+present(store, show, at=now, phrase=phrase)
+```
+
+**Say the withheld count and the reason, every time.** `withheld_line(held)`
+puts it in the shape the owner asked for — *"4 descartadas porque «son de
+investigación»"*. A filter nobody is told about is indistinguishable from a
+thin market, which is the same failure `step-07-sourcing` names for liveness,
+arriving by a different route.
+
 ## Stop rule
 
 A ranking is produced and presented. **Hard cap: the number shown at once**, so the list stays readable; the rest are available on request.
