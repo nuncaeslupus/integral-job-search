@@ -1,5 +1,8 @@
 {
   "connector_executes_no_shared_code": 1,
   "probes_run": 15,
-  "violations": []
+  "violations": [],
+  "partial_extraction_contracts_failing": 0,
+  "partial_extraction_contracts_run": 11,
+  "partial_extraction_defects": []
 }
