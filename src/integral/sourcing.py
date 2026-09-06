@@ -55,6 +55,7 @@ from integral.connectors import (
     build_list_requests,
     build_list_urls,
     build_offer,
+    client_headers,
     collect_listing,
     load_connector,
     parse_detail_page,
@@ -280,8 +281,18 @@ def _detail_record(connector: Connector, url: str, *, fetch: Fetch) -> dict[str,
 
     `ListRequest` is the shape `Fetch` takes; a detail page is a plain GET, so
     it is built here rather than given a second request type nothing else needs.
+
+    **The detail page gets its own client's headers** (T133), derived from
+    `connector.detail` rather than from the listing: a board serving both
+    behind htmx targets different elements for each, and foorilla.com does
+    exactly that — `mc_1` for the list, `mc_2` for the advert. Sending none was
+    silent in the worst way: the fetch answered 200 with the site's shell, the
+    detail selectors matched nothing, and 40 adverts were dropped for "no text"
+    over a board that had returned all 50 rows.
     """
-    response = fetch(ListRequest(url=url, method="GET", headers={}, body=None))
+    detail = connector.detail
+    headers = client_headers(detail.client, detail.client_target) if detail else {}
+    response = fetch(ListRequest(url=url, method="GET", headers=headers, body=None))
     if response.error is not None or response.status != 200:
         return None
     try:
