@@ -52,6 +52,14 @@ sites while reading as though it covers the concept.
 Widening the set is not this task. Making the eight sites checkable is.
 
 ## Acceptance gate
+
+```gate
+language_set_declarations_disagreeing == 0
+evidence: status/evidence/T129.json
+key: language_set_declarations_disagreeing
+```
+
 ```bash
 uv run python -m integral.language_set --check
+uv run --extra dev pytest tests/test_language_set.py -q
 ```
