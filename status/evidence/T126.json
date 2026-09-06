@@ -1,9 +1,11 @@
 {
   "sourced_offers_without_a_recorded_fetch": 0,
-  "sourced_offers_evaluated": 34,
+  "sourced_offers_evaluated": 36,
   "boards_consulted": 6,
   "boards_with_a_committed_capture": 6,
   "boards_steered": 2,
+  "boards_starved_by_a_missing_detail_fetch": 0,
+  "boards_needing_the_advert_page": 2,
   "unrecorded_offers_detected_by_the_control": 1,
   "gate_status": "measured"
 }
