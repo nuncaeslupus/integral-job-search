@@ -1,123 +1,135 @@
 # Session handover
 
-**2026-09-05.** Board: **142 terminal tasks**, `verify-gates` 141/142, 2793
-tests. Two PRs merged (#346, #347), four issues queued (#343, #344, #345, #348).
-The session began as "get a live candidate session ready" and ended having found
-that a live session is not possible yet — for a reason no checkpoint reports.
+**2026-09-05 into 2026-09-06.** Board: **173 tasks** — 25 open, 145 merged,
+2 cancelled, 1 done. `origin/main` at `79a1f23`. Five PRs merged (#349, #350,
+#353, #354, #357, #359); #343 and #345 closed by them, #344 closed
+not-planned by the owner's decision.
 
-## 1. Step 7 has no implementation that fetches — #348
+The session set out to make a live Spanish candidate session possible. It
+ended having found that the thing blocking every remaining connector is not a
+connector problem at all.
 
-The two ends of sourcing exist and have never been connected. Measured on
-`main` at 1fbf836:
+## 1. The connector gap is a language gap — #358
 
-- `load_connectors` / `usable_connectors` are imported by exactly two modules,
-  `connectors.py` and `connector_exchange.py`. Neither touches a `ProfileStore`.
-- `build_offer` / `build_search_offer` are called from exactly two places and
-  **both are gates** — `connector_contract.py`, `connector_coverage.py`.
-- `collect_offer`, the only writer into a candidate's tree, is called from
-  `reaction_elicit.py` (handed its offers by the caller) and from `lifecycle.py`'s
-  own probe fixtures. Nowhere else.
-- `build_list_urls` / `build_list_requests` have **no production caller at all**.
+This is the finding that reframes the rest, and it corrects work done earlier
+in the same session.
 
-There is no path from `constraints.json` to a live board to
-`profiles/<handle>/offers/`. The `ivan` profile's 106 offers were placed by a
-session by hand, and are dated 2026-08-15.
+`connectors/wanted.yaml` was written ranking fourteen boards by country
+coverage. Twelve were then surveyed end to end — robots checked with the
+repo's own matcher, then an anonymous GET for readability. `net-empregos.com`
+cleared robots, mapped every field, decoded 121 KB of ISO-8859-1 cleanly
+once T128 landed, and the package still would not load:
 
-**Why nothing reported it.** Step 7's `run_checkpoint.py` returns
-`artefacts_present: true`, `coverage_met: true`, `runnable: true`. It checks that
-offer files exist, not that anything can produce them — so a step whose artefacts
-were placed by hand is indistinguishable from one whose implementation works. The
-same fail-open shape this repo keeps finding, one layer further out than usual:
-not a metric that counts the wrong thing, but a *coverage check* satisfied by
-artefacts nobody produced.
+```
+ConnectorError: locale: Input should be 'en', 'es' or 'ca'
+```
 
-`tools/collect_ads.py` is **not** this and was briefly mistaken for it here. It
-writes `corpus/raw/ads.jsonl` from hand-written `from_<board>` functions with
-hardcoded URLs and never touches the connector engine. It is the corpus
-collector.
+**Not one of the fourteen can be connected.** Not for robots, not for markup,
+not for either engine gap filed this session — because the language does not
+exist in the type.
 
-## 2. What merged
+What a language pack costs, measured on `79a1f23`:
 
-**#346 (T124)** — `url_pattern` admitted only `{page}`, so every candidate got
-the query its YAML author wrote: `?te=python` on tecnoempleo,
-`atencion_al_cliente` on trabajos. Adds `{query}` as a second allowed literal
-(the brace check still refuses `{0.__class__}`, `{query!r}`, `{}`, `{QUERY}`),
-refuses to substitute an empty query, adds `accepts_query()`, and records the
-terms in `candidate.Aim` — deliberately **outside** `FIELD_MODELS`, because
-D-20's gate says a pinned constraint nothing filters on is a lie and the aim
-steers the fetch rather than narrowing the result.
+| | count |
+|---|---|
+| declarations of the language set | **3** — `corpus.LANGUAGES:19`, `dimensions.Language:45`, `identity.Language:78` |
+| dimension files carrying cues | 37 of 41 |
+| cue phrases per language | en 105, es 110, ca 109 |
+| catalogue entries needing a translation | 24, each carrying `of` — the sha256 of the English it came from |
+| corpus ads in the new language | **0** (today: ca 90, es 93, en 25) |
 
-Two boards wired, four left alone, each decided by a **differential live fetch**
-rather than by reading a form's `name` attribute:
+The bootstrap problem is worth naming before anyone starts: a language needs a
+corpus, and the corpus is drawn through connectors for that language, of which
+there are none. That circularity is the actual work, not the 41 files.
 
-| board | param | verdict |
-|---|---|---|
-| tecnoempleo | `te` | wired — 30/27/29 cards for three queries, titles matching |
-| jobfluent | `q` | wired — different first cards per query |
-| trabajos | `BUSCAR` | ignored — byte-identical 40 items for both queries |
-| ticjob | `keywords` | GET returns 3 and 2 items whose titles do not match; real form is POST |
-| infojobs | — | no form inputs in 1.2 MB; JS-rendered |
-| getmanfred | — | no slot by design; the API returns the whole active list |
+**A trap directly in that path.** Only two of the three declarations are tied
+together — `test_dimension_model.py:243` asserts
+`set(get_args(Language)) == set(LANGUAGES)`. `identity.Language` is spelled
+independently and nothing compares it to either. It validates
+`Identity.language`, the field in every candidate's `identity.json`. Adding a
+language to the other two would leave identity refusing it, and no test says so.
 
-**#347 (T107)** — 24 candidate-facing strings, `en` (source) / `es` / `ca`, in
-`strings/catalogue.json`. Each translation records `of`: the sha256 of the source
-text it was made from, so editing the English makes its translations *provably*
-stale. `presentation.py` looks strings up through `_t(key, language)`; `render()`,
-`card()` and every helper take a `language`. Card columns are **derived** from
-label widths (`ubicación` is longer than `location`); the pay period is rendered
-(without it a Spanish card read `EUR/year`).
+Both yaml files now open with a `READ THIS FIRST` block saying the ranking
+measures the wrong thing.
 
-**Completeness and staleness are gated. Quality is not, and is not claimed** —
-nothing can tell whether a contributed German pack is good German, so a pack
-records who made it and when. An unserved language falls back on every string and
-`untranslated(language)` names every one: silent English was the defect, announced
-English is the feature.
+## 2. The rot check was comparing a page with itself — #353 (T127)
 
-## 3. Merged without CI, and the evidence trail was repaired late
+`assess_package` compares a connector's fixture against its probe. That is
+meaningful only if the two carry different offers. **2 of 18 packages had
+probes that were re-captures of the fixture** — `ticjob_es` and
+`getmanfred_es` — so the check ran, passed, and measured nothing.
 
-Actions is still dry (checks fail in 2–4s, `runner_id: 0`). The owner instructed
-merging anyway. `make host-gate` was green over each tree before its PR opened —
-but `tools/verified_gate.sh` was **not** run, its block **not** pasted before the
-merge, and the results **not** quoted in either squash message. All three are the
-procedure the 2026-09-04 handover records. The block was produced afterwards over
-the merged tip and posted on both PRs, which is weaker evidence than the
-procedure asks for. Next session: run it first.
+One of the two was byte-*different* from its fixture while carrying the same
+three offers, so no byte comparison could ever have caught it. The metric is
+now reference overlap, and it refuses a zero denominator: a side that parses
+to nothing reports `parsed no offers`, never 100% overlap.
 
-Note `CLAUDE.md`'s "Known environment state" still says Actions recovered on
-2026-09-01 and that a red CI is a signal again. **That is stale** — a session
-trusting it will chase a phantom failure.
+`getmanfred_es/meta.yaml` had carried an argument that the near-equality was
+"a fact about the three offers kept, not about the capture" and "the healthy
+reading rather than a weak one". That was wrong and is retracted in the file.
 
-## 4. Two costs worth not paying twice
+Both probes re-captured live 2026-09-06; 0 of 3 overlap each.
 
-- **Seeding a task needs its `status/plan.md` row already marked `☑`.** The gate
-  runs *after* `open_task_pr.sh` archives the task file, so a `☐` row fails
-  post-archive while a `☑` row fails pre-archive. Check instantly with
-  `plan_v2.measure()['violations']` instead of discovering it through a
-  four-minute helper run. Cost here: three wasted runs across two PRs.
-- **`make evidence` diffs the working tree against the *index*.** A regenerated
-  evidence file must be `git add`ed before `open_task_pr.sh`, or the gate reports
-  drift about a change that is already correct. Adding `strings.py` bumped
-  `gate_modules_discovered` 92 → 93 — a growth-sensitive key of exactly the shape
-  T111 flags.
-- **`make format` is a repo-wide rewrite.** `make lint` never checked formatting,
-  so `ruff format .` on a clean checkout rewrites **33 files** (`cue_audit.py`
-  alone by 683 lines). It swept a third of `src/` into T124's diff and had to be
-  reverted file by file. Queued as #345 — do it when no PR is open.
+## 3. Connectors can declare a charset — #359 (T128)
 
-## 5. Queued, in the order they unblock each other
+Every fetch assumed UTF-8. `decode_body` now honours a declared charset, with
+a BOM winning over the declaration, and **decodes strictly** — never
+`errors="replace"`, which would turn an encoding bug into plausible mojibake
+that no gate can see.
 
-- **#348** — the sourcing driver. Blocks any live session.
-- **#345** — format once, add `ruff format --check` to `make lint`. Small, and
-  wants a moment with no PR open.
-- **#344** — the corpus ships 208 verbatim adverts, full text, 485k characters.
-  The excerpting rule the *fixtures* obey ("the adverts are the board's content,
-  not ours") was never applied to it. Blocks making the repo public — which in
-  turn is what would end the Actions problem, since Actions is free and unlimited
-  on public repositories.
-- **#343** — contributed connectors and language packs should arrive
-  review-ready: generate the PR body from `meta.yaml`, guard the paths in CI.
+`iso-8859-1` and `us-ascii` map to **cp1252**, per WHATWG Encoding §4.2: they
+are labels *of* windows-1252, not Latin-1. The difference is bytes 0x80–0x9F.
 
-## 6. Housekeeping
+Two things about how it was verified, because neither is the usual claim:
 
-**63 claim refs** on the remote and a dozen stale worktrees, including several
-under `.claude/worktrees/`. Noise in every `git worktree list`; nobody's task yet.
+- CLAUDE.md requires a **second session** to write fixtures for anything
+  comparing two encodings of the same thing. None was available. The 13-case
+  table was derived from the standards text before any code, each contract
+  citing its clause — which breaks the circularity but **is not the second
+  reader**. Said on the PR and in the merge commit rather than claimed as
+  compliant.
+- Mutation round 1 scored **5 of 7**. Deleting the `REPLACEMENT_LABELS` guard
+  left the gate green: those labels were still refused, via the unknown-label
+  path. The contract asked "did it raise" and got a yes over a deleted check.
+  It now reads the refusal's *reason*. 7 of 7 after.
+
+## 4. The corpus cannot be excerpted — #344, closed not-planned
+
+`tools/excerpt_corpus.py` was written, run, and **deliberately not committed**.
+Four independent mechanisms anchor a corpus row to its exact bytes: offsets in
+`corpus/labelled`, verbatim gold spans in `dimensions/*.yaml`, raw/labelled
+body equality that nothing gates, and "some advert must exercise each recovery
+route". Cutting it moved **six** measurements, **five of them silently**.
+
+Owner's decision: keep it whole and publish it — 208 ads, 485,074 chars, with
+`source_url` on every row. A copy of the discarded tool is in the session
+scratchpad only.
+
+## 5. Corrections to this repo's own record
+
+- **CLAUDE.md's "Known environment state" was stale** (#354). Re-measured
+  2026-09-05 22:31 UTC: five runs, 3–6 seconds each, every job failed. Actions
+  has no minutes. The section keeps the clock test, points at
+  `tools/verified_gate.sh`, and now records that it has been wrong twice — which
+  is the section's own point about snapshots.
+- `cv-library.co.uk` answered 200 and then 403 four minutes later to an
+  identical request. Recorded in `ruled-out.yaml` as an inconsistency, not as
+  either verdict.
+- 18 stale worktrees and 65 claim refs cleared. Only the main checkout remains.
+
+## 6. Standing authority granted this session
+
+The owner granted **standing merge authority**: any PR green on
+`tools/verified_gate.sh` may be merged, with the verdict block on the PR and
+the four results quoted in the merge commit. He was offered an "except risky
+diffs" carve-out and **explicitly declined it**. Do not re-ask.
+
+## 7. Open
+
+| | |
+|---|---|
+| **#358** | the language gap — highest value, upstream of every remaining connector, and needs an owner decision on which language and how to bootstrap its corpus |
+| **#356** | a selector cannot take part of a text node — real, but no longer the binding constraint for DE |
+| **#352** | CI path guard for contribution PRs — blocked on the repo being public |
+| — | `T89.ledger_entries_scanned` is committed as an exact value and grows with every ledger row; it wants T100's floor treatment |
+| — | **Ivan's live Spanish candidate session, still unstarted.** T124 gave step 7 its aim and T126 gave it a real fetcher, so it is now genuinely possible for the first time. |
