@@ -1,0 +1,173 @@
+# Boards worth a connector that do not have one yet — the complement of
+# `ruled-out.yaml`.
+#
+# That file records boards already surveyed and refused, with the evidence. This
+# one records boards nobody has surveyed, so that deciding *where to spend an
+# hour* is not re-derived from scratch every session. An entry here is a
+# candidate, never a promise: none of these has been fetched, none has had its
+# robots.txt adjudicated, and none is known to be readable.
+#
+# **Nothing here is measured except the coverage gap.** The `rank` is a judgment
+# with a stated basis, and the basis is written into each entry so a later reader
+# can disagree with it on the record rather than guess at it. Saying so matters:
+# a file of confident-looking rankings is exactly the shape of a measurement, and
+# this is not one.
+#
+# What IS measured, on 2026-09-06, over the 18 committed packages:
+#
+#     ES  6      GLOBAL  7      US  2      PL  2      GB  1
+#     DE  0      FR  0      IT  0      NL  0      PT  0
+#
+# Five European countries with a live job market have no connector at all. That
+# gap is the whole reason for the ordering below — a board in a country with
+# zero coverage buys more than the seventh board in a country with six.
+#
+# ---------------------------------------------------------------------------
+# How to take one
+#
+# 1. Check it is not already in `ruled-out.yaml`. Two entries there were wrong,
+#    and one was wrong twice, so a stale ruling is worth re-testing — but read
+#    the `retest` line before spending the hour.
+# 2. Survey it against the two tests that file states: robots (adjudicated with
+#    the repo's own matcher, never a grep) and whether an anonymous GET returns
+#    the advert text.
+# 3. **Either outcome is a result.** A board that fails belongs in
+#    `ruled-out.yaml` with its evidence and a `retest` command. Writing that
+#    entry is the deliverable when there is no connector to write.
+# 4. If it passes, `CONTRIBUTING.md` has the package rules — including the one
+#    that cost two connectors their rot check (T127): the probe must name at
+#    least one offer the fixture does not.
+#
+# `connector_packages()` filters on `is_dir()`, so nothing in the sourcing path
+# reads this file. No gate parses it either. It is for the next reader.
+
+listed: 2026-09-06
+listed_by: "@nuncaeslupus"
+
+# Basis for `rank`, stated once so each entry does not restate it:
+#   1  country has zero connectors AND the board is a national public
+#      employment service — widest coverage, usually the most permissive terms,
+#      and it serves people the private boards do not
+#   2  country has zero connectors, large general-purpose national board
+#   3  country has zero connectors, sector board (tech-heavy, which is this
+#      tool's current corpus bias — see `corpus_scope`)
+#   4  country already has a connector; this would widen it
+
+wanted:
+  # --- Germany: no connector -----------------------------------------------
+  - site: arbeitsagentur.de
+    country: DE
+    language: de
+    rank: 1
+    why: "Federal employment agency. Public-sector board, national coverage, all sectors."
+    surveyed: no
+
+  - site: stepstone.de
+    country: DE
+    language: de
+    rank: 2
+    why: "Largest general German board. Also serves AT and parts of NL/BE."
+    surveyed: no
+
+  # --- France: no connector -------------------------------------------------
+  - site: francetravail.fr
+    country: FR
+    language: fr
+    rank: 1
+    why: "The national employment service (formerly Pôle emploi). Same shape as arbeitsagentur.de."
+    surveyed: no
+
+  - site: apec.fr
+    country: FR
+    language: fr
+    rank: 2
+    why: "Association pour l'emploi des cadres — the French board for qualified and managerial roles."
+    surveyed: no
+
+  # welcometothejungle.com was here and has been removed: `ruled-out.yaml`
+  # already refuses it under `robots_refused` (checked 2026-08-30, the search
+  # path is disallowed). Caught by `test_no_wanted_board_was_already_ruled_out`
+  # on its first run, which is the entire reason that check exists — an entry
+  # like this costs the next reader an hour re-deriving a ruling that is
+  # already written down. Left as a comment rather than deleted silently, so
+  # the next person to think of it finds the answer here.
+
+  # --- Italy: no connector --------------------------------------------------
+  - site: infojobs.it
+    country: IT
+    language: it
+    rank: 2
+    why: "Same operator as infojobs.net, which is already ruled JS-rendered here — so this one is likely to fail the same way, and finding that out is cheap because the ES sibling's survey says exactly what to look for."
+    surveyed: no
+
+  - site: itjobs.it
+    country: IT
+    language: it
+    rank: 3
+    why: "Italian tech board."
+    surveyed: no
+
+  # --- Netherlands: no connector -------------------------------------------
+  - site: werk.nl
+    country: NL
+    language: nl
+    rank: 1
+    why: "UWV, the Dutch public employment service."
+    surveyed: no
+
+  - site: nationalevacaturebank.nl
+    country: NL
+    language: nl
+    rank: 2
+    why: "Large general Dutch board."
+    surveyed: no
+
+  # --- Portugal: no connector ----------------------------------------------
+  - site: net-empregos.com
+    country: PT
+    language: pt
+    rank: 2
+    why: "Long-running general Portuguese board."
+    surveyed: no
+
+  - site: itjobs.pt
+    country: PT
+    language: pt
+    rank: 3
+    why: "Portuguese tech board."
+    surveyed: no
+
+  # --- EU-wide --------------------------------------------------------------
+  - site: eures.europa.eu
+    country: EU
+    language: en
+    rank: 1
+    why: >
+      The European Job Mobility Portal — one board covering every EEA country,
+      so a single connector would touch all five gaps above at once. Ranked here
+      rather than first because `euraxess.ec.europa.eu` is already in
+      `ruled-out.yaml` under `robots_refused`, and a sibling europa.eu service
+      may well serve the same robots.txt. Check that before anything else; it is
+      a five-minute answer that decides whether this is the cheapest entry on the
+      list or a dead one.
+    surveyed: no
+
+  # --- United Kingdom: one connector, academic only -------------------------
+  - site: cv-library.co.uk
+    country: GB
+    language: en
+    rank: 4
+    why: "GB has one connector and it is jobs.ac.uk — academic posts only, so the country is effectively uncovered for everyone else."
+    surveyed: no
+
+  # --- Spain: six connectors, one gap worth naming --------------------------
+  - site: empleo.sepe.es
+    country: ES
+    language: es
+    rank: 4
+    why: >
+      The Spanish public employment service. ES has six connectors and all six
+      are private boards, so public-sector and non-tech vacancies are absent
+      from a market this tool otherwise covers best. Ranked 4 for coverage but
+      it is the entry that would most change *who* the tool can serve.
+    surveyed: no
