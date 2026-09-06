@@ -335,35 +335,40 @@ Three more costs, each measured here:
 
 ## Known environment state
 
-**GitHub Actions has runner minutes again** (measured 2026-09-01: runs complete in
-~56 seconds with real conclusions). From 2026-08-19 until then every job failed in
-3–5 seconds with `runner_id: 0`, and this section told sessions that a red CI here
-said nothing about the code. That was true, and it cost something: the first run
-with a real conclusion found a job that had been failing since #123 for its own
-reasons, invisible for as long as everything failed. **A red CI is a signal
-again.** Read it.
+**GitHub Actions has no runner minutes, and has not since 2026-09-04.**
+Re-measured 2026-09-05 22:31 UTC: five consecutive runs — two `push main`, two
+`pull_request`, one `pull_request_target` — each completing in **3 to 6 seconds**
+with every job failed. That is the runner dying before any job body ran. **A red
+CI here says nothing about the code**, and there is no CI to read until the
+billing period turns over.
 
-**Except that it went away again mid-session on 2026-09-04, and the way to tell
-is the clock, not the conclusion.** Measured on #329: two consecutive runs
-completed in **6 and 5 seconds** with every job failed and **every log a 404**,
-against ~95 seconds with real conclusions on #328 twenty minutes earlier. So the
-test is: read `created_at` and `updated_at` on the run. A whole run under ~10
-seconds with unreadable logs is the runner dying before any job body ran, and it
-says nothing about the code; a run of a minute or more is a verdict.
+**The way to tell is the clock, not the conclusion**, and that test outlives any
+particular outage. Read `created_at` and `updated_at` on the run: a whole run
+under ~10 seconds with unreadable logs is the runner dying; a run of a minute or
+more is a verdict. Measured on #329 — 6 and 5 seconds with every log a 404,
+against ~95 seconds with real conclusions on #328 twenty minutes earlier.
 
-When that happens `make host-gate` is the substitute, because it is **exactly**
-what CI runs — and the substitution has to be written down. #329 merged on it,
-with the four results quoted in the merge commit, the outage named on the PR, and
-the pushed SHA verified equal to the tested one. A merge whose evidence lives only
-in a session's scrollback is a merge nobody can audit afterwards.
+`tools/verified_gate.sh <ref>` is the substitute, and the section above says how
+to use it: verdict block on the pull request, the four results quoted in the
+merge commit, and merge only while the head is still the SHA the block names.
+Do **not** reach for a bare `make host-gate` in the working tree instead — that
+is the thing `verified_gate.sh` exists to stop, because the working tree is not
+what a reviewer merges.
 
-**The paragraph above this one was true when written and false four hours later,
-which is the point.** A recorded environment fact is a snapshot, not a standing
-truth — the same shape as the check-in that fired that morning telling this session
-*"RESOLVED — do not re-investigate: CodeRabbit runs on Free and never produces a
-review object"*, which was also true when written, false by 10:12, and whose
-instruction not to look is what would have kept it false. Re-measure before
-trusting either.
+**Going public would fix this**, and it is the same decision as the corpus and
+the contribution guard (#352): Actions is free and unmetered on public
+repositories. Until then, every merge is on the local verdict block.
+
+**This section has now been wrong twice, which is the point.** It said
+"Actions has runner minutes again — a red CI is a signal again. Read it." That
+was true when written on 2026-09-01 and false by 2026-09-04, and it stood for a
+further day telling every session to trust a signal that had stopped existing.
+The same shape as the check-in that fired one morning saying *"RESOLVED — do not
+re-investigate: CodeRabbit runs on Free and never produces a review object"* —
+true when written, false by 10:12, and whose instruction not to look is what
+would have kept it false. A recorded environment fact is a snapshot, not a
+standing truth. **Re-measure before trusting this paragraph too**; `gh run list
+--json conclusion,createdAt,updatedAt` is the whole check and costs one command.
 
 **Run the gate locally as well.** These are what CI runs, and all four must
 pass before a merge:
