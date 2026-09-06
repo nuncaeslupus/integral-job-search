@@ -1,0 +1,51 @@
+{
+  "language_set_declarations_disagreeing": 0,
+  "language_set_declarations_compared_at_least": 7,
+  "language_set_declarations_resolved": 7,
+  "reference": "corpus.LANGUAGES",
+  "reference_value": [
+    "ca",
+    "en",
+    "es"
+  ],
+  "disagreeing": [],
+  "unreadable": [],
+  "declarations": {
+    "corpus.LANGUAGES": [
+      "ca",
+      "en",
+      "es"
+    ],
+    "corpus_scope.TARGET_MIX keys": [
+      "ca",
+      "en",
+      "es"
+    ],
+    "dimensions.Language": [
+      "ca",
+      "en",
+      "es"
+    ],
+    "dimensions.LocalisedText fields": [
+      "ca",
+      "en",
+      "es"
+    ],
+    "identity.Language": [
+      "ca",
+      "en",
+      "es"
+    ],
+    "salary_recovery.LANGUAGES": [
+      "ca",
+      "en",
+      "es"
+    ],
+    "strings/catalogue.json languages": [
+      "ca",
+      "en",
+      "es"
+    ]
+  },
+  "gate_status": "measured"
+}
