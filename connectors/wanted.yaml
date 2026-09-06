@@ -43,45 +43,89 @@
 
 listed: 2026-09-06
 listed_by: "@nuncaeslupus"
+surveyed: 2026-09-06
 
-# Basis for `rank`, stated once so each entry does not restate it:
-#   1  country has zero connectors AND the board is a national public
-#      employment service — widest coverage, usually the most permissive terms,
-#      and it serves people the private boards do not
-#   2  country has zero connectors, large general-purpose national board
-#   3  country has zero connectors, sector board (tech-heavy, which is this
-#      tool's current corpus bias — see `corpus_scope`)
-#   4  country already has a connector; this would widen it
+# ---------------------------------------------------------------------------
+# The survey happened. Read this before the list.
+#
+# Twelve of the fourteen entries were surveyed on 2026-09-06 and nine are now
+# rulings in `ruled-out.yaml`, each with its evidence and a retest line.
+#
+# **FR and NL are exhausted.** Every candidate this file listed for them is
+# refused: francetravail.fr by robots, apec.fr an 11 KB empty shell, werk.nl
+# behind an Oracle login, nationalevacaturebank.nl a 403. Those two countries
+# do not need more work on these boards; they need a board nobody has named
+# yet, which is a different task and is why they have no rows below.
+#
+# **Two boards passed both tests and are blocked on this repository**, not on
+# themselves. They are under `blocked_on_engine`, and they are the concrete
+# reason to do the engine work rather than an abstract argument for it.
+# ---------------------------------------------------------------------------
 
-wanted:
-  # --- Germany: no connector -----------------------------------------------
+blocked_on_engine:
+  # Surveyed, robots-allowed, adverts served to an anonymous GET. Written up in
+  # full under `engine_gap_selector` and `engine_gap_charset` in
+  # `ruled-out.yaml`. Each becomes a connector the day its gap closes.
   - site: arbeitsagentur.de
     country: DE
-    language: de
-    rank: 1
-    why: "Federal employment agency. Public-sector board, national coverage, all sectors."
-    surveyed: no
+    needs: "a selector that can take part of a text node"
+    why_it_matters: "DE has zero connectors and this is the federal employment agency"
+  - site: net-empregos.com
+    country: PT
+    needs: "a `charset` key on the connector, honoured by the fetcher"
+    why_it_matters: >
+      PT has zero connectors, and the gap is not specific to this board —
+      legacy encodings survive longest on the non-English European boards,
+      which is exactly where every remaining coverage gap is
 
+wanted:
   - site: stepstone.de
     country: DE
     language: de
     rank: 2
-    why: "Largest general German board. Also serves AT and parts of NL/BE."
+    why: >
+      Largest general German board; also serves AT and parts of NL/BE. Partly
+      surveyed 2026-09-06: robots allows /jobs/python and the GET answers 200
+      with 1.29 MB and 246 offer anchors, so it is server-rendered and worth
+      the hour. Its fields were never mapped — that is the remaining work.
     surveyed: no
 
-  # --- France: no connector -------------------------------------------------
-  - site: francetravail.fr
-    country: FR
-    language: fr
+  - site: itjobs.pt
+    country: PT
+    language: pt
+    rank: 3
+    why: >
+      Portuguese tech board. Partly surveyed 2026-09-06: robots allows
+      /emprego, 200 with 69 KB and 124 offer anchors, repeated classes
+      `list-group-item` (33) and `list-title` (18) that look like real cards.
+      Check its charset first — its PT sibling net-empregos.com is ISO-8859-1
+      and that is exactly what blocks it.
+    surveyed: no
+
+  - site: itjobs.it
+    country: IT
+    language: it
+    rank: 3
+    why: >
+      Italian tech board, and the only IT candidate left: infojobs.it was
+      surveyed and is a 3.9 KB empty shell, exactly as its ES sibling's
+      already-written entry predicted it would be.
+    surveyed: no
+
+  - site: eures.europa.eu
+    country: EU
+    language: en
     rank: 1
-    why: "The national employment service (formerly Pôle emploi). Same shape as arbeitsagentur.de."
-    surveyed: no
-
-  - site: apec.fr
-    country: FR
-    language: fr
-    rank: 2
-    why: "Association pour l'emploi des cadres — the French board for qualified and managerial roles."
+    why: >
+      One board covering every EEA country, so a single connector would touch
+      every remaining gap at once. Surveyed 2026-09-06 and **not** resolved.
+      The open question — whether it serves euraxess's refusing robots.txt —
+      is answered: it does NOT, both paths tried are allowed. But
+      /en/search-jobs is a 404, the old portal at
+      europa.eu/eures/portal/jv-se/search answers 200 with 69 KB and zero offer
+      anchors, and eures.europa.eu/index_en is a landing page. The search
+      endpoint was not found; it was not proven absent. Highest value on this
+      list and the least resolved.
     surveyed: no
 
   # welcometothejungle.com was here and has been removed: `ruled-out.yaml`
@@ -91,83 +135,3 @@ wanted:
   # like this costs the next reader an hour re-deriving a ruling that is
   # already written down. Left as a comment rather than deleted silently, so
   # the next person to think of it finds the answer here.
-
-  # --- Italy: no connector --------------------------------------------------
-  - site: infojobs.it
-    country: IT
-    language: it
-    rank: 2
-    why: "Same operator as infojobs.net, which is already ruled JS-rendered here — so this one is likely to fail the same way, and finding that out is cheap because the ES sibling's survey says exactly what to look for."
-    surveyed: no
-
-  - site: itjobs.it
-    country: IT
-    language: it
-    rank: 3
-    why: "Italian tech board."
-    surveyed: no
-
-  # --- Netherlands: no connector -------------------------------------------
-  - site: werk.nl
-    country: NL
-    language: nl
-    rank: 1
-    why: "UWV, the Dutch public employment service."
-    surveyed: no
-
-  - site: nationalevacaturebank.nl
-    country: NL
-    language: nl
-    rank: 2
-    why: "Large general Dutch board."
-    surveyed: no
-
-  # --- Portugal: no connector ----------------------------------------------
-  - site: net-empregos.com
-    country: PT
-    language: pt
-    rank: 2
-    why: "Long-running general Portuguese board."
-    surveyed: no
-
-  - site: itjobs.pt
-    country: PT
-    language: pt
-    rank: 3
-    why: "Portuguese tech board."
-    surveyed: no
-
-  # --- EU-wide --------------------------------------------------------------
-  - site: eures.europa.eu
-    country: EU
-    language: en
-    rank: 1
-    why: >
-      The European Job Mobility Portal — one board covering every EEA country,
-      so a single connector would touch all five gaps above at once. Ranked here
-      rather than first because `euraxess.ec.europa.eu` is already in
-      `ruled-out.yaml` under `robots_refused`, and a sibling europa.eu service
-      may well serve the same robots.txt. Check that before anything else; it is
-      a five-minute answer that decides whether this is the cheapest entry on the
-      list or a dead one.
-    surveyed: no
-
-  # --- United Kingdom: one connector, academic only -------------------------
-  - site: cv-library.co.uk
-    country: GB
-    language: en
-    rank: 4
-    why: "GB has one connector and it is jobs.ac.uk — academic posts only, so the country is effectively uncovered for everyone else."
-    surveyed: no
-
-  # --- Spain: six connectors, one gap worth naming --------------------------
-  - site: empleo.sepe.es
-    country: ES
-    language: es
-    rank: 4
-    why: >
-      The Spanish public employment service. ES has six connectors and all six
-      are private boards, so public-sector and non-tech vacancies are absent
-      from a market this tool otherwise covers best. Ranked 4 for coverage but
-      it is the entry that would most change *who* the tool can serve.
-    surveyed: no

@@ -311,6 +311,17 @@ corrected:
 # Ruled out because ROBOTS refuses us — the `*` group, not an AI-agent group.
 # These are settled. Re-reading them is only worth it if robots.txt changes.
 robots_refused:
+  - site: francetravail.fr
+    checked: "2026-09-06"
+    detail: >
+      The national French employment service, and the highest-ranked FR entry
+      in `wanted.yaml` before this survey. The repo matcher refuses
+      https://candidat.francetravail.fr/offres/recherche?motsCles=python. FR
+      has no connector and this was the best candidate for one; apec.fr below
+      is the next, and it fails differently.
+    retest: >
+      uv run python -c "from integral.robots import Robots;
+      print(Robots().allows('https://candidat.francetravail.fr/offres/recherche?motsCles=python'))"
   - site: euraxess.ec.europa.eu
     checked: 2026-08-30
     rule: "Disallow: /jobs/*  — the last line of the single `User-agent: *` group"
@@ -353,6 +364,21 @@ robots_refused:
     detail: "robots.txt disallows the search path; never fetched, so nothing is known or claimed about how it renders"
 
 javascript_rendered:
+  - site: apec.fr
+    checked: "2026-09-06"
+    detail: >
+      robots allows /candidat/recherche-emploi.html, and the GET answers 200
+      with **11,548 bytes and zero scripts** — an empty shell that loads its
+      results some other way. Zero anchors matching the offer path. Not a
+      rendering guess: there is no advert markup of any kind in the response.
+    retest: "GET the path and measure the body; anything over ~100 KB means this changed."
+  - site: infojobs.it
+    checked: "2026-09-06"
+    detail: >
+      3,946 bytes, zero scripts, zero offer anchors — the same empty shell, and
+      the same operator as infojobs.net, already ruled out here for the same
+      reason. The ES sibling's entry said what to look for and it was right.
+    retest: "As above."
   # getmanfred.com, remoteok.com and usajobs.gov were here until 2026-08-31.
   # Their served HTML is exactly as empty as this section said — the entries
   # were not sloppy — and all three fetch their adverts from an endpoint a plain
@@ -466,6 +492,22 @@ javascript_rendered:
 # retrying it costs one request.
 
 edge_blocked:
+  - site: nationalevacaturebank.nl
+    checked: "2026-09-06"
+    detail: "robots allows /vacature/zoeken; the GET answers 403 to the tool's UA on the first request."
+    retest: "GET /vacature/zoeken and read the status."
+  - site: cv-library.co.uk
+    checked: "2026-09-06"
+    detail: >
+      **Answered 200 once and 403 four minutes later**, same UA, same path,
+      no intervening traffic to that host beyond the one read. So the first
+      200 (636 KB, 93 offer anchors) is not evidence the board is readable —
+      it is evidence the edge had not yet decided. A connector built on that
+      first capture would have a fixture nobody can reproduce. Recording the
+      inconsistency rather than either verdict, because a board that answers
+      differently to identical requests is the one case where a single fetch
+      proves nothing.
+    retest: "GET https://www.cv-library.co.uk/python-jobs twice, a minute apart, and compare."
   - site: indeed.com
     checked: 2026-08-30
     status: 403
@@ -730,6 +772,18 @@ policy_refused:
 
 
 policy_unreadable:
+  - site: empleo.sepe.es
+    checked: "2026-09-06"
+    detail: >
+      The Spanish public employment service. The repo matcher raises
+      RobotsError on https://empleo.sepe.es/buscarofertas — robots.txt could
+      not be read, and an unreadable robots.txt **refuses**, it does not
+      permit. ES already has six connectors and all six are private boards, so
+      this is the entry that would most change who the tool can serve; it is
+      worth re-testing rather than forgetting.
+    retest: >
+      uv run python -c "from integral.robots import Robots;
+      print(Robots().allows('https://empleo.sepe.es/buscarofertas'))"
   - site: simplyhired.com
     checked: 2026-08-30
     detail: "/robots.txt returns 403, and the browser-agent retry (T71) could not read it either"
@@ -742,3 +796,91 @@ policy_unreadable:
     checked: 2026-08-30
     detail: "/robots.txt read timed out"
     note: "a timeout is the likeliest of these to be transient — retry before believing it"
+
+# ===========================================================================
+# Second survey — 2026-09-06, working `connectors/wanted.yaml` top to bottom.
+#
+# Twelve boards, chosen because DE, FR, IT, NL and PT had zero connectors. Two
+# passed both tests and are blocked on the ENGINE rather than on the board; the
+# rest are below. Every robots verdict is the repo's own matcher (T70), never a
+# grep, and every fetch used the tool's own UA with no cookie jar.
+# ===========================================================================
+
+authentication_required:
+  - site: werk.nl
+    country: NL
+    checked: "2026-09-06"
+    detail: >
+      GET https://www.werk.nl/werkzoekenden/vacatures/ answers 302 to
+      https://login.werk.nl/oam/server/obrareq.cgi — an Oracle Access Manager
+      login. robots.txt allows the path; there is simply nothing behind it for
+      an anonymous client. A connector may not carry a credential, so this is
+      out of scope by the schema and not merely by policy.
+    retest: >
+      curl -sI -A integral-job-search https://www.werk.nl/werkzoekenden/vacatures/ | head -1
+      — anything but a 3xx to login.werk.nl means this changed.
+
+engine_gap_selector:
+  # Boards that pass robots AND serve their adverts to an anonymous GET, and
+  # that this library still cannot read — because `SimpleSelector` has no way
+  # to take PART of a text node. Same shape as `engine_gap_json` above, one
+  # grammar over: there, a path could not name an array element; here, a
+  # selector cannot name a substring.
+  - site: arbeitsagentur.de
+    country: DE
+    language: de
+    checked: "2026-09-06"
+    robots: "allowed — /jobsuche/suche?was=python and /jobsuche/ both True"
+    readable: >
+      Yes. Angular, but server-side rendered: GET returns 376 KB carrying 25
+      real results with stable class names (li.listeneintrag,
+      a[role="button"] href, .firma-lane, .ba-icon-location-full). The
+      `_ngcontent-ng-cNNNN` attributes are a build hash and must not be
+      selected on; nothing else needs them.
+    gap: >
+      Every element carrying the advert title also carries a prefix, and there
+      are only three of them: `.titel-lane` reads "1.&nbsp;Python Entwickler
+      (m/w/d)" (the result index), `h2.sr-only` reads "1: <title> bei
+      <company>", and `button.vormerken-button[title]` reads "Stelle vormerken:
+      <title>". A connector can select any of the three and can take an
+      attribute, but it cannot take a substring — so every offer would reach a
+      candidate with a rendering artefact in its title.
+    blocked_on: "an engine change, not a board change"
+    retest: >
+      Fetch the list and grep for the title with no prefix. If a bare-title
+      element appears, this is a connector waiting to be written — DE has none.
+
+engine_gap_charset:
+  # The connector schema has nowhere to declare a board's character set, and
+  # every capture in this repo is read as UTF-8. Eighteen packages hide that,
+  # because all eighteen are UTF-8. It is not a coincidence that the first
+  # board to break it is Portuguese: legacy encodings survive longest on the
+  # non-English European boards, which is exactly where the coverage gap is.
+  - site: net-empregos.com
+    country: PT
+    language: pt
+    checked: "2026-09-06"
+    robots: "allowed — /pesquisa-empregos.asp and the detail paths are all True"
+    readable: >
+      Yes, and cleanly. `div.job-item` per result, `a.oferta-link` carries both
+      the bare title text and the href, `img.net-img-logo[alt]` is the company,
+      and the detail page's `div.job-description` is the advert body. 59,791
+      live adverts, `?page=N` paginates and was verified to return different
+      results on page 2.
+    gap: >
+      The board serves **ISO-8859-1** (`<meta charset="ISO-8859-1">`, no charset
+      in the Content-Type header) and `bytes.decode("utf-8")` raises
+      UnicodeDecodeError on it outright. Decoding with `errors="replace"` gives
+      `T\ufffdcnico de Manuten\ufffd\ufffdo` — mojibake in every accented
+      Portuguese word, which is most of them. `connector.yaml` has no `charset`
+      key and `Fetch` is injected, so there is no layer that could be told.
+    also: >
+      `?nome_pesquisa=python` is IGNORED — 59,791 results either way and an
+      identical first row, so this board takes no `{query}` and would join
+      trabajos_es as an unsteered one. Worth knowing before writing it.
+    blocked_on: "an engine change, not a board change"
+    retest: >
+      python3 -c "import urllib.request as u; print(u.urlopen(u.Request(
+      'https://www.net-empregos.com/pesquisa-empregos.asp',
+      headers={'User-Agent':'integral-job-search'})).read()[:2000])" | grep -o 'charset=[^\"]*'
+
