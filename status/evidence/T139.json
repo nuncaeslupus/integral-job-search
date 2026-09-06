@@ -1,0 +1,8 @@
+{
+  "discard_reasons_not_stored": 0,
+  "silently_dropped_offers": 0,
+  "presentation_defects": 0,
+  "contracts_run": 10,
+  "failed_contracts": [],
+  "gate_status": "measured"
+}

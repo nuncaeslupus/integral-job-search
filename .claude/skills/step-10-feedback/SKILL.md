@@ -48,6 +48,40 @@ In this step that sounds like:
 - Never infer an offer status from silence — `screened_out` and `shortlisted` are recorded from what the candidate actually said.
 - Never work down the list item by item asking for an opinion on each — that is a survey, not following.
 
+## Recording a decision — one route, and it keeps the words
+
+```python
+from integral.presentation_log import choose, rule_out
+
+choose(store, offer_id, at=now, reason="me interesa")            # -> shortlisted
+rule_out(store, offer_id, "yo no soy applied researcher", at=now)  # -> screened_out
+```
+
+Both go through `feedback.record_decision`, so the sentence lands in the
+advert's own history **and** in `profile/evidence.jsonl`, and the weights are
+rebuilt before the next ranking is computed. `rule_out` refuses a blank
+reason: a `screened_out` with nothing behind it records the verdict and loses
+the only part worth keeping.
+
+**Choosing one advert does not reject the others in its batch**, and the
+reason is not tidiness. `screened_out` is purge-eligible at sixty days, so
+marking four adverts rejected because the candidate picked the second would
+schedule the deletion of their text for not having been picked first. Being
+passed over is recorded as a fact about the presentation and the status is
+left alone.
+
+**Weak signal becomes strong by asking, never by inferring.**
+`passed_over(store)` names adverts shown at least twice, never chosen and
+never ruled on. That is a list to ask **one** question about:
+
+```text
+"Has pasado de cuatro de investigación en dos rondas. ¿Te las quito del todo?"
+```
+
+What is stored is then their answer, in their words. A category this step
+guessed is not evidence, and `record_decision` would file it as though it
+were.
+
 ## Stop rule
 
 The candidate stops talking about the offers, or every offer they raised has a recorded reaction. **Hard cap: no prompt is issued more than twice in a session.**
