@@ -45,6 +45,25 @@ listed: 2026-09-06
 listed_by: "@nuncaeslupus"
 surveyed: 2026-09-06
 
+# ===========================================================================
+# READ THIS FIRST — the ranking below measures the wrong thing
+#
+# `Language = Literal["en", "es", "ca"]` (`dimensions.py:45`, `identity.py:78`).
+# **No connector can exist for DE, FR, IT, NL or PT**, whatever its robots.txt
+# says and whatever its markup looks like: `load_connector` refuses the package
+# outright. Found 2026-09-06 by writing a `netempregos_pt` package against the
+# new charset support and watching it fail to load — after this file had ranked
+# fourteen boards by country coverage without anyone noticing.
+#
+# Widening the literal is not a connector-sized task. Per new language: cue
+# vocabularies across 41 dimension files, 24 candidate-facing strings, and a
+# corpus in that language — of which there are 0 adverts for all five (ca 90,
+# es 93, en 25). `T3.language_slices_with_no_corpus_hit` would grow by up to 41.
+#
+# So the honest ordering is **language first, then boards in that language**,
+# and every `rank` below is provisional on that. See #358.
+# ===========================================================================
+
 # ---------------------------------------------------------------------------
 # The survey happened. Read this before the list.
 #

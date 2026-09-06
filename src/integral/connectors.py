@@ -89,7 +89,7 @@ import json
 import math
 import re
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date
 from functools import lru_cache
@@ -1387,6 +1387,127 @@ class DetailPage(Strict):
         return self
 
 
+# ---------------------------------------------------------------------------
+# character encodings — the third small grammar
+#
+# Every committed capture in this library is UTF-8, and for eighteen packages
+# that was not a decision, it was a coincidence: `connector.yaml` had nowhere to
+# say otherwise and every fetcher assumed it. `net-empregos.com` — 59,791 live
+# Portuguese adverts, clean selectors, robots allowed — broke it by serving
+# ISO-8859-1, on which `bytes.decode("utf-8")` raises outright and
+# `errors="replace"` gives `T\ufffdcnico de Manuten\ufffd\ufffdo`.
+#
+# The lenient decode is the dangerous one. It produces an advert that looks
+# fine to every check and is wrong in every accented word, which the candidate
+# is the first to notice. So nothing here ever replaces: a body that will not
+# decode is a refusal.
+#
+# The label table is **not** `codecs.lookup`. Python maps `iso-8859-1` to true
+# Latin-1; the WHATWG Encoding Standard §4.2 maps that label to **windows-1252**,
+# because that is what browsers do and therefore what boards are authored
+# against. The difference is bytes 0x80-0x9F: undefined in Latin-1, and the
+# printable `€ " '` in cp1252. A board's curly apostrophe decoded by the
+# stdlib's reading of its own declared label becomes a control character.
+
+#: WHATWG Encoding Standard §4.2, restricted to the labels a job board plausibly
+#: declares. Adding a label is adding a line; a label absent here is refused at
+#: load rather than guessed at.
+ENCODING_LABELS = {
+    "utf-8": "utf-8",
+    "utf8": "utf-8",
+    "unicode-1-1-utf-8": "utf-8",
+    "unicode11utf8": "utf-8",
+    # Every one of these is a *label of windows-1252* in the standard's index.
+    # `iso-8859-1` and `us-ascii` most of all: they are the two a board is most
+    # likely to declare and the two the stdlib would read differently.
+    "windows-1252": "cp1252",
+    "cp1252": "cp1252",
+    "iso-8859-1": "cp1252",
+    "iso8859-1": "cp1252",
+    "iso_8859-1": "cp1252",
+    "latin1": "cp1252",
+    "l1": "cp1252",
+    "csisolatin1": "cp1252",
+    "ascii": "cp1252",
+    "us-ascii": "cp1252",
+    "ansi_x3.4-1968": "cp1252",
+    "iso-8859-15": "iso8859-15",
+    "iso8859-15": "iso8859-15",
+    "iso_8859-15": "iso8859-15",
+    "windows-1250": "cp1250",
+    "iso-8859-2": "iso8859-2",
+    "iso8859-2": "iso8859-2",
+    "utf-16le": "utf-16-le",
+    "utf-16be": "utf-16-be",
+    "utf-16": "utf-16",
+}
+
+#: Labels the standard maps to the *replacement* decoder, whose whole purpose is
+#: to refuse. A board needing one is out of scope, and accepting the label would
+#: yield U+FFFD for every character while looking like a supported encoding.
+REPLACEMENT_LABELS = frozenset(
+    {"replacement", "iso-2022-cn", "iso-2022-cn-ext", "iso-2022-kr", "hz-gb-2312", "csiso2022kr"}
+)
+
+#: Byte-order marks, longest first — UTF-8's prefix does not collide with
+#: UTF-16's, but checking the 2-byte marks before a 3-byte one would.
+_BOMS: tuple[tuple[bytes, str], ...] = (
+    (b"\xef\xbb\xbf", "utf-8"),
+    (b"\xff\xfe", "utf-16-le"),
+    (b"\xfe\xff", "utf-16-be"),
+)
+
+
+def encoding_for(label: str) -> str:
+    """The Python codec for a WHATWG encoding label, or `ConnectorError`.
+
+    Labels are matched ASCII-case-insensitively after stripping whitespace,
+    per Encoding §4.2 — `"  ISO-8859-1  "` and `"iso-8859-1"` are the same
+    label and a board is free to write either.
+
+    An unknown label is **refused**, not defaulted to UTF-8. A default here
+    would turn "this connector's author typed the charset wrong" into
+    "every advert from this board is mojibake", which is the failure this
+    whole path exists to prevent.
+    """
+    normalised = label.strip().lower()
+    if normalised in REPLACEMENT_LABELS:
+        raise ConnectorError(
+            f"charset {label!r} maps to the replacement decoder, which refuses everything"
+        )
+    try:
+        return ENCODING_LABELS[normalised]
+    except KeyError:
+        raise ConnectorError(f"unknown charset label: {label!r}") from None
+
+
+def decode_body(raw: bytes | str, charset: str = "utf-8") -> str:
+    """Decode a fetched body, refusing rather than replacing.
+
+    A byte-order mark wins over `charset` and is removed from the output
+    (WHATWG HTML, "Determining the character encoding", step 1). A leftover
+    U+FEFF is not cosmetic: it lands inside the first extracted field, so one
+    page's first advert differs from every other by an invisible character.
+
+    `errors` is never passed, so a body that does not decode raises. That is
+    the point: `errors="replace"` is what produced `T\ufffdcnico` and it is
+    indistinguishable, downstream, from an advert that really said that.
+    """
+    if isinstance(raw, str):
+        return raw
+    for mark, codec in _BOMS:
+        if raw.startswith(mark):
+            return raw[len(mark) :].decode(codec)
+    try:
+        return raw.decode(encoding_for(charset))
+    except UnicodeDecodeError as error:
+        raise ConnectorError(
+            f"body does not decode as {charset!r}: {error}. The connector declares "
+            "the wrong charset, or the board changed it — decoding it leniently "
+            "would put replacement characters into an advert a candidate reads."
+        ) from error
+
+
 class Connector(Strict):
     """One site's connector — `connectors/<site>_<locale>.yaml`.
 
@@ -1398,6 +1519,26 @@ class Connector(Strict):
 
     site: str = Field(pattern=SITE_NAME.pattern, min_length=2, max_length=64)
     locale: Language
+    #: The board's character encoding, as a WHATWG label. Defaults to utf-8,
+    #: which is what all eighteen packages committed before this existed were
+    #: serving — so the default is the measured status quo, not a guess.
+    charset: str = "utf-8"
+
+    @field_validator("charset")
+    @classmethod
+    def _charset_is_a_known_label(cls, charset: str) -> str:
+        """Refused at load, like every other unusable field.
+
+        A typo'd charset that survived to fetch time would decode every advert
+        from the board wrongly — and cp1252 never raises, so it would do it
+        silently. Load is the last place this can fail loudly.
+        """
+        try:
+            encoding_for(charset)
+        except ConnectorError as exc:
+            raise ValueError(str(exc)) from exc
+        return charset
+
     version: str = Field(pattern=VERSION.pattern)
     last_verified: date
     auth: AuthMode = "none"
@@ -2264,6 +2405,225 @@ def probe_connector_isolation() -> ProbeReport:
 MINIMUM_PROBES = 10
 
 
+# ---------------------------------------------------------------------------
+# T128's gate: the charset contracts
+#
+# Written from the WHATWG Encoding Standard and WHATWG HTML **before** the
+# decoder existed (`tmp/charset-cases.md` in the branch that added this records
+# the table and the date). That ordering is the whole point: CLAUDE.md requires
+# a session other than the implementer to derive a correctness-critical gate's
+# cases from the spec, precisely so the cases are not a description of what the
+# code already does. No second session was available; deriving the table from
+# the standard first is the nearest available substitute and is weaker, and the
+# pull request says so rather than claiming the rule was met.
+#
+# Every contract cites the clause its verdict comes from. A verdict argued from
+# what the decoder does is the circularity this exists to break.
+
+#: Each entry: name, the clause it is derived from, and a callable that returns
+#: True when the contract holds. Behavioural — nothing here reads source text,
+#: so a comment cannot satisfy one and a hard-coded pass cannot either.
+CHARSET_CONTRACTS: tuple[tuple[str, str, Callable[[], bool]], ...] = (
+    (
+        "iso_8859_1_decodes_as_windows_1252",
+        "Encoding §4.2 — `iso-8859-1` is a label OF windows-1252; the index has "
+        "no separate latin-1 decoder. FAIL-OPEN: 0x92 is undefined in true "
+        "Latin-1 and is a right single quote in cp1252.",
+        lambda: decode_body(b"don\x92t", "iso-8859-1") == "don\u2019t",
+    ),
+    (
+        "latin1_aliases_resolve_to_the_same_encoding",
+        "Encoding §4.2 — latin1, l1, csisolatin1 share one label set.",
+        lambda: (
+            {encoding_for(label) for label in ("latin1", "l1", "csisolatin1", "iso8859-1")}
+            == {"cp1252"}
+        ),
+    ),
+    (
+        "us_ascii_decodes_as_windows_1252",
+        "Encoding §4.2 — us-ascii is also a windows-1252 label. FAIL-OPEN: a "
+        "board declaring ascii and serving a £ would otherwise lose it.",
+        lambda: decode_body(b"\xa3100", "us-ascii") == "\u00a3100",
+    ),
+    (
+        "labels_are_case_insensitive_and_trimmed",
+        "Encoding §4.2 — labels match ASCII-case-insensitively after stripping "
+        "leading and trailing whitespace.",
+        lambda: encoding_for("  ISO_8859-1  ") == encoding_for("iso-8859-1") == "cp1252",
+    ),
+    (
+        "a_utf8_bom_wins_and_is_removed",
+        "HTML 'Determining the character encoding' step 1 — the BOM is "
+        "authoritative and is not content. FAIL-OPEN: a leftover U+FEFF lands "
+        "inside the first extracted field of the page.",
+        lambda: decode_body(b"\xef\xbb\xbfHola", "iso-8859-1") == "Hola",
+    ),
+    (
+        "a_utf16_bom_selects_utf16_and_is_removed",
+        "HTML 'Determining the character encoding' step 1 — FF FE and FE FF "
+        "select UTF-16LE and UTF-16BE.",
+        lambda: (
+            decode_body(b"\xff\xfeH\x00i\x00", "utf-8") == "Hi"
+            and decode_body(b"\xfe\xff\x00H\x00i", "utf-8") == "Hi"
+        ),
+    ),
+    (
+        "an_unknown_label_is_refused_not_defaulted",
+        "Encoding §4.2 — a label matching nothing has no encoding. FAIL-OPEN if "
+        "defaulted: a typo'd charset would silently mojibake every advert.",
+        lambda: _refuses(lambda: encoding_for("banana")),
+    ),
+    (
+        "replacement_decoder_labels_are_refused",
+        "Encoding §4.2 — these map to the replacement decoder, whose purpose is "
+        "to refuse. FAIL-OPEN if accepted: it yields U+FFFD for everything. "
+        "Asserts the REASON, not just the refusal: deleting the guard still "
+        "refuses these labels via the unknown-label path, so a contract asking "
+        "only 'did it raise' passes over a deleted check. Caught by mutating "
+        "the guard away and watching this contract stay green.",
+        lambda: all(_refused_as_replacement(label) for label in REPLACEMENT_LABELS),
+    ),
+    (
+        "an_undecodable_body_refuses_rather_than_replacing",
+        "repo policy, and a deliberate departure: Encoding §6 specifies U+FFFD "
+        "for a decode error, which is right for RENDERING. This library "
+        "produces evidence a candidate reads. THE fail-open of this task: "
+        "errors='replace' is what gives 'T\ufffdcnico de Manuten\ufffd\ufffdo'.",
+        lambda: _refuses(lambda: decode_body("Técnico".encode("cp1252"), "utf-8")),
+    ),
+    (
+        "a_connector_declaring_an_unknown_charset_will_not_load",
+        "repo policy: refused at load like every other unusable field. cp1252 "
+        "never raises, so a typo caught at fetch time would never be caught "
+        "at all — load is the last place this can fail loudly.",
+        lambda: _refuses(
+            lambda: parse_connector(
+                "site: acme\nlocale: en\nversion: '1.0.0'\nlast_verified: '2026-01-01'\n"
+                "charset: banana\n"
+                "list:\n  url_pattern: 'https://x.test'\n  item: '.job'\n"
+                "  fields:\n    text: {css: '.x'}\n"
+            ),
+            (ConnectorError, ValueError),
+        ),
+    ),
+    (
+        "an_empty_body_decodes_to_an_empty_string",
+        "repo policy: nothing to decode is not an error. FAIL-CLOSED if it raised.",
+        lambda: decode_body(b"", "iso-8859-1") == "",
+    ),
+    (
+        "text_that_is_already_str_is_returned_unchanged",
+        "repo policy: there is nothing to decode. Guards the committed captures, "
+        "which are read from disk as str.",
+        lambda: decode_body("Técnico", "iso-8859-1") == "Técnico",
+    ),
+    (
+        "every_committed_capture_survives_its_declared_charset",
+        "repo policy: the round trip the case table names as the ONLY check for "
+        "'declared latin-1, actually UTF-8'. cp1252 never raises, so that case "
+        "is invisible to the decoder and catchable only against real captures.",
+        lambda: not _captures_outside_their_charset(),
+    ),
+)
+
+
+def _refused_as_replacement(label: str) -> bool:
+    """True when `label` is refused **for being a replacement label**.
+
+    `REPLACEMENT_LABELS` is, today, unreachable by accident: none of its labels
+    is in `ENCODING_LABELS` either, so deleting the guard leaves them refused
+    as unknown. That makes the guard look like dead code and makes any contract
+    asking merely "did it raise" green over its removal.
+
+    It is not dead code, and the distinction is the reason. A later maintainer
+    adding CJK support would put `iso-2022-cn` into `ENCODING_LABELS` and get a
+    decoder returning U+FFFD for every character of every advert — the guard is
+    what refuses that, and only then. So the contract reads the message.
+    """
+    try:
+        encoding_for(label)
+    except ConnectorError as error:
+        return "replacement decoder" in str(error)
+    return False
+
+
+def _refuses(call: Callable[[], Any], exceptions: Any = ConnectorError) -> bool:
+    """True when `call` raises. A contract asserting a refusal must observe one."""
+    try:
+        call()
+    except exceptions:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def _captures_outside_their_charset(
+    directory: Path = DEFAULT_CONNECTORS_DIR,
+) -> list[str]:
+    """Committed captures holding a character their board's charset cannot carry.
+
+    Every capture in this library is committed as UTF-8 — that is a repository
+    rule, not a fact about the boards. `charset` describes the *live* board. So
+    the assertion is that the text actually shipped could have come from that
+    board: a package declaring iso-8859-1 whose fixture contains a CJK
+    character has either the wrong declaration or a corrupted capture, and both
+    are worth knowing before a candidate reads it.
+    """
+    outside: list[str] = []
+    for package in connector_packages(directory):
+        try:
+            connector = load_connector(package / CONNECTOR_FILENAME)
+        except Exception:
+            continue
+        codec = encoding_for(connector.charset)
+        for capture in sorted(package.rglob("*.html")):
+            try:
+                capture.read_text(encoding="utf-8").encode(codec)
+            except UnicodeEncodeError as error:
+                outside.append(f"{package.name}/{capture.relative_to(package)}: {error}")
+            except UnicodeDecodeError:
+                outside.append(
+                    f"{package.name}/{capture.relative_to(package)}: not committed as UTF-8"
+                )
+    return outside
+
+
+#: A library that lost its contracts must not report a clean zero.
+MINIMUM_CHARSET_CONTRACTS = 13
+
+
+def measure_charset() -> dict[str, Any]:
+    """T128's gate reading: `charset_contracts_failing`."""
+    failing: list[str] = []
+    for name, clause, contract in CHARSET_CONTRACTS:
+        try:
+            held = contract()
+        except Exception as error:
+            held = False
+            clause = f"{clause} [raised {type(error).__name__}: {error}]"
+        if not held:
+            failing.append(f"{name}: {clause}")
+    checked = len(CHARSET_CONTRACTS)
+    return {
+        "charset_contracts_failing": len(failing),
+        "charset_contracts_checked": checked,
+        "charset_contracts_at_least": MINIMUM_CHARSET_CONTRACTS,
+        "gate_status": "measured" if checked >= MINIMUM_CHARSET_CONTRACTS else "unmeasured",
+        "failed_contracts": failing,
+        "captures_outside_their_charset": _captures_outside_their_charset(),
+        "contracts_checked_by_name": [name for name, _, _ in CHARSET_CONTRACTS],
+    }
+
+
+def write_charset_evidence(evidence: Path) -> dict[str, Any]:
+    """Measure and record `status/evidence/T128.json`."""
+    measured = measure_charset()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     """Measure `connector_executes_no_shared_code` and record it.
 
@@ -2287,7 +2647,27 @@ def _main(argv: list[str]) -> int:
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)
+    # T128 beside T32, wherever T32 was asked for — the same shape
+    # `connector_health` uses for T72/T73/T127. A caller redirecting one record
+    # to a scratch directory is not asking to have the other written into the
+    # repository.
+    charset = write_charset_evidence(target.parent / "T128.json")
     print(json.dumps(measured, ensure_ascii=False))
+    if charset["charset_contracts_failing"]:
+        for failure in charset["failed_contracts"]:
+            print(f"charset contract failed: {failure}", file=sys.stderr)
+        return 1
+    for capture in charset["captures_outside_their_charset"]:
+        print(f"capture outside its declared charset: {capture}", file=sys.stderr)
+    if charset["captures_outside_their_charset"]:
+        return 1
+    if charset["gate_status"] == "unmeasured":
+        print(
+            f"only {charset['charset_contracts_checked']} charset contract(s) "
+            f"(floor {charset['charset_contracts_at_least']})",
+            file=sys.stderr,
+        )
+        return 3
     if measured["probes_run"] < MINIMUM_PROBES:
         print(
             f"only {measured['probes_run']} probe(s) ran (floor {MINIMUM_PROBES}) — "

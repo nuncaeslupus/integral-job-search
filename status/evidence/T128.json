@@ -1,0 +1,23 @@
+{
+  "charset_contracts_failing": 0,
+  "charset_contracts_checked": 13,
+  "charset_contracts_at_least": 13,
+  "gate_status": "measured",
+  "failed_contracts": [],
+  "captures_outside_their_charset": [],
+  "contracts_checked_by_name": [
+    "iso_8859_1_decodes_as_windows_1252",
+    "latin1_aliases_resolve_to_the_same_encoding",
+    "us_ascii_decodes_as_windows_1252",
+    "labels_are_case_insensitive_and_trimmed",
+    "a_utf8_bom_wins_and_is_removed",
+    "a_utf16_bom_selects_utf16_and_is_removed",
+    "an_unknown_label_is_refused_not_defaulted",
+    "replacement_decoder_labels_are_refused",
+    "an_undecodable_body_refuses_rather_than_replacing",
+    "a_connector_declaring_an_unknown_charset_will_not_load",
+    "an_empty_body_decodes_to_an_empty_string",
+    "text_that_is_already_str_is_returned_unchanged",
+    "every_committed_capture_survives_its_declared_charset"
+  ]
+}
