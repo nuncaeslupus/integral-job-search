@@ -41,6 +41,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 from integral.candidate import Aim, CandidateConstraints
 from integral.candidate import Location as ConstraintLocation
@@ -52,9 +53,11 @@ from integral.connectors import (
     ListRequest,
     accepts_query,
     build_list_requests,
+    build_list_urls,
     build_offer,
     collect_listing,
     load_connector,
+    parse_detail_page,
 )
 from integral.identity import ProfileStore
 from integral.lifecycle import (
@@ -81,6 +84,14 @@ MINIMUM_BOARDS = 1
 #: A run that collected no offers says nothing about how offers get recorded.
 #: The committed captures yielded well above this when T126 landed.
 MINIMUM_OFFERS_COLLECTED = 3
+
+#: Detail pages fetched per board per run. A listing row that cannot complete an
+#: offer sends us to the advert's own page, and a 40-row listing would otherwise
+#: turn one listing request into 41. The cap is per board so one badly-shaped
+#: connector cannot spend the whole run, and what it stopped is reported rather
+#: than dropped silently — `BoardOutcome.detail_budget_spent` against
+#: `detail_needed`.
+DETAIL_FETCH_CEILING = 40
 
 
 @dataclass(frozen=True)
@@ -118,6 +129,11 @@ class BoardOutcome:
     refused: str | None = None
     skipped: str | None = None
     error: str | None = None
+    #: Rows the list page could not complete on its own, and detail fetches
+    #: actually made for them. They differ when `DETAIL_FETCH_CEILING` or
+    #: robots stopped one, which is a truncated pass and not an empty board.
+    detail_needed: int = 0
+    detail_fetched: int = 0
 
     @property
     def reached_the_board(self) -> bool:
@@ -235,6 +251,45 @@ def source(
     return run
 
 
+def _absolute(url: str | None, against: str) -> str | None:
+    """A row's `detail_url` as something fetchable.
+
+    Boards write it both ways — `builtin_en` yields `/job/<slug>`, others a full
+    URL — and a relative one is not fetchable and is not a usable `Offer.url`
+    either. `urljoin` leaves an absolute URL untouched, so this is safe on both.
+    """
+    if not url:
+        return None
+    return urljoin(against, url)
+
+
+def _may_fetch(robots: Robots, url: str) -> bool:
+    """Robots, adjudicated for a detail page exactly as for a list page.
+
+    A `robots.txt` that cannot be read is a refusal, not a permission — the same
+    direction `_one_board` takes for the listing, and for the same reason.
+    """
+    try:
+        return robots.allows(url)
+    except (RobotsError, OSError):
+        return False
+
+
+def _detail_record(connector: Connector, url: str, *, fetch: Fetch) -> dict[str, str] | None:
+    """The advert's own page, parsed for whatever `connector.detail` names.
+
+    `ListRequest` is the shape `Fetch` takes; a detail page is a plain GET, so
+    it is built here rather than given a second request type nothing else needs.
+    """
+    response = fetch(ListRequest(url=url, method="GET", headers={}, body=None))
+    if response.error is not None or response.status != 200:
+        return None
+    try:
+        return parse_detail_page(connector, response.body)
+    except ConnectorError:
+        return None
+
+
 def _one_board(
     store: ProfileStore,
     package: Package,
@@ -269,6 +324,8 @@ def _one_board(
     items_seen = 0
     added = 0
     dropped = 0
+    detail_needed = 0
+    detail_fetched = 0
     drop_reason: str | None = None
     stale = False
     last: Response | None = None
@@ -309,7 +366,20 @@ def _one_board(
         items_seen += len(result.items)
         collected: list[str] = []
         for item in result.items:
-            offer, why = _offer_from(connector, item)
+            detail_url = _absolute(item.get("detail_url"), request.url)
+            offer, why = _offer_from(connector, item, url=detail_url)
+            if offer is None and connector.detail is not None and detail_url:
+                # The list row cannot complete an offer and the connector says
+                # the rest of the advert is on its own page. Six installed
+                # connectors declare `text` only under `detail:` — correctly,
+                # since their list rows carry no teaser — and every one of them
+                # produced zero offers for as long as nothing fetched it.
+                detail_needed += 1
+                if detail_fetched < DETAIL_FETCH_CEILING and _may_fetch(robots, detail_url):
+                    detail_fetched += 1
+                    fields = _detail_record(connector, detail_url, fetch=fetch)
+                    if fields:
+                        offer, why = _offer_from(connector, item, fields, url=detail_url)
             if offer is None:
                 dropped += 1
                 drop_reason = drop_reason or why
@@ -339,10 +409,17 @@ def _one_board(
         dropped=dropped,
         drop_reason=drop_reason,
         stale=stale,
+        detail_needed=detail_needed,
+        detail_fetched=detail_fetched,
     )
 
 
-def _offer_from(connector: Connector, item: dict[str, str]) -> tuple[Any, str | None]:
+def _offer_from(
+    connector: Connector,
+    item: dict[str, str],
+    detail_fields: dict[str, str] | None = None,
+    url: str | None = None,
+) -> tuple[Any, str | None]:
     """One parsed row as an `Offer`, or `(None, why)` when it cannot be one.
 
     A row the schema refuses is dropped rather than raised: one malformed card
@@ -353,7 +430,15 @@ def _offer_from(connector: Connector, item: dict[str, str]) -> tuple[Any, str | 
     which field the board stopped supplying.
     """
     try:
-        return build_offer(connector, list_fields=item, url=item.get("detail_url")), None
+        return (
+            build_offer(
+                connector,
+                list_fields=item,
+                detail_fields=detail_fields,
+                url=url or item.get("detail_url"),
+            ),
+            None,
+        )
     except (ConnectorError, ValueError) as exc:
         return None, str(exc).splitlines()[0][:160]
 
@@ -476,14 +561,25 @@ def measure_fixture() -> dict[str, Any]:
     # and the run would report a clean zero over six boards that produced no
     # offers — the exact vacuous pass this gate is built to refuse.
     by_host: dict[str, str] = {}
+    detail_by_host: dict[str, str] = {}
+    list_paths: set[str] = set()
     for package in packages_for(constraints, DEFAULT_CONNECTORS_DIR):
         capture = DEFAULT_CONNECTORS_DIR / package.name / "fixture" / "list.html"
         if capture.is_file() and package.site:
             by_host[package.site] = capture.read_text(encoding="utf-8")
+        advert = DEFAULT_CONNECTORS_DIR / package.name / "fixture" / "detail.html"
+        if advert.is_file() and package.site:
+            detail_by_host[package.site] = advert.read_text(encoding="utf-8")
+        # Which paths are listings, so the answerer can tell the two apart. A
+        # board's adverts live on its own host, so the host alone cannot.
+        connector = _connector_of(package, DEFAULT_CONNECTORS_DIR)
+        for url in build_list_urls(connector, query=aim.query):
+            list_paths.add(urlsplit(url).path)
 
     def answer(request: ListRequest) -> Response:
         host = (urlsplit(request.url).hostname or "").removeprefix("www.")
-        for site, html in by_host.items():
+        served = by_host if urlsplit(request.url).path in list_paths else detail_by_host
+        for site, html in served.items():
             if host == site.removeprefix("www."):
                 return Response(200, html)
         return Response(404, "", error=f"no committed capture for {host}")
@@ -526,12 +622,25 @@ def measure_fixture() -> dict[str, Any]:
         )
         detected = len(offers_without_a_recorded_fetch(store)) - len(driven)
 
+        starved = [
+            outcome.connector
+            for outcome in run.outcomes
+            if outcome.items and not outcome.added and outcome.detail_needed
+        ]
+
         measured: dict[str, Any] = {
             "sourced_offers_without_a_recorded_fetch": len(driven),
             "sourced_offers_evaluated": collected,
             "boards_consulted": len(run.outcomes),
             "boards_with_a_committed_capture": len(by_host),
             "boards_steered": len(run.steered),
+            # T130. A board whose list page parsed rows and yielded no offer,
+            # while its connector declares a detail page carrying the rest, is
+            # a board the engine starved rather than one the market emptied.
+            # Six installed connectors were in that state until the detail
+            # fetch existed; the count is the gate.
+            "boards_starved_by_a_missing_detail_fetch": len(starved),
+            "boards_needing_the_advert_page": sum(1 for o in run.outcomes if o.detail_needed),
             "unrecorded_offers_detected_by_the_control": detected,
             "gate_status": "measured",
         }
@@ -540,6 +649,16 @@ def measure_fixture() -> dict[str, Any]:
             measured["reasons"] = [
                 f"only {collected} offer(s) collected (floor {MINIMUM_OFFERS_COLLECTED}) — "
                 "a run that collected nothing proves nothing about how offers are recorded"
+            ]
+        elif not measured["boards_needing_the_advert_page"]:
+            # A zero over a run where no board ever needed the advert page is
+            # the vacuous pass this key exists to refuse: it would read clean
+            # with the detail fetch deleted. T127 met the same shape from the
+            # other side — a rot check whose two sides carried the same offers.
+            measured["gate_status"] = "unmeasured"
+            measured["reasons"] = [
+                "no board's listing needed the advert page, so a zero starved "
+                "count says nothing about whether the advert page is fetched"
             ]
         elif detected != 1:
             measured["gate_status"] = "unmeasured"

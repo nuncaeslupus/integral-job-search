@@ -261,3 +261,199 @@ def test_the_gate_measures_a_real_run_and_its_control() -> None:
     assert measured["sourced_offers_without_a_recorded_fetch"] == 0
     assert measured["sourced_offers_evaluated"] > 0
     assert measured["unrecorded_offers_detected_by_the_control"] == 1
+
+
+# ---------------------------------------------------------------------------
+# T130 — the advert's own page
+
+
+def _answer_with_detail(*, detail_status: int = 200, seen: list[str] | None = None) -> Any:
+    """List pages from each package's `fixture/list.html`, everything else from
+    its `fixture/detail.html`. A board's detail URLs are its own host, so the
+    two are told apart by whether the path is one `build_list_urls` produced."""
+    from urllib.parse import urlsplit
+
+    from integral.connectors import build_list_urls, load_connector
+
+    captures = _captures()
+    details: dict[str, str] = {}
+    list_paths: set[str] = set()
+    for package in packages_for(_spain(), _CONNECTORS):
+        capture = _CONNECTORS / package.name / "fixture" / "detail.html"
+        if capture.is_file() and package.site:
+            details[package.site.removeprefix("www.")] = capture.read_text(encoding="utf-8")
+        connector = load_connector(_CONNECTORS / package.name)
+        for url in build_list_urls(connector, query="python"):
+            list_paths.add(urlsplit(url).path)
+
+    def answer(request: ListRequest) -> Response:
+        host = (urlsplit(request.url).hostname or "").removeprefix("www.")
+        if urlsplit(request.url).path in list_paths:
+            return Response(
+                200, captures.get(host, ""), error=None if host in captures else "no capture"
+            )
+        if seen is not None:
+            seen.append(request.url)
+        if host not in details:
+            return Response(404, "", error="no detail capture")
+        # The body is the real advert whatever the status: a helper that
+        # blanked it on an error status would make "the status is read" and
+        # "the body was empty" indistinguishable.
+        return Response(detail_status, details[host])
+
+    return answer
+
+
+def _run(store: ProfileStore, fetch: Any, robots: Robots | None = None) -> Any:
+    return source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python",)),
+        fetch=fetch,
+        at=AT,
+        directory=_CONNECTORS,
+        robots=robots or _robots(),
+    )
+
+
+def test_a_list_row_with_no_body_is_completed_from_the_adverts_own_page(
+    store: ProfileStore,
+) -> None:
+    """The defect: six installed connectors declare `text` only under `detail:`
+    — correctly, their list rows carry no teaser — and produced zero offers for
+    as long as nothing fetched it. Measured live 2026-09-06: getmanfred_es 22
+    rows / 0 offers, arbeitnow_en 35 / 0, wellfound_en 20 / 0, remotive_en 18 / 0.
+    """
+    without = _run(store, _answer_with_captures())
+    starved = {o.connector for o in without.outcomes if o.items and not o.added}
+    assert starved, without.summary()
+
+    with_detail = _run(store, _answer_with_detail())
+    recovered = {o.connector for o in with_detail.outcomes if o.added}
+    assert starved & recovered, with_detail.summary()
+
+
+def test_the_detail_page_is_fetched_only_for_a_row_that_needs_it(
+    store: ProfileStore,
+) -> None:
+    """A listing whose rows already carry a body must not double the requests."""
+    seen: list[str] = []
+    run = _run(store, _answer_with_detail(seen=seen))
+    needed = sum(o.detail_needed for o in run.outcomes)
+    assert len(seen) <= needed, run.summary()
+    complete = [o for o in run.outcomes if o.items and not o.detail_needed]
+    assert complete, "no board completed a row from its list page alone"
+
+
+def test_robots_is_consulted_for_the_detail_page_too(store: ProfileStore) -> None:
+    """The list URL and the advert URL are different paths, and a board may
+    allow one and refuse the other — `getmanfred_es` lists under `/api/` and
+    advertises under `/ofertas-empleo/`. Failing open here would fetch exactly
+    the pages nobody confirmed we may, which is why the robots text below
+    permits the listing: a rule that blocks both proves nothing about the
+    second."""
+    from integral.connector_coverage import installed_packages
+    from integral.sourcing import _one_board
+
+    package = next(p for p in installed_packages(_CONNECTORS) if p.name == "getmanfred_es")
+
+    def _outcome(robots_text: str, seen: list[str]) -> Any:
+        return _one_board(
+            store,
+            package,
+            Aim(state="stated", terms=("python",)),
+            fetch=_answer_with_detail(seen=seen),
+            at=AT,
+            directory=_CONNECTORS,
+            page_count=1,
+            robots=Robots(fetch=lambda url: robots_text),
+        )
+
+    permitted: list[str] = []
+    allowed = _outcome(ALLOW_ALL, permitted)
+    assert permitted, f"nothing fetched a detail page, so a refusal proves nothing: {allowed}"
+
+    refused: list[str] = []
+    outcome = _outcome("User-agent: *\nDisallow: /ofertas-empleo/\n", refused)
+    assert outcome.items, "the listing itself was refused, so this tests the wrong rule"
+    assert refused == [], outcome
+    assert outcome.detail_needed > outcome.detail_fetched, outcome
+
+
+def test_the_detail_budget_is_capped_and_the_shortfall_is_reported(
+    store: ProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One listing must not turn into one request per row without a ceiling —
+    and a truncated pass must be legible as truncated, not as an empty board."""
+    monkeypatch.setattr("integral.sourcing.DETAIL_FETCH_CEILING", 1)
+    seen: list[str] = []
+    run = _run(store, _answer_with_detail(seen=seen))
+    for outcome in run.outcomes:
+        assert outcome.detail_fetched <= 1, outcome
+        assert outcome.detail_fetched <= outcome.detail_needed, outcome
+    starved = [o for o in run.outcomes if o.detail_needed > o.detail_fetched]
+    assert starved, "the ceiling stopped nothing, so this proves nothing"
+
+
+def test_a_relative_detail_url_is_made_absolute(store: ProfileStore) -> None:
+    """`builtin_en` yields `/job/<slug>`. A relative URL is not fetchable, and
+    it is not a usable `Offer.url` either — it reached a candidate's tree as
+    one before this."""
+    seen: list[str] = []
+    _run(store, _answer_with_detail(seen=seen))
+    assert seen, "no detail page was fetched, so this asserts nothing"
+    assert all(url.startswith("http") for url in seen), seen[:5]
+
+
+def test_a_relative_detail_url_is_resolved_against_the_page_it_came_from() -> None:
+    """`jobfluent_es` yields `/es/empleos/<slug>`, `infojobs_es` the
+    protocol-relative `//www.infojobs.net/...`, and `builtin_en` `/job/<slug>`.
+    None is fetchable, and none is a usable `Offer.url` — one reached a
+    candidate's tree as `/job/...` before this."""
+    from integral.sourcing import _absolute
+
+    page = "https://www.jobfluent.com/es/empleos-barcelona"
+    assert _absolute("/es/empleos/data-scientist-cc3854", page) == (
+        "https://www.jobfluent.com/es/empleos/data-scientist-cc3854"
+    )
+    assert _absolute("//www.infojobs.net/barcelona/of-i7f3", page) == (
+        "https://www.infojobs.net/barcelona/of-i7f3"
+    )
+    absolute = "https://www.tecnoempleo.com/rf-f0eb18"
+    assert _absolute(absolute, page) == absolute
+    assert _absolute(None, page) is None
+    assert _absolute("", page) is None
+
+
+def test_an_unreadable_robots_refuses_the_advert_rather_than_permitting_it() -> None:
+    """Fail-open is the expensive direction: it fetches pages nobody could
+    confirm we may. The listing already takes this posture; the advert's own
+    page takes the same one. Asserted on `_may_fetch` directly because `Robots`
+    caches per host, and a board's adverts share its listing's host — so a run
+    can never reach this branch, and a mutation flipping it was invisible.
+    """
+    from integral.robots import RobotsError
+    from integral.sourcing import _may_fetch
+
+    url = "https://www.getmanfred.com/ofertas-empleo/8389/scala-developer"
+
+    def unreadable(_: str) -> str:
+        raise RobotsError("robots.txt could not be read")
+
+    assert _may_fetch(Robots(fetch=unreadable), url) is False
+    assert _may_fetch(Robots(fetch=lambda _: ALLOW_ALL), url) is True
+    assert _may_fetch(Robots(fetch=lambda _: "User-agent: *\nDisallow: /\n"), url) is False
+
+
+def test_an_advert_page_that_answered_with_an_error_is_not_read_as_an_advert(
+    store: ProfileStore,
+) -> None:
+    """A 404 or 403 still has a body, and boards serve a rendered page with it.
+    Parsing that would put "page not found" into an offer a candidate reads —
+    and the row's real defect, that its body is missing, would be hidden behind
+    a body that is present and wrong."""
+    run = _run(store, _answer_with_detail(detail_status=404))
+    starved = [o for o in run.outcomes if o.detail_needed]
+    assert starved, "no board needed a detail page, so this proves nothing"
+    for outcome in starved:
+        assert outcome.detail_needed == outcome.dropped, outcome
