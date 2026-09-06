@@ -1,0 +1,2108 @@
+
+
+<span id="hr_0t" hx-swap-oob="false">all coding - Hiring</span>
+<div id="hr_1a" hx-swap-oob="false">
+    <div class="px-1">
+
+
+> <strong>All</strong>
+
+    </div>
+</div>
+
+<div id="mc_0a" hx-swap-oob="false">
+<div class="text-body-secondary px-1 border-bottom">
+
+1,329 new jobs found (60d)
+
+</div>
+<div class="p-1 border-bottom position-relative">
+    <a class="fw-semibold stretched-link" role="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#oc_0"
+        hx-get="/topics/hiring/"
+        hx-target="#oc_0"
+        hx-on::before-request="event.detail.target.innerHTML = '...'">
+        Topics»
+    </a>
+</div>
+<div class="p-1 border-bottom position-relative">
+    <a class="fw-semibold stretched-link" role="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#oc_0"
+        hx-get="/regions/hiring/"
+        hx-target="#oc_0"
+        hx-on::before-request="event.detail.target.innerHTML = '...'">
+        Regions»
+    </a>
+</div>
+<div class="p-1 border-bottom position-relative">
+    <a class="fw-semibold stretched-link" role="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#oc_0"
+        hx-get="/hiring/filter/"
+        hx-target="#oc_0"
+        hx-on::before-request="event.detail.target.innerHTML = '...'">
+        Filters»
+    </a>
+</div>
+<div class="p-1 border-bottom position-relative">
+    <a class="fw-semibold stretched-link" role="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#oc_0"
+        hx-get="/hiring/setting/"
+        hx-target="#oc_0"
+        hx-on::before-request="event.detail.target.innerHTML = '...'">
+        Settings»
+    </a>
+</div>
+
+
+<div class="p-1 border-bottom">
+<small>
+    Export as<br class="d-lg-none">
+    <a href="/hiring/jobs/latest/export/?format=csv">CSV</a> &middot;
+    <a href="/hiring/jobs/latest/export/?format=json">JSON</a>
+</small>
+</div>
+
+
+</div>
+<div id="mc_0b" hx-swap-oob="false">
+
+<div hx-get="/hiring/jobs/?job_search=agentic&amp;insights=1" hx-trigger="load" hx-target="#mc_0b" hx-swap="innerHTML">...</div>
+
+</div>
+
+<ul class="list-group list-group-flush text-break">
+<li class="border-bottom">
+<div class="d-flex justify-content-start" style="overflow-x: auto; white-space: nowrap;">
+
+<div class="border-end px-1 text-bg-light">
+    <h3 class="text-primary">Latest</h3>
+</div>
+
+
+<div class="border-end px-1">
+    <h3><a href=""
+        hx-get="/hiring/jobs/followed/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Followed</a></h3>
+</div>
+
+
+<div class="border-end px-1">
+    <h3><a href=""
+        hx-get="/hiring/jobs/saved/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Saved</a></h3>
+</div>
+
+
+<div class="border-end px-1">
+    <h3><a href=""
+        hx-get="/hiring/companies/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Companies</a></h3>
+</div>
+
+
+<div class="border-end px-1">
+    <h3><a href=""
+        hx-get="/hiring/companies/following/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Following</a></h3>
+</div>
+
+
+<div class="border-end px-1 d-md-none">
+    <h3><a href=""
+        hx-get="/hiring/jobs/viewed/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Viewed</a></h3>
+</div>
+
+
+<div class="border-end px-1 d-md-none">
+    <h3><a href=""
+        hx-get="/hiring/jobs/applied/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Applied</a></h3>
+</div>
+
+
+<div class="border-end px-1 d-md-none">
+    <h3><a href=""
+        hx-get="/hiring/jobs/top/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Top</a></h3>
+</div>
+
+</div>
+</li>
+<li class="border-bottom">
+  <div class="d-flex gap-1 align-items-center">
+    <input
+      type="text"
+      name="job_search"
+      value="agentic"
+      class="form-control"
+      placeholder="Quick search..."
+      autofocus
+      hx-get="/hiring/jobs/"
+      hx-trigger="keyup changed delay:500ms"
+      hx-target="#mc_1"
+      hx-on::before-request="showSearchListLoading(event)" />
+    <button
+      class="btn btn-outline-primary btn-sm text-nowrap d-inline-flex align-items-center flex-shrink-0"
+      type="button"
+      title="Add to Context"
+      hx-post="/search/hiring/"
+      hx-include="[name='job_search']"
+      hx-vals='{"action":"save","search_param":"job_search"}'>
+      Add
+    </button>
+    <button
+      class="btn btn-outline-secondary btn-sm text-nowrap d-inline-flex align-items-center flex-shrink-0"
+      type="button"
+      title="Clear"
+      hx-post="/search/hiring/"
+      hx-vals='{"action":"clear","search_param":"job_search"}'>
+      Clear
+    </button>
+  </div>
+  
+  <script>
+    (function() {
+      const inputEl = document.querySelector('[name="job_search"]');
+      if (inputEl) {
+        const val = inputEl.value;
+        inputEl.focus();
+        inputEl.setSelectionRange(val.length, val.length);
+      }
+    })();
+  </script>
+  
+</li>
+
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/engineering-manager-agentic-insights-vancouver-british-columbia-canada-3647226/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Engineering Manager - Agentic Insights
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    18h ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">CAD 150K-190K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Vancouver, British Columbia, Canada
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/post-training-agentic-research-scientist-deepmind-mountain-view-ca-usa-new-york-ny-usa-3644904/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Post-training Agentic Research Scientist, DeepMind
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 174K-252K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Mountain View, CA, USA; New York, …
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-ai-platform-engineer-mcp-agentic-infrastructure-zaragoza-es-aragon-3642925/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior AI Platform Engineer - MCP &amp; Agentic Infrastructure
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 131K-165K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Zaragoza, ES, Aragon
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/avp-member-of-tech-staff-agentic-api-atlanta-georgia-3647211/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AVP-Member of Tech Staff (Agentic API)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[EX]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 237K-427K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Atlanta, Georgia
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/avp-member-of-tech-staff-agentic-api-san-ramon-california-3647212/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AVP-Member of Tech Staff (Agentic API)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[EX]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 237K-427K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    San Ramon, California
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/avp-member-of-tech-staff-agentic-api-middletown-new-jersey-3647213/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AVP-Member of Tech Staff (Agentic API)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[EX]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 237K-427K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Middletown, New Jersey
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/avp-member-of-tech-staff-agentic-api-bothell-washington-3647216/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AVP-Member of Tech Staff (Agentic API)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[EX]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 237K-427K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Bothell, Washington
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/avp-member-of-tech-staff-agentic-api-dallas-texas-3647214/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AVP-Member of Tech Staff (Agentic API)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[EX]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 237K-427K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Dallas, Texas
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/ai-agentic-engineer-detroit-michigan-united-states-3647780/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AI Agentic Engineer
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 56K-66K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Detroit, Michigan, United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agentic-ai-expert-for-physical-design-automation-agrate-brianza-italy-3638181/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agentic AI Expert for Physical Design Automation
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 39K-50K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Agrate Brianza, Italy
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/staff-data-scientist-aiml-generative-ai-agentic-systems-milpitas-ca-united-states-3639737/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Staff Data Scientist – AI/ML, Generative AI &amp; Agentic Systems
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 141K-210K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Milpitas, CA, United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/software-engineer-ai-agentic-product-dev-team-us-santa-clara-ca-3637205/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Software Engineer - AI Agentic Product Dev Team (US)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 120K-161K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Santa Clara, CA
+    <span class="text-success">[WH]</span>
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agentic-operations-architect-denver-co-hybrid-las-vegas-nv-remote-new-york-new-york-united-states-phoenix-az-remote-3642935/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agentic Operations Architect
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 168K-210K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Denver, CO - Hybrid; Las Vegas, …
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-backend-engineer-agentic-data-platform-united-states-united-states-latin-america-latam-south-america-europe-eastern-europe-middle-3636545/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Backend Engineer (Agentic Data Platform)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 172K-230K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    United States , United States, Latin …
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-ai-data-scientist-agentic-automation-marketing-berlin-germany-3644510/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior AI Data Scientist, Agentic Automation (Marketing)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 75K-95K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Berlin, Germany
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/ai-and-agentic-engineer-ii-alameda-hq-united-states-3634580/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AI and Agentic Engineer II
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 152K-215K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Alameda HQ, United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/staff-ai-engineer-agentic-shopping-amsterdam-north-holland-netherlands-3643394/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Staff AI Engineer - Agentic Shopping
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 62K-83K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Amsterdam, North Holland, Netherlands
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/forward-deployed-engineer-agentic-platform-riyadh-saudi-arabia-3635401/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Forward Deployed Engineer, Agentic Platform
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 140K-208K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Riyadh, Saudi Arabia
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agentic-experience-product-manager-wilmington-de-united-states-3646123/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agentic Experience Product Manager
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 124K-180K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Wilmington, DE, United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/distinguished-engineer-non-human-agentic-identity-united-states-3645909/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Distinguished Engineer - Non Human &amp; Agentic Identity
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 175K-250K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/product-manager-agentic-platform-united-states-washington-redmond-3632472/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Product Manager- Agentic Platform
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 119K-234K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    United States, Washington, Redmond
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/principal-platform-architect-agentic-ai-chennai-tn-india-3633990/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Principal Platform Architect | Agentic AI
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 2500K-5000K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Chennai, TN, India
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-software-engineer-ii-agentic-ai-hyderabad-3643574/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Software Engineer II-Agentic AI
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 2500K-4131K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Hyderabad
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agentic-ai-engineer-stockholm-sweden-3633014/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agentic AI Engineer
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">SEK 500K-600K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Stockholm, Sweden
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-software-developer-agentic-full-stack-wmd-office-eschborn-remote-3645671/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Software Developer (Agentic Full-Stack) (w/m/d)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 60K-66K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Office Eschborn, Remote
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-engineering-manager-agentic-ai-for-finance-bangalore-india-3630780/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Engineering Manager, Agentic AI for Finance
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 3700K-5876K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Bangalore, India
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/ai-engineer-agentic-ad-creative-multimodal-mountain-view-california-united-states-3628824/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AI Engineer, Agentic Ad Creative (Multimodal)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 120K-220K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Mountain View, California, United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/principal-product-manager-agentic-ai-platform-india-remote-first-3628339/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Principal Product Manager – Agentic AI Platform
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 3000K-5000K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    India (Remote-First)
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/principal-product-manager-agentic-platform-remote-3627837/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Principal Product Manager (Agentic Platform)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 180K-250K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Remote
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agentic-ai-engineer-locations-san-francisco-3628036/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agentic AI Engineer
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 140K-204K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Locations: San Francisco
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/research-scientist-agentic-data-benchmarking-sunnyvale-ca-3625480/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Research Scientist, Agentic Data &amp; Benchmarking
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[EN]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 250K-380K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Sunnyvale, CA
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/staff-sw-systems-engineer-agentic-product-engineer-10310-chennai-india-3624721/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Staff SW Systems Engineer -Agentic Product Engineer-10310
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 3000K-5000K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Chennai, India
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/staff-engineer-agentic-product-developer-dallas-tx-3625589/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Staff Engineer, Agentic Product Developer
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 152K-241K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Dallas, TX
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/lead-ai-engineer-agentic-systems-hybrid-3626606/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Lead AI Engineer (Agentic Systems)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 129K-200K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Hybrid
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/technical-lead-agentic-ai-platforms-pl856-toronto-ontario-canada-3627953/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Technical Lead, Agentic AI Platforms (PL856)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">CAD 42K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Toronto , Ontario, Canada
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/principal-agentic-architect-11386-chicago-illinois-united-states-3624726/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Principal Agentic Architect - 11386
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 150K-184K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Chicago, Illinois, United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/principal-agentic-engineer-talent-pipeline-toronto-3624288/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Principal Agentic Engineer - Talent Pipeline
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">CAD 131K-170K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Toronto
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agentic-solution-engineer-gurugram-3623858/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agentic Solution Engineer
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 1500K-2800K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Gurugram
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agentic-ai-engineer-engineering-webmobile-team-bucharest-bucharest-romania-3623886/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agentic AI Engineer (Engineering, Web&amp;Mobile Team)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">RON 100K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Bucharest, Bucharest, Romania
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/staff-software-engineer-agentic-first-us-remote-3623702/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Staff Software Engineer - Agentic First
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 171K-274K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    US - Remote
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/sr-agentic-data-management-advisor-india-3623813/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Sr Agentic Data Management Advisor
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 3672K-5000K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    India
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/software-engineer-agentic-platform-kbenhavn-denmark-3632213/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Software Engineer - Agentic Platform
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">DKK 552K-645K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    København, Denmark
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/presales-manager-inference-agentic-ai-noida-uttar-pradesh-3623507/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Presales Manager - Inference &amp; Agentic AI
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 2500K-5000K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Noida, Uttar Pradesh
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-machine-learning-engineer-agentic-ai-bangalore-ind-3625055/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Machine Learning Engineer (Agentic AI)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 3000K-4580K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Bangalore, IND
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/software-engineer-agentic-data-pipelines-remote-us-3625713/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Software Engineer — Agentic data pipelines
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 110K-162K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Remote - US
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-staff-software-engineer-agentic-automation-us-ca-santa-clara-3638283/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Staff Software Engineer - Agentic Automation
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 200K-322K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    US, CA, Santa Clara
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/in_senior-associate_aiagentic-platform_gcc_advisory_hyderabad-hyderabad-salarpuria-india-3645926/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    IN_Senior Associate_AI/Agentic Platform_GCC_Advisory_Hyderabad
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 2000K-4500K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Hyderabad - Salarpuria, India
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/in_senior-associate_aiagentic-platform_gcc_advisory_hyderabad-hyderabad-salarpuria-india-3643590/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    IN_Senior Associate_AI/Agentic Platform_GCC_Advisory_Hyderabad
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 2000K-4500K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Hyderabad - Salarpuria, India
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/ai-architectai-engineer-generative-agentic-ai-usa-tx-remote-united-states-3635855/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    AI Architect/AI Engineer – Generative &amp; Agentic AI
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 125K-190K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    USA - TX - Remote, United …
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item"
+hx-get="/hiring/jobs/?page=2&job_search=agentic"
+hx-trigger="intersect once"
+hx-swap="afterend"
+hx-on::before-request="event.detail.target.innerHTML = '...'"
+hx-on::after-request="event.detail.target.innerHTML = ''">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/field-cto-data-agentic-transformation-google-cloud-new-york-one-manhattan-west-corp-united-states-3646780/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Field CTO - Data &amp; Agentic Transformation, Google Cloud
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    2d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[EX]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 94K-266K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    New York, One Manhattan West, Corp, …
+    
+</small>
+</div>
+</div>
+</li>
+
+
+
+
+</ul>
+
+
+<script>handlePrimaryListItems();</script>

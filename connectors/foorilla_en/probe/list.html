@@ -1,0 +1,2084 @@
+
+
+<span id="hr_0t" hx-swap-oob="false">all coding - Hiring</span>
+<div id="hr_1a" hx-swap-oob="false">
+    <div class="px-1">
+
+
+> <strong>All</strong>
+
+    </div>
+</div>
+
+<div id="mc_0a" hx-swap-oob="false">
+<div class="text-body-secondary px-1 border-bottom">
+
+2,097 new jobs found (60d)
+
+</div>
+<div class="p-1 border-bottom position-relative">
+    <a class="fw-semibold stretched-link" role="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#oc_0"
+        hx-get="/topics/hiring/"
+        hx-target="#oc_0"
+        hx-on::before-request="event.detail.target.innerHTML = '...'">
+        Topics»
+    </a>
+</div>
+<div class="p-1 border-bottom position-relative">
+    <a class="fw-semibold stretched-link" role="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#oc_0"
+        hx-get="/regions/hiring/"
+        hx-target="#oc_0"
+        hx-on::before-request="event.detail.target.innerHTML = '...'">
+        Regions»
+    </a>
+</div>
+<div class="p-1 border-bottom position-relative">
+    <a class="fw-semibold stretched-link" role="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#oc_0"
+        hx-get="/hiring/filter/"
+        hx-target="#oc_0"
+        hx-on::before-request="event.detail.target.innerHTML = '...'">
+        Filters»
+    </a>
+</div>
+<div class="p-1 border-bottom position-relative">
+    <a class="fw-semibold stretched-link" role="button"
+        data-bs-toggle="offcanvas"
+        data-bs-target="#oc_0"
+        hx-get="/hiring/setting/"
+        hx-target="#oc_0"
+        hx-on::before-request="event.detail.target.innerHTML = '...'">
+        Settings»
+    </a>
+</div>
+
+
+<div class="p-1 border-bottom">
+<small>
+    Export as<br class="d-lg-none">
+    <a href="/hiring/jobs/latest/export/?format=csv">CSV</a> &middot;
+    <a href="/hiring/jobs/latest/export/?format=json">JSON</a>
+</small>
+</div>
+
+
+</div>
+<div id="mc_0b" hx-swap-oob="false">
+
+<div hx-get="/hiring/jobs/?job_search=python&amp;insights=1" hx-trigger="load" hx-target="#mc_0b" hx-swap="innerHTML">...</div>
+
+</div>
+
+<ul class="list-group list-group-flush text-break">
+<li class="border-bottom">
+<div class="d-flex justify-content-start" style="overflow-x: auto; white-space: nowrap;">
+
+<div class="border-end px-1 text-bg-light">
+    <h3 class="text-primary">Latest</h3>
+</div>
+
+
+<div class="border-end px-1">
+    <h3><a href=""
+        hx-get="/hiring/jobs/followed/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Followed</a></h3>
+</div>
+
+
+<div class="border-end px-1">
+    <h3><a href=""
+        hx-get="/hiring/jobs/saved/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Saved</a></h3>
+</div>
+
+
+<div class="border-end px-1">
+    <h3><a href=""
+        hx-get="/hiring/companies/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Companies</a></h3>
+</div>
+
+
+<div class="border-end px-1">
+    <h3><a href=""
+        hx-get="/hiring/companies/following/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Following</a></h3>
+</div>
+
+
+<div class="border-end px-1 d-md-none">
+    <h3><a href=""
+        hx-get="/hiring/jobs/viewed/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Viewed</a></h3>
+</div>
+
+
+<div class="border-end px-1 d-md-none">
+    <h3><a href=""
+        hx-get="/hiring/jobs/applied/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Applied</a></h3>
+</div>
+
+
+<div class="border-end px-1 d-md-none">
+    <h3><a href=""
+        hx-get="/hiring/jobs/top/"
+        hx-replace-url="true"
+        hx-target="#mc_1">
+        Top</a></h3>
+</div>
+
+</div>
+</li>
+<li class="border-bottom">
+  <div class="d-flex gap-1 align-items-center">
+    <input
+      type="text"
+      name="job_search"
+      value="python"
+      class="form-control"
+      placeholder="Quick search..."
+      autofocus
+      hx-get="/hiring/jobs/"
+      hx-trigger="keyup changed delay:500ms"
+      hx-target="#mc_1"
+      hx-on::before-request="showSearchListLoading(event)" />
+    <button
+      class="btn btn-outline-primary btn-sm text-nowrap d-inline-flex align-items-center flex-shrink-0"
+      type="button"
+      title="Add to Context"
+      hx-post="/search/hiring/"
+      hx-include="[name='job_search']"
+      hx-vals='{"action":"save","search_param":"job_search"}'>
+      Add
+    </button>
+    <button
+      class="btn btn-outline-secondary btn-sm text-nowrap d-inline-flex align-items-center flex-shrink-0"
+      type="button"
+      title="Clear"
+      hx-post="/search/hiring/"
+      hx-vals='{"action":"clear","search_param":"job_search"}'>
+      Clear
+    </button>
+  </div>
+  
+  <script>
+    (function() {
+      const inputEl = document.querySelector('[name="job_search"]');
+      if (inputEl) {
+        const val = inputEl.value;
+        inputEl.focus();
+        inputEl.setSelectionRange(val.length, val.length);
+      }
+    })();
+  </script>
+  
+</li>
+
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agile-developer-3-java-spring-boot-python-annapolis-junction-maryland-3646605/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agile Developer 3 - (Java, Spring Boot, Python)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    22h ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 201K-245K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Annapolis Junction, Maryland
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/agile-developer-3-java-spring-boot-python-annapolis-junction-maryland-3646606/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Agile Developer 3 - (Java, Spring Boot, Python)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    22h ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 201K-245K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Annapolis Junction, Maryland
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-engineer-with-python-genai-database-systems-pune-mh-india-3647730/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Engineer with Python, GenAI &amp; Database systems
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 1860K-4800K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Pune, MH, India
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-python-utvecklare-malmo-sweden-3645790/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Python utvecklare
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">SEK 480K-504K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Malmö, Sweden
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-developer-taguig-philippines-3644700/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Developer
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PHP 600K-800K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Taguig, Philippines
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/systems-administrator-3-on-call-linuxbashpythonansiblesaltstackdocker-annapolis-junction-md-3642093/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Systems Administrator 3 (On-Call) - Linux/Bash/Python/Ansible/SaltStack/Docker
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 130K-270K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Annapolis Junction, MD
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-python-engineer-utrecht-nl-3584-ab-3642601/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Python Engineer
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">EUR 243K-333K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Utrecht, NL, 3584 AB
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/software-engineer-full-stack-python-java-or-javascripttypescript-tssci-clearance-required-gaithersburg-maryland-united-states-3642431/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Software Engineer: Full Stack - Python, Java or JavaScript/TypeScript (TS/SCI Clearance Required)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 130K-175K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Gaithersburg, Maryland, United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-pythonflaskreact-fullstack-engineer-remote-latin-america-concepcion-chile-3640785/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Python/Flask+React Fullstack Engineer - Remote, Latin America
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">CLP 43000K-53000K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Concepción, Chile
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-pythonflaskreact-fullstack-engineer-remote-latin-america-goiania-goias-brazil-3640786/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Python/Flask+React Fullstack Engineer - Remote, Latin America
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">BRL 234K-295K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Goiânia, Goiás, Brazil
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-automation-testing-engineer-python-bangalore-india-3642120/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior Automation Testing Engineer (Python)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 1600K-2541K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Bangalore, India
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/principal-azure-data-engineer-12-to-15-yrs-python-pyspark-sql-databricks-remote-india-india-3641787/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Principal Azure Data Engineer (12 to 15 yrs) (Python / PySpark / SQL/ DataBricks) - Remote India
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">INR 2040K-4000K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    India
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/software-engineer-ii-python-and-java-location-irving-texas-3647134/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Software Engineer II - Python and Java
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 32K-56K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Location Irving, Texas
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/javapython-full-stack-developer-plano-tx-united-states-3642437/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Java/Python Full Stack Developer
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 9K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Plano, TX, United States
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/lead-engineer-aipython-location-krakow-poland-3638173/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Lead Engineer (AI/Python)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PLN 242K-276K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Location Krakow, Poland
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/pessoa-desenvolvedora-backend-python-especialista-i-venda-direta-brasil-3638853/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Pessoa Desenvolvedora Backend Python Especialista I (Venda Direta)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+
+</div>
+<div class="text-end">
+<small>
+    Brasil
+    <span class="text-success">[R]</span>
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/senior-sme-software-developer-java-python-chantilly-va-3642999/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Senior / SME Software Developer – Java / Python
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-success">USD 120K-180K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Chantilly, VA
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/full-stack-software-engineer-angularpython-tutzing-netherlands-office-3645489/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Full Stack Software Engineer (Angular/Python)
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 50K-66K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Tutzing, Netherlands Office
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/enterprise-agile-developer-testing-python-cicd-annapolis-junction-md-annapolis-junction-md-annapolis-junction-md-annapolis-junction-md-anna-3635916/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Enterprise - Agile Developer - Testing, Python, CI/CD
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 215K-250K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Annapolis Junction, MD; Annapolis Junction, MD; …
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/enterprise-agile-developer-python-microservices-cicd-annapolis-junction-md-3635917/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Enterprise - Agile Developer - Python, Microservices, CI/CD
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 225K-262K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Annapolis Junction, MD
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/enterprise-agile-developer-python-java-aws-annapolis-junction-md-tysons-va-annapolis-junction-md-annapolis-junction-md-3636029/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Enterprise - Agile Developer - Python, Java, AWS
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">USD 150K-265K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Annapolis Junction, MD; Tysons, VA; Annapolis …
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/lead-software-engineer-python-cloud-ai-glasgow-lanarkshire-united-kingdom-3645791/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Lead Software Engineer - Python, Cloud &amp; AI
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[SE]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">GBP 90K-126K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    GLASGOW, LANARKSHIRE, United Kingdom
+    
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-sofija-bulgaria-3635582/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">BGN 55K-63K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    София / Sofija, Bulgaria
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-lublin-poland-3635583/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PLN 237K-393K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Lublin, Poland
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-poznan-poland-3635584/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PLN 237K-393K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Poznań, Poland
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-warsaw-poland-3635585/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PLN 237K-393K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Warsaw, Poland
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-gdansk-poland-3635586/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PLN 237K-393K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Gdańsk, Poland
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-wrocaw-poland-3635587/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PLN 237K-393K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Wrocław, Poland
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-braga-portugal-3635588/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Braga, Portugal
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-coimbra-portugal-3635589/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Coimbra, Portugal
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-lisboa-portugal-3635590/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Lisboa, Portugal
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-porto-portugal-3635591/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Porto, Portugal
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-brasov-romania-3635592/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">RON 180K-270K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Braşov, Romania
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-timisoara-romania-3635593/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">RON 180K-270K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Timişoara, Romania
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-cluj-napoca-romania-3635594/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">RON 180K-270K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Cluj-Napoca, Romania
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-barcelona-spain-3635595/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Barcelona, Spain
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-krakow-poland-3635596/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PLN 237K-393K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Kraków, Poland
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-madrid-spain-3635597/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Madrid, Spain
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-ukraine-3635598/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+
+</div>
+<div class="text-end">
+<small>
+    Дніпро, Ukraine
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-ukraine-3635599/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+
+</div>
+<div class="text-end">
+<small>
+    Львів, Ukraine
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-ukraine-3635600/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+
+</div>
+<div class="text-end">
+<small>
+    Івано-Франківськ, Ukraine
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-ukraine-3635601/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+
+</div>
+<div class="text-end">
+<small>
+    Вінниця, Ukraine
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-ukraine-3635602/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+
+</div>
+<div class="text-end">
+<small>
+    Одеса, Ukraine
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-plovdiv-bulgaria-3635604/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">BGN 55K-63K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Пловдив / Plovdiv, Bulgaria
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-valencia-spain-3635605/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Valencia, Spain
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-sector-1-romania-3635608/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">RON 180K-270K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Sector 1, Romania
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-aveiro-portugal-3635636/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Aveiro, Portugal
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-ljubljana-smartno-slovenia-3635644/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">EUR 61K-76K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Ljubljana-Šmartno, Slovenia
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-cluj-napoca-romania-3635646/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">RON 180K-270K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Cluj-Napoca, Romania
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+<li class="list-group-item"
+hx-get="/hiring/jobs/?page=2&job_search=python"
+hx-trigger="intersect once"
+hx-swap="afterend"
+hx-on::before-request="event.detail.target.innerHTML = '...'"
+hx-on::after-request="event.detail.target.innerHTML = ''">
+<div class="hstack justify-content-between">
+<a class="stretched-link" href=""
+    data-bs-dismiss="offcanvas"
+    data-bs-target="#oc_1"
+    hx-get="/hiring/jobs/python-engineer-id70123-szczecin-poland-3635647/"
+    hx-replace-url="true"
+    hx-target="#mc_2"
+    hx-swap="scroll:top"
+    >
+    
+    Python Engineer ID70123
+</a>
+<div class="flex-shrink-0 text-body-secondary"><small>
+    1d ago 
+</small></div>
+</div>
+<div class="hstack justify-content-between">
+<div>
+<small class="text-warning-emphasis">[MI]</small><small class="text-body-secondary">[Full Time]</small>
+
+
+    
+    <small class="text-bg-secondary">PLN 237K-393K</small>
+    
+
+
+</div>
+<div class="text-end">
+<small>
+    Szczecin, Poland
+    <span class="text-success">[R]</span>
+</small>
+</div>
+</div>
+</li>
+
+
+
+
+</ul>
+
+
+<script>handlePrimaryListItems();</script>

@@ -1,0 +1,30 @@
+site: foorilla.com
+# The listing spans every market the board carries — the recorded capture names
+# Vancouver, Mountain View, New York, Annapolis Junction and remote-anywhere in
+# one page — so GLOBAL, not US, which would claim a scope narrower than the
+# pages return.
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-09-06"
+
+# Checked on the date above with this repo's RFC 9309 matcher, with two paths
+# from the same file shown refusing, so the permission is a verdict and not a
+# matcher that says yes to everything. The full rule set and the two refusals
+# are quoted in `connector.yaml`'s header.
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+fixture:
+  provenance: sampled
+  recorded: "2026-09-06"
+  # Committed as served. The response is the htmx fragment rather than a whole
+  # page — 46 KB with no stylesheet, no analytics and no duplicate of the list
+  # in a script block — so there is nothing an excerpt would remove that the
+  # board did not already leave out.
+  bodies: verbatim
+  # Grepped for an IPv4 literal across both captures: none. The board writes no
+  # client address into the response.
+  client_ip: redacted

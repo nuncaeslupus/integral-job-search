@@ -34,6 +34,7 @@ from integral.connectors import (
     build_list_urls,
     build_offer,
     build_search_offer,
+    client_headers,
     collect_listing,
     compile_path,
     compile_selector,
@@ -1653,10 +1654,18 @@ def test_every_committed_connector_still_builds_a_plain_get() -> None:
         connector = load_connector(path)
         if connector.list.method != "GET":
             continue
+        # T133: a GET still carries no body and no headers of its own. What a
+        # connector declaring a `client` carries is that client's fixed set and
+        # nothing else — the header names are literals in `connectors.py`, so
+        # this asserts the derivation rather than a fixed empty dict, which
+        # would have to be relaxed to `!= None` the first time a client landed
+        # and would then assert nothing at all.
+        expected = client_headers(connector.list.client, connector.list.client_target)
         for request in build_list_requests(connector, query="python"):
             assert request.method == "GET", path.parent.name
             assert request.body is None, path.parent.name
-            assert request.headers == {}, path.parent.name
+            assert request.headers == expected, path.parent.name
+            assert all(name.startswith("HX-") for name in request.headers), path.parent.name
 
 
 def test_a_get_may_not_declare_a_body() -> None:

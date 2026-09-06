@@ -1,8 +1,8 @@
 {
   "undisclosed_connectorless_sourcing": 0,
   "situations_probed": 6,
-  "connectors_installed": 19,
-  "connectors_usable": 18,
+  "connectors_installed": 21,
+  "connectors_usable": 20,
   "rule_declared_in_step_spec": true,
   "shortfalls": [],
   "readings": [
@@ -44,7 +44,9 @@
       "connectorless": false,
       "usable": [
         "arbeitnow_en",
+        "foorilla_en",
         "himalayas_en",
+        "landingjobs_en",
         "pythonorg_en",
         "remotive_en",
         "wellfound_en",
