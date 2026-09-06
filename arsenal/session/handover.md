@@ -124,6 +124,29 @@ The owner granted **standing merge authority**: any PR green on
 the four results quoted in the merge commit. He was offered an "except risky
 diffs" carve-out and **explicitly declined it**. Do not re-ask.
 
+## 6b. T129 — the language set was declared eight times (#361)
+
+The first concrete step of #358, and it came out of measuring rather than
+guessing: adding `pt` to the three obvious declarations broke 13 tests loudly,
+then `make evidence` died on `AttributeError: 'LocalisedText' object has no
+attribute 'pt'` — `LocalisedText.get()` checks membership in `LANGUAGES` and
+reaches the value with `getattr`, so its guard and its lookup read different
+declarations.
+
+`integral.language_set` now reads all seven remaining sites **from the live
+object** and asserts they agree; `interview.leaks_quota_language` lost the
+eighth, an inline `("en", "es", "ca")` its own docstring already called "corpus
+languages". 7 of 7 mutations caught.
+
+`salary_recovery.LANGUAGES` was **not** deleted: its own comment says the
+duplication is deliberate, so it is checked rather than removed.
+
+**This PR shipped T122's own defect and then fixed it.** The first commit's task
+file carried only a ```` ```bash ```` block; `verify_gates.declares_a_gate` looks
+for ```` ```gate ````, so the task counted as terminal with its gate run by
+nothing — `verify-gates` went 1 → 2 "carry no fenced gate block". Caught by
+reading the gate's output rather than the summary line.
+
 ## 7. Open
 
 | | |
