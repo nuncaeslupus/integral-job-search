@@ -884,3 +884,23 @@ engine_gap_charset:
       'https://www.net-empregos.com/pesquisa-empregos.asp',
       headers={'User-Agent':'integral-job-search'})).read()[:2000])" | grep -o 'charset=[^\"]*'
 
+language_unsupported:
+  # Not a property of these boards. `Language = Literal["en", "es", "ca"]`, so
+  # `load_connector` refuses any package declaring another locale — which is
+  # every board in the five countries with zero coverage. Recorded here so the
+  # next reader does not survey a board, clear its robots, map its fields and
+  # then discover this, which is what happened on 2026-09-06. See #358.
+  - locales: [pt, de, fr, it, nl]
+    checked: "2026-09-06"
+    detail: >
+      Measured cost of adding one: cue vocabularies across 41 dimension files
+      (en 31, es 38, ca 31 entries today), 24 strings in
+      `strings/catalogue.json`, and corpus adverts in that language — currently
+      ca 90, es 93, en 25 and zero for all five. Adding a locale to the literal
+      without the rest would leave up to 41 new empty slices in
+      `T3.language_slices_with_no_corpus_hit`, and the owner's standing rule is
+      that supported languages behave identically.
+    retest: >
+      uv run python -c "from integral.dimensions import Language;
+      import typing; print(typing.get_args(Language))"
+
