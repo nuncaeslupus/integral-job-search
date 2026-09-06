@@ -90,6 +90,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from integral.candidate import CandidateConstraints
+from integral.corpus import LANGUAGES
 from integral.decline import DeclineLedger
 from integral.dimensions import (
     Cue,
@@ -532,7 +533,7 @@ def leaks_quota_language(text: LocalisedText) -> list[str]:
     like any other turn's text, not exempted as "the ones we wrote carefully".
     """
     hits = []
-    for language in ("en", "es", "ca"):
+    for language in LANGUAGES:
         lowered = text.get(language).lower()
         if any(marker in lowered for marker in _QUOTA_MARKERS) or _QUOTA_COUNT_RE.search(lowered):
             hits.append(language)
