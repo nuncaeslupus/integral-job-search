@@ -2,14 +2,19 @@
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 9608,
-  "skills_counted": 32,
-  "headroom_chars": 1392,
+  "description_chars_total": 10073,
+  "skills_counted": 33,
+  "headroom_chars": 927,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 1608,
+  "overage_against_upstream_default": 2073,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
+    {
+      "skill": "connector-new",
+      "description_chars": 448,
+      "listing_chars": 465
+    },
     {
       "skill": "continue",
       "description_chars": 245,
