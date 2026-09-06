@@ -65,8 +65,14 @@ format, not a job board, and `assess_coverage` counts it as example-only for tha
 Then offer the two things that actually exist. A disclosure with no way out of it is a dead end:
 
 - **Build a connector for a named portal.** The candidate names the board they would use —
-  InfoJobs, a sector board, an employer's careers page — and T32's declarative format is what
-  gets written, with `connectors/examplejobs_es/` as the worked example to copy.
+  InfoJobs, a sector board, an employer's careers page — and the `connector-new` skill is the
+  procedure, with `connectors/examplejobs_es/` as the worked example to copy.
+
+  **Ask before building one, and say what it costs.** It is a detour out of the search the
+  candidate came for, it can take a large part of a session, and step 1 of the procedure can
+  rule the board out after all of it. So name the board, say roughly what it will take, and
+  wait — never start one because the results looked thin. The owner's instruction:
+  *"dado que crear un conector puede consumir muchos tokens, debes decírselo antes al usuario."*
 - **Drive the candidate's own browser session** on a source that needs a login, the same route
   this step already takes for authenticated sources. Nothing stored, nothing to rotate.
 
