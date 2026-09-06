@@ -457,3 +457,41 @@ def test_an_advert_page_that_answered_with_an_error_is_not_read_as_an_advert(
     assert starved, "no board needed a detail page, so this proves nothing"
     for outcome in starved:
         assert outcome.detail_needed == outcome.dropped, outcome
+
+
+def test_the_advert_page_gets_its_own_clients_headers(store: ProfileStore) -> None:
+    """T133 wired into T130's fetch. A board serving both surfaces behind htmx
+    targets a different element for each — foorilla.com uses `mc_1` for the
+    list and `mc_2` for the advert — so the detail request's headers come from
+    `connector.detail`, not from the listing's declaration.
+
+    Sending none was silent in the worst way: the fetch answers **200** with
+    the site's shell, the detail selectors match nothing, and every row is
+    dropped for "no text" over a board that returned all of them. Measured
+    live 2026-09-06: 50 rows in, 40 detail pages fetched, 0 offers.
+    """
+    from integral.connector_coverage import installed_packages
+    from integral.sourcing import _one_board
+
+    package = next(p for p in installed_packages(_CONNECTORS) if p.name == "foorilla_en")
+    seen: list[dict[str, str]] = []
+    fixture = (_CONNECTORS / "foorilla_en" / "fixture" / "list.html").read_text(encoding="utf-8")
+    detail = (_CONNECTORS / "foorilla_en" / "fixture" / "detail.html").read_text(encoding="utf-8")
+
+    def answer(request: ListRequest) -> Response:
+        seen.append(dict(request.headers))
+        return Response(200, fixture if "job_search" in request.url else detail)
+
+    outcome = _one_board(
+        store,
+        package,
+        Aim(state="stated", terms=("agentic",)),
+        fetch=answer,
+        at=AT,
+        directory=_CONNECTORS,
+        page_count=1,
+        robots=_robots(),
+    )
+    assert outcome.added, outcome
+    assert seen[0] == {"HX-Request": "true", "HX-Target": "mc_1"}, seen[0]
+    assert seen[1] == {"HX-Request": "true", "HX-Target": "mc_2"}, seen[1]
