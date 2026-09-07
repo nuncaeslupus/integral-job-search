@@ -52,6 +52,32 @@ dict was right while no package declared a client, and the first one that did
 would have forced the check to be relaxed to "some headers are allowed", which
 asserts nothing. What must never happen is a package acquiring a header nobody
 declared, and that is what the derived expectation still catches.
+
+## What is committed out of that half, and why it is not the count (T111)
+
+`get_connectors_evaluated` was committed as an exact census — the number of
+GET packages on the day — so the sixteenth connector package moved a number in
+`status/evidence/T89.json` and reddened `make evidence` on a pull request that
+had touched nothing here. That is T55's and T100's defect in this module: a
+**denominator** committed as a value. It measures nothing about the transport;
+it exists to stop a clean `get_packages_changed: []` resting on a scan of
+nothing.
+
+So `record` commits `get_connectors_evaluated_at_least` — the floor `measure`
+checks the live count against, the way `naming.MINIMUM_SCANNED` is checked —
+and drops the two censuses. The equality that mattered,
+`get_connectors_still_plain_gets == get_connectors_evaluated`, is kept where it
+can fail: it is exactly `get_packages_changed == []`, which stays in the record
+as the finding, and `measure` still computes both counts for a caller that
+wants to see them.
+
+`measure_growth_sensitivity` is the proof rather than the assertion. It runs
+the whole reading twice — once over the committed library, once over that
+library plus one more GET package — and compares the two **records** key by
+key. `growth_sensitive_evidence_keys` is how many moved, and
+`evidence_keys_compared` is what says the comparison happened at all: a
+`record` that satisfied "nothing moved" by committing nothing would otherwise
+score a clean zero (T100's lesson, and T104's `record_keys_compared` after it).
 """
 
 from __future__ import annotations
@@ -59,7 +85,9 @@ from __future__ import annotations
 import json
 import shlex
 import sys
-from collections.abc import Mapping
+import tempfile
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -143,6 +171,32 @@ MINIMUM_LEDGER_ENTRIES = 10
 #: count of the day, for T100's reason — the exact number moves whenever a
 #: case is added, and the number is not the measurement.
 MINIMUM_CREDENTIAL_CASES = 50
+
+#: The floor `get_connectors_evaluated` is checked against, and what the
+#: record carries in its place (T111). A floor rather than the census for
+#: `naming.MINIMUM_SCANNED`'s reason: the count is a **denominator** — it says
+#: the default-did-not-move check ran over something — and committing it as an
+#: exact value made every new connector package a drift in an evidence file
+#: that PR never touched. Well under the twenty packages that declare a GET
+#: listing today, so the library can lose one without the gate turning red for
+#: a reason that is not a finding.
+MINIMUM_GET_PACKAGES = 10
+
+#: T111's own record, beside T89's — one reading, two questions: did the
+#: default move, and can what we commit about it survive one more package.
+DEFAULT_GROWTH_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T111.json"
+
+#: A literal, not `len(record(measure()))`: asserting the denominator against
+#: the thing it is the denominator of is the self-reference #297 caught as
+#: D-4 on T104. The record carries twelve keys; a `record` that quietly
+#: stopped committing the finding would compare fewer and fail here.
+MINIMUM_RECORD_KEYS_COMPARED = 10
+
+#: The site name the simulated seventeenth package takes. Not a board and
+#: never fetched — it exists inside one `measure_growth_sensitivity` call, in
+#: a throwaway directory, to answer "what does one more GET package do to the
+#: committed record".
+GROWTH_PROBE_SITE = "growthprobe"
 
 
 #: Any terms will do: these checks measure a request's *shape* — method, body,
@@ -526,8 +580,14 @@ def measure(
 
     unreadable = [reason for recorded in issuable for reason in why_unreadable(recorded)]
     changed, get_checked = get_packages_that_changed(directory)
-    if get_checked == 0:
-        return _unmeasured("no committed connector package declares a GET listing")
+    if get_checked < MINIMUM_GET_PACKAGES:
+        # T111 raised this from `== 0`: the record no longer carries how many
+        # packages ran, so the floor is the whole of what says the check ran
+        # over a library rather than over a directory somebody emptied.
+        return _unmeasured(
+            f"only {get_checked} committed package(s) declare a GET listing (floor "
+            f"{MINIMUM_GET_PACKAGES}) — a default checked against nothing is not a pass"
+        )
 
     try:
         misjudged, case_count = credential_key_misjudgements(cases)
@@ -559,20 +619,159 @@ def measure(
     }
 
 
+def record(measured: Mapping[str, Any]) -> dict[str, Any]:
+    """What is committed, out of what was measured (T111).
+
+    The two GET censuses go out and the floor they were checked against goes
+    in. Nothing about the finding changes: `get_packages_changed` is still the
+    list of packages whose request stopped being a plain GET, and it is empty
+    exactly when `get_connectors_still_plain_gets == get_connectors_evaluated`.
+    What stops being committed is a number that moves when somebody adds a
+    connector — which is the whole of the defect, and none of the check.
+    """
+    committed = {
+        key: value
+        for key, value in measured.items()
+        if key not in ("get_connectors_evaluated", "get_connectors_still_plain_gets")
+    }
+    committed["get_connectors_evaluated_at_least"] = MINIMUM_GET_PACKAGES
+    return committed
+
+
+@contextmanager
+def _library_grown_by_one(directory: Path) -> Iterator[Path]:
+    """`directory` as it would be with one more GET package in it.
+
+    Every existing package is linked, not copied — the library is three
+    megabytes of recorded fixtures and none of it is read here — and the extra
+    package is a committed one's `connector.yaml` under a new site name,
+    because `load_connector` requires the directory to be called
+    `<site>_<locale>`. Deriving it from a real package rather than writing a
+    connector out here keeps this from becoming a second, private idea of what
+    a connector looks like.
+    """
+    source = next(
+        (
+            package
+            for package in connector_packages(directory)
+            if load_connector(package).list.method == "GET"
+        ),
+        None,
+    )
+    if source is None:
+        raise ConnectorError(f"no package under {directory} declares a GET listing")
+    declaration = yaml.safe_load((source / "connector.yaml").read_text(encoding="utf-8"))
+    declaration["site"] = GROWTH_PROBE_SITE
+    with tempfile.TemporaryDirectory(prefix="growth-probe-") as tmp:
+        grown = Path(tmp) / "connectors"
+        grown.mkdir()
+        for package in connector_packages(directory):
+            (grown / package.name).symlink_to(package.resolve(), target_is_directory=True)
+        added = grown / f"{GROWTH_PROBE_SITE}_{declaration['locale']}"
+        added.mkdir()
+        (added / "connector.yaml").write_text(
+            yaml.safe_dump(declaration, allow_unicode=True, sort_keys=False), encoding="utf-8"
+        )
+        yield grown
+
+
+def measure_growth_sensitivity(
+    ledger: Path = DEFAULT_LEDGER_PATH,
+    directory: Path = DEFAULT_CONNECTORS_DIR,
+    cases: Path = DEFAULT_CREDENTIAL_CASES_PATH,
+) -> dict[str, Any]:
+    """T111's gate: `growth_sensitive_evidence_keys`.
+
+    Not a test of the fix's shape but of its effect, T100's form on the axis
+    that moves here. A `record` that dropped the finding as well as the census
+    would satisfy "nothing moved", and `evidence_keys_compared` is what
+    catches it; a simulated package that never entered the scan would prove
+    nothing at all, which is why the raw counts are read back and required to
+    have risen by exactly one before anything is compared.
+    """
+
+    def _unmeasured(reason: str) -> dict[str, Any]:
+        return {
+            "growth_sensitive_evidence_keys": 0,
+            "evidence_keys_compared": 0,
+            "gate_status": "unmeasured",
+            "unmeasured_reason": reason,
+            "grown_by": None,
+            "sensitive": [],
+        }
+
+    live = measure(ledger, directory, cases)
+    if live["gate_status"] != "measured":
+        return _unmeasured(f"the committed library does not measure: {live['unmeasured_reason']}")
+    try:
+        with _library_grown_by_one(directory) as grown_directory:
+            grown = measure(ledger, grown_directory, cases)
+    except (ConnectorError, OSError, KeyError, TypeError, yaml.YAMLError) as exc:
+        return _unmeasured(f"the library could not be grown for the comparison: {exc}")
+    if grown["gate_status"] != "measured":
+        return _unmeasured(f"the grown library does not measure: {grown['unmeasured_reason']}")
+    if grown["get_connectors_evaluated"] != live["get_connectors_evaluated"] + 1:
+        return _unmeasured(
+            "the simulated package did not enter the scan: "
+            f"{live['get_connectors_evaluated']} GET package(s) before, "
+            f"{grown['get_connectors_evaluated']} after"
+        )
+    before, after = record(live), record(grown)
+    sensitive = sorted(key for key in before | after if before.get(key) != after.get(key))
+    return {
+        "growth_sensitive_evidence_keys": len(sensitive),
+        "evidence_keys_compared": len(before | after),
+        "gate_status": "measured",
+        "grown_by": f"{GROWTH_PROBE_SITE}_*",
+        "sensitive": sensitive,
+    }
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH,
     ledger: Path = DEFAULT_LEDGER_PATH,
     directory: Path = DEFAULT_CONNECTORS_DIR,
 ) -> dict[str, Any]:
-    """Measure and record `status/evidence/T89.json`."""
+    """Measure and record `status/evidence/T89.json`.
+
+    Returns what was *measured*; writes what is *recorded*. The caller still
+    wants both live counts for its own report, and the file must not carry
+    either — that is T111.
+    """
     measured = measure(ledger, directory)
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    evidence.write_text(
+        json.dumps(record(measured), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return measured
+
+
+def write_growth_sensitivity_evidence(
+    evidence: Path = DEFAULT_GROWTH_EVIDENCE_PATH,
+    ledger: Path = DEFAULT_LEDGER_PATH,
+    directory: Path = DEFAULT_CONNECTORS_DIR,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T111.json`.
+
+    Returns the whole reading; commits all of it but `unmeasured_reason`,
+    which is a sentence about one run rather than a measurement — the same
+    treatment T89's own record gives it.
+    """
+    measured = measure_growth_sensitivity(ledger, directory)
+    committed = {k: v for k, v in measured.items() if k != "unmeasured_reason"}
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(
+        json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return measured
 
 
 def _main(argv: list[str]) -> int:
-    """`python -m integral.connector_transport [evidence-path]` → T89's evidence."""
+    """`python -m integral.connector_transport [evidence-path]` → T89 and T111.
+
+    Two files from one reading, `naming`'s shape: T89's record beside T111's
+    answer to whether that record survives the library growing.
+    """
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     target = Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(target)
@@ -595,6 +794,40 @@ def _main(argv: list[str]) -> int:
         or measured["get_packages_changed"]
         or measured["credential_key_misjudged"]
     ):
+        return 1
+
+    # T111, beside T89 — the same reading asked a second question. Written
+    # next to whichever file T89's record went to, so a measurement of another
+    # tree lands beside it rather than over this repository's own record.
+    sensitivity = write_growth_sensitivity_evidence(target.parent / "T111.json")
+    for key in sensitivity["sensitive"]:
+        print(
+            f"✗ `{key}` changes when one more GET package is added — a committed value "
+            "that moves on a connector nobody in this PR touched is what reddens "
+            "`make evidence` elsewhere (T111)",
+            file=sys.stderr,
+        )
+    if sensitivity["growth_sensitive_evidence_keys"]:
+        return 1
+    if sensitivity["gate_status"] != "measured":
+        print(
+            "growth_sensitive_evidence_keys: UNMEASURED — "
+            f"{sensitivity['unmeasured_reason']}. Not a pass and not a fail.",
+            file=sys.stderr,
+        )
+        return 3
+    # The denominator, last and as a hard failure. Exit 1 rather than 3 for
+    # #297's D-1 reason: `Makefile`'s evidence loop maps 3 to
+    # `unmeasured (recorded)` and carries on, so a floor that exits 3 is
+    # decoration (T115). A record that compared fewer keys than this ran — it
+    # is a finding, not the absence of a measurement.
+    if sensitivity["evidence_keys_compared"] < MINIMUM_RECORD_KEYS_COMPARED:
+        print(
+            f"only {sensitivity['evidence_keys_compared']} record key(s) were compared "
+            f"(floor {MINIMUM_RECORD_KEYS_COMPARED}) — zero growth-sensitive keys over a "
+            "record that committed almost nothing is not a measurement",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
