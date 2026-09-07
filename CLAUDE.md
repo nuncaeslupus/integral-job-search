@@ -209,14 +209,17 @@ worktrees are *unavailable* — `worktree_probe.sh` prints `available` here, so 
 would be a false record, and `task_select.py` reads it to clamp every future round to one
 task. The probe writes it itself when it is true; nothing else should.
 
-## No CI until the billing period turns over — `tools/verified_gate.sh` is the substitute
+## `tools/verified_gate.sh` — the local verdict block, run whatever CI is doing
 
-The account spent its **2000 monthly Actions minutes in four days** and ran dry on
-2026-09-04. Runs still start and still fail, in single-digit seconds with
-unreadable logs, so the section below about reading a red CI does not apply until
-the period turns over: **there is no CI to read.**
+Actions ran dry on 2026-09-04 — 2000 monthly minutes in four days — and for three
+days this script *replaced* the CI half of `merge-policy`. **It has minutes again
+as of 2026-09-07** (measured below), so the script is no longer a substitute for
+anything. It stays required anyway, and the reason is the one it was always worth
+running for rather than the outage: it measures the **committed** commit, and the
+working tree a session happens to have is not what a reviewer merges.
 
-`merge-policy` stays `after-ci-and-review`. What replaces the CI half is:
+`merge-policy` stays `after-ci-and-review`. Both halves are live again; this is
+what the local half runs:
 
 ```bash
 bash tools/verified_gate.sh <branch-or-sha>     # prints a verdict block
@@ -335,12 +338,16 @@ Three more costs, each measured here:
 
 ## Known environment state
 
-**GitHub Actions has no runner minutes, and has not since 2026-09-04.**
-Re-measured 2026-09-05 22:31 UTC: five consecutive runs — two `push main`, two
-`pull_request`, one `pull_request_target` — each completing in **3 to 6 seconds**
-with every job failed. That is the runner dying before any job body ran. **A red
-CI here says nothing about the code**, and there is no CI to read until the
-billing period turns over.
+**GitHub Actions has runner minutes again as of 2026-09-07 — a red CI is a
+signal again. Read it.** Measured 2026-09-07 23:20 UTC: two `pull_request` runs
+of the `CI` workflow concluding **`success`**, in **95 and 133 seconds**. Against
+the same workflow's last `push main` runs the day before — 4, 5, 5 and 9 seconds,
+every one `failure` — that is the difference between a runner that ran the jobs
+and a runner that died before any job body did.
+
+So the CI half of `merge-policy` is satisfiable by GitHub again: a task PR merges
+on a **green `CI` check on its head** plus a second-reader report, and a red one
+is about the code until the clock below says otherwise.
 
 **The way to tell is the clock, not the conclusion**, and that test outlives any
 particular outage. Read `created_at` and `updated_at` on the run: a whole run
@@ -348,27 +355,37 @@ under ~10 seconds with unreadable logs is the runner dying; a run of a minute or
 more is a verdict. Measured on #329 — 6 and 5 seconds with every log a 404,
 against ~95 seconds with real conclusions on #328 twenty minutes earlier.
 
-`tools/verified_gate.sh <ref>` is the substitute, and the section above says how
-to use it: verdict block on the pull request, the four results quoted in the
-merge commit, and merge only while the head is still the SHA the block names.
-Do **not** reach for a bare `make host-gate` in the working tree instead — that
-is the thing `verified_gate.sh` exists to stop, because the working tree is not
-what a reviewer merges.
+`tools/verified_gate.sh <ref>` is **not** retired by that, and the section above
+says why: it measures the committed commit rather than whatever tree the session
+happens to have, which is a different assertion from CI's and the one a reviewer
+can re-run by hand. So the discipline is unchanged — verdict block on the pull
+request, the four results quoted in the merge commit, and merge only while the
+head is still the SHA the block names. Do **not** reach for a bare
+`make host-gate` in the working tree instead. What changed is only that the block
+is no longer the *whole* evidence: a green `CI` check on the head is required
+beside it.
 
-**Going public would fix this**, and it is the same decision as the corpus and
-the contribution guard (#352): Actions is free and unmetered on public
-repositories. Until then, every merge is on the local verdict block.
+**Going public would still be the fix for the next outage**, and it is the same
+decision as the corpus and the contribution guard (#352): Actions is free and
+unmetered on public repositories. 2000 minutes went in four days once and will
+again.
 
-**This section has now been wrong twice, which is the point.** It said
+**This section has now been wrong three times, which is the point** — and this
+paragraph is the third rewrite, not the correction that ends them. It said
 "Actions has runner minutes again — a red CI is a signal again. Read it." That
 was true when written on 2026-09-01 and false by 2026-09-04, and it stood for a
 further day telling every session to trust a signal that had stopped existing.
+Then it said the opposite, and that was false by 2026-09-07 — the paragraph above
+is the first sentence again, restored by measurement rather than by memory.
 The same shape as the check-in that fired one morning saying *"RESOLVED — do not
 re-investigate: CodeRabbit runs on Free and never produces a review object"* —
 true when written, false by 10:12, and whose instruction not to look is what
 would have kept it false. A recorded environment fact is a snapshot, not a
-standing truth. **Re-measure before trusting this paragraph too**; `gh run list
---json conclusion,createdAt,updatedAt` is the whole check and costs one command.
+standing truth. **Re-measure before trusting this paragraph too** — it is the one
+sentence here with a perfect record of going stale. `gh run list --json
+conclusion,createdAt,updatedAt` is the whole check and costs one command; on a
+surface with no `gh`, the MCP `actions_list` answers it, with `created_at` and
+`updated_at` on each run giving the clock.
 
 **Run the gate locally as well.** These are what CI runs, and all four must
 pass before a merge:
