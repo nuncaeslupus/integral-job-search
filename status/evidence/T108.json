@@ -1,0 +1,19 @@
+{
+  "status_presence_fields_named_as_identity": 0,
+  "identity_named_presence_fields": [],
+  "presence_recording_fields": [
+    "declares_status_key",
+    "status_key_resolves"
+  ],
+  "emitted_fields": [
+    "declares_status_key",
+    "evidence",
+    "key",
+    "status_key_resolves",
+    "task",
+    "value_is_numeric"
+  ],
+  "emitted_fields_scanned": 6,
+  "presence_recording_fields_scanned": 2,
+  "field_naming_status": "measured"
+}

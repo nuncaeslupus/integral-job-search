@@ -36,6 +36,7 @@ import argparse
 import json
 import re
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,21 @@ MINIMUM_STATUS_KEY_GATES = 20
 #: vacuous zero past this denominator.
 MINIMUM_RECORD_KEYS_COMPARED = 4
 
+DEFAULT_T108_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T108.json"
+
+#: T108's floors. `status_presence_fields_named_as_identity` is a metric named
+#: after a **category** — T123's rule says such a metric is satisfiable by
+#: there being none of them — so both its denominators are asserted rather
+#: than reported. `emitted_fields_scanned` says the probe read a row at all;
+#: `presence_recording_fields_scanned` says the row still carried fields of
+#: the kind the metric ranges over. Today the emitted row carries six fields,
+#: two of which record presence (`declares_status_key`, `status_key_resolves`),
+#: and both floors sit at or just under those: unlike D-12's census these move
+#: only when *this module's own* emitted row changes, which is a code change
+#: somebody is already reading, never somebody else's task PR merging.
+MINIMUM_EMITTED_FIELDS_SCANNED = 5
+MINIMUM_PRESENCE_RECORDING_FIELDS = 2
+
 #: What `record` drops in favour of a floor, or drops outright. `readings` is
 #: the per-task detail — one row per gate, regenerable by `--check`, read by
 #: nothing — and it is the largest of the three: a merged task appends a row
@@ -112,19 +128,31 @@ _GATE_RE = re.compile(r"(<=|>=|==|!=|<|>)\s*([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?
 
 @dataclass(frozen=True)
 class Reading:
-    """One task's evidence gate, and whether its measurement can be recorded."""
+    """One task's evidence gate, and whether its measurement can be recorded.
+
+    `status_key_resolves` was called `status_is_asserted` until T108, and the
+    rename is the whole of that task. It records that the declared
+    `status-key` **resolves to a non-empty string** — presence, not content —
+    and `"measured"` satisfies it. Under the old name two independent reviews
+    (#286, #290) read `status_is_asserted: true` as claiming the status *is*
+    the word `asserted`, and both proposed setting it false because the
+    evidence says `measured`; both were rejected, and the second one is what
+    made the name the finding rather than the readers. The suggested change
+    would also have made every status-only gate unrecordable, `recordable`
+    being `value_is_numeric or status_key_resolves`.
+    """
 
     task_id: str
     key: str
     evidence: str
     value_is_numeric: bool
     declares_status_key: bool
-    status_is_asserted: bool
+    status_key_resolves: bool
     reason: str = ""
 
     @property
     def recordable(self) -> bool:
-        return self.value_is_numeric or self.status_is_asserted
+        return self.value_is_numeric or self.status_key_resolves
 
 
 def parse_gate_block(text: str) -> dict[str, str] | None:
@@ -202,6 +230,25 @@ def read_gate(task_id: str, payload: Path, root: Path) -> Reading | None:
     return Reading(task_id, key, evidence, numeric, bool(status_key), asserted, reason)
 
 
+def _emitted_row(reading: Reading) -> dict[str, Any]:
+    """One reading as `measure` emits it.
+
+    One function rather than a dict literal inside the comprehension, because
+    T108's probe scans **the emitted row** and not the dataclass. Reading the
+    dataclass would measure the field names a future `measure` might stop
+    emitting, which is a different set from the one anybody reads out of
+    `D12.json`.
+    """
+    return {
+        "task": reading.task_id,
+        "key": reading.key,
+        "evidence": reading.evidence,
+        "value_is_numeric": reading.value_is_numeric,
+        "declares_status_key": reading.declares_status_key,
+        "status_key_resolves": reading.status_key_resolves,
+    }
+
+
 def _unmeasured(reason: str) -> dict[str, Any]:
     """The shape a reading that could not happen takes: `-1`, never `0`."""
     return {
@@ -263,17 +310,7 @@ def measure(
         "evidence_gates_read": len(readings),
         "gates_declaring_status_key": sum(1 for r in readings if r.declares_status_key),
         "unrecordable": [r.reason for r in unrecordable],
-        "readings": [
-            {
-                "task": r.task_id,
-                "key": r.key,
-                "evidence": r.evidence,
-                "value_is_numeric": r.value_is_numeric,
-                "declares_status_key": r.declares_status_key,
-                "status_is_asserted": r.status_is_asserted,
-            }
-            for r in sorted(readings, key=lambda r: r.task_id)
-        ],
+        "readings": [_emitted_row(r) for r in sorted(readings, key=lambda r: r.task_id)],
     }
 
 
@@ -325,7 +362,7 @@ def measure_board_sensitivity(
     # would move `unrecordable_task_gates` — a real difference reported as
     # drift. Take one the board can record.
     candidate = next(
-        (r["task"] for r in readings if r["value_is_numeric"] or r["status_is_asserted"]),
+        (r["task"] for r in readings if r["value_is_numeric"] or r["status_key_resolves"]),
         None,
     )
     if candidate is None:
@@ -417,12 +454,178 @@ def write_evidence(
     return measured | sensitivity
 
 
+# T108 — a field that records *presence* must not be named as a claim about
+# *identity*. `<subject>_is_<claim>` is the grammar of an identity assertion:
+# it binds the subject to the claim, which is exactly how two reviews coming
+# to `D12.json` cold read `status_is_asserted: true` as "the status **is**
+# `asserted`" and proposed setting it false because the evidence says
+# `measured`. A field that records whether something is *there* has to be
+# named with a verb of resolution or declaration — `resolves`, `declares_…`,
+# `has_…` — because none of those can be read as the subject's value.
+#
+# `value_is_numeric` is the case the rule must NOT catch, and it is the reason
+# the classification below is behavioural rather than a list of banned words:
+# that field really does assert something about the value's content, so its
+# `_is_` name is accurate and a keyword rule would have renamed it too.
+_COPULA_RE = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*_(?:is|are|was|were)_[a-z0-9]+(?:_[a-z0-9]+)*$")
+
+#: Absence, distinguishable from a `None` that is genuinely recorded.
+_MISSING = object()
+
+_PROBE_PAYLOAD = """---
+id: probe-0001
+title: "the synthetic gate T108 classifies the emitted row from"
+priority: 5
+---
+
+## Acceptance gate
+
+```gate
+score >= 0.75
+evidence: status/evidence/PROBE.json
+key: score
+{status_line}```
+"""
+
+
+def _probe_row(root: Path, *, value: object, status: object, declares: bool) -> dict[str, Any]:
+    """The emitted row for one synthetic gate, written to disk and read back.
+
+    Synthetic and disposable deliberately. Classifying the live board's rows
+    would make the record move whenever somebody else's task PR landed a gate
+    — the drift `measure_board_sensitivity` exists to refuse, one axis over —
+    and would make the classification depend on which gates the queue happens
+    to hold today.
+    """
+    tasks = root / "arsenal" / "tasks"
+    tasks.mkdir(parents=True)
+    evidence = root / "status" / "evidence" / "PROBE.json"
+    evidence.parent.mkdir(parents=True)
+    data: dict[str, Any] = {}
+    if value is not _MISSING:
+        data["score"] = value
+    if status is not _MISSING:
+        data["score_status"] = status
+    evidence.write_text(json.dumps(data), encoding="utf-8")
+    payload = tasks / "probe-0001.md"
+    payload.write_text(
+        _PROBE_PAYLOAD.format(status_line="status-key: score_status\n" if declares else ""),
+        encoding="utf-8",
+    )
+    reading = read_gate("probe-0001", payload, root)
+    return {} if reading is None else _emitted_row(reading)
+
+
+def classify_emitted_fields(
+    present_a: dict[str, Any], present_b: dict[str, Any], absent: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    """`(the presence-recording fields, those of them named as identity claims)`.
+
+    A field records **presence** when its value is invariant across the two
+    probes that differ only in the *content* of what the gate points at, and
+    changes when that content is not there at all. Read off behaviour, never
+    off the name: that is what lets the rule spare `value_is_numeric`, which
+    flips between the two present probes and is therefore a claim about the
+    value, while catching a field that answers the same in both and only
+    notices the thing disappearing.
+    """
+    names = sorted(set(present_a) & set(present_b) & set(absent))
+    presence = [
+        name
+        for name in names
+        if all(isinstance(row[name], bool) for row in (present_a, present_b, absent))
+        and present_a[name] == present_b[name]
+        and present_a[name] != absent[name]
+    ]
+    return presence, [name for name in presence if _COPULA_RE.match(name)]
+
+
+def measure_field_naming() -> dict[str, Any]:
+    """T108's gate reading: `status_presence_fields_named_as_identity`.
+
+    Three probes over one synthetic gate. Two carry both a value and a status
+    and differ only in what those *say* — `5`/`measured` against
+    `"not a number"`/`pending`; the third carries neither and declares no
+    `status-key` at all, so every presence a row could record is gone at once.
+    """
+    with tempfile.TemporaryDirectory() as raw:
+        base = Path(raw)
+        present_a = _probe_row(base / "a", value=5, status="measured", declares=True)
+        present_b = _probe_row(base / "b", value="not a number", status="pending", declares=True)
+        absent = _probe_row(base / "c", value=_MISSING, status=_MISSING, declares=False)
+
+    names = sorted(set(present_a) & set(present_b) & set(absent))
+    if not names:
+        return {
+            "status_presence_fields_named_as_identity": -1,
+            "identity_named_presence_fields": [],
+            "presence_recording_fields": [],
+            "emitted_fields": [],
+            "emitted_fields_scanned": 0,
+            "presence_recording_fields_scanned": 0,
+            "field_naming_status": "unmeasured",
+            "field_naming_unmeasured_reason": (
+                "the probe gate produced no emitted row, so no field was classified — "
+                "not zero identity-named fields, no reading at all"
+            ),
+        }
+
+    presence, identity = classify_emitted_fields(present_a, present_b, absent)
+    return {
+        "status_presence_fields_named_as_identity": len(identity),
+        "identity_named_presence_fields": identity,
+        "presence_recording_fields": presence,
+        "emitted_fields": names,
+        "emitted_fields_scanned": len(names),
+        "presence_recording_fields_scanned": len(presence),
+        "field_naming_status": "measured",
+    }
+
+
+def field_naming_floor_breaches(measured: dict[str, Any]) -> list[str]:
+    """Which of T108's two denominators came in short. Empty is the pass."""
+    return [
+        f"only {measured[name]} field(s) counted for {name} (floor {floor}) — "
+        "a metric named after a category, verified over an empty category, is not a measurement"
+        for name, floor in (
+            ("emitted_fields_scanned", MINIMUM_EMITTED_FIELDS_SCANNED),
+            ("presence_recording_fields_scanned", MINIMUM_PRESENCE_RECORDING_FIELDS),
+        )
+        if measured[name] < floor
+    ]
+
+
+def write_field_naming_evidence(
+    evidence: Path = DEFAULT_T108_EVIDENCE_PATH, measured: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T108.json`.
+
+    A run that could not classify, or that came in under either floor, writes
+    nothing at all — the only record it could write is one whose zero claims
+    the rename holds over a population the run never found, and that file
+    would become the baseline the next `make evidence` diffs against. Same
+    refusal, same reason, as `write_evidence` above.
+    """
+    if measured is None:
+        measured = measure_field_naming()
+    if measured["field_naming_status"] != "measured" or field_naming_floor_breaches(measured):
+        return measured
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.task_gate [--check]`.
 
-    Without arguments it writes the evidence file, so `make evidence` — whose
-    module list is derived from `^def _main` — regenerates D-12's number with
-    no flag to remember.
+    Without arguments it writes both evidence files — D-12's and T108's — so
+    `make evidence`, which invokes this module once like any other, regenerates
+    both numbers with no flag to remember.
+
+    Both records are written *before* either is adjudicated, and then the exit
+    codes are taken in order. A finding in one gate must not stop the other
+    from leaving the record it measured, or the file `make evidence` diffs
+    against would depend on which gate failed first.
     """
     parser = argparse.ArgumentParser(
         description="D-12's gate: every task gate can record what its evidence actually says"
@@ -440,15 +643,33 @@ def _main(argv: list[str]) -> int:
         metavar="PATH",
         help="write evidence JSON to PATH (default: status/evidence/D12.json)",
     )
+    parser.add_argument(
+        "--write-t108-evidence",
+        nargs="?",
+        const=str(DEFAULT_T108_EVIDENCE_PATH),
+        default=str(DEFAULT_T108_EVIDENCE_PATH),
+        metavar="PATH",
+        help="write T108's field-naming evidence to PATH (default: status/evidence/T108.json)",
+    )
     args = parser.parse_args(argv[1:])
 
     if args.check:
         measured = measure() | measure_board_sensitivity()
+        naming = measure_field_naming()
     else:
         measured = write_evidence(Path(args.write_evidence))
+        naming = write_field_naming_evidence(Path(args.write_t108_evidence))
     print(json.dumps(measured, ensure_ascii=False))
+    print(json.dumps(naming, ensure_ascii=False))
     for reason in measured["unrecordable"]:
         print(reason, file=sys.stderr)
+    for name in naming["identity_named_presence_fields"]:
+        print(
+            f"✗ `{name}` records whether something is *present* and is named as a claim about "
+            "what it *is* — two reviews took `status_is_asserted: true` for a status equal to "
+            "the word `asserted` and proposed setting it false",
+            file=sys.stderr,
+        )
     if measured["unrecordable_task_gates"] == -1:
         return 3
     if measured["unrecordable_task_gates"]:
@@ -502,6 +723,20 @@ def _main(argv: list[str]) -> int:
             "property this gate asserts",
             file=sys.stderr,
         )
+        return 1
+
+    # T108, last, and by the same precedence: the finding first, its
+    # denominators after. `write_field_naming_evidence` has already refused to
+    # write anything a breach would have made false.
+    if naming["field_naming_status"] != "measured":
+        print(naming["field_naming_unmeasured_reason"], file=sys.stderr)
+        return 3
+    if naming["status_presence_fields_named_as_identity"]:
+        return 1
+    naming_breaches = field_naming_floor_breaches(naming)
+    for breach in naming_breaches:
+        print(breach, file=sys.stderr)
+    if naming_breaches:
         return 1
     return 0
 

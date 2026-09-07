@@ -508,3 +508,169 @@ def test_a_thin_sensitivity_comparison_writes_no_evidence_file(
     assert measured["board_sensitive_record_keys"] == 0
     assert measured["record_keys_compared"] < task_gate.MINIMUM_RECORD_KEYS_COMPARED
     assert not target.exists(), "a run that compared too few keys wrote its vacuous zero"
+
+
+# --- T108: a field that records presence must not be named as an identity claim ---
+
+
+def test_recordable_still_accepts_a_status_only_gate() -> None:
+    """The rename is a rename: a gate with no number and an asserted status stays
+    recordable.
+
+    Both #286 and #290 proposed setting this field to `false` because the
+    evidence says `measured` rather than `asserted`. That change would have made
+    every status-only gate unrecordable — `recordable` is
+    `value_is_numeric or <the presence field>` — so this pins the behaviour the
+    rename must not move.
+    """
+    reading = task_gate.Reading(
+        task_id="lo-1111",
+        key="score",
+        evidence="status/evidence/X.json",
+        value_is_numeric=False,
+        declares_status_key=True,
+        status_key_resolves=True,
+    )
+
+    assert reading.recordable
+
+
+def test_a_status_key_resolving_to_an_empty_value_is_not_recordable(tmp_path: Path) -> None:
+    """Presence means a non-empty string, and whitespace is not one.
+
+    The companion to `test_a_status_key_the_evidence_does_not_carry_is_not_a_third_outcome`:
+    that one covers a key the file omits, this one a key the file carries and
+    says nothing at. Both are the same hole — a gate that stops checking by
+    omission — and only the second is reachable by a generated evidence file
+    writing `""` where a status should be.
+    """
+    tasks = _board(
+        tmp_path,
+        value=None,
+        status_line="status-key: score_status\n",
+        status_field="   ",
+    )
+
+    measured = task_gate.measure(tasks, tasks / "_history", tmp_path)
+
+    assert measured["unrecordable_task_gates"] == 1
+    assert "asserts no status there" in measured["unrecordable"][0]
+
+
+def test_no_emitted_gate_field_names_presence_as_identity() -> None:
+    """T108's gate, over the fields this module actually emits.
+
+    The finding is zero **and** the denominator is asserted: a rename verified
+    over no fields at all is the clean zero every gate here exists to refuse,
+    and this metric is category-named (T123), so the population it ranges over
+    has to be shown non-empty in the same breath.
+    """
+    measured = task_gate.measure_field_naming()
+
+    assert measured["field_naming_status"] == "measured"
+    assert measured["status_presence_fields_named_as_identity"] == 0
+    assert measured["identity_named_presence_fields"] == []
+    assert measured["emitted_fields_scanned"] >= task_gate.MINIMUM_EMITTED_FIELDS_SCANNED
+    assert (
+        measured["presence_recording_fields_scanned"] >= task_gate.MINIMUM_PRESENCE_RECORDING_FIELDS
+    )
+    # And the population is the one the metric names: both presence fields the
+    # emitted row carries were classified, not merely counted.
+    assert measured["presence_recording_fields"] == ["declares_status_key", "status_key_resolves"]
+
+
+def test_the_old_name_is_the_worked_example_the_classifier_catches() -> None:
+    """The mutation, without editing the module: the pre-rename row scores 1.
+
+    `status_is_asserted` is invariant under the status's *content* changing
+    (`measured` and `pending` both resolve) and flips when the status goes
+    away — so it records presence — while its name binds the subject to a
+    claim with a copula. That pair is the defect, and it is what two cold
+    readers read off the name.
+    """
+    present_a = {"status_is_asserted": True, "value_is_numeric": True, "task": "lo-1111"}
+    present_b = {"status_is_asserted": True, "value_is_numeric": False, "task": "lo-1111"}
+    absent = {"status_is_asserted": False, "value_is_numeric": False, "task": "lo-1111"}
+
+    presence, identity = task_gate.classify_emitted_fields(present_a, present_b, absent)
+
+    assert presence == ["status_is_asserted"]
+    assert identity == ["status_is_asserted"]
+
+
+def test_a_copula_over_a_content_predicate_is_not_the_defect() -> None:
+    """`value_is_numeric` keeps its name, and the rule has to say why.
+
+    It changes when the value's content changes, so it is a claim about the
+    value and its name is accurate. A rule that banned every `_is_` name would
+    have renamed it too, and would have been a keyword list rather than a
+    reading of what the field records.
+    """
+    present_a = {"value_is_numeric": True}
+    present_b = {"value_is_numeric": False}
+    absent = {"value_is_numeric": False}
+
+    presence, identity = task_gate.classify_emitted_fields(present_a, present_b, absent)
+
+    assert presence == []
+    assert identity == []
+
+
+def test_a_probe_that_classifies_no_presence_field_writes_no_evidence(tmp_path: Path) -> None:
+    """Zero identity-named fields out of zero presence fields is not a pass.
+
+    The same argument as D-12's own floors, on the axis T123 names: this
+    metric counts a category, so it is satisfiable by the category being
+    empty. A probe that stopped classifying anything must refuse to write the
+    record, or the artefact asserting a floor it never met becomes the
+    baseline the next `make evidence` diffs against.
+    """
+    degenerate = {
+        "status_presence_fields_named_as_identity": 0,
+        "identity_named_presence_fields": [],
+        "presence_recording_fields": [],
+        "emitted_fields": ["task", "key", "evidence", "value_is_numeric", "declares_status_key"],
+        "emitted_fields_scanned": 5,
+        "presence_recording_fields_scanned": 0,
+        "field_naming_status": "measured",
+    }
+    target = tmp_path / "T108.json"
+
+    assert task_gate.field_naming_floor_breaches(degenerate)
+    task_gate.write_field_naming_evidence(target, measured=degenerate)
+
+    assert not target.exists()
+
+
+def test_a_thin_field_naming_denominator_fails_the_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit 1, not 3 — `make evidence` maps 3 to "unmeasured (recorded)" and
+    carries on, so a floor that returned it would only ever be advice."""
+    monkeypatch.setattr(
+        task_gate,
+        "measure_field_naming",
+        lambda: {
+            "status_presence_fields_named_as_identity": 0,
+            "identity_named_presence_fields": [],
+            "presence_recording_fields": [],
+            "emitted_fields": [],
+            "emitted_fields_scanned": 0,
+            "presence_recording_fields_scanned": 0,
+            "field_naming_status": "measured",
+        },
+    )
+
+    exit_code = task_gate._main(
+        [
+            "task_gate",
+            "--write-evidence",
+            str(tmp_path / "D12.json"),
+            "--write-t108-evidence",
+            str(tmp_path / "T108.json"),
+        ]
+    )
+
+    assert exit_code == 1
+    assert "emitted_fields_scanned" in capsys.readouterr().err
+    assert not (tmp_path / "T108.json").exists()
