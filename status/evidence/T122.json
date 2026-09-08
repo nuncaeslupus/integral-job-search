@@ -11,10 +11,15 @@
     "bold_label",
     "fence_above_the_heading",
     "fence_after_the_section_ends",
+    "fence_carries_an_info_string",
+    "fence_never_closed",
     "fence_quoted_in_prose_only",
+    "heading_pluralised",
+    "heading_with_no_space_after_the_hashes",
     "label_in_a_later_section",
     "no_fence_at_all",
     "no_section_heading_at_all",
+    "second_acceptance_gate_section",
     "second_fence_after_the_first"
   ]
 }

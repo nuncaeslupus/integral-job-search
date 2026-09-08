@@ -16,10 +16,12 @@ while asserting nothing at all.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -29,6 +31,7 @@ from integral.gate_reader_agreement import (
     MINIMUM_GATES_COMPARED,
     UNGATED_ARRANGEMENT,
     Arrangement,
+    Probe,
     floor_breaches,
     measure,
     probe,
@@ -190,3 +193,168 @@ def test_the_committed_evidence_names_every_arrangement_the_module_probes() -> N
     expected = {a.name for a in ARRANGEMENTS} | {UNGATED_ARRANGEMENT.name}
     assert set(committed["arrangements_probed"]) == expected
     assert committed["gates_compared_at_least"] == MINIMUM_GATES_COMPARED
+
+
+def _verifier_module() -> ModuleType:
+    """`tools/verify_gates.py` loaded in-process, so its checker can be stubbed.
+
+    Every other case here drives the verifier as a subprocess, which is the
+    honest way to measure it. This one needs the checker replaced, and the
+    checker is a module-level path rather than an argument.
+    """
+    spec = importlib.util.spec_from_file_location("t122_verify_gates", VERIFIER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("arrangement", UNREADABLE, ids=_ids(UNREADABLE))
+def test_every_unread_arrangement_really_carries_the_fence_it_is_about(
+    arrangement: Arrangement,
+) -> None:
+    """Each unread fixture is `unreadable`, never `absent`.
+
+    Without this the ten cases above are satisfiable the wrong way: a payload
+    carrying no fence at all is also never counted and also never green over a
+    missing evidence file, so a fixture that lost its fence in an edit would go
+    on passing while measuring nothing. `unreadable` is the classification each
+    is derived from — the substring is present and the grammar does not reach
+    it — so it is the classification asserted.
+    """
+    assert "```gate" in arrangement.body, arrangement.why
+    assert gate_declaration(arrangement.body) == "unreadable", arrangement.why
+
+
+def test_a_counted_gate_whose_checker_printed_nothing_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The end-to-end catch, made load-bearing.
+
+    `gate_evidence.py` exits 0 in exactly two states: it read a block and the
+    measurement cleared the threshold, in which case it says so on stdout, or
+    it found no block and returned silently. So a counted gate whose checker
+    printed nothing was not asserted, whatever the grammar on this side thinks
+    — which is the half of the fix that survives any future drift between the
+    two readers.
+
+    The second reader on #425 measured this branch as free to delete: all
+    eighty-eight tests and the gate metric stayed green without it. A stub
+    checker that exits 0 and prints nothing is what makes it die.
+    """
+    verify_gates = _verifier_module()
+    mute_checker = tmp_path / "mute_checker.py"
+    mute_checker.write_text("import sys\n\nsys.exit(0)\n", encoding="utf-8")
+    monkeypatch.setattr(verify_gates, "GATE_EVIDENCE", mute_checker)
+
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    (tasks / "t-mute.md").write_text(
+        '---\nid: t-mute\ntitle: "mute"\nstatus: merged\n---\n\n'
+        "## Acceptance gate\n\n```gate\nfixture_metric == 0\n"
+        "evidence: status/evidence/absent-fixture.json\nkey: fixture_metric\n```\n",
+        encoding="utf-8",
+    )
+    report = tmp_path / "report.json"
+    status = verify_gates.main(
+        [
+            "--queue",
+            str(tasks),
+            "--payload-dir",
+            str(tasks),
+            "--report-json",
+            str(report),
+        ]
+    )
+
+    assert status == 1, "a silent pass is not a measurement"
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["counted_as_asserted"] == 1
+    assert payload["counted_as_asserted_but_never_read"] == ["t-mute"]
+
+
+def test_the_reported_signal_alone_catches_a_verifier_that_is_red() -> None:
+    """A verifier that drifted back to a substring rule and reports it honestly.
+
+    It names the divergence and exits 1, so the run is **not** green and the
+    exit-status signal is silent. This is the shape a plain revert of the fix
+    produces — and it is the whole of why `counted_but_never_read` reads what
+    the run says as well as what it did.
+    """
+    honest_but_wrong = Probe(
+        name="drifted_verifier",
+        counted_as_asserted=1,
+        exit_status=1,
+        reported_ungated=0,
+        reported_never_read=1,
+    )
+    assert not honest_but_wrong.green
+    assert honest_but_wrong.counted_but_never_read
+
+
+def test_the_exit_status_signal_alone_catches_a_verifier_that_reports_nothing() -> None:
+    """A verifier whose own report is empty, and which is green anyway.
+
+    The fixture declares an evidence file that does not exist, so a checker
+    that read the block must fail. Green while counting a gate is therefore the
+    divergence with nothing else it can be — and it is all that is left when
+    the verifier's self-report has stopped being trustworthy, which is the case
+    a number reported about itself cannot cover.
+    """
+    silent_and_green = Probe(
+        name="mute_verifier",
+        counted_as_asserted=1,
+        exit_status=0,
+        reported_ungated=0,
+        reported_never_read=0,
+    )
+    assert silent_and_green.counted_but_never_read
+
+
+def test_a_substring_verifier_that_reports_nothing_is_caught_end_to_end(
+    tmp_path: Path,
+) -> None:
+    """The same signal, driven by a verifier rather than asserted about one.
+
+    This stub *is* the pre-fix reader: it counts the fence by substring, never
+    runs a checker, writes an empty `counted_as_asserted_but_never_read`, and
+    exits 0. Its report is clean and its verdict is wrong, so the first signal
+    cannot see it. If the exit-status signal were dropped, this run would read
+    as agreement.
+    """
+    substring_verifier = tmp_path / "substring_verifier.py"
+    substring_verifier.write_text(
+        "import argparse\n"
+        "import json\n"
+        "from pathlib import Path\n"
+        "\n"
+        "parser = argparse.ArgumentParser()\n"
+        'parser.add_argument("--queue", type=Path)\n'
+        'parser.add_argument("--payload-dir", type=Path)\n'
+        'parser.add_argument("--report-json", type=Path)\n'
+        "args = parser.parse_args()\n"
+        "counted = sum(\n"
+        "    1\n"
+        '    for payload in sorted(args.payload_dir.glob("*.md"))\n'
+        '    if "```gate" in payload.read_text(encoding="utf-8")\n'
+        ")\n"
+        "args.report_json.write_text(\n"
+        "    json.dumps(\n"
+        "        {\n"
+        '            "counted_as_asserted": counted,\n'
+        '            "ungated": 0,\n'
+        '            "counted_as_asserted_but_never_read": [],\n'
+        "        }\n"
+        "    )\n"
+        '    + "\\n",\n'
+        '    encoding="utf-8",\n'
+        ")\n",
+        encoding="utf-8",
+    )
+
+    result = probe(UNREADABLE[0], substring_verifier)
+
+    assert result.counted_as_asserted == 1
+    assert result.green, "the stub reproduces the pre-fix reader, which passed these"
+    assert result.reported_never_read == 0, "its own report is clean; that is the point"
+    assert result.counted_but_never_read, UNREADABLE[0].why

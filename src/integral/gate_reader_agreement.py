@@ -87,7 +87,15 @@ MINIMUM_GATES_COMPARED = 150
 #: the board census this moves only when *this module's own* fixture set
 #: changes, which is a code change somebody is already reading. It is what
 #: stops a clean zero that was reached by deleting the fixtures.
-MINIMUM_ARRANGEMENTS_PROBED = 7
+#:
+#: It rose 7 → 12 when the second reader on #425 accepted five further shapes
+#: that fail **open** on the pre-fix verifier and were pinned by nothing:
+#: `heading_with_no_space_after_the_hashes`, `fence_carries_an_info_string`,
+#: `fence_never_closed`, `second_acceptance_gate_section` and
+#: `heading_pluralised`. Raising the floor with them is the half of that rule
+#: that is easy to skip — an accepted case answered in a comment and not
+#: committed leaves the code exactly as unprotected as the report found it.
+MINIMUM_ARRANGEMENTS_PROBED = 12
 
 _FRONT_MATTER = """---
 id: {task_id}
@@ -186,6 +194,69 @@ ARRANGEMENTS: tuple[Arrangement, ...] = (
         ),
     ),
     Arrangement(
+        name="heading_with_no_space_after_the_hashes",
+        body="##Acceptance gate\n\n" + _GATE_BLOCK + "\n",
+        carries_a_readable_gate=False,
+        why=(
+            "`##\\s+Acceptance gate` requires at least one whitespace character between the "
+            "hashes and the label. `##Acceptance gate` supplies none, so no section matches "
+            "and the fence below it is never searched for."
+        ),
+    ),
+    Arrangement(
+        name="fence_carries_an_info_string",
+        body=(
+            "## Acceptance gate\n\n"
+            "```gate extra\nfixture_metric == 0\n"
+            "evidence: status/evidence/absent-fixture.json\nkey: fixture_metric\n```\n"
+        ),
+        carries_a_readable_gate=False,
+        why=(
+            "`_BLOCK_RE` is ```` ```gate\\s*\\n ````: only whitespace may stand between the "
+            "fence and the newline. An info string puts `extra` there, so the block never "
+            "opens — while the substring `` ```gate `` is present all the same."
+        ),
+    ),
+    Arrangement(
+        name="fence_never_closed",
+        body=(
+            "## Acceptance gate\n\n"
+            "```gate\nfixture_metric == 0\n"
+            "evidence: status/evidence/absent-fixture.json\nkey: fixture_metric\n"
+        ),
+        carries_a_readable_gate=False,
+        why=(
+            "`_BLOCK_RE` requires a closing ```` ``` ````. An opener with nothing closing it "
+            "extracts no block, so the gate is written, visible, and read by nobody."
+        ),
+    ),
+    Arrangement(
+        name="second_acceptance_gate_section",
+        body=(
+            "## Acceptance gate\n\n"
+            "Prose only — the fence is under the second copy of this heading.\n\n"
+            "## Acceptance gate\n\n" + _GATE_BLOCK + "\n"
+        ),
+        carries_a_readable_gate=False,
+        why=(
+            "`_SECTION_RE.search` takes the **first** match and the span ends at the next "
+            "`##`, so a second `## Acceptance gate` section lies outside everything that is "
+            "searched. Distinct from `fence_after_the_section_ends`: there the fence sits "
+            "under a differently-named heading, here under the very heading its author "
+            "expected to be read."
+        ),
+    ),
+    Arrangement(
+        name="heading_pluralised",
+        body="## Acceptance gates\n\n" + _GATE_BLOCK + "\n",
+        carries_a_readable_gate=False,
+        why=(
+            "`##\\s+Acceptance gate\\s*\\n` allows only whitespace between `gate` and the "
+            "line break. The plural's `s` is not whitespace, so the heading does not match "
+            "and no section is found."
+        ),
+    ),
+    Arrangement(
         name="second_fence_after_the_first",
         body=(
             "## Acceptance gate\n\n" + _GATE_BLOCK + "\n\n"
@@ -251,14 +322,42 @@ class Probe:
         have failed on the absent file, so green-while-counting is the same
         divergence with nothing else it can be.
 
-        Either alone is insufficient, and that is why both are read. The first
-        is a number the verifier reports about itself, so a verifier that
-        hard-coded it empty would clear it — the second is its exit status over
-        a fixture built to make a real assertion fail, which it cannot fake
-        without also failing the controls. The second, on its own, misses a
-        verifier that has drifted back to a substring rule and *reports* the
-        drift honestly: the divergence is real, the run is red about it, and
-        only the first signal names it.
+        Neither signal subsumes the other, and **each is now pinned by a
+        fixture rather than by this paragraph**. That is the correction the
+        second reader on #425 asked for: the claim stood here untested, and
+        deleting either signal left all of the module's tests and the metric
+        green over a defect that was fully back.
+
+        * Only the **first** fires against a verifier that has drifted back to
+          a substring rule and *reports* the drift honestly — it names the
+          task and exits 1, so the run is red and `green` is False. That is
+          what a plain revert of this fix produces, and it is why the second
+          signal alone is not enough:
+          `test_the_reported_signal_alone_catches_a_verifier_that_is_red`.
+        * Only the **second** fires when the verifier's own report is empty —
+          the silent-pass catch removed, or the list hard-coded — so the
+          divergence is real, unreported and green. That is why the first
+          signal alone is not enough:
+          `test_the_exit_status_signal_alone_catches_a_verifier_that_reports_nothing`
+          drives exactly such a verifier end to end.
+
+        The measured caveat, recorded because the earlier wording obscured it:
+        under a *single* reverted defect only the first signal ever fires. The
+        second is reachable when the verifier's self-report has also stopped
+        being trustworthy, which is precisely the case a number reported about
+        itself cannot cover.
+
+        And one hole is named rather than closed here. Remove the first signal
+        *and* revert the classifier, and this property returns False for every
+        arrangement: the run is red about the divergence, so `green` is False,
+        and the metric reads **0** over a defect that is fully back. What fails
+        in that state is the fixture set — twenty-three cases, measured — not
+        the number. So the protection is real and it does not live in this
+        metric, which is worth knowing before quoting the metric as though it
+        were the whole check. Closing it means dropping to the simpler rule
+        (*counted at all, or green*), which subsumes both signals and is a
+        redesign of the detector rather than the second reader's remedy on
+        #425; it is left for a round that reviews it as one.
         """
         if self.reported_never_read:
             return True
