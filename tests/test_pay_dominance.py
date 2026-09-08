@@ -32,7 +32,14 @@ from integral.pay_dominance import (
     _main as main,
 )
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, PayBand, RankingError, rank, require_pay_coherence
+from integral.rank import (
+    Candidate,
+    PayBand,
+    RankingError,
+    rank,
+    require_pay_coherence,
+    require_priced_dimensions_ranked,
+)
 
 DIMENSIONS = ("commute", "mentoring", "remote")
 WEIGHTS = {
@@ -190,7 +197,7 @@ def test_a_point_is_the_band_whose_ends_coincide() -> None:
     """So a range against a point is the ordinary comparison, not a special one."""
     point = _offer("aa-point", 3000.0, commute=0.2, remote=0.6)
 
-    assert comparable_band(point, "EUR") == (3000.0, 3000.0)
+    assert comparable_band(point, "EUR") == (3000.0, 3000.0, "EUR")
 
 
 def test_overlapping_bands_make_no_claim_in_either_direction() -> None:
@@ -288,6 +295,16 @@ def test_the_measurement_reports_no_violation_and_a_rule_that_fired() -> None:
     assert {row["case"] for row in measured["decided_cases"]} == {
         "one_side_publishes_no_band",
         "different_currencies_or_a_range_against_a_point",
+        "a_ranking_that_names_no_currency",
+        "an_absent_salary_keeps_the_place_the_alphabet_gave_it",
+    }
+    # The three cases a second reader accepted on 2026-09-08 are pairs in the
+    # fixture set, not answers in a comment: six before, nine after.
+    assert measured["pairs_compared"] == 9
+    assert measured["absent_salaries_demoted_in_a_tie"] == 0
+    assert measured["contradictions_refused"] == {
+        "a_dimension_priced_but_not_ranked": 1,
+        "a_published_band_with_no_point_where_the_ranking_names_no_currency": 1,
     }
 
 
@@ -318,3 +335,147 @@ def test_write_evidence_returns_what_it_wrote(tmp_path: Path) -> None:
     measured = write_evidence(evidence)
 
     assert json.loads(evidence.read_text(encoding="utf-8")) == measured
+
+
+# --------------------------------------------------------------------------
+# What a second reader found on 2026-09-08. Each case is derived from the
+# task's own sentence — *where two offers are equal on every other ranked
+# dimension, the higher-paying one is never ranked below* — and from the two
+# decisions the task wrote down, never from what the code returns.
+# --------------------------------------------------------------------------
+
+
+def test_a_dimension_the_weights_price_but_the_ranking_does_not_rank_is_refused() -> None:
+    """Fail-open: the order moved on a dimension the rule could not see.
+
+    `perks` is priced at €5.000 and is not in `DIMENSIONS`, so it drives the
+    salary-equivalent total while `alike_apart_from_pay` — which reads only the
+    ranked set — calls the two offers alike. `rank` published the 2000 above the
+    5000, and `violations` then reported `1` against that same list. The rule is
+    a property of the published order, so a ranking that cannot satisfy it is
+    refused rather than printed.
+    """
+    weights = {
+        **WEIGHTS,
+        "part_worths": {
+            "commute": {"utility_per_unit": 0.3, "salary_equivalent_per_month": 200.0},
+            "mentoring": {"utility_per_unit": 0.15, "salary_equivalent_per_month": 100.0},
+            "remote": {"utility_per_unit": 0.9, "salary_equivalent_per_month": 600.0},
+            "perks": {"utility_per_unit": 0.5, "salary_equivalent_per_month": 5000.0},
+        },
+    }
+    poor = Candidate(
+        offer_id="aa-poor-2000",
+        salary_per_month=2000.0,
+        scores={"commute": 0.2, "remote": 0.6, "perks": 1.0},
+        unknown=frozenset({"mentoring"}),
+    )
+    rich = Candidate(
+        offer_id="zz-rich-5000",
+        salary_per_month=5000.0,
+        scores={"commute": 0.2, "remote": 0.6, "perks": 0.0},
+        unknown=frozenset({"mentoring"}),
+    )
+
+    with pytest.raises(RankingError, match="perks"):
+        _rank(poor, rich, weights=weights)
+
+
+def test_the_ranked_set_has_to_cover_the_priced_one_and_not_the_other_way() -> None:
+    """A ranked dimension with no price is what makes a total `None` — allowed."""
+    require_priced_dimensions_ranked(("commute", "mentoring"), {"commute": 200.0})
+
+    with pytest.raises(RankingError, match="perks"):
+        require_priced_dimensions_ranked(("commute",), {"commute": 200.0, "perks": 5000.0})
+
+
+def test_a_band_with_no_point_is_refused_where_the_ranking_names_no_currency() -> None:
+    """Fail-open: the guard was right and a `None` currency switched it off.
+
+    L1, no weights, no `currency=` argument, so the ranking's currency is
+    `None`. The sort orders on the point reading, so a €4.000-4.200 band
+    carrying none ranks as if unpaid — beneath a published €3.000 that it
+    dominates under every reading of both. `None` is the absence of a currency
+    to disagree with, not a currency that disagrees.
+    """
+    banded = _offer("zz-band", None, pay=PayBand(4000.0, 4200.0, "EUR"), commute=0.2, remote=0.6)
+    point = _offer("aa-point", 3000.0, pay=PayBand(3000.0, 3000.0, "EUR"), commute=0.2, remote=0.6)
+
+    with pytest.raises(RankingError, match="no point reading"):
+        _rank(banded, point, weights=None)
+
+    with pytest.raises(RankingError, match="no point reading"):
+        require_pay_coherence([banded], None)
+
+
+def test_the_rule_reads_two_bands_where_the_ranking_names_no_currency() -> None:
+    """The other half of the same hole: the rule was inert there too.
+
+    €4.000-4.200 against €3.000-3.200 is disjoint — A's worst reading is above
+    B's best — so the claim holds wherever it is made, and a ranking that names
+    no currency is not a ranking in some other currency.
+    """
+    rich = _offer("zz-rich", 4100.0, pay=PayBand(4000.0, 4200.0, "EUR"), commute=0.2, remote=0.6)
+    poor = _offer("aa-poor", 3100.0, pay=PayBand(3000.0, 3200.0, "EUR"), commute=0.2, remote=0.6)
+
+    assert pays_more(rich, poor, None)
+    assert not pays_more(poor, rich, None)
+
+    ranking = _rank(rich, poor, weights=None)
+    assert ranking["currency"] is None
+    assert ranking["pareto"] == ["zz-rich", "aa-poor"]
+    assert violations(ranking, [rich, poor]) == []
+
+    reversed_order = {**ranking, "pareto": ["aa-poor", "zz-rich"]}
+    assert len(violations(reversed_order, [rich, poor])) == 1
+
+
+def test_without_a_ranking_currency_two_moneys_are_still_incomparable() -> None:
+    """Reading a band under a `None` currency must not start converting one.
+
+    $4.000-4.200 against €3.000-3.200 is a conversion, and it needs a rate with
+    a date and a source; none lives in this repository, so there is no claim in
+    either direction.
+    """
+    dollars = _offer("zz-usd", 4100.0, pay=PayBand(4000.0, 4200.0, "USD"), commute=0.2, remote=0.6)
+    euros = _offer("aa-eur", 3100.0, pay=PayBand(3000.0, 3200.0, "EUR"), commute=0.2, remote=0.6)
+
+    assert not pays_more(dollars, euros, None)
+    assert not pays_more(euros, dollars, None)
+
+
+def test_an_offer_that_published_no_salary_keeps_the_place_the_alphabet_gave_it() -> None:
+    """The decided tiebreak: where the rule is silent, the order is too.
+
+    `mentoring` is priced and unsettled on both, so neither has a
+    salary-equivalent total and the two share one tie bucket. The rule refuses
+    the pair in both directions — an unpublished salary is not a low one — so
+    the tiebreak it drives may not fire either, and sinking the silent side
+    would be that refusal thrown away at the last step.
+    """
+    silent = _offer("aa-silent", None, commute=0.2, remote=0.6)
+    publishing = _offer("zz-point-2000", 2000.0, commute=0.2, remote=0.6)
+
+    ranking = _rank(silent, publishing)
+
+    assert ranking["salary_equivalent_total"] == {}, "one bucket, or this proves nothing"
+    assert not pays_more(publishing, silent, "EUR")
+    assert not pays_more(silent, publishing, "EUR")
+    assert ranking["pareto"] == ["aa-silent", "zz-point-2000"]
+
+
+def test_the_pay_tiebreak_still_orders_the_publishing_offers_in_that_same_tie() -> None:
+    """And the silent one is not what pushes the 5000 below the 2000.
+
+    Three offers in one bucket. The two that published are ordered by what they
+    published, taking the slots they held between them; the silent one keeps
+    the slot the alphabet gave it, which is the first.
+    """
+    silent = _offer("aa-silent", None, commute=0.2, remote=0.6)
+    poor = _offer("mm-poor-2000", 2000.0, commute=0.2, remote=0.6)
+    rich = _offer("zz-rich-5000", 5000.0, commute=0.2, remote=0.6)
+
+    ranking = _rank(silent, poor, rich)
+
+    assert ranking["pareto"] == ["aa-silent", "zz-rich-5000", "mm-poor-2000"]
+    assert violations(ranking, [silent, poor, rich]) == []
