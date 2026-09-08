@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -2106,18 +2109,295 @@ def test_the_transport_evidence_records_both_denominators(tmp_path: Path) -> Non
     assert measured["boards_readable_only_by_post"] == 0
     assert measured["boards_readable_only_by_post_evaluated"] >= 1
     assert measured["ledger_entries_scanned"] >= connector_transport.MINIMUM_LEDGER_ENTRIES
-    assert measured["get_connectors_evaluated"] >= 10
+    assert measured["get_connectors_evaluated"] >= connector_transport.MINIMUM_GET_PACKAGES
     assert measured["get_connectors_still_plain_gets"] == measured["get_connectors_evaluated"]
     assert measured["boards_refused_on_policy"] == 0
     assert measured["credential_key_misjudged"] == 0
     assert measured["credential_key_cases_checked"] >= connector_transport.MINIMUM_CREDENTIAL_CASES
-    assert json.loads((tmp_path / "T89.json").read_text(encoding="utf-8")) == measured
+    # T111: what is measured and what is committed are no longer the same
+    # object. The file carries the finding and the floor; the two GET censuses
+    # are what a new connector package would move, so they stay out of it.
+    committed = json.loads((tmp_path / "T89.json").read_text(encoding="utf-8"))
+    assert committed == connector_transport.record(measured)
+    assert "get_connectors_evaluated" not in committed
+    assert "get_connectors_still_plain_gets" not in committed
+    assert committed["get_packages_changed"] == []
+    assert (
+        committed["get_connectors_evaluated_at_least"] == connector_transport.MINIMUM_GET_PACKAGES
+    )
 
     empty = tmp_path / "empty.yaml"
     empty.write_text("corrected: []\n", encoding="utf-8")
     thin = connector_transport.measure(empty)
     assert thin["gate_status"] == "unmeasured"
     assert thin["boards_readable_only_by_post_evaluated"] == 0
+
+
+# ---------------------------------------------------------------------------
+# T111 — the committed record must survive the connector library growing.
+#
+# `status/evidence/T89.json` used to commit `get_connectors_evaluated` and
+# `get_connectors_still_plain_gets`, both being the number of GET packages on
+# the day, so the next connector package moved two numbers in an evidence file
+# its pull request had not touched and `make evidence` went red there. T55,
+# T100 and T104's defect, in this module. What follows measures the effect of
+# the repair rather than its shape.
+
+
+def _linked_library(packages: list[Path], destination: Path) -> Path:
+    """A connector directory holding just `packages`, linked rather than copied."""
+    destination.mkdir(parents=True, exist_ok=True)
+    for package in packages:
+        (destination / package.name).symlink_to(package.resolve(), target_is_directory=True)
+    return destination
+
+
+def test_adding_a_get_package_does_not_change_any_asserted_value(tmp_path: Path) -> None:
+    """The regression T111 was filed over: one more GET package lands in the
+    library, the raw measurement moves by one, and the committed record does
+    not move at all. `evidence_keys_compared` is what says the comparison
+    happened — a `record` that answered "nothing moved" by committing nothing
+    would score the same clean zero without it."""
+    live = connector_transport.measure()
+    with connector_transport._library_grown_by_one(connectors.DEFAULT_CONNECTORS_DIR) as grown_dir:
+        grown = connector_transport.measure(directory=grown_dir)
+    # The perturbation is real: the scan genuinely saw one more package.
+    assert grown["get_connectors_evaluated"] == live["get_connectors_evaluated"] + 1
+    assert grown["get_connectors_still_plain_gets"] == live["get_connectors_still_plain_gets"] + 1
+    assert connector_transport.record(grown) == connector_transport.record(live)
+
+    reading = connector_transport.write_growth_sensitivity_evidence(tmp_path / "T111.json")
+    assert reading["gate_status"] == "measured"
+    assert reading["growth_sensitive_evidence_keys"] == 0
+    assert reading["sensitive"] == []
+    assert reading["evidence_keys_compared"] >= connector_transport.MINIMUM_RECORD_KEYS_COMPARED
+    committed = json.loads((tmp_path / "T111.json").read_text(encoding="utf-8"))
+    assert committed["growth_sensitive_evidence_keys"] == 0
+    assert "unmeasured_reason" not in committed
+
+
+def test_the_relation_between_evaluated_and_still_plain_gets_is_the_real_check(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Dropping the two counts from the record drops nothing that was being
+    checked. The claim they carried was the equality — every GET package still
+    builds a plain GET — and that is `get_packages_changed == []`, which stays
+    in the record and still goes red when a package's request changes shape."""
+    clean = connector_transport.measure()
+    assert clean["get_connectors_still_plain_gets"] == clean["get_connectors_evaluated"]
+    assert connector_transport.record(clean)["get_packages_changed"] == []
+
+    real_build = connectors.build_list_requests
+
+    def a_body_appears(connector: connectors.Connector, **kwargs: object) -> list[Any]:
+        built = real_build(connector, **kwargs)  # type: ignore[arg-type]
+        if connector.site != "arbeitnow":
+            return built
+        return [
+            connectors.ListRequest(
+                url=built[0].url, method="GET", headers={}, body=b'{"smuggled": true}'
+            )
+        ]
+
+    monkeypatch.setattr(connector_transport, "build_list_requests", a_body_appears)
+    changed = connector_transport.measure()
+    assert changed["get_connectors_still_plain_gets"] == changed["get_connectors_evaluated"] - 1
+    assert changed["get_packages_changed"] == ["arbeitnow_en"]
+    assert connector_transport.record(changed)["get_packages_changed"] == ["arbeitnow_en"]
+    assert connector_transport._main([__file__, str(tmp_path / "T89.json")]) == 1
+
+
+def test_an_empty_package_scan_fails_the_floor(tmp_path: Path) -> None:
+    """`get_connectors_evaluated_at_least` is the denominator the zero rests
+    on, so the floor has to be enforced somewhere the record cannot fake: a
+    library of two packages is not a pass, it is a scan that did not happen."""
+    packages = connectors.connector_packages(connectors.DEFAULT_CONNECTORS_DIR)
+    thin = connector_transport.measure(
+        directory=_linked_library(packages[:2], tmp_path / "thin"),
+    )
+    assert thin["gate_status"] == "unmeasured"
+    assert "floor" in thin["unmeasured_reason"]
+    assert thin["get_connectors_evaluated"] == 0
+
+    empty = connector_transport.measure(directory=_linked_library([], tmp_path / "empty"))
+    assert empty["gate_status"] == "unmeasured"
+
+    # And a library that thin cannot be compared either — a growth reading
+    # over an unmeasurable library is not a clean zero.
+    reading = connector_transport.measure_growth_sensitivity(
+        directory=_linked_library(packages[:2], tmp_path / "thin2")
+    )
+    assert reading["gate_status"] == "unmeasured"
+    assert reading["growth_sensitive_evidence_keys"] == 0
+
+
+def _measuring_a_library_of(packages: list[Path], destination: Path) -> Any:
+    """`connector_transport.measure`, redirected at a library of `packages`.
+
+    `write_evidence` and `_main` take no directory, so the only way to put a
+    sub-floor library in front of the code path that *writes* is to replace
+    the module-global the writer resolves. Everything else — the ledger, the
+    credential cases, the whole of `measure` — is the real thing.
+    """
+    real = connector_transport.measure
+    thin = _linked_library(packages, destination)
+
+    def over_a_thin_library(
+        ledger: Path = connector_transport.DEFAULT_LEDGER_PATH,
+        directory: Path = connectors.DEFAULT_CONNECTORS_DIR,
+        cases: Path = connector_transport.DEFAULT_CREDENTIAL_CASES_PATH,
+    ) -> dict[str, Any]:
+        return real(ledger, thin, cases)
+
+    return over_a_thin_library
+
+
+def test_a_sub_floor_scan_fails_instead_of_recording_a_floor_it_never_met(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T104's rule in this module: a run that breaches the floor must not
+    write the floor.
+
+    `record` used to append `get_connectors_evaluated_at_least: 10`
+    unconditionally, so a scan of an empty directory — which `measure`
+    correctly calls `unmeasured` with `get_connectors_evaluated: 0` — produced
+    a record claiming ten packages were read. Since T111 stopped committing
+    the census, that line is the only thing left in the file speaking to scan
+    size, and it said the opposite of what happened: fail-open.
+    """
+    monkeypatch.setattr(connector_transport, "measure", _measuring_a_library_of([], tmp_path / "e"))
+    target = tmp_path / "T89.json"
+
+    exit_code = connector_transport._main([__file__, str(target)])
+
+    # Exit 1, not 3: `make evidence` prints "unmeasured (recorded)" for 3 and
+    # carries on, and nothing was recorded — the same code the key-count floor
+    # below already returns.
+    assert exit_code == 1
+    assert "floor 10" in capsys.readouterr().err
+    # And it wrote nothing. A floor is a constant by construction, so the only
+    # record this run could write is one asserting the floor it just failed.
+    assert not target.exists()
+    # The claim itself is gone from the unmeasured record, not merely unwritten.
+    unmeasured = connector_transport.measure(directory=_linked_library([], tmp_path / "e2"))
+    assert unmeasured["gate_status"] == "unmeasured"
+    assert "get_connectors_evaluated_at_least" not in connector_transport.record(unmeasured)
+
+
+def test_a_sub_floor_run_leaves_an_existing_record_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ordering, where it costs something: the exit code is not a run's
+    only output.
+
+    `write_evidence` wrote before anything checked, so an empty scan
+    overwrote the committed T89 record — and that overwritten file is what the
+    *next* `make evidence` diffs against. Commit it once and the drift check
+    goes green over a library that scanned nothing. Byte-identical, not merely
+    still valid.
+    """
+    monkeypatch.setattr(connector_transport, "measure", _measuring_a_library_of([], tmp_path / "e"))
+    healthy = tmp_path / "T89.json"
+    healthy.write_text('{"kept": true}\n', encoding="utf-8")
+    before = healthy.read_bytes()
+
+    exit_code = connector_transport._main([__file__, str(healthy)])
+
+    assert exit_code == 1
+    assert healthy.read_bytes() == before
+
+
+def test_a_census_committed_as_an_exact_value_is_reported_growth_sensitive(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The gate, shown failing. Put the census back into the record and the
+    reading names it, the evidence file records one, and the module exits 1 —
+    so this is a check with teeth rather than a comparison of two dicts a test
+    built itself."""
+    honest = connector_transport.record
+
+    def with_the_census(measured: Mapping[str, Any]) -> dict[str, Any]:
+        committed = honest(measured)
+        committed["get_connectors_evaluated"] = measured["get_connectors_evaluated"]
+        return committed
+
+    monkeypatch.setattr(connector_transport, "record", with_the_census)
+    reading = connector_transport.measure_growth_sensitivity()
+    assert reading["gate_status"] == "measured"
+    assert reading["sensitive"] == ["get_connectors_evaluated"]
+    assert reading["growth_sensitive_evidence_keys"] == 1
+
+    assert connector_transport._main([__file__, str(tmp_path / "T89.json")]) == 1
+    assert "get_connectors_evaluated" in capsys.readouterr().err
+    written = json.loads((tmp_path / "T111.json").read_text(encoding="utf-8"))
+    assert written["growth_sensitive_evidence_keys"] == 1
+
+
+def test_the_growth_reading_is_unmeasured_when_no_package_enters_the_scan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Zero moved keys over a library that never grew is what a comparison of
+    a tree with itself also reports — `connector_health`'s probe defect, and
+    the one `naming.first_task_file` guards against for T100."""
+
+    @contextmanager
+    def grows_nothing(directory: Path) -> Iterator[Path]:
+        yield directory
+
+    monkeypatch.setattr(connector_transport, "_library_grown_by_one", grows_nothing)
+    reading = connector_transport.measure_growth_sensitivity()
+    assert reading["gate_status"] == "unmeasured"
+    assert "did not enter the scan" in reading["unmeasured_reason"]
+    assert reading["evidence_keys_compared"] == 0
+
+    assert connector_transport._main([__file__, str(tmp_path / "T89.json")]) == 3
+    assert "UNMEASURED" in capsys.readouterr().err
+
+
+def test_a_record_that_stops_committing_the_finding_fails_the_key_floor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`MINIMUM_RECORD_KEYS_COMPARED` is a literal for #297's D-4 reason: a
+    denominator asserted against the record it is the denominator of compares
+    the fix with itself. A `record` that satisfied "no key moved" by
+    committing two keys is growth-invariant and worthless, and exits 1."""
+
+    def almost_nothing(measured: Mapping[str, Any]) -> dict[str, Any]:
+        return {"gate_status": measured["gate_status"]}
+
+    monkeypatch.setattr(connector_transport, "record", almost_nothing)
+    reading = connector_transport.measure_growth_sensitivity()
+    assert reading["growth_sensitive_evidence_keys"] == 0
+    assert reading["evidence_keys_compared"] == 1
+
+    assert connector_transport._main([__file__, str(tmp_path / "T89.json")]) == 1
+    assert "floor" in capsys.readouterr().err
+
+
+def test_a_record_that_drops_only_the_finding_fails_the_key_floor_too(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Why the floor is twelve and not ten (second-reader note on #402).
+
+    The interval [10, 11] is where a floor with slack differs from one without,
+    and the case that lives there is the one that matters: a `record` that
+    commits everything *except* `get_packages_changed` — the finding itself —
+    still moves no key when the library grows, so `growth_sensitive_evidence_keys`
+    is a clean zero. Eleven keys cleared a floor of ten, and the module exited
+    0 over a record that had stopped carrying its own finding.
+    """
+    honest = connector_transport.record
+
+    def without_the_finding(measured: Mapping[str, Any]) -> dict[str, Any]:
+        return {k: v for k, v in honest(measured).items() if k != "get_packages_changed"}
+
+    monkeypatch.setattr(connector_transport, "record", without_the_finding)
+    reading = connector_transport.measure_growth_sensitivity()
+    assert reading["growth_sensitive_evidence_keys"] == 0
+    assert reading["evidence_keys_compared"] == 11
+
+    assert connector_transport._main([__file__, str(tmp_path / "T89.json")]) == 1
+    assert "only 11 record key(s) were compared" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
