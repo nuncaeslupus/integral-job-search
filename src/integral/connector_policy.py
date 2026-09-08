@@ -140,6 +140,7 @@ from __future__ import annotations
 import json
 import sys
 import urllib.robotparser
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -147,7 +148,7 @@ from typing import Any
 
 import yaml
 
-from integral import robots
+from integral import robots, second_reader
 from integral.gate_exit import worst
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -452,7 +453,26 @@ NOT_RUN = "not_run"
 
 #: The second readers this repository knows how to name. A free-text field here
 #: makes `second_reader: "checked it myself"` indistinguishable from a parser.
-KNOWN_SECOND_READERS = ("urllib.robotparser",)
+KNOWN_SECOND_READERS = ("urllib.robotparser", second_reader.NAME)
+
+#: Each named reader, and the function that asks it. A row is verified against
+#: **the reader it names**, never against whichever one this module currently
+#: prefers: `urllib.robotparser` is what the rows adjudicated before T120
+#: actually consulted, and re-checking those claims against a better parser
+#: would certify an agreement that never happened. New adjudications name
+#: `integral.second_reader`, which can refuse.
+READERS: dict[str, Callable[[str, str, str], bool]] = {
+    "urllib.robotparser": lambda text, agent, target: second_reader_allows(text, agent, target),
+    second_reader.NAME: second_reader.allows,
+}
+
+#: The reader a new adjudication gets, and the one `_classify` measures unless
+#: told otherwise. It is the longest-match reader for the reason T120 exists:
+#: the stdlib returns the first matching rule in file order, so on a file
+#: opening with `Allow: /` it cannot refuse, cannot disagree, and its agreement
+#: says nothing. This default is not a statement that the new reader is
+#: competent — `_classify` still measures it, per file, exactly as before.
+DEFAULT_SECOND_READER = second_reader.NAME
 
 #: The denominator's floor. A count of the day would move whenever a connector
 #: is added and make every such PR an evidence drift; a floor says what the
@@ -504,7 +524,9 @@ def second_reader_allows(text: str, agent: str, target: str) -> bool:
     return parser.can_fetch(agent, target)
 
 
-def _classify(text: str, agent: str) -> Competence:
+def _classify(
+    text: str, agent: str, reader: Callable[[str, str, str], bool] | None = None
+) -> Competence:
     """Can this second reader refuse anything on this file?
 
     The controls are the file's own `Disallow` patterns, turned back into
@@ -540,6 +562,7 @@ def _classify(text: str, agent: str) -> Competence:
     pattern let a competing `Allow` capture it and made a file that refuses
     `/ay` report that no negative control was possible at all.
     """
+    ask = READERS[DEFAULT_SECOND_READER] if reader is None else reader
     tried: list[str] = []
     rfc_refused: list[str] = []
     agreed: list[str] = []
@@ -551,7 +574,7 @@ def _classify(text: str, agent: str) -> Competence:
                 continue
             tried.append(target)
             rfc_allows = robots.allows_text(text, agent, target)
-            second_allows = second_reader_allows(text, agent, target)
+            second_allows = ask(text, agent, target)
             if not rfc_allows:
                 rfc_refused.append(target)
                 (false_allows if second_allows else agreed).append(target)
@@ -594,6 +617,14 @@ class _CompetenceFixture:
     expected: str
     section: str
     why: str
+    #: Which reader this `expected` is a statement about. Competence is a
+    #: property of a (file, reader) pair, so a fixture that does not name its
+    #: reader is not a fixture — it is a classification that silently changes
+    #: meaning the day the default reader changes. Every case written for T116
+    #: names `urllib.robotparser`, because its `why` describes first-match
+    #: behaviour; T120's cases name the longest-match reader and say what the
+    #: same documents look like once the second reader can refuse.
+    reader: str = "urllib.robotparser"
 
 
 #: The mechanism's fixtures. Every `expected` below was written down from RFC
@@ -778,6 +809,169 @@ Disallow: /apply
             "no `two_parsers_agreed` may rest on it."
         ),
     ),
+    # ---------------------------------------------------------------------
+    # T120's half of the table: the SAME documents, read by the longest-match
+    # reader that replaced the stdlib. Each pairs with the case above it, and
+    # the pairing is the evidence: the classification changes while the file
+    # does not, which is what "competence is a property of a (file, reader)
+    # pair" means when it is measured rather than asserted.
+    #
+    # These are not a claim that the new reader is competent. They are the
+    # measurement of it, on files whose verdicts RFC 9309 settles, and a
+    # regression that broke longest-match would turn them red rather than
+    # quietly restore the fail-open reading they exist to record.
+    # ---------------------------------------------------------------------
+    _CompetenceFixture(
+        name="the_longest_match_reader_refuses_what_the_permissive_opener_hid",
+        robots_txt="""
+User-agent: *
+Allow: /
+Disallow: /apply
+""",
+        agent="integral-job-search/0.1",
+        expected=COMPETENT,
+        section="RFC 9309 §2.2.2",
+        why=(
+            "The same document as `a_permissive_opener_hides_every_longer_disallow`, "
+            "where the stdlib classifies `incompetent`: it returns the `Allow: /` it "
+            "meets first and refuses nothing anywhere in the file. §2.2.2's most-octets "
+            "rule refuses `/apply` — six octets against one — and the reader that "
+            "implements it says so, so on this file the second reader is a second "
+            "opinion again. This is the pair that makes T120's point: identical bytes, "
+            "opposite verdicts, and the difference is which reader was asked."
+        ),
+        reader=second_reader.NAME,
+    ),
+    _CompetenceFixture(
+        name="the_longest_match_reader_is_competent_on_both_targets_not_one",
+        robots_txt="""
+User-agent: *
+Disallow: /admin
+Allow: /
+Disallow: /apply
+""",
+        agent="integral-job-search/0.1",
+        expected=COMPETENT,
+        section="RFC 9309 §2.2.2",
+        why=(
+            "The file the stdlib reads as `partially_competent`, refusing `/admin` "
+            "(whose rule it meets first) and allowing `/apply` (whose first matching "
+            "rule is `Allow: /`). §2.2.2 refuses both, each disallow being six octets "
+            "to the allow's one, and the longest-match reader refuses both — so the "
+            "verdict is `competent` and an agreement may rest on it whichever of the "
+            "two targets a row adjudicates. `partially_competent` is not a verdict "
+            "this reader escapes by construction: it is what this file would still "
+            "produce if longest-match were broken for one of the two rules."
+        ),
+        reader=second_reader.NAME,
+    ),
+    _CompetenceFixture(
+        name="the_longest_match_reader_reads_the_metacharacters_the_stdlib_ignores",
+        robots_txt="""
+User-agent: *
+Allow: /
+Disallow: /*.pdf$
+""",
+        agent="integral-job-search/0.1",
+        expected=COMPETENT,
+        section="RFC 9309 §2.2.3",
+        why=(
+            "§2.2.3 gives `*` 'any sequence of characters' and `$` the end of the "
+            "match, so `/x.pdf` is disallowed and §2.2.2 gives that pattern precedence "
+            "over `Allow: /`. The stdlib implements neither metacharacter — it matches "
+            "`/*.pdf$` as a literal prefix — and is `incompetent` here. A reader that "
+            "read `*` as 'one or more' rather than 'zero or more', or that anchored a "
+            "mid-pattern `$`, would fail this case rather than quietly widen the file."
+        ),
+        reader=second_reader.NAME,
+    ),
+    _CompetenceFixture(
+        name="the_longest_match_reader_finds_the_control_a_competing_allow_hid",
+        robots_txt="""
+User-agent: *
+Disallow: /a*
+Allow: /ax
+""",
+        agent="integral-job-search/0.1",
+        expected=COMPETENT,
+        section="RFC 9309 §2.2.3",
+        why=(
+            "`Disallow: /a*` covers `/ay`, which the literal `Allow: /ax` does not "
+            "match at all, so §2.2.2 refuses `/ay` — a negative control exists on this "
+            "file. The stdlib, with no wildcard support, finds no rule applying to "
+            "`/ay` and allows it (`incompetent`). The longest-match reader refuses it. "
+            "Note `/ax` itself stays ALLOWED for both: three octets against three is "
+            "the tie §2.2.2 gives to the allow, and a reader that resolved that tie by "
+            "file order would refuse it and be wrong in the fail-closed direction."
+        ),
+        reader=second_reader.NAME,
+    ),
+    _CompetenceFixture(
+        name="the_longest_match_reader_still_finds_no_control_on_a_bare_disallow",
+        robots_txt="""
+User-agent: *
+Disallow:
+""",
+        agent="integral-job-search/0.1",
+        expected=NO_CONTROL_POSSIBLE,
+        section="RFC 9309 §2.2.2 (empty-pattern)",
+        why=(
+            "www.workingnomads.com's whole robots.txt. An empty pattern states no path, "
+            "so no path matches it and §2.2.2's fallback allows the URI; no correct "
+            "parser refuses anything here, so no negative control can exist and a "
+            "better reader does not change that. The fixture is here precisely because "
+            "the new reader must NOT improve this verdict: a reader that manufactured "
+            "a refusal on this file — by reading the empty pattern as the zero-length "
+            "prefix every path starts with — would score as more competent while being "
+            "catastrophically wrong, refusing every path on every legacy robots.txt."
+        ),
+        reader=second_reader.NAME,
+    ),
+    _CompetenceFixture(
+        name="the_longest_match_reader_makes_no_false_refusal_on_equivalent_rules",
+        robots_txt="""
+User-agent: *
+Disallow: /jobs
+Allow: /jobs
+""",
+        agent="integral-job-search/0.1",
+        expected=NO_CONTROL_POSSIBLE,
+        section="RFC 9309 §2.2.2 (equivalent rules)",
+        why=(
+            "§2.2.2: 'If an allow rule and a disallow rule are equivalent, then the "
+            "allow rule SHOULD be used.' `/jobs` is ALLOWED, this file refuses nothing, "
+            "and no control is possible. The stdlib returns the disallow it meets first "
+            "and says False — which a competence check asking only whether some `False` "
+            "came back would score as its best showing, on the one path where it is "
+            "wrong. The replacement reader must not buy its competence that way, and "
+            "this case is what would catch it doing so: a false refusal here reads as "
+            "`incompetent`, never as competence."
+        ),
+        reader=second_reader.NAME,
+    ),
+    _CompetenceFixture(
+        name="the_longest_match_reader_does_not_borrow_another_agents_group",
+        robots_txt="""
+User-agent: OtherBot
+Disallow: /
+
+User-agent: *
+Disallow:
+""",
+        agent="integral-job-search/0.1",
+        expected=NO_CONTROL_POSSIBLE,
+        section="RFC 9309 §2.2.1",
+        why=(
+            "§2.2.1 selects one group by product token; with no group naming us the `*` "
+            "group applies, and it carries a bare `Disallow:`. `OtherBot`'s "
+            "`Disallow: /` is not a restriction on us. A reader that combined every "
+            "group, or that fell back to `*` while ALSO obeying a foreign group, would "
+            "refuse `/` here and look more competent for it — competence manufactured "
+            "out of a group we are not in, which is the same error as the false refusal "
+            "above wearing a different hat."
+        ),
+        reader=second_reader.NAME,
+    ),
 )
 
 
@@ -946,8 +1140,25 @@ class RobotsAdjudication:
         """
         if not self.robots_txt.strip():
             return []
+        ask = READERS.get(self.second_reader)
+        if ask is None:
+            # The row names no reader this module can ask — `not_run`, or a name
+            # `problems()` has already faulted above. Classify with the
+            # RFC-correct reader anyway, so the row's `allowed` paths and its
+            # standing are still checked against the file; what must not happen
+            # is an AGREEMENT being validated by a reader the row never used,
+            # and that is refused outright rather than defaulted.
+            if self.standing == TWO_PARSERS_AGREED:
+                return [
+                    f"{where}: standing {TWO_PARSERS_AGREED!r} while naming "
+                    f"{self.second_reader or '(nothing)'!r} as its second reader — an "
+                    f"agreement can only be checked against a reader this module can "
+                    f"run ({', '.join(KNOWN_SECOND_READERS)}), and this row's claim "
+                    "cannot be checked at all"
+                ]
+            ask = READERS[DEFAULT_SECOND_READER]
         try:
-            found = _classify(self.robots_txt, self.agent)
+            found = _classify(self.robots_txt, self.agent, ask)
         except robots.RobotsError as exc:
             return [f"{where}: `robots_txt` could not be classified for {self.agent!r}: {exc}"]
         problems: list[str] = []
@@ -965,7 +1176,7 @@ class RobotsAdjudication:
                     "ALLOWS it on this file — a refusal the RFC does not make is not a "
                     "negative control, it is the second reader being wrong"
                 )
-            elif second_reader_allows(self.robots_txt, self.agent, path):
+            elif ask(self.robots_txt, self.agent, path):
                 problems.append(
                     f"{where}: names {path!r} as a second-reader refusal, and the second "
                     "reader ALLOWS it on this file — the agreement this row rests on is "
@@ -1246,11 +1457,12 @@ def measure_second_readers(
 
     misclassified = []
     for fixture in fixtures:
-        found = _classify(fixture.robots_txt, fixture.agent)
+        found = _classify(fixture.robots_txt, fixture.agent, READERS[fixture.reader])
         if found.verdict != fixture.expected:
             misclassified.append(
                 {
                     "name": fixture.name,
+                    "reader": fixture.reader,
                     "section": fixture.section,
                     "expected": fixture.expected,
                     "actual": found.verdict,
@@ -1261,7 +1473,7 @@ def measure_second_readers(
             )
     violations += [
         f"competence fixture {case['name']}: {case['section']} requires "
-        f"{case['expected']}, classifier says {case['actual']}"
+        f"{case['expected']} of {case['reader']}, classifier says {case['actual']}"
         for case in misclassified
     ]
 
