@@ -1,0 +1,370 @@
+{
+  "merges_allowed_without_a_review_of_the_head": 0,
+  "prs_evaluated_at_least": 44,
+  "second_reader_reports_found_at_least": 8,
+  "docs_only_prs_excluded": 1,
+  "marker": "arsenal-second-reader: head=<40-hex head sha> verdict=CLEAR",
+  "reader_named_in_claude_md": true,
+  "floor_breaches": [],
+  "readings_that_allow_a_merge_without_a_review": [],
+  "readings": [
+    {
+      "control": "a_second_reader_cleared_this_head",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: a PR may merge once a session other than its implementer has read it",
+      "direction": ""
+    },
+    {
+      "control": "no_report_at_all",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: if no other session has read a PR, it is not reviewed",
+      "direction": ""
+    },
+    {
+      "control": "a_report_on_a_superseded_commit",
+      "required": "blocked/3",
+      "observed": "blocked/3",
+      "derived_from": "t-41fda10d: a report on the wrong commit does not count (#320's nine\nunworked findings)",
+      "direction": ""
+    },
+    {
+      "control": "a_green_check_that_was_rate_limited",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "t-41fda10d: a rate-limited check reporting `pass` must not resolve to allowed",
+      "direction": ""
+    },
+    {
+      "control": "a_green_check_skipped_on_a_draft",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "t-41fda10d: a draft-skipped check reporting `pass` must not resolve to allowed",
+      "direction": ""
+    },
+    {
+      "control": "the_author_reviewed_their_own_head",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off",
+      "direction": ""
+    },
+    {
+      "control": "the_author_quotes_another_readers_marker",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — quoting a marker is\nstill their own comment",
+      "direction": ""
+    },
+    {
+      "control": "a_docs_only_pr_with_no_report",
+      "required": "exempt/0",
+      "observed": "exempt/0",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: docs-only PRs are exempt — a handover or a task-file edit merges on green CI",
+      "direction": ""
+    },
+    {
+      "control": "a_docs_only_pr_a_second_reader_blocked",
+      "required": "blocked/1",
+      "observed": "blocked/1",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the exemption is for a diff a test would catch, not a\nlicence over an objection",
+      "direction": ""
+    },
+    {
+      "control": "a_code_pr_that_also_touches_docs",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the rule is about diffs that can be wrong in a way a test does not catch",
+      "direction": ""
+    },
+    {
+      "control": "a_report_that_only_says_reviewed_in_prose",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "t-41fda10d: do not let the marker be free text — a scan matching prose\npasses on a comment that says the word",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_with_a_truncated_sha",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "t-41fda10d: the marker names the head commit it read — an abbreviated\nsha binds nothing",
+      "direction": ""
+    },
+    {
+      "control": "a_second_reader_blocked_this_head",
+      "required": "blocked/1",
+      "observed": "blocked/1",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the report goes on the PR, naming for each finding the input and the verdict",
+      "direction": ""
+    },
+    {
+      "control": "a_head_commit_that_does_not_resolve",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "t-41fda10d: `review_reader_status: unmeasured` when the scan cannot\nresolve PRs or markers",
+      "direction": ""
+    },
+    {
+      "control": "a_pr_with_no_changed_paths_captured",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "t-41fda10d: an exclusion with no counter is silence — an unresolved\nfile list is not docs-only",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_did_not_resolve",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — an author that did not\nresolve cannot be shown to be somebody else, so self-review is not ruled out",
+      "direction": ""
+    },
+    {
+      "control": "the_author_reviewed_their_own_head_under_a_different_case",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — GitHub logins are\ncase-insensitive, so capitalising one is the same account",
+      "direction": ""
+    },
+    {
+      "control": "the_author_reviewed_their_own_head_with_a_padded_login",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — surrounding whitespace\nnames the same account",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_zero_width_space",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — `str.strip()` does not\nremove U+200B, so an invisible author is non-blank and names nobody",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_byte_order_mark",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — U+FEFF survives\n`str.strip()` for the same reason U+200B does",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_nul_byte",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — a control character is\nnot whitespace and identifies no account",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_punctuation_only",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — an author with no\nalphanumeric character names nobody a human can check, so the identity\nis unresolved rather than merely unequal to the PR's",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_an_at_mention",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — `@login` is how a\nhand-written capture ordinarily spells a login, and `@` is not a\ncharacter a GitHub login contains, so the string is no login and\nnames nobody — self-review is not ruled out",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_carries_a_trailing_full_stop",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — sentence punctuation is\nnot part of a login, so `nuncaeslupus.` is not one and names nobody",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_parenthesised",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — brackets are not login\ncharacters, so a parenthesised login is not a login",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_in_fullwidth_letterforms",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — U+FF41..U+FF5A are not\nthe ASCII letters a login is drawn from. Round 4 NFKC-folded them\nback; round 5 removed that fold because the same fold turns `™`\ninto the identity `tm`, so the spelling now names nobody instead",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_holds_internal_spaces",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — a GitHub login holds no\nspace, so a spaced spelling is not a login and names nobody",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_markdown_bullet",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — a login may neither begin\nnor end with a hyphen, so `- nuncaeslupus` is not one",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_run_of_hyphens",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — a login may neither\nbegin nor end with a hyphen, so a string of them is no login at all\nand names nobody a human can check",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_wears_an_association_badge",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — `gh` prints the author\nassociation beside the login, and round 4 welded it on as\n`nuncaeslupusowner`, an identity that is not the author's and cleared\nthe head at exit 0. A badge is not part of a login, so the string is\nnot one",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_carries_a_bot_suffix",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — brackets are outside the\nalphabet and `bot` is inside it, so round 4 welded `nuncaeslupusbot`",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_followed_by_a_role_word",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — the worst shape of the\nweld: `nuncaeslupus-maintainer` is a WELL-FORMED login that no account\nbears, so nothing downstream could tell it was manufactured",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_superscript_digit",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — U+00B2 is not an ASCII\ndigit; NFKC rewrote it into the identity `2`, which named a second\nreader that does not exist",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_roman_numeral",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — NFKC LENGTHENS U+2167\ninto `VIII`, which is the counterexample to round 4's claim that the\ntransform only ever merges",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_trademark_sign",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — `™` became `tm`, a login\nshape a human would read as an account and could not find",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_circled_letter",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — a circled letterform is\npresentation, and folding it produced the identity `a`",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_vulgar_fraction",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — `½` folds to a digit, a\nFRACTION SLASH and a digit; the slash is then deleted, welding the\nidentity `12`: a rewrite and a weld in one character",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_squared_unit",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — `㎏` folds to `kg`",
+      "direction": ""
+    },
+    {
+      "control": "the_pr_authors_own_field_wears_an_association_badge",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — the mirror of #31. The\nauthor welded to `nuncaeslupusowner`, so their own marker read as a\nsecond reader's and cleared the head at exit 0",
+      "direction": ""
+    },
+    {
+      "control": "the_pr_authors_own_field_carries_a_bot_suffix",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — the mirror of #32, and\nthe direction that matters: a decorated AUTHOR field is what lets the\nauthor be somebody else",
+      "direction": ""
+    },
+    {
+      "control": "the_pr_authors_own_field_is_a_compatibility_character",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "t-41fda10d: an unresolvable PR author is `unresolvable/2` — round 4\nrewrote `™` into the identity `tm` and answered `allowed/0` over a PR\nwhose author it had invented",
+      "direction": ""
+    },
+    {
+      "control": "the_pr_authors_own_field_is_in_fullwidth_letterforms",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "t-41fda10d: the author-side mirror of #26. It was already fail-closed\nunder round 4 (folded to the same account, `blocked/2`) and stays\nfail-closed here for a different reason — a fullwidth spelling is not\na login. Committed so the AUTHOR side has a control either way",
+      "direction": ""
+    },
+    {
+      "control": "the_pr_author_written_in_another_case_is_still_the_same_account",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — casefold survives the\nvalidator, on the AUTHOR side too: GitHub logins are case-insensitive",
+      "direction": ""
+    },
+    {
+      "control": "a_second_reader_whose_login_holds_a_digit",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: a PR may merge once a session other than its implementer has\nread it — digits are in the login grammar and must not be refused",
+      "direction": ""
+    },
+    {
+      "control": "a_second_reader_whose_login_begins_with_a_digit",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: a login may begin with a digit, so `^[A-Za-z0-9]` and not\n`^[A-Za-z]` — a validator that refused this would block real readers",
+      "direction": ""
+    },
+    {
+      "control": "a_second_reader_whose_login_is_padded_by_the_capture",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: a PR may merge once a session other than its implementer has\nread it — outer whitespace is transport framing, not identity, and it\nis the one thing `str.strip()` may still remove because it cannot weld",
+      "direction": ""
+    },
+    {
+      "control": "a_second_reader_whose_login_differs_only_by_hyphens",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: a PR may merge once a session other than its implementer has\nread it — the hyphen IS in the login alphabet, so `nunca-es-lupus` is\na different account from `nuncaeslupus` and this control is the one\nthat stops the round-4 fold from merging two real people into one",
+      "direction": ""
+    },
+    {
+      "control": "a_second_reader_whose_login_is_the_longest_github_allows",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: a PR may merge once a session other than its implementer has\nread it — 39 characters is the longest login GitHub\nissues, so the bound must clear it or it refuses real second readers",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_longer_than_any_github_login",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "t-41fda10d (#408 F1): a string no GitHub account can bear names nobody,\nso it is `unresolvable/2`. Unbounded it validated and cleared the head\nat exit 0 — the fail-open direction over a grammar meant to be closed",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_pads_past_the_bound_with_hyphens",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "t-41fda10d (#408 F1): the bound is on CHARACTERS, not on alphanumerics.\n41 characters of well-formed alternation is still longer than any login,\nand the obvious spelling of the bound — `(?:-?[A-Za-z0-9]){0,38}` —\ncounts pairs and lets 77 characters through. This is the control that\ndistinguishes the two",
+      "direction": ""
+    },
+    {
+      "control": "an_author_weld_that_stays_inside_the_alphabet_is_a_known_limitation",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "t-41fda10d (#408 F2): RECORDED LIMITATION, not a requirement of the\nrule. A weld inside the login alphabet is a well-formed login for\nanother account and validation cannot distinguish it from a real\nsecond reader whose name shares a prefix. Unreachable at every capture\nformat that exists today — all of them separate with a character the\nalphabet refuses — and committed so that stops being true out loud",
+      "direction": ""
+    }
+  ],
+  "review_reader_status": "measured"
+}

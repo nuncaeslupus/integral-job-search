@@ -191,7 +191,74 @@ rule is about diffs that can be wrong in a way a test does not already catch.
 
 `D-28` (`claude-arsenal#313`) is re-scoped to this: not "read CodeRabbit's signal" but
 "a merge must not proceed until a second-reader report exists for the head commit".
-That is a checkable condition, which the bot's never was.
+That is a checkable condition, which the bot's never was — **and it now has a
+reader**, so the rule above is no longer only prose.
+
+**End the report with the marker, and check it before merging.** The marker is
+emitted, never typed: prose saying "reviewed" passes a scan that matches words and
+fails on a thorough review that does not use them.
+
+```bash
+uv run python -m integral.review_reader emit --head <40-hex head sha>   # the reader pastes this last line
+uv run python -m integral.review_reader check <pr-state.json>           # the merger runs this
+```
+
+`check` reads a small JSON capture — `number`, `author`, `head_sha`, `files`,
+`comments[{author, body}]` — written to disk from a GitHub tool result, the same
+way the board JSON is, so it works on a surface whose REST channel answers 403.
+Its exit codes are `adversarial_review.sh`'s, and for the same reason: **0** a
+second reader cleared *this* head (or the PR is docs-only and exempt), **1** a
+second reader said BLOCK, **2** no report on record, **3** a report exists but for
+another commit. **2 and 3 are not passes** — a review of an earlier tree is not a
+review of this one, which is what #320 cost nine unworked findings. A marker
+written by the PR's own author never counts, including one they quote from
+somebody else's report — and one whose author did not resolve at all counts for
+nobody: an identity that cannot be shown to differ from the implementer's does
+not rule self-review out.
+
+**How an author becomes an identity is one rule: the string must already BE a
+login.** #408 took **five** review rounds, and each of the first four normalised
+one more layer of decoration and stopped — a blank author, then case, then
+invisible padding, then visible padding (`@nuncaeslupus`, `nuncaeslupus.`,
+`(nuncaeslupus)`, the fullwidth `ｎｕｎｃａｅｓｌｕｐｕｓ`, `nunca es lupus`), every
+one of them clearing that account's own PR through this very CLI at exit 0. So
+the rule is now stated as a **validator**, not a transform:
+
+> `resolve_identity` trims outer whitespace, requires the whole string to match
+> `[A-Za-z0-9](?:-?[A-Za-z0-9])*`, and casefolds. **Anything else returns
+> `None`** — unresolvable, exit 2 — and is never repaired into an identity.
+
+**The paragraph this replaces was wrong, and the way it was wrong is the lesson.**
+Round 4's rule was *NFKC-fold, then delete everything outside `[A-Za-z0-9-]`*,
+defended here as safe because "the transform only ever *merges* strings … so
+every collision pushes toward `blocked`". Both halves are false:
+
+- **An allowlist applied as a deletion filter enumerates by complement.** It
+  removes only decoration made of characters *outside* the alphabet; decoration
+  made of characters *inside* it is **welded onto the login**, and a weld is a
+  different identity, which reads as somebody else and clears the PR.
+  `nuncaeslupus (OWNER)` — a `gh` association badge, one step past round 4's own
+  accepted `(nuncaeslupus)` — became `nuncaeslupusowner`: exit 0,
+  `merge_may_proceed: true`, on a PR authored by `nuncaeslupus`.
+- **The transform did not only merge.** Its own worked example refutes it:
+  `resolve_identity("straße")` returned `strae`, **not** `strasse`. Deletion
+  shortens and NFKC lengthens (`™`→`TM`, `№`→`No`, `Ⅷ`→`VIII`), so it **split**
+  too — and every split is **fail-open**, because a split moves a writer away
+  from the author and toward "somebody else". `²`, `Ⅷ`, `™`, `Ⓐ`, `½` and `㎏`
+  each resolved alone to a distinct identity and cleared the head at exit 0.
+
+The discriminator is therefore not whether the output *looks* like a login (`2`
+looks no worse than `reviewer`) but whether normalisation had to **rewrite the
+input into something else**. Validation cannot: it returns the login GitHub
+itself would case-fold, or nothing. `nunca-es-lupus` is the control that the
+strictness has not gone too far — the hyphen is in the grammar, so a hyphenated
+login is a different, real account and still clears at exit 0.
+
+`status/evidence/D28.json` is the gate: `merges_allowed_without_a_review_of_the_head`
+over forty-seven constructed states — including the PR-**author**-side mirrors no
+round before the fifth had, which is structurally why each stopped one layer
+short — with `-1` and `review_reader_status: unmeasured` rather than a clean zero
+when the scan resolves nothing.
 
 ## Work each task in a linked worktree — that is the whole branch protocol
 
