@@ -1294,6 +1294,12 @@ class ListPage(Strict):
     #: The HTTP method the engine issues for this listing. `GET` by default,
     #: so every connector written before T89 is unchanged — a board whose
     #: search is a POST was simply unreachable, however public it was.
+    #:
+    #: `POST` and `body_json` imply each other, in both directions
+    #: (`_a_post_and_a_body_imply_each_other`): a body without a POST cannot be
+    #: sent, and a POST without a body has no declared form to derive a
+    #: `Content-Type` from, so it would go out with none. There is therefore no
+    #: legal bodyless POST — T110.
     method: Literal["GET", "POST"] = "GET"
     #: The request body, declared as **data** — a YAML mapping, which is a
     #: parsed structure before this schema ever sees it. There is deliberately
@@ -1455,14 +1461,33 @@ class ListPage(Strict):
         return body
 
     @model_validator(mode="after")
-    def _only_a_post_carries_a_body(self) -> ListPage:
-        # The default did not move: a GET connector sends no body, and one that
-        # declares a body has contradicted its own method rather than quietly
-        # getting a body it cannot send.
+    def _a_post_and_a_body_imply_each_other(self) -> ListPage:
+        # Both directions, because the schema having an opinion about one of
+        # them and none about the other is what T110 found. The default did
+        # not move: a GET connector sends no body, and one that declares a
+        # body has contradicted its own method rather than quietly getting a
+        # body it cannot send.
         if self.body_json is not None and self.method != "POST":
             raise ValueError(
                 f"list.body_json is declared but list.method is {self.method!r} — only a "
                 "POST carries a request body"
+            )
+        # The other direction (T110). `Content-Type` is derived from the
+        # declared body form and from nothing else — that is what stops a
+        # connector naming a header — so a POST with no `body_json` is the one
+        # shape this schema can express and the engine cannot send properly:
+        # `build_list_requests` took its bodyless branch and produced
+        # `method="POST"` with no `Content-Type`, which several back ends
+        # answer 400 or 415 to. Refused rather than blessed: a body is what
+        # makes a POST a POST here, so a POST without one is a connector file
+        # that means a GET, and the cost of being wrong that way is a
+        # contributor reading one error message. Blessing it would have meant
+        # inventing a second content type for a request with no content.
+        if self.method == "POST" and self.body_json is None:
+            raise ValueError(
+                "list.method is 'POST' but no list.body_json is declared — a POST carries a "
+                "body, and its Content-Type is derived from that body, so a bodyless POST "
+                "would go out with none; declare body_json, or say method: GET"
             )
         return self
 
@@ -2018,14 +2043,40 @@ def build_list_requests(
     A GET connector gets exactly what it always did — its URL, no body, no
     headers — which is the property the gate enumerates over every committed
     package rather than trusting to review.
+
+    The bodyless branch is a GET branch and says so (T110). It used to be
+    reached by `method: POST` with no `body_json` as well, and emitted a POST
+    with no `Content-Type` — a request no connector meant to describe.
+    `_a_post_and_a_body_imply_each_other` now refuses that document at load,
+    and the clamp is repeated here for the reason `build_list_urls` repeats
+    its own: an object built with `model_copy(update=...)` never met a
+    validator, so a property this module is asked to keep is kept where the
+    request is actually made and not only where the file is read.
     """
     page = connector.list
     urls = build_list_urls(connector, page_count=page_count, query=query)
     if page.body_json is None:
+        if page.method != "GET":
+            raise ConnectorError(
+                f"{connector.site}: list.method is {page.method!r} with no list.body_json — "
+                "the body is what a Content-Type is derived from, so this request would go "
+                "out with none; declare body_json, or say method: GET"
+            )
         derived = client_headers(page.client, page.client_target)
         return [
             ListRequest(url=url, method=page.method, headers=derived, body=None) for url in urls
         ]
+    if page.method != "POST":
+        # The other half of the same clamp (T110). `_a_post_and_a_body_imply_each_other`
+        # refuses this document too, and repeating only the bodyless-POST half here
+        # would have left the validator symmetric and the builder not: an object made
+        # with `model_copy(update=...)` could still reach this branch as a GET and be
+        # issued with a body and a `Content-Type` — a request in a shape no connector
+        # can declare, which is precisely what the clamp exists to make unreachable.
+        raise ConnectorError(
+            f"{connector.site}: list.body_json is declared but list.method is "
+            f"{page.method!r} — only a POST carries a request body"
+        )
     start = page.pagination.start
     # `pagination.param` names a *body* key only under `mode: body_field`; under
     # `query_param` and `path_segment` it names a URL key, and handing that name to
