@@ -39,7 +39,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from integral.taskboard import DEFAULT_HISTORY_DIR, DEFAULT_TASKS_DIR, load_board
 
@@ -124,6 +124,51 @@ _DIAGNOSTIC_ONLY = frozenset({"withheld_for_the_comparison"})
 _SECTION_RE = re.compile(r"##\s+Acceptance gate\s*\n(.*?)(?=\n##\s|\Z)", re.DOTALL | re.IGNORECASE)
 _BLOCK_RE = re.compile(r"```gate\s*\n(.*?)```", re.DOTALL)
 _GATE_RE = re.compile(r"(<=|>=|==|!=|<|>)\s*([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)")
+
+#: The fence opener, and the whole of what `tools/verify_gates.py` used to
+#: test for. T122: a substring is not a grammar. A payload can carry these
+#: seven characters and still declare nothing any reader will read — the label
+#: bolded rather than headed, the fence in a section the reader's regex has
+#: already walked past, the string quoted inside a ``text`` block. Every one of
+#: those counted as a gate and was then handed to a checker that extracted
+#: nothing and exited 0, so the board's "gate(s) asserted" tally went *up* for
+#: a task whose evidence file was never opened and was not required to exist.
+GATE_FENCE = "```gate"
+
+
+def gate_declaration(text: str) -> Literal["readable", "unreadable", "absent"]:
+    """What a payload's gate fence amounts to, by the grammar that reads it.
+
+    Three outcomes, because the two that a boolean conflates need different
+    handling and it is their conflation that T122 is about:
+
+    * ``readable`` — `parse_gate_block` extracts a block, so `gate_evidence.py`
+      extracts the same one and asserts it. This is the only state in which a
+      task may be counted among the gates a verifier asserted.
+    * ``unreadable`` — the fence is *there* and no reader reaches it. Not an
+      ungated task: an ungated task is a task whose author declared no gate,
+      and this one declared one that nothing enforces. Reporting it as ungated
+      is what let `t-2a30f58a` and `t-246f6dde` (#334) sit at terminal status
+      with their evidence files never opened, so it is reported as a fault.
+    * ``absent`` — no fence at all. `t-62612ae0` (T124) is the board's one
+      honest case: an executable ``bash`` gate and no evidence block, which
+      this layer has nothing to say about.
+
+    The readable case is decided by `parse_gate_block` — the module comment
+    above says why that is a *mirror* of `gate_evidence.py`'s regexes rather
+    than an import of them, and a mirror is still two descriptions of one
+    grammar. What T122 removes is the **third** description: `verify_gates.py`
+    counting fences by substring while the checker read them by grammar. The
+    remaining mirror is covered from the other end — a gate counted as
+    asserted whose checker printed nothing is reported as a fault by
+    `verify_gates.main`, which is a behavioural check that holds however far
+    the two regex sets drift.
+    """
+    if parse_gate_block(text) is not None:
+        return "readable"
+    if GATE_FENCE in text:
+        return "unreadable"
+    return "absent"
 
 
 @dataclass(frozen=True)

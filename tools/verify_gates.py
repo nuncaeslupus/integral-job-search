@@ -17,6 +17,21 @@ So this runs in CI, on every push, over the *whole* board:
    — the same checker `gate_run.sh` uses, so CI and the release path speak one
    language rather than two that drift apart.
 
+1b. **What counts as declaring a gate is the checker's own answer.** This file
+   used to decide it from the substring ``` ```gate ``` anywhere in the payload
+   while the checker read only the first fence inside the first
+   ``## Acceptance gate`` *heading*'s section. Where the two disagreed the task
+   was counted among "gate(s) asserted" and then checked by a reader that
+   asserted nothing, so the asserted tally went **up** for a task whose evidence
+   file was never opened — measured on #334 over `t-2a30f58a` and `t-246f6dde`,
+   whose label was bold rather than a heading. One predicate now answers both
+   questions (`integral.task_gate.gate_declaration`), a fence no reader reaches
+   is a **failure** rather than a quieter tally, and a counted gate whose
+   checker printed nothing is a failure too — the second is the end-to-end
+   catch that survives any future drift between the two grammars.
+   `status/evidence/T122.json` measures both, over this board and over a fixture
+   per way a fence can be present and unread.
+
 2. **An open task with no evidence is not a failure.** A task nobody has
    started legitimately has no measurement, and demanding one would make the
    whole board red from the first commit and stay that way — a check that is
@@ -61,6 +76,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from integral.task_gate import gate_declaration
 from integral.taskboard import load_board
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -105,14 +121,13 @@ def load_tasks(queue: Path) -> list[dict[str, object]]:
     return rows
 
 
-def declares_a_gate(payload: Path) -> bool:
-    """Whether the payload carries a fenced ``gate`` block.
-
-    The fence is what makes a gate mechanical — prose describing a threshold,
-    or one in single backticks, is not checked by anything. A payload without
-    the block has nothing for this tool to assert.
-    """
-    return "```gate" in payload.read_text(encoding="utf-8")
+# There is deliberately no local `declares_a_gate` any more. It was
+# ``"```gate" in payload.read_text(...)`` — a second description of a grammar
+# whose only implementation is `gate_evidence.py`'s regexes, and the gap
+# between the two descriptions is T122. Rewriting it to delegate would leave
+# the same shape: a predicate that `main` might or might not be the caller of,
+# free to drift again the moment somebody adds a branch. `main` asks
+# `gate_declaration` directly, and the fence is classified in exactly one place.
 
 
 def check_payload(payload: Path) -> tuple[bool, str]:
@@ -131,6 +146,16 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--queue", type=Path, default=QUEUE_PATH)
     parser.add_argument("--payload-dir", type=Path, default=PAYLOAD_DIR)
+    parser.add_argument(
+        "--report-json",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "write what this run counted and what the checker actually read to PATH — "
+            "the input `integral.gate_reader_agreement` measures T122's gate from"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -144,7 +169,10 @@ def main(argv: list[str] | None = None) -> int:
 
     checked = 0
     ungated = 0
+    compared = 0
     failures: list[str] = []
+    unreadable: list[str] = []
+    silently_unread: list[str] = []
 
     for row in rows:
         if row.get("status") not in TERMINAL:
@@ -155,12 +183,40 @@ def main(argv: list[str] | None = None) -> int:
         if not payload.exists():
             failures.append(f"{task_id}: recorded {row.get('status')} but has no payload file")
             continue
-        if not declares_a_gate(payload):
+        compared += 1
+        declaration = gate_declaration(payload.read_text(encoding="utf-8"))
+        if declaration == "unreadable":
+            # T122. Not the same thing as declaring no gate, and reporting it
+            # as one is what let two terminal tasks sit in the "gate(s)
+            # asserted" tally with their evidence files never opened. The
+            # author wrote a gate; no reader reaches it; the honest verdict is
+            # a refusal, not a quieter tally.
+            unreadable.append(task_id)
+            failures.append(
+                f"{task_id} ({payload_name}): carries a ```gate fence that no reader reaches — "
+                "the label must be a `## Acceptance gate` heading and the fence must sit "
+                "inside that section, before the next `##`"
+            )
+            continue
+        if declaration == "absent":
             ungated += 1
             continue
         passed, output = check_payload(payload)
         checked += 1
-        if not passed:
+        if passed and not output.strip():
+            # The end-to-end half of the same defect, and the one that survives
+            # any future drift between this file's grammar and the checker's:
+            # a gate counted as asserted whose checker printed nothing at all
+            # was not asserted. `gate_evidence.py` exits 0 in exactly two
+            # states — it read a block and the measurement cleared the
+            # threshold (and says so on stdout), or it found no block and
+            # returned silently. Only the second is mute.
+            silently_unread.append(task_id)
+            failures.append(
+                f"{task_id} ({payload_name}): counted as asserting a gate, and the evidence "
+                "checker read nothing — a silent pass is not a measurement"
+            )
+        elif not passed:
             reason = output.splitlines()[-1] if output else "gate check failed with no output"
             failures.append(f"{task_id} ({payload_name}): {reason}")
 
@@ -169,6 +225,24 @@ def main(argv: list[str] | None = None) -> int:
         f"verify-gates: {terminal} terminal task(s); {checked} gate(s) asserted, "
         f"{ungated} carry no fenced gate block"
     )
+    if args.report_json is not None:
+        args.report_json.parent.mkdir(parents=True, exist_ok=True)
+        args.report_json.write_text(
+            json.dumps(
+                {
+                    "terminal": terminal,
+                    "compared": compared,
+                    "counted_as_asserted": checked,
+                    "ungated": ungated,
+                    "unreadable_fences": unreadable,
+                    "counted_as_asserted_but_never_read": silently_unread,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     for failure in failures:
         print(f"  FAIL {failure}", file=sys.stderr)
 
