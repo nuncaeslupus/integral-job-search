@@ -212,10 +212,12 @@ second reader said BLOCK, **2** no report on record, **3** a report exists but f
 another commit. **2 and 3 are not passes** — a review of an earlier tree is not a
 review of this one, which is what #320 cost nine unworked findings. A marker
 written by the PR's own author never counts, including one they quote from
-somebody else's report.
+somebody else's report — and one whose author did not resolve at all counts for
+nobody: an identity that cannot be shown to differ from the implementer's does
+not rule self-review out.
 
 `status/evidence/D28.json` is the gate: `merges_allowed_without_a_review_of_the_head`
-over fifteen constructed states, `-1` and `review_reader_status: unmeasured`
+over sixteen constructed states, `-1` and `review_reader_status: unmeasured`
 rather than a clean zero when the scan resolves nothing.
 
 ## Work each task in a linked worktree — that is the whole branch protocol

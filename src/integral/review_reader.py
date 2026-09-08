@@ -54,7 +54,11 @@ Three properties are read off it and each is a way a report can fail to be one:
   stale, not absent — a distinction the exit codes keep.
 * **The comment's author must not be the PR's author.** The implementer never
   signs it off; a marker the author quotes out of somebody else's report is
-  still their own comment, and is refused.
+  still their own comment, and is refused. A **blank** author is refused for the
+  same reason the PR's own blank author is: `author != pr.author` is vacuously
+  true for an identity that never resolved, so the one relation this module
+  reasons about would read an unknown writer as a second reader — approval out
+  of an absence, the shape the whole module refuses.
 * **`verdict=BLOCK` blocks**, including on a docs-only PR. Exemption applies to
   a PR nobody objected to, never over an objection somebody raised.
 
@@ -131,7 +135,7 @@ UNRESOLVABLE = "unresolvable"
 #: Floors, in `naming.MINIMUM_SCANNED` style (T100). Committed as the value the
 #: code asserts rather than the count of the day, so the record is invariant
 #: under adding a control.
-MINIMUM_PRS_EVALUATED = 12
+MINIMUM_PRS_EVALUATED = 13
 MINIMUM_REPORTS_FOUND = 2
 
 
@@ -212,7 +216,10 @@ def read(pr: PullRequest) -> Verdict:
     The order of the checks is load-bearing:
 
     1. An unresolvable head or an empty file list is `unresolvable` — code 2,
-       the same as no report, because neither is a pass.
+       the same as no report, because neither is a pass. So is a marker whose
+       *comment* author is blank: an identity that did not resolve cannot be
+       shown to differ from the PR's, so self-review cannot be ruled out and it
+       is not a second reader.
     2. A `BLOCK` on the head blocks, **before** the docs-only exemption is
        considered. Exemption is for a PR nobody objected to.
     3. A `CLEAR` on the head by somebody other than the author allows.
@@ -241,6 +248,12 @@ def read(pr: PullRequest) -> Verdict:
     by_the_author = False
     for comment in pr.comments:
         for marked_head, verdict in markers(comment.body):
+            if not comment.author.strip():
+                return Verdict(
+                    UNRESOLVABLE,
+                    2,
+                    "a marker's author is unknown, so self-review cannot be ruled out",
+                )
             if comment.author == pr.author:
                 by_the_author = True
                 continue
@@ -492,6 +505,14 @@ def _control_prs() -> tuple[tuple[str, PullRequest, str, int, str], ...]:
             2,
             "t-41fda10d: an exclusion with no counter is silence — an unresolved\n"
             "file list is not docs-only",
+        ),
+        (
+            "a_marker_whose_author_did_not_resolve",
+            PullRequest(16, "author", _HEAD, code, (Comment("", marker_line(_HEAD)),)),
+            UNRESOLVABLE,
+            2,
+            f"{rule}: the implementer never signs it off — an author that did not\n"
+            "resolve cannot be shown to be somebody else, so self-review is not ruled out",
         ),
     )
 

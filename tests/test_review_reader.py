@@ -97,6 +97,28 @@ def test_the_pr_author_cannot_review_their_own_head() -> None:
     assert (verdict.state, verdict.code) == (rr.BLOCKED, 2)
 
 
+@pytest.mark.parametrize("who", ["", " ", "   \t "])
+def test_a_marker_from_an_unresolved_author_is_not_a_second_reader(who: str) -> None:
+    """A blank comment author is refused exactly as a blank PR author is.
+
+    `read` decides "somebody else" from the single relation
+    `comment.author == pr.author`, and that relation is vacuously false for an
+    identity that never resolved — so without this guard an unattributed marker
+    clears the PR (`allowed/0`, *"a second reader () cleared …"*). Approval read
+    out of an absence is the shape the module exists to refuse, and it is the
+    fail-open direction: the unknown writer may be the implementer.
+    """
+    verdict = rr.read(_pr(comments=(_report(author=who),)))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
+
+
+def test_an_unresolved_author_on_a_comment_carrying_no_marker_changes_nothing() -> None:
+    """The guard fires on markers, not on every comment a capture happens to hold."""
+    verdict = rr.read(_pr(comments=(rr.Comment("", "+1"), _report())))
+    assert (verdict.state, verdict.code) == (rr.ALLOWED, 0)
+
+
 def test_the_author_quoting_another_readers_marker_is_still_a_self_review() -> None:
     quoted = rr.Comment("author", f"They wrote:\n\n> {rr.marker_line(HEAD)}")
     verdict = rr.read(_pr(comments=(quoted,)))

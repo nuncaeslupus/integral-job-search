@@ -1,6 +1,6 @@
 {
   "merges_allowed_without_a_review_of_the_head": 0,
-  "prs_evaluated_at_least": 12,
+  "prs_evaluated_at_least": 13,
   "second_reader_reports_found_at_least": 2,
   "docs_only_prs_excluded": 1,
   "marker": "arsenal-second-reader: head=<40-hex head sha> verdict=CLEAR",
@@ -111,6 +111,13 @@
       "required": "unresolvable/2",
       "observed": "unresolvable/2",
       "derived_from": "t-41fda10d: an exclusion with no counter is silence — an unresolved\nfile list is not docs-only",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_did_not_resolve",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — an author that did not\nresolve cannot be shown to be somebody else, so self-review is not ruled out",
       "direction": ""
     }
   ],
