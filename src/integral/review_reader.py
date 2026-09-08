@@ -141,8 +141,13 @@ UNRESOLVABLE = "unresolvable"
 #: the evidence counts twelve more than it did."* Seventeen controls were added
 #: (47 states, 7 head-bound reports), and a floor left at the old value would let
 #: every one of them be deleted again without the record noticing.
-MINIMUM_PRS_EVALUATED = 40
-MINIMUM_REPORTS_FOUND = 6
+#:
+#: Raised again by the round-5 second-reader report — 40→44 and 6→8 — for the
+#: same reason: four controls landed (51 states, 9 head-bound reports), three for
+#: F1's length bound and one recording F2's limitation, and each floor moves by
+#: exactly what was added so the margin over the observed count is unchanged.
+MINIMUM_PRS_EVALUATED = 44
+MINIMUM_REPORTS_FOUND = 8
 
 
 @dataclass(frozen=True)
@@ -217,9 +222,28 @@ def _is_sha(value: str) -> bool:
 
 
 #: Everything a GitHub login **is**: ASCII letters and digits, with interior
-#: single hyphens. This is applied as a **validator** over the whole string —
-#: never as a filter over its characters — and `resolve_identity` says why.
-_GITHUB_LOGIN = re.compile(r"[A-Za-z0-9](?:-?[A-Za-z0-9])*")
+#: single hyphens, and **at most 39 characters**. This is applied as a
+#: **validator** over the whole string — never as a filter over its characters —
+#: and `resolve_identity` says why.
+#:
+#: The length bound is #408's F1: unbounded, `"r" * 5000` validated and cleared a
+#: head at exit 0 — a string no GitHub account can bear, accepted as a second
+#: reader. That is not a self-clearance path, which is why the round-5 verdict was
+#: CLEAR, but it is the fail-open direction, and a grammar written to say what a
+#: login **is** has to be closed in every direction or it is back to enumerating.
+#:
+#: The repetition consumes exactly **one** character per step — `-(?=[A-Za-z0-9])`
+#: takes the hyphen and only looks ahead at the alphanumeric — so `{0,38}` bounds
+#: the whole string at 39 rather than bounding the number of alnum characters.
+#: The obvious spelling, `(?:-?[A-Za-z0-9]){0,38}`, does the latter and lets a
+#: hyphen-alternating 77-character string through; `#50` is the control on that.
+#: This is GitHub's own documented username grammar, character for character, and
+#: it refuses `--` for exactly the reason the round-5 hypothesis was refuted: no
+#: branch consumes a hyphen that is not followed by an alphanumeric.
+_GITHUB_LOGIN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}")
+
+#: The bound above, named so a control can cite it rather than restating `39`.
+MAXIMUM_LOGIN_LENGTH = 39
 
 
 def resolve_identity(raw: str) -> str | None:
@@ -303,6 +327,19 @@ def resolve_identity(raw: str) -> str | None:
     `nunca-es-lupus` is the control on that: the hyphen is in the grammar, so a
     hyphenated login is a different, well-formed account and still clears
     `nuncaeslupus`'s PR at code 0.
+
+    **Length is part of the grammar** and the round-5 report found it missing:
+    `"r" * 5000` validated and cleared a head at 0. `_GITHUB_LOGIN` now bounds
+    the whole string at `MAXIMUM_LOGIN_LENGTH`, with controls at 39 (clears) and
+    at 40 (refuses) so the boundary is pinned on the side that would refuse real
+    readers as well as on the side that let a non-login through.
+
+    **One fail-open survives and is recorded rather than fixed**: a weld that
+    stays *inside* the alphabet — `nuncaeslupusOWNER` — is a well-formed login
+    for another account, so it resolves and clears its own author's PR.
+    Validation cannot see it, and no rule that refused it would spare `nunca`
+    reviewing `nuncaeslupus`. Control #51 asserts that behaviour and says what
+    keeps it unreachable today.
     """
     candidate = raw.strip()
     if not _GITHUB_LOGIN.fullmatch(candidate):
@@ -1027,6 +1064,98 @@ def _control_prs() -> tuple[tuple[str, PullRequest, str, int, str], ...]:
             "read it — the hyphen IS in the login alphabet, so `nunca-es-lupus` is\n"
             "a different account from `nuncaeslupus` and this control is the one\n"
             "that stops the round-4 fold from merging two real people into one",
+        ),
+        # ── The bound on the alphabet (#408 F1). The grammar said what a login
+        # is made OF and never how long it may be, so `"r" * 5000` validated and
+        # cleared a head at exit 0. Both sides of the boundary are pinned: a
+        # bound committed only on its failing side is a bound nothing stops from
+        # being tightened until it refuses real readers.
+        (
+            "a_second_reader_whose_login_is_the_longest_github_allows",
+            PullRequest(
+                48,
+                "author",
+                _HEAD,
+                code,
+                (Comment("r" * MAXIMUM_LOGIN_LENGTH, marker_line(_HEAD)),),
+            ),
+            ALLOWED,
+            0,
+            f"{rule}: a PR may merge once a session other than its implementer has\n"
+            f"read it — {MAXIMUM_LOGIN_LENGTH} characters is the longest login GitHub\n"
+            "issues, so the bound must clear it or it refuses real second readers",
+        ),
+        (
+            "a_marker_whose_author_is_longer_than_any_github_login",
+            PullRequest(
+                49,
+                "author",
+                _HEAD,
+                code,
+                (Comment("r" * (MAXIMUM_LOGIN_LENGTH + 1), marker_line(_HEAD)),),
+            ),
+            UNRESOLVABLE,
+            2,
+            "t-41fda10d (#408 F1): a string no GitHub account can bear names nobody,\n"
+            "so it is `unresolvable/2`. Unbounded it validated and cleared the head\n"
+            "at exit 0 — the fail-open direction over a grammar meant to be closed",
+        ),
+        (
+            "a_marker_whose_author_pads_past_the_bound_with_hyphens",
+            PullRequest(
+                50,
+                "author",
+                _HEAD,
+                code,
+                (Comment("a-" * 20 + "a", marker_line(_HEAD)),),
+            ),
+            UNRESOLVABLE,
+            2,
+            "t-41fda10d (#408 F1): the bound is on CHARACTERS, not on alphanumerics.\n"
+            "41 characters of well-formed alternation is still longer than any login,\n"
+            "and the obvious spelling of the bound — `(?:-?[A-Za-z0-9]){0,38}` —\n"
+            "counts pairs and lets 77 characters through. This is the control that\n"
+            "distinguishes the two",
+        ),
+        # ── A RECORDED LIMITATION, not a passing property (#408 F2) ──────────
+        # This control asserts what the reader does TODAY, and what it does today
+        # is fail open. `nuncaeslupusOWNER` is the PR author's login with an
+        # association badge welded on *inside* the alphabet, so it is a
+        # well-formed login for a different account, resolves, and clears the
+        # author's own PR at exit 0. Validation cannot see it: `nuncaeslupusowner`
+        # and `nuncaeslupus` are two logins, and refusing one because it contains
+        # the other would refuse `nunca` reviewing `nuncaeslupus` — a real reader.
+        #
+        # It is unreachable as capture formats stand: every spelling `gh` or a
+        # GitHub badge actually emits separates the login from the decoration with
+        # a space, parens or brackets — `nuncaeslupus (OWNER)` (#31),
+        # `nuncaeslupus[bot]` (#32), `nuncaeslupus - maintainer` — and every one of
+        # those is refused, because the separator is outside the alphabet. The weld
+        # has to be typed by hand.
+        #
+        # What would make it reachable: any capture path that strips punctuation
+        # before this module sees the author, or a tool that concatenates a login
+        # and a role with no separator. The day either appears, this control turns
+        # red in the fail-open direction, which is the whole reason it is committed
+        # rather than left in a review comment — an unreachable fail-open nobody
+        # wrote down becomes a reachable one the day a format changes.
+        (
+            "an_author_weld_that_stays_inside_the_alphabet_is_a_known_limitation",
+            PullRequest(
+                51,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("nuncaeslupusOWNER", marker_line(_HEAD)),),
+            ),
+            ALLOWED,
+            0,
+            "t-41fda10d (#408 F2): RECORDED LIMITATION, not a requirement of the\n"
+            "rule. A weld inside the login alphabet is a well-formed login for\n"
+            "another account and validation cannot distinguish it from a real\n"
+            "second reader whose name shares a prefix. Unreachable at every capture\n"
+            "format that exists today — all of them separate with a character the\n"
+            "alphabet refuses — and committed so that stops being true out loud",
         ),
     )
 

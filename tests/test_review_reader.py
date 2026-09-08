@@ -325,6 +325,61 @@ def test_every_identity_that_resolves_is_a_well_formed_login() -> None:
         assert re.fullmatch(r"[a-z0-9](?:-?[a-z0-9])*", resolved), resolved
 
 
+def test_a_login_is_bounded_at_thirty_nine_characters_on_both_sides() -> None:
+    """#408 F1. The grammar said what a login is made of, never how long.
+
+    Unbounded, `"r" * 5000` validated, resolved and cleared a head at exit 0 — a
+    string no GitHub account can bear, accepted as a second reader. That is the
+    fail-open direction over a grammar written to be closed.
+
+    Both sides are asserted because a bound committed only on the side that was
+    failing is a bound nothing stops from being tightened until it refuses real
+    readers: 39 is the longest login GitHub issues and must still resolve.
+    """
+    assert rr.MAXIMUM_LOGIN_LENGTH == 39
+    longest = "r" * rr.MAXIMUM_LOGIN_LENGTH
+    assert rr.resolve_identity(longest) == longest
+    assert rr.resolve_identity("r" * (rr.MAXIMUM_LOGIN_LENGTH + 1)) is None
+    assert rr.resolve_identity("r" * 5000) is None
+
+
+def test_the_length_bound_counts_characters_and_not_alphanumerics() -> None:
+    """The obvious spelling of the bound counts the wrong thing.
+
+    `[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}` bounds the number of ALPHANUMERICS at
+    39, so a hyphen-alternating string of up to 77 characters walks through it —
+    still longer than any login, still the fail-open direction. GitHub's own
+    grammar consumes one character per repetition, so `{0,38}` bounds the whole
+    string, and this is the case that tells the two spellings apart.
+    """
+    alternating = "a-" * 20 + "a"
+    assert len(alternating) == 41
+    assert rr.resolve_identity(alternating) is None
+    assert rr.resolve_identity("a-" * 19 + "a") == "a-" * 19 + "a"
+
+
+def test_a_weld_inside_the_login_alphabet_is_a_recorded_limitation() -> None:
+    """#408 F2 — asserts what the reader DOES, and what it does is fail open.
+
+    `nuncaeslupusOWNER` is the author's login with an association badge welded on
+    *inside* the alphabet. It is a well-formed login for a different account, so
+    it resolves and clears its own author's PR at exit 0. Validation cannot see
+    it, and no rule that refused it would spare `nunca` reviewing `nuncaeslupus`.
+
+    It is unreachable at every capture format that exists: `gh` and every GitHub
+    badge separate the login from the decoration with a space, parens or
+    brackets, and those spellings are all refused (see the controls above). What
+    would make it reachable is a capture path that strips punctuation before this
+    module sees the author, or a tool that concatenates login and role with no
+    separator. This test is red the day either appears — which is the reason it
+    is committed rather than left in a review comment.
+    """
+    verdict = rr.read(_pr(author="nuncaeslupus", comments=(_report(author="nuncaeslupusOWNER"),)))
+    assert (verdict.state, verdict.code) == (rr.ALLOWED, 0)
+    for separated in ("nuncaeslupus (OWNER)", "nuncaeslupus[bot]", "nuncaeslupus - maintainer"):
+        assert rr.resolve_identity(separated) is None, separated
+
+
 # --------------------------------------------------------------------------
 # The regression ladder
 # --------------------------------------------------------------------------

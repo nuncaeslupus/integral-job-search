@@ -1,7 +1,7 @@
 {
   "merges_allowed_without_a_review_of_the_head": 0,
-  "prs_evaluated_at_least": 40,
-  "second_reader_reports_found_at_least": 6,
+  "prs_evaluated_at_least": 44,
+  "second_reader_reports_found_at_least": 8,
   "docs_only_prs_excluded": 1,
   "marker": "arsenal-second-reader: head=<40-hex head sha> verdict=CLEAR",
   "reader_named_in_claude_md": true,
@@ -335,6 +335,34 @@
       "required": "allowed/0",
       "observed": "allowed/0",
       "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: a PR may merge once a session other than its implementer has\nread it — the hyphen IS in the login alphabet, so `nunca-es-lupus` is\na different account from `nuncaeslupus` and this control is the one\nthat stops the round-4 fold from merging two real people into one",
+      "direction": ""
+    },
+    {
+      "control": "a_second_reader_whose_login_is_the_longest_github_allows",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: a PR may merge once a session other than its implementer has\nread it — 39 characters is the longest login GitHub\nissues, so the bound must clear it or it refuses real second readers",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_longer_than_any_github_login",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "t-41fda10d (#408 F1): a string no GitHub account can bear names nobody,\nso it is `unresolvable/2`. Unbounded it validated and cleared the head\nat exit 0 — the fail-open direction over a grammar meant to be closed",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_pads_past_the_bound_with_hyphens",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "t-41fda10d (#408 F1): the bound is on CHARACTERS, not on alphanumerics.\n41 characters of well-formed alternation is still longer than any login,\nand the obvious spelling of the bound — `(?:-?[A-Za-z0-9]){0,38}` —\ncounts pairs and lets 77 characters through. This is the control that\ndistinguishes the two",
+      "direction": ""
+    },
+    {
+      "control": "an_author_weld_that_stays_inside_the_alphabet_is_a_known_limitation",
+      "required": "allowed/0",
+      "observed": "allowed/0",
+      "derived_from": "t-41fda10d (#408 F2): RECORDED LIMITATION, not a requirement of the\nrule. A weld inside the login alphabet is a well-formed login for\nanother account and validation cannot distinguish it from a real\nsecond reader whose name shares a prefix. Unreachable at every capture\nformat that exists today — all of them separate with a character the\nalphabet refuses — and committed so that stops being true out loud",
       "direction": ""
     }
   ],
