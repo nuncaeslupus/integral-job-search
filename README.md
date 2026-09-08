@@ -1,11 +1,21 @@
 # integral-job-search
 
+[![CI](https://github.com/nuncaeslupus/integral-job-search/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nuncaeslupus/integral-job-search/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Candidate-centred integral job search: one dimension model, carried end to end.
 
 Job tools match skills against requirements and stop. This one carries a single
 vocabulary — how social the office is, whether "remote" means remote, whether the
 schedule survives a school run — across every stage: the questions asked, the
 evidence read out of an advert, the ranking, the CV, the interview.
+
+**Where it is.** Usable, and used — it has been run end to end by its author, to
+a sent application. The thirteen steps all exist and all have gates. What is
+thinnest is **sourcing**: connectors exist for a handful of boards, so how many
+real offers reach you depends on whether your field is one of them, and
+[CONTRIBUTING.md](CONTRIBUTING.md) is about adding one. Expect to be the second
+person using this, not the thousandth.
 
 ## Using it
 
