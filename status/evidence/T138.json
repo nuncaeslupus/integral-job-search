@@ -1,0 +1,102 @@
+{
+  "absent_bands_read_as_zero": 0,
+  "claiming_pairs_broken_when_reversed": 3,
+  "decided_cases": [
+    {
+      "because": "a point is the band whose ends coincide, so a claim is made only when the two bands are disjoint; across currencies there is no claim at all, because converting needs a rate with a date and a source and none lives in this repository",
+      "case": "different_currencies_or_a_range_against_a_point",
+      "claiming_pairs_broken_when_reversed": 1,
+      "incomparable_pairs_clean_in_either_order": 2,
+      "pairs": 3,
+      "pay_dominance_claimed": 1,
+      "violations": 0
+    },
+    {
+      "because": "an unpublished salary is not a low one \u2014 97 of 561 offers measured 2026-09-06 carried a band at all, so reading the absence as zero buries every board that does not publish",
+      "case": "one_side_publishes_no_band",
+      "claiming_pairs_broken_when_reversed": 0,
+      "incomparable_pairs_clean_in_either_order": 1,
+      "pairs": 1,
+      "pay_dominance_claimed": 0,
+      "violations": 0
+    }
+  ],
+  "gate_status": "measured",
+  "pairs": [
+    {
+      "alike_apart_from_pay": true,
+      "case": "two_published_bands_disjoint",
+      "pay_dominance_claimed": 1,
+      "published_order": [
+        "z-band-4100",
+        "a-band-3100"
+      ],
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 1
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "two_point_salaries",
+      "pay_dominance_claimed": 1,
+      "published_order": [
+        "z-point-3800",
+        "a-point-3100"
+      ],
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 1
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "a_range_against_a_point_disjoint",
+      "pay_dominance_claimed": 1,
+      "published_order": [
+        "z-range-4200",
+        "a-point-3000"
+      ],
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 1
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "a_range_against_a_point_overlapping",
+      "pay_dominance_claimed": 0,
+      "published_order": [
+        "a-point-3500",
+        "z-range-3400"
+      ],
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 0
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "different_currencies",
+      "pay_dominance_claimed": 0,
+      "published_order": [
+        "a-eur-3100",
+        "z-usd-4100"
+      ],
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 0
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "one_side_publishes_no_band",
+      "pay_dominance_claimed": 0,
+      "published_order": [
+        "a-point-3000",
+        "z-silent"
+      ],
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 0
+    }
+  ],
+  "pairs_compared": 6,
+  "pairs_where_pay_dominance_is_claimed": 3,
+  "pay_dominance_violations": 0
+}
