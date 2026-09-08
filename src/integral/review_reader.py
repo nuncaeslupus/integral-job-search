@@ -150,12 +150,75 @@ is an approval out of an absence; an objection from nobody is a reason to look.
 So a marker naming nobody may still decide the answer for the set in exactly one
 direction, and it is the fail-closed one.
 
+**The scope of "vetoes nothing" is the whole tail of `read`, not its first
+branch — three residuals, from the second reader on #421 (F1-F3).** The first
+version of this fix guarded check 5 on `if unattributable:` and left it sitting
+*ahead* of the docs-only, stale and author-only branches, while the check's own
+sentence scoped it to "an unattributable marker with nothing else on record". So
+a bot's name still turned a stale report's **code 3 into a 2**, still withheld
+the docs-only exemption, and still emitted *"the only marker on record"* beside a
+second marker — the same defect, one branch further down, and all three
+fail-closed. Check 5 now sits last, where "nothing else on record" is what
+reaching it means, and the `discarded` canary rides on the three reasons it used
+to replace.
+
+**F2 is the one decision here that moves fail-open, and it is taken
+deliberately.** Restoring the exemption turns that state from `unresolvable/2`
+into `exempt/0`: a merge that was refused is now allowed. CLAUDE.md says to
+weight that direction hardest, and the conservative option — keep the refusal and
+pin it as a second, argued veto — was available. It is not taken, for three
+reasons:
+
+* **The exemption resolves no identity.** *"Docs-only PRs are exempt — a
+  handover or a task-file edit merges on green CI."* That is a claim about the
+  **changed paths**, decided by `is_docs_only(pr.files)`. An author string this
+  module cannot resolve is not evidence about a file list, and there is no
+  mechanism by which a mangled author makes a `.py` path read as `.md`.
+* **Refusing here would be incoherent with the answer already argued above.**
+  The clearance case keeps counting *because* an unattributable marker is not a
+  report — and identity is genuinely load-bearing there. If "one bad field
+  impugns the whole capture" were accepted for the exemption, it would apply with
+  more force to the clearance, which is exactly the reasoning T155 rejected. The
+  permissive branch is taken in the case where identity matters and the
+  restrictive one in the case where it does not; that is not a defensible pair.
+* **The step is exactly one state wide, and the bound is committed.** An
+  unattributable **BLOCK** on a docs-only PR is still `unresolvable/2`, because
+  *"Exemption applies to a PR nobody objected to, never over an objection
+  somebody raised."* `a_docs_only_pr_an_unattributable_marker_objected_to` pins
+  it, beside the state it bounds.
+* **Nothing is granted that was not already granted.** CLAUDE.md defines the
+  direction to fear as *"the check said yes to something it was built to
+  refuse"* — and a docs-only PR is the one thing this check was built to say
+  yes to outright. Delete the bot's comment and the same PR is `exempt/0`
+  already; the marker is not evidence for the exemption, it is simply not
+  evidence against it. So this branch does not hand out a permission, it
+  withdraws a veto a marker naming nobody was never entitled to cast, which is
+  the sentence the whole task is named for. The fixture for this state asserts
+  the two answers are *equal* — with the marker and without it — rather than
+  merely asserting the one, so a drift in either direction is what fails.
+
+**What would make this wrong**, recorded so the next reader can check rather than
+re-derive: a capture path that decides `files` from the same mangled source as
+`author` — then one broken field really would impugn the other, and the
+conservative branch becomes the right one. Nothing in `pull_request_from` does
+that today; it validates `files` independently and refuses an empty list.
+
 `status/evidence/T155.json` is the gate:
-`unresolvable_marker_authors_with_an_unrecorded_effect` over `SCOPE_STATES`,
-which pairs six unattributable authors with a genuine head-bound clearance in
-both comment orders and counts a state whose outcome is wrong **or** whose reason
-does not name the author and record the effect. That `or` is load-bearing:
-against the code as it stood, the metric read **22 of 22**.
+`unresolvable_marker_authors_with_an_unrecorded_effect` over `SCOPE_STATES` —
+six unattributable authors paired with a genuine head-bound clearance in both
+comment orders, plus an unattributable BLOCK, a stale unattributable marker, a
+resolvable BLOCK, a docs-only PR, and #421's residuals — counting a state whose
+outcome is wrong **or** whose reason does not name the author and record the
+effect. That `or` is load-bearing: against the code as it stood, the metric read
+**22 of 22**, of which 18 failed on outcome and 4 on the reason alone.
+
+**The states claim to cover both comment orders, and that claim is now checked
+rather than labelled** (#421 F4). It was asserted by comparing state *names*, so
+collapsing the two orders onto one comment tuple left the whole suite green and
+the metric at 0 — a gate certifying coverage it did not have, which is the
+vacuous-coverage shape one level up from the one this task fixes.
+`test_both_orders_carry_different_comment_sequences` compares the constructed
+`Comment` tuples and pins the marker to opposite ends.
 """
 
 from __future__ import annotations
@@ -222,7 +285,17 @@ MINIMUM_REPORTS_FOUND = 8
 #: T155's floor, same style: the marker-scope states are the denominator of
 #: `unresolvable_marker_authors_with_an_unrecorded_effect`, and a control list
 #: that shrank to nothing would otherwise score a serene zero.
-MINIMUM_SCOPE_STATES = 22
+MINIMUM_SCOPE_STATES = 29
+
+#: The second T155 floor, and the one #421's F4 required. Counting *states* says
+#: nothing about whether they are distinct: collapsing both comment orders onto
+#: the same tuple — changing only the label — left the count at 29, the metric at
+#: 0 and the whole suite green, so the gate certified coverage it did not have.
+#: `measure_marker_scope` therefore counts distinct constructed states — the
+#: `(files, comments)` pairs actually handed to `read` — and floors that too. A
+#: collapse now breaches this floor and the record reads `unmeasured`, which is
+#: the gate catching it rather than only a test beside the gate.
+MINIMUM_DISTINCT_SCOPE_STATES = 29
 
 #: The two phrases a verdict carries when an unattributable marker sits beside a
 #: head-bound clearance. They are **named constants because T155's gate asserts
@@ -231,6 +304,18 @@ MINIMUM_SCOPE_STATES = 22
 #: `read` emits exactly one of them in that situation, and never both.
 CLEARANCE_STANDS = "the clearance stands"
 CLEARANCE_SET_ASIDE = "the clearance was set aside"
+
+#: The canary itself, carried by **every** verdict standing beside an
+#: unattributable marker — including the three that used to be shadowed by it
+#: (#421 F1-F3: a stale report, the docs-only exemption, the author's own
+#: marker). Named for the same reason the two above are: what the reason has to
+#: record is checkable, not a matter of a human liking the prose.
+RECORDED_BUT_INERT = "is on record and cleared nothing"
+
+#: What the one honoured veto says. An unattributable BLOCK is the single
+#: direction in which a marker naming nobody still decides the answer for the
+#: set, so the sentence that carries it is pinned too.
+OBJECTION_HONOURED = "an objection this reader cannot attribute is not a pass"
 
 
 @dataclass(frozen=True)
@@ -504,9 +589,7 @@ def read(pr: PullRequest) -> Verdict:
     cleared = [comment for comment, verdict in on_head if verdict == "CLEAR"]
     named = ", ".join(repr(who) for who in unattributable)
     discarded = (
-        f"; a marker author naming nobody ({named}) is on record and cleared nothing"
-        if unattributable
-        else ""
+        f"; a marker author naming nobody ({named}) {RECORDED_BUT_INERT}" if unattributable else ""
     )
     if blocking:
         aside = f", so {CLEARANCE_SET_ASIDE}" if cleared else ""
@@ -522,8 +605,7 @@ def read(pr: PullRequest) -> Verdict:
             UNRESOLVABLE,
             2,
             f"a marker on {head[:12]} says BLOCK and its author names nobody ({named}), "
-            f"so {aside}: an objection this reader cannot attribute is not a pass, and "
-            "the capture is what needs fixing",
+            f"so {aside}: {OBJECTION_HONOURED}, and the capture is what needs fixing",
             reports,
         )
     if reports:
@@ -538,27 +620,35 @@ def read(pr: PullRequest) -> Verdict:
             f"a second reader ({reports[0].author}) cleared {head[:12]}{stands}",
             reports,
         )
-    if unattributable:
-        return Verdict(
-            UNRESOLVABLE,
-            2,
-            f"the only marker on record has an author naming nobody ({named}), "
-            "so self-review cannot be ruled out",
-        )
     if is_docs_only(pr.files):
-        return Verdict(EXEMPT, 0, "docs-only PR: every changed path is documentation")
+        return Verdict(EXEMPT, 0, f"docs-only PR: every changed path is documentation{discarded}")
     if on_another_commit:
         return Verdict(
             BLOCKED,
             3,
-            f"the only report on record is for another commit, not {head[:12]}",
+            f"the only report on record is for another commit, not {head[:12]}{discarded}",
         )
     if by_the_author:
         return Verdict(
             BLOCKED,
             2,
             "the only marker on record was written by the PR's own author, "
-            "who is not a second reader",
+            f"who is not a second reader{discarded}",
+        )
+    # Check 5 sits HERE, not before the three branches above: its own sentence is
+    # "an unattributable marker with nothing else on record", and nothing else on
+    # record is what reaching this line means. Placed earlier it turned a stale
+    # report's code 3 into a 2, withheld the docs-only exemption, and shadowed
+    # the author's-own-marker reason — all three fail-closed, all three the very
+    # shape T155 was filed to remove, and all three found by the second reader on
+    # #421 (F1-F3). The `discarded` canary now rides on the reasons it was
+    # shadowing instead of replacing them.
+    if unattributable:
+        return Verdict(
+            UNRESOLVABLE,
+            2,
+            f"the only marker on record has an author naming nobody ({named}), "
+            "so self-review cannot be ruled out",
         )
     return Verdict(BLOCKED, 2, f"no second-reader report for {head[:12]}")
 
@@ -1405,9 +1495,21 @@ class ScopeState:
     author" vacuously. That is the same vacuous-truth shape `is_docs_only`
     refuses for an empty file list.
 
-    `effect` is `CLEARANCE_STANDS` or `CLEARANCE_SET_ASIDE`: what the reason has
-    to say became of the head-bound clearance. A state whose outcome is right
-    and whose reason says neither still counts as a violation — the gate's `or`.
+    `effect` is the phrase the reason has to carry: what became of the thing the
+    verdict turns on. For the clearance pairings that is `CLEARANCE_STANDS` or
+    `CLEARANCE_SET_ASIDE`; for the residuals #421 accepted (F1-F3) the marker
+    stands beside a *stale* report, the docs-only exemption or the author's own
+    marker instead, and the phrase is `RECORDED_BUT_INERT` — the canary that now
+    rides on those reasons rather than replacing them. A state whose outcome is
+    right and whose reason carries neither still counts as a violation: the
+    gate's `or`.
+
+    `order` says where the unattributable marker sits — `unattributable_first`,
+    `clearance_first`, or `single` for a state with one comment, where there is
+    no order to vary. **It is not decoration**: #421 F4 found that asserting the
+    two orders by their *names* is satisfied by two identical comment tuples, so
+    `test_both_orders_carry_different_comment_sequences` reads this field to pair
+    the states up and then compares the sequences themselves.
     """
 
     name: str
@@ -1417,6 +1519,7 @@ class ScopeState:
     unattributable: str
     effect: str
     citation: str
+    order: str = "single"
 
 
 #: The names a capture actually carries for a writer this module cannot resolve.
@@ -1479,6 +1582,8 @@ def _scope_states() -> tuple[ScopeState, ...]:
         "reviewer", f"Read the diff. Two findings, both answered.\n\n{marker_line(_HEAD)}"
     )
     objected = Comment("other-reader", f"One finding stands.\n\n{marker_line(_HEAD, 'BLOCK')}")
+    stale = Comment("reviewer", f"Read the diff at the time.\n\n{marker_line(_OLDER)}")
+    own = Comment("nuncaeslupus", f"Answered the findings.\n\n{marker_line(_HEAD)}")
 
     def echo(who: str, verdict: str = "CLEAR", head: str = _HEAD) -> Comment:
         return Comment(who, f"Automated summary of this thread.\n\n{marker_line(head, verdict)}")
@@ -1512,6 +1617,7 @@ def _scope_states() -> tuple[ScopeState, ...]:
                     CLEARANCE_STANDS,
                     f"{rule}: a PR may merge once a session OTHER THAN ITS IMPLEMENTER has\n"
                     f"read it and reported — {why}",
+                    order,
                 )
             )
             number += 1
@@ -1531,6 +1637,7 @@ def _scope_states() -> tuple[ScopeState, ...]:
                     "An objection this reader cannot attribute is not a pass, so the one\n"
                     "direction in which an unattributable marker still decides the set is\n"
                     "the fail-closed one",
+                    order,
                 )
             )
             number += 1
@@ -1547,6 +1654,7 @@ def _scope_states() -> tuple[ScopeState, ...]:
                 "t-41fda10d: a marker on the wrong commit binds nothing, and one that\n"
                 "also names nobody binds nothing twice — it does not make the PR stale\n"
                 "(code 3) either, because there is no report to be stale ABOUT",
+                order,
             )
         )
         number += 1
@@ -1563,6 +1671,7 @@ def _scope_states() -> tuple[ScopeState, ...]:
                 f"{rule}: a BLOCK from a second session is the objection the whole rule\n"
                 "is for; the bot's marker changes nothing in either direction, and the\n"
                 "reason still has to say what became of the clearance beside it",
+                order,
             )
         )
         number += 1
@@ -1579,9 +1688,112 @@ def _scope_states() -> tuple[ScopeState, ...]:
                 f"{rule}: docs-only PRs are exempt, and a report is stronger evidence\n"
                 "than the exemption — a docs PR that WAS read reads as read, not as\n"
                 "unreadable because a bot commented on it",
+                order,
             )
         )
         number += 1
+
+    # ── The residuals of T155's own defect, accepted from #421 (F1-F3) ───────
+    # Check 5 used to sit ahead of the three branches below, so a bot's name
+    # turned a stale report's code 3 into a 2, withheld an exemption CLAUDE.md
+    # grants outright, and shadowed the author's-own-marker reason with a
+    # sentence that was false on its face ("the only marker on record", beside a
+    # second marker). All three are the shape T155 was filed to remove, surviving
+    # one branch further down the function.
+
+    for order, comments in orders(echo("github-actions[bot]"), stale):
+        states.append(
+            ScopeState(
+                f"a_stale_genuine_report_beside_an_unattributable_marker__{order}",
+                PullRequest(number, "nuncaeslupus", _HEAD, code, comments),
+                BLOCKED,
+                3,
+                "github-actions[bot]",
+                RECORDED_BUT_INERT,
+                "t-41fda10d (#421 F1): 'reviewed, then kept coding' is a different\n"
+                "situation from 'never reviewed', and both are hidden by a rollup that\n"
+                "only shows a tick. Skipping the unattributable marker leaves a genuine\n"
+                "report for another commit on record, which is stale — code 3. A bot's\n"
+                "name must not turn 3 into 2",
+                order,
+            )
+        )
+        number += 1
+
+    for order, comments in orders(echo(""), own):
+        states.append(
+            ScopeState(
+                f"the_authors_own_marker_beside_an_unattributable_one__{order}",
+                PullRequest(number, "nuncaeslupus", _HEAD, code, comments),
+                BLOCKED,
+                2,
+                "",
+                RECORDED_BUT_INERT,
+                f"{rule} (#421 F3): the implementer never signs it off, and THAT is\n"
+                "what a human reading this exit has to be told. Same code either way;\n"
+                "the shadowed reason was strictly worse and, saying 'the only marker on\n"
+                "record', factually false beside a second marker",
+                order,
+            )
+        )
+        number += 1
+
+    states.append(
+        ScopeState(
+            "a_docs_only_pr_carrying_only_an_unattributable_marker",
+            PullRequest(number, "nuncaeslupus", _HEAD, docs, (echo("github-actions[bot]"),)),
+            EXEMPT,
+            0,
+            "github-actions[bot]",
+            RECORDED_BUT_INERT,
+            f"{rule} (#421 F2): 'Docs-only PRs are exempt — a handover or a task-file\n"
+            "edit merges on green CI.' The exemption is a claim about the CHANGED PATHS\n"
+            "and resolves no identity, so an author this reader cannot resolve is not\n"
+            "evidence against it. See the module docstring for why this branch is taken\n"
+            "in the fail-open direction rather than the conservative one",
+            order="single",
+        )
+    )
+    number += 1
+
+    states.append(
+        ScopeState(
+            "a_docs_only_pr_an_unattributable_marker_objected_to",
+            PullRequest(
+                number, "nuncaeslupus", _HEAD, docs, (echo("github-actions[bot]", "BLOCK"),)
+            ),
+            UNRESOLVABLE,
+            2,
+            "github-actions[bot]",
+            OBJECTION_HONOURED,
+            "this module's own rule, stated in the docstring above and older than\n"
+            "#421: 'Exemption applies to a PR nobody objected to, never over an\n"
+            f"objection somebody raised' — the carve-out {rule} does NOT itself\n"
+            "spell out, which is why it is cited here as ours. This is the BOUND on\n"
+            "the state above — the exemption survives a marker naming nobody and does\n"
+            "NOT survive one that objects, so the fail-open step F2 takes is exactly\n"
+            "one state wide",
+            order="single",
+        )
+    )
+    number += 1
+
+    states.append(
+        ScopeState(
+            "a_code_pr_carrying_only_an_unattributable_marker",
+            PullRequest(number, "nuncaeslupus", _HEAD, code, (echo("github-actions[bot]"),)),
+            UNRESOLVABLE,
+            2,
+            "github-actions[bot]",
+            "so self-review cannot be ruled out",
+            "t-41fda10d: check 5 still fires when its own sentence is true — nothing\n"
+            "else IS on record. The control that stops F1-F3's remedy degenerating into\n"
+            "deleting the guard: a marker naming nobody never becomes a report, and a\n"
+            "code PR carrying only one has not been read",
+            order="single",
+        )
+    )
+    number += 1
 
     return tuple(states)
 
@@ -1639,9 +1851,16 @@ def measure_marker_scope(states: tuple[ScopeState, ...] | None = None) -> dict[s
         )
 
     floor, breached = _floor(len(evaluated), MINIMUM_SCOPE_STATES)
+    # What was actually handed to `read`, not what the labels claim. Two states
+    # carrying identical `(files, comments)` are one state measured twice (#421
+    # F4), and a count that cannot tell them apart is a coverage claim nobody
+    # checked.
+    distinct = len({(case.pr.files, case.pr.comments) for case in evaluated})
+    distinct_floor, distinct_breached = _floor(distinct, MINIMUM_DISTINCT_SCOPE_STATES)
     record: dict[str, Any] = {
         "unresolvable_marker_authors_with_an_unrecorded_effect": len(unrecorded),
         "marker_scope_states_at_least": floor,
+        "distinct_constructed_states_at_least": distinct_floor,
         "rule": (
             "an unattributable marker clears nothing and vetoes nothing, and every "
             "verdict beside one says what became of the clearance"
@@ -1650,13 +1869,23 @@ def measure_marker_scope(states: tuple[ScopeState, ...] | None = None) -> dict[s
         "states_with_an_unrecorded_effect": unrecorded,
         "readings": readings,
     }
+    breaches: list[str] = []
     if breached:
-        record["unresolvable_marker_authors_with_an_unrecorded_effect"] = -1
-        record["gate_status"] = "unmeasured"
-        record["unmeasured_reason"] = (
+        breaches.append(
             f"marker_scope_states_at_least: {len(evaluated)} states evaluated, "
             f"floor is {MINIMUM_SCOPE_STATES}"
         )
+    if distinct_breached:
+        breaches.append(
+            f"distinct_constructed_states_at_least: {len(evaluated)} states collapse to "
+            f"{distinct} distinct (files, comments) pairs, floor is "
+            f"{MINIMUM_DISTINCT_SCOPE_STATES} — states that are not distinct are one "
+            "state measured twice"
+        )
+    if breaches:
+        record["unresolvable_marker_authors_with_an_unrecorded_effect"] = -1
+        record["gate_status"] = "unmeasured"
+        record["unmeasured_reason"] = "; ".join(breaches)
     return record
 
 

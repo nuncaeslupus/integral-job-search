@@ -934,21 +934,72 @@ def test_the_scope_gate_names_a_blank_author_by_repr_and_not_vacuously() -> None
 
 
 def test_the_scope_states_only_grow() -> None:
-    """CLAUDE.md: *"the measured denominator must rise"* — the floor is how."""
+    """CLAUDE.md: *"the measured denominator must rise"* — the floor is how.
+
+    Two floors since #421: counting states says nothing about whether they are
+    distinct, and F4's mutant kept the count at 29 while collapsing eleven
+    pairings onto one tuple each.
+    """
+    record = rr.measure_marker_scope()
     assert len(rr.SCOPE_STATES) >= rr.MINIMUM_SCOPE_STATES
-    assert rr.measure_marker_scope()["marker_scope_states_at_least"] == rr.MINIMUM_SCOPE_STATES
+    assert record["marker_scope_states_at_least"] == rr.MINIMUM_SCOPE_STATES
+    assert record["distinct_constructed_states_at_least"] == rr.MINIMUM_DISTINCT_SCOPE_STATES
 
 
-def test_both_comment_orders_are_present_for_every_pairing() -> None:
-    """A one-order control set would pass a fix that only read the first marker."""
-    first = {n.rsplit("__", 1)[0] for n in (c.name for c in rr.SCOPE_STATES) if n.endswith("first")}
-    later = {
-        n.rsplit("__", 1)[0]
-        for n in (c.name for c in rr.SCOPE_STATES)
-        if n.endswith("clearance_first")
-    }
-    assert first == later
-    assert len(rr.SCOPE_STATES) == 2 * len(first)
+def test_states_that_are_not_distinct_are_one_state_measured_twice() -> None:
+    """#421 F4, asserted on the gate rather than only beside it.
+
+    Handing `measure_marker_scope` a duplicated state keeps `len(states)` at the
+    floor and must still read `unmeasured`: a denominator counting the same
+    `(files, comments)` pair twice is a coverage claim that is not true.
+    """
+    duplicated = (*rr.SCOPE_STATES[:-1], rr.SCOPE_STATES[0])
+    assert len(duplicated) == len(rr.SCOPE_STATES)
+    record = rr.measure_marker_scope(states=duplicated)
+    assert record["gate_status"] == "unmeasured"
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == -1
+    assert "distinct_constructed_states_at_least" in record["unmeasured_reason"]
+    assert rr.scope_exit_code_for(record) == 1
+
+
+def _pairings() -> dict[str, dict[str, rr.ScopeState]]:
+    """The ordered states, grouped by the pairing they are two orders of."""
+    grouped: dict[str, dict[str, rr.ScopeState]] = {}
+    for case in rr.SCOPE_STATES:
+        if case.order == "single":
+            continue
+        grouped.setdefault(case.name.rsplit("__", 1)[0], {})[case.order] = case
+    return grouped
+
+
+def test_both_orders_carry_different_comment_sequences() -> None:
+    """#421 F4: the previous version of this test compared state NAMES.
+
+    Collapsing both orders onto the same comment tuple — changing only the label
+    — left 137 tests green and the metric at 0, so the gate certified coverage it
+    did not have. (Its `endswith("first")` filter was a no-op besides: BOTH
+    suffixes end in `first`.) The claim is about the constructed sequences, so
+    this asserts the sequences: they must differ, and the unattributable marker
+    must actually sit at opposite ends.
+    """
+    pairings = _pairings()
+    assert pairings
+    for prefix, pair in pairings.items():
+        assert set(pair) == {"unattributable_first", "clearance_first"}, prefix
+        head_first = pair["unattributable_first"].pr.comments
+        head_last = pair["clearance_first"].pr.comments
+        assert head_first != head_last, f"{prefix}: both 'orders' carry the same comment tuple"
+        assert head_first[0].author == pair["unattributable_first"].unattributable, prefix
+        assert head_last[-1].author == pair["clearance_first"].unattributable, prefix
+
+
+def test_a_single_comment_state_is_the_only_kind_with_no_second_order() -> None:
+    """`order='single'` is a claim about the state, so it is checked, not trusted."""
+    singles = [case for case in rr.SCOPE_STATES if case.order == "single"]
+    assert singles
+    for case in singles:
+        assert len(case.pr.comments) == 1, case.name
+    assert len(rr.SCOPE_STATES) == 2 * len(_pairings()) + len(singles)
 
 
 def test_a_scan_over_zero_scope_states_is_unmeasured_and_never_a_clean_zero() -> None:
@@ -974,6 +1025,96 @@ def test_write_scope_evidence_records_exactly_what_was_measured(tmp_path: Path) 
 
 
 def test_every_scope_state_cites_the_text_its_expectation_comes_from() -> None:
+    """And every required phrase is a NAMED one, not prose invented per state.
+
+    Widened from the two clearance phrases when #421's residuals were accepted:
+    F1-F3 pair the unattributable marker with a stale report, the docs-only
+    exemption or the author's own marker rather than with a clearance. The point
+    of the constraint is unchanged — a phrase a state makes up for itself is a
+    phrase no other state can hold the reader to.
+    """
+    named = {
+        rr.CLEARANCE_STANDS,
+        rr.CLEARANCE_SET_ASIDE,
+        rr.RECORDED_BUT_INERT,
+        rr.OBJECTION_HONOURED,
+        "so self-review cannot be ruled out",
+    }
     for case in rr.SCOPE_STATES:
         assert case.citation.strip()
-        assert case.effect in {rr.CLEARANCE_STANDS, rr.CLEARANCE_SET_ASIDE}
+        assert case.effect in named, case.name
+
+
+# --------------------------------------------------------------------------
+# The residuals of T155's own defect (#421 F1-F3)
+# --------------------------------------------------------------------------
+#
+# Check 5 was guarded on `if unattributable:` but placed BEFORE the docs-only,
+# stale and author-only branches, while its own docstring scoped it to "nothing
+# else on record". So a bot's name still turned code 3 into code 2, still
+# withheld an exemption CLAUDE.md grants outright, and still emitted "the only
+# marker on record" beside a second marker. All three fail-closed; all three the
+# shape T155 was filed to remove, surviving one branch further down.
+
+
+@pytest.mark.parametrize("unattributable_first", [True, False])
+def test_a_stale_genuine_report_keeps_its_own_code(unattributable_first: bool) -> None:
+    """F1: 'reviewed, then kept coding' must stay distinguishable from 'never read'."""
+    bot, human = _echo("github-actions[bot]"), _report(head=OLDER)
+    comments = (bot, human) if unattributable_first else (human, bot)
+    verdict = rr.read(_pr(comments=comments))
+    assert (verdict.state, verdict.code) == (rr.BLOCKED, 3)
+    assert repr("github-actions[bot]") in verdict.reason
+    assert rr.RECORDED_BUT_INERT in verdict.reason
+    # Removing the bot must not change the answer — that it did was the finding.
+    assert rr.read(_pr(comments=(human,))).code == verdict.code
+
+
+def test_a_docs_only_pr_keeps_its_exemption_beside_a_marker_naming_nobody() -> None:
+    """F2: CLAUDE.md grants the exemption on the CHANGED PATHS, which resolve no identity."""
+    verdict = rr.read(_pr(files=DOCS, comments=(_echo("github-actions[bot]"),)))
+    assert (verdict.state, verdict.code) == (rr.EXEMPT, 0)
+    assert repr("github-actions[bot]") in verdict.reason
+    assert rr.RECORDED_BUT_INERT in verdict.reason
+    assert rr.read(_pr(files=DOCS)).code == verdict.code
+
+
+def test_the_exemption_still_does_not_survive_an_objection_from_nobody() -> None:
+    """F2's bound: the fail-open step is exactly one state wide.
+
+    CLAUDE.md § review-half: *"Exemption applies to a PR nobody objected to,
+    never over an objection somebody raised."* An unattributable CLEAR is not an
+    objection; an unattributable BLOCK is.
+    """
+    verdict = rr.read(_pr(files=DOCS, comments=(_echo("github-actions[bot]", "BLOCK"),)))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
+    assert rr.OBJECTION_HONOURED in verdict.reason
+
+
+@pytest.mark.parametrize("unattributable_first", [True, False])
+def test_the_authors_own_marker_keeps_its_own_reason(unattributable_first: bool) -> None:
+    """F3: same code either way; the shadowed reason was the informative one.
+
+    And the shadowing reason was false on its face — "the only marker on record"
+    beside a second marker.
+    """
+    blank, own = _echo(""), _report(author="nuncaeslupus")
+    comments = (blank, own) if unattributable_first else (own, blank)
+    verdict = rr.read(_pr(author="nuncaeslupus", comments=comments))
+    assert (verdict.state, verdict.code) == (rr.BLOCKED, 2)
+    assert "written by the PR's own author" in verdict.reason
+    assert "the only marker on record has an author naming nobody" not in verdict.reason
+    assert repr("") in verdict.reason
+    assert rr.RECORDED_BUT_INERT in verdict.reason
+
+
+def test_check_five_still_fires_when_its_own_sentence_is_true() -> None:
+    """The control that stops F1-F3's remedy degenerating into deleting the guard.
+
+    A code PR whose only marker names nobody has not been read by anybody, and
+    `unresolvable/2` is still the answer.
+    """
+    verdict = rr.read(_pr(comments=(_echo("github-actions[bot]"),)))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False

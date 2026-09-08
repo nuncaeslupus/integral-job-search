@@ -1,6 +1,7 @@
 {
   "unresolvable_marker_authors_with_an_unrecorded_effect": 0,
-  "marker_scope_states_at_least": 22,
+  "marker_scope_states_at_least": 29,
+  "distinct_constructed_states_at_least": 29,
   "rule": "an unattributable marker clears nothing and vetoes nothing, and every verdict beside one says what became of the clearance",
   "gate_status": "measured",
   "states_with_an_unrecorded_effect": [],
@@ -180,6 +181,62 @@
       "names_the_unattributable_author": true,
       "records_the_effect": true,
       "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: docs-only PRs are exempt, and a report is stronger evidence\nthan the exemption — a docs PR that WAS read reads as read, not as\nunreadable because a bot commented on it"
+    },
+    {
+      "state": "a_stale_genuine_report_beside_an_unattributable_marker__unattributable_first",
+      "required": "blocked/3",
+      "observed": "blocked/3",
+      "names_the_unattributable_author": true,
+      "records_the_effect": true,
+      "derived_from": "t-41fda10d (#421 F1): 'reviewed, then kept coding' is a different\nsituation from 'never reviewed', and both are hidden by a rollup that\nonly shows a tick. Skipping the unattributable marker leaves a genuine\nreport for another commit on record, which is stale — code 3. A bot's\nname must not turn 3 into 2"
+    },
+    {
+      "state": "a_stale_genuine_report_beside_an_unattributable_marker__clearance_first",
+      "required": "blocked/3",
+      "observed": "blocked/3",
+      "names_the_unattributable_author": true,
+      "records_the_effect": true,
+      "derived_from": "t-41fda10d (#421 F1): 'reviewed, then kept coding' is a different\nsituation from 'never reviewed', and both are hidden by a rollup that\nonly shows a tick. Skipping the unattributable marker leaves a genuine\nreport for another commit on record, which is stale — code 3. A bot's\nname must not turn 3 into 2"
+    },
+    {
+      "state": "the_authors_own_marker_beside_an_unattributable_one__unattributable_first",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "names_the_unattributable_author": true,
+      "records_the_effect": true,
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot (#421 F3): the implementer never signs it off, and THAT is\nwhat a human reading this exit has to be told. Same code either way;\nthe shadowed reason was strictly worse and, saying 'the only marker on\nrecord', factually false beside a second marker"
+    },
+    {
+      "state": "the_authors_own_marker_beside_an_unattributable_one__clearance_first",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "names_the_unattributable_author": true,
+      "records_the_effect": true,
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot (#421 F3): the implementer never signs it off, and THAT is\nwhat a human reading this exit has to be told. Same code either way;\nthe shadowed reason was strictly worse and, saying 'the only marker on\nrecord', factually false beside a second marker"
+    },
+    {
+      "state": "a_docs_only_pr_carrying_only_an_unattributable_marker",
+      "required": "exempt/0",
+      "observed": "exempt/0",
+      "names_the_unattributable_author": true,
+      "records_the_effect": true,
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot (#421 F2): 'Docs-only PRs are exempt — a handover or a task-file\nedit merges on green CI.' The exemption is a claim about the CHANGED PATHS\nand resolves no identity, so an author this reader cannot resolve is not\nevidence against it. See the module docstring for why this branch is taken\nin the fail-open direction rather than the conservative one"
+    },
+    {
+      "state": "a_docs_only_pr_an_unattributable_marker_objected_to",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "names_the_unattributable_author": true,
+      "records_the_effect": true,
+      "derived_from": "this module's own rule, stated in the docstring above and older than\n#421: 'Exemption applies to a PR nobody objected to, never over an\nobjection somebody raised' — the carve-out CLAUDE.md § The review half of `merge-policy` is a second session, not a bot does NOT itself\nspell out, which is why it is cited here as ours. This is the BOUND on\nthe state above — the exemption survives a marker naming nobody and does\nNOT survive one that objects, so the fail-open step F2 takes is exactly\none state wide"
+    },
+    {
+      "state": "a_code_pr_carrying_only_an_unattributable_marker",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "names_the_unattributable_author": true,
+      "records_the_effect": true,
+      "derived_from": "t-41fda10d: check 5 still fires when its own sentence is true — nothing\nelse IS on record. The control that stops F1-F3's remedy degenerating into\ndeleting the guard: a marker naming nobody never becomes a report, and a\ncode PR carrying only one has not been read"
     }
   ]
 }
