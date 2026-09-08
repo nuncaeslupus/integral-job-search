@@ -87,6 +87,75 @@ A breach returns **1, never 3**. `Makefile:58-70` maps exit 3 to "unmeasured
 (recorded)" and *continues*, which is the fail-open shape #297 recorded; this
 module's unmeasured verdict has to stop `make evidence`, because "the reader
 could not read anything" is precisely when a merge must not proceed.
+
+**T155 — an unattributable marker clears nothing and vetoes nothing.**
+
+Until this task, a marker whose comment author failed the login grammar returned
+`unresolvable/2` for the **whole** pull request, so one `github-actions[bot]`
+comment discarded a genuine second reader's head-bound `verdict=CLEAR`, in either
+comment order. T155's file left the rule open — *skip the unattributable marker
+and keep counting*, or *refuse wholesale and say so in the reason* — and required
+the choice to be argued from CLAUDE.md § *The review half of `merge-policy` is a
+second session, not a bot*. **The choice is to skip it, and to record it in every
+verdict that stands beside one.** Four things in that section decide it:
+
+* **The condition is existential over reports.** *"A code PR may merge once a
+  session other than its implementer has read it and reported on the PR."* That
+  is satisfied by **exhibiting one** such report. A comment nobody can attribute
+  is not a counter-example to a report that exists; it is not a report at all.
+* **The guard's own premise is narrower than the answer it used to give.** Its
+  reason string says *"self-review cannot be ruled out"* — a statement about the
+  marker whose author did not resolve, concluding that **that** marker is not a
+  second reader's. Nothing in it bears on a different comment whose author does
+  resolve and does differ from the PR's. Returning for the whole PR was a
+  non-sequitur from the module's own sentence.
+* **A marker naming nobody is already the category `markers()` discards.**
+  Prose saying "reviewed, looks good" is refused for naming no head; an author
+  outside the login grammar names no writer. Both are comments that fail to be
+  reports, and the module's answer to a non-report has always been to keep
+  reading, not to stop.
+* **The section is titled *not a bot*.** Under the old rule the deciding input on
+  a reviewed PR was a bot's display name — a string no session chose, in a format
+  GitHub picked. Letting that veto a human read is the section's own subject,
+  inverted.
+
+**The losing branch's risk, recorded because it is real.** *Refuse wholesale* is
+fail-closed, and this rule is not: it hands back the ability to merge a PR that
+carries a marker this module cannot attribute. The specific danger the refusal
+covered is that **the implementer can appear under an unresolvable spelling of
+themselves** — `nuncaeslupus (OWNER)` is round 5's own control — and after this
+change such a marker is discarded silently instead of stopping the PR. Two things
+bound it, and the second is why the recording is not decoration:
+
+1. **A discarded marker can never supply a clearance.** It is dropped before any
+   branch that allows, so the implementer wearing a badge cannot clear their own
+   PR by that route in either comment order; what clears is a *different*
+   account's resolvable marker, which is exactly what the rule asks for. The
+   remaining self-clearance path is unchanged and still recorded: control #51's
+   weld that stays inside the alphabet.
+2. **An unattributable author is a canary for a capture whose author fields are
+   being mangled**, and if one comment's author arrives mangled another's may
+   too — mangled, this time, into something that resolves and reads as somebody
+   else. Skipping quietly spends that canary. So the skip is never quiet: the
+   verdict names the author it could not resolve, in `repr()`, and says
+   `CLEARANCE_STANDS` or `CLEARANCE_SET_ASIDE`. Exit 0 with a line naming
+   `'github-actions[bot]'` is what tells a human to fix the capture rather than
+   to hunt for a review that is already there.
+
+**And the skip is not symmetric.** An unattributable **`BLOCK`** on the head is
+honoured — `unresolvable/2` — because the two error directions are not
+symmetric anywhere else in this module either: *"Exemption applies to a PR nobody
+objected to, never over an objection somebody raised."* A clearance from nobody
+is an approval out of an absence; an objection from nobody is a reason to look.
+So a marker naming nobody may still decide the answer for the set in exactly one
+direction, and it is the fail-closed one.
+
+`status/evidence/T155.json` is the gate:
+`unresolvable_marker_authors_with_an_unrecorded_effect` over `SCOPE_STATES`,
+which pairs six unattributable authors with a genuine head-bound clearance in
+both comment orders and counts a state whose outcome is wrong **or** whose reason
+does not name the author and record the effect. That `or` is load-bearing:
+against the code as it stood, the metric read **22 of 22**.
 """
 
 from __future__ import annotations
@@ -101,6 +170,7 @@ from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D28.json"
+DEFAULT_T155_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T155.json"
 DEFAULT_CLAUDE_MD = _REPO_ROOT / "CLAUDE.md"
 
 #: The marker's name. A report is a PR comment ending in a line of this shape;
@@ -148,6 +218,19 @@ UNRESOLVABLE = "unresolvable"
 #: exactly what was added so the margin over the observed count is unchanged.
 MINIMUM_PRS_EVALUATED = 44
 MINIMUM_REPORTS_FOUND = 8
+
+#: T155's floor, same style: the marker-scope states are the denominator of
+#: `unresolvable_marker_authors_with_an_unrecorded_effect`, and a control list
+#: that shrank to nothing would otherwise score a serene zero.
+MINIMUM_SCOPE_STATES = 22
+
+#: The two phrases a verdict carries when an unattributable marker sits beside a
+#: head-bound clearance. They are **named constants because T155's gate asserts
+#: them**: "the effect was recorded" has to be checkable by something other than
+#: a human reading prose, which is the same reason `markers()` refuses free text.
+#: `read` emits exactly one of them in that situation, and never both.
+CLEARANCE_STANDS = "the clearance stands"
+CLEARANCE_SET_ASIDE = "the clearance was set aside"
 
 
 @dataclass(frozen=True)
@@ -360,11 +443,21 @@ def read(pr: PullRequest) -> Verdict:
        author fields go through that **one** helper, and the "is this somebody
        else?" comparison is made between its outputs — never between the raw
        captured strings, which differ by case and padding for one account.
+       **That conclusion is about the marker it fires on, and T155 scopes it
+       there**: an unattributable marker clears nothing and vetoes nothing, and
+       every verdict standing beside one names its author and says what became
+       of the clearance. See the module docstring for the argument.
     2. A `BLOCK` on the head blocks, **before** the docs-only exemption is
        considered. Exemption is for a PR nobody objected to.
-    3. A `CLEAR` on the head by somebody other than the author allows.
-    4. Docs-only, with nothing on record, is exempt.
-    5. Otherwise blocked — and if a marker exists for a *different* commit, the
+    3. An **unattributable** `BLOCK` on the head is `unresolvable` — the one
+       direction in which a marker naming nobody still decides the answer for
+       the set, and it is the fail-closed one (T155).
+    4. A `CLEAR` on the head by somebody other than the author allows, and says
+       in its reason that any unattributable marker beside it was discarded.
+    5. An unattributable marker with nothing else on record is `unresolvable`,
+       exactly as before — there is then nothing else to count.
+    6. Docs-only, with nothing on record, is exempt.
+    7. Otherwise blocked — and if a marker exists for a *different* commit, the
        code is 3 (stale) rather than 2 (absent), because "reviewed, then kept
        coding" is a different situation from "never reviewed" and both are
        hidden by a rollup that only shows a tick.
@@ -387,15 +480,17 @@ def read(pr: PullRequest) -> Verdict:
     on_head: list[tuple[Comment, str]] = []
     on_another_commit = False
     by_the_author = False
+    unattributable: list[str] = []
+    unattributable_objection = False
     for comment in pr.comments:
         for marked_head, verdict in markers(comment.body):
             writer = resolve_identity(comment.author)
             if writer is None:
-                return Verdict(
-                    UNRESOLVABLE,
-                    2,
-                    "a marker's author is unknown, so self-review cannot be ruled out",
-                )
+                if comment.author not in unattributable:
+                    unattributable.append(comment.author)
+                if marked_head == head and verdict == "BLOCK":
+                    unattributable_objection = True
+                continue
             if writer == pr_identity:
                 by_the_author = True
                 continue
@@ -406,19 +501,49 @@ def read(pr: PullRequest) -> Verdict:
 
     reports = tuple(comment for comment, _ in on_head)
     blocking = [comment for comment, verdict in on_head if verdict == "BLOCK"]
+    cleared = [comment for comment, verdict in on_head if verdict == "CLEAR"]
+    named = ", ".join(repr(who) for who in unattributable)
+    discarded = (
+        f"; a marker author naming nobody ({named}) is on record and cleared nothing"
+        if unattributable
+        else ""
+    )
     if blocking:
+        aside = f", so {CLEARANCE_SET_ASIDE}" if cleared else ""
         return Verdict(
             BLOCKED,
             1,
-            f"a second reader ({blocking[0].author}) BLOCKed {head[:12]}",
+            f"a second reader ({blocking[0].author}) BLOCKed {head[:12]}{aside}{discarded}",
+            reports,
+        )
+    if unattributable_objection:
+        aside = f"{CLEARANCE_SET_ASIDE}" if cleared else "no clearance was on record"
+        return Verdict(
+            UNRESOLVABLE,
+            2,
+            f"a marker on {head[:12]} says BLOCK and its author names nobody ({named}), "
+            f"so {aside}: an objection this reader cannot attribute is not a pass, and "
+            "the capture is what needs fixing",
             reports,
         )
     if reports:
+        stands = (
+            f"{discarded}, so {CLEARANCE_STANDS}: it is not a report, and it is not a veto over one"
+            if unattributable
+            else ""
+        )
         return Verdict(
             ALLOWED,
             0,
-            f"a second reader ({reports[0].author}) cleared {head[:12]}",
+            f"a second reader ({reports[0].author}) cleared {head[:12]}{stands}",
             reports,
+        )
+    if unattributable:
+        return Verdict(
+            UNRESOLVABLE,
+            2,
+            f"the only marker on record has an author naming nobody ({named}), "
+            "so self-review cannot be ruled out",
         )
     if is_docs_only(pr.files):
         return Verdict(EXEMPT, 0, "docs-only PR: every changed path is documentation")
@@ -1265,6 +1390,285 @@ def measure(
     return record
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# T155 — the scope of an unattributable marker
+# ──────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ScopeState:
+    """One constructed state pairing an unattributable marker with a clearance.
+
+    `unattributable` is the raw author string the verdict's reason must name —
+    checked as `repr(...)`, never as the bare string, because a **blank** author
+    is a substring of every reason ever written and would satisfy "names the
+    author" vacuously. That is the same vacuous-truth shape `is_docs_only`
+    refuses for an empty file list.
+
+    `effect` is `CLEARANCE_STANDS` or `CLEARANCE_SET_ASIDE`: what the reason has
+    to say became of the head-bound clearance. A state whose outcome is right
+    and whose reason says neither still counts as a violation — the gate's `or`.
+    """
+
+    name: str
+    pr: PullRequest
+    state: str
+    code: int
+    unattributable: str
+    effect: str
+    citation: str
+
+
+#: The names a capture actually carries for a writer this module cannot resolve.
+#: Each is paired with why it resolves to nobody, so the control cites the
+#: grammar rather than the behaviour.
+_UNATTRIBUTABLE_AUTHORS: tuple[tuple[str, str, str], ...] = (
+    (
+        "github_actions",
+        "github-actions[bot]",
+        "`[` is outside the login alphabet, so the string is no login — this is\n"
+        "F3's own example, the one that vetoed a real reader on #408",
+    ),
+    (
+        "dependabot",
+        "dependabot[bot]",
+        "the same shape from a second bot: a PR carrying routine automation must\n"
+        "not become unmergeable because the automation commented on it",
+    ),
+    (
+        "coderabbitai",
+        "coderabbitai[bot]",
+        "the review bot that left on 2026-09-04 — its comments outlive it in every\n"
+        "old capture, and none of them is a second reader either way",
+    ),
+    (
+        "a_blank_author",
+        "",
+        "an author field that arrived empty names nobody (control #16); it is the\n"
+        "state `repr()` exists for, since `'' in reason` is vacuously true",
+    ),
+    (
+        "an_author_longer_than_any_login",
+        "r" * (MAXIMUM_LOGIN_LENGTH + 1),
+        "#408 F1: 40 characters is longer than any account GitHub issues, so the\n"
+        "string names nobody — and still must not veto somebody who does",
+    ),
+    (
+        "the_prs_own_author_wearing_a_badge",
+        "nuncaeslupus (OWNER)",
+        "#408 round 5's weld, and the LOSING BRANCH'S RISK made a control: this IS\n"
+        "the implementer under a spelling that resolves to nobody. Their marker\n"
+        "clears nothing; the clearance that stands is a different, resolvable\n"
+        "account's, which is what the rule requires of a second reader",
+    ),
+)
+
+
+def _scope_states() -> tuple[ScopeState, ...]:
+    """T155's states: an unattributable marker beside a genuine clearance.
+
+    Every pairing is built **in both comment orders**, because the defect fired
+    on the presence of the unattributable author and not on where it sat — a fix
+    that only looked at the first marker, or only at the last, would pass one
+    order and fail the other.
+    """
+    rule = "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot"
+    code = ("src/integral/thing.py",)
+    docs = ("arsenal/session/handover.md",)
+    cleared = Comment(
+        "reviewer", f"Read the diff. Two findings, both answered.\n\n{marker_line(_HEAD)}"
+    )
+    objected = Comment("other-reader", f"One finding stands.\n\n{marker_line(_HEAD, 'BLOCK')}")
+
+    def echo(who: str, verdict: str = "CLEAR", head: str = _HEAD) -> Comment:
+        return Comment(who, f"Automated summary of this thread.\n\n{marker_line(head, verdict)}")
+
+    def orders(
+        unattributable: Comment, *rest: Comment
+    ) -> tuple[tuple[str, tuple[Comment, ...]], ...]:
+        """The same comments with the unattributable marker at each end.
+
+        Both orders, always: F3's guard fired on the presence of the author and
+        not on its position, so a fix reading only the first or only the last
+        marker would pass one of these and fail the other.
+        """
+        return (
+            ("unattributable_first", (unattributable, *rest)),
+            ("clearance_first", (*rest, unattributable)),
+        )
+
+    states: list[ScopeState] = []
+    number = 101
+
+    for label, who, why in _UNATTRIBUTABLE_AUTHORS:
+        for order, comments in orders(echo(who), cleared):
+            states.append(
+                ScopeState(
+                    f"{label}_beside_a_clearance__{order}",
+                    PullRequest(number, "nuncaeslupus", _HEAD, code, comments),
+                    ALLOWED,
+                    0,
+                    who,
+                    CLEARANCE_STANDS,
+                    f"{rule}: a PR may merge once a session OTHER THAN ITS IMPLEMENTER has\n"
+                    f"read it and reported — {why}",
+                )
+            )
+            number += 1
+
+    for label, who in (("github_actions", "github-actions[bot]"), ("a_blank_author", "")):
+        for order, comments in orders(echo(who, "BLOCK"), cleared):
+            states.append(
+                ScopeState(
+                    f"an_unattributable_BLOCK_from_{label}__{order}",
+                    PullRequest(number, "nuncaeslupus", _HEAD, code, comments),
+                    UNRESOLVABLE,
+                    2,
+                    who,
+                    CLEARANCE_SET_ASIDE,
+                    f"{rule}: the exemption — and by the same asymmetry a clearance — is\n"
+                    "for a PR nobody objected to, never over an objection somebody raised.\n"
+                    "An objection this reader cannot attribute is not a pass, so the one\n"
+                    "direction in which an unattributable marker still decides the set is\n"
+                    "the fail-closed one",
+                )
+            )
+            number += 1
+
+    for order, comments in orders(echo("github-actions[bot]", "CLEAR", _OLDER), cleared):
+        states.append(
+            ScopeState(
+                f"an_unattributable_marker_for_another_commit__{order}",
+                PullRequest(number, "nuncaeslupus", _HEAD, code, comments),
+                ALLOWED,
+                0,
+                "github-actions[bot]",
+                CLEARANCE_STANDS,
+                "t-41fda10d: a marker on the wrong commit binds nothing, and one that\n"
+                "also names nobody binds nothing twice — it does not make the PR stale\n"
+                "(code 3) either, because there is no report to be stale ABOUT",
+            )
+        )
+        number += 1
+
+    for order, comments in orders(echo("github-actions[bot]"), cleared, objected):
+        states.append(
+            ScopeState(
+                f"a_resolvable_reader_blocked_the_same_head__{order}",
+                PullRequest(number, "nuncaeslupus", _HEAD, code, comments),
+                BLOCKED,
+                1,
+                "github-actions[bot]",
+                CLEARANCE_SET_ASIDE,
+                f"{rule}: a BLOCK from a second session is the objection the whole rule\n"
+                "is for; the bot's marker changes nothing in either direction, and the\n"
+                "reason still has to say what became of the clearance beside it",
+            )
+        )
+        number += 1
+
+    for order, comments in orders(echo("github-actions[bot]"), cleared):
+        states.append(
+            ScopeState(
+                f"a_docs_only_pr_a_second_reader_cleared__{order}",
+                PullRequest(number, "nuncaeslupus", _HEAD, docs, comments),
+                ALLOWED,
+                0,
+                "github-actions[bot]",
+                CLEARANCE_STANDS,
+                f"{rule}: docs-only PRs are exempt, and a report is stronger evidence\n"
+                "than the exemption — a docs PR that WAS read reads as read, not as\n"
+                "unreadable because a bot commented on it",
+            )
+        )
+        number += 1
+
+    return tuple(states)
+
+
+SCOPE_STATES = _scope_states()
+
+
+def measure_marker_scope(states: tuple[ScopeState, ...] | None = None) -> dict[str, Any]:
+    """T155's reading: `unresolvable_marker_authors_with_an_unrecorded_effect`.
+
+    A state counts when its outcome is not the one the rule above requires **or**
+    when the reason does not name the unattributable author and say what became
+    of the clearance. The disjunction is load-bearing and was a conjunction until
+    the second reader on #408 caught it: under `and`, the "refuse wholesale"
+    answer scored zero over code nobody had changed, because that code already
+    returned `unresolvable/2`. A gate satisfied by doing nothing is the defect
+    this repository keeps meeting.
+    """
+    evaluated = SCOPE_STATES if states is None else states
+    readings: list[dict[str, Any]] = []
+    unrecorded: list[str] = []
+
+    for case in evaluated:
+        verdict = read(case.pr)
+        outcome_ok = verdict.state == case.state and verdict.code == case.code
+        named_ok = repr(case.unattributable) in verdict.reason
+        effect_ok = case.effect in verdict.reason
+        if not (outcome_ok and named_ok and effect_ok):
+            required_may_proceed = case.state in {ALLOWED, EXEMPT}
+            direction = (
+                "fail-open"
+                if verdict.merge_may_proceed and not required_may_proceed
+                else "fail-closed"
+            )
+            missing = []
+            if not outcome_ok:
+                missing.append(f"the rule requires {case.state}/{case.code}")
+            if not named_ok:
+                missing.append(f"the reason does not name {case.unattributable!r}")
+            if not effect_ok:
+                missing.append(f"the reason does not say {case.effect!r}")
+            unrecorded.append(
+                f"{case.name}: {'; '.join(missing)} ({case.citation}); the reader answered "
+                f"{verdict.state}/{verdict.code} — {verdict.reason} [{direction}]"
+            )
+        readings.append(
+            {
+                "state": case.name,
+                "required": f"{case.state}/{case.code}",
+                "observed": f"{verdict.state}/{verdict.code}",
+                "names_the_unattributable_author": named_ok,
+                "records_the_effect": effect_ok,
+                "derived_from": case.citation,
+            }
+        )
+
+    floor, breached = _floor(len(evaluated), MINIMUM_SCOPE_STATES)
+    record: dict[str, Any] = {
+        "unresolvable_marker_authors_with_an_unrecorded_effect": len(unrecorded),
+        "marker_scope_states_at_least": floor,
+        "rule": (
+            "an unattributable marker clears nothing and vetoes nothing, and every "
+            "verdict beside one says what became of the clearance"
+        ),
+        "gate_status": "measured",
+        "states_with_an_unrecorded_effect": unrecorded,
+        "readings": readings,
+    }
+    if breached:
+        record["unresolvable_marker_authors_with_an_unrecorded_effect"] = -1
+        record["gate_status"] = "unmeasured"
+        record["unmeasured_reason"] = (
+            f"marker_scope_states_at_least: {len(evaluated)} states evaluated, "
+            f"floor is {MINIMUM_SCOPE_STATES}"
+        )
+    return record
+
+
+def write_scope_evidence(evidence: Path | None = None) -> dict[str, Any]:
+    """Measure, then record `status/evidence/T155.json` — in that order (#297)."""
+    path = DEFAULT_T155_EVIDENCE_PATH if evidence is None else evidence
+    measured = measure_marker_scope()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def write_evidence(evidence: Path | None = None) -> dict[str, Any]:
     """Measure, then record `status/evidence/D28.json` — in that order (#297)."""
     path = DEFAULT_EVIDENCE_PATH if evidence is None else evidence
@@ -1285,6 +1689,18 @@ def exit_code_for(record: dict[str, Any]) -> int:
     if record["review_reader_status"] != "measured":
         return 1
     return 1 if record["merges_allowed_without_a_review_of_the_head"] else 0
+
+
+def scope_exit_code_for(record: dict[str, Any]) -> int:
+    """T155's half of the exit status — 0 measured and clean, 1 anything else.
+
+    Never 3, for `exit_code_for`'s reason: a reader that cannot say what an
+    unattributable marker did to a clearance is one whose verdicts nobody can
+    audit, and `make evidence` records a 3 and continues.
+    """
+    if record["gate_status"] != "measured":
+        return 1
+    return 1 if record["unresolvable_marker_authors_with_an_unrecorded_effect"] else 0
 
 
 def _cmd_emit(head: str, verdict: str) -> int:
@@ -1361,7 +1777,19 @@ def _main(argv: list[str] | None = None) -> int:
         print(reason, file=sys.stderr)
     if measured["review_reader_status"] != "measured":
         print(measured["unmeasured_reason"], file=sys.stderr)
-    return exit_code_for(measured)
+
+    # T155's record is written by the same invocation `make evidence` already
+    # makes: one module, two gates, like `repo_gate`'s four. A second module
+    # would have had to import this one to reach `read`, and the reader whose
+    # behaviour is being measured must be the one that ships.
+    scope = write_scope_evidence()
+    print(json.dumps(scope, ensure_ascii=False))
+    for reason in scope["states_with_an_unrecorded_effect"]:
+        print(reason, file=sys.stderr)
+    if scope["gate_status"] != "measured":
+        print(scope["unmeasured_reason"], file=sys.stderr)
+
+    return exit_code_for(measured) or scope_exit_code_for(scope)
 
 
 if __name__ == "__main__":

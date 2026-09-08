@@ -729,3 +729,251 @@ def test_an_unreadable_capture_is_never_a_pass(tmp_path: Path) -> None:
     broken = tmp_path / "broken.json"
     broken.write_text("{not json", encoding="utf-8")
     assert rr._main(["check", str(broken)]) == 2
+
+
+# --------------------------------------------------------------------------
+# T155 — the scope of an unattributable marker
+# --------------------------------------------------------------------------
+#
+# The defect: `read` returned `unresolvable/2` for the WHOLE pull request as
+# soon as any marker's comment author failed the login grammar, so one
+# `github-actions[bot]` comment discarded a genuine second reader's head-bound
+# CLEAR — in either comment order. The rule chosen (module docstring, T155) is
+# **skip the unattributable marker and record what it did**, with one
+# asymmetry: an unattributable BLOCK is honoured, because a clearance from
+# nobody is approval out of an absence and an objection from nobody is a reason
+# to look.
+
+
+def _echo(who: str, verdict: str = "CLEAR", head: str = HEAD) -> rr.Comment:
+    """A marker written by somebody this module cannot resolve to a login."""
+    return rr.Comment(who, f"Automated summary.\n\n{rr.marker_line(head, verdict)}")
+
+
+def test_no_unattributable_marker_author_has_an_unrecorded_effect() -> None:
+    """T155's named gate."""
+    record = rr.measure_marker_scope()
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == 0, record[
+        "states_with_an_unrecorded_effect"
+    ]
+    assert record["gate_status"] == "measured"
+
+
+@pytest.mark.parametrize(
+    "who",
+    ["github-actions[bot]", "dependabot[bot]", "coderabbitai[bot]", "", "r" * 40],
+)
+@pytest.mark.parametrize("unattributable_first", [True, False])
+def test_a_marker_naming_nobody_never_vetoes_a_second_reader(
+    who: str, unattributable_first: bool
+) -> None:
+    """Both orders: the old guard fired on presence, not on position."""
+    bot, human = _echo(who), _report()
+    comments = (bot, human) if unattributable_first else (human, bot)
+    verdict = rr.read(_pr(comments=comments))
+    assert (verdict.state, verdict.code) == (rr.ALLOWED, 0)
+    assert repr(who) in verdict.reason
+    assert rr.CLEARANCE_STANDS in verdict.reason
+
+
+def test_an_unattributable_marker_can_never_supply_a_clearance() -> None:
+    """The fail-open direction of the choice, pinned.
+
+    Skipping it means it counts for nothing — not that it counts for somebody.
+    With no other marker on record the PR is still `unresolvable/2`.
+    """
+    verdict = rr.read(_pr(comments=(_echo("github-actions[bot]"),)))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
+    assert repr("github-actions[bot]") in verdict.reason
+
+
+def test_the_implementer_wearing_a_badge_still_clears_nothing_of_their_own() -> None:
+    """The losing branch's risk, made a test.
+
+    `nuncaeslupus (OWNER)` is round 5's weld: it IS the implementer, under a
+    spelling that resolves to nobody. Alone it clears nothing; beside a real
+    second reader the clearance that stands is the OTHER account's.
+    """
+    badge = _echo("nuncaeslupus (OWNER)")
+    alone = rr.read(_pr(author="nuncaeslupus", comments=(badge,)))
+    assert (alone.state, alone.code) == (rr.UNRESOLVABLE, 2)
+
+    beside = rr.read(_pr(author="nuncaeslupus", comments=(badge, _report())))
+    assert (beside.state, beside.code) == (rr.ALLOWED, 0)
+    assert beside.reports == (_report(),)
+    assert repr("nuncaeslupus (OWNER)") in beside.reason
+
+
+@pytest.mark.parametrize("unattributable_first", [True, False])
+def test_an_objection_from_nobody_is_still_an_objection(unattributable_first: bool) -> None:
+    """The one direction an unattributable marker still decides the set.
+
+    CLAUDE.md § the review half: *"Exemption applies to a PR nobody objected to,
+    never over an objection somebody raised."* A clearance from nobody is
+    approval out of an absence; a BLOCK from nobody is a reason to look.
+    """
+    bot, human = _echo("github-actions[bot]", "BLOCK"), _report()
+    comments = (bot, human) if unattributable_first else (human, bot)
+    verdict = rr.read(_pr(comments=comments))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
+    assert repr("github-actions[bot]") in verdict.reason
+    assert rr.CLEARANCE_SET_ASIDE in verdict.reason
+
+
+def test_a_resolvable_block_still_wins_over_everything_beside_it() -> None:
+    verdict = rr.read(
+        _pr(comments=(_echo("github-actions[bot]"), _report(), _report("other", verdict="BLOCK")))
+    )
+    assert (verdict.state, verdict.code) == (rr.BLOCKED, 1)
+    assert rr.CLEARANCE_SET_ASIDE in verdict.reason
+    assert repr("github-actions[bot]") in verdict.reason
+
+
+def test_a_stale_marker_naming_nobody_is_not_a_stale_report() -> None:
+    """It binds nothing twice: wrong commit AND no writer, so code 3 is not it."""
+    verdict = rr.read(_pr(comments=(_echo("github-actions[bot]", "CLEAR", OLDER), _report())))
+    assert (verdict.state, verdict.code) == (rr.ALLOWED, 0)
+    alone = rr.read(_pr(comments=(_echo("github-actions[bot]", "CLEAR", OLDER),)))
+    assert (alone.state, alone.code) == (rr.UNRESOLVABLE, 2)
+
+
+def test_a_verdict_beside_no_unattributable_marker_says_nothing_about_one() -> None:
+    """The appendix is conditional: an ordinary clearance reads as it always did."""
+    verdict = rr.read(_pr(comments=(_report(),)))
+    assert verdict.reason == f"a second reader (reviewer) cleared {HEAD[:12]}"
+    assert rr.CLEARANCE_STANDS not in verdict.reason
+
+
+# The T155 ladder. `test_every_earlier_rule_still_reddens_its_own_controls`
+# keeps each historical `resolve_identity` measured; these keep each historical
+# — and each half-done — SCOPE rule measured, for the same reason. The second
+# rung is the one the gate's `or` exists for: it answers every state with the
+# right state and code and says nothing about the marker it dropped.
+
+
+#: The shipped reader, bound at import so a rung can delegate to it while
+#: `rr.read` is monkeypatched to the rung itself. Calling `rr.read` there is an
+#: infinite recursion, not a measurement.
+_SHIPPED_READ = rr.read
+
+
+def _wholesale_refusal(pr: rr.PullRequest) -> rr.Verdict:
+    """The rule this task replaced: any unattributable marker refuses the PR."""
+    for comment in pr.comments:
+        if rr.markers(comment.body) and rr.resolve_identity(comment.author) is None:
+            return rr.Verdict(
+                rr.UNRESOLVABLE,
+                2,
+                "a marker's author is unknown, so self-review cannot be ruled out",
+            )
+    return _SHIPPED_READ(pr)
+
+
+def _skip_without_recording(pr: rr.PullRequest) -> rr.Verdict:
+    """The same outcomes as the shipped rule, with the reason stripped bare."""
+    verdict = _SHIPPED_READ(pr)
+    return rr.Verdict(verdict.state, verdict.code, "no comment", verdict.reports)
+
+
+def _skip_including_an_objection(pr: rr.PullRequest) -> rr.Verdict:
+    """Symmetric skipping: an unattributable BLOCK dropped like a CLEAR."""
+    kept = tuple(
+        comment
+        for comment in pr.comments
+        if not rr.markers(comment.body) or rr.resolve_identity(comment.author) is not None
+    )
+    dropped = [c.author for c in pr.comments if c not in kept]
+    verdict = _SHIPPED_READ(
+        rr.PullRequest(pr.number, pr.author, pr.head_sha, pr.files, kept or pr.comments)
+    )
+    note = f"; a marker author naming nobody ({', '.join(repr(a) for a in dropped)}) was dropped"
+    stands = f", so {rr.CLEARANCE_STANDS}" if dropped else ""
+    return rr.Verdict(verdict.state, verdict.code, verdict.reason + note + stands, verdict.reports)
+
+
+SCOPE_LADDER: tuple[tuple[str, object], ...] = (
+    ("the rule T155 replaced — refuse the whole PR", _wholesale_refusal),
+    ("skipping without recording the effect — the gate's `or`", _skip_without_recording),
+    ("skipping an unattributable BLOCK too — the fail-open half", _skip_including_an_objection),
+)
+
+
+@pytest.mark.parametrize("label,rule", SCOPE_LADDER, ids=[row[0] for row in SCOPE_LADDER])
+def test_every_rule_this_one_replaced_still_reddens_the_scope_states(
+    label: str, rule: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rung scoring 0 is a rung whose own defect nothing is watching any more."""
+    monkeypatch.setattr(rr, "read", rule)
+    record = rr.measure_marker_scope()
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] > 0, (
+        f"{label} scores 0 against T155's states, so the gate would be satisfied by it"
+    )
+
+
+def test_the_rule_this_task_replaced_reddens_every_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The measurement the task required before the code was touched: 22 of 22.
+
+    Committed rather than reported, because "the metric was non-zero before"
+    is a claim a later reader cannot re-run from a session's scrollback.
+    """
+    monkeypatch.setattr(rr, "read", _wholesale_refusal)
+    record = rr.measure_marker_scope()
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == len(rr.SCOPE_STATES)
+
+
+def test_the_scope_gate_names_a_blank_author_by_repr_and_not_vacuously() -> None:
+    """`'' in reason` is true of every reason ever written; `"''" in reason` is not."""
+    blanks = [case for case in rr.SCOPE_STATES if case.unattributable == ""]
+    assert blanks
+    for case in blanks:
+        assert repr("") in rr.read(case.pr).reason
+
+
+def test_the_scope_states_only_grow() -> None:
+    """CLAUDE.md: *"the measured denominator must rise"* — the floor is how."""
+    assert len(rr.SCOPE_STATES) >= rr.MINIMUM_SCOPE_STATES
+    assert rr.measure_marker_scope()["marker_scope_states_at_least"] == rr.MINIMUM_SCOPE_STATES
+
+
+def test_both_comment_orders_are_present_for_every_pairing() -> None:
+    """A one-order control set would pass a fix that only read the first marker."""
+    first = {n.rsplit("__", 1)[0] for n in (c.name for c in rr.SCOPE_STATES) if n.endswith("first")}
+    later = {
+        n.rsplit("__", 1)[0]
+        for n in (c.name for c in rr.SCOPE_STATES)
+        if n.endswith("clearance_first")
+    }
+    assert first == later
+    assert len(rr.SCOPE_STATES) == 2 * len(first)
+
+
+def test_a_scan_over_zero_scope_states_is_unmeasured_and_never_a_clean_zero() -> None:
+    record = rr.measure_marker_scope(states=())
+    assert record["gate_status"] == "unmeasured"
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == -1
+    assert rr.scope_exit_code_for(record) == 1
+    assert rr.scope_exit_code_for(record) != 3
+
+
+def test_a_breached_scope_floor_records_what_was_observed() -> None:
+    record = rr.measure_marker_scope(states=rr.SCOPE_STATES[:3])
+    assert record["marker_scope_states_at_least"] == 3
+    assert record["gate_status"] == "unmeasured"
+
+
+def test_write_scope_evidence_records_exactly_what_was_measured(tmp_path: Path) -> None:
+    path = tmp_path / "T155.json"
+    written = rr.write_scope_evidence(path)
+    assert json.loads(path.read_text(encoding="utf-8")) == written
+    assert written["unresolvable_marker_authors_with_an_unrecorded_effect"] == 0
+    assert written["gate_status"] == "measured"
+
+
+def test_every_scope_state_cites_the_text_its_expectation_comes_from() -> None:
+    for case in rr.SCOPE_STATES:
+        assert case.citation.strip()
+        assert case.effect in {rr.CLEARANCE_STANDS, rr.CLEARANCE_SET_ASIDE}
