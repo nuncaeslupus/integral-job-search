@@ -113,6 +113,59 @@ def test_a_marker_from_an_unresolved_author_is_not_a_second_reader(who: str) -> 
     assert verdict.merge_may_proceed is False
 
 
+@pytest.mark.parametrize(
+    "who",
+    ["NuncaEsLupus", "NUNCAESLUPUS", " nuncaeslupus ", "\tnuncaeslupus\n", "  NuncaEsLupus  "],
+)
+def test_the_pr_author_cannot_review_their_own_head_under_another_spelling(who: str) -> None:
+    """#408 round 2, the serious half: the identity relation, not its blankness.
+
+    Round 1 normalised the author for emptiness (`comment.author.strip()`) and
+    left `comment.author == pr.author` raw, two lines below. GitHub logins are
+    case-insensitive, so `NuncaEsLupus` is `nuncaeslupus` — and the implementer
+    could clear their own PR by holding shift, which CLAUDE.md forbids by name
+    (*"the implementer never signs it off"*). Padding is the same account for
+    the same reason. Fail-open: these all answered `allowed/0`.
+    """
+    pr = _pr(author="nuncaeslupus", comments=(_report(author=who),))
+    verdict = rr.read(pr)
+    assert (verdict.state, verdict.code) == (rr.BLOCKED, 2)
+    assert verdict.merge_may_proceed is False
+
+
+@pytest.mark.parametrize("who", ["​", "﻿", "\x00", "...", "​﻿ \x00"])
+def test_an_author_that_survives_strip_but_names_nobody_is_still_unresolved(who: str) -> None:
+    """`str.strip()` removes none of U+200B, U+FEFF or `\\x00`.
+
+    So each of these is a *non-blank* string that differs from every login,
+    which round 1's `strip()` guard let through and the raw `==` then read as
+    "somebody else". `resolve_identity` deletes invisible characters and then
+    requires an alphanumeric to remain, so an author made only of them — and a
+    punctuation-only one, which names no account a human can check — resolves to
+    `None` rather than to a second reader.
+    """
+    verdict = rr.read(_pr(comments=(_report(author=who),)))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
+
+
+def test_one_helper_answers_both_questions_the_module_asks_about_an_author() -> None:
+    """The root cause was two normalisation rules for one relation (#408 rd 2)."""
+    assert rr.resolve_identity("  NuncaEsLupus​ ") == "nuncaeslupus"
+    assert rr.resolve_identity("nunca​eslupus") == "nuncaeslupus"
+    for empty in ("", "   ", "​", "﻿", "\x00", "..."):
+        assert rr.resolve_identity(empty) is None
+    # A real second reader still resolves, and to something that is not the author.
+    assert rr.resolve_identity("reviewer") != rr.resolve_identity("author")
+
+
+def test_a_pr_author_that_only_looks_non_blank_is_unresolvable() -> None:
+    """The blankness guard on the PR's own author goes through the same helper."""
+    for who in ("​", "\x00", "..."):
+        verdict = rr.read(_pr(author=who, comments=(_report(),)))
+        assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+
+
 def test_an_unresolved_author_on_a_comment_carrying_no_marker_changes_nothing() -> None:
     """The guard fires on markers, not on every comment a capture happens to hold."""
     verdict = rr.read(_pr(comments=(rr.Comment("", "+1"), _report())))

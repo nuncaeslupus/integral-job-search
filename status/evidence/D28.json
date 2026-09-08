@@ -1,6 +1,6 @@
 {
   "merges_allowed_without_a_review_of_the_head": 0,
-  "prs_evaluated_at_least": 13,
+  "prs_evaluated_at_least": 20,
   "second_reader_reports_found_at_least": 2,
   "docs_only_prs_excluded": 1,
   "marker": "arsenal-second-reader: head=<40-hex head sha> verdict=CLEAR",
@@ -118,6 +118,48 @@
       "required": "unresolvable/2",
       "observed": "unresolvable/2",
       "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — an author that did not\nresolve cannot be shown to be somebody else, so self-review is not ruled out",
+      "direction": ""
+    },
+    {
+      "control": "the_author_reviewed_their_own_head_under_a_different_case",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — GitHub logins are\ncase-insensitive, so capitalising one is the same account",
+      "direction": ""
+    },
+    {
+      "control": "the_author_reviewed_their_own_head_with_a_padded_login",
+      "required": "blocked/2",
+      "observed": "blocked/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — surrounding whitespace\nnames the same account",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_zero_width_space",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — `str.strip()` does not\nremove U+200B, so an invisible author is non-blank and names nobody",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_byte_order_mark",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — U+FEFF survives\n`str.strip()` for the same reason U+200B does",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_a_nul_byte",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — a control character is\nnot whitespace and identifies no account",
+      "direction": ""
+    },
+    {
+      "control": "a_marker_whose_author_is_punctuation_only",
+      "required": "unresolvable/2",
+      "observed": "unresolvable/2",
+      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the implementer never signs it off — an author with no\nalphanumeric character names nobody a human can check, so the identity\nis unresolved rather than merely unequal to the PR's",
       "direction": ""
     }
   ],

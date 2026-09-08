@@ -95,6 +95,7 @@ import argparse
 import json
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -135,7 +136,7 @@ UNRESOLVABLE = "unresolvable"
 #: Floors, in `naming.MINIMUM_SCANNED` style (T100). Committed as the value the
 #: code asserts rather than the count of the day, so the record is invariant
 #: under adding a control.
-MINIMUM_PRS_EVALUATED = 13
+MINIMUM_PRS_EVALUATED = 20
 MINIMUM_REPORTS_FOUND = 2
 
 
@@ -210,6 +211,59 @@ def _is_sha(value: str) -> bool:
     return bool(re.fullmatch(r"[0-9a-fA-F]{40}", value))
 
 
+#: Unicode general categories that carry no identity: `Cc` (control, so `\x00`),
+#: `Cf` (format, so U+200B ZERO WIDTH SPACE and U+FEFF), `Cs` (surrogates), and
+#: the line/paragraph separators. They are deleted before an author string is
+#: compared, because `str.strip()` removes none of them: a login padded with
+#: them, or made only of them, is otherwise a distinct non-blank string.
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
+
+
+def resolve_identity(raw: str) -> str | None:
+    """The one place an author string becomes an identity, or fails to.
+
+    **Both** questions this module asks about an author go through this
+    function: "did this identity resolve at all?" and "is it the same person as
+    the PR's author?". Round 1 of #408's review fixed the first with
+    `author.strip()` and left the second as raw `==`, which reproduced the very
+    defect it was closing one line away: nine unresolved spellings — a
+    capitalised login above all — still cleared their own PR. Two normalisation
+    rules for one relation is the root cause, so there is now one rule and
+    neither caller may re-derive it.
+
+    The rule, in order:
+
+    * **Delete invisible characters** (`_INVISIBLE_CATEGORIES`). `str.strip()`
+      does not remove U+200B, U+FEFF or `\\x00`, so an author made only of them
+      is non-empty by `strip()` and would read as a resolved identity that
+      differs from everybody. Deleting rather than merely refusing also closes
+      the padded form: `"nunca\\u200beslupus"` resolves to the login it hides.
+    * **`strip()`**, which removes ASCII and Unicode whitespace (U+00A0
+      included) — F3's `" nuncaeslupus "`.
+    * **`casefold()`**, because **GitHub logins are case-insensitive**: `nuncaeslupus`
+      and `NuncaEsLupus` are one account. Comparing them raw let the implementer
+      clear their own PR by holding shift, which is exactly what CLAUDE.md's
+      *"the implementer never signs it off"* forbids.
+
+    `None` — identity unresolved — is returned when nothing survives, and also
+    when what survives holds **no alphanumeric character at all** (F4's `"..."`).
+    That is a deliberate ruling, and it is not the narrower claim "this is not a
+    valid GitHub login": the module's contract is only that an identity resolve
+    to somebody a human can check on the PR. A run of punctuation names nobody,
+    is not traceable to any account or session, and differs from the PR author
+    only by being unequal — the same vacuous inequality a blank author gave.
+    CLAUDE.md weights **fail-open over fail-closed** for exactly this choice: a
+    wrongly refused author costs one more read, a wrongly accepted one is a
+    merge nobody reviewed.
+    """
+    cleaned = "".join(
+        ch for ch in raw if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES
+    ).strip()
+    if not any(ch.isalnum() for ch in cleaned):
+        return None
+    return cleaned.casefold()
+
+
 def read(pr: PullRequest) -> Verdict:
     """Does a second-reader report exist for this PR's head commit?
 
@@ -217,9 +271,12 @@ def read(pr: PullRequest) -> Verdict:
 
     1. An unresolvable head or an empty file list is `unresolvable` — code 2,
        the same as no report, because neither is a pass. So is a marker whose
-       *comment* author is blank: an identity that did not resolve cannot be
-       shown to differ from the PR's, so self-review cannot be ruled out and it
-       is not a second reader.
+       *comment* author does not resolve through `resolve_identity`: an identity
+       that did not resolve cannot be shown to differ from the PR's, so
+       self-review cannot be ruled out and it is not a second reader. Both
+       author fields go through that **one** helper, and the "is this somebody
+       else?" comparison is made between its outputs — never between the raw
+       captured strings, which differ by case and padding for one account.
     2. A `BLOCK` on the head blocks, **before** the docs-only exemption is
        considered. Exemption is for a PR nobody objected to.
     3. A `CLEAR` on the head by somebody other than the author allows.
@@ -231,7 +288,8 @@ def read(pr: PullRequest) -> Verdict:
     """
     if not _is_sha(pr.head_sha):
         return Verdict(UNRESOLVABLE, 2, f"head commit {pr.head_sha!r} does not resolve to a sha")
-    if not pr.author:
+    pr_identity = resolve_identity(pr.author)
+    if pr_identity is None:
         return Verdict(
             UNRESOLVABLE, 2, "the PR's author is unknown, so self-review cannot be ruled out"
         )
@@ -248,13 +306,14 @@ def read(pr: PullRequest) -> Verdict:
     by_the_author = False
     for comment in pr.comments:
         for marked_head, verdict in markers(comment.body):
-            if not comment.author.strip():
+            writer = resolve_identity(comment.author)
+            if writer is None:
                 return Verdict(
                     UNRESOLVABLE,
                     2,
                     "a marker's author is unknown, so self-review cannot be ruled out",
                 )
-            if comment.author == pr.author:
+            if writer == pr_identity:
                 by_the_author = True
                 continue
             if marked_head != head:
@@ -513,6 +572,72 @@ def _control_prs() -> tuple[tuple[str, PullRequest, str, int, str], ...]:
             2,
             f"{rule}: the implementer never signs it off — an author that did not\n"
             "resolve cannot be shown to be somebody else, so self-review is not ruled out",
+        ),
+        # ── #408 round 2: the identity relation itself, not just its blankness ──
+        # The guard above normalised the author for *blankness* and the relation
+        # two lines below compared the raw strings, so nine spellings of the PR's
+        # own author still cleared it. Each of these is one of those spellings,
+        # committed so the fix is measured rather than asserted.
+        (
+            "the_author_reviewed_their_own_head_under_a_different_case",
+            PullRequest(
+                17,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("NuncaEsLupus", marker_line(_HEAD)),),
+            ),
+            BLOCKED,
+            2,
+            f"{rule}: the implementer never signs it off — GitHub logins are\n"
+            "case-insensitive, so capitalising one is the same account",
+        ),
+        (
+            "the_author_reviewed_their_own_head_with_a_padded_login",
+            PullRequest(
+                18,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("  nuncaeslupus\t", marker_line(_HEAD)),),
+            ),
+            BLOCKED,
+            2,
+            f"{rule}: the implementer never signs it off — surrounding whitespace\n"
+            "names the same account",
+        ),
+        (
+            "a_marker_whose_author_is_a_zero_width_space",
+            PullRequest(19, "author", _HEAD, code, (Comment("​", marker_line(_HEAD)),)),
+            UNRESOLVABLE,
+            2,
+            f"{rule}: the implementer never signs it off — `str.strip()` does not\n"
+            "remove U+200B, so an invisible author is non-blank and names nobody",
+        ),
+        (
+            "a_marker_whose_author_is_a_byte_order_mark",
+            PullRequest(20, "author", _HEAD, code, (Comment("﻿", marker_line(_HEAD)),)),
+            UNRESOLVABLE,
+            2,
+            f"{rule}: the implementer never signs it off — U+FEFF survives\n"
+            "`str.strip()` for the same reason U+200B does",
+        ),
+        (
+            "a_marker_whose_author_is_a_nul_byte",
+            PullRequest(21, "author", _HEAD, code, (Comment("\x00", marker_line(_HEAD)),)),
+            UNRESOLVABLE,
+            2,
+            f"{rule}: the implementer never signs it off — a control character is\n"
+            "not whitespace and identifies no account",
+        ),
+        (
+            "a_marker_whose_author_is_punctuation_only",
+            PullRequest(22, "author", _HEAD, code, (Comment("...", marker_line(_HEAD)),)),
+            UNRESOLVABLE,
+            2,
+            f"{rule}: the implementer never signs it off — an author with no\n"
+            "alphanumeric character names nobody a human can check, so the identity\n"
+            "is unresolved rather than merely unequal to the PR's",
         ),
     )
 
