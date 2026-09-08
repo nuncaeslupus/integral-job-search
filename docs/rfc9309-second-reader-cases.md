@@ -100,6 +100,14 @@ implementer's reading of the spec, is green when the reading is wrong.
 | 51 | `equals_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
 | 52 | `star_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
 | 53 | `dollar_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 60 | `dollar_as_path_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 61 | `colon_as_path_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 62 | `ampersand_as_path_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 63 | `equals_as_path_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 64 | `comma_as_path_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 65 | `at_sign_as_path_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 66 | `plus_as_path_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 67 | `a_path_separator_is_not_data_beside_one_that_is` | ALLOW | FAIL_CLOSED_RISK | HIGH | 2.2.2 |
 
 Fifty-three rows: 35 `FAIL_OPEN_RISK`, 17 `FAIL_CLOSED_RISK`, 1 `NEUTRAL` — weighted toward
 fail-open, since a fail-closed bug costs one skipped fetch and a fail-open bug means the
@@ -1359,15 +1367,32 @@ Disallow: /*a$b
 - **section:** 2.2.2 — RECOLLECTED
 - **why:** The same fault one step further on, and the row that stops the fix being a
   pattern-side-only patch. This rule has no literal `?`, so "which octets are in the query"
-  is undecidable from the pattern and its `$` is canonicalised as a path octet — left
-  literal, correctly, since §2.2.2 encodes reserved octets appearing as data *inside a
-  query*. The equivalence must therefore be met from the target side, by offering the
-  target's query with its reserved-as-data escapes resolved, which is what row 50 established
-  for `:` and `/` under a wildcard. A matcher resolving every reserved octet there *except*
-  `$` and `*` refuses this row. Nothing justifies that exception: the decode pass reads a
-  **request target**, and a target has no pattern for `*` to designate 0 or more of and no
-  end of a pattern for `$` to designate — rows 52 and 53's whole argument, applied where it
-  had not been applied.
+  is undecidable from the pattern, and its `$` is therefore canonicalised as a **path**
+  octet.
+
+  > **CORRECTED on the fourth review round.** This note used to continue: "left literal,
+  > correctly, since §2.2.2 encodes reserved octets appearing as data *inside a query*."
+  > That was wrong, and wrong in precisely the way section H exists to catch. It read the
+  > requirement off §2.2.2's example *table* — whose encoding rows happen to place their
+  > octets inside a query — rather than off §2.2.2's *sentence*, which states the
+  > requirement over "the URI and robots.txt **paths**". The path is the one region that
+  > sentence names, so it is the last region an exemption can be read into. It is the
+  > identical argument-from-example that rows 50–53 were written to refute, made one region
+  > over, and while it stood every reserved octet in a path was fail-open: `Disallow: /a$b`
+  > returned ALLOW on `/a%24b`, and so did `:`, `&`, `=`, `+`, `,` and `@`. **Rows 60–67 are
+  > that hole, and this paragraph is the argument that hid it.**
+
+  The verdict is unchanged and the mechanism is not. The rule canonicalises to `/*a%24b`,
+  which meets this target's own `%24` directly, so the row is now carried by the encode pass
+  rather than by the target-side decode. That decode still earns its place on the `/` alone:
+  `/` is the segment separator in a path (RFC 3986 §3.3) and ordinary content in a query
+  (§3.4), so a wildcard rule written `/*http://` and a target written `/out?url=http://x`
+  are read in two different regions and disagree on that one octet — which is what row 50
+  established for `:` and `/` under a wildcard. A matcher resolving every reserved octet
+  there *except* `$` and `*` still refuses this row. Nothing justifies that exception: the
+  decode pass reads a **request target**, and a target has no pattern for `*` to designate 0
+  or more of and no end of a pattern for `$` to designate — rows 52 and 53's whole argument,
+  applied where it had not been applied.
 - **direction:** FAIL_OPEN_RISK
 - **confidence:** HIGH
 
@@ -1390,6 +1415,229 @@ Disallow: /s?a=$b$
   is allowed. Encoding the first `$` must not consume the anchor after it, nor may anchoring
   on the wrong `$` end the rule at the first one. Fail-**closed** on its own, which is why it
   is pinned: no fail-open sweep would find a matcher that refuses this path.
+- **direction:** FAIL_CLOSED_RISK
+- **confidence:** HIGH
+
+---
+
+## Rows 60-67 — the region §2.2.2 states its requirement over
+
+Derived on the **fourth** review round of the reader's pull request, by a session other than
+the implementer, from §2.2.2 and RFC 3986 before the matcher was opened — the same
+provenance as rows 50–59.
+
+**Four rounds have now each found the encoding rule too narrow in a different dimension**,
+and the shape of that sequence is the finding. Round 1: the octet *set* was the literal
+`":/"`, widened to RFC 3986's reserved production. Round 2: the exemption applied to
+targets as well as patterns, made side-aware. Round 3: a non-trailing `$` in a pattern was
+still exempt, made positional from §2.2.3's own scopes. **Round 4 is the region**, and it
+is the one the module had argued for against itself: the whole pass was gated on being past
+the first `?`, so it ran in the query and never in the path.
+
+**The derivation, once, since rows 60–66 share it.** §2.2.2 requires octets "in the reserved
+range defined by RFC3986" percent-encoded "prior to comparison", and states that over "the
+URI and robots.txt **paths**" (RECOLLECTED). A path is the one region that sentence names by
+name, so it is the last region an exemption can be read into. The only support for the gate
+was §2.2.2's example table, whose two encoding rows happen to sit inside a query — and rows
+50–53 had already ruled that "a table is an illustration of a rule and never its extent".
+The module's own `_RESERVED` docstring says so in those words. Row 58's note then made the
+argument-from-example anyway, one region over, which is why that note is corrected above and
+why these rows exist.
+
+**Which octets are held out, and why it is one and not a list.** RFC 3986 §2.2 divides the
+reserved set by *purpose*: data "must be percent-encoded" only where it "would conflict with
+a reserved character's purpose as a delimiter". §3.3 then gives the path's grammar — a path
+is "a sequence of path segments separated by a slash (`/`) character", `segment = *pchar`,
+and `pchar = unreserved / pct-encoded / sub-delims / ":" / "@"`. So inside a path exactly one
+reserved octet delimits: `/`. Every sub-delim, and `:` and `@` besides, is admitted by
+`pchar` as data *within a segment* — exactly as the same octets are data within a query
+value, `query` being built from that same `pchar` (§3.4). `?` and `#` cannot occur in a path
+at all: §3.3 ends the path at the first of either.
+
+That gives **three** candidate delimiters, and only two survive as behaviour:
+
+- **`/` — held out, and regionally.** §3.3 makes it the segment separator. It *must* be held
+  out rather than merely may be: this reader never resolves `%2F` back to `/` (doing so would
+  let a rule about `/a%2Fb` cover `/a/b`), so encoding a literal `/` reaches the same merge
+  from the other direction. In a **query** it separates nothing, and §2.2.2's own table
+  encodes it — `?baz=https://foo.bar` → `?baz=https%3A%2F%2Ffoo.bar` — so the hold-out is
+  positional for this octet alone. Rows 29, 30 and 67 pin it.
+- **`?` — held out, positionally, at its first occurrence only**, since that is the octet
+  that makes "in the query" decidable at all. A later `?` is data (§3.4 admits it as
+  content) and is encoded. Unchanged by this round.
+- **`#` — NOT held out.** It does open the fragment (§3.5), so "hold out the structural
+  delimiters" would list it. But §3.3 ends the path at the first `?` or `#`, §3.4 ends the
+  query the same way, and a fragment "is not part of the request" — so no `#` can appear in
+  the string §2.2.2 compares, and on the rule side §2.2's comment marker has already removed
+  it. It reaches the canonicaliser only as ill-formed input, where §2.2.2's sentence has no
+  exception for it. Encoding it is also the fail-closed half: a rule written `Disallow:
+  /a%23b` then refuses a target spelled `/a#b`, where holding the octet out would leave the
+  two unequal and allow it. Pinned by `a_fragment_marker_is_data_not_a_delimiter`, an
+  implementer-derived row, since the reviewer's brief named `#` and this departs from it.
+
+**The specificity consequence, stated rather than left to be found.** §2.2.2 orders the
+encoding "prior to comparison" and ranks matches by "the most octets", so the octets counted
+are the canonical ones. A reserved data octet in a path now weighs three where it weighed
+one — exactly as the same octet in a query always has — so two rules can swap places, in
+either direction. A differential fuzz of 200,000 unstructured documents found **no**
+loosening from that shift; a second corpus of 200,000, shaped so an allow and a disallow both
+reach one target, found **4,564**. The zero was a fact about the first corpus, not about the
+change, and `precedence_shifts_when_a_path_octet_is_encoded` pins the loosening direction.
+Rows 23–25 are untouched: their patterns carry only `/` (held out) and a trailing `$`
+(§2.2.3's anchor, consumed rather than compared), so row 25 still weighs 5 octets against 4.
+
+### 60. `dollar_as_path_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /a$b
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/a%24b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** The bare shape, and row 54's own pattern moved out of the query. `$` is a
+  sub-delim, so it is in the reserved range; it is not final, so §2.2.3 does not describe it
+  and row 22 has already ruled it "an ordinary octet". §2.2.2 percent-encodes an ordinary
+  reserved octet in a **path**, so the rule canonicalises to `/a%24b` and meets this target.
+  Row 54 passed over exactly this defect because its pattern carried a `?`: the two rows
+  differ in nothing but region.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 61. `colon_as_path_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /jobs%3Aremote/list
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/jobs:remote/list`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** `:` is a gen-delim, and §3.3 admits it inside a segment as `pchar` — so in a path
+  it is data with no delimiting purpose to conflict with (§2.2). Written with the **encoding
+  on the rule** and the literal octet in the request, the opposite way round from row 60,
+  because a matcher canonicalising only one side passes a row spelled the other way. The
+  trailing `/list` makes the two sides differ in more than the octet under test.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 62. `ampersand_as_path_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /r&d/notes
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/r%26d/notes`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** Row 50 one region over, and the pair is the argument: row 50 asked this of `&`
+  inside a query and was green, while the same octet in a path was fail-open the whole time.
+  `&` is a sub-delim admitted by `pchar`, and it separates nothing here — it is the second
+  octet of the segment `r&d`.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 63. `equals_as_path_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /filter/size%3Dxl
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/filter/size=xl`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** Row 51 one region over, spelled with the encoding on the rule. The reading that
+  lowered nothing in row 51 — whether an `=` separating a key from a value is structure —
+  cannot even be raised here: there is no query for a key and a value to be in, so §3.3
+  leaves the octet as `pchar` data.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 64. `comma_as_path_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /geo/lat,lon
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/geo/lat%2Clon`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** `,` is a sub-delim, and this is how it actually reaches a robots.txt — a
+  coordinate pair inside one path segment. Kept because it is an octet no example in either
+  RFC prints, so a reader that generalised from §2.2.2's *sentence* handles it and a reader
+  that generalised from the *table's octets* does not. That is the distinction rows 60–66
+  measure.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 65. `at_sign_as_path_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /u/%40acme
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/u/@acme`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** `@` is a gen-delim whose delimiting purpose lies in the **authority** (§3.2,
+  separating userinfo from host), not in the path — and §3.3 lists it in `pchar` outright.
+  So in a path it is data. This is the octet that shows the hold-out must be read per
+  *region* and not per octet: the same `@` genuinely does delimit somewhere, just not in the
+  component §2.2.2 compares.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 66. `plus_as_path_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /c++/guide
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/c%2B%2B/guide`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** `+` is a sub-delim, so §2.2.2 encodes it in a path and the two spellings are one
+  path. Two of them in a row, so a matcher encoding only the first occurrence of an octet is
+  caught. This does **not** disturb row 34: there the rule's `+` meets a request's `%20`, and
+  `%2B` is not `%20` under any reading — a `+` means a space in
+  `application/x-www-form-urlencoded`, which a URI path is not.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 67. `a_path_separator_is_not_data_beside_one_that_is`
+
+```
+User-agent: *
+Disallow: /a:b/c:d
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/a%3Ab%2Fc%3Ad`
+- **expected:** ALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** The control on rows 60–66, and the row that stops the fix being "encode every
+  reserved octet". One pattern carrying both roles: its two `:` are `pchar` data and encode,
+  its `/` is §3.3's segment separator and must not. The request spells that separator `%2F`,
+  which row 29 has already ruled is not a separator — so the rule names two segments, the
+  request is one, no rule matches, and a path no rule matches is allowed. A matcher encoding
+  the `/` too gives both sides `%2Fa%3Ab%2Fc%3Ad` and **refuses** this request, which is a
+  rule covering a path it does not name. Fail-closed as a verdict, but the defect it pins is
+  the fail-open twin of row 29: once `/a/b` and `/a%2Fb` are one string, a rule about either
+  covers both.
 - **direction:** FAIL_CLOSED_RISK
 - **confidence:** HIGH
 
