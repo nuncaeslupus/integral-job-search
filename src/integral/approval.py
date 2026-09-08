@@ -47,6 +47,19 @@ three ways a story reaches an employer:
    test while `payload.json` went on telling the candidate the story was
    withheld. A summary that is false is worse than no summary.
 
+**What exempts an episode from that third sweep is a line the document carries,
+never a row the manifest holds (T114).** The two part company the moment anything
+edits a file after drafting, and the manifest is the half that cannot notice.
+Deleting an episode line from `letter.md` used to leave its manifest row standing,
+the row kept the episode exempt, and a headline carrying the same story sent it
+with no approval behind it — `unapproved_episode_disclosures` 0, coverage 1.0,
+over a document demonstrably disclosing it. Disclosure outliving its document,
+which is D-24's shape on the other axis, and fail-open in the direction that
+reaches an employer. The divergence is now reported in its own right as
+`disclosures_unbacked_by_a_generated_document`, because `payload.json` is
+assembled from those rows: a row over a line nothing carries is this tool
+describing a letter it is not looking at, which is the same false summary.
+
 **The measurement cannot construct both sides of its own equality.** `measure()`
 writes approvals and documents in one call from one tuple, so they agree by
 construction: on its own it proves only that `generate` emits the indices it was
@@ -114,6 +127,7 @@ from integral.cv_store import (
 )
 from integral.generate import (
     DEFAULT_FIXTURE_MASTER,
+    Manifest,
     _claim_lines,
     _entries,
     generate,
@@ -126,6 +140,7 @@ from integral.profile import EVIDENCE_PARTS, EvidenceLog, Kind, ProfileError
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T46.json"
 DEFAULT_D24_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-24.json"
+DEFAULT_T114_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T114.json"
 
 SCHEMA_VERSION: Literal[1] = 1
 
@@ -268,6 +283,26 @@ def _squash(text: str) -> str:
     return re.sub(r"[^0-9a-z]+", "", text.casefold())
 
 
+def _refuse_unbacked_disclosures(measured: dict[str, Any], consequence: str) -> None:
+    """Stop at the boundary when the manifest names a disclosure no document carries (T114).
+
+    A separate refusal from the unapproved-disclosure one above, and deliberately
+    so: that one is about substance reaching an employer, this one is about the
+    tool describing a document it is not looking at. Both stop the same two
+    calls, because `payload.json` is assembled from the manifest's rows and a
+    payload the candidate confirms has to be true about the files on disk.
+
+    Over-refusing here costs a regeneration. Under-refusing means the candidate
+    confirms a summary of a letter that no longer says what it says, which is
+    the one direction §6.2 will not take.
+    """
+    if measured["disclosures_unbacked_by_a_generated_document"]:
+        raise ApprovalError(
+            f"the manifest records a disclosure this version's documents do not carry, "
+            f"{consequence}: " + "; ".join(measured["unbacked_disclosures"])
+        )
+
+
 # ---------------------------------------------------------------------------
 # preparing one application, and stopping short of sending it
 
@@ -320,6 +355,7 @@ def prepare(
             "this draft discloses something no per-use approval backs, so no payload was "
             "written: " + "; ".join(measured["unapproved_episodes"])
         )
+    _refuse_unbacked_disclosures(measured, "so no payload was written")
 
     payload = Payload(
         offer_id=offer_id,
@@ -369,6 +405,7 @@ def record_sent(
             "these documents disclose something no per-use approval backs, so nothing here "
             "is sendable: " + "; ".join(measured["unapproved_episodes"])
         )
+    _refuse_unbacked_disclosures(measured, "so nothing here is sendable")
     payload = read_payload(store, offer_id, version)
     digest = payload_digest(payload)
     if confirms != digest:
@@ -579,13 +616,53 @@ def measure_prepared(
                     )
                 )
 
+    # T114: what exempts an episode from the sweep below is a line the **document**
+    # carries, never a row the manifest holds. The manifest is a record of what
+    # generation intended; the document is what reaches the employer, and the two
+    # part company the moment anything edits a file after drafting. Reading
+    # `disclosed` from the manifest meant deleting an episode line kept its
+    # exemption: with the approval gone and the substance still in a headline, the
+    # sweep skipped the one episode it existed to look for and the gate measured a
+    # clean zero. Disclosure outliving its document, which is D-24's shape — an
+    # approval outliving its evidence — on the other axis.
+    episode_claims = [claim for claim in claims if claim.section == "episodes"]
+    on_disk: Counter[tuple[str, str]] = Counter(
+        (name, line) for name, body in documents.items() for line in _claim_lines(body)
+    )
+    # Non-episode rows reserve their line first, and are **not** asked to re-render
+    # to do it. A headline spelled exactly like the story puts that sentence in
+    # `letter.md` twice, so after the episode line is deleted one identical line is
+    # still there: without the reservation the episode claim consumes the
+    # headline's own line, calls itself disclosed, and the hole reopens under a
+    # different spelling. Reserving on the strength of the row alone can only make
+    # an episode claim harder to satisfy, which is the direction §6.2 asks for.
+    for claim in claims:
+        if claim.section != "episodes":
+            reserved = (claim.document, claim.text)
+            if on_disk[reserved] > 0:
+                on_disk[reserved] -= 1
+    disclosed: set[str] = set()
+    unwritten: list[str] = []
+    for claim in episode_claims:
+        key = (claim.document, claim.text)
+        if on_disk[key] > 0:
+            on_disk[key] -= 1
+            disclosed.add(claim.text)
+        else:
+            # A row over a line that is not there. Reported rather than skipped,
+            # because `payload.json` is built from these rows and tells the
+            # candidate what the letter says: a summary describing a document that
+            # is not on disk is the false summary this module already refuses.
+            unwritten.append(
+                f"{offer_id}/v{version} {claim.document}: {claim.text} — the manifest "
+                "records this episode as disclosed, and the document does not carry it"
+            )
+
     # Substance carried by something that is not an episode line: a headline or a
     # job description holding the same sentence reaches the employer just the
     # same, and used to leave `payload.json` reporting the story as withheld.
     # Checked over the backed lines only, so a line already reported above is not
     # counted a second time.
-    episode_claims = [claim for claim in claims if claim.section == "episodes"]
-    disclosed = {claim.text for claim in episode_claims}
     carried = 0
     intact = "\n".join(surviving)
     for episode in master.episodes:
@@ -598,14 +675,20 @@ def measure_prepared(
                 "episode, carried by an entry no per-use approval names"
             )
 
-    checked = len(episode_claims) + len(findings)
+    # Over the disclosures that actually happened, never the rows that claim one.
+    # Counting the phantom rows here would let a manifest inflate the denominator
+    # of the coverage fraction it is itself failing.
+    written_claims = len(episode_claims) - len(unwritten)
+    checked = written_claims + len(findings)
     return {
         # A fraction over nothing checked is the third D-2 outcome, not a
         # passing 1.0 — `_main` fails on it.
         "episode_approval_coverage": None if checked == 0 else (checked - len(findings)) / checked,
         "unapproved_episode_disclosures": len(findings),
         "unapproved_episodes": sorted(findings),
-        "episode_disclosures": len(episode_claims) + carried,
+        "disclosures_unbacked_by_a_generated_document": len(unwritten),
+        "unbacked_disclosures": sorted(unwritten),
+        "episode_disclosures": written_claims + carried,
         # Measured against **every** line on disk, not just the backed ones. A
         # planted episode is excluded from `surviving`, so counting withholding
         # over `intact` reported the same sentence as disclosed and withheld in
@@ -725,6 +808,53 @@ def retracted_episodes_sendable(store: ProfileStore, master: CVMaster) -> dict[s
     }
 
 
+def disclosures_unbacked_by_a_document(store: ProfileStore, master: CVMaster) -> dict[str, Any]:
+    """T114's reading over one profile — a manifest row no finished document carries.
+
+    Every `manifest.json` under `cv/generated/`, joined to the `.md` files beside
+    it. The join is `measure_prepared`'s, so there is one rule about what counts
+    as a document carrying a line rather than two that drift; this walks the
+    versions and adds the answers up.
+
+    `manifest_disclosures_compared` is the denominator: episode claims actually
+    put in front of a document. A profile that generated nothing, and one whose
+    generations disclosed no episode, both compare nothing — and report
+    `unmeasured` rather than the clean zero an empty scan produces, because a
+    fail-open check that has read no documents has proved exactly nothing.
+    """
+    empty: dict[str, Any] = {
+        "disclosures_unbacked_by_a_generated_document": 0,
+        "unbacked_disclosures": [],
+        "manifest_disclosures_compared": 0,
+        "gate_status": "unmeasured",
+    }
+    generated = store.path("cv", "generated")
+    if not generated.is_dir():
+        return empty
+
+    compared = 0
+    unbacked: list[str] = []
+    for path in sorted(generated.glob("*/v*/manifest.json")):
+        # The manifest names its own offer and version, so a directory renamed
+        # underneath it cannot silently redirect the measurement at a version
+        # that agrees with it.
+        manifest = Manifest.model_validate_json(path.read_text(encoding="utf-8"))
+        disclosures = sum(1 for claim in manifest.claims if claim.section == "episodes")
+        if not disclosures:
+            continue
+        measured = measure_prepared(store, master, manifest.offer_id, manifest.version)
+        compared += disclosures
+        unbacked.extend(measured["unbacked_disclosures"])
+    if compared == 0:
+        return empty
+    return {
+        "disclosures_unbacked_by_a_generated_document": len(unbacked),
+        "unbacked_disclosures": sorted(unbacked),
+        "manifest_disclosures_compared": compared,
+        "gate_status": "measured",
+    }
+
+
 # ---------------------------------------------------------------------------
 # the probes — the half of the gate that is allowed to find something
 
@@ -758,7 +888,7 @@ _PROBE_OFFER = "probe-1"
 
 # Every scenario `measure()` structurally cannot contain, because each one is a
 # defect on purpose and the gate is `== 0`.
-MINIMUM_PROBES = 10
+MINIMUM_PROBES = 14
 
 
 def _probe_master(headline: str = "Backend engineer — data platforms") -> CVMaster:
@@ -942,6 +1072,53 @@ def probe_boundary(root: Path) -> dict[str, Any]:
     except ApprovalError:
         refused = True
     check(refused, "a version that was never written measured clean")
+
+    # 12 — T114, and the reason the sweep reads the documents rather than the
+    # manifest. The headline carries the whole story, the letter's episode line is
+    # deleted, and the approval is gone: the substance still reaches the employer
+    # and nothing backs it. The manifest row used to keep that episode exempt from
+    # the sweep, so this measured a clean zero at coverage 1.0.
+    outlived = _probe_master(headline=win.rstrip("."))
+    store = fresh("outlived", outlived)
+    _probe_prepare(store, outlived, approved=(0,))
+    letter = letter_of(store)
+    letter.write_text(
+        "\n".join(line for line in letter.read_text(encoding="utf-8").splitlines() if line != win)
+        + "\n",
+        encoding="utf-8",
+    )
+    store.path(*_version_parts(_PROBE_OFFER, 1), "approvals.json").unlink()
+    measured = measure_prepared(store, outlived, _PROBE_OFFER, 1)
+    check(
+        any(
+            "the substance of a story-bank episode" in item
+            for item in measured["unapproved_episodes"]
+        ),
+        "a deleted episode line left its substance exempt from the sweep",
+    )
+    check(
+        measured["episode_approval_coverage"] != 1.0,
+        "a document carrying an unapproved story reported full approval coverage",
+    )
+
+    # 13 — the divergence on its own: a manifest row naming a line the document
+    # does not carry. `payload.json` is assembled from those rows, so leaving it
+    # unreported means telling the candidate the letter says something it does not.
+    check(
+        measured["disclosures_unbacked_by_a_generated_document"] == 1,
+        "a manifest row over a line no document carries was not reported",
+    )
+
+    # 14 — the over-refusal control for 12 and 13 together. An untouched draft
+    # agrees with its manifest and must measure nothing at all.
+    store = fresh("agreeing", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    measured = measure_prepared(store, plain, _PROBE_OFFER, 1)
+    check(
+        measured["disclosures_unbacked_by_a_generated_document"] == 0
+        and measured["unapproved_episode_disclosures"] == 0,
+        "a document that agrees with its manifest was reported as a divergence",
+    )
 
     return {"detection_probes": checks, "detection_probe_failures": failures}
 
@@ -1283,6 +1460,241 @@ def probe_retracted_sends(root: Path) -> dict[str, Any]:
     }
 
 
+# Floors, not the count of the day, for T100's reason: a denominator committed as
+# an exact value moves whenever the corpus does, and a probe set that quietly
+# shrank would still clear an exact match. The corpus contributes one disclosure
+# per advert, so the floor here is a long way under what a healthy run measures
+# and a long way over what an empty scan could produce.
+MINIMUM_DISCLOSURE_PROBES = 18
+MINIMUM_MANIFEST_DISCLOSURES_COMPARED = 100
+
+
+def probe_unbacked_disclosures(root: Path) -> dict[str, Any]:
+    """T114: drive the boundary against a manifest that outruns its documents.
+
+    Ten scenarios, eight of them defects on purpose. The other two are the
+    over-refusal this must not become — an untouched draft has to stay sendable —
+    and they are also the only trees the aggregate reading below scans, since the
+    planted ones are divergent by construction and counting them would make the
+    gate assert its own fixtures rather than the code.
+    """
+    from integral.retraction import retract
+
+    failures: list[str] = []
+    checks = 0
+    compared = 0
+    unbacked: list[str] = []
+
+    def check(condition: bool, message: str) -> None:
+        nonlocal checks
+        checks += 1
+        if not condition:
+            failures.append(message)
+
+    def fresh(handle: str, master: CVMaster) -> ProfileStore:
+        identity = create_profile(root, "Probe", handle=handle, language="en")
+        store = ProfileStore(root, identity.handle)
+        write_master(store, master)
+        return store
+
+    def where(store: ProfileStore) -> Path:
+        return store.path(*_version_parts(_PROBE_OFFER, 1))
+
+    def drop_line(store: ProfileStore, text: str, document: str = "letter.md") -> None:
+        path = where(store) / document
+        kept = [line for line in path.read_text(encoding="utf-8").splitlines() if line != text]
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    def divergences(store: ProfileStore, master: CVMaster) -> int:
+        count: int = measure_prepared(store, master, _PROBE_OFFER, 1)[
+            "disclosures_unbacked_by_a_generated_document"
+        ]
+        return count
+
+    def sweep_findings(store: ProfileStore, master: CVMaster) -> list[str]:
+        found: list[str] = measure_prepared(store, master, _PROBE_OFFER, 1)["unapproved_episodes"]
+        return found
+
+    def scan(store: ProfileStore, master: CVMaster) -> None:
+        """Add a tree that must read clean to the aggregate the gate is over."""
+        nonlocal compared
+        reading = disclosures_unbacked_by_a_document(store, master)
+        compared += reading["manifest_disclosures_compared"]
+        unbacked.extend(reading["unbacked_disclosures"])
+        check(
+            reading["gate_status"] == "measured",
+            "a profile with a disclosed episode reported nothing to compare",
+        )
+
+    def sends(store: ProfileStore, master: CVMaster, payload: Payload) -> Path | None:
+        try:
+            return record_sent(store, master, _PROBE_OFFER, 1, confirms=payload_digest(payload))
+        except ApprovalError:
+            return None
+
+    win, _failure = (episode.text for episode in _FIXTURE_EPISODES)
+    plain = _probe_master()
+    # The headline the substance sweep is about: the whole story, one full stop
+    # short of the episode's own spelling, so the two are distinct strings and
+    # only a normalised shingle match connects them.
+    smuggled = _probe_master(headline=win.rstrip("."))
+
+    # 1 — the defect. The letter's episode line is deleted, the approval is gone,
+    # and the headline still carries the story word for word. Before this task the
+    # manifest row kept the episode exempt and the whole measurement read clean.
+    store = fresh("deleted", smuggled)
+    _probe_prepare(store, smuggled, approved=(0,))
+    drop_line(store, win)
+    (where(store) / "approvals.json").unlink()
+    check(divergences(store, smuggled) == 1, "a deleted episode line left its manifest row alone")
+    check(
+        any(
+            "the substance of a story-bank episode" in item
+            for item in sweep_findings(store, smuggled)
+        ),
+        "an episode's substance surviving in a headline was skipped by its own manifest row",
+    )
+
+    # 2 — the divergence on its own, with the approval untouched. Nothing is
+    # smuggled here; what is wrong is that `payload.json` describes a letter that
+    # does not say what it says, and the send boundary must refuse it.
+    store = fresh("described", plain)
+    payload = _probe_prepare(store, plain, approved=(0,))
+    drop_line(store, win)
+    check(divergences(store, plain) == 1, "a manifest row over a missing line was not reported")
+    check(sends(store, plain, payload) is None, "a payload describing a deleted line was sendable")
+
+    # 3 — the over-refusal control. An untouched draft agrees with its manifest,
+    # measures nothing, and still sends.
+    store = fresh("untouched", plain)
+    payload = _probe_prepare(store, plain, approved=(0,))
+    check(divergences(store, plain) == 0, "a document that agrees with its manifest was refused")
+    check(sends(store, plain, payload) is not None, "a clean draft was refused")
+    scan(store, plain)
+
+    # 4 — the headline spelled *exactly* like the story, so the letter carries that
+    # sentence twice. Delete the episode line and one identical line is still
+    # there: a check that only asks "does this document contain the text" reads
+    # clean off the headline's own line. A non-episode row reserves its line first.
+    twin = _probe_master(headline=win)
+    store = fresh("twinned", twin)
+    _probe_prepare(store, twin, approved=(0,))
+    letter = where(store) / "letter.md"
+    lines = letter.read_text(encoding="utf-8").splitlines()
+    check(lines.count(win) == 2, "the twinned fixture did not put the sentence in twice")
+    lines.remove(win)
+    letter.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (where(store) / "approvals.json").unlink()
+    check(divergences(store, twin) == 1, "an episode row borrowed another claim's identical line")
+
+    # 5 — the whole document removed. A file that is not there carries nothing.
+    store = fresh("gone", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    (where(store) / "letter.md").unlink()
+    check(divergences(store, plain) == 1, "a deleted document left its manifest rows backed")
+
+    # 6 — the row duplicated over one line. One line backs one claim (T45).
+    store = fresh("doubled", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    path = where(store) / "manifest.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["claims"].append(
+        dict(next(claim for claim in raw["claims"] if claim["section"] == "episodes"))
+    )
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    check(divergences(store, plain) == 1, "two manifest rows shared one document line")
+
+    # 7 — the row re-pointed at the other document. A claim is scoped to the
+    # document it names, so `cv.md` cannot answer for a row about `letter.md`.
+    store = fresh("misfiled", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    path = where(store) / "manifest.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    for claim in raw["claims"]:
+        if claim["section"] == "episodes":
+            claim["document"] = "cv.md"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    check(divergences(store, plain) == 1, "an episode row was answered by a different document")
+
+    # 8 — the line reworded rather than deleted. Deletion plus insertion, and it
+    # has to read as both: the row names no line, and the line no approval names.
+    store = fresh("reworded", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    letter = where(store) / "letter.md"
+    letter.write_text(
+        letter.read_text(encoding="utf-8").replace(win, "Cut the billing run, more or less."),
+        encoding="utf-8",
+    )
+    check(divergences(store, plain) == 1, "a reworded episode line kept its manifest row backed")
+    check(sweep_findings(store, plain) != [], "a reworded episode line was backed by an approval")
+
+    # 9 — where this crosses D-24. The retraction withdraws the approval and the
+    # deletion removes the line the withdrawal would have been reported over, so
+    # before this task neither gate had anything to say about a story still being
+    # carried, in full, by the headline.
+    store = fresh("withdrawn", smuggled)
+    row = EvidenceLog(store).append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="history",
+        kind="episode",
+        text=win,
+        source="conversation",
+    )
+    _probe_prepare(store, smuggled, approved=(0,))
+    retract(EvidenceLog(store), row.id, at="2026-01-02T09:00:00+00:00")
+    drop_line(store, win)
+    check(divergences(store, smuggled) == 1, "a retracted, deleted episode line measured clean")
+    check(
+        sweep_findings(store, smuggled) != [],
+        "a retracted episode's substance in a headline was skipped by its manifest row",
+    )
+
+    # 10 — every claim line stripped from both documents, manifest untouched. The
+    # degenerate end of the same axis, and it must report rather than crash.
+    store = fresh("stripped", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    for document in sorted(where(store).glob("*.md")):
+        document.write_text("", encoding="utf-8")
+    check(divergences(store, plain) == 1, "emptying both documents left the manifest rows backed")
+
+    # 11 — the empty-scan rule. A generation nobody approved an episode into has
+    # no disclosure to compare, and the reading must say so rather than pass.
+    store = fresh("nothing-approved", plain)
+    _probe_prepare(store, plain)
+    reading = disclosures_unbacked_by_a_document(store, plain)
+    check(
+        reading["gate_status"] == "unmeasured"
+        and reading["manifest_disclosures_compared"] == 0
+        and reading["disclosures_unbacked_by_a_generated_document"] == 0,
+        "a profile that disclosed no episode scored a clean zero instead of unmeasured",
+    )
+
+    # 12 — a profile that never generated anything is unmeasured too, not clean.
+    check(
+        disclosures_unbacked_by_a_document(fresh("ungenerated", plain), plain)["gate_status"]
+        == "unmeasured",
+        "a profile with nothing generated scored a clean zero instead of unmeasured",
+    )
+
+    # 13 — a second clean tree for the aggregate, with an ordinary headline in the
+    # way, so the denominator does not rest on a single shape of document.
+    ordinary = _probe_master(headline="Data engineer — billing and reconciliation")
+    store = fresh("ordinary", ordinary)
+    payload = _probe_prepare(store, ordinary, approved=(0,))
+    check(divergences(store, ordinary) == 0, "an ordinary headline was read as a divergence")
+    check(sends(store, ordinary, payload) is not None, "an ordinary clean draft was refused")
+    scan(store, ordinary)
+
+    return {
+        "disclosures_unbacked_by_a_generated_document": len(unbacked),
+        "unbacked_disclosures": sorted(unbacked),
+        "manifest_disclosures_compared": compared,
+        "gate_status": "measured" if compared else "unmeasured",
+        "disclosure_probes": checks,
+        "disclosure_probe_failures": failures,
+    }
+
+
 # ---------------------------------------------------------------------------
 # the gate — measured over the real corpus, against a stated fixture candidate
 
@@ -1341,6 +1753,12 @@ def measure(
 
         leaked = personal_details_in_master(store, _FIXTURE_DETAILS)
         unconfirmed = sends_without_confirmation(store)
+        # T114 over the same tree, before the scratch directory goes: two hundred
+        # real letters, each joined back to the manifest that claims to describe
+        # it. `probe_unbacked_disclosures` is the half that plants divergences;
+        # this is the half that says the check does not fire on documents nobody
+        # touched, over a denominator neither this module nor T114 chose.
+        unbacked = disclosures_unbacked_by_a_document(store, master)
 
     with tempfile.TemporaryDirectory() as scratch:
         probed = probe_boundary(Path(scratch) / "profiles")
@@ -1351,6 +1769,11 @@ def measure(
         ),
         "unapproved_episode_disclosures": len(unapproved),
         "unapproved_episodes": sorted(unapproved),
+        "disclosures_unbacked_by_a_generated_document": unbacked[
+            "disclosures_unbacked_by_a_generated_document"
+        ],
+        "unbacked_disclosures": unbacked["unbacked_disclosures"],
+        "manifest_disclosures_compared": unbacked["manifest_disclosures_compared"],
         "episode_disclosures": disclosures,
         "episodes_withheld": withheld,
         "personal_details_in_master": leaked,
@@ -1379,6 +1802,67 @@ def write_retraction_evidence(evidence: Path = DEFAULT_D24_EVIDENCE_PATH) -> dic
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return measured
+
+
+def write_disclosure_evidence(
+    evidence: Path = DEFAULT_T114_EVIDENCE_PATH,
+    corpus: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T114.json` — the probes plus the corpus pass.
+
+    `corpus` is `measure()`'s reading over the fixture tree, passed in by `_main`
+    because it has already paid for it. Given nothing, this measures it again
+    rather than reporting over the probes alone: a gate whose only denominator is
+    the fixtures its own author wrote is the shape this task exists to close.
+    """
+    with tempfile.TemporaryDirectory(prefix="integral-t114-") as scratch:
+        probed = probe_unbacked_disclosures(Path(scratch) / "profiles")
+    over_the_corpus = measure() if corpus is None else corpus
+    found = sorted([*probed["unbacked_disclosures"], *over_the_corpus["unbacked_disclosures"]])
+    compared = (
+        probed["manifest_disclosures_compared"] + over_the_corpus["manifest_disclosures_compared"]
+    )
+    measured = {
+        "disclosures_unbacked_by_a_generated_document": len(found),
+        "unbacked_disclosures": found,
+        "manifest_disclosures_compared": compared,
+        "gate_status": "measured" if compared else "unmeasured",
+        "disclosure_probes": probed["disclosure_probes"],
+        "disclosure_probe_failures": probed["disclosure_probe_failures"],
+    }
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _disclosure_report(measured: dict[str, Any]) -> int:
+    """Print T114's measurement and say whether it fails the gate."""
+    print(json.dumps(measured, ensure_ascii=False))
+    failures = 0
+    for key, label in (
+        ("disclosure_probe_failures", "the disclosure boundary failed a planted case"),
+        ("unbacked_disclosures", "a disclosure no generated document carries"),
+    ):
+        for name in measured[key]:
+            print(f"✗ {label}: {name}", file=sys.stderr)
+            failures += 1
+    for key, floor in (
+        ("disclosure_probes", MINIMUM_DISCLOSURE_PROBES),
+        ("manifest_disclosures_compared", MINIMUM_MANIFEST_DISCLOSURES_COMPARED),
+    ):
+        if measured[key] < floor:
+            print(f"{key} is {measured[key]}, below the floor of {floor}", file=sys.stderr)
+            failures += 1
+    # The corpus pass discloses an episode per advert and the probes leave two
+    # clean trees standing, so `unmeasured` here is a measurement that stopped
+    # reaching the documents — the clean zero this gate is about, one level up.
+    if measured["gate_status"] != "measured":
+        print(
+            "no manifest disclosure was compared against a document — nothing was measured",
+            file=sys.stderr,
+        )
+        failures += 1
+    return 1 if failures else 0
 
 
 def _retraction_report(measured: dict[str, Any]) -> int:
@@ -1422,6 +1906,7 @@ def _main(argv: list[str] | None = None) -> int:
     failures = 0
     for key, label in (
         ("unapproved_episodes", "disclosed with no per-use approval"),
+        ("unbacked_disclosures", "a disclosure no generated document carries"),
         ("personal_details_in_master", "personal detail in the intake store"),
         ("sends_without_confirmation", "send recorded without confirming its payload"),
         ("detection_probe_failures", "the boundary failed to catch a planted defect"),
@@ -1456,7 +1941,14 @@ def _main(argv: list[str] | None = None) -> int:
     retraction_exit = _retraction_report(
         write_retraction_evidence(target.with_name(DEFAULT_D24_EVIDENCE_PATH.name))
     )
-    return 1 if (failures or retraction_exit) else 0
+    # T114's record, written on the same terms and for the same reason: it is
+    # `measure()`'s corpus reading plus its own probes, and short-circuiting on a
+    # red T46 would leave it stale while `make evidence` reported drift in a gate
+    # that was still passing.
+    disclosure_exit = _disclosure_report(
+        write_disclosure_evidence(target.with_name(DEFAULT_T114_EVIDENCE_PATH.name), measured)
+    )
+    return 1 if (failures or retraction_exit or disclosure_exit) else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
