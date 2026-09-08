@@ -1,0 +1,12 @@
+{
+  "bodyless_posts_sent_without_a_content_type": 0,
+  "packages_checked_at_least": 20,
+  "probes_at_least": 8,
+  "probes_checked": 9,
+  "legal_shapes_refused": 0,
+  "offending_packages": [],
+  "packages_that_no_longer_build": [],
+  "disagreements": [],
+  "fail_open": 0,
+  "gate_status": "measured"
+}
