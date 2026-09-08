@@ -873,12 +873,24 @@ def _resolve(document: Any, path: tuple[str, ...]) -> Any:
     Every way out of range is the same miss: there is no negative index in the
     grammar, so nothing wraps around, and an index past the end returns
     `_MISSING` rather than raising.
+
+    "Rather than raising" is why the digit count is compared **before**
+    `int(segment)`. CPython refuses to convert a decimal string of more than
+    `sys.get_int_max_str_digits()` digits and raises `ValueError`, so an index
+    of 4301 nines compiled cleanly and then blew up inside a walk whose whole
+    contract is that out of range is a miss. The comparison needs no limit
+    constant to be right: leading zeros are refused by the grammar, so a
+    segment of more digits than `len(node)` has is necessarily larger than any
+    index into `node`, and one of at most that many digits is small enough to
+    convert.
     """
     node: Any = document
     for segment in path:
         if _INDEX_SEGMENT.fullmatch(segment):
+            if not isinstance(node, list) or len(segment) > len(str(len(node))):
+                return _MISSING
             index = int(segment)
-            if not isinstance(node, list) or index >= len(node):
+            if index >= len(node):
                 return _MISSING
             node = node[index]
             continue
@@ -2585,7 +2597,13 @@ _ARRAY_PATH_DOCUMENT: Final[dict[str, Any]] = {
     "company": {"name": "Manfred"},
     "counts": {"0": "seven"},
     "nested": {"tags": ["alpha"]},
+    "grid": [["alpha", "beta"]],
 }
+
+#: An index segment long enough that `int()` refuses to convert it. Built
+#: rather than typed out: the point is the digit count, and 4301 nines in a
+#: source file would be unreadable and unmaintainable.
+_OVERLONG_INDEX: Final = "locations." + "9" * 4301
 
 #: T118 — what an array path must resolve to, as a table derived from the
 #: **grammar** and kept beside it, in the shape `PARTIAL_EXTRACTION_CONTRACTS`
@@ -2700,6 +2718,48 @@ ARRAY_PATH_CONTRACTS: tuple[tuple[str, Any, str | _Refused | None, str], ...] = 
         "`$` still names the document, and a document is a container — `items:` reads it "
         "through `dig_container`, never `dig` — FAIL-CLOSED",
     ),
+    # The five below were accepted from the independent second read of #401,
+    # which found them absent rather than wrong. Each is derived from a rule
+    # the vocabulary already states, not from what the resolver returns.
+    (
+        "grid.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "the element at the index is itself an array, and `dig`'s container rule is about "
+        "what a path LANDS on, not about how it got there — `str([...])` reaching "
+        "`location_raw` is the same invented place as `str({...})` — FAIL-CLOSED",
+    ),
+    (
+        "grid.0.1",
+        _ARRAY_PATH_DOCUMENT,
+        "beta",
+        "index after index, both in range: the walk has one interpretation per segment, so "
+        "`a.0.1` composes exactly as `a.0.b` does",
+    ),
+    (
+        "offices.0.country",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "`a.0.b` where the element carries no `b`: a key segment reads a mapping and the "
+        "key is absent, so it is a miss — an index earlier in the path buys no "
+        "leniency later — FAIL-CLOSED",
+    ),
+    (
+        "locations.",
+        _ARRAY_PATH_DOCUMENT,
+        REFUSED,
+        "a trailing dot names an empty segment, which is neither a key nor an index in "
+        "`JSON_PATH` — refused at load, where a typo is visible, rather than resolved to "
+        "nothing at parse time",
+    ),
+    (
+        _OVERLONG_INDEX,
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "an index of 4301 digits is past the end like any other, and `_resolve` promises "
+        "out of range is a miss 'rather than raising' — a `ValueError` escaping the walk "
+        "is neither the value nor the miss the grammar names",
+    ),
 )
 
 #: Floor, in `naming.MINIMUM_SCANNED`'s style: what is committed as the
@@ -2707,7 +2767,7 @@ ARRAY_PATH_CONTRACTS: tuple[tuple[str, Any, str | _Refused | None, str], ...] = 
 #: the table — CLAUDE.md requires the measured denominator to grow when a
 #: second reader's cases are accepted — and never falls, so a table quietly
 #: emptied reports `unmeasured` instead of a clean zero over nothing.
-MINIMUM_ARRAY_PATH_CONTRACTS = 21
+MINIMUM_ARRAY_PATH_CONTRACTS = 26
 
 
 def _resolve_declared(path: str, document: Any) -> str | _Refused | None:
