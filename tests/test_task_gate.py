@@ -657,6 +657,8 @@ def test_a_thin_field_naming_denominator_fails_the_run(
             "emitted_fields": [],
             "emitted_fields_scanned": 0,
             "presence_recording_fields_scanned": 0,
+            "measure_fields_not_classified": [],
+            "measure_emits_the_classified_row": True,
             "field_naming_status": "measured",
         },
     )
@@ -674,3 +676,141 @@ def test_a_thin_field_naming_denominator_fails_the_run(
     assert exit_code == 1
     assert "emitted_fields_scanned" in capsys.readouterr().err
     assert not (tmp_path / "T108.json").exists()
+
+
+def _live_probe_rows(tmp_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """This module's own emitted row, with the gate's target present and gone."""
+    present = task_gate._probe_row(tmp_path / "p", value=5, status="measured", declares=True)
+    absent = task_gate._probe_row(
+        tmp_path / "q", value=task_gate._MISSING, status=task_gate._MISSING, declares=False
+    )
+    return present, absent
+
+
+def test_the_next_name_the_denylist_would_have_passed_is_caught() -> None:
+    """F1 (#399) — `status_asserted`, the likeliest name after the rename.
+
+    The classifier's first form denied four copulas, which is a fail-open
+    filter: every name avoiding `is`/`are`/`was`/`were` walked through it, so
+    dropping one underscore from the defect's own name scored a clean zero.
+    The comment above `_RESOLUTION_VERBS` states a **positive** rule — a
+    presence field must carry a verb of resolution or declaration — and
+    `asserted` is a past participle, the grammar that reads as the subject's
+    value. Same presence behaviour as the old name; same verdict.
+    """
+    present_a = {"status_asserted": True, "value_is_numeric": True}
+    present_b = {"status_asserted": True, "value_is_numeric": False}
+    absent = {"status_asserted": False, "value_is_numeric": False}
+
+    presence, identity = task_gate.classify_emitted_fields(present_a, present_b, absent)
+
+    assert presence == ["status_asserted"]
+    assert identity == ["status_asserted"]
+    assert not task_gate.names_presence_honestly("status_asserted")
+    # And the two names the module does emit pass the same positive rule.
+    assert task_gate.names_presence_honestly("status_key_resolves")
+    assert task_gate.names_presence_honestly("declares_status_key")
+    # A verb of resolution does not license a copula built around it.
+    assert not task_gate.names_presence_honestly("status_is_resolved")
+
+
+def test_measure_emits_the_row_the_classification_scans() -> None:
+    """F2 (#399) — the classification is about `measure`, so say so.
+
+    `classify_emitted_fields` reads `_emitted_row`. Nothing asserted that
+    `measure` routes through it, so reverting `measure` to its pre-T108 inline
+    dict left the module emitting `status_is_asserted` — the exact defect T108
+    removes — while the metric read 0 and `--check` exited 0.
+    """
+    measured = task_gate.measure_field_naming()
+
+    assert measured["measure_emits_the_classified_row"] is True
+    assert measured["measure_fields_not_classified"] == []
+
+
+def test_a_measure_that_stops_routing_through_the_emitted_row_is_caught(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The F2 mutation, without editing the module: the pre-T108 inline dict.
+
+    `measure` emits the same six values under the old fifth name. The
+    classification never sees it, and that disagreement is the finding.
+    """
+    real = task_gate.measure
+
+    def pre_t108(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        measured = real(*args, **kwargs)
+        measured["readings"] = [
+            {("status_is_asserted" if k == "status_key_resolves" else k): v for k, v in row.items()}
+            for row in measured["readings"]
+        ]
+        return measured
+
+    monkeypatch.setattr(task_gate, "measure", pre_t108)
+
+    agrees, emitted, classified = task_gate.measure_emits_the_classified_row(tmp_path / "d")
+
+    assert agrees is False
+    assert "status_is_asserted" in emitted
+    assert "status_is_asserted" not in classified
+
+
+def test_a_presence_field_that_is_not_a_bool_escapes_and_this_row_has_none(
+    tmp_path: Path,
+) -> None:
+    """F3 (#399) — the accepted limitation, and the assertion that bounds it.
+
+    `classify_emitted_fields` requires a field to be a `bool` in all three
+    probes, so a presence field emitted as `"yes"`/`"no"` is never classified
+    and can never be reported however it is named. That is fail-open, and it
+    is committed here rather than answered in prose.
+
+    The second half is what makes the fixture load-bearing: **this module's
+    emitted row does not exercise the hole**. Every field that changes when
+    the gate's target disappears is a bool, so a future row that records
+    presence as a string turns this red rather than going quietly unclassified.
+    """
+    stringly_a = {"status_asserted": "yes", "value_is_numeric": True}
+    stringly_b = {"status_asserted": "yes", "value_is_numeric": False}
+    stringly_absent = {"status_asserted": "no", "value_is_numeric": False}
+
+    presence, identity = task_gate.classify_emitted_fields(stringly_a, stringly_b, stringly_absent)
+
+    assert presence == []  # the documented limitation
+    assert identity == []
+
+    present, absent = _live_probe_rows(tmp_path)
+    changed = [name for name in present if present[name] != absent[name]]
+    assert changed, "the probes must vary something, or there is nothing to classify"
+    non_bool = [name for name in changed if not isinstance(present[name], bool)]
+    assert non_bool == [], f"presence recorded as a non-bool escapes classification: {non_bool}"
+
+
+def test_a_presence_field_the_probes_never_vary_escapes_and_this_row_has_none(
+    tmp_path: Path,
+) -> None:
+    """F4 (#399) — the second accepted limitation, bounded the same way.
+
+    A field the probes answer identically in all three rows fails
+    `present_a[name] != absent[name]` and is dropped, so a presence field
+    hard-wired to `True` is invisible to the metric whatever it is called.
+    Committed as a fixture, with the half that binds this module: **no bool
+    the emitted row carries is constant across the probes**, so a field the
+    probes cannot move turns this red.
+    """
+    frozen_a = {"status_asserted": True, "value_is_numeric": True}
+    frozen_b = {"status_asserted": True, "value_is_numeric": False}
+    frozen_absent = {"status_asserted": True, "value_is_numeric": False}
+
+    presence, identity = task_gate.classify_emitted_fields(frozen_a, frozen_b, frozen_absent)
+
+    assert presence == []  # the documented limitation
+    assert identity == []
+
+    present, absent = _live_probe_rows(tmp_path)
+    frozen = [
+        name
+        for name in present
+        if isinstance(present[name], bool) and present[name] == absent[name]
+    ]
+    assert frozen == [], f"a bool the probes never vary is never classified: {frozen}"

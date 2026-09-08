@@ -15,5 +15,7 @@
   ],
   "emitted_fields_scanned": 6,
   "presence_recording_fields_scanned": 2,
+  "measure_fields_not_classified": [],
+  "measure_emits_the_classified_row": true,
   "field_naming_status": "measured"
 }

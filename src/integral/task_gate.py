@@ -467,7 +467,51 @@ def write_evidence(
 # the classification below is behavioural rather than a list of banned words:
 # that field really does assert something about the value's content, so its
 # `_is_` name is accurate and a keyword rule would have renamed it too.
+#
+# The rule above is **positive**, and it is applied positively. A denylist of
+# copulas was the first attempt and is a fail-open filter: it passes every
+# name that merely avoids four words, so `status_asserted` — the likeliest
+# next name, and the one #286/#290 read exactly as they read the old one —
+# scored clean. Second-reader finding F1 on #399. What the comment states is
+# that a presence field must *carry* a verb of resolution or declaration, so a
+# name carrying none is a finding, whatever else it avoids.
+#
+# The verbs are third-person present or `has`/`have` on purpose. A past
+# participle — `asserted`, `resolved`, `declared` — is precisely the grammar
+# that reads as the subject's value (`status_asserted` is "the status is
+# asserted"), so admitting one would reopen the hole this closes.
+_RESOLUTION_VERBS = frozenset(
+    {
+        "resolves",
+        "declares",
+        "has",
+        "have",
+        "carries",
+        "records",
+        "reports",
+        "provides",
+        "contains",
+        "holds",
+        "exists",
+    }
+)
+
+# Retained *alongside* the positive rule, not instead of it: a name may carry a
+# resolution verb and still be built as a copula (`status_is_resolved`), and
+# that name is an identity claim however honest its verb. A field must pass
+# both to count as honestly named.
 _COPULA_RE = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*_(?:is|are|was|were)_[a-z0-9]+(?:_[a-z0-9]+)*$")
+
+
+def names_presence_honestly(name: str) -> bool:
+    """Does `name` say it records *presence* rather than assert an identity?
+
+    The positive half is the rule the comment above states — the name carries a
+    verb of resolution or declaration. The negative half refuses a copula
+    construction even when it does.
+    """
+    return bool(_RESOLUTION_VERBS & set(name.split("_"))) and not _COPULA_RE.match(name)
+
 
 #: Absence, distinguishable from a `None` that is genuinely recorded.
 _MISSING = object()
@@ -488,15 +532,8 @@ key: score
 """
 
 
-def _probe_row(root: Path, *, value: object, status: object, declares: bool) -> dict[str, Any]:
-    """The emitted row for one synthetic gate, written to disk and read back.
-
-    Synthetic and disposable deliberately. Classifying the live board's rows
-    would make the record move whenever somebody else's task PR landed a gate
-    — the drift `measure_board_sensitivity` exists to refuse, one axis over —
-    and would make the classification depend on which gates the queue happens
-    to hold today.
-    """
+def _write_probe(root: Path, *, value: object, status: object, declares: bool) -> Path:
+    """One synthetic gate on disk, and the tasks directory holding it."""
     tasks = root / "arsenal" / "tasks"
     tasks.mkdir(parents=True)
     evidence = root / "status" / "evidence" / "PROBE.json"
@@ -507,13 +544,51 @@ def _probe_row(root: Path, *, value: object, status: object, declares: bool) -> 
     if status is not _MISSING:
         data["score_status"] = status
     evidence.write_text(json.dumps(data), encoding="utf-8")
-    payload = tasks / "probe-0001.md"
-    payload.write_text(
+    tasks.joinpath("probe-0001.md").write_text(
         _PROBE_PAYLOAD.format(status_line="status-key: score_status\n" if declares else ""),
         encoding="utf-8",
     )
-    reading = read_gate("probe-0001", payload, root)
+    return tasks
+
+
+def _probe_row(root: Path, *, value: object, status: object, declares: bool) -> dict[str, Any]:
+    """The emitted row for one synthetic gate, written to disk and read back.
+
+    Synthetic and disposable deliberately. Classifying the live board's rows
+    would make the record move whenever somebody else's task PR landed a gate
+    — the drift `measure_board_sensitivity` exists to refuse, one axis over —
+    and would make the classification depend on which gates the queue happens
+    to hold today.
+    """
+    tasks = _write_probe(root, value=value, status=status, declares=declares)
+    reading = read_gate("probe-0001", tasks / "probe-0001.md", root)
     return {} if reading is None else _emitted_row(reading)
+
+
+def measure_emits_the_classified_row(root: Path) -> tuple[bool, list[str], list[str]]:
+    """Does `measure` actually emit the row the classification above scans?
+
+    `(they agree, what measure emits, what _emitted_row emits)`.
+
+    Second-reader finding F2 on #399: the classification reads `_emitted_row`,
+    and until this existed **nothing asserted that `measure` routes through
+    it**. Reverting `measure` to the pre-T108 inline dict carrying
+    `status_is_asserted` left the module emitting the exact defect T108 removes
+    while the metric read zero and `--check` exited 0 — the gate green over the
+    fault it was written for.
+
+    Measured over the same synthetic board the probes use rather than the live
+    one, for `_probe_row`'s reason: the live board's membership must not be
+    able to move this reading.
+    """
+    tasks = _write_probe(root, value=5, status="measured", declares=True)
+    # Positional, like every other call site: `measure` is looked up on the
+    # module so a replacement of it is what this reading is about.
+    measured = measure(tasks, root / "no-history", root)
+    readings = measured["readings"]
+    reference = sorted(_emitted_row(Reading("probe-0001", "score", "PROBE.json", True, True, True)))
+    emitted = sorted(readings[0]) if readings else []
+    return emitted == reference, emitted, reference
 
 
 def classify_emitted_fields(
@@ -537,7 +612,7 @@ def classify_emitted_fields(
         and present_a[name] == present_b[name]
         and present_a[name] != absent[name]
     ]
-    return presence, [name for name in presence if _COPULA_RE.match(name)]
+    return presence, [name for name in presence if not names_presence_honestly(name)]
 
 
 def measure_field_naming() -> dict[str, Any]:
@@ -553,6 +628,7 @@ def measure_field_naming() -> dict[str, Any]:
         present_a = _probe_row(base / "a", value=5, status="measured", declares=True)
         present_b = _probe_row(base / "b", value="not a number", status="pending", declares=True)
         absent = _probe_row(base / "c", value=_MISSING, status=_MISSING, declares=False)
+        agrees, measure_fields, classified_fields = measure_emits_the_classified_row(base / "d")
 
     names = sorted(set(present_a) & set(present_b) & set(absent))
     if not names:
@@ -563,6 +639,8 @@ def measure_field_naming() -> dict[str, Any]:
             "emitted_fields": [],
             "emitted_fields_scanned": 0,
             "presence_recording_fields_scanned": 0,
+            "measure_fields_not_classified": [],
+            "measure_emits_the_classified_row": agrees,
             "field_naming_status": "unmeasured",
             "field_naming_unmeasured_reason": (
                 "the probe gate produced no emitted row, so no field was classified — "
@@ -578,6 +656,11 @@ def measure_field_naming() -> dict[str, Any]:
         "emitted_fields": names,
         "emitted_fields_scanned": len(names),
         "presence_recording_fields_scanned": len(presence),
+        # F2's finding, as a committed key: the fields `measure` really emits,
+        # minus the ones the classification above ranges over. Non-empty means
+        # the metric was scored over a row nobody reads.
+        "measure_fields_not_classified": sorted(set(measure_fields) - set(classified_fields)),
+        "measure_emits_the_classified_row": agrees,
         "field_naming_status": "measured",
     }
 
@@ -731,6 +814,18 @@ def _main(argv: list[str]) -> int:
     if naming["field_naming_status"] != "measured":
         print(naming["field_naming_unmeasured_reason"], file=sys.stderr)
         return 3
+    # Before the finding, the thing the finding is *about*. A classification of
+    # a row `measure` does not emit is not a weaker reading of the board, it is
+    # a reading of something else — so this is a failure and not a floor.
+    if not naming["measure_emits_the_classified_row"]:
+        print(
+            "measure() does not emit the row T108 classifies — "
+            f"fields measure emits and the classification never sees: "
+            f"{naming['measure_fields_not_classified']}. The metric below was scored "
+            "over `_emitted_row`, which nothing routes through.",
+            file=sys.stderr,
+        )
+        return 1
     if naming["status_presence_fields_named_as_identity"]:
         return 1
     naming_breaches = field_naming_floor_breaches(naming)
