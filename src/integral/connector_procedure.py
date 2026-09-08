@@ -39,6 +39,7 @@ from typing import Any
 
 import yaml
 
+from integral import second_reader
 from integral.robots import USER_AGENT
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -67,14 +68,34 @@ CLIENTS: dict[str, dict[str, str]] = {
 MINIMUM_CASES = 2
 
 
-def second_reader_verdict(robots_text: str, urls: list[str]) -> str:
-    """Classify CPython's parser on one robots.txt. Pure: no network."""
+def second_reader_verdict(
+    robots_text: str,
+    urls: list[str],
+    reader: str = "urllib.robotparser",
+    paths: list[str] | None = None,
+) -> str:
+    """Classify a row's second reader on one robots.txt. Pure: no network.
+
+    **Which reader is asked is the row's to say, not this module's.** It used to
+    be CPython's, always, because there was only one; T120 added
+    `integral.second_reader`, a longest-match reader that can refuse where the
+    stdlib cannot. Asking the stdlib about a row adjudicated with the new reader
+    would report that an agreement "could not have happened" on a file where it
+    demonstrably did — this gate contradicting the ledger over a reader neither
+    of them used.
+
+    The stdlib takes full URLs, the new reader takes request paths, so both are
+    passed and each is given the form it reads.
+    """
     if not urls:
         return "not run — no path given"
-    parser = urllib.robotparser.RobotFileParser()
-    parser.parse(robots_text.splitlines())
-    verdicts = [parser.can_fetch(USER_AGENT, url) for url in urls]
-    if all(verdicts):
+    if reader == second_reader.NAME:
+        verdicts = [second_reader.allows(robots_text, USER_AGENT, path) for path in (paths or [])]
+    else:
+        parser = urllib.robotparser.RobotFileParser()
+        parser.parse(robots_text.splitlines())
+        verdicts = [parser.can_fetch(USER_AGENT, url) for url in urls]
+    if not verdicts or all(verdicts):
         return INCOMPETENT
     return f"competent — refused {verdicts.count(False)} of {len(verdicts)} path(s)"
 
@@ -95,7 +116,12 @@ def measure() -> dict[str, Any]:
             continue
         checked += 1
         origin = f"https://{row['site']}"
-        verdict = second_reader_verdict(row["robots_txt"], [origin + p for p in paths])
+        verdict = second_reader_verdict(
+            row["robots_txt"],
+            [origin + p for p in paths],
+            reader=row.get("second_reader", "urllib.robotparser"),
+            paths=paths,
+        )
         incompetent = verdict == INCOMPETENT
         # The ledger's own standing is the expectation. A row claiming two
         # parsers agreed, over a file the second parser cannot refuse on, is

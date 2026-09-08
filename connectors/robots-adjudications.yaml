@@ -14,6 +14,49 @@
 # something only when both can disagree, so on those files the rule silently
 # became "the repo matcher decided" while the record said two parsers had.
 #
+# **T120 replaced that second reader.** `integral.second_reader` implements
+# §2.2.1's group selection, §2.2.2's most-octets precedence and §2.2.3's `*` and
+# `$`, and it was written from the RFC by a session that had not read
+# `integral.robots` — a second reader derived from the same reading as the first
+# is one matcher with two names. It is the reader a NEW adjudication gets.
+#
+# Two things that did not change, and both are the point:
+#
+#   * **Competence is still measured, per file, exactly as before.** A reader
+#     believed competent because of who wrote it is the assumption T116 removed,
+#     and it is not being reintroduced under a better parser's name. The four
+#     verdicts stay, and `integral.second_reader` is put through the same
+#     constructed files the stdlib is — including the three where it must NOT
+#     improve on it (a bare `Disallow:`, two equivalent rules, and another
+#     agent's group), because refusing a path RFC 9309 allows is the opposite
+#     error and not competence.
+#
+#   * **Every row below is verified against the reader IT names**, not against
+#     whichever reader the code now prefers. Each of these adjudications
+#     consulted `urllib.robotparser`; re-checking those claims against a better
+#     parser would certify an agreement that never happened, improving the
+#     record without anyone re-running anything.
+#
+# **One standing below changed, and the honest count fell with it.**
+# `foorilla.com` carries a committed robots.txt and stood as `single_parser`
+# because the stdlib could not refuse anything on a file opening with
+# `Allow: /`. Re-adjudicated on 2026-09-08 against `integral.second_reader` —
+# 22 controls, all 22 refused, no false allows and no false refusals — it is a
+# genuine agreement, so `robots_adjudications_without_a_competent_second_reader`
+# reads **19** where T116 committed 20. No egress was involved: the file was
+# already here.
+#
+# That is the whole of what T120 delivers on the ledger, and it is one board
+# rather than eighteen because only three rows carry a `robots_txt:` snapshot
+# (`usajobs.gov`, `landing.jobs`, `foorilla.com`) and the other two were already
+# agreements. A competence verdict is a property of a FILE, so the remaining
+# rows cannot be re-adjudicated until their files are in hand — which needs
+# egress, and egress is 403 here.
+#
+# Every other standing below is untouched, for the reason in the bullet above:
+# those rows consulted `urllib.robotparser`, and re-reading their claims with a
+# better parser would improve the record without anyone re-running anything.
+#
 # That is fail-open in the exact component that exists as the independent check,
 # which is why competence is now recorded rather than assumed. Each entry below
 # carries a `standing`:
@@ -191,31 +234,38 @@ adjudications:
 
   - site: foorilla.com
     package: connectors/foorilla_en
-    checked: 2026-09-06
+    checked: 2026-09-08
     agent: "integral-job-search/0.1"
-    standing: single_parser
-    second_reader: "urllib.robotparser"
+    standing: two_parsers_agreed
+    second_reader: "integral.second_reader"
     source: connectors/foorilla_en/meta.yaml
     allowed:
       - /hiring/jobs/?job_search=python
       - /hiring/jobs/engineering-manager-agentic-insights-3647226/
-    second_reader_refused: []
+    second_reader_refused:
+      - /hiring/companies/
+      - /hiring/jobs/x/apply/
     reason: >
-      The second reader RAN, on 2026-09-06, and could not refuse: it returned
-      True for all four paths tried, including `/hiring/companies/x` and
-      `/hiring/jobs/x/apply/`, which the repo matcher refuses. Not "no control
-      was run" — the control was run and is incompetent on this file, for the
-      reason this ledger's header gives: it opens with `Allow: /`, and CPython
-      returns the first matching rule in file order rather than RFC 9309's
-      longest match, so no later Disallow can ever be reached.
-    # Not `two_parsers_agreed`, and the file below is why. It opens with
-    # `Allow: /`, so CPython's `robotparser` — first matching rule in file
-    # order — answers True for every path in it, including `/hiring/companies/`
-    # and `/hiring/jobs/*/apply/`, which the repo matcher refuses. It was run,
-    # on 2026-09-06, and returned True four times out of four. A parser that
-    # cannot refuse cannot agree, so this row records one reading, which is
-    # what there is. This is the failure mode described at the top of this file
-    # met on a live board rather than in the abstract.
+      Re-adjudicated on 2026-09-08 against `integral.second_reader`, the
+      longest-match reader T120 added, over the same committed file below — no
+      egress was needed or used. It refuses 22 of the 22 paths RFC 9309 refuses
+      on this file and allows every path the RFC allows: zero false allows and
+      zero false refusals, so `_classify` reads `competent` and this row is a
+      genuine two-parser agreement rather than one reading with a second name.
+      The two paths named above are the negative control the standing rests on.
+    # This row is the point of T120, so its history is kept rather than
+    # overwritten. Until 2026-09-08 it stood as `single_parser`, and the reason
+    # said: the second reader RAN, on 2026-09-06, and could not refuse — it
+    # returned True for all four paths tried, including the two named above,
+    # which the repo matcher refuses. That was not "no control was run". The
+    # file opens with `Allow: /`, and CPython's `robotparser` returns the first
+    # matching rule in file order rather than RFC 9309 §2.2.2's longest match,
+    # so no later `Disallow` in this document could ever be reached and the
+    # parser could not disagree with anything.
+    #
+    # Nothing about the board changed. The reader did, and that is the whole
+    # difference between the two standings — which is why competence is
+    # measured per (file, reader) and why this row names the reader it used.
     robots_txt: |
       User-agent: *
       Allow: /

@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 from integral import connector_policy as cp
-from integral import robots
+from integral import robots, second_reader
 from integral.connector_policy import (
     DEFAULT_LEDGER_PATH,
     PolicyRefusal,
@@ -238,7 +238,7 @@ def test_a_first_match_parser_on_a_permissively_opening_file_is_not_competent() 
     Measured on himalayas.app and nofluffjobs.com, both of which open this way.
     """
     fixture = _fixture("a_permissive_opener_hides_every_longer_disallow")
-    found = cp._classify(fixture.robots_txt, fixture.agent)
+    found = cp._classify(fixture.robots_txt, fixture.agent, cp.READERS[fixture.reader])
 
     assert found.verdict == cp.INCOMPETENT
     # The two halves of the finding, asserted rather than assumed.
@@ -301,7 +301,7 @@ def test_a_file_admitting_no_negative_control_carries_its_own_verdict() -> None:
     possible here" and "nobody ran a control" were the same silence.
     """
     fixture = _fixture("a_bare_disallow_admits_no_negative_control")
-    found = cp._classify(fixture.robots_txt, fixture.agent)
+    found = cp._classify(fixture.robots_txt, fixture.agent, cp.READERS[fixture.reader])
 
     assert found.verdict == cp.NO_CONTROL_POSSIBLE
     assert found.rfc_refused == ()
@@ -327,10 +327,14 @@ def test_the_same_rules_in_the_other_order_change_the_second_readers_competence(
     assert robots.allows_text(permissive_first.robots_txt, permissive_first.agent, "/apply") is (
         robots.allows_text(disallow_first.robots_txt, disallow_first.agent, "/apply")
     )
-    assert cp._classify(permissive_first.robots_txt, permissive_first.agent).verdict == (
+    stdlib = cp.READERS["urllib.robotparser"]
+    assert cp._classify(permissive_first.robots_txt, permissive_first.agent, stdlib).verdict == (
         cp.INCOMPETENT
     )
-    assert cp._classify(disallow_first.robots_txt, disallow_first.agent).verdict == cp.COMPETENT
+    assert (
+        cp._classify(disallow_first.robots_txt, disallow_first.agent, stdlib).verdict
+        == cp.COMPETENT
+    )
 
 
 def test_refusing_a_path_the_rfc_allows_is_not_counted_as_competence() -> None:
@@ -349,7 +353,7 @@ def test_refusing_a_path_the_rfc_allows_is_not_counted_as_competence() -> None:
     path on the file, because it manufactures a competence finding.
     """
     fixture = _fixture("refusing_a_path_the_rfc_allows_is_not_competence")
-    found = cp._classify(fixture.robots_txt, fixture.agent)
+    found = cp._classify(fixture.robots_txt, fixture.agent, cp.READERS[fixture.reader])
 
     assert found.verdict == cp.NO_CONTROL_POSSIBLE
     assert "/jobs" in found.second_reader_false_refusals
@@ -364,12 +368,15 @@ def test_a_disallow_written_for_another_agent_is_not_our_negative_control() -> N
     "passes" while proving nothing about the rules binding this fetch.
     """
     fixture = _fixture("a_disallow_for_another_agent_is_not_our_negative_control")
-    found = cp._classify(fixture.robots_txt, fixture.agent)
+    found = cp._classify(fixture.robots_txt, fixture.agent, cp.READERS[fixture.reader])
 
     assert found.verdict == cp.NO_CONTROL_POSSIBLE
     assert found.controls_tried == ()
     # And the same file DOES yield a control for the agent it names.
-    assert cp._classify(fixture.robots_txt, "OtherBot/1.0").verdict == cp.COMPETENT
+    assert (
+        cp._classify(fixture.robots_txt, "OtherBot/1.0", cp.READERS[fixture.reader]).verdict
+        == cp.COMPETENT
+    )
 
 
 def test_a_wildcard_and_anchored_rule_still_yields_a_negative_control() -> None:
@@ -379,7 +386,7 @@ def test_a_wildcard_and_anchored_rule_still_yields_a_negative_control() -> None:
     good news and is the fail-open answer.
     """
     fixture = _fixture("an_end_anchored_wildcard_rule_still_yields_a_control")
-    found = cp._classify(fixture.robots_txt, fixture.agent)
+    found = cp._classify(fixture.robots_txt, fixture.agent, cp.READERS[fixture.reader])
 
     assert found.controls_tried == ("/x.pdf",)
     assert found.rfc_refused == ("/x.pdf",)
@@ -390,7 +397,7 @@ def test_every_competence_fixture_classifies_as_the_rfc_requires() -> None:
     """The whole table, in one assertion, so a new fixture is measured by
     being added rather than by also being wired up."""
     for fixture in cp.COMPETENCE_FIXTURES:
-        found = cp._classify(fixture.robots_txt, fixture.agent)
+        found = cp._classify(fixture.robots_txt, fixture.agent, cp.READERS[fixture.reader])
         assert found.verdict == fixture.expected, f"{fixture.name}: {fixture.section}"
 
 
@@ -632,7 +639,7 @@ def test_a_file_that_refuses_a_path_is_never_told_no_control_is_possible() -> No
     `/ax`, which §2.2.2 allows on the equal-length tie.
     """
     fixture = _fixture("a_competing_allow_captures_the_only_witness_a_pattern_produced")
-    found = cp._classify(fixture.robots_txt, fixture.agent)
+    found = cp._classify(fixture.robots_txt, fixture.agent, cp.READERS[fixture.reader])
 
     assert found.verdict == cp.INCOMPETENT
     assert found.verdict != cp.NO_CONTROL_POSSIBLE
@@ -694,7 +701,7 @@ def test_a_second_reader_that_allows_one_refused_path_cannot_carry_an_agreement(
     fixture = _fixture(
         "a_reader_refusing_one_refused_path_and_allowing_another_is_only_partly_competent"
     )
-    found = cp._classify(fixture.robots_txt, fixture.agent)
+    found = cp._classify(fixture.robots_txt, fixture.agent, cp.READERS[fixture.reader])
 
     assert found.verdict == cp.PARTIALLY_COMPETENT
     assert found.second_reader_refused == ("/admin",)
@@ -719,7 +726,7 @@ def test_a_row_carrying_a_snapshot_is_checked_against_it_not_against_its_prose()
 
     assert usajobs.robots_txt.strip(), "the one agreement must show the file it rests on"
     assert usajobs.problems() == []
-    found = cp._classify(usajobs.robots_txt, usajobs.agent)
+    found = cp._classify(usajobs.robots_txt, usajobs.agent, cp.READERS[usajobs.second_reader])
     assert found.verdict == cp.COMPETENT
     assert usajobs.standing in cp.STANDINGS_FOR_CLASSIFICATION[found.verdict]
     # Every claimed refusal is refused by BOTH readers over that text.
@@ -862,16 +869,29 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
     """
     measured = cp.measure_second_readers()
 
-    assert measured["robots_adjudications_without_a_competent_second_reader"] == 20
+    assert measured["robots_adjudications_without_a_competent_second_reader"] == 19
     assert measured["robots_adjudications_misrepresenting_their_standing"] == 0
-    # The 20 is the 22 rows minus the two standing on a demonstrated agreement.
+    # The count is every row minus those standing on a demonstrated agreement —
+    # asserted as that relationship and not only as a literal, because the
+    # literal is the thing T120 exists to move and a frozen one would have to be
+    # edited to stay true rather than being re-derived.
     live = cp.adjudications()
     earned = [row for row in live if row.standing == cp.TWO_PARSERS_AGREED and not row.problems()]
-    assert len(live) - len(earned) == 20
+    assert len(live) - len(earned) == 19
+    # **It was 20 until 2026-09-08, and what moved it is the point of T120.**
+    # foorilla.com carried a committed robots.txt and stood as `single_parser`
+    # because `urllib.robotparser` could not refuse anything on a file opening
+    # with `Allow: /`. Re-adjudicated against `integral.second_reader` — which
+    # refuses 22 of the 22 paths RFC 9309 refuses there, with no false allows —
+    # it is a genuine agreement, and the honest count falls by one board. No
+    # egress was needed: the file was already in the repository.
+    assert live and any(
+        row.site == "foorilla.com" and row.standing == cp.TWO_PARSERS_AGREED for row in live
+    )
     # Both survive into the committed record: hiding the honest count behind
     # the gate's zero is the defect, so it is committed beside it.
     committed = cp.record_second_readers(measured)
-    assert committed["robots_adjudications_without_a_competent_second_reader"] == 20
+    assert committed["robots_adjudications_without_a_competent_second_reader"] == 19
 
 
 def test_single_parser_names_which_of_its_two_findings_each_row_is() -> None:
@@ -882,10 +902,78 @@ def test_single_parser_names_which_of_its_two_findings_each_row_is() -> None:
     measured = cp.measure_second_readers()
     cases = measured["single_parser_cases"]
 
-    assert cases["second_reader_ran_and_could_not_refuse"] == 4
+    # Was 4 until foorilla.com was re-adjudicated with a reader that CAN refuse
+    # (T120); it is no longer a `single_parser` row at all, so it leaves this
+    # count rather than moving between its two halves.
+    assert cases["second_reader_ran_and_could_not_refuse"] == 3
     assert cases["second_reader_never_run"] == 15
     assert sum(cases.values()) == measured["standings"][cp.SINGLE_PARSER]
 
     live = {row.site: row for row in cp.adjudications()}
     for site in ("himalayas.app", "nofluffjobs.com", "remoteok.com"):
         assert live[site].second_reader != cp.NOT_RUN, site
+
+
+def test_the_replacement_reader_refuses_the_file_the_stdlib_could_not() -> None:
+    """T120, in one assertion: the same bytes, and only the reader changed.
+
+    `a_permissive_opener_hides_every_longer_disallow` and its T120 twin are the
+    identical document. The stdlib classifies `incompetent` on it — it returns
+    the `Allow: /` it meets first and refuses nothing anywhere in the file — and
+    the longest-match reader classifies `competent`. That difference is the
+    whole of what this task delivers, and it is measured here rather than
+    asserted in a docstring.
+    """
+    stdlib_case = _fixture("a_permissive_opener_hides_every_longer_disallow")
+    replacement = _fixture("the_longest_match_reader_refuses_what_the_permissive_opener_hid")
+    assert stdlib_case.robots_txt == replacement.robots_txt, "the files must be identical"
+
+    stdlib = cp.READERS["urllib.robotparser"]
+    longest = cp.READERS[second_reader.NAME]
+    assert cp._classify(stdlib_case.robots_txt, stdlib_case.agent, stdlib).verdict == (
+        cp.INCOMPETENT
+    )
+    assert cp._classify(replacement.robots_txt, replacement.agent, longest).verdict == cp.COMPETENT
+
+    # And the direction: RFC 9309 refuses `/apply`, the stdlib allowed it, the
+    # replacement refuses it. Fail-open closed, on the file shape measured live
+    # on himalayas.app and nofluffjobs.com.
+    assert robots.allows_text(stdlib_case.robots_txt, stdlib_case.agent, "/apply") is False
+    assert stdlib(stdlib_case.robots_txt, stdlib_case.agent, "/apply") is True
+    assert longest(stdlib_case.robots_txt, stdlib_case.agent, "/apply") is False
+
+
+def test_a_row_is_verified_against_the_reader_it_names_not_the_current_default() -> None:
+    """A claim is checked against the parser that made it.
+
+    Every row adjudicated before T120 consulted `urllib.robotparser`, and
+    re-checking those claims against a better parser would certify an agreement
+    that never happened — the record would improve without anybody re-running
+    anything. So `second_reader` selects the reader, and the default only
+    applies to a row that names none.
+    """
+    assert set(cp.READERS) == set(cp.KNOWN_SECOND_READERS)
+    assert cp.DEFAULT_SECOND_READER == second_reader.NAME
+
+    live = {row.site: row for row in cp.adjudications()}
+    usajobs = live["usajobs.gov"]
+    assert usajobs.second_reader in cp.READERS
+    # The row names a reader this module can actually ask, which is what makes
+    # `_snapshot_problems` a check rather than a lookup that silently defaults.
+    assert cp.READERS.get(usajobs.second_reader) is not None
+
+
+def test_the_default_second_reader_is_one_that_can_refuse() -> None:
+    """The point of the swap, stated as a property rather than as a name.
+
+    A default reader that cannot refuse makes every future adjudication's
+    agreement worthless in the same way T116 measured. This asserts the
+    replacement refuses a path RFC 9309 refuses on a file the stdlib reads
+    permissively — so a future change that pointed the default back at a
+    first-match parser would fail here, whatever it was called.
+    """
+    document = _fixture("a_permissive_opener_hides_every_longer_disallow").robots_txt
+    agent = "integral-job-search/0.1"
+    default = cp.READERS[cp.DEFAULT_SECOND_READER]
+    assert robots.allows_text(document, agent, "/apply") is False
+    assert default(document, agent, "/apply") is False
