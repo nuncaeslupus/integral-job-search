@@ -81,12 +81,46 @@ class SecondReaderError(Exception):
     """The document could not be read — never silently an allow."""
 
 
-#: Reserved octets that §2.2.2's example table shows percent-encoded when they
-#: appear as **data** inside a query value, while the same table leaves the
-#: query's own delimiters (`?`, `=`, `&`) literal. `/foo/bar?baz=https://foo.bar`
-#: has "path to match" `/foo/bar?baz=https%3A%2F%2Ffoo.bar`: the `:` and the two
-#: `/` are data in the value of `baz`, and the `?` and `=` are structure.
-_QUERY_DATA_OCTETS = ":/"
+#: RFC 3986's reserved set — gen-delims `:/?#[]@` and sub-delims `!$&\'()*+,;=`.
+#: §2.2.2's requirement is stated over this set, not over an example: octets
+#: "outside the range of the US-ASCII coded character set, and those in the
+#: reserved range defined by RFC3986, MUST be percent-encoded ... prior to
+#: comparison". The section's example table then *exercises* two of them —
+#: `/foo/bar?baz=https://foo.bar` has "path to match"
+#: `/foo/bar?baz=https%3A%2F%2Ffoo.bar`, showing the `:` and the two `/` encoded
+#: as data inside the value of `baz` — and that is an illustration of the rule,
+#: never its extent.
+_RESERVED = ":/?#[]@!$&\'()*+,;="
+
+#: The two reserved octets held out, because §2.2.3 gives them a meaning inside
+#: a **pattern**: `*` "designates 0 or more instances of any character" and `$`
+#: "designates the end of the match pattern". Canonicalisation runs over rules
+#: and targets alike — running it over one side only is the asymmetry this
+#: module's docstrings call fail-open — so encoding these would delete a rule's
+#: own metacharacters, and `Disallow: /s?q=*` would stop matching anything.
+#: Case 22's `confidence_note` already records that whether a literal `$` in a
+#: pattern should be encoded before comparison is unsettled by the RFC; this is
+#: where that reading is taken, once, rather than in each caller.
+_PATTERN_METACHARACTERS = "*$"
+
+#: Reserved octets percent-encoded when they appear as **data** in a query.
+#:
+#: This used to be the literal string `":/"` — the two octets the example table
+#: happens to exercise — which made the equivalence a description of one row
+#: rather than of the rule. Every other reserved octet then escaped it in the
+#: fail-open direction: `Disallow: /s?q=a%26b` did not match `/s?q=a&b`, and
+#: `%3D` did not match `=`, so a rule an operator wrote in plain sight covered
+#: nothing. Deriving the set from `_RESERVED` is what closes that class; adding
+#: `&` and `=` to a list would have left `#`, `[`, `]`, `@`, `!`, `'`, `(`, `)`,
+#: `+`, `,` and `;` still outside it.
+#:
+#: The query's opening `?` is not excluded here but positionally, in
+#: `canonical`: it is the octet that makes "in the query" decidable at all, so
+#: encoding it would leave nothing to be in. A *later* `?` is data and is
+#: encoded, on both sides, like any other reserved octet.
+_QUERY_DATA_OCTETS = "".join(
+    octet for octet in _RESERVED if octet not in _PATTERN_METACHARACTERS
+)
 
 
 def _percent(octet: str) -> str:
@@ -113,10 +147,24 @@ def canonical(text: str, *, encode_query_data: bool = True) -> str:
       written in literal UTF-8 and a request that arrives encoded are one
       string. Encoding both sides rather than decoding both is the direction the
       table shows.
-    * **Reserved octets used as data in a query are percent-encoded**, while the
-      query's own delimiters are not: `?baz=https://foo.bar` becomes
-      `?baz=https%3A%2F%2Ffoo.bar`. The `/` inside a *path* is structure and
-      stays, which is why this applies only after the first `?`.
+    * **Reserved octets used as data in a query are percent-encoded** — every
+      octet in RFC 3986's reserved set, which is what §2.2.2 states the
+      requirement over, and not only the `:` and `/` its example table happens
+      to exercise. `?baz=https://foo.bar` becomes `?baz=https%3A%2F%2Ffoo.bar`,
+      and by the same rule `?q=a&b` becomes `?q=a%26b`, so a rule written
+      `/s?q=a%26b` matches a request written `/s?q=a&b`. The `/` inside a
+      *path* is structure and stays, which is why this applies only after the
+      first `?`; that first `?` and the two pattern metacharacters `*` and `$`
+      are the only reserved octets held out, and `_QUERY_DATA_OCTETS` says why.
+
+      This produces a canonical string that is not, octet for octet, the
+      example table's printed "path to match" column — `?baz=` there keeps its
+      `=`. It does not need to be. What §2.2.2 requires is that two spellings
+      of one URI compare equal, and the transform runs over the rule and the
+      target alike, so encoding a delimiter on both sides leaves every verdict
+      the table states unchanged while merging the spellings it does not
+      mention. Encoding one side only is what breaks, and that is the mistake
+      the paragraph below is about.
 
     A `%` that begins no valid escape is a literal `%`, kept as one: a decoder
     that raised on `/sale/100%discount` would have to answer somehow, and the
@@ -144,10 +192,11 @@ def canonical(text: str, *, encode_query_data: bool = True) -> str:
             out.append("%")
             index += 1
             continue
-        if char == "?":
-            # The first `?` is the query delimiter and stays literal; so does a
-            # later one, which is data but which the table's first row leaves
-            # alone along with `=`.
+        if char == "?" and not in_query:
+            # The first `?` is the query delimiter, and it is the only octet
+            # this function reads positionally: without one literal `?` there
+            # is no query for anything to be "in". A LATER `?` is data, and
+            # falls through to the reserved-octet branch below like any other.
             in_query = True
             out.append(char)
         elif ord(char) > 127 or (encode_query_data and in_query and char in _QUERY_DATA_OCTETS):
@@ -506,14 +555,14 @@ def allows(text: str, agent: str, target: str) -> bool:
 #: guaranteed without moving, and it is deliberately under what the table
 #: carries. Its job is to stop a clean zero resting on an empty table — a
 #: reader that reads nothing misreads nothing.
-FIXTURES_AT_LEAST = 30
+FIXTURES_AT_LEAST = 32
 
 #: Of those, how many must be cases a weak matcher would wrongly ALLOW. A table
 #: made only of paths a broken reader would wrongly refuse would score a clean
 #: zero while saying nothing about the direction that matters: a fail-closed
 #: bug costs one skipped fetch, a fail-open bug means the check said yes to
 #: something it exists to refuse.
-FAIL_OPEN_CASES_AT_LEAST = 15
+FAIL_OPEN_CASES_AT_LEAST = 17
 
 #: And how many paths this reader must refuse where `urllib.robotparser` does
 #: not. A "longest-match" reader that happens to agree with the stdlib on every
@@ -533,26 +582,36 @@ REGRESSION_CASES_AT_LEAST = 4
 #: CLAUDE.md tells every session to adjudicate a board with — answers something
 #: other than what RFC 9309 requires, as measured by this table.
 #:
-#: There is one, and it is **fail-open**: on
-#: `Disallow: /foo/bar?baz=https%3A%2F%2Ffoo.bar` against the request
+#: There are three, and all three are **fail-open**, and all three are one bug.
+#: On `Disallow: /foo/bar?baz=https%3A%2F%2Ffoo.bar` against the request
 #: `/foo/bar?baz=https://foo.bar`, §2.2.2's own example table (row two) gives
 #: the "path to match" as the percent-encoded form and therefore requires
 #: DISALLOW. `robots.allows_text` returns True: its `_CHUNK_SAFE` allowlist
 #: leaves `:` and `/` unencoded everywhere, including as data inside a query
-#: value, so the rule and the request never compare equal.
+#: value, so the rule and the request never compare equal. `_CHUNK_SAFE` also
+#: carries `&` and `=`, so cases 50 and 51 fail there for the same reason and
+#: by the same mechanism.
 #:
 #: **That defect is pre-existing and fixing it is not this task's job** — T120
 #: replaces the SECOND reader. What would not be acceptable is shipping the
 #: artefact that proves it and recording the proof nowhere, which is what this
-#: constant and the measurement below exist to prevent: the one disagreement the
-#: independent table bought is the most valuable thing in it, and it was
+#: constant and the measurement below exist to prevent: the disagreements the
+#: independent table bought are the most valuable thing in it, and they were
 #: invisible until the pre-PR review ran the table against both readers.
 #:
-#: It is pinned rather than merely counted, so a SECOND disagreement appearing
-#: is a test failure naming it rather than a number quietly going from one to
-#: two. Fixing `robots.py` is a follow-up; when it lands, this tuple empties and
-#: the evidence drifts, which is the change being visible rather than a nuisance.
-REPO_MATCHER_DISAGREEMENTS = ("reserved_octets_stay_encoded_in_query",)
+#: It is pinned rather than merely counted, so a NEW disagreement appearing is a
+#: test failure naming it rather than a number quietly going up. It went from
+#: one to three on the review of this reader's own pull request, which is the
+#: pin doing its job: the two cases the review added are the general rule that
+#: the first case was one instance of, and the follow-up is scoped to the rule
+#: rather than to the instance. Fixing `robots.py` is that follow-up (T151);
+#: when it lands this tuple empties and the evidence drifts, which is the change
+#: being visible rather than a nuisance.
+REPO_MATCHER_DISAGREEMENTS = (
+    "reserved_octets_stay_encoded_in_query",
+    "ampersand_as_query_data_is_encoded",
+    "equals_as_query_data_is_encoded",
+)
 
 #: Cases the deriving session marked LOW confidence: RFC 9309's text admits more
 #: than one reading and the document says which it took and why. They gate like
@@ -763,6 +822,62 @@ REGRESSION_CASES: tuple[Case, ...] = (
             "octets. §2.2's grammar describes the fields; a file that cannot be opened "
             "must not read as one that permits everything. Reported by the independent "
             "pre-PR review."
+        ),
+        direction=FAIL_OPEN_RISK,
+    ),
+    # The three below pin the two decisions that generalising
+    # `_QUERY_DATA_OCTETS` from `":/"` to RFC 3986's reserved set forced, and
+    # they are here because a mutation round found both unreached: with the
+    # 51-case spec table green, removing the first-`?` guard survived, and so
+    # did emptying `_PATTERN_METACHARACTERS`. Both surviving mutants are
+    # fail-open. A generalised rule needs its exemptions pinned octet by octet
+    # or the exemption list becomes the new `":/"`.
+    Case(
+        id="a_later_question_mark_is_query_data",
+        robots_txt="User-agent: *\nDisallow: /s?q=a%3Fb\n",
+        agent="integral-job-search/0.1",
+        path="/s?q=a?b",
+        expected=DISALLOW_VERDICT,
+        section="RFC 9309 §2.2.2 (implementer-derived)",
+        why=(
+            "`?` is a gen-delim, so it is in RFC 3986's reserved range and §2.2.2 "
+            "requires it percent-encoded before comparison like any other reserved "
+            "octet. Only the FIRST `?` is exempt, and positionally rather than by "
+            "class: it is the delimiter that makes 'in the query' decidable at all. A "
+            "canonicaliser that treats EVERY `?` as that delimiter leaves a later one "
+            "literal on the request while the rule's `%3F` stays encoded, so the two "
+            "never compare equal and the rule matches nothing."
+        ),
+        direction=FAIL_OPEN_RISK,
+    ),
+    Case(
+        id="a_wildcard_in_the_query_is_still_a_wildcard",
+        robots_txt="User-agent: *\nDisallow: /s?q=*\n",
+        agent="integral-job-search/0.1",
+        path="/s?q=secret",
+        expected=DISALLOW_VERDICT,
+        section="RFC 9309 §2.2.3 (implementer-derived)",
+        why=(
+            "§2.2.3 gives `*` its pattern meaning wherever it appears in a rule, and "
+            "being also an RFC 3986 sub-delim does not turn it into data. Encoding "
+            "every reserved octet in the query without holding the pattern "
+            "metacharacters out rewrites this rule's `*` to `%2A` — a literal run no "
+            "request path carries — so the rule silently covers nothing."
+        ),
+        direction=FAIL_OPEN_RISK,
+    ),
+    Case(
+        id="a_dollar_anchor_in_the_query_still_anchors",
+        robots_txt="User-agent: *\nDisallow: /s?q=x$\n",
+        agent="integral-job-search/0.1",
+        path="/s?q=x",
+        expected=DISALLOW_VERDICT,
+        section="RFC 9309 §2.2.3 (implementer-derived)",
+        why=(
+            "The `$` half of the case above, and it needs its own row: a holdout list "
+            "carrying `*` alone passes that one while rewriting this rule's `$` to "
+            "`%24`, leaving an anchor no path can satisfy. §2.2.3 designates `$` 'the "
+            "end of the match pattern', and a sub-delim in RFC 3986 is not that."
         ),
         direction=FAIL_OPEN_RISK,
     ),

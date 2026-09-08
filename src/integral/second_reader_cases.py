@@ -1,4 +1,4 @@
-"""RFC 9309's verdicts for 49 constructed cases, derived by a second session.
+"""RFC 9309's verdicts for 51 constructed cases, derived by second sessions.
 
 **Nothing in this file was written by the session that wrote
 `integral.second_reader`, and nothing in it was decided by running code.**
@@ -16,6 +16,13 @@ forbid that a weak matcher would allow. A fail-closed bug costs one skipped
 fetch; a fail-open bug means the check said yes to something it exists to
 refuse. That session returned 31 `FAIL_OPEN_RISK` cases, 17 `FAIL_CLOSED_RISK`
 and one neutral, each citing the section its verdict was read off.
+
+Cases 50 and 51 arrived the same way and later: the session that reviewed the
+reader's pull request derived two more from §2.2.2's text, both `FAIL_OPEN_RISK`,
+and both ALLOW at the time against a table of 49 that was already green. The
+comment above them says what the first 49 missed. The rule the file is built on
+is unchanged — the session that writes a case is never the session whose code it
+judges — and it has now been applied twice.
 
 The prose it wrote — its provenance statement, its reading of the two
 specificity interpretations, and the full derivation of every row — is kept
@@ -1147,5 +1154,69 @@ Disallow: /admin/    # staff only, humans welcome
             "`#` is trimmed rather than kept as part of the pattern is the natural reading of "
             "the ABNF's `*WS`, not a separate quoted sentence."
         ),
+    ),
+    # -- The independent read of PR #410 -----------------------------------
+    #
+    # Cases 50 and 51 were derived by the session that reviewed the reader,
+    # not by the one that wrote it — the same split as the 49 above, made a
+    # second time. Both were ALLOW when they were written down, in a reader
+    # whose 49-row table was already green: the table exercised §2.2.2's
+    # percent-encoding requirement only through the two octets the section's
+    # example table happens to print, so `_QUERY_DATA_OCTETS = ":/"` passed it
+    # while every other reserved octet used as query data escaped the
+    # equivalence. That is the shape CLAUDE.md's T70 paragraph describes — a
+    # green gate that is necessary and not sufficient — and the reason these
+    # are committed as rows rather than answered in a comment.
+    #
+    # ---- 50. ampersand_as_query_data_is_encoded --------------------------
+    Case(
+        id="ampersand_as_query_data_is_encoded",
+        robots_txt="""User-agent: *
+Disallow: /s?q=a%26b
+""",
+        agent="integral-job-search/0.1",
+        path="/s?q=a&b",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "§2.2.2 states its canonicalisation over a **set**, not over an example: octets "
+            '"outside the range of the US-ASCII coded character set, and those in the reserved '
+            'range defined by RFC3986, MUST be percent-encoded ... prior to comparison". `&` is '
+            "a sub-delim, so it is in RFC 3986's reserved range, so it is encoded before "
+            "comparison exactly as the `:` and the two `/` of the example table's second row "
+            "are. Here it is data inside the value of `q`, the same position `https://foo.bar` "
+            "occupies inside the value of `baz` in that row. So rule and request are two "
+            "spellings of one URI and the rule refuses the request. The example table is an "
+            "illustration of the requirement and never its extent — a matcher that encodes "
+            "only the octets the table prints allows every other reserved octet through, and "
+            "the operator's rule covers nothing."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
+    # ---- 51. equals_as_query_data_is_encoded -----------------------------
+    Case(
+        id="equals_as_query_data_is_encoded",
+        robots_txt="""User-agent: *
+Disallow: /s?q=a%3Db
+""",
+        agent="integral-job-search/0.1",
+        path="/s?q=a=b",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "Case 50's argument with `=` in place of `&`: `=` is a sub-delim and therefore "
+            "reserved, so `%3D` and `=` are one octet in two spellings and the rule refuses "
+            "the request. This row is deliberately built so the *sub-reading* does not change "
+            "the verdict. Read strictly — only reserved octets appearing as **data** are "
+            "encoded, and the `=` separating `q` from its value is structure — the second `=` "
+            "in `q=a=b` is still data, so both sides canonicalise alike. Read broadly — every "
+            "reserved octet after the query delimiter is encoded — both `=` are encoded on "
+            "both sides, and they still canonicalise alike. The verdict is DISALLOW under "
+            "either, which is why the case can be asserted at HIGH confidence while the "
+            "structural/data line itself is not settled by the RFC's text."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
     ),
 )

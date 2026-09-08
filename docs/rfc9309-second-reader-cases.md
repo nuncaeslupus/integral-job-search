@@ -36,8 +36,8 @@ implementer's reading of the spec, is green when the reading is wrong.
     consumed, so a `*` expansion inflates the score.
   **This table takes (P)**, because the RFC's wildcard-free examples cannot distinguish
   the two and (P) is the reading that makes a rule's specificity a property of the
-  robots.txt file rather than of the request. Cases 24–26 are built so the two readings
-  are *tested*: 24 makes them agree, 25 and 26 make them diverge and are marked `LOW`.
+  robots.txt file rather than of the request. Cases 23–25 are built so the two readings
+  are *tested*: 23 makes them agree, 24 and 25 make them diverge and are marked `LOW`.
 - **`direction`** is about the failure a weak matcher makes on this row:
   `FAIL_OPEN_RISK` — the RFC says DISALLOW and a weak matcher would ALLOW (a fetch the
   check exists to refuse goes out); `FAIL_CLOSED_RISK` — the RFC says ALLOW and a weak
@@ -96,14 +96,18 @@ implementer's reading of the spec, is green when the reading is wrong.
 | 47 | `group_with_no_rules_allows` | ALLOW | FAIL_CLOSED_RISK | MEDIUM | 2.2.2 |
 | 48 | `rules_before_first_ua_line_are_ignored` | ALLOW | FAIL_CLOSED_RISK | MEDIUM | 2.2 |
 | 49 | `comment_is_stripped_from_the_value` | DISALLOW | FAIL_OPEN_RISK | MEDIUM | 2.2.3 |
+| 50 | `ampersand_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 51 | `equals_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
 
-Forty-nine rows: 31 `FAIL_OPEN_RISK`, 17 `FAIL_CLOSED_RISK`, 1 `NEUTRAL` — weighted toward
+Fifty-one rows: 33 `FAIL_OPEN_RISK`, 17 `FAIL_CLOSED_RISK`, 1 `NEUTRAL` — weighted toward
 fail-open, since a fail-closed bug costs one skipped fetch and a fail-open bug means the
-check said yes to something it exists to refuse. That is four over the 30–45 the brief
-asked for; the four kept beyond it are the paired mirrors (5 against 4, 7 against 6, 18
-against 17, 30 against 29), each of which exists because its partner can be passed by
-accident — dropping either half of a pair would leave a matcher able to score the row
-without implementing the rule.
+check said yes to something it exists to refuse. Forty-nine of them were derived before
+any implementation existed; **50 and 51 were derived later, by the session that reviewed
+the reader those 49 were written for**, and section H says what the first forty-nine
+missed. That is six over the 30–45 the brief asked for; four of the six are the paired
+mirrors (5 against 4, 7 against 6, 18 against 17, 30 against 29), each of which exists
+because its partner can be passed by accident — dropping either half of a pair would leave
+a matcher able to score the row without implementing the rule.
 
 ---
 
@@ -1103,6 +1107,77 @@ Disallow: /admin/    # staff only, humans welcome
 
 ---
 
+## H. Percent-encoding equivalence, again — what section E missed (§2.2.2)
+
+**Provenance differs here and it is the point of the section.** Rows 1–49 were derived
+before any implementation existed. Rows 50 and 51 were derived afterwards, from the same
+text, by the session that **reviewed** the reader those rows were written to judge — and
+they were derived because section E's rows were all green against a reader that was still
+fail-open.
+
+Section E adjudicates percent-encoding equivalence through the two octets §2.2.2's example
+table happens to print, `:` and `/` (rows 26–31). A reader can satisfy every one of those
+rows with the literal set `":/"`, and that is exactly what the reader under review carried:
+`_QUERY_DATA_OCTETS = ":/"`. Every *other* reserved octet used as query data then escaped
+the equivalence, in the fail-open direction — `Disallow: /s?q=a%26b` matched nothing.
+
+The generalisation the rows below assert is read off §2.2.2's own sentence rather than off
+its table: octets "outside the range of the US-ASCII coded character set, and those in the
+reserved range defined by RFC3986, MUST be percent-encoded ... prior to comparison"
+(RECOLLECTED). The requirement is stated over RFC 3986's **reserved** production —
+gen-delims `:/?#[]@` and sub-delims `!$&'()*+,;=` — and the table illustrates it with two
+of those eleven-plus octets. **A table is an illustration of a rule and never its extent**,
+and a case table built only from a spec's examples inherits whatever the examples do not
+reach. That is the lesson of these two rows, and it applies to section E as much as to any
+implementation.
+
+### 50. `ampersand_as_query_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /s?q=a%26b
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/s?q=a&b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** `&` is a sub-delim, so it is in RFC 3986's reserved range, so §2.2.2's sentence
+  requires it percent-encoded before comparison — exactly as the `:` and the two `/` of the
+  example table's second row are. Here it sits as data inside the value of `q`, the same
+  position `https://foo.bar` occupies inside the value of `baz` in row 31. Rule and request
+  are therefore two spellings of one URI, and the rule refuses the request.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH — the octet's membership in `sub-delims` is not in doubt, and the
+  sentence quantifies over the whole reserved range rather than over the table's examples.
+  The one thing the RFC leaves open — where the line between "data" and "structure" falls
+  inside a query — does not reach this row: `&` here separates nothing, it is the second
+  octet of the value `a&b`.
+
+### 51. `equals_as_query_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /s?q=a%3Db
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/s?q=a=b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** Row 50's argument with `=` in place of `&`; `=` is likewise a sub-delim. This
+  row is built so the sub-reading cannot change the verdict, which is why it can be `HIGH`
+  while the data/structure line stays unsettled. Read **strictly** — only reserved octets
+  appearing as data are encoded, and the `=` separating `q` from its value is structure —
+  the *second* `=` in `q=a=b` is still data, so `%3D` and `=` meet and the rule matches.
+  Read **broadly** — every reserved octet after the query delimiter is encoded — both `=`
+  are encoded on both sides, and the rule matches again. DISALLOW under either.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH — for the reason just given: the row is constructed to be invariant
+  under the one ambiguity that could otherwise lower it.
+
+---
+
 ## Using this table
 
 Each row is a fixture, not a comment. Per CLAUDE.md, an accepted case is only accepted once
@@ -1111,5 +1186,6 @@ read and waved through leaves the code exactly as unprotected as it was, and the
 denominator must rise by the number of cases accepted.
 
 Where a row is `LOW`, the finding is a *reading disagreement* to settle in writing (cases
-22, 24, 25, 46), not automatically a defect. Where a row is `HIGH` and `FAIL_OPEN_RISK`, a
+22, 24, 25, 34, 46 — the five `second_reader.CONTESTED_CASES` publishes), not
+automatically a defect. Where a row is `HIGH` and `FAIL_OPEN_RISK`, a
 disagreeing matcher is fetching something the operator refused.
