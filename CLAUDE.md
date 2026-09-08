@@ -484,6 +484,15 @@ archive-sensitive: `status/evidence/T100.json` names it, because
 `archive_sensitive_evidence_keys` compares the whole committed record across a
 simulated archive rather than trusting that one key was the only one.
 
+**Adding a file is the other half of that, and it was the second instance.**
+`T125.files_checked` counted every file `ruff format` reads, which since ruff 0.16
+includes **Markdown**, so a pull request of nine task files and no Python at all moved
+it 453 → 462 — and two branches could each read 465 while their merge ref read 467.
+That is **T150**: the count is committed as the floor `files_checked_at_least`
+(`repo_gate.MINIMUM_FILES_FORMATTED`), and `status/evidence/T150.json`'s
+`unstable_evidence_keys` compares each registered record across **both** mutations —
+a file added and a task file archived. T100's check could only ever see the second.
+
 **One evidence key is now archive-*driven* by design, and it is not that finding.**
 Since D-27, `S8.json`'s `merged_tasks_with_an_unticked_plan_row` requires every task
 archived in `arsenal/tasks/_history/` with `status: merged` to carry a ticked `☑` row

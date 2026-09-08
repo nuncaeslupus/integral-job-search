@@ -1,0 +1,10 @@
+{
+  "unstable_evidence_keys": 0,
+  "evidence_keys_compared": 16,
+  "mutations_compared": [
+    "a Markdown file is added",
+    "a task file is archived"
+  ],
+  "gate_status": "measured",
+  "unstable": []
+}

@@ -391,3 +391,175 @@ def test_a_scan_that_found_almost_nothing_is_unmeasured(tmp_path: Path) -> None:
     measured = repo_gate.measure_formatting(repo)
     assert measured["gate_status"] == "unmeasured"
     assert measured["files_checked"] < repo_gate.MINIMUM_FILES_FORMATTED
+
+
+# ---------------------------------------------------------------------------
+# T150 — a committed evidence key must not move when the tree gains a file.
+
+
+def test_the_formatting_record_commits_a_floor_and_not_the_count_of_the_day() -> None:
+    """T125 committed `files_checked` exactly, and ruff 0.16 reads Markdown, so
+    a pull request of nine task files and no Python moved it 453 -> 462 and
+    `make evidence` went red about formatting it had no finding on. The floor
+    is the denominator's whole job — `unformatted_files == 0` must not rest on
+    an empty scan — and it does not move."""
+    small = repo_gate.record_formatting(
+        {"unformatted_files": 0, "files_checked": 465, "gate_status": "measured"}
+    )
+    grown = repo_gate.record_formatting(
+        {"unformatted_files": 0, "files_checked": 474, "gate_status": "measured"}
+    )
+
+    assert "files_checked" not in small
+    assert small["files_checked_at_least"] == repo_gate.MINIMUM_FILES_FORMATTED
+    assert small == grown, "nine added task files must not change what is committed"
+    assert small["unformatted_files"] == 0, "the finding itself is untouched"
+
+
+def test_adding_a_markdown_file_adds_one_to_the_formatter_population(tmp_path: Path) -> None:
+    """The fact `_one_more_file` encodes, measured rather than assumed: since
+    ruff 0.16 the formatter reads Markdown, so `arsenal/tasks/` is inside
+    `files_checked` and every task file lands in it."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "Makefile").write_text("lint:\n\truff format --check .\n", encoding="utf-8")
+    for name in ("a", "b", "c"):
+        (repo / f"{name}.md").write_text(f"# {name}\n", encoding="utf-8")
+    before = repo_gate.measure_formatting(repo)
+    assert before["files_checked"] == 3
+
+    (repo / "d.md").write_text("# d\n", encoding="utf-8")
+    after = repo_gate.measure_formatting(repo)
+    assert after["files_checked"] == before["files_checked"] + 1
+    assert after["unformatted_files"] == 0
+
+
+def _census_source(name: str = "census") -> repo_gate.EvidenceSource:
+    """A source that commits its population exactly — T125 before this task."""
+    return repo_gate.EvidenceSource(
+        name=name,
+        measure=lambda repo_root: {"findings": 0, "files": 400},
+        record=dict,
+        mutations={
+            repo_gate.A_FILE_IS_ADDED: repo_gate._one_more_file("files"),
+            repo_gate.A_TASK_FILE_IS_ARCHIVED: lambda repo_root, measured: {
+                **measured,
+                "files": measured["files"] - 1,
+            },
+        },
+    )
+
+
+def test_a_key_that_moves_when_a_file_is_added_is_named(tmp_path: Path) -> None:
+    """The control. T100 compared its record across an archive only, and
+    archiving moves a task file *inside* the tree — ruff formats it either way
+    — so the key that drifts on every added file survived it."""
+    measured = repo_gate.measure_evidence_stability(tmp_path, sources=[_census_source()])
+
+    assert measured["gate_status"] == "measured"
+    assert measured["unstable_evidence_keys"] == 2, measured
+    assert "census.files moves when a Markdown file is added" in measured["unstable"]
+    assert "census.files moves when a task file is archived" in measured["unstable"]
+
+
+def test_a_floor_in_place_of_the_census_is_what_makes_it_stable(tmp_path: Path) -> None:
+    """The same source, recorded T100's way: the live count out, the floor in."""
+    census = _census_source()
+    floored = repo_gate.EvidenceSource(
+        name=census.name,
+        measure=census.measure,
+        record=lambda measured: {
+            **{key: value for key, value in measured.items() if key != "files"},
+            "files_at_least": 300,
+        },
+        mutations=census.mutations,
+    )
+
+    measured = repo_gate.measure_evidence_stability(tmp_path, sources=[floored])
+    assert measured["unstable_evidence_keys"] == 0, measured
+    assert measured["evidence_keys_compared"] == 4, measured
+    assert measured["gate_status"] == "measured"
+
+
+def test_a_mutation_that_moves_nothing_is_not_a_comparison(tmp_path: Path) -> None:
+    """A record compared with itself agrees with itself. That is the shape
+    `naming.first_task_file` was rewritten to avoid, and a registry made of it
+    must report `unmeasured` rather than a clean zero."""
+    inert = repo_gate.EvidenceSource(
+        name="inert",
+        measure=lambda repo_root: {"findings": 0, "files": 400},
+        record=dict,
+        mutations={
+            repo_gate.A_FILE_IS_ADDED: lambda repo_root, measured: dict(measured),
+            repo_gate.A_TASK_FILE_IS_ARCHIVED: lambda repo_root, measured: dict(measured),
+        },
+    )
+
+    measured = repo_gate.measure_evidence_stability(tmp_path, sources=[inert])
+    assert measured["unstable_evidence_keys"] == 0
+    assert measured["evidence_keys_compared"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert any("moved nothing" in reason for reason in measured["reasons"])
+
+
+def test_stability_reached_by_committing_nothing_is_unmeasured(tmp_path: Path) -> None:
+    """`record` could satisfy "the mutation changes nothing" by dropping every
+    key. The denominator is what refuses that: zero over zero is not a pass."""
+    empty = repo_gate.EvidenceSource(
+        name="empty",
+        measure=lambda repo_root: {"files": 400},
+        record=lambda measured: {},
+        mutations={
+            repo_gate.A_FILE_IS_ADDED: repo_gate._one_more_file("files"),
+            repo_gate.A_TASK_FILE_IS_ARCHIVED: lambda repo_root, measured: {"files": 399},
+        },
+    )
+
+    measured = repo_gate.measure_evidence_stability(tmp_path, sources=[empty])
+    assert measured["evidence_keys_compared"] == 0
+    assert measured["gate_status"] == "unmeasured"
+
+
+def test_losing_the_added_file_half_is_unmeasured_not_a_pass(tmp_path: Path) -> None:
+    """T100 was green while blind to one of the two mutations. A registry that
+    exercises only the archive again must say so out loud."""
+    census = _census_source()
+    archive_only = repo_gate.EvidenceSource(
+        name=census.name,
+        measure=census.measure,
+        record=lambda measured: {"findings": measured["findings"]},
+        mutations={
+            repo_gate.A_TASK_FILE_IS_ARCHIVED: census.mutations[repo_gate.A_TASK_FILE_IS_ARCHIVED]
+        },
+    )
+
+    measured = repo_gate.measure_evidence_stability(tmp_path, sources=[archive_only])
+    assert measured["unstable_evidence_keys"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["mutations_compared"] == ["a task file is archived"]
+    assert any("a Markdown file is added" in reason for reason in measured["reasons"])
+
+
+def test_this_repository_commits_nothing_that_moves_under_either_mutation() -> None:
+    """T150's gate, over the real tree: both mutations exercised, no key moves."""
+    measured = repo_gate.measure_evidence_stability()
+
+    assert measured["gate_status"] == "measured", measured
+    assert measured["unstable_evidence_keys"] == 0, measured["unstable"]
+    assert measured["mutations_compared"] == [
+        repo_gate.A_FILE_IS_ADDED,
+        repo_gate.A_TASK_FILE_IS_ARCHIVED,
+    ]
+    assert measured["evidence_keys_compared"] >= 12, measured
+
+
+def test_the_floor_is_below_what_this_tree_actually_holds() -> None:
+    """A floor is only a floor while the population clears it. Raised above
+    what the tree holds it stops being a denominator and becomes an assertion
+    the repository cannot satisfy — `gate_status` goes `unmeasured` and nothing
+    in the suite would otherwise notice, because every other test names the
+    constant rather than a number."""
+    measured = repo_gate.measure_formatting()
+
+    assert measured["gate_status"] == "measured", measured
+    assert measured["files_checked"] > repo_gate.MINIMUM_FILES_FORMATTED, measured

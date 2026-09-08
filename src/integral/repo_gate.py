@@ -64,11 +64,14 @@ import re
 import shlex
 import subprocess
 import sys
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from integral import naming
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-22.json"
@@ -749,11 +752,211 @@ def measure_formatting(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
 MINIMUM_FILES_FORMATTED = 300
 
 
+def record_formatting(measured: dict[str, Any]) -> dict[str, Any]:
+    """What is committed, out of what `measure_formatting` measured.
+
+    The one difference is the denominator, and it is `naming.record`'s
+    difference for `naming.record`'s reason (T100). `files_checked` measures
+    nothing about the code: it exists so that `unformatted_files == 0` cannot
+    rest on a scan that found nothing. Committed as an exact value it moved on
+    every pull request that added a file — and since ruff 0.16 the formatter
+    reads **Markdown**, so a pull request that adds nine task files and no
+    Python at all took it from 453 to 462 and `make evidence` went red for a
+    reason that had nothing to do with formatting (T150).
+
+    The floor does the denominator's whole job and does not move. The number is
+    not hidden — the run still prints what it saw, and refuses to score at all
+    below the floor.
+    """
+    committed = {key: value for key, value in measured.items() if key != "files_checked"}
+    committed["files_checked_at_least"] = MINIMUM_FILES_FORMATTED
+    return committed
+
+
 def write_formatting_evidence(
     evidence: Path = DEFAULT_T125_EVIDENCE_PATH, repo_root: Path = _REPO_ROOT
 ) -> dict[str, Any]:
     """Measure and record `status/evidence/T125.json`."""
-    measured = measure_formatting(repo_root)
+    committed = record_formatting(measure_formatting(repo_root))
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(
+        json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return committed
+
+
+DEFAULT_T150_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T150.json"
+
+#: The two ways the tree moves under a pull request that changes no behaviour.
+#: T100 asked the second one only, which is why it never saw `files_checked`:
+#: archiving a task file moves it inside the tree, and `ruff format` reads it
+#: either way, so the key that drifts on every added file survived a check
+#: built entirely out of moving one.
+A_FILE_IS_ADDED = "a Markdown file is added"
+A_TASK_FILE_IS_ARCHIVED = "a task file is archived"
+
+
+@dataclass(frozen=True)
+class EvidenceSource:
+    """One committed evidence record, and how the tree's shape moves it.
+
+    `measure` is the live measurement and `record` is what gets committed out
+    of it — the same pair `naming.measure`/`naming.record` already are.
+    `mutations` maps a mutation name to a function of `(repo_root, measured)`
+    returning the measurement the *mutated* tree would produce.
+
+    A mutation is stated as a transform of the measurement rather than
+    performed on disk because the alternative is not available here: measuring
+    a whole second tree means regenerating evidence in it, and this metric is
+    itself part of `make evidence`, which would then run inside itself. What
+    keeps a transform from being a comfortable fiction is that it must
+    *actually move the measurement it is given* — a mutation that changes
+    nothing is dropped from the denominator below, so a registry of identity
+    transforms reports `unmeasured`, never a clean zero.
+    """
+
+    name: str
+    measure: Callable[[Path], dict[str, Any]]
+    record: Callable[[dict[str, Any]], dict[str, Any]]
+    mutations: Mapping[str, Callable[[Path, dict[str, Any]], dict[str, Any]]]
+
+
+def _one_more_file(key: str) -> Callable[[Path, dict[str, Any]], dict[str, Any]]:
+    """The measurement a tree with one more Markdown file in it would produce.
+
+    One more file, and no new finding in it: a task file adds nothing to
+    `unformatted_files` (the formatter would rewrite it otherwise and `make
+    lint` is red) and nothing to the old-name counts. Measured, not assumed —
+    `ruff format --check` over a directory of *n* Markdown files reports *n*,
+    which `test_adding_a_markdown_file_adds_one_to_the_formatter_population`
+    holds down.
+    """
+
+    def mutate(repo_root: Path, measured: dict[str, Any]) -> dict[str, Any]:
+        population = measured.get(key)
+        if not isinstance(population, int) or isinstance(population, bool):
+            return dict(measured)
+        return {**measured, key: population + 1}
+
+    return mutate
+
+
+def _with_a_task_file_archived(repo_root: Path, measured: dict[str, Any]) -> dict[str, Any]:
+    """T100's mutation, reused: the sweep with one live task file in `_history/`."""
+    candidate = naming.first_task_file(repo_root)
+    if candidate is None:
+        return dict(measured)
+    return naming.measure(repo_root, archived=frozenset({candidate}))
+
+
+def evidence_sources() -> tuple[EvidenceSource, ...]:
+    """The records this gate compares across both mutations.
+
+    Every measurement that counts a **population of files** belongs here, and
+    the two that do today are the two that have already been caught committing
+    one: T55's `files_scanned` (fixed by T100) and T125's `files_checked`
+    (fixed by T150). A new sweep that commits a census and is not registered
+    here is not covered — which is why the fix is the floor in each record and
+    this is the check that the floor is really doing its job.
+    """
+    return (
+        EvidenceSource(
+            name="T125",
+            measure=measure_formatting,
+            record=record_formatting,
+            mutations={A_FILE_IS_ADDED: _one_more_file("files_checked")},
+        ),
+        EvidenceSource(
+            name="T55",
+            measure=naming.measure,
+            record=naming.record,
+            mutations={
+                A_FILE_IS_ADDED: _one_more_file("files_scanned"),
+                A_TASK_FILE_IS_ARCHIVED: _with_a_task_file_archived,
+            },
+        ),
+    )
+
+
+def measure_evidence_stability(
+    repo_root: Path = _REPO_ROOT,
+    *,
+    sources: Sequence[EvidenceSource] | None = None,
+) -> dict[str, Any]:
+    """T150's gate: `unstable_evidence_keys`.
+
+    A committed evidence key must say the same thing about a tree that gained a
+    file and about a tree that archived one. Anything else is a gate that goes
+    red on pull requests it has no opinion about, which is the state that
+    teaches sessions to expect red.
+
+    Three things make the zero mean something:
+
+    - a mutation that leaves the measurement untouched is **not a comparison**
+      and is not counted — the self-comparison T100's `first_task_file` was
+      rewritten to avoid;
+    - `evidence_keys_compared` is the denominator, so a `record` that reached
+      stability by dropping all of its keys scores zero over zero and is
+      `unmeasured`;
+    - **both** mutations must be exercised somewhere in the registry. T100 was
+      green while blind to one of them; a run that has quietly lost the added-
+      file half must not read like a pass.
+    """
+    registry = evidence_sources() if sources is None else tuple(sources)
+    unstable: list[str] = []
+    skipped: list[str] = []
+    exercised: set[str] = set()
+    keys_compared = 0
+    comparisons = 0
+
+    for source in registry:
+        measured = source.measure(repo_root)
+        live = source.record(measured)
+        for mutation, mutate in sorted(source.mutations.items()):
+            mutated = mutate(repo_root, measured)
+            if mutated == measured:
+                skipped.append(f"{source.name}: {mutation} moved nothing to compare")
+                continue
+            after = source.record(mutated)
+            compared = live.keys() | after.keys()
+            if not compared:
+                skipped.append(f"{source.name}: {mutation} left no committed key to compare")
+                continue
+            comparisons += 1
+            exercised.add(mutation)
+            keys_compared += len(compared)
+            unstable.extend(
+                f"{source.name}.{key} moves when {mutation}"
+                for key in sorted(compared)
+                if live.get(key) != after.get(key)
+            )
+
+    result: dict[str, Any] = {
+        "unstable_evidence_keys": len(unstable),
+        "evidence_keys_compared": keys_compared,
+        "mutations_compared": sorted(exercised),
+        "gate_status": "measured",
+        "unstable": unstable,
+    }
+    missing = sorted({A_FILE_IS_ADDED, A_TASK_FILE_IS_ARCHIVED} - exercised)
+    if comparisons == 0 or missing:
+        result["gate_status"] = "unmeasured"
+        result["reasons"] = [
+            *(
+                [f"no evidence record was compared across {mutation}" for mutation in missing]
+                if missing
+                else []
+            ),
+            *skipped,
+        ]
+    return result
+
+
+def write_evidence_stability(
+    evidence: Path = DEFAULT_T150_EVIDENCE_PATH, repo_root: Path = _REPO_ROOT
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T150.json`."""
+    measured = measure_evidence_stability(repo_root)
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return measured
@@ -800,9 +1003,10 @@ def _main(argv: list[str]) -> int:
 
     d22 = measure() if args.check else write_evidence(Path(args.write_evidence))
     t85 = measure_evidence_reach() if args.check else write_evidence_reach()
-    t125 = measure_formatting() if args.check else write_formatting_evidence()
+    t125 = record_formatting(measure_formatting()) if args.check else write_formatting_evidence()
+    t150 = measure_evidence_stability() if args.check else write_evidence_stability()
 
-    print(json.dumps({"D-22": d22, "T85": t85, "T125": t125}, ensure_ascii=False))
+    print(json.dumps({"D-22": d22, "T85": t85, "T125": t125, "T150": t150}, ensure_ascii=False))
     for reason in d22["unenforced"]:
         print(reason, file=sys.stderr)
     if "ci_unmeasured_reason" in d22:
@@ -816,6 +1020,10 @@ def _main(argv: list[str]) -> int:
         print(f"the CI reader misread a control: {failure}", file=sys.stderr)
     for module in t85["modules_missing"]:
         print(f"{module} writes evidence but is not reached by `make evidence`", file=sys.stderr)
+    for key in t150["unstable"]:
+        print(f"a committed evidence key is not stable: {key}", file=sys.stderr)
+    for reason in t150.get("reasons", []):
+        print(f"evidence stability is unmeasured: {reason}", file=sys.stderr)
 
     d22_unenforced = d22["required_gates_with_no_enforcement_point"]
     ci_missing = d22["ci_targets_missing_from_makefile"]
@@ -834,9 +1042,16 @@ def _main(argv: list[str]) -> int:
         or ci_missing == -1
         or t85["gate_status"] == "unmeasured"
         or t125["gate_status"] == "unmeasured"
+        or t150["gate_status"] == "unmeasured"
     ):
         return 3
-    if d22_unenforced or ci_missing or t85_unreached or t125["unformatted_files"]:
+    if (
+        d22_unenforced
+        or ci_missing
+        or t85_unreached
+        or t125["unformatted_files"]
+        or t150["unstable_evidence_keys"]
+    ):
         return 1
     if not t125["lint_runs_the_check"]:
         return 1
