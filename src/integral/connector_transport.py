@@ -188,9 +188,13 @@ DEFAULT_GROWTH_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T111.json"
 
 #: A literal, not `len(record(measure()))`: asserting the denominator against
 #: the thing it is the denominator of is the self-reference #297 caught as
-#: D-4 on T104. The record carries twelve keys; a `record` that quietly
-#: stopped committing the finding would compare fewer and fail here.
-MINIMUM_RECORD_KEYS_COMPARED = 10
+#: D-4 on T104. The record carries twelve keys and this is twelve — no slack,
+#: unlike the census floors above, because this is not a census: the number of
+#: keys `record` commits moves only when somebody edits `record`, never when
+#: the library grows. Ten left two keys of headroom, which is exactly enough
+#: for `record` to stop committing `get_packages_changed` — the finding itself
+#: — and still score green here (second-reader note on #402).
+MINIMUM_RECORD_KEYS_COMPARED = 12
 
 #: The site name the simulated seventeenth package takes. Not a board and
 #: never fetched — it exists inside one `measure_growth_sensitivity` call, in
@@ -628,13 +632,23 @@ def record(measured: Mapping[str, Any]) -> dict[str, Any]:
     exactly when `get_connectors_still_plain_gets == get_connectors_evaluated`.
     What stops being committed is a number that moves when somebody adds a
     connector — which is the whole of the defect, and none of the check.
+
+    The floor goes in **only when the run met it** (second-reader BLOCK on
+    #402, T104's `floor_breaches` one module over). Since the census is no
+    longer committed, `get_connectors_evaluated_at_least` is now the only line
+    in the file that speaks to how much was scanned — so writing it out of an
+    unmeasured reading turns the record of a scan over nothing into a claim
+    that ten packages were read. That is a floor asserted by a run that failed
+    it, which is worse than the census it replaced: the census at least said
+    zero.
     """
     committed = {
         key: value
         for key, value in measured.items()
         if key not in ("get_connectors_evaluated", "get_connectors_still_plain_gets")
     }
-    committed["get_connectors_evaluated_at_least"] = MINIMUM_GET_PACKAGES
+    if measured.get("gate_status") == "measured":
+        committed["get_connectors_evaluated_at_least"] = MINIMUM_GET_PACKAGES
     return committed
 
 
@@ -737,8 +751,20 @@ def write_evidence(
     Returns what was *measured*; writes what is *recorded*. The caller still
     wants both live counts for its own report, and the file must not carry
     either — that is T111.
+
+    **An unmeasured run writes nothing at all**, which is T104's
+    `test_a_sub_floor_run_leaves_an_existing_record_untouched` in this module.
+    The exit code is not a run's only output: whatever is on disk afterwards is
+    what the next `make evidence` diffs against, so a sub-floor run that
+    overwrote the committed record would make the *second* run of a broken
+    library green. Nothing this run could write is true — the floor is a
+    constant, and it is the only remaining line about scan size — so it writes
+    nothing and `_main` carries the finding in an exit code the caller stops
+    on.
     """
     measured = measure(ledger, directory)
+    if measured["gate_status"] != "measured":
+        return measured
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(
         json.dumps(record(measured), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
@@ -777,8 +803,16 @@ def _main(argv: list[str]) -> int:
     measured = write_evidence(target)
     print(json.dumps(measured, ensure_ascii=False))
     if measured["gate_status"] == "unmeasured":
+        # Exit 1, not 3, and the two floors in this module now agree on it
+        # (second-reader note on #402). `Makefile`'s evidence loop prints
+        # "unmeasured (recorded)" for 3 and carries on — and `write_evidence`
+        # records nothing for an unmeasured reading, so 3 would be a claim
+        # that a record was written when none was, and `make evidence` would
+        # go green over a library that scanned nothing. Every unmeasured path
+        # here is a floor breached or an input that could not be read: a
+        # finding, and T115's shape if it only advises.
         print(measured["unmeasured_reason"], file=sys.stderr)
-        return 3
+        return 1
     for reason in measured["unreadable"]:
         print(f"still unreadable: {reason}", file=sys.stderr)
     for name in measured["get_packages_changed"]:
@@ -809,6 +843,10 @@ def _main(argv: list[str]) -> int:
         )
     if sensitivity["growth_sensitive_evidence_keys"]:
         return 1
+    # This 3 is not the inconsistency #402's second reader named — that was
+    # the *package* floor, and it is a 1 above now. Here the reading really
+    # was recorded: `write_growth_sensitivity_evidence` has already written
+    # the unmeasured reading, so "unmeasured (recorded)" is what happened.
     if sensitivity["gate_status"] != "measured":
         print(
             "growth_sensitive_evidence_keys: UNMEASURED — "

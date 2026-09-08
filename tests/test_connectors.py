@@ -1979,6 +1979,82 @@ def test_an_empty_package_scan_fails_the_floor(tmp_path: Path) -> None:
     assert reading["growth_sensitive_evidence_keys"] == 0
 
 
+def _measuring_a_library_of(packages: list[Path], destination: Path) -> Any:
+    """`connector_transport.measure`, redirected at a library of `packages`.
+
+    `write_evidence` and `_main` take no directory, so the only way to put a
+    sub-floor library in front of the code path that *writes* is to replace
+    the module-global the writer resolves. Everything else — the ledger, the
+    credential cases, the whole of `measure` — is the real thing.
+    """
+    real = connector_transport.measure
+    thin = _linked_library(packages, destination)
+
+    def over_a_thin_library(
+        ledger: Path = connector_transport.DEFAULT_LEDGER_PATH,
+        directory: Path = connectors.DEFAULT_CONNECTORS_DIR,
+        cases: Path = connector_transport.DEFAULT_CREDENTIAL_CASES_PATH,
+    ) -> dict[str, Any]:
+        return real(ledger, thin, cases)
+
+    return over_a_thin_library
+
+
+def test_a_sub_floor_scan_fails_instead_of_recording_a_floor_it_never_met(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T104's rule in this module: a run that breaches the floor must not
+    write the floor.
+
+    `record` used to append `get_connectors_evaluated_at_least: 10`
+    unconditionally, so a scan of an empty directory — which `measure`
+    correctly calls `unmeasured` with `get_connectors_evaluated: 0` — produced
+    a record claiming ten packages were read. Since T111 stopped committing
+    the census, that line is the only thing left in the file speaking to scan
+    size, and it said the opposite of what happened: fail-open.
+    """
+    monkeypatch.setattr(connector_transport, "measure", _measuring_a_library_of([], tmp_path / "e"))
+    target = tmp_path / "T89.json"
+
+    exit_code = connector_transport._main([__file__, str(target)])
+
+    # Exit 1, not 3: `make evidence` prints "unmeasured (recorded)" for 3 and
+    # carries on, and nothing was recorded — the same code the key-count floor
+    # below already returns.
+    assert exit_code == 1
+    assert "floor 10" in capsys.readouterr().err
+    # And it wrote nothing. A floor is a constant by construction, so the only
+    # record this run could write is one asserting the floor it just failed.
+    assert not target.exists()
+    # The claim itself is gone from the unmeasured record, not merely unwritten.
+    unmeasured = connector_transport.measure(directory=_linked_library([], tmp_path / "e2"))
+    assert unmeasured["gate_status"] == "unmeasured"
+    assert "get_connectors_evaluated_at_least" not in connector_transport.record(unmeasured)
+
+
+def test_a_sub_floor_run_leaves_an_existing_record_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ordering, where it costs something: the exit code is not a run's
+    only output.
+
+    `write_evidence` wrote before anything checked, so an empty scan
+    overwrote the committed T89 record — and that overwritten file is what the
+    *next* `make evidence` diffs against. Commit it once and the drift check
+    goes green over a library that scanned nothing. Byte-identical, not merely
+    still valid.
+    """
+    monkeypatch.setattr(connector_transport, "measure", _measuring_a_library_of([], tmp_path / "e"))
+    healthy = tmp_path / "T89.json"
+    healthy.write_text('{"kept": true}\n', encoding="utf-8")
+    before = healthy.read_bytes()
+
+    exit_code = connector_transport._main([__file__, str(healthy)])
+
+    assert exit_code == 1
+    assert healthy.read_bytes() == before
+
+
 def test_a_census_committed_as_an_exact_value_is_reported_growth_sensitive(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2044,6 +2120,32 @@ def test_a_record_that_stops_committing_the_finding_fails_the_key_floor(
 
     assert connector_transport._main([__file__, str(tmp_path / "T89.json")]) == 1
     assert "floor" in capsys.readouterr().err
+
+
+def test_a_record_that_drops_only_the_finding_fails_the_key_floor_too(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Why the floor is twelve and not ten (second-reader note on #402).
+
+    The interval [10, 11] is where a floor with slack differs from one without,
+    and the case that lives there is the one that matters: a `record` that
+    commits everything *except* `get_packages_changed` — the finding itself —
+    still moves no key when the library grows, so `growth_sensitive_evidence_keys`
+    is a clean zero. Eleven keys cleared a floor of ten, and the module exited
+    0 over a record that had stopped carrying its own finding.
+    """
+    honest = connector_transport.record
+
+    def without_the_finding(measured: Mapping[str, Any]) -> dict[str, Any]:
+        return {k: v for k, v in honest(measured).items() if k != "get_packages_changed"}
+
+    monkeypatch.setattr(connector_transport, "record", without_the_finding)
+    reading = connector_transport.measure_growth_sensitivity()
+    assert reading["growth_sensitive_evidence_keys"] == 0
+    assert reading["evidence_keys_compared"] == 11
+
+    assert connector_transport._main([__file__, str(tmp_path / "T89.json")]) == 1
+    assert "only 11 record key(s) were compared" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
