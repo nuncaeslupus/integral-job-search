@@ -92,15 +92,20 @@ class SecondReaderError(Exception):
 #: never its extent.
 _RESERVED = ":/?#[]@!$&'()*+,;="
 
-#: The two reserved octets held out, because §2.2.3 gives them a meaning inside
-#: a **pattern**: `*` "designates 0 or more instances of any character" and `$`
-#: "designates the end of the match pattern". Canonicalisation runs over rules
-#: and targets alike — running it over one side only is the asymmetry this
-#: module's docstrings call fail-open — so encoding these would delete a rule's
-#: own metacharacters, and `Disallow: /s?q=*` would stop matching anything.
+#: The two reserved octets §2.2.3 gives a meaning to **inside a pattern**: `*`
+#: "designates 0 or more instances of any character" and `$` "designates the end
+#: of the match pattern". Encoding them in a rule would delete that rule's own
+#: metacharacters, and `Disallow: /s?q=*` would stop matching anything.
 #: Case 22's `confidence_note` already records that whether a literal `$` in a
 #: pattern should be encoded before comparison is unsettled by the RFC; this is
 #: where that reading is taken, once, rather than in each caller.
+#:
+#: **The hold-out is a property of patterns, and of nothing else.** A request
+#: target is a sequence of octets: there is no pattern in it for `*` to
+#: designate 0 or more of, or for `$` to anchor the end of. So §2.2.2's
+#: requirement over RFC 3986's reserved range reaches a target's `*` and `$`
+#: like every other reserved octet, and `_encode_set` is what says so — see its
+#: docstring for the fail-open that reading the hold-out as two-sided produced.
 _PATTERN_METACHARACTERS = "*$"
 
 #: Reserved octets percent-encoded when they appear as **data** in a query.
@@ -121,12 +126,38 @@ _PATTERN_METACHARACTERS = "*$"
 _QUERY_DATA_OCTETS = "".join(octet for octet in _RESERVED if octet not in _PATTERN_METACHARACTERS)
 
 
+def _encode_set(*, as_pattern: bool) -> str:
+    """The reserved octets encoded as query data on one side of the comparison.
+
+    §2.2.2 states its requirement over RFC 3986's whole reserved range, and that
+    is what a **request target** gets: `_RESERVED`, entire. The two hold-outs
+    above are §2.2.3 pattern semantics, and §2.2.3 is a section about the
+    `Allow`/`Disallow` *value* — a target has no pattern in it for `*` to
+    designate 0 or more of, or for `$` to end.
+
+    Reading the hold-out as two-sided is a **fail-open**, and it was measured on
+    this module: `Disallow: /s?q=a%2Ab` against `/s?q=a*b` returned ALLOW where
+    §2.2.2 requires DISALLOW, because the rule's `%2A` stayed encoded while the
+    target's `*` was held out of the encode pass and stayed literal, so the two
+    could never compare equal. The `%24`/`$` twin returned ALLOW for the same
+    reason. `integral.robots` — the matcher this reader exists to audit —
+    refuses both, so on those two octets the second reader was the more
+    permissive of the two, which is T116's failure mode inside its replacement.
+
+    The fix is this function rather than a list of exceptions-to-the-exception.
+    A literal list is what `_QUERY_DATA_OCTETS` used to be (`":/"`), and the
+    lesson of that round is that the rule has to be made right: pattern
+    semantics apply to patterns.
+    """
+    return _QUERY_DATA_OCTETS if as_pattern else _RESERVED
+
+
 def _percent(octet: str) -> str:
     """One character as its UTF-8 percent-encoding, upper-cased."""
     return "".join(f"%{byte:02X}" for byte in octet.encode("utf-8"))
 
 
-def canonical(text: str, *, encode_query_data: bool = True) -> str:
+def canonical(text: str, *, encode_query_data: bool = True, as_pattern: bool = True) -> str:
     """One spelling for octet sequences §2.2.2 and §2.2.3 call equivalent.
 
     Comparison is octet against octet, so a rule and a request path have to be
@@ -152,8 +183,12 @@ def canonical(text: str, *, encode_query_data: bool = True) -> str:
       and by the same rule `?q=a&b` becomes `?q=a%26b`, so a rule written
       `/s?q=a%26b` matches a request written `/s?q=a&b`. The `/` inside a
       *path* is structure and stays, which is why this applies only after the
-      first `?`; that first `?` and the two pattern metacharacters `*` and `$`
-      are the only reserved octets held out, and `_QUERY_DATA_OCTETS` says why.
+      first `?`. The first `?` is held out on both sides, positionally; the two
+      pattern metacharacters `*` and `$` are held out **when canonicalising a
+      pattern and only then** (`as_pattern`, the default), because §2.2.3 gives
+      them a meaning in a rule and gives them none in a request target. Holding
+      them out of a target too is a fail-open, and `_encode_set` records the two
+      cases that measured it.
 
       This produces a canonical string that is not, octet for octet, the
       example table's printed "path to match" column — `?baz=` there keeps its
@@ -174,6 +209,7 @@ def canonical(text: str, *, encode_query_data: bool = True) -> str:
     come to disagree, and the disagreement is always the fail-open way round:
     the rule stops matching.
     """
+    encode_set = _encode_set(as_pattern=as_pattern)
     out: list[str] = []
     index = 0
     length = len(text)
@@ -197,7 +233,7 @@ def canonical(text: str, *, encode_query_data: bool = True) -> str:
             # falls through to the reserved-octet branch below like any other.
             in_query = True
             out.append(char)
-        elif ord(char) > 127 or (encode_query_data and in_query and char in _QUERY_DATA_OCTETS):
+        elif ord(char) > 127 or (encode_query_data and in_query and char in encode_set):
             out.append(_percent(char))
         else:
             out.append(char)
@@ -492,12 +528,31 @@ def spellings(target: str) -> tuple[str, ...]:
     toward refusing. A rule whose reach into the query is uncertain can gain
     coverage when it is a `Disallow` and never when it is an `Allow`.
 
+    The second spelling is the target read **as a target**: `canonical` holds
+    `*` and `$` out of the encode pass when it is canonicalising a pattern,
+    because §2.2.3 gives them a meaning there, and a request target has no
+    pattern semantics for them to carry. Running the pattern's hold-out over the
+    target as well left `Disallow: /s?q=a%2Ab` unable to reach `/s?q=a*b` — the
+    rule's `%2A` encoded, the target's `*` literal — and the `%24`/`$` twin the
+    same, both ALLOW where §2.2.2 requires DISALLOW, and both refused correctly
+    by `integral.robots`. It is offered to `Disallow` rules under the same
+    one-directional rule as the others: it can make a refusal reach, never an
+    allow.
+
     Found by the independent pre-PR review, not by the case table: no case in
     the table has a wildcard spanning the `?`, so the gate was green over it.
+    The `*`/`$` pair was found by the second round of the same review, in the
+    exemption the first round introduced.
     """
     written = canonical(target, encode_query_data=False)
     found: list[str] = []
-    for spelling in (canonical(target), written, _decode_query_data(written)):
+    candidates = (
+        canonical(target),
+        canonical(target, as_pattern=False),
+        written,
+        _decode_query_data(written),
+    )
+    for spelling in candidates:
         if spelling not in found:
             found.append(spelling)
     return tuple(found)
@@ -553,14 +608,14 @@ def allows(text: str, agent: str, target: str) -> bool:
 #: guaranteed without moving, and it is deliberately under what the table
 #: carries. Its job is to stop a clean zero resting on an empty table — a
 #: reader that reads nothing misreads nothing.
-FIXTURES_AT_LEAST = 32
+FIXTURES_AT_LEAST = 34
 
 #: Of those, how many must be cases a weak matcher would wrongly ALLOW. A table
 #: made only of paths a broken reader would wrongly refuse would score a clean
 #: zero while saying nothing about the direction that matters: a fail-closed
 #: bug costs one skipped fetch, a fail-open bug means the check said yes to
 #: something it exists to refuse.
-FAIL_OPEN_CASES_AT_LEAST = 17
+FAIL_OPEN_CASES_AT_LEAST = 19
 
 #: And how many paths this reader must refuse where `urllib.robotparser` does
 #: not. A "longest-match" reader that happens to agree with the stdlib on every

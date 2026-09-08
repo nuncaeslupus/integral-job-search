@@ -98,13 +98,16 @@ implementer's reading of the spec, is green when the reading is wrong.
 | 49 | `comment_is_stripped_from_the_value` | DISALLOW | FAIL_OPEN_RISK | MEDIUM | 2.2.3 |
 | 50 | `ampersand_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
 | 51 | `equals_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 52 | `star_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
+| 53 | `dollar_as_query_data_is_encoded` | DISALLOW | FAIL_OPEN_RISK | HIGH | 2.2.2 |
 
-Fifty-one rows: 33 `FAIL_OPEN_RISK`, 17 `FAIL_CLOSED_RISK`, 1 `NEUTRAL` — weighted toward
+Fifty-three rows: 35 `FAIL_OPEN_RISK`, 17 `FAIL_CLOSED_RISK`, 1 `NEUTRAL` — weighted toward
 fail-open, since a fail-closed bug costs one skipped fetch and a fail-open bug means the
 check said yes to something it exists to refuse. Forty-nine of them were derived before
-any implementation existed; **50 and 51 were derived later, by the session that reviewed
-the reader those 49 were written for**, and section H says what the first forty-nine
-missed. That is six over the 30–45 the brief asked for; four of the six are the paired
+any implementation existed; **50–53 were derived later, by the session that reviewed
+the reader those 49 were written for** — 50 and 51 in its first round, 52 and 53 in its
+second, against the fix the first round produced — and section H says what the first
+forty-nine missed. That is six over the 30–45 the brief asked for; four of the six are the paired
 mirrors (5 against 4, 7 against 6, 18 against 17, 30 against 29), each of which exists
 because its partner can be passed by accident — dropping either half of a pair would leave
 a matcher able to score the row without implementing the rule.
@@ -1110,10 +1113,12 @@ Disallow: /admin/    # staff only, humans welcome
 ## H. Percent-encoding equivalence, again — what section E missed (§2.2.2)
 
 **Provenance differs here and it is the point of the section.** Rows 1–49 were derived
-before any implementation existed. Rows 50 and 51 were derived afterwards, from the same
+before any implementation existed. Rows 50–53 were derived afterwards, from the same
 text, by the session that **reviewed** the reader those rows were written to judge — and
 they were derived because section E's rows were all green against a reader that was still
-fail-open.
+fail-open. Rows 52 and 53 come from that review's **second** round, and they are the
+strongest form of the section's own claim: they were green against the fix rows 50 and 51
+produced, and the reader was still fail-open where §2.2.2 and §2.2.3 meet.
 
 Section E adjudicates percent-encoding equivalence through the two octets §2.2.2's example
 table happens to print, `:` and `/` (rows 26–31). A reader can satisfy every one of those
@@ -1175,6 +1180,56 @@ Disallow: /s?q=a%3Db
 - **direction:** FAIL_OPEN_RISK
 - **confidence:** HIGH — for the reason just given: the row is constructed to be invariant
   under the one ambiguity that could otherwise lower it.
+
+---
+
+### 52. `star_as_query_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /s?q=a%2Ab
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/s?q=a*b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** `*` is an RFC 3986 sub-delim, so §2.2.2 percent-encodes it before comparison
+  like any other reserved octet, and rule and request are two spellings of one URI.
+  §2.2.3 is not a counter-argument, and the **direction** is the whole of it: §2.2.3
+  defines `*` as a special character *in the value* of an `Allow` or `Disallow` field —
+  it designates 0 or more instances of any character **in a pattern**. A request target is
+  not a pattern. There is nothing in `/s?q=a*b` for a `*` to designate 0 or more of. So a
+  matcher may hold `*` out of the encode pass on the **rule** side, where encoding it would
+  delete the rule's own wildcard, and must not hold it out on the **target** side, where
+  doing so leaves the rule's `%2A` nothing to compare equal to.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH — the encoding requirement is stated over a set that contains `*`,
+  and the exemption argument is about patterns, which a target is not.
+
+---
+
+### 53. `dollar_as_query_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /s?q=a%24b
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/s?q=a$b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** Row 52's argument with `$` in place of `*`, and it needs its own row for the
+  reason 51 needs one after 50: a fix reaching one octet of a two-octet hold-out leaves the
+  other exactly as it was. `$` is a sub-delim and therefore reserved; §2.2.3 designates it
+  "the end of the match pattern", which is a property a **pattern** has and a request target
+  does not. This row takes **no** position on row 22's open question — whether a literal
+  `$` written inside a *rule* should be encoded is still unsettled. It asks only about the
+  target, where there is no match pattern for `$` to end.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH — for row 52's reason; row 22's ambiguity is on the other side of
+  the comparison and is untouched.
 
 ---
 

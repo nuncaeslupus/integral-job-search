@@ -1219,4 +1219,65 @@ Disallow: /s?q=a%3Db
         direction=FAIL_OPEN_RISK,
         confidence="HIGH",
     ),
+    # Cases 52 and 53 come from the SECOND round of the independent review, and
+    # they are the same finding as 50 and 51 one level up: the round-1 fix
+    # derived the encode set from RFC 3986's reserved production and then held
+    # `*` and `$` out of it, on the ground that §2.2.3 gives them pattern
+    # meaning. That ground holds for a **pattern**. It does not reach a request
+    # target, which has no pattern semantics for either octet to carry, so
+    # holding them out of the target's canonicalisation left the two rows below
+    # answering ALLOW. The code's own comment predicted it — "or the exemption
+    # list becomes the new `\":/\"`".
+    #
+    # ---- 52. star_as_query_data_is_encoded -------------------------------
+    Case(
+        id="star_as_query_data_is_encoded",
+        robots_txt="""User-agent: *
+Disallow: /s?q=a%2Ab
+""",
+        agent="integral-job-search/0.1",
+        path="/s?q=a*b",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "§2.2.2 requires octets 'in the reserved range defined by RFC3986' to be "
+            "percent-encoded prior to comparison, and `*` is a sub-delim, so it is in that "
+            "range. The rule writes it encoded and the request writes it literally: two "
+            "spellings of one URI, so the rule refuses the request. §2.2.3 is not a "
+            "counter-argument here, and the direction matters. §2.2.3 defines `*` as a "
+            "special character 'in the value' of an `Allow` or `Disallow` field — it "
+            "designates 0 or more instances of any character *in a pattern*. A request "
+            "target is not a pattern: there is nothing in `/s?q=a*b` for a `*` to designate "
+            "0 or more of. So a matcher may hold `*` out of the encode pass on the rule "
+            "side, where deleting it would destroy the rule's own wildcard, and must not "
+            "hold it out on the target side, where doing so leaves the rule's `%2A` with "
+            "nothing to compare equal to and the operator's rule covering nothing."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
+    # ---- 53. dollar_as_query_data_is_encoded -----------------------------
+    Case(
+        id="dollar_as_query_data_is_encoded",
+        robots_txt="""User-agent: *
+Disallow: /s?q=a%24b
+""",
+        agent="integral-job-search/0.1",
+        path="/s?q=a$b",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "Case 52's argument with `$` in place of `*`, and it needs its own row for the "
+            "reason case 51 needs one after case 50: a fix that reaches one octet of a "
+            "two-octet hold-out leaves the other exactly as it was. `$` is a sub-delim and "
+            "therefore in RFC 3986's reserved range, so §2.2.2 encodes it before comparison; "
+            "§2.2.3 designates it 'the end of the match pattern', which is a property a "
+            "**pattern** has and a request target does not. Note this row does not disturb "
+            "case 22's open question — whether a literal `$` written inside a *rule* should "
+            "be encoded is still unsettled, and this row takes no position on it. It asks "
+            "only about the target, where there is no anchor for `$` to be."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
 )
