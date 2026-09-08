@@ -13,6 +13,7 @@ REST channel answers 403.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -153,10 +154,64 @@ def test_one_helper_answers_both_questions_the_module_asks_about_an_author() -> 
     """The root cause was two normalisation rules for one relation (#408 rd 2)."""
     assert rr.resolve_identity("  NuncaEsLupus​ ") == "nuncaeslupus"
     assert rr.resolve_identity("nunca​eslupus") == "nuncaeslupus"
-    for empty in ("", "   ", "​", "﻿", "\x00", "..."):
+    for empty in ("", "   ", "​", "﻿", "\x00", "...", "---", "@", "()"):
         assert rr.resolve_identity(empty) is None
     # A real second reader still resolves, and to something that is not the author.
     assert rr.resolve_identity("reviewer") != rr.resolve_identity("author")
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        "@nuncaeslupus",
+        "nuncaeslupus.",
+        "(nuncaeslupus)",
+        "nuncaeslupus:",
+        "**nuncaeslupus**",
+        "\uff20nuncaeslupus",  # FULLWIDTH COMMERCIAL AT
+        "\uff4e\uff55\uff4e\uff43\uff41\uff45\uff53\uff4c\uff55\uff50\uff55\uff53",  # fullwidth
+        "nunca es lupus",
+        "- nuncaeslupus",
+        "  @NuncaEsLupus.\t",
+    ],
+)
+def test_visible_decoration_resolves_to_the_login_it_decorates(spelling: str) -> None:
+    """Round 4: the round-3 helper deleted invisible padding and not visible padding.
+
+    Each spelling here cleared `nuncaeslupus`'s own PR through the shipped
+    `check` CLI — exit 0, `merge_may_proceed: true`. The rule that ends the
+    sequence is stated as what a login *can* be, so none of these is answered by
+    naming the decoration it carries: NFKC folds the presentational forms, and
+    everything outside `[A-Za-z0-9-]` was never in the alphabet to begin with.
+    """
+    assert rr.resolve_identity(spelling) == "nuncaeslupus"
+
+
+def test_the_fold_never_merges_two_real_logins() -> None:
+    """The hyphen is IN the login alphabet, so hyphenation is not decoration.
+
+    This is the control on the fix rather than on the defect: an aggressive
+    normaliser that also deleted hyphens would refuse a genuine second reader
+    whose login differs from the implementer's only by them.
+    """
+    assert rr.resolve_identity("nunca-es-lupus") != rr.resolve_identity("nuncaeslupus")
+
+
+def test_every_identity_that_resolves_is_a_well_formed_login() -> None:
+    """The reviewer's `²` / `Ⅷ` nuance, settled by the alphabet rather than listed.
+
+    Round 3 decided "names somebody" with `str.isalnum()`, which is Unicode-wide,
+    so `²` and `Ⅷ` resolved to themselves — identities no GitHub account can
+    bear. Restricting the output to the login alphabet means every identity this
+    returns is a string an account could have, which is the whole of the
+    module's contract: an identity a human can check on the PR. Whether that
+    account exists is not knowable offline, and a rule that refused `2` would
+    have to refuse `reviewer` too.
+    """
+    for raw in ("²", "Ⅷ", "@nuncaeslupus", "- nunca-es-lupus -"):
+        resolved = rr.resolve_identity(raw)
+        assert resolved is not None
+        assert re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?", resolved), resolved
 
 
 def test_a_pr_author_that_only_looks_non_blank_is_unresolvable() -> None:

@@ -136,7 +136,7 @@ UNRESOLVABLE = "unresolvable"
 #: Floors, in `naming.MINIMUM_SCANNED` style (T100). Committed as the value the
 #: code asserts rather than the count of the day, so the record is invariant
 #: under adding a control.
-MINIMUM_PRS_EVALUATED = 20
+MINIMUM_PRS_EVALUATED = 25
 MINIMUM_REPORTS_FOUND = 2
 
 
@@ -211,12 +211,10 @@ def _is_sha(value: str) -> bool:
     return bool(re.fullmatch(r"[0-9a-fA-F]{40}", value))
 
 
-#: Unicode general categories that carry no identity: `Cc` (control, so `\x00`),
-#: `Cf` (format, so U+200B ZERO WIDTH SPACE and U+FEFF), `Cs` (surrogates), and
-#: the line/paragraph separators. They are deleted before an author string is
-#: compared, because `str.strip()` removes none of them: a login padded with
-#: them, or made only of them, is otherwise a distinct non-blank string.
-_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
+#: Everything a GitHub login **can** be: ASCII letters, digits and the hyphen.
+#: The rule below is written as this allowlist rather than as a list of things
+#: to remove, and that is the whole point — see `resolve_identity`.
+_OUTSIDE_THE_LOGIN_ALPHABET = re.compile(r"[^A-Za-z0-9-]")
 
 
 def resolve_identity(raw: str) -> str | None:
@@ -224,44 +222,69 @@ def resolve_identity(raw: str) -> str | None:
 
     **Both** questions this module asks about an author go through this
     function: "did this identity resolve at all?" and "is it the same person as
-    the PR's author?". Round 1 of #408's review fixed the first with
-    `author.strip()` and left the second as raw `==`, which reproduced the very
-    defect it was closing one line away: nine unresolved spellings — a
-    capitalised login above all — still cleared their own PR. Two normalisation
-    rules for one relation is the root cause, so there is now one rule and
-    neither caller may re-derive it.
+    the PR's author?".
 
-    The rule, in order:
+    **The rule is defined by what a login can be, not by what it must not
+    contain**, and #408 took four review rounds to reach that, each of which
+    normalised one more layer of decoration and stopped:
 
-    * **Delete invisible characters** (`_INVISIBLE_CATEGORIES`). `str.strip()`
-      does not remove U+200B, U+FEFF or `\\x00`, so an author made only of them
-      is non-empty by `strip()` and would read as a resolved identity that
-      differs from everybody. Deleting rather than merely refusing also closes
-      the padded form: `"nunca\\u200beslupus"` resolves to the login it hides.
-    * **`strip()`**, which removes ASCII and Unicode whitespace (U+00A0
-      included) — F3's `" nuncaeslupus "`.
-    * **`casefold()`**, because **GitHub logins are case-insensitive**: `nuncaeslupus`
-      and `NuncaEsLupus` are one account. Comparing them raw let the implementer
-      clear their own PR by holding shift, which is exactly what CLAUDE.md's
-      *"the implementer never signs it off"* forbids.
+    * Round 1 fixed a **blank** author with `.strip()` and left the identity
+      comparison raw, so `NuncaEsLupus` still cleared its own PR.
+    * Round 2 routed blankness through one helper but compared raw strings.
+    * Round 3 made one helper — delete Unicode `Cc/Cf/Cs/Zl/Zp`, `strip()`,
+      `casefold()` — and both call sites used it. Nine spellings refused.
+    * Round 4 found the same class alive: that helper deleted *invisible*
+      padding and not *visible* padding. `@nuncaeslupus`, `nuncaeslupus.`,
+      `(nuncaeslupus)`, `nuncaeslupus` spelled in U+FF41..U+FF5A fullwidth
+      letterforms, and
+      `nunca es lupus` each resolved unequal to `nuncaeslupus` and cleared that
+      account's own PR — through the shipped CLI, `merge_may_proceed: true`.
 
-    `None` — identity unresolved — is returned when nothing survives, and also
-    when what survives holds **no alphanumeric character at all** (F4's `"..."`).
-    That is a deliberate ruling, and it is not the narrower claim "this is not a
-    valid GitHub login": the module's contract is only that an identity resolve
-    to somebody a human can check on the PR. A run of punctuation names nobody,
-    is not traceable to any account or session, and differs from the PR author
-    only by being unequal — the same vacuous inequality a blank author gave.
-    CLAUDE.md weights **fail-open over fail-closed** for exactly this choice: a
-    wrongly refused author costs one more read, a wrongly accepted one is a
-    merge nobody reviewed.
+    A fifth strip-list would have been the fourth iteration of one mistake.
+    Enumerating what must not appear can only ever remove the decorations
+    somebody thought of; there is always another. So the rule inverts:
+
+    1. **NFKC-fold.** Compatibility composition maps the fullwidth, circled,
+       superscript and other presentational forms of a character onto the plain
+       one, so U+FF4E U+FF55 U+FF4E U+FF43 U+FF41 and U+FF20 arrive as
+       `nunca` and `@`.
+    2. **Delete every character outside `[A-Za-z0-9-]`** — the alphabet GitHub
+       logins are drawn from. `@`, `.`, `(`, `)`, `:`, `*` and the space are
+       gone not because they were listed but because they were never in.
+    3. **Trim leading and trailing hyphens**, because a login may not begin or
+       end with one. A markdown bullet (`- nuncaeslupus`) is decoration by the
+       grammar's own definition, not by an exception written for it.
+    4. **`casefold()`**, because GitHub logins are case-insensitive:
+       `nuncaeslupus` and `NuncaEsLupus` are one account.
+
+    `None` — identity unresolved — is returned when nothing survives. Nothing
+    surviving is exactly "this string held no character a login is made of",
+    which subsumes round 1's blank, round 3's `"..."`, `"\\u200b"`, `"\\ufeff"`
+    and `"\\x00"`: none of them contribute a single character to the alphabet.
+
+    **Why this is safe to make aggressive.** Steps 1-3 only ever *merge*
+    strings — many spellings collapse onto one identity, and none is ever split
+    into two. The only use of the result is the equality
+    `writer == pr_identity`, and a merge can therefore push a writer only
+    *toward* the author, i.e. toward `blocked`. There is no reviewer roster to
+    impersonate into: resolving to the author's identity never clears anything,
+    it refuses. So the collisions this creates are **fail-closed**, which is the
+    direction CLAUDE.md weights for. `straße`/`strasse` and U+212A KELVIN SIGN
+    against `kelvin` are the checked cases: NFKC leaves `ß` alone and folds
+    U+212A to `K` → `k`, and either way a collision costs one more read rather
+    than a merge nobody reviewed.
+
+    It also settles the Unicode-wide `isalnum()` that round 3 used to decide
+    "names somebody": `²` and `Ⅷ` are alphanumeric to Python and name no
+    account, so they resolved as identities. Every identity this returns is now
+    a **well-formed login** — a string a human can look up on the PR — which is
+    all this module's contract ever claimed.
     """
-    cleaned = "".join(
-        ch for ch in raw if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES
-    ).strip()
-    if not any(ch.isalnum() for ch in cleaned):
+    folded = unicodedata.normalize("NFKC", raw)
+    kept = _OUTSIDE_THE_LOGIN_ALPHABET.sub("", folded).strip("-")
+    if not kept:
         return None
-    return cleaned.casefold()
+    return kept.casefold()
 
 
 def read(pr: PullRequest) -> Verdict:
@@ -638,6 +661,130 @@ def _control_prs() -> tuple[tuple[str, PullRequest, str, int, str], ...]:
             f"{rule}: the implementer never signs it off — an author with no\n"
             "alphanumeric character names nobody a human can check, so the identity\n"
             "is unresolved rather than merely unequal to the PR's",
+        ),
+        # ── #408 round 4: visible padding, which round 3's helper did not touch ──
+        # Round 3 deleted the *invisible* decorations and stopped there, so a
+        # login wearing a visible one — an at-sign, a full stop, brackets, a
+        # fullwidth letterform, a space — resolved unequal to the same account
+        # and cleared its own PR. Reproduced through the shipped `check` CLI,
+        # all five exiting 0 with `merge_may_proceed: true`. The fix is not a
+        # sixth decoration to strip but the inverse rule: NFKC-fold, then keep
+        # only what a GitHub login is made of.
+        (
+            "the_author_reviewed_their_own_head_as_an_at_mention",
+            PullRequest(
+                23,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("@nuncaeslupus", marker_line(_HEAD)),),
+            ),
+            BLOCKED,
+            2,
+            f"{rule}: the implementer never signs it off — `@login` is how a\n"
+            "hand-written capture ordinarily spells a login, and `@` is not a\n"
+            "character a GitHub login contains",
+        ),
+        (
+            "the_author_reviewed_their_own_head_with_a_trailing_full_stop",
+            PullRequest(
+                24,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("nuncaeslupus.", marker_line(_HEAD)),),
+            ),
+            BLOCKED,
+            2,
+            f"{rule}: the implementer never signs it off — sentence punctuation\n"
+            "is not part of the login it follows",
+        ),
+        (
+            "the_author_reviewed_their_own_head_parenthesised",
+            PullRequest(
+                25,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("(nuncaeslupus)", marker_line(_HEAD)),),
+            ),
+            BLOCKED,
+            2,
+            f"{rule}: the implementer never signs it off — brackets around a\n"
+            "login name the same account",
+        ),
+        (
+            "the_author_reviewed_their_own_head_in_fullwidth_letterforms",
+            PullRequest(
+                26,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (
+                    Comment(
+                        "\uff4e\uff55\uff4e\uff43\uff41\uff45\uff53\uff4c\uff55\uff50\uff55\uff53",
+                        marker_line(_HEAD),
+                    ),
+                ),
+            ),
+            BLOCKED,
+            2,
+            f"{rule}: the implementer never signs it off — a fullwidth letterform\n"
+            "is a presentational variant of the same letter, which is what NFKC\n"
+            "compatibility composition is defined to fold",
+        ),
+        (
+            "the_author_reviewed_their_own_head_with_internal_spaces",
+            PullRequest(
+                27,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("nunca es lupus", marker_line(_HEAD)),),
+            ),
+            BLOCKED,
+            2,
+            f"{rule}: the implementer never signs it off — a GitHub login holds\n"
+            "no space, so a spaced spelling is the same account written loosely",
+        ),
+        (
+            "the_author_reviewed_their_own_head_as_a_markdown_bullet",
+            PullRequest(
+                28,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("- nuncaeslupus", marker_line(_HEAD)),),
+            ),
+            BLOCKED,
+            2,
+            f"{rule}: the implementer never signs it off — a login may neither\n"
+            "begin nor end with a hyphen, so a leading one is a list bullet",
+        ),
+        (
+            "a_marker_whose_author_is_a_run_of_hyphens",
+            PullRequest(29, "author", _HEAD, code, (Comment("---", marker_line(_HEAD)),)),
+            UNRESOLVABLE,
+            2,
+            f"{rule}: the implementer never signs it off — a login may neither\n"
+            "begin nor end with a hyphen, so a string of them is no login at all\n"
+            "and names nobody a human can check",
+        ),
+        (
+            "a_second_reader_whose_login_differs_only_by_hyphens",
+            PullRequest(
+                30,
+                "nuncaeslupus",
+                _HEAD,
+                code,
+                (Comment("nunca-es-lupus", marker_line(_HEAD)),),
+            ),
+            ALLOWED,
+            0,
+            f"{rule}: a PR may merge once a session other than its implementer has\n"
+            "read it — the hyphen IS in the login alphabet, so `nunca-es-lupus` is\n"
+            "a different account from `nuncaeslupus` and this control is the one\n"
+            "that stops the round-4 fold from merging two real people into one",
         ),
     )
 

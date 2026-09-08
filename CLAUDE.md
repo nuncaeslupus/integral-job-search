@@ -216,8 +216,22 @@ somebody else's report — and one whose author did not resolve at all counts fo
 nobody: an identity that cannot be shown to differ from the implementer's does
 not rule self-review out.
 
+**How an author becomes an identity is one rule, stated as what a login can be.**
+#408 took four review rounds because each of the first three normalised one more
+layer and stopped: a blank author, then case, then invisible padding — and the
+fourth found `@nuncaeslupus`, `nuncaeslupus.`, `(nuncaeslupus)`, the fullwidth
+`ｎｕｎｃａｅｓｌｕｐｕｓ` and `nunca es lupus` still clearing that account's own
+PR through this very CLI. A fifth strip-list would have been the fourth
+iteration of the mistake, so the rule inverts: **NFKC-fold, then keep only
+`[A-Za-z0-9-]` — the alphabet a GitHub login is drawn from — trim the hyphens a
+login may neither begin nor end with, and casefold.** There is no next
+decoration to discover, because nothing is enumerated. It is safe to make that
+aggressive because the transform only ever *merges* strings and the merged
+result is only ever compared to the PR's author: there is no reviewer roster to
+impersonate into, so every collision it creates pushes toward `blocked`.
+
 `status/evidence/D28.json` is the gate: `merges_allowed_without_a_review_of_the_head`
-over sixteen constructed states, `-1` and `review_reader_status: unmeasured`
+over thirty constructed states, `-1` and `review_reader_status: unmeasured`
 rather than a clean zero when the scan resolves nothing.
 
 ## Work each task in a linked worktree — that is the whole branch protocol
