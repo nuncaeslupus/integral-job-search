@@ -191,7 +191,32 @@ rule is about diffs that can be wrong in a way a test does not already catch.
 
 `D-28` (`claude-arsenal#313`) is re-scoped to this: not "read CodeRabbit's signal" but
 "a merge must not proceed until a second-reader report exists for the head commit".
-That is a checkable condition, which the bot's never was.
+That is a checkable condition, which the bot's never was — **and it now has a
+reader**, so the rule above is no longer only prose.
+
+**End the report with the marker, and check it before merging.** The marker is
+emitted, never typed: prose saying "reviewed" passes a scan that matches words and
+fails on a thorough review that does not use them.
+
+```bash
+uv run python -m integral.review_reader emit --head <40-hex head sha>   # the reader pastes this last line
+uv run python -m integral.review_reader check <pr-state.json>           # the merger runs this
+```
+
+`check` reads a small JSON capture — `number`, `author`, `head_sha`, `files`,
+`comments[{author, body}]` — written to disk from a GitHub tool result, the same
+way the board JSON is, so it works on a surface whose REST channel answers 403.
+Its exit codes are `adversarial_review.sh`'s, and for the same reason: **0** a
+second reader cleared *this* head (or the PR is docs-only and exempt), **1** a
+second reader said BLOCK, **2** no report on record, **3** a report exists but for
+another commit. **2 and 3 are not passes** — a review of an earlier tree is not a
+review of this one, which is what #320 cost nine unworked findings. A marker
+written by the PR's own author never counts, including one they quote from
+somebody else's report.
+
+`status/evidence/D28.json` is the gate: `merges_allowed_without_a_review_of_the_head`
+over fifteen constructed states, `-1` and `review_reader_status: unmeasured`
+rather than a clean zero when the scan resolves nothing.
 
 ## Work each task in a linked worktree — that is the whole branch protocol
 

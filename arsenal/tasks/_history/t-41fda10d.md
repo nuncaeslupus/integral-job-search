@@ -2,12 +2,17 @@
 id: t-41fda10d
 title: "D-28: `after-ci-and-review` has no reader for the review half — and now no reviewer either"
 priority: 5
+status: merged
 ---
 
-Imported from issue #313. **Re-scoped 2026-09-04**: CodeRabbit is gone — the
-account lost it for private repositories and the owner's decision is to go
-without. The original text below is kept because its measurements are the
-evidence, not because the bot still exists.
+Imported from issue #313. **Re-scoped 2026-09-04**: CodeRabbit was gone — the
+account lost it for private repositories and the owner's decision was to go
+without. It came back when the repository went public on 2026-09-07, on a tier
+that reviews only when asked, **and the re-scope stands**: a bot that has to be
+asked is not a standing reviewer, and this repository has swapped review bots
+four times. The reader built here reads *our* artefact — a second-reader report
+bound to the head commit — so it does not depend on any particular bot. The
+original text below is kept because its measurements are the evidence.
 
 ## Acceptance gate
 
@@ -17,6 +22,16 @@ evidence: status/evidence/D28.json
 key: merges_allowed_without_a_review_of_the_head
 status-key: review_reader_status
 ```
+
+```bash
+uv run --extra dev pytest tests/test_review_reader.py -q
+uv run --extra dev python -m integral.review_reader
+```
+
+The fenced `bash` block is the check that runs; the `gate` block above is the
+number it has to leave behind. The second command exits **1**, never 3, when the
+reader cannot measure — so `make evidence` stops on it rather than recording
+`unmeasured (recorded)` and continuing (#297).
 
 The metric is `status/plan.md`'s own and it survives the re-scope unchanged: "a
 review of the head" is exactly what a second-reader report on the head commit is.
@@ -106,16 +121,3 @@ legible without a second fenced block competing to be read.
 The measurement is over constructed states, not over live GitHub: a review on an older commit, no review at all, a rate-limited check reporting `pass`, a draft-skipped check reporting `pass`, and a genuine review on the head — the first four must not resolve to allowed, and the fifth must. Denominator is the number of states evaluated, and `gate_status` must be `unmeasured` when the reviewer's availability could not be determined, never a pass.
 
 The exit-3 shape applies: `Makefile:58-70` maps exit 3 to `unmeasured (recorded)` and **continues**, so a floor breach returning 3 does not fail `make evidence`. Return 1 on a breach, and do not let `record()` write the claim before the check runs (#297).
-
-## Acceptance gate
-
-<!-- This task came from an issue, so its "gate" is prose. Write a real check
-     below, then DELETE the `requires: [human:gate]` line in the front matter.
-     Until that line is gone the selector will not offer this task, which is
-     deliberate: a prose gate runs nothing, and a gate that runs nothing passes
-     everything. -->
-
-```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-false
-```
