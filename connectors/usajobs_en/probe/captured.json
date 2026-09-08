@@ -1,6 +1,12 @@
 {
   "captured_at": "2026-09-02",
   "url": "https://www.usajobs.gov/Search/ExecuteSearch",
+  "method": "POST",
+  "body": {
+    "Keyword": "python",
+    "ResultsPerPage": 25
+  },
   "status": 200,
-  "surface": "laptop"
+  "surface": "laptop",
+  "provenance": "transcribed"
 }

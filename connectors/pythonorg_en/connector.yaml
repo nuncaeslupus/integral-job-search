@@ -27,20 +27,55 @@ last_verified: "2026-08-30"
 auth: none
 
 list:
-  # Paged by a plain `?page=N` query parameter with consecutive integers
-  # starting at 1 — the exact shape `Pagination` can express. Verified live on
-  # 2026-08-30: the page's own pager emits `href="?page=1"` and `href="?page=2"`
-  # and nothing else, `?page=2` returns HTTP 200 with 6 listings, and 25 + 6 =
-  # 31 matches the board's own "31 jobs on the Python Job Board" heading. So
-  # `max_pages: 2` is the whole board today, not a guess. Kept modest rather
-  # than raised speculatively: an over-large value spends requests on 200-with-
-  # zero-listings pages against a board whose robots.txt asks for a 1s delay.
-  url_pattern: "https://www.python.org/jobs/?page={page}"
+  # **The URL that was actually captured, and no page key on it (T113).**
+  #
+  # This connector used to declare `?page={page}` with `mode: query_param`,
+  # `param: page`, `max_pages: 2` — so it issued `?page=1` and `?page=2`, and
+  # `probe/captured.json` records that what was fetched was
+  # `https://www.python.org/jobs/`. Neither URL the connector sent had ever been
+  # captured, which is the same defect T113 was filed about on usajobs_en, found
+  # by the library-wide scan that task added rather than by another audit of one
+  # board.
+  #
+  # The page-2 measurement itself was made, and is worth keeping in writing:
+  # verified live on 2026-08-30, the page's own pager emits `href="?page=1"` and
+  # `href="?page=2"` and nothing else, `?page=2` returns HTTP 200 with 6
+  # listings, and 25 + 6 = 31 matches the board's own "31 jobs on the Python Job
+  # Board" heading. But a dated sentence in a comment is not a capture — that is
+  # precisely the distinction T113 draws — and nothing in `probe/` carries the
+  # bytes or the request, so the six adverts on page 2 are out of reach until
+  # somebody commits them.
+  #
+  # Restoring it takes one capture and one commit: fetch `?page=2`, commit that
+  # response and a `probe/captured.json` recording that URL, then set
+  # `url_pattern` back to `https://www.python.org/jobs/?page={page}` with
+  # `mode: query_param`, `param: page`, `start: 1`, `max_pages: 2`.
+  # `integral.pagination_capture` refuses the key until that capture exists.
+  #
+  # **Attempted 2026-09-08 and blocked before robots could even be read.** The
+  # second reader on #406 recommended restoring rather than shipping the drop,
+  # and the reasoning is right: usajobs's `Page` was never sent and its name was
+  # inferred from a *response* field, while this board's `page` is its own
+  # emitted href, actually exercised, which answered 200 with six listings. What
+  # is missing here is only the artefact.
+  #
+  # The session that went to record it could not. Adjudication is the first step
+  # and it is the one that failed: `Robots().allows(...)` fetches
+  # `https://www.python.org/robots.txt`, and this environment's egress proxy
+  # answers `403 Forbidden` to the CONNECT — an organisation policy denial for
+  # the host, logged by the proxy as `connect_rejected`, not a robots verdict and
+  # not a matcher result. So the matcher returned nothing to act on, and **no
+  # fetch of `?page=2` was made**.
+  #
+  # It stays `mode: none` on that account, and deliberately: the one thing that
+  # must not happen here is a capture written from the 2026-08-30 sentence above,
+  # which would be a fabricated artefact certifying a request nobody re-issued —
+  # the exact defect T113 exists to refuse, committed under T113's own name. A
+  # task to record it belongs on the board; nothing on the board covers it today.
+  url_pattern: "https://www.python.org/jobs/"
   pagination:
-    mode: query_param
-    param: page
-    start: 1
-    max_pages: 2
+    mode: none
+    max_pages: 1
   # Counted, not eyeballed: `h2.listing-company` occurs exactly 25 times on the
   # live first page, matching the 25 `href="/jobs/<id>/"` links on it. This is
   # the board's own semantic class name, not a layout utility, so it should
