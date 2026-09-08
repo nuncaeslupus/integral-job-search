@@ -19,9 +19,11 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from integral import connector_coverage, connector_transport, process_spec, step_skills
+from integral import connector_coverage, connector_transport, connectors, process_spec, step_skills
 from integral.connectors import (
+    ARRAY_PATH_CONTRACTS,
     JSON_CONTENT_TYPE,
+    MINIMUM_ARRAY_PATH_CONTRACTS,
     MINIMUM_PROBES,
     SEARCH_SOURCE,
     ConnectorError,
@@ -29,6 +31,7 @@ from integral.connectors import (
     ListPage,
     _as_float,
     accepts_query,
+    array_path_defects,
     assess_staleness,
     build_list_requests,
     build_list_urls,
@@ -42,12 +45,14 @@ from integral.connectors import (
     dig_container,
     load_connector,
     load_connectors,
+    measure_array_paths,
     parse_connector,
     parse_detail_page,
     parse_html,
     parse_list_page,
     probe_connector_isolation,
     select_first,
+    write_array_path_evidence,
     write_evidence,
 )
 
@@ -1039,6 +1044,174 @@ def test_dig_refuses_a_boolean() -> None:
     """JSON's `true` is not a title, a body or a wage."""
     assert dig({"remote": True}, compile_path("remote")) is None
     assert dig({"n": 0}, compile_path("n")) == "0"
+
+
+# ---------------------------------------------------------------------------
+# T118 — array indexing in the shared path resolver.
+#
+# The document below holds one of every shape the grammar must answer for, and
+# the tests read the answers off the GRAMMAR: an index segment names element N
+# of a sequence and nothing else, the first segment is always a key, and
+# landing on a container is still a miss.
+
+ARRAY_DOCUMENT = {
+    "locations": ["Marbella, Espa\u00f1a", "Madrid, Espa\u00f1a"],
+    "empty": [],
+    "offices": [{"city": "Barcelona"}],
+    "counts": {"0": "seven"},
+    "nested": {"tags": ["alpha"]},
+}
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("locations.0", "Marbella, Espa\u00f1a"),
+        ("locations.1", "Madrid, Espa\u00f1a"),
+        ("offices.0.city", "Barcelona"),
+        ("nested.tags.0", "alpha"),
+    ],
+)
+def test_an_index_segment_reads_the_element_it_names(path: str, expected: str) -> None:
+    assert dig(ARRAY_DOCUMENT, compile_path(path)) == expected
+
+
+@pytest.mark.parametrize(
+    ("path", "why"),
+    [
+        ("locations.2", "index past the end"),
+        ("locations.9999", "far past the end, and still not an exception"),
+        ("empty.0", "an empty array has no element 0 — getmanfred's remote offers"),
+        ("locations", "the array itself is a container, which indexing does not change"),
+        ("offices.0", "the element is an object, so `str({...})` never reaches build_offer"),
+        ("counts.0", 'a mapping key spelled "0" is not element 0'),
+        ("locations.0.0", "a string is not a sequence to index into"),
+        ("nested.0", "an object is not indexable"),
+        ("locations.1.5", "not a decimal index: two segments, and the second reads a string"),
+    ],
+)
+def test_an_index_that_names_no_element_is_absent_rather_than_invented(path: str, why: str) -> None:
+    """Every one of these is fail-closed, and that is the direction that matters
+    for `location_raw`: a missing city is a gap the candidate can see, while
+    `M` or `{'city': 'Barcelona'}` is a place that is simply wrong."""
+    assert dig(ARRAY_DOCUMENT, compile_path(path)) is None, why
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "locations.-1",
+        "locations.01",
+        "locations[0]",
+        "locations.1_0",
+        "locations.+1",
+        "0",
+        "0.name",
+    ],
+)
+def test_a_spelling_the_index_grammar_does_not_have_is_refused_at_load(path: str) -> None:
+    """The refusals are the decision T118 actually makes. `-1` would wrap to the
+    last element, `01` would be a second spelling of `0`, brackets are a syntax
+    this grammar has no room for, and a bare leading index is `str.format`'s
+    positional syntax — which `compile_url_template` refuses a `{0}` slot for."""
+    with pytest.raises(ConnectorError):
+        compile_path(path)
+
+
+def test_a_container_path_still_reads_its_array_and_an_index_reads_into_it() -> None:
+    """`dig_container` and `dig` keep their opposite acceptances after T118."""
+    assert dig_container(ARRAY_DOCUMENT, compile_path("locations")) == [
+        "Marbella, Espa\u00f1a",
+        "Madrid, Espa\u00f1a",
+    ]
+    assert dig_container({"a": [["x"]]}, compile_path("a.0")) == ["x"]
+    assert dig_container(ARRAY_DOCUMENT, compile_path("locations.0")) == []
+
+
+def test_a_null_or_a_boolean_inside_an_array_is_not_a_value() -> None:
+    assert dig({"maybe": [None]}, compile_path("maybe.0")) is None
+    assert dig({"flags": [True]}, compile_path("flags.0")) is None
+    assert dig({"figures": [50000]}, compile_path("figures.0")) == "50000"
+
+
+def test_marbella_survives_into_a_parsed_offer() -> None:
+    """The end of the journey T118 exists for: the board publishes the city in
+    an array, and it reaches `Offer.location.raw`.
+
+    The candidate this tool is built for is constrained to Barcelona with
+    `relocation.willingness: "no"`, so the city is what decides whether an
+    offer is reachable at all. Before this, a Manfred offer carried a remote
+    percentage and no place.
+    """
+    package = _CONNECTOR_LIBRARY / "getmanfred_es"
+    connector = load_connector(package / "connector.yaml")
+    rows = parse_list_page(
+        connector, (package / "fixture" / "list.html").read_text(encoding="utf-8")
+    )
+    row = next(r for r in rows if r.get("location_raw") == "Marbella, Espa\u00f1a")
+    offer = build_offer(
+        connector,
+        list_fields=row,
+        detail_fields={"text": "A body long enough to be an advert." * 3},
+        url=row["detail_url"],
+    )
+    assert offer.location is not None
+    assert offer.location.raw == "Marbella, Espa\u00f1a"
+    assert offer.location.remote == "40"
+
+
+def test_an_empty_locations_array_yields_no_location_raw() -> None:
+    """`"locations": []` — the fully-remote offers — must yield nothing, not an
+    empty string and not an exception. Absent beats invented: `location_remote`
+    already says what those offers are."""
+    package = _CONNECTOR_LIBRARY / "getmanfred_es"
+    connector = load_connector(package / "connector.yaml")
+    listing = (package / "fixture" / "list.html").read_text(encoding="utf-8")
+    assert '"locations": []' in listing or '"locations":[]' in listing
+    rows = parse_list_page(connector, listing)
+    row = next(r for r in rows if r["title"] == "Scala developer")
+    assert "location_raw" not in row
+    offer = build_offer(
+        connector,
+        list_fields=row,
+        detail_fields={"text": "A body long enough to be an advert." * 3},
+        url=row["detail_url"],
+    )
+    assert offer.location is not None
+    assert offer.location.raw is None
+    assert offer.location.remote == "100"
+
+
+def test_every_array_path_contract_holds() -> None:
+    """T118's gate, run as a test as well as recorded as evidence."""
+    assert array_path_defects() == []
+
+
+def test_the_array_path_table_is_at_or_above_its_floor() -> None:
+    """A zero over a shrunken table says nothing, so the floor is asserted here
+    as well as reported as `gate_status` — the `naming.MINIMUM_SCANNED` shape."""
+    assert len(ARRAY_PATH_CONTRACTS) >= MINIMUM_ARRAY_PATH_CONTRACTS
+    assert measure_array_paths()["gate_status"] == "measured"
+
+
+def test_a_shrunken_array_path_table_reports_unmeasured_rather_than_a_clean_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The denominator's whole job. With one pair evaluated the record must not
+    read as a pass, and `_main` must exit 1 — not the 3 `make evidence` records
+    as `unmeasured (recorded)` and continues past (#297, #309)."""
+    monkeypatch.setattr(connectors, "ARRAY_PATH_CONTRACTS", ARRAY_PATH_CONTRACTS[:1])
+    measured = measure_array_paths()
+    assert measured["connector_array_paths_misresolved"] == 0
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["reasons"]
+
+
+def test_the_array_path_record_is_written_from_what_was_measured(tmp_path: Path) -> None:
+    written = write_array_path_evidence(tmp_path / "T118.json")
+    on_disk = json.loads((tmp_path / "T118.json").read_text(encoding="utf-8"))
+    assert on_disk == written
+    assert on_disk["connector_array_path_pairs_at_least"] == MINIMUM_ARRAY_PATH_CONTRACTS
 
 
 def test_dig_container_wants_an_array_and_a_scalar_is_the_miss() -> None:

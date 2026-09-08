@@ -114,6 +114,23 @@ list:
       # vocabulary, and Manfred's vocabulary is a number: `100` is fully
       # remote, `40` is two days a week. Read it as a percent.
       location_remote: remotePercentage
+      # The physical city, and the field this connector could not map until
+      # T118: `locations` is an ARRAY — `["Marbella, España"]` — and the path
+      # grammar had no segment that could name an element of one. `locations.0`
+      # can now, and `locations[0]` still cannot: one spelling, refused at load
+      # rather than resolved to nothing at parse time.
+      #
+      # THE FIRST ELEMENT, NOT A JOIN. Every offer in the capture carries zero
+      # or one location, so "the first" is "the only one there is" here; a
+      # board that started sending two would leave the second unread rather
+      # than have this file invent a compound place out of them.
+      #
+      # An offer with `"locations": []` — the fully-remote ones; one of the
+      # three in the fixture — yields NO `location_raw` at all, not an empty
+      # string. That is the fail-closed half and it is the half that matters
+      # for this candidate: `location_remote` already says the role is remote,
+      # and a blank city would be a place the board never named.
+      location_raw: locations.0
       # No `text` here — the list API carries no advert body at all, only
       # `highlights`, which is an array of four emoji-prefixed slogans. The
       # body comes from the detail page, which is what makes that block
