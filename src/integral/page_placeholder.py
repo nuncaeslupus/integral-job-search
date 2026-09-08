@@ -400,9 +400,35 @@ PROBES: tuple[Probe, ...] = (
 )
 
 
+def _url_pattern(probe: Probe) -> str:
+    """The list URL this probe's *mode* requires, so only its body is on trial.
+
+    Every probe here is about the **body** rule, and the scaffold URL was a
+    fixed `.../Search/ExecuteSearch` under every mode. T113's second-reader
+    round closed the URL half of the same rule
+    (`_a_page_placeholder_and_a_query_key_imply_each_other`), and that URL is
+    one of the three shapes it now refuses: a `query_param` or `path_segment`
+    connector with no `{page}` anywhere issues the identical URL `max_pages`
+    times. Refusing it is correct, and it would have turned every R7 probe into
+    a load failure for a reason that has nothing to do with the body.
+
+    So the URL is derived from the mode rather than fixed: `{page}` under the
+    key `pagination.param` names for `query_param`, a path position for
+    `path_segment`, and none at all for `body_field` and `none` — which is what
+    those two modes now require.
+    """
+    base = _DOCUMENT["list"]["url_pattern"]
+    if probe.mode == "query_param" and probe.param is not None:
+        return f"{base}?{probe.param}={PAGE_PLACEHOLDER}"
+    if probe.mode == "path_segment":
+        return f"{base}/{PAGE_PLACEHOLDER}"
+    return str(base)
+
+
 def _document(probe: Probe) -> str:
     """The probe as a whole connector document, ready for `parse_connector`."""
     document = json.loads(json.dumps(_DOCUMENT))
+    document["list"]["url_pattern"] = _url_pattern(probe)
     document["list"]["body_json"] = probe.body_json
     pagination: dict[str, Any] = {"mode": probe.mode}
     if probe.param is not None:

@@ -2,6 +2,7 @@
 id: t-6d3fac96
 title: "T114: D-25: the substance sweep trusts the manifest, so a deleted line whose substance survives in a headline is invisible"
 priority: 5
+status: merged
 ---
 
 ## Acceptance gate
@@ -10,6 +11,7 @@ priority: 5
 disclosures_unbacked_by_a_generated_document == 0
 evidence: status/evidence/T114.json
 key: disclosures_unbacked_by_a_generated_document
+status-key: gate_status
 ```
 
 Transcribed from `status/plan.md`'s row for this task, which declared this
@@ -43,13 +45,30 @@ Read `disclosed` from the generated documents rather than the manifest, or recon
 
 ## Acceptance gate
 
-<!-- This task came from an issue, so its "gate" is prose. Write a real check
-     below, then DELETE the `requires: [human:gate]` line in the front matter.
-     Until that line is gone the selector will not offer this task, which is
-     deliberate: a prose gate runs nothing, and a gate that runs nothing passes
-     everything. -->
+`src/integral/approval.py` writes `status/evidence/T114.json` beside the T46 and
+D-24 records it already writes, so each gate keeps reading its own file.
 
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-false
+uv run --extra dev pytest tests/test_substance_sweep.py -q
+uv run --extra dev pytest tests/test_approval.py -q
+uv run --extra dev python -m integral.approval
 ```
+
+## What was done
+
+`measure_prepared` now derives `disclosed` from the **document lines on disk**
+instead of from `manifest.json`, so an episode line deleted after drafting stops
+exempting its own substance from the sweep. Non-episode claims reserve their line
+first, which closes the variant where a headline spelled exactly like the story
+answers for the episode row that was deleted.
+
+The divergence is also reported in its own right —
+`disclosures_unbacked_by_a_generated_document`, with `unbacked_disclosures`
+naming each — and both `prepare` and `record_sent` refuse over it: `payload.json`
+is assembled from those manifest rows, so a row over a line no document carries
+is the tool describing a letter it is not looking at.
+
+The denominator is `manifest_disclosures_compared`, and it is the corpus reading
+(one disclosure per advert) plus the two clean trees the probes leave standing.
+`gate_status` is `unmeasured` when nothing was compared, so a sweep that read no
+documents cannot report the clean zero an empty scan produces.

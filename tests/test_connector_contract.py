@@ -40,6 +40,7 @@ from integral.connector_contract import (
 )
 from integral.connector_shape import measure as shape_measure
 from integral.connectors import PROBE_DIRNAME
+from integral.pagination_capture import measure as pagination_measure
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
@@ -75,6 +76,30 @@ def test_the_committed_library_conforms() -> None:
     report = check_library(_LIBRARY)
     assert report.violations == []
     assert len(report.packages) >= MINIMUM_PACKAGES
+
+
+def test_every_pagination_key_a_package_sends_appears_in_a_capture() -> None:
+    """T113's gate, beside T53's, because it is the same kind of claim: a rule
+    every shipped package must satisfy, asserted over the whole library.
+
+    A page key named after something read out of a **response** — usajobs's
+    `Pager.CurrentPageIndex` — says the board reports a page index, not that it
+    accepts one in a request under that spelling. Only a recorded request
+    certifies a request key, and if the board ignores an unknown one then page 2
+    duplicates page 1 and the fetcher collects duplicate offers with nothing to
+    report it.
+
+    `paginated_request_keys_checked` is asserted beside the zero because a
+    library where nothing paginates reports the same zero as a library whose
+    every page key is measured, and those are two different facts. The rule
+    itself, mode by mode, is `tests/test_pagination_capture.py`.
+    """
+    measured = pagination_measure(_LIBRARY)
+
+    assert measured["findings"] == []
+    assert measured["paginated_request_keys_no_capture_measured"] == 0
+    assert measured["gate_status"] == "measured"
+    assert measured["paginated_request_keys_checked"] >= 5
 
 
 def test_the_reference_package_is_the_one_the_library_ships() -> None:
