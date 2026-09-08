@@ -2,5 +2,6 @@
   "captured_at": "2026-09-06",
   "url": "https://foorilla.com/hiring/jobs/?job_search=python",
   "status": 200,
-  "surface": "laptop"
+  "surface": "laptop",
+  "provenance": "unrecorded"
 }

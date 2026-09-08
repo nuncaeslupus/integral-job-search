@@ -15,14 +15,17 @@ exercised from both sides, and
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
+from integral import capture_provenance as cp
 from integral import pagination_capture as pc
 from integral.connectors import (
     ConnectorError,
@@ -721,3 +724,467 @@ def test_a_finding_names_the_provenance_of_the_capture_that_failed_to_certify(
     (finding,) = pc.measure(library)["findings"]
 
     assert pc.TRANSCRIBED in finding["reason"]
+
+
+# ---------------------------------------------------------------------------
+# T153 — the provenance is enforced, or it is a label wearing evidence's clothes
+#
+# T113 shipped `provenance` advisory: nineteen of twenty captures declared
+# nothing, nothing failed on any value, and a fabricated capture claiming
+# `live` passed. `integral.capture_provenance` is the check, and these are its
+# fixtures. They live here rather than in a file of their own because the field
+# and its enforcement are one subject, and the T113 tests above are what a
+# reader needs beside them.
+#
+# Two rules run through all of them: a claim is substantiated by the ARTEFACT
+# or it is counted, and `unrecorded` is a truthful statement rather than a hole
+# — the nineteen must be able to pass while saying exactly what they know.
+
+
+def _capture_probe(library: Path, body: bytes = b"<html>a list of jobs</html>") -> Path:
+    """Response bytes committed beside the capture, as a live fetch leaves them."""
+    probe = _package(library) / "probe"
+    probe.mkdir(exist_ok=True)
+    path = probe / "list.html"
+    path.write_bytes(body)
+    return path
+
+
+def _live_response(path: Path) -> dict[str, Any]:
+    """The `response` block that honestly describes `path`."""
+    body = path.read_bytes()
+    return {
+        "file": path.name,
+        "bytes": len(body),
+        "sha256": hashlib.sha256(body).hexdigest(),
+    }
+
+
+@pytest.fixture
+def provenance_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Measure a one-package library at all — the floor is asserted separately."""
+    monkeypatch.setattr(cp, "MINIMUM_CAPTURES_SCANNED", 1)
+
+
+def _provenance_findings(library: Path, **kwargs: Any) -> list[dict[str, str]]:
+    measured = cp.measure(library, **kwargs)
+    assert measured["gate_status"] == "measured", measured
+    rows: list[dict[str, str]] = measured["findings"]
+    assert measured["captures_with_an_unenforced_provenance"] == len(rows)
+    return rows
+
+
+def test_an_absent_provenance_is_a_finding_not_a_default(
+    library: Path, provenance_floor: None
+) -> None:
+    """The hole T113 left. `read_provenance` maps a missing field to
+    `unrecorded` and never writes it back, so "nobody established this" and
+    "nobody wrote anything" are the same bytes — and the second read as a pass.
+    After this task the absence has to be stated."""
+    _real_board(library)
+    _write_capture(library, captured_at="2026-09-08", url=f"https://{_REAL_SITE}/jobs", status=200)
+
+    (finding,) = _provenance_findings(library)
+
+    assert finding["claim"] == "absent"
+    assert "provenance" in finding["reason"]
+    assert finding["direction"] == "fail-open"
+
+
+def test_an_unrecorded_capture_is_the_truthful_label_and_still_passes(
+    library: Path, provenance_floor: None
+) -> None:
+    """The control this task is bounded by. `unrecorded` claims nothing, so
+    there is nothing to substantiate — and the nineteen committed captures for
+    which it is the honest word must be able to say it and pass. A gate
+    satisfiable only by stamping `live` on them would be the invention this
+    whole module refuses."""
+    _real_board(library)
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance=pc.UNRECORDED,
+    )
+
+    assert _provenance_findings(library) == []
+
+
+def test_a_provenance_outside_the_vocabulary_is_a_finding(
+    library: Path, provenance_floor: None
+) -> None:
+    """`pagination_capture.read_provenance` folds an unknown spelling into
+    `unrecorded`, which is right for *reading* a claim and wrong for enforcing
+    one: a file saying `Live` has stated something, and silently reading it as
+    an absence is how a typo becomes a pass."""
+    _real_board(library)
+    for declared in ("Live", "recorded live", "", 1, None, ["live"]):
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url=f"https://{_REAL_SITE}/jobs",
+            status=200,
+            provenance=declared,
+        )
+        (finding,) = _provenance_findings(library)
+        assert "vocabulary" in finding["reason"], declared
+
+
+def test_a_capture_claiming_live_provenance_carries_what_a_live_capture_leaves(
+    library: Path, provenance_floor: None
+) -> None:
+    """The fabrication this task is named for, and the seven ways it is caught.
+
+    A live fetch leaves the response behind; a hand-written record has nothing
+    to leave. So `live` is held to the bytes in `probe/` — the digest most of
+    all, because it binds the claim to the exact response committed rather than
+    to a form filled in.
+    """
+    _real_board(library)
+    response = _live_response(_capture_probe(library))
+    honest: dict[str, Any] = {
+        "captured_at": "2026-09-08",
+        "url": f"https://{_REAL_SITE}/jobs",
+        "status": 200,
+        "provenance": pc.LIVE,
+        "response": response,
+    }
+    today = date(2026, 9, 8)
+
+    # The control first: a live claim that carries all of it is not a finding.
+    _write_capture(library, **honest)
+    assert _provenance_findings(library, today=today) == []
+
+    broken: list[tuple[dict[str, Any], str]] = [
+        # A bare claim — what a fabricated capture costs to write today.
+        ({"response": None}, "no `response` block"),
+        # The response named but not committed.
+        ({"response": {**response, "file": "absent.html"}}, "not committed"),
+        # Committed, and not the bytes the record describes.
+        ({"response": {**response, "bytes": response["bytes"] + 1}}, "bytes on disk"),
+        ({"response": {**response, "sha256": "0" * 64}}, "does not match"),
+        ({"response": {**response, "sha256": "not-a-digest"}}, "not a sha256"),
+        # A record of a fetch that has not happened.
+        ({"captured_at": "2026-09-09"}, "in the future"),
+        ({"captured_at": "the second of September"}, "not a YYYY-MM-DD"),
+        # A status no response carried.
+        ({"status": "200"}, "not an HTTP status"),
+        ({"status": 999}, "not an HTTP status"),
+    ]
+    for change, expected in broken:
+        record = {**honest, **change}
+        if change.get("response", ...) is None:
+            record.pop("response")
+        _write_capture(library, **record)
+        (finding,) = _provenance_findings(library, today=today)
+        assert finding["claim"] == pc.LIVE, change
+        assert expected in finding["reason"], (change, finding["reason"])
+
+
+def test_a_live_response_cannot_name_a_file_outside_its_own_package(
+    library: Path, provenance_floor: None
+) -> None:
+    """`response.file` addresses `probe/`, and only `probe/`. A claim that
+    reaches up the tree could certify itself against any committed file in the
+    repository — the fixture beside it, or another package's probe."""
+    _real_board(library)
+    honest = _live_response(_capture_probe(library))
+    for escape in ("../fixture/list.html", "/etc/hostname", "..", "sub/list.html", ""):
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url=f"https://{_REAL_SITE}/jobs",
+            status=200,
+            provenance=pc.LIVE,
+            response={**honest, "file": escape},
+        )
+        (finding,) = _provenance_findings(library, today=date(2026, 9, 8))
+        assert "plain filename" in finding["reason"], escape
+
+
+def test_a_transcribed_capture_names_the_committed_request_it_came_from(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """`transcribed` means "somebody else's committed command produced this",
+    so the whole content of the claim is *which* command — and it has to be
+    here. A transcribed record naming nothing is a live claim in a quieter
+    voice."""
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    (repo / "connectors").mkdir(parents=True)
+    ledger = repo / "connectors" / "ruled-out.yaml"
+    ledger.write_text(
+        "  - site: realboard.io\n"
+        f'    retest: "curl -s -X POST -d \'{{\\"Keyword\\":\\"python\\"}}\' \'{url}\'"\n',
+        encoding="utf-8",
+    )
+
+    base: dict[str, Any] = {
+        "captured_at": "2026-09-08",
+        "url": url,
+        "body": {"Keyword": "python"},
+        "status": 200,
+        "provenance": pc.TRANSCRIBED,
+    }
+
+    # The control: the ledger carries this URL and this body, so the claim
+    # resolves. Note the committed command spells the body backslash-escaped
+    # inside a YAML scalar and the capture spells it as JSON — the same request,
+    # which is why the source text is read with backslashes stripped.
+    _write_capture(library, **base, transcribed_from="connectors/ruled-out.yaml")
+    assert _provenance_findings(library, repo_root=repo) == []
+
+    broken: list[tuple[dict[str, Any], str]] = [
+        ({}, "no `transcribed_from`"),
+        ({"transcribed_from": "connectors/absent.yaml"}, "does not resolve"),
+        ({"transcribed_from": "/etc/hostname"}, "not a repo-relative path"),
+        ({"transcribed_from": "../../etc/hostname"}, "not a repo-relative path"),
+        # The named file exists and is a command for a different request.
+        (
+            {"transcribed_from": "connectors/ruled-out.yaml", "url": f"https://{_REAL_SITE}/other"},
+            "does not carry the captured URL",
+        ),
+        (
+            {"transcribed_from": "connectors/ruled-out.yaml", "body": {"Keyword": "rust"}},
+            "does not carry the captured body",
+        ),
+        (
+            {
+                "transcribed_from": "connectors/ruled-out.yaml",
+                "body": {"Keyword": "python", "Page": 2},
+            },
+            "does not carry the captured body",
+        ),
+    ]
+    for change, expected in broken:
+        _write_capture(library, **{**base, **change})
+        (finding,) = _provenance_findings(library, repo_root=repo)
+        assert finding["claim"] == pc.TRANSCRIBED, change
+        assert expected in finding["reason"], (change, finding["reason"])
+
+
+def test_a_transcribed_body_resolves_whatever_order_the_command_spells_it_in(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """The claim is "this request is committed", not "these bytes are committed
+    in this order". Matching one serialised object would make a ledger line
+    spelling the same two fields the other way round read as a different
+    request — fail-closed, and for nothing."""
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "ledger.yaml").write_text(
+        f'retest: curl -d \'{{"ResultsPerPage":25,"Keyword":"python"}}\' {url}\n',
+        encoding="utf-8",
+    )
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        body={"Keyword": "python", "ResultsPerPage": 25},
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from="ledger.yaml",
+    )
+
+    assert _provenance_findings(library, repo_root=repo) == []
+
+
+def test_deleting_the_capture_is_not_the_cheapest_way_to_pass(
+    library: Path, provenance_floor: None
+) -> None:
+    """Otherwise a gate about capture provenance is satisfied by having no
+    capture — the fail-open direction this family of tasks keeps meeting."""
+    _real_board(library)
+    probe = _package(library) / "probe" / "captured.json"
+    probe.parent.mkdir(exist_ok=True)
+    probe.write_text("{}", encoding="utf-8")
+    assert _provenance_findings(library)[0]["claim"] == "absent"
+
+    probe.unlink()
+    (finding,) = _provenance_findings(library)
+    assert finding["claim"] == "absent"
+    assert "no readable" in finding["reason"]
+
+    probe.write_text("[]", encoding="utf-8")
+    assert _provenance_findings(library)[0]["reason"].startswith("no readable")
+
+
+def test_the_committed_library_has_no_unenforced_provenance() -> None:
+    """The gate itself, over the twenty shipped captures — nineteen truthfully
+    `unrecorded`, one `transcribed` naming a ledger line that carries its URL
+    and its body."""
+    measured = cp.measure(_LIBRARY)
+
+    assert measured["gate_status"] == "measured"
+    assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
+    assert measured["claims"] == {"live": 0, "transcribed": 1, "unrecorded": 19}
+    assert measured["example_packages_excluded"] == ["examplejobs_es"]
+
+
+def test_the_usajobs_capture_names_a_resolvable_committed_request() -> None:
+    """The one capture that claims anything. `connectors/ruled-out.yaml`'s
+    `retest` line for usajobs.gov carries the POST URL and both body fields, so
+    the claim is checkable rather than asserted."""
+    record = cp.read_record(_LIBRARY / "usajobs_en")
+
+    assert record is not None
+    assert record["provenance"] == pc.TRANSCRIBED
+    assert record["transcribed_from"] == "connectors/ruled-out.yaml"
+    assert cp.check_transcribed(record) == []
+
+
+def test_a_fabricated_live_capture_over_the_real_library_raises_the_metric(
+    tmp_path: Path,
+) -> None:
+    """The gate's own falsifiability, demonstrated on the shipped library
+    rather than on a one-package fixture: copy the twenty, relabel one
+    `live`, and the metric moves off zero. A gate nobody has watched fail is
+    not known to be able to."""
+    library = tmp_path / "connectors"
+    shutil.copytree(_LIBRARY, library)
+    path = library / "arbeitnow_en" / "probe" / "captured.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**record, "provenance": pc.LIVE}), encoding="utf-8")
+
+    measured = cp.measure(library)
+
+    assert measured["captures_with_an_unenforced_provenance"] == 1
+    (finding,) = measured["findings"]
+    assert finding["package"] == "arbeitnow_en"
+    assert finding["claim"] == pc.LIVE
+    assert measured["fail_open"] == 1
+
+
+def test_a_library_too_small_to_enforce_reports_unmeasured(
+    library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A clean zero over a scan that found nothing is the vacuous truth this
+    repository keeps meeting — so the floor, and `unmeasured` rather than 0."""
+    monkeypatch.setattr(cp, "MINIMUM_CAPTURES_SCANNED", 100)
+    _real_board(library)
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance=pc.UNRECORDED,
+    )
+
+    measured = cp.measure(library)
+
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["captures_with_an_unenforced_provenance"] == 0
+    assert "floor 100" in measured["unmeasured_reason"]
+
+
+def test_an_empty_library_is_unmeasured_rather_than_clean(tmp_path: Path) -> None:
+    empty = tmp_path / "connectors"
+    empty.mkdir()
+
+    assert cp.measure(empty)["gate_status"] == "unmeasured"
+    assert cp.measure(tmp_path / "absent")["gate_status"] == "unmeasured"
+
+
+def test_a_breached_floor_writes_nothing_and_fails_the_gate(
+    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two properties in one place because they are one decision. The record is
+    not written (a run that could not measure must not leave behind an artefact
+    asserting the floor it never met), and the exit status is **1** rather than
+    the 3 `make evidence` prints as `unmeasured (recorded)` and walks past —
+    T115's finding, which a module written after it has no reason to reproduce.
+    """
+    monkeypatch.setattr(cp, "MINIMUM_CAPTURES_SCANNED", 100)
+    monkeypatch.setattr(cp, "DEFAULT_CONNECTORS_DIR", library)
+    target = tmp_path / "T153.json"
+
+    cp.write_evidence(target, library)
+    assert not target.exists()
+
+    assert cp._main(["capture_provenance", str(target)]) == 1
+    assert not target.exists()
+
+
+def test_the_entry_point_exits_one_on_an_unenforced_provenance(
+    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cp, "MINIMUM_CAPTURES_SCANNED", 1)
+    monkeypatch.setattr(cp, "DEFAULT_CONNECTORS_DIR", library)
+    _real_board(library)
+    _write_capture(library, captured_at="2026-09-08", url=f"https://{_REAL_SITE}/jobs", status=200)
+    target = tmp_path / "T153.json"
+
+    assert cp._main(["capture_provenance", str(target)]) == 1
+    assert json.loads(target.read_text(encoding="utf-8"))["findings"]
+
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance=pc.UNRECORDED,
+    )
+    assert cp._main(["capture_provenance", str(target)]) == 0
+
+
+def test_the_committed_provenance_record_carries_the_floor_and_not_the_count(
+    tmp_path: Path,
+) -> None:
+    """T100's rule. `captures_scanned` and the per-claim tally both move the
+    moment anybody adds, retires or re-records a connector; committing them as
+    exact values would redden `make evidence` on a change that is not a
+    finding."""
+    target = tmp_path / "T153.json"
+    cp.write_evidence(target, _LIBRARY)
+    committed = json.loads(target.read_text(encoding="utf-8"))
+
+    assert committed["captures_scanned_at_least"] == cp.MINIMUM_CAPTURES_SCANNED
+    for moving in ("captures_scanned", "claims"):
+        assert moving not in committed
+    assert committed["captures_with_an_unenforced_provenance"] == 0
+
+
+def test_the_committed_provenance_evidence_matches_what_the_code_measures_now(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "T153.json"
+    cp.write_evidence(target, _LIBRARY)
+
+    assert json.loads(target.read_text(encoding="utf-8")) == json.loads(
+        cp.DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8")
+    )
+
+
+def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path: Path) -> None:
+    """The check this repository keeps having to make about its own gates.
+
+    A metric that already reads 0 over the defect it was filed against is
+    satisfiable by doing nothing, and every `unmeasured`/floor mechanism above
+    is decoration behind it. So: rebuild the library as T113 shipped it — no
+    capture carrying a `provenance` key, and `usajobs_en`'s `transcribed`
+    naming nothing — and the metric must be the whole population, not zero.
+
+    Measured against the real `origin/main` tree while T153 was being written:
+    **20 of 20**, nineteen `absent` and one `transcribed` that could not name
+    its committed request. Reconstructed here rather than pinned to a commit so
+    it keeps holding as the library changes.
+    """
+    library = tmp_path / "connectors"
+    shutil.copytree(_LIBRARY, library)
+    for path in library.glob("*/probe/captured.json"):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        for advisory in ("provenance", "transcribed_from"):
+            record.pop(advisory, None)
+        path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+
+    before = cp.measure(library)
+    after = cp.measure(_LIBRARY)
+
+    assert before["gate_status"] == "measured"
+    assert before["captures_with_an_unenforced_provenance"] == before["captures_scanned"] > 0
+    assert {row["claim"] for row in before["findings"]} == {"absent"}
+    assert after["captures_with_an_unenforced_provenance"] == 0

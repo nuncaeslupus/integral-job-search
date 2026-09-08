@@ -31,13 +31,23 @@ what URL*; until #406 it never said *how*, so a record transcribed from a
 command committed elsewhere and one written straight off the wire read
 identically, and the difference had to be argued in a pull-request comment
 rather than read in the file. `provenance` is that field — `live`,
-`transcribed`, or absent, which reads as `unrecorded` and is never written back.
-`usajobs_en` declares `transcribed`: its request record is byte-identical to the
-re-runnable `retest` curl `connectors/ruled-out.yaml` commits, and the response
-bytes beside it (`Total: 43`, `ItemsPerPage: 25`, 25 rows) are that command's
-output. Nothing here fails on an `unrecorded` capture — a provenance nobody has
-established is not a defect, and stamping one on twenty files to make a number
-go green would be the invention this module exists to refuse.
+`transcribed` or `unrecorded`. `usajobs_en` declares `transcribed`: its request
+record is byte-identical to the re-runnable `retest` curl
+`connectors/ruled-out.yaml` commits, and the response bytes beside it
+(`Total: 43`, `ItemsPerPage: 25`, 25 rows) are that command's output. Nothing
+*here* fails on an `unrecorded` capture — a provenance nobody has established is
+not a defect, and stamping one on twenty files to make a number go green would
+be the invention this module exists to refuse.
+
+**T153 is what makes the field evidence rather than a label**, and it is a
+separate module (`integral.capture_provenance`) because it asks a different
+question of the same file: not "which request was measured" but "can this record
+substantiate what it says about itself". It shipped advisory here — nothing
+failed on any value, so a fabricated capture claiming `live` passed — and the
+one change it made to this module's own reading is that a **missing** field is
+no longer the same statement as a written `unrecorded`. `read_provenance` still
+folds an absence into `UNRECORDED`, because reading a claim charitably is right;
+enforcing one is where the two have to be told apart.
 
 **The rule, per `pagination.mode`:**
 
@@ -393,9 +403,13 @@ LIVE = "live"
 TRANSCRIBED = "transcribed"
 UNRECORDED = "unrecorded"
 
-#: The two a capture may declare. `UNRECORDED` is what a capture that declares
-#: nothing — or declares something outside this vocabulary — reads as; it is
-#: never written, so an old capture is not retro-labelled by a schema it predates.
+#: The two a capture may *claim*. `UNRECORDED` is what a capture that declares
+#: nothing — or declares something outside this vocabulary — reads as, so it is
+#: deliberately not in here: the set is what a record asserts about its origin,
+#: and "nobody established this" asserts none of it. Every shipped capture now
+#: writes one of the three, `capture_provenance.DECLARABLE` being that wider
+#: set — an absence used to be indistinguishable from a statement, which is the
+#: hole T153 closed.
 PROVENANCE = frozenset({LIVE, TRANSCRIBED})
 
 
