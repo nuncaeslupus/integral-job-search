@@ -46,10 +46,18 @@ hand-written one has nothing to leave. So the claim is held to the bytes in
   of a fetch that has not happened yet is not a record of a fetch.
 * `status` — an integer HTTP status in 100…599.
 * `response` — `{file, bytes, sha256}`, where `file` names a plain filename
-  that **resolves** inside the package's own `probe/` — a committed symlink is
-  refused, because `read_bytes` follows one and a link is how a capture would
-  certify itself against another package's response — and `bytes` and `sha256`
-  **agree with the committed file**.
+  the package **commits at that path** — a symlink is refused, because
+  `read_bytes` follows one and a link is how a capture would certify itself
+  against another package's response — and `bytes` and `sha256` **agree with
+  the committed file**.
+
+The last of those is one rule (`_committed_at`) rather than a check written per
+call site, and that is not tidiness. Written twice it was wrong once: the leaf
+was checked and the **directory holding it** was not, so a package whose
+`probe/` was itself a symlink to a donor read as enforced over bytes it never
+held — and a `probe/` linked at a sibling's made a package with no capture of
+its own read as enforced. Every path this module reads out of a package or a
+repository now goes through the same question, `probe/captured.json` included.
 
 The digest is what makes the claim more than a form filled in. It binds `live`
 to the exact bytes it certifies: hand-edit `probe/list.html` afterwards and the
@@ -73,12 +81,23 @@ source has to be**:
 * **a command for this request.** One line of that file must carry a
   request-issuing command (`curl`, `wget`, `xh`, `Invoke-WebRequest`), the
   captured URL, and every top-level body field — the three together, on that
-  line. Naming a URL is not issuing one. A prose sentence containing it, a
-  dated comment about it, and a note recording that the fetch was *refused and
-  never made* all contain the string; T113 decided that class when it refused
-  to write `pythonorg_en`'s capture from exactly such a comment, because **"a
-  dated sentence in a comment is not a capture"**. A module enforcing T113's
-  field cannot accept what T113 refused.
+  line — and the command must be found in what is **left of the line once the
+  URL and the body are struck out**. Naming a URL is not issuing one, and the
+  string under test may not supply the evidence about itself: a URL whose path
+  reads `/curl/`, or an ordinary job-board body of `{"q": "curl"}`, certified
+  its own capture until a second reader asked. So the refused class is exactly
+  **a mention that names no client command of its own** — a prose sentence
+  carrying the URL, a dated comment about it, a note saying the fetch was
+  refused. T113 decided that class when it refused to write `pythonorg_en`'s
+  capture from exactly such a comment, because **"a dated sentence in a comment
+  is not a capture"**. A module enforcing T113's field cannot accept what T113
+  refused.
+
+  A denial that **quotes** a command — *"we never ran: `curl -s '<url>'`"* — is
+  not in that class and passes. Textual negation is not decidable and this does
+  not try: what is established is that the repo commits the text of a command,
+  never what the prose around it says was done with it. That limit is disclosed
+  here and pinned by a control fixture rather than left as a sentence.
 
 Lines are joined across a trailing `\\` before matching, since a `curl` wrapped
 over several lines is one command, and the text is then read with backslashes
@@ -171,6 +190,37 @@ _REQUEST_COMMAND = re.compile(r"(?<![\w-])(?:curl|wget|xh|Invoke-WebRequest)(?![
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
+def _committed_at(root: Path, relative: Path) -> bool:
+    """Does `root` commit a file at `relative`, or does that path lead elsewhere?
+
+    **One rule, three callers** — `read_record` asks it about
+    `probe/captured.json`, `check_live` about `probe/<response.file>`, and
+    `check_transcribed` about `transcribed_from`. All three are the same
+    question: *does this tree carry those bytes at that path, or is some part of
+    the path a link to somebody else's?* Written per call site it was written
+    two different ways, and only one of them was right — `check_live` resolved
+    **both** sides of its own comparison, which normalises a symlinked
+    directory away on the left and the right alike, so the leaf was checked and
+    the `probe/` holding it was not. That is T122's defect, two readers of one
+    rule, and the repair is the shared rule rather than a second implementation
+    that happens to agree today.
+
+    The rule: resolve the **base**, never the relative part. `base / relative`
+    is where the tree says the file is; `(base / relative).resolve()` is where
+    the filesystem actually goes. They differ exactly when some component of
+    `relative` is a symlink — the leaf, or any directory above it. Resolving the
+    base first is what keeps a checkout or a library reached *through* a
+    symlinked path from being refused for it, which would be fail-closed for
+    every package at once.
+
+    It says nothing about existence: a path with no file at it is "committed
+    here" and fails later, on the read, with a reason about the file rather than
+    about a link.
+    """
+    base = root.resolve()
+    return (base / relative).resolve() == base / relative
+
+
 @dataclass(frozen=True)
 class Finding:
     """One capture whose provenance this module cannot hold it to.
@@ -206,7 +256,17 @@ def read_record(package: Path) -> dict[str, Any] | None:
     unreadable, not JSON, or JSON that is not an object all read as `None`,
     which is a finding rather than an error, the posture `connector_health` and
     `pagination_capture` already take toward this file.
+
+    **A capture the package does not commit is not the package's capture.** The
+    same containment rule the two checks use applies to this file first: a
+    `probe/` that is a symlink to a sibling's makes every package downstream of
+    it read as holding a record it does not have — `test_deleting_the_capture_is
+    _not_the_cheapest_way_to_pass` with the deletion replaced by a link. Reading
+    it here rather than in each check is what keeps `measure`'s claim tally and
+    `check_capture`'s verdict from disagreeing about which file was read.
     """
+    if not _committed_at(package, Path(PROBE_DIRNAME) / PROBE_CAPTURE_FILE):
+        return None
     path = package / PROBE_DIRNAME / PROBE_CAPTURE_FILE
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -260,12 +320,13 @@ def check_live(package: Path, record: dict[str, Any], today: date) -> list[str]:
     # The name is inside `probe/`; the bytes must be too. `read_bytes` follows a
     # symlink, and git commits symlinks, so a `list.html` pointing at another
     # package's probe — or at anything else on the machine — would otherwise let
-    # a capture certify itself against bytes it never received. Resolving both
-    # sides is the check: a plain file under `probe/` resolves to exactly this
-    # path, and a link resolves somewhere else.
+    # a capture certify itself against bytes it never received. `_committed_at`
+    # is asked about the whole relative path rather than the leaf, so `probe/`
+    # being a link is the same refusal as `list.html` being one: this check used
+    # to resolve both sides and could not see the directory at all.
     probe = package / PROBE_DIRNAME
     path = probe / name
-    if path.resolve() != probe.resolve() / name:
+    if not _committed_at(package, Path(PROBE_DIRNAME) / name):
         reasons.append(
             f"response.file {name!r} does not resolve inside the package's own "
             "probe/ — a symlink is not a committed response"
@@ -323,6 +384,38 @@ def _command_lines(text: str) -> list[str]:
     return [line.replace("\\", "") for line in joined.splitlines()]
 
 
+def _issues_the_request(line: str, needles: list[str]) -> bool:
+    """Is this one line a committed command for exactly this request?
+
+    Two conditions, and the second is the one a second reader found missing.
+
+    *All of the needles, on this line.* The captured URL and every top-level
+    body field together, so that pieces scattered through a file do not add up
+    to a request nobody sent.
+
+    *A client word that is not one of the needles.* `_REQUEST_COMMAND` used to
+    be applied to the whole line, needles included, so the very strings under
+    test could supply the independent evidence that a request was issued: a file
+    whose entire content was `https://example.com/curl/jobs` certified its own
+    capture, and so did a body of `{"q": "curl"}` — an ordinary search for a job
+    board about developer tools. That is the same shape as a record citing
+    itself, one level in: the thing being checked must not be able to satisfy
+    the check. So the command is looked for in what is **left of the line once
+    the needles are struck out**.
+
+    They are replaced by a space rather than deleted, because deleting them
+    could splice a client word out of the two halves that surrounded one — a
+    fix that manufactured the evidence it removed would be the same defect
+    again, in the other direction.
+    """
+    if not all(needle in line for needle in needles):
+        return False
+    remainder = line
+    for needle in needles:
+        remainder = remainder.replace(needle, " ")
+    return _REQUEST_COMMAND.search(remainder) is not None
+
+
 def check_transcribed(
     package: Path, record: dict[str, Any], repo_root: Path = _REPO_ROOT
 ) -> list[str]:
@@ -334,7 +427,7 @@ def check_transcribed(
     source failing either one substantiates nothing.
 
     *Somebody else's* — `transcribed_from` is a repo-relative path (no absolute
-    path, no `..`, no symlink out of the tree) that resolves, and that does not
+    path, no `..`, and no symlink anywhere along it) that resolves, and that does not
     resolve inside the citing capture's own `probe/`. A record is not a source
     for itself: `captured.json` contains its own `url` and its own `body` by
     construction, so a capture citing its own file would answer every question
@@ -343,13 +436,30 @@ def check_transcribed(
     strongest-sounding word.
 
     *Command* — one line of that file must carry a request-issuing command
-    together with the URL and every top-level body field. Naming a URL is not
-    issuing one. A prose sentence containing it, a dated comment about it, and
-    a note recording that the fetch was **refused and never made** all contain
-    the string, and T113 already decided that class: it refused to write
-    `pythonorg_en`'s capture from exactly such a comment, because "a dated
-    sentence in a comment is not a capture". A module enforcing T113's own field
-    must not accept what T113 refused.
+    together with the URL and every top-level body field, and the command must
+    still be there once the URL and the body are **struck out of the line**.
+    Naming a URL is not issuing one, and the strings under test may not be the
+    evidence about themselves: a URL whose path reads `/curl/`, or a body of
+    `{"q": "curl"}` — an ordinary thing for this tool to have searched — used to
+    certify their own capture out of a file containing nothing else.
+
+    So the refused class is precisely **a mention that names no client command
+    of its own**: a prose sentence carrying the URL, a dated comment about it, a
+    note saying the fetch was refused. T113 already decided that class — it
+    refused to write `pythonorg_en`'s capture from exactly such a comment,
+    because "a dated sentence in a comment is not a capture" — and a module
+    enforcing T113's own field must not accept what T113 refused.
+
+    **The disclosed limit, stated where it can be checked rather than implied.**
+    A denial that *quotes* a command — "we never ran: `curl -s '<url>'`" —
+    passes, and that is the honest ceiling rather than a gap: textual negation
+    is not decidable, and a check that guessed at one would be a worse thing
+    than a narrow one. Nothing here reads what the prose says was *done* with
+    the command; only that its text is committed. An earlier draft of this
+    docstring claimed the refused class included "a note recording that the
+    fetch was refused and never made", which is true only of the spellings that
+    omit a client word — a docstring certifying a property its test does not
+    check, which is this task's own subject one level up.
 
     Body pairs are matched individually rather than as one serialised object, so
     a source spelling the same request with its keys in another order still
@@ -390,10 +500,10 @@ def check_transcribed(
 
     root = repo_root.resolve()
     path = root / candidate
-    if path.resolve() != root / candidate:
+    if not _committed_at(repo_root, candidate):
         reasons.append(
-            f"transcribed_from {source!r} does not resolve inside this repo — "
-            "a symlink is not a committed source"
+            f"transcribed_from {source!r} is not the file this repo commits at that "
+            "path — a symlink is not a committed source"
         )
         return reasons
 
@@ -425,21 +535,22 @@ def check_transcribed(
     needles = [url]
     body = record.get("body")
     if body is not None:
-        missing = [needle for needle in _body_needles(body) if needle not in haystack]
+        body_needles = _body_needles(body)
+        missing = [needle for needle in body_needles if needle not in haystack]
         if missing:
             reasons.append(
                 f"{source} does not carry the captured body: " + ", ".join(sorted(missing))
             )
-        needles.extend(_body_needles(body))
+        needles.extend(body_needles)
 
     if reasons:
         return reasons
 
     # Every piece is somewhere in the file. The claim is that a *command* for
     # this request is committed, so they must be one command: a single line
-    # issuing a request, carrying the URL and the whole body.
-    commands = [line for line in lines if _REQUEST_COMMAND.search(line)]
-    if not any(all(needle in line for needle in needles) for line in commands):
+    # issuing a request, carrying the URL and the whole body, and naming a
+    # client somewhere other than inside the URL and body themselves.
+    if not any(_issues_the_request(line, needles) for line in lines):
         reasons.append(
             f"{source} mentions this request but commits no command for it — no single "
             "line carries a request command together with the captured URL and every "
@@ -456,6 +567,14 @@ def check_capture(
 
     record = read_record(package)
     if record is None:
+        if not _committed_at(package, Path(PROBE_DIRNAME) / PROBE_CAPTURE_FILE):
+            return Finding(
+                package.name,
+                "absent",
+                "probe/captured.json is not the file this package commits at that path "
+                "— a symlinked probe/ borrows another package's capture instead of "
+                "holding one of its own",
+            )
         return Finding(package.name, "absent", "no readable probe/captured.json to enforce")
 
     if "provenance" not in record:
@@ -506,7 +625,10 @@ def measure(
 
     examples: list[str] = []
     findings: list[Finding] = []
-    claims: dict[str, int] = {LIVE: 0, TRANSCRIBED: 0, UNRECORDED: 0}
+    # Built from `DECLARABLE` rather than re-spelled: a second literal list of
+    # the same three values is a second reader of one rule, and the one that
+    # would silently stop counting if the vocabulary ever grew.
+    claims: dict[str, int] = dict.fromkeys(sorted(DECLARABLE), 0)
     scanned = 0
     for package in packages:
         if is_example_site(read_package(package).site):
@@ -515,7 +637,7 @@ def measure(
         scanned += 1
         record = read_record(package)
         declared = record.get("provenance") if record is not None else None
-        if isinstance(declared, str) and declared in claims:
+        if isinstance(declared, str) and declared in DECLARABLE:
             claims[declared] += 1
         finding = check_capture(package, repo_root, today)
         if finding is not None:
@@ -551,8 +673,20 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
     adding a second example package would have reddened the gate for a reason
     unrelated to any provenance. What must not move is the numerator, and it
     does not.
+
+    **`fail_open` is dropped too, and that one is this task's own subject caught
+    in this task's own evidence.** `Finding.direction` defaults to `fail-open`
+    and nothing in this module ever sets it to anything else, so the committed
+    `fail_open` was `len(findings)` written twice — two numbers in one record
+    that cannot disagree, the second reading as a corroborating measurement and
+    corroborating nothing. `cue_audit` and `second_reader` compute a direction
+    per case, which is what makes their `fail_open` a measurement; here it was a
+    constant wearing one's clothes. The per-row `direction` stays, because as a
+    *label on a row* it is a true and useful statement — it is the aggregate
+    that pretended to be measured. Anyone wanting the count can add up the rows,
+    which is the only place the fact actually lives.
     """
-    dropped = ("captures_scanned", "claims", "example_packages_excluded")
+    dropped = ("captures_scanned", "claims", "example_packages_excluded", "fail_open")
     committed = {key: value for key, value in measured.items() if key not in dropped}
     committed["captures_scanned_at_least"] = MINIMUM_CAPTURES_SCANNED
     return committed

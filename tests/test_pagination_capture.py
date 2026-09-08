@@ -1071,9 +1071,14 @@ def test_a_file_that_only_mentions_the_request_is_not_a_committed_command(
     the request, and `status/plan.md`'s T152 row records that the refusal was
     right. A module enforcing T113's own marker cannot then accept the artefact
     T113 refused — so containment is not the join. Each source below contains
-    the URL, and the last is worse than the rest: it records that the fetch was
-    **refused and never issued**, which is a source certifying the absence of
-    the very request it is cited for.
+    the URL and **names no client command of its own**, which is the class this
+    refuses; a refusal that quotes a `curl` is a different input and is pinned
+    as a disclosed limit by
+    `test_a_refusal_that_quotes_a_command_is_inside_the_disclosed_ceiling`. An
+    earlier draft of this docstring called the third case "a source certifying
+    the absence of the very request it is cited for" and left the reader to
+    assume every spelling of that was caught. Only the ones without a client
+    word are.
     """
     _real_board(library)
     url = f"https://{_REAL_SITE}/search"
@@ -1100,7 +1105,8 @@ def test_a_file_that_only_mentions_the_request_is_not_a_committed_command(
         f"We have NEVER fetched this board.\n{url}\n",
         # T113's own case, verbatim in shape: a dated sentence in a comment.
         f"# 2026-09-02: someone said they saw {url} return 200. Not verified.\n",
-        # A record of a REFUSAL, certifying the request it says was never made.
+        # A record of a REFUSAL that quotes no command — the spelling this
+        # class covers, and the whole of what it covers.
         f"The fetch of {url} was REFUSED by robots.txt and never issued.\n",
         # The URL alone, with nothing around it at all.
         f"{url}\n",
@@ -1135,16 +1141,19 @@ def test_a_transcribed_source_reached_through_a_symlink_is_not_committed_here(
 ) -> None:
     """`transcribed_from` refuses `..` and an absolute path, which constrains
     the string. A symlink is how that constraint is walked around: a path that
-    reads as repo-relative, resolving to a file the repository does not carry.
-    "Committed elsewhere in this repo" is the claim, and a link out of the tree
-    is not it."""
+    reads as repo-relative, resolving to a file the repository does not carry
+    at that path. "Committed here" is the claim, and a link is not it —
+    including a link whose target is in the tree, which is why the reason no
+    longer says "does not resolve inside this repo" about an input that plainly
+    does. A second reader caught that sentence being false about its own case:
+    the verdict was right and the words were not."""
     _real_board(library)
     url = f"https://{_REAL_SITE}/search"
     repo = tmp_path / "repo"
     repo.mkdir()
     outside = tmp_path / "outside.sh"
     outside.write_text(f"curl -s '{url}'\n", encoding="utf-8")
-    (repo / "ledger.yaml").symlink_to(outside)
+    (repo / "inside.sh").write_text(f"curl -s '{url}'\n", encoding="utf-8")
 
     _write_capture(
         library,
@@ -1155,8 +1164,12 @@ def test_a_transcribed_source_reached_through_a_symlink_is_not_committed_here(
         transcribed_from="ledger.yaml",
     )
 
-    (finding,) = _provenance_findings(library, repo_root=repo)
-    assert "does not resolve inside this repo" in finding["reason"], finding["reason"]
+    # Out of the tree, and — the case the old sentence lied about — in it.
+    for target in (outside, Path("inside.sh")):
+        (repo / "ledger.yaml").unlink(missing_ok=True)
+        (repo / "ledger.yaml").symlink_to(target)
+        (finding,) = _provenance_findings(library, repo_root=repo)
+        assert "is not the file this repo commits at that path" in finding["reason"], target
 
 
 def test_a_command_wrapped_over_several_lines_is_still_one_command(
@@ -1216,6 +1229,380 @@ def test_a_transcribed_body_resolves_whatever_order_the_command_spells_it_in(
     )
 
     assert _provenance_findings(library, repo_root=repo) == []
+
+
+def test_a_symlinked_probe_directory_is_not_a_capture_this_package_holds(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """The containment of `test_a_live_response_file_that_is_a_symlink…`, one
+    directory up — and the case that showed the two checks were two rules.
+
+    `check_live` used to resolve **both** sides of its own comparison, which
+    normalises a symlinked `probe/` away on the left and the right alike: the
+    leaf was checked and the directory holding it was not. So a package whose
+    `probe/` linked at a donor passed a `live` claim over bytes it never held,
+    with `bytes` and `sha256` honest over the donor's file because they were
+    computed there. `check_transcribed` compared against the **unresolved**
+    join and got this right, which is the whole defect — one rule, two readers,
+    only one of them correct. `_committed_at` is now that one rule, and it is
+    asked about `probe/captured.json` before anything else, because a package
+    whose capture is borrowed has no capture of its own to enforce.
+    """
+    _real_board(library)
+    package = _package(library)
+    donor = tmp_path / "donor"
+    donor.mkdir()
+    body = b"<html>a donor package's list of jobs</html>"
+    (donor / "list.html").write_bytes(body)
+    record: dict[str, Any] = {
+        "captured_at": "2026-09-08",
+        "url": f"https://{_REAL_SITE}/jobs",
+        "status": 200,
+        "provenance": pc.LIVE,
+        "response": {
+            "file": "list.html",
+            "bytes": len(body),
+            "sha256": hashlib.sha256(body).hexdigest(),
+        },
+    }
+    (donor / "captured.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+
+    shutil.rmtree(package / "probe", ignore_errors=True)
+    (package / "probe").symlink_to(donor, target_is_directory=True)
+
+    (finding,) = _provenance_findings(library, today=date(2026, 9, 8))
+    assert finding["claim"] == "absent"
+    assert "symlinked probe/" in finding["reason"], finding["reason"]
+
+    # And `check_live` refuses it on its own terms, so its guarantee does not
+    # rest on `read_record` having got there first. Handed the record directly
+    # — which is what the unfixed check was handed by the unfixed reader — the
+    # response is still not one this package commits.
+    reasons = cp.check_live(package, record, date(2026, 9, 8))
+    assert any("own probe/" in reason for reason in reasons), reasons
+
+
+def test_a_probe_linked_at_a_sibling_package_is_not_this_packages_capture(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """`test_deleting_the_capture_is_not_the_cheapest_way_to_pass`, with the
+    deletion replaced by a link — and it is cheaper than the deletion, because
+    it reads as a pass rather than as a finding.
+
+    A package with **no capture at all** borrows a neighbour's by pointing its
+    `probe/` at the neighbour's, and every question the module asks is answered
+    by the neighbour's artefact: the record resolves, its `transcribed_from`
+    resolves, the command is committed. What is not true is the only thing the
+    row claims — that *this* package's request is the one that was recorded.
+    """
+    _real_board(library)
+    package = _package(library)
+    url = f"https://{_REAL_SITE}/search"
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "ledger.yaml").write_text(f"retest: curl -s '{url}'\n", encoding="utf-8")
+
+    # A neighbour whose own capture is honest. It keeps the reference package's
+    # reserved example domain, so it is excluded from the scan and the finding
+    # below is unambiguously about the borrower.
+    donor = library / "donorboard_es"
+    shutil.copytree(_REFERENCE, donor)
+    (donor / "probe").mkdir(exist_ok=True)
+    (donor / "probe" / "captured.json").write_text(
+        json.dumps(
+            {
+                "captured_at": "2026-09-08",
+                "url": url,
+                "status": 200,
+                "provenance": pc.TRANSCRIBED,
+                "transcribed_from": "ledger.yaml",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    shutil.rmtree(package / "probe", ignore_errors=True)
+    (package / "probe").symlink_to(Path("..") / donor.name / "probe", target_is_directory=True)
+
+    (finding,) = _provenance_findings(library, repo_root=repo, today=date(2026, 9, 8))
+    assert finding["package"] == package.name
+    assert finding["claim"] == "absent"
+    assert "symlinked probe/" in finding["reason"], finding["reason"]
+
+
+def test_the_request_under_test_may_not_supply_the_command_that_certifies_it(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """The self-citation of `test_a_capture_cannot_cite_itself…`, one level in.
+
+    The command is supposed to be evidence **independent** of the request: the
+    file says somebody issued this, and the URL and body say which request that
+    was. Searching the whole line for a client word collapses the two, so the
+    needles certify themselves — a file whose entire content is the URL passed,
+    if the URL's path happened to read `/curl/`, and so did a body of
+    `{"q": "curl"}`, which is an ordinary search for this tool to have run
+    against a job board. The committed case `C16` — "the URL alone, with nothing
+    around it at all" — was passing on the luck of `arbeitnow`'s URL not
+    containing a client name, which is not a fixture.
+    """
+    _real_board(library)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = repo / "notes.md"
+
+    def _cited(text: str, **capture: Any) -> list[dict[str, str]]:
+        source.write_text(text, encoding="utf-8")
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            status=200,
+            provenance=pc.TRANSCRIBED,
+            transcribed_from="notes.md",
+            **capture,
+        )
+        return _provenance_findings(library, repo_root=repo)
+
+    # The client name is inside the URL's own path.
+    path_url = f"https://{_REAL_SITE}/curl/jobs"
+    (finding,) = _cited(f"{path_url}\n", url=path_url)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+    # …and inside its query string.
+    query_url = f"https://{_REAL_SITE}/jobs?utm_source=curl"
+    (finding,) = _cited(f"{query_url}\n", url=query_url)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+    # …and inside a body value, which needs no unusual URL at all.
+    url = f"https://{_REAL_SITE}/search"
+    for term in ("curl", "wget developer", "xh"):
+        needle = json.dumps({"q": term}, separators=(",", ":"))
+        (finding,) = _cited(f"{url} {needle}\n", url=url, body={"q": term})
+        assert "commits no command for it" in finding["reason"], term
+
+    # The control, which is what stops the fix from being "refuse everything":
+    # the same shape with a search term that is not a client name, and a real
+    # command outside both needles.
+    assert _cited(f'curl -d \'{{"q":"python"}}\' {url}\n', url=url, body={"q": "python"}) == []
+
+
+def test_a_refusal_that_quotes_a_command_is_inside_the_disclosed_ceiling(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """The limit, pinned rather than asserted in prose — the other half of
+    `test_a_command_wrapped_over_several_lines…`, which bounds strictness from
+    the same side.
+
+    The module's honest claim is *"this repo commits the text of a command for
+    this request"*. It is not, and cannot be, *"the fetch happened"*: reading
+    what the surrounding prose says was done with the command means deciding
+    textual negation, and a check that guessed at that would be worse than a
+    narrow one. So a note denying the fetch while **quoting** the command
+    passes, and a note that names no client word does not. Both spellings are
+    committed here so that the ceiling is a measured fact rather than a
+    sentence in a docstring — which is exactly the substitution this task
+    exists to refuse, and which the docstring itself made until a second reader
+    read it against the code.
+    """
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = repo / "notes.md"
+
+    def _cited(text: str) -> list[dict[str, str]]:
+        source.write_text(text, encoding="utf-8")
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url=url,
+            status=200,
+            provenance=pc.TRANSCRIBED,
+            transcribed_from="notes.md",
+        )
+        return _provenance_findings(library, repo_root=repo)
+
+    # Inside the ceiling: the command's text is committed, whatever the prose
+    # around it says was done with it.
+    quoting = [
+        f"The fetch was REFUSED by robots.txt and never issued; it would have been: curl '{url}'\n",
+        f"# do NOT curl {url} — the board refuses it\n",
+        f"2026-09-02: robots refuses this. We never ran: curl -s '{url}'\n",
+    ]
+    for text in quoting:
+        assert _cited(text) == [], text
+
+    # Outside it: the same denial with no client word is the class the module
+    # does refuse, and it is refused.
+    (finding,) = _cited(f"The fetch of {url} was REFUSED by robots.txt and never issued.\n")
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+
+def test_the_pieces_of_a_request_spread_over_several_commands_are_not_one_command(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """The one-line rule, isolated — "all of the needles on one line" rather
+    than "each needle on some line".
+
+    Its neighbour `test_a_file_that_only_mentions_the_request…` scatters two
+    body fields over lines carrying no client word, so it re-tests the command
+    requirement and leaves this one unpinned: weakening `any(all(…))` to
+    `all(any(…))` survived the whole suite. Prefixing each stray line with a
+    real `curl` separates the two rules, and this is the source that does it —
+    three commands for three different requests, none of them this one.
+    """
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    other = "https://elsewhere.example/other"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "notes.md").write_text(
+        f"curl -s '{url}'\n"
+        f"curl -d '{{\"Keyword\":\"python\"}}' '{other}'\n"
+        f"curl -d '{{\"ResultsPerPage\":25}}' '{other}'\n",
+        encoding="utf-8",
+    )
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        body={"Keyword": "python", "ResultsPerPage": 25},
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from="notes.md",
+    )
+
+    (finding,) = _provenance_findings(library, repo_root=repo)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+
+def test_a_client_name_inside_a_longer_word_is_not_a_client(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """`_REQUEST_COMMAND`'s word boundaries, which nothing pinned.
+
+    Deleting them survives the suite, and it is a large widening in the
+    fail-open direction: bare `xh` matches inside `exhausted` and `xhr`, and
+    bare `curl` inside `curly`. Prose about a request is the exact input this
+    module refuses, and prose is where those words live.
+    """
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = repo / "notes.md"
+
+    def _cited(text: str) -> list[dict[str, str]]:
+        source.write_text(text, encoding="utf-8")
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url=url,
+            status=200,
+            provenance=pc.TRANSCRIBED,
+            transcribed_from="notes.md",
+        )
+        return _provenance_findings(library, repo_root=repo)
+
+    embedded = [
+        f"we discussed the curly-brace syntax for {url}\n",
+        f"the xhr behind {url} never fired\n",
+        f"our retry budget for {url} was exhausted\n",
+    ]
+    for text in embedded:
+        (finding,) = _cited(text)
+        assert "commits no command for it" in finding["reason"], text
+
+
+def test_every_client_the_vocabulary_names_is_a_command(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """All four members, not the one the corpus happens to use.
+
+    `usajobs_en` writes `curl`, so narrowing `_REQUEST_COMMAND` to `curl` alone
+    survived the suite: three quarters of a documented vocabulary was unmeasured
+    while the docstring listed it. That is a gate certifying a property it does
+    not test — this task's subject, applied to the fix for it — and it matters
+    because the answer to an omitted client is "add the name", which nothing
+    would catch being undone.
+    """
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = repo / "notes.md"
+
+    for command in ("curl", "wget", "xh", "Invoke-WebRequest"):
+        source.write_text(f"{command} '{url}'\n", encoding="utf-8")
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url=url,
+            status=200,
+            provenance=pc.TRANSCRIBED,
+            transcribed_from="notes.md",
+        )
+        assert _provenance_findings(library, repo_root=repo) == [], command
+
+
+def test_the_committed_record_does_not_restate_the_numerator_as_a_measurement(
+    library: Path, provenance_floor: None
+) -> None:
+    """The look-again this round was told to do, turned on this module's own
+    evidence — and it found one.
+
+    `Finding.direction` defaults to `fail-open` and nothing here ever sets it
+    otherwise, so the committed `fail_open` was arithmetically
+    `captures_with_an_unenforced_provenance`, in every run there will ever be.
+    Two numbers in one evidence file that cannot disagree: the second reads as
+    corroboration and corroborates nothing, which is the label-counting shape
+    found four times in this repository the night this was written. It is
+    dropped from the record and the identity is pinned here, so that a future
+    finding with a genuinely different direction is a change somebody has to
+    make on purpose rather than a silent divergence between two numbers nobody
+    was comparing.
+
+    Contrast `cue_audit` and `second_reader`, which derive a direction per case
+    from the case: there `fail_open` is a measurement, and committing it says
+    something.
+    """
+    _real_board(library)
+    _write_capture(library, captured_at="2026-09-08", url=f"https://{_REAL_SITE}/jobs", status=200)
+
+    measured = cp.measure(library)
+    assert measured["captures_with_an_unenforced_provenance"] == 1
+    assert measured["fail_open"] == measured["captures_with_an_unenforced_provenance"]
+    assert {row["direction"] for row in measured["findings"]} == {"fail-open"}
+
+    committed = cp.record(measured)
+    assert "fail_open" not in committed
+    assert "captures_with_an_unenforced_provenance" in committed
+
+
+def test_the_claim_tally_is_the_vocabulary_and_not_a_second_copy_of_it(
+    library: Path, monkeypatch: pytest.MonkeyPatch, provenance_floor: None
+) -> None:
+    """One spelling of the three values, not two.
+
+    `measure` used to build its tally from a literal `{LIVE: 0, TRANSCRIBED: 0,
+    UNRECORDED: 0}` and test membership against *that*, which is a second reader
+    of `DECLARABLE` — the same T122 shape the containment rule was blocked for,
+    one function along. A fourth declarable value would have been enforceable by
+    `check_capture` and invisible to the tally, with nothing to notice.
+    """
+    _real_board(library)
+    monkeypatch.setattr(cp, "DECLARABLE", frozenset({*cp.DECLARABLE, "reconstructed"}))
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance="reconstructed",
+    )
+
+    measured = cp.measure(library)
+    assert measured["claims"]["reconstructed"] == 1, measured["claims"]
 
 
 def test_deleting_the_capture_is_not_the_cheapest_way_to_pass(

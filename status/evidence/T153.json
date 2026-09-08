@@ -1,7 +1,6 @@
 {
   "captures_with_an_unenforced_provenance": 0,
   "findings": [],
-  "fail_open": 0,
   "gate_status": "measured",
   "captures_scanned_at_least": 15
 }
