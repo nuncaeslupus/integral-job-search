@@ -1,165 +1,118 @@
 # Session handover
 
-**2026-09-06.** Board: **185 tasks** — 28 open, 154 merged, 2 cancelled, 1 done.
-`origin/main` at the merge of #384. Eleven PRs merged: #365, #367, #369, #371,
-#373, #375, #376, #380, #382, #383, #384.
+**2026-09-07/08.** Board: **195 tasks** — 36 open, 154 merged, 2 cancelled,
+1 done, 2 blocked. `origin/main` at #385. One pull request open: **#396**,
+which seeds T141–T150.
 
-A **live candidate session for the repository owner**, run with the test-mode
-meta-channel open, which is why almost everything below started as a defect a
-real search hit rather than as a planned task.
+A **live candidate session for the repository owner**, run to the end: the tool
+was taken from the first question to a **sent application** (Grafana Labs, Staff
+AI Engineer, 2nd Horizon, Spain). Only step 12, interview preparation, was not
+exercised. Almost everything below started as a defect that real run hit.
 
-## 1. Six "broken connectors" were one missing engine stage — T130, T135
+## 1. The application was sent, and that is the fixture we now have
 
-Six boards returned nothing and looked individually broken. They were not. The
-sourcing engine had **no detail-fetch stage at all**: a connector could declare
-`detail_url` on a listing row, and nothing ever fetched the advert page, so
-every row on a board whose listing carries no body was dropped for "no text" —
-which reads exactly like a connector whose selectors are wrong.
+Thirteen document revisions produced a two-page CV and a one-page letter, built
+by hand from `docgen.py` + `build_docs.sh` + `style.css` in the candidate's own
+tree. **Those tools are not in this repository** — T142 and T143 are the tasks
+that bring them in, and `docgen.py` is named as the *reference implementation*,
+not a sketch: its shape held across all thirteen revisions.
 
-T135 is the same bug one layer down and is the sharper lesson: `_detail_record`
-built its request with `headers={}`. **`foorilla_en` shipped green and returned
-0 offers live** — 50 rows parsed, 40 advert pages fetched, every one answering
-**200** with the site's 10,836-byte shell. A fixture cannot catch this: the
-fixture is the response, and the bug is in the request.
+T149 is the task to freeze the run's **shape** as an end-to-end fixture over the
+fictional candidate in `tests/fixtures/generation/master.json`. The real run
+stays in `~/.integral-job-search/` and is never committed.
 
-That is now step 7 of the `connector-new` skill, in those words.
+## 2. The profile was nearly empty when the application went out — T145
 
-## 2. What a connector is, settled — T132, T133, T134
+This is the finding that matters most, and it is the owner's own:
 
-Twelve-field closed vocabulary, plus `detail_url` on the list only. Two
-grammars (a CSS subset, JSON paths). `url_pattern` takes `{query}` and `{page}`
-and nothing else. **No field anywhere for a credential**, and `auth:` has
-exactly two values, `none` and `candidate_session`.
+> "todo lo que dice el candidato es oro […] aquí he hecho el trabajo más yo que
+> tú."
 
-T133 added `take:` — `range_low`, `range_high`, `currency`, `last_text_node` —
-which is what makes `€50.000 - €65.000` two numbers instead of one string.
-Every member **fails closed**: text that is not the shape the name describes
-yields nothing, never the unparsed original. 16 partial-extraction contracts,
-6 of them fail-closed, measured into `status/evidence/T32.json`.
+**Measured.** When the CV and letter were sent, `profile/evidence.jsonl` held
+**62 rows spanning one dimension**. A backfill of what that same session had
+already said produced **34 more rows spanning 26 dimensions** — Honeycomb, the
+saxophone, scripts-inside-skills, the leap of faith about no longer reading his
+own PRs, seven voice preferences, and the project figures cut from the CV for
+being stale or unintelligible but worth keeping for an interview.
 
-T134 built `foorilla_en` and `landingjobs_en`. foorilla needed `client: htmx`
-with a different `client_target` per surface (`mc_1` list, `mc_2` detail) —
-found from a HAR the owner supplied, after the board had been ruled unreachable
-by eye. **The capture is what showed it.**
+None of it was new. All of it had been said aloud, or written by the candidate
+into his own CV, hours earlier.
 
-## 3. A `ClaudeBot` disallow does not bind this tool — #365
+Two causes, and T145 covers both:
 
-Re-litigated for the third time, and this time the argument is in CLAUDE.md
-rather than only in a module docstring and a YAML header. RemoteOK was wrongly
-ruled out mid-session on exactly the reasoning those two files already refute.
+- **Capture is opt-in per step.** `profile_capture.capture` is reached only from
+  the intake, constraints, history, traits and feedback drivers. The
+  `application` step — the whole document stretch, where a candidate talks most
+  freely about how they work — has no writer attached.
+- **Nothing elicits.** Even where capture existed, nobody asked. The owner
+  listed the questions that were never put to him: how you work, what kind of
+  projects you make, what you do with your free time, what matters to you while
+  working, what you always try to improve, how you face challenges and what
+  those were, how you react to rules.
 
-The asymmetry, not the argument, was the defect: CLAUDE.md is in context every
-turn and the ledger header is not, so a session forms its opinion before ever
-opening the file that would correct it.
+**Until T145 lands, a session does this by hand**, and announces it in one line
+— *"Añado lo de tus clases de pintura a tu perfil"* — rather than asking.
+`source: "cv_document"` is the right source for anything the candidate writes
+into a document himself; it had **zero rows** before the backfill.
 
-## 4. Connecting a board is now a written procedure — T136, #375
+## 3. A letter went out with a false claim about the candidate — T146
 
-`.claude/skills/connector-new/`. Seven steps, cheap ones first, each able to
-rule the board out. The owner's reason: *"crear conectores debería ser
-relativamente rápido, ya que cualquier usuario puede necesitarlo."*
+The letter said *"I have not used observability tools"*. The candidate had used
+**Honeycomb at Flanks** for years and understands queries and traces. T45's
+manifest traces assertions and has no row to demand for an **absence**, so
+`cv_generation_traceability == 1.0` was green over an invented fact about the
+candidate, in the direction of making him smaller, sent over his name.
 
-Gated on the one judgement nobody can make by eye — whether CPython's
-`robotparser`, used as the second reader, was **competent on that particular
-file**. On a robots.txt opening with `Allow: /` it returns the first matching
-rule and so answers True to everything; an agreement with a parser that cannot
-disagree is not an agreement. foorilla.com is that file, landing.jobs is not.
+`ev-000062` has been retracted in his profile and the corrected rows written.
+The same task covers a **count** that went stale inside one session — *"~1,600
+commits across seven repositories, six published"*.
 
-**The gate's dependency was inverted in review, and the review was a test.**
-The first draft had `integral.connector_procedure` load the skill's script by
-path, and `test_nothing_in_the_codebase_executes_a_contributed_parse_module`
-refused it — `spec_from_file_location` plus `exec_module` is the machinery that
-would let a contributed connector ship code. The judgement now lives in the
-package and the script imports it.
+## 4. The offer that worked came from the employer's own board — T144
 
-## 5. Three tasks seeded from the test-mode triage — #376
+Not from an aggregator. Every connector in `connectors/` points at an aggregator
+or a job board and **none at an ATS host**, so "the market is exhausted" means
+"our aggregators are exhausted". Greenhouse, Lever, Ashby, Workable,
+SmartRecruiters, Teamtailor, Personio and Recruitee each host thousands of
+employers behind one URL shape — one connector per host, bought as data.
 
-- **T137** `t-c56152d9` — nothing tells a candidate session from a session
-  working on the repository. This session was both at once, and only the
-  operator's judgement kept them apart.
-- **T138** `t-85ca22d6` — two offers alike but for the salary can come back in
-  either order. Stated as **dominance**, not as a weight.
-- **T139** `t-9069e62e` — a reason given while rejecting an offer is used once
-  in the reply and then lost. The candidate said *"Applied Research Scientist,
-  eso no sería mi perfil"* and nothing reached `profile/evidence.jsonl`.
+Distinct from **T75** (prefers the employer's copy only when both copies arrive)
+and from **T91** (fixes the loop, not what it has to loop over).
 
-## 6. The search now remembers what it searched for — T140, T139
+## 5. Two silent document corruptions, neither of which failed anything — T148
 
-Both were the same complaint from the owner: *"no guardar esto entre sesiones
-es un error"*, and *"los anuncios que el usuario ha considerado relevantes
-también tienen que guardarse para poder comparar en el futuro"*.
+Paragraphs edited **by index** after an earlier edit had removed one: the
+leap-of-faith and honest-gaps paragraphs were overwritten with duplicates of two
+others. The write, the render and the paragraph count were all correct. And
+`if b.get("text") is not None` dropped the letter's `to` block, so the letter was
+addressed to nobody.
 
-**T140 — `Aim` was never read from disk and never written to it**, its only
-construction in the codebase being a measurement fixture. And `Aim.query`
-joined every term into one string, which every board reads as AND: 50 of 62
-recorded fetches went out as `agentic python engineer`, and the boards that
-AND their terms returned nearly nothing — which reads as a thin market rather
-than a malformed query. A term is a **phrase**; several are searched one at a
-time and merged, which is also what makes an advert attributable to the phrase
-that found it. A board that does not search is still fetched **once**.
+Both were found by running `pdftotext` and reading. `integral.ats.check_document`
+passed both times, **correctly** — the text layer was intact and simply said the
+wrong thing. An ATS contract asserts a document can be read, never that it says
+what it should.
 
-The ranking needed no new store: `offers/_fetches.jsonl` has stamped `query`
-and `offer_ids` per request since T126. Ranked by **unique contribution**
-before volume, and a phrase that returned nothing stays in the ranking,
-because it is the row that says do not spend a run on this again.
+## 6. `files_checked` moves on any docs PR — T150, found by #396 itself
 
-**T139 — the engine for keeping a rejection reason already existed and nothing
-called it.** `feedback.record_decision` writes the words into the advert's
-history *and* into `evidence.jsonl` and rebuilds the weights; T21's
-`orphaned_reasons` already counted a reason that reached one without the
-other. 561 of 567 offers in the owner's tree were still `new`.
+Nine task files, no Python touched, and `make evidence` went red: `453 -> 462`.
+Since **ruff 0.16, `ruff format` formats Markdown**, so
+`status/evidence/T125.json` counts every `.md` in the repository —
+`arsenal/tasks/` alone is 189 of it. Regenerated to 463 in #396; T150 makes it a
+floor.
 
-`presentation_log` adds the caller. Its one real design decision:
-**choosing one advert does not reject the others in its batch.**
-`screened_out` is purge-eligible at sixty days, so marking four rejected
-because the candidate picked the second would schedule the deletion of their
-text for not having been picked first — the opposite of keeping them to
-compare against. Being passed over is a fact about a presentation, not a
-verdict, and weak signal becomes strong by **asking** (`passed_over`), never
-by inferring.
+That is T100's fix for T55 applied to a key T100 could not see:
+`archive_sensitive_evidence_keys` compares the committed record across
+*archiving* a task file, and adding one is not archiving one.
 
-**Two process facts learned the hard way.** `gate_run.sh` reads a task file
-from `origin/main`, not the working copy — deliberately, so a PR cannot
-rewrite the gate that judges it — so correcting a seeded gate block costs its
-own docs PR first (#383). And `make evidence`'s file counts settle only after
-one full run when a module is added; stage the settled value, not the first.
+## What the next session should know
 
-## 7. Open, reported and not fixed
-
-- **`packages_for()` cannot select a `GLOBAL` package.** It matches
-  `country == "ES"` while six packages declare `GLOBAL`, which the `^[A-Z]{2}$`
-  country pattern makes structurally unreachable. Worked around per-session.
-- **The repo ships no live `Fetch`.** Every live run this session used a
-  session-only fetcher written in the scratchpad. An honest UA and
-  `Accept-Encoding: identity` turned tecnoempleo's 403 into 29 offers.
-
-## 8. Traps met, so they are not met again
-
-- **`make evidence` diffs the working tree against the *index*.** Regenerated
-  evidence must be `git add`ed before `open_task_pr.sh`, or it reads as drift.
-  The exception is `S8.json`: staging a pre-archive copy is wrong, because the
-  tick/archive check flips when the task file moves. Restore it from HEAD.
-- **A `: ` in a skill's `description` breaks the YAML and the skill vanishes
-  from the listing with no error.** The budget total went 33 skills to 32 and
-  looked like a successful trim.
-- **`gh pr merge --body` inline was refused by the auto-mode classifier**;
-  `--body-file` is the way through.
-
-## 9. Candidate state — ready for a fresh session
-
-`~/.integral-job-search/profiles/ivan` — **567 offers, 98 carrying a salary
-band** (from 37 at the session's start), 53 evidence rows.
-
-- `search/aim.json` holds **`agentic python engineer` · `agentic ai` ·
-  `python`**, sourced to `ev-000050`, which is the owner's own wording.
-- Three `Applied Research Scientist` adverts are `screened_out` carrying his
-  words — *"yo no soy applied researcher: eso no sería mi perfil"* — and
-  `orphaned_reasons` reads **0**, so the reason is in the advert's history and
-  in `evidence.jsonl` both. The other research-titled adverts (security
-  research, market research) were **left alone**: generalising his sentence to
-  them is the inference this design refuses to make.
-- Recorded position is still `preferences` / `L0`, because every search this
-  session was driven by hand rather than through the step runtime. A new
-  session will offer to resume there; the offers are already collected.
-
-Salary publication, not market thinness, is the binding constraint: the
-agentic + python + remote intersection went from 8 offers to 13 with a band.
+- **#396 must merge before any fresh clone can see T141–T150.** `task_select.py`
+  reads task files from the default branch.
+- **T148 and T143 are blocked on T142** — the block vocabulary lives there.
+- **T145 is sized L and is the most valuable of the ten.** Everything else in
+  this list is one gap; T145 is the mechanism whose absence produced several of
+  them.
+- **The gate is green and CI is still dead.** `bash tools/verified_gate.sh <sha>`
+  is the substitute, verdict block on the pull request, and merge only while the
+  head is the SHA it names.
+- The candidate's evidence rows are written in **Spanish**, matching the 62 rows
+  already there. The repository itself is English.
