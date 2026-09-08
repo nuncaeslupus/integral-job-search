@@ -493,6 +493,41 @@ That is **T150**: the count is committed as the floor `files_checked_at_least`
 `unstable_evidence_keys` compares each registered record across **both** mutations —
 a file added and a task file archived. T100's check could only ever see the second.
 
+**The mutation is applied to the tree, not to the number, and that distinction is the
+whole check.** The first version of T150's gate transformed the *measurement*:
+`{**measured, key: population + 1}` for a hand-written `key`. Two keys were ever
+written, and they were the two already known to be broken, so the check could
+re-confirm the fixes it shipped with and could not discover a third — while the third,
+`T58.bundle_files`, sat committed on `main` and the gate reported a clean zero over it.
+The added-file mutation now **writes a real Markdown file** into every top-level
+directory that already holds Markdown, hands those paths to every registered
+measurement, and deletes them again; one added file therefore moves every population
+derived from it at once, exactly as a real pull request does. A key nobody named moves
+with the rest. Caught by the second reader on the pull request that introduced the
+gate, who added a second census key to a committed record and watched it report
+`stable`.
+
+Two consequences worth knowing before editing any of this:
+
+- **The registry is discovered, not listed.** A module joins by declaring
+  `EVIDENCE_SOURCES = (("T55", measure, record),)` beside the code that counts;
+  `repo_gate` finds those declarations by parsing the source (never `importlib` —
+  `src/integral/` may not load code, and the connector contract depends on that) and
+  resolves them through `sys.modules`. A module that declares one and is not imported
+  by `repo_gate` makes the gate `unmeasured` and says so by name.
+- **Every registered source must be moved by some mutation, and both denominators are
+  asserted** (`MINIMUM_EVIDENCE_KEYS_COMPARED`, `MINIMUM_EVIDENCE_SOURCES_COMPARED`).
+  Pooled across the registry, one source's coverage could degrade to nothing — deleted,
+  emptied, or blind to the tree — while another kept the run reading `measured` with
+  both mutations advertised. The only trace was a denominator nobody read.
+
+**`ruff format` reads two unrelated populations, so there are two floors.** Markdown is
+242 files and grows about nine per task-seeding pull request; Python is 227. A single
+total floor of 300 is satisfied by Markdown alone within six or seven such PRs, at which
+point a scan that read **no Python at all** scores a clean pass — and even today it does
+not catch losing `src/` (469 − 104 = 365). `MINIMUM_PYTHON_FILES_FORMATTED` says the
+thing the conflated total cannot.
+
 **One evidence key is now archive-*driven* by design, and it is not that finding.**
 Since D-27, `S8.json`'s `merged_tasks_with_an_unticked_plan_row` requires every task
 archived in `arsenal/tasks/_history/` with `status: merged` to carry a ticked `☑` row

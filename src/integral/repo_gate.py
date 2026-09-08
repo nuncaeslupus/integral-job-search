@@ -64,14 +64,15 @@ import re
 import shlex
 import subprocess
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from integral import naming
+from integral import arsenal_source, naming
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-22.json"
@@ -677,36 +678,27 @@ def write_evidence_reach(
 DEFAULT_T125_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T125.json"
 
 
-def measure_formatting(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
-    """T125: how many files `ruff format` would still rewrite.
+#: What ruff says instead of a summary when the restriction matches no file.
+_RUFF_FOUND_NOTHING = "No Python files found"
 
-    Lives here rather than in a module of its own because it is the same
-    question this file already asks — whether the repo's own checking machinery
-    is wired up — and a whole module for one `subprocess.run` would be more
-    scaffolding than measurement.
 
-    Two numbers, not one. `unformatted_files` alone is satisfiable by a repo
-    that cannot run the formatter at all, so `files_checked` is the denominator
-    and `lint_runs_the_check` records whether anything would *notice* a
-    regression: a formatted tree with no check in `make lint` drifts back within
-    one session, which is exactly how this task came to exist.
+def _ruff_format_population(repo_root: Path, *restrict: str) -> tuple[int, int] | str:
+    """`(would_reformat, already_formatted)` from one `ruff format --check`, or why not.
+
+    Returned rather than raised because every caller turns a failure into
+    `gate_status: "unmeasured"` with the reason attached — a metric that cannot
+    say why it did not run is the clean zero this repository refuses.
     """
     try:
         result = subprocess.run(
-            ["uv", "run", "--extra", "dev", "ruff", "format", "--check", "."],
+            ["uv", "run", "--extra", "dev", "ruff", "format", "--check", *restrict, "."],
             capture_output=True,
             text=True,
             cwd=repo_root,
             check=False,
         )
     except OSError as exc:
-        return {
-            "unformatted_files": -1,
-            "files_checked": 0,
-            "lint_runs_the_check": False,
-            "gate_status": "unmeasured",
-            "reasons": [f"ruff could not be run: {exc}"],
-        }
+        return f"ruff could not be run: {exc}"
     output = result.stdout + result.stderr
     # ruff's summary line, not a per-file marker. An earlier version of this
     # counted `^Would reformat: ` lines, which `--check` does not emit at all —
@@ -719,65 +711,174 @@ def measure_formatting(repo_root: Path = _REPO_ROOT) -> dict[str, Any]:
         output,
     )
     if summary is None:
+        # An empty population is a number, not a parse failure. Ruff prints this
+        # warning and no summary when the restriction matches nothing, and a
+        # zero here is exactly what the floor below exists to refuse — turning it
+        # into "could not be measured" would report the same `unmeasured` for a
+        # scan that read no Python and for a ruff that would not start, which are
+        # different findings.
+        if _RUFF_FOUND_NOTHING in output:
+            return 0, 0
+        return f"ruff printed no summary line to parse: {output[-200:]!r}"
+    return int(summary.group(1) or 0), int(summary.group(2) or summary.group(3) or 0)
+
+
+#: What to pass `ruff format --check` to make it read the Python half of the
+#: tree only. Since ruff 0.16 the formatter also reads Markdown, and the two
+#: populations are unrelated: `arsenal/tasks/` alone grows by about nine files
+#: per task-seeding pull request, while `src/` moves when somebody writes code.
+#: A single total over both cannot express "the code was scanned" — which is
+#: the whole of T150's F5.
+_PYTHON_ONLY = ("--exclude", "*.md")
+
+
+def measure_formatting(
+    repo_root: Path = _REPO_ROOT,
+    *,
+    added: frozenset[str] = frozenset(),
+    archived: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """T125: how many files `ruff format` would still rewrite.
+
+    Lives here rather than in a module of its own because it is the same
+    question this file already asks — whether the repo's own checking machinery
+    is wired up — and a whole module for one `subprocess.run` would be more
+    scaffolding than measurement.
+
+    Not one number. `unformatted_files` alone is satisfiable by a repo that
+    cannot run the formatter at all, so `files_checked` is the denominator and
+    `lint_runs_the_check` records whether anything would *notice* a regression:
+    a formatted tree with no check in `make lint` drifts back within one
+    session, which is exactly how this task came to exist.
+
+    `python_files_checked` is the second denominator, and it is there because
+    the first one conflates two populations that move for unrelated reasons.
+    A total floor of 300 over a 469-file tree is satisfied today by Markdown
+    alone once Markdown passes 300, and Markdown is at 242 and climbing about
+    nine files per task-seeding pull request — at which point a run that read
+    **no Python at all** would score a clean pass. It also does not catch losing
+    `src/` today: 469 minus 104 = 365, comfortably over 300. A floor over the Python
+    half says the thing the total cannot.
+
+    `added` and `archived` are accepted and unused. Ruff reads the working
+    tree, so a file that is really on disk is already in this measurement's
+    population whether or not git has been told about it; the arguments are
+    here because T150's stability gate measures every registered source through
+    one signature, so that a single mutation of the *tree* moves every
+    population derived from it at once.
+    """
+    total = _ruff_format_population(repo_root)
+    if isinstance(total, str):
         return {
             "unformatted_files": -1,
             "files_checked": 0,
+            "python_files_checked": 0,
             "lint_runs_the_check": False,
             "gate_status": "unmeasured",
-            "reasons": [f"ruff printed no summary line to parse: {output[-200:]!r}"],
+            "reasons": [total],
         }
-    would_reformat = int(summary.group(1) or 0)
-    already = int(summary.group(2) or summary.group(3) or 0)
+    python = _ruff_format_population(repo_root, *_PYTHON_ONLY)
+    if isinstance(python, str):
+        return {
+            "unformatted_files": -1,
+            "files_checked": sum(total),
+            "python_files_checked": 0,
+            "lint_runs_the_check": False,
+            "gate_status": "unmeasured",
+            "reasons": [f"the Python-only population could not be read: {python}"],
+        }
+    would_reformat, already = total
     files_checked = would_reformat + already
+    python_files_checked = sum(python)
     lint_checks = "ruff format --check" in (repo_root / "Makefile").read_text(encoding="utf-8")
     measured: dict[str, Any] = {
         "unformatted_files": would_reformat,
         "files_checked": files_checked,
+        "python_files_checked": python_files_checked,
         "lint_runs_the_check": lint_checks,
         "gate_status": "measured",
     }
-    if files_checked < MINIMUM_FILES_FORMATTED:
-        # A zero over a scan that found almost nothing is what a broken
-        # invocation also reports.
+    # A zero over a scan that found almost nothing is what a broken invocation
+    # also reports — and a zero over a scan that read only Markdown is what a
+    # formatter pointed at the wrong half of the tree reports.
+    reasons = [
+        f"only {found} {half} file(s) checked (floor {floor}) — a pass over nothing is not a pass"
+        for found, floor, half in (
+            (files_checked, MINIMUM_FILES_FORMATTED, "total"),
+            (python_files_checked, MINIMUM_PYTHON_FILES_FORMATTED, "Python"),
+        )
+        if found < floor
+    ]
+    if reasons:
         measured["gate_status"] = "unmeasured"
-        measured["reasons"] = [
-            f"only {files_checked} file(s) checked (floor {MINIMUM_FILES_FORMATTED}) — "
-            "a pass over nothing is not a pass"
-        ]
+        measured["reasons"] = reasons
     return measured
 
 
-#: The tree held 427 files when T125 landed. The floor sits well below that so
+#: The tree held 469 files when T150 landed. The floor sits well below that so
 #: deleting a module never trips it, and a broken invocation reporting two does.
 MINIMUM_FILES_FORMATTED = 300
+
+#: The Python half of the same scan: 227 files today, of which `src/` is 104 and
+#: `tests/` 112. The floor sits at the ratio the other two floors already use
+#: (`MINIMUM_SCANNED` is 500/748 = 67%, this is 150/227 = 66%), which is what
+#: makes it catch what it is for — losing all of `src/` leaves 123, losing all of
+#: `tests/` leaves 115, and a scan that read only Markdown leaves 0 — without
+#: turning red on a legitimate deletion. The second reader recommended ~200; at
+#: 88% of today's count that trips on any routine removal of a couple of dozen
+#: files, which is the drift this task exists to remove, and it catches nothing
+#: 150 does not.
+MINIMUM_PYTHON_FILES_FORMATTED = 150
 
 
 def record_formatting(measured: dict[str, Any]) -> dict[str, Any]:
     """What is committed, out of what `measure_formatting` measured.
 
-    The one difference is the denominator, and it is `naming.record`'s
-    difference for `naming.record`'s reason (T100). `files_checked` measures
-    nothing about the code: it exists so that `unformatted_files == 0` cannot
-    rest on a scan that found nothing. Committed as an exact value it moved on
-    every pull request that added a file — and since ruff 0.16 the formatter
-    reads **Markdown**, so a pull request that adds nine task files and no
-    Python at all took it from 453 to 462 and `make evidence` went red for a
-    reason that had nothing to do with formatting (T150).
+    The difference is the denominators, and it is `naming.record`'s difference
+    for `naming.record`'s reason (T100). `files_checked` measures nothing about
+    the code: it exists so that `unformatted_files == 0` cannot rest on a scan
+    that found nothing. Committed as an exact value it moved on every pull
+    request that added a file — and since ruff 0.16 the formatter reads
+    **Markdown**, so a pull request that adds nine task files and no Python at
+    all took it from 453 to 462 and `make evidence` went red for a reason that
+    had nothing to do with formatting (T150). `python_files_checked` is the same
+    kind of number and is committed the same way.
 
-    The floor does the denominator's whole job and does not move. The number is
-    not hidden — the run still prints what it saw, and refuses to score at all
-    below the floor.
+    The floors do the denominators' whole job and do not move. The live counts
+    are not hidden: `_main` prints them beside their floors on every run, and
+    the measurement refuses to score at all below either one.
     """
-    committed = {key: value for key, value in measured.items() if key != "files_checked"}
+    committed = {
+        key: value
+        for key, value in measured.items()
+        if key not in ("files_checked", "python_files_checked")
+    }
     committed["files_checked_at_least"] = MINIMUM_FILES_FORMATTED
+    committed["python_files_checked_at_least"] = MINIMUM_PYTHON_FILES_FORMATTED
     return committed
 
 
+#: This module's declaration to the evidence-stability gate below. It is
+#: discovered exactly like `naming`'s and `arsenal_source`'s, through the same
+#: import — `repo_gate` gets no privileged place in its own registry, because a
+#: registry whose author can hand-add themselves is a registry that can be
+#: hand-trimmed to the sources that happen to pass.
+EVIDENCE_SOURCES = (("T125", measure_formatting, record_formatting),)
+
+
 def write_formatting_evidence(
-    evidence: Path = DEFAULT_T125_EVIDENCE_PATH, repo_root: Path = _REPO_ROOT
+    evidence: Path = DEFAULT_T125_EVIDENCE_PATH,
+    repo_root: Path = _REPO_ROOT,
+    measured: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Measure and record `status/evidence/T125.json`."""
-    committed = record_formatting(measure_formatting(repo_root))
+    """Measure and record `status/evidence/T125.json`.
+
+    `measured` lets a caller that has already run the measurement hand it in
+    rather than pay for a second pair of `ruff` invocations — `_main` prints the
+    live populations beside their floors, so it needs the measurement as well as
+    the record.
+    """
+    committed = record_formatting(measure_formatting(repo_root) if measured is None else measured)
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(
         json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
@@ -798,90 +899,222 @@ A_TASK_FILE_IS_ARCHIVED = "a task file is archived"
 
 @dataclass(frozen=True)
 class EvidenceSource:
-    """One committed evidence record, and how the tree's shape moves it.
+    """One committed evidence record, and how to produce it from a tree.
 
     `measure` is the live measurement and `record` is what gets committed out
-    of it — the same pair `naming.measure`/`naming.record` already are.
-    `mutations` maps a mutation name to a function of `(repo_root, measured)`
-    returning the measurement the *mutated* tree would produce.
+    of it — the same pair `naming.measure`/`naming.record` already are. There is
+    deliberately **no per-source mutation** here. The first version of this gate
+    had one, a map from a mutation name to a transform of the *measurement*, and
+    every transform it could contain was `{**measured, key: population + 1}` for
+    a hand-written `key`. Two keys were written, and they were the two already
+    known to be broken, so the check could re-confirm the fixes it shipped with
+    and could not discover a third — while a third, `T58.bundle_files`, sat
+    committed in the tree and the gate reported a clean zero over it.
 
-    A mutation is stated as a transform of the measurement rather than
-    performed on disk because the alternative is not available here: measuring
-    a whole second tree means regenerating evidence in it, and this metric is
-    itself part of `make evidence`, which would then run inside itself. What
-    keeps a transform from being a comfortable fiction is that it must
-    *actually move the measurement it is given* — a mutation that changes
-    nothing is dropped from the denominator below, so a registry of identity
-    transforms reports `unmeasured`, never a clean zero.
+    A mutation is now a mutation of the **tree**, applied once for every source,
+    and each source's `measure` takes `added`/`archived` populations so that one
+    added file moves every key derived from it simultaneously — which is what an
+    added file actually does.
     """
 
     name: str
-    measure: Callable[[Path], dict[str, Any]]
+    measure: Callable[..., dict[str, Any]]
     record: Callable[[dict[str, Any]], dict[str, Any]]
-    mutations: Mapping[str, Callable[[Path, dict[str, Any]], dict[str, Any]]]
 
 
-def _one_more_file(key: str) -> Callable[[Path, dict[str, Any]], dict[str, Any]]:
-    """The measurement a tree with one more Markdown file in it would produce.
+#: The name of the file the added-file mutation really writes. A basename rather
+#: than a path because it is written once per location below.
+PROBE_BASENAME = "_evidence_stability_probe.md"
 
-    One more file, and no new finding in it: a task file adds nothing to
-    `unformatted_files` (the formatter would rewrite it otherwise and `make
-    lint` is red) and nothing to the old-name counts. Measured, not assumed —
-    `ruff format --check` over a directory of *n* Markdown files reports *n*,
-    which `test_adding_a_markdown_file_adds_one_to_the_formatter_population`
-    holds down.
+#: Its contents. Plain prose on purpose: `ruff format` must leave it alone (or
+#: `unformatted_files` moves for a reason that is the probe's fault and not the
+#: tree's) and `naming.measure` must find no old name in it.
+PROBE_TEXT = (
+    "# evidence stability probe\n"
+    "\n"
+    "A tree with one more Markdown file in it, for as long as one measurement\n"
+    "takes. Written and deleted again by the evidence stability gate.\n"
+)
+
+
+def probe_paths(repo_root: Path = _REPO_ROOT) -> tuple[str, ...]:
+    """Where the added-file mutation puts its file, derived from the tree.
+
+    One probe in every top-level location that already holds Markdown, because
+    a census over a path **prefix** only moves when the added file lands under
+    that prefix — `T58.bundle_files` counts `claude-arsenal/` and nothing else.
+    A hand-written list of locations would be the same defect as a hand-written
+    list of keys, one level up: it could only ever cover the prefixes somebody
+    thought of. Reading them off the tree means a new top-level directory of
+    documents is probed the day it exists.
     """
+    roots = set()
+    for path in arsenal_source.tracked_files(repo_root):
+        if not path.endswith(".md"):
+            continue
+        head, slash, _ = path.partition("/")
+        roots.add(head if slash else "")
+    return tuple(sorted(f"{root}/{PROBE_BASENAME}" if root else PROBE_BASENAME for root in roots))
 
-    def mutate(repo_root: Path, measured: dict[str, Any]) -> dict[str, Any]:
-        population = measured.get(key)
-        if not isinstance(population, int) or isinstance(population, bool):
-            return dict(measured)
-        return {**measured, key: population + 1}
 
-    return mutate
+@contextmanager
+def _a_markdown_file_is_added(repo_root: Path) -> Iterator[dict[str, Any] | None]:
+    """Really write the files, hand the paths to every source, delete them again.
+
+    Really, because the alternative was the defect. `git ls-files` cannot see an
+    untracked file and `ruff` cannot see a file that is not there, so both halves
+    are needed for one mutation to be the same event for every source: the file
+    exists on disk *and* the population each source walks is told about it.
+
+    A path that already exists is not overwritten and aborts the mutation — a
+    leftover probe means a previous run died, and measuring against somebody
+    else's file is worse than reporting that this could not be measured.
+    """
+    paths = probe_paths(repo_root)
+    written: list[Path] = []
+    try:
+        for relative in paths:
+            target = repo_root / relative
+            if target.exists():
+                yield None
+                return
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(PROBE_TEXT, encoding="utf-8")
+            written.append(target)
+        yield {"added": frozenset(paths)} if written else None
+    finally:
+        for target in written:
+            target.unlink(missing_ok=True)
 
 
-def _with_a_task_file_archived(repo_root: Path, measured: dict[str, Any]) -> dict[str, Any]:
-    """T100's mutation, reused: the sweep with one live task file in `_history/`."""
+@contextmanager
+def _a_task_file_is_archived(repo_root: Path) -> Iterator[dict[str, Any] | None]:
+    """T100's mutation, reused: one live task file measured as if in `_history/`."""
     candidate = naming.first_task_file(repo_root)
-    if candidate is None:
-        return dict(measured)
-    return naming.measure(repo_root, archived=frozenset({candidate}))
+    yield None if candidate is None else {"archived": frozenset({candidate})}
 
 
-def evidence_sources() -> tuple[EvidenceSource, ...]:
-    """The records this gate compares across both mutations.
-
-    Every measurement that counts a **population of files** belongs here, and
-    the two that do today are the two that have already been caught committing
-    one: T55's `files_scanned` (fixed by T100) and T125's `files_checked`
-    (fixed by T150). A new sweep that commits a census and is not registered
-    here is not covered — which is why the fix is the floor in each record and
-    this is the check that the floor is really doing its job.
-    """
+def tree_mutations() -> tuple[tuple[str, Callable[[Path], Any]], ...]:
+    """The tree changes every committed evidence key has to survive."""
     return (
-        EvidenceSource(
-            name="T125",
-            measure=measure_formatting,
-            record=record_formatting,
-            mutations={A_FILE_IS_ADDED: _one_more_file("files_checked")},
-        ),
-        EvidenceSource(
-            name="T55",
-            measure=naming.measure,
-            record=naming.record,
-            mutations={
-                A_FILE_IS_ADDED: _one_more_file("files_scanned"),
-                A_TASK_FILE_IS_ARCHIVED: _with_a_task_file_archived,
-            },
-        ),
+        (A_FILE_IS_ADDED, _a_markdown_file_is_added),
+        (A_TASK_FILE_IS_ARCHIVED, _a_task_file_is_archived),
     )
+
+
+def modules_declaring_evidence_sources(src_dir: Path = DEFAULT_SRC_DIR) -> tuple[str, ...]:
+    """Module stems carrying a top-level `EVIDENCE_SOURCES`, read and not run.
+
+    Parsed with `ast`, never imported, and that is not squeamishness:
+    `test_nothing_in_the_codebase_executes_a_contributed_parse_module` refuses
+    `importlib.import_module` anywhere under `src/integral/`, because the
+    connector contract's whole safety story is that this package loads no code
+    it did not ship. Discovery does not need to run anything — the declaration
+    is a literal at module level — and the callables it names are reached
+    through `sys.modules`, for modules this one already imports. A declaring
+    module that is not imported here is *reported*, never silently dropped;
+    `evidence_sources_not_imported` is that half.
+    """
+    declaring: list[str] = []
+    for path in sorted(src_dir.glob("*.py")):
+        if path.stem == "__init__":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                targets: list[ast.expr] = list(node.targets)
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if any(
+                isinstance(target, ast.Name) and target.id == "EVIDENCE_SOURCES"
+                for target in targets
+            ):
+                declaring.append(path.stem)
+                break
+    return tuple(declaring)
+
+
+def _declared_module(stem: str) -> Any | None:
+    """The imported module for `integral.<stem>`, or `None`.
+
+    Resolved by `__spec__` and not by the key alone, because `make evidence` runs
+    `python -m integral.repo_gate` and that puts this very file in `sys.modules`
+    as `__main__`. A lookup by dotted name found T55 and T58 and missed T125,
+    and the gate reported `unmeasured` under `make evidence` while every test in
+    the suite passed — which is the check being fail-closed, and is how this was
+    found rather than shipped.
+    """
+    module = sys.modules.get(f"integral.{stem}")
+    if module is not None:
+        return module
+    for candidate in list(sys.modules.values()):
+        spec = getattr(candidate, "__spec__", None)
+        if spec is not None and getattr(spec, "name", None) == f"integral.{stem}":
+            return candidate
+    return None
+
+
+def evidence_sources_not_imported(src_dir: Path = DEFAULT_SRC_DIR) -> tuple[str, ...]:
+    """Modules that declare a source this file cannot reach.
+
+    The fail-open shape this exists to close: discovery through `sys.modules`
+    sees a declaration only when something already imported the module, so a
+    fourth census module added tomorrow would be *found* by the AST scan and
+    *missing* from the registry, and the gate would report a clean zero over it
+    — which is the F2 defect a second time. Anything named here makes the
+    measurement `unmeasured`, and the fix is one import at the top of this file.
+    """
+    return tuple(
+        stem
+        for stem in modules_declaring_evidence_sources(src_dir)
+        if _declared_module(stem) is None
+    )
+
+
+def evidence_sources(src_dir: Path = DEFAULT_SRC_DIR) -> tuple[EvidenceSource, ...]:
+    """Every source, discovered from the modules that declare one.
+
+    Not a literal tuple in this file. The literal tuple named T55 and T125 —
+    the two records already caught committing a file census — so the registry
+    could not cover a third even in principle, and `T58.bundle_files` was that
+    third, committed on `main`, while this gate reported zero unstable keys.
+
+    A module joins by declaring `EVIDENCE_SOURCES`, a tuple of
+    `(name, measure, record)`, next to the code that does the counting, rather
+    than by somebody remembering to edit a list here.
+    """
+    found: list[EvidenceSource] = []
+    for stem in modules_declaring_evidence_sources(src_dir):
+        module = _declared_module(stem)
+        if module is None:
+            continue
+        for name, measure, record in module.EVIDENCE_SOURCES:
+            found.append(EvidenceSource(name=name, measure=measure, record=record))
+    return tuple(sorted(found, key=lambda source: source.name))
+
+
+#: The denominator's floor. Today's registry compares 22 committed keys across
+#: the mutations that move them; losing any one of the three sources costs at
+#: least five. Asserted, because a silently shrinking denominator was how a
+#: source could be deleted outright while the record still read `measured` with
+#: both mutations advertised and zero unstable keys — the only trace was this
+#: number moving, and nothing read it.
+MINIMUM_EVIDENCE_KEYS_COMPARED = 18
+
+#: And the registry's own floor, for the same reason said about sources rather
+#: than keys. Two independent catches for one deletion is deliberate: the key
+#: count also moves when a record legitimately gains or loses a field.
+MINIMUM_EVIDENCE_SOURCES_COMPARED = 3
 
 
 def measure_evidence_stability(
     repo_root: Path = _REPO_ROOT,
     *,
     sources: Sequence[EvidenceSource] | None = None,
+    minimum_keys: int = MINIMUM_EVIDENCE_KEYS_COMPARED,
+    minimum_sources: int = MINIMUM_EVIDENCE_SOURCES_COMPARED,
 ) -> dict[str, Any]:
     """T150's gate: `unstable_evidence_keys`.
 
@@ -890,66 +1123,132 @@ def measure_evidence_stability(
     red on pull requests it has no opinion about, which is the state that
     teaches sessions to expect red.
 
-    Three things make the zero mean something:
+    What makes the zero mean something, and each clause is a hole that was open:
 
-    - a mutation that leaves the measurement untouched is **not a comparison**
-      and is not counted — the self-comparison T100's `first_task_file` was
-      rewritten to avoid;
-    - `evidence_keys_compared` is the denominator, so a `record` that reached
-      stability by dropping all of its keys scores zero over zero and is
-      `unmeasured`;
-    - **both** mutations must be exercised somewhere in the registry. T100 was
-      green while blind to one of them; a run that has quietly lost the added-
-      file half must not read like a pass.
+    - the mutation is applied to the **tree**, and every source is measured
+      through it, so any key derived from the file population moves at once. A
+      transform that bumped one named integer could only ever re-confirm the
+      keys it was told about;
+    - a mutation that leaves a source's measurement untouched is **not a
+      comparison** and is not counted — the self-comparison T100's
+      `first_task_file` was rewritten to avoid;
+    - **every registered source must be moved by some mutation.** A source
+      whose measurement ignores the tree, or whose `record` returns nothing,
+      contributes no comparison, and pooling coverage across the registry let
+      exactly that vanish while the other source kept the run looking green;
+    - **every mutation must move some source**, so a run that has quietly lost
+      the added-file half does not read like a pass;
+    - `evidence_keys_compared` and `evidence_sources_compared` are asserted
+      against floors, so a source deleted from the registry is a finding rather
+      than a smaller number nobody reads.
+
+    `minimum_keys` and `minimum_sources` are the floors, and they are arguments
+    for the same reason `repo_root` is: a test drives a registry of one source
+    over a repository of three files, and a floor written for this tree would
+    make every such test `unmeasured` for a reason that is not the finding.
+    Nothing in the run path passes them — `write_evidence_stability` and `_main`
+    take the module constants, and `test_the_gate_asserts_the_committed_floors`
+    holds that down.
     """
     registry = evidence_sources() if sources is None else tuple(sources)
     unstable: list[str] = []
     skipped: list[str] = []
-    exercised: set[str] = set()
     keys_compared = 0
-    comparisons = 0
+    moved_by_source = {source.name: 0 for source in registry}
+    moved_by_mutation = {name: 0 for name, _ in tree_mutations()}
+    baseline = {source.name: source.measure(repo_root) for source in registry}
 
-    for source in registry:
-        measured = source.measure(repo_root)
-        live = source.record(measured)
-        for mutation, mutate in sorted(source.mutations.items()):
-            mutated = mutate(repo_root, measured)
-            if mutated == measured:
-                skipped.append(f"{source.name}: {mutation} moved nothing to compare")
+    for mutation, apply in tree_mutations():
+        with apply(repo_root) as population:
+            if population is None:
+                skipped.append(f"{mutation}: could not be applied to this tree")
                 continue
-            after = source.record(mutated)
-            compared = live.keys() | after.keys()
-            if not compared:
-                skipped.append(f"{source.name}: {mutation} left no committed key to compare")
-                continue
-            comparisons += 1
-            exercised.add(mutation)
-            keys_compared += len(compared)
-            unstable.extend(
-                f"{source.name}.{key} moves when {mutation}"
-                for key in sorted(compared)
-                if live.get(key) != after.get(key)
-            )
+            for source in registry:
+                measured = baseline[source.name]
+                mutated = source.measure(repo_root, **population)
+                if mutated == measured:
+                    skipped.append(f"{source.name}: {mutation} moved nothing to compare")
+                    continue
+                live, after = source.record(measured), source.record(mutated)
+                compared = live.keys() | after.keys()
+                if not compared:
+                    skipped.append(f"{source.name}: {mutation} left no committed key to compare")
+                    continue
+                moved_by_source[source.name] += 1
+                moved_by_mutation[mutation] += 1
+                keys_compared += len(compared)
+                unstable.extend(
+                    f"{source.name}.{key} moves when {mutation}"
+                    for key in sorted(compared)
+                    if live.get(key) != after.get(key)
+                )
 
+    exercised = sorted(name for name, moved in moved_by_mutation.items() if moved)
     result: dict[str, Any] = {
         "unstable_evidence_keys": len(unstable),
         "evidence_keys_compared": keys_compared,
-        "mutations_compared": sorted(exercised),
+        "evidence_sources_compared": sum(1 for moved in moved_by_source.values() if moved),
+        "sources_compared": sorted(name for name, moved in moved_by_source.items() if moved),
+        "mutations_compared": exercised,
         "gate_status": "measured",
         "unstable": unstable,
     }
-    missing = sorted({A_FILE_IS_ADDED, A_TASK_FILE_IS_ARCHIVED} - exercised)
-    if comparisons == 0 or missing:
+    reasons = [
+        *(
+            f"{stem} declares an evidence source that `repo_gate` does not import, so the "
+            "registry cannot reach it — add it to this module's imports"
+            for stem in evidence_sources_not_imported()
+        ),
+        *(
+            f"no evidence record was compared across {mutation}"
+            for mutation, moved in sorted(moved_by_mutation.items())
+            if not moved
+        ),
+        *(
+            f"{name} was moved by no mutation — it is in the registry and is measuring nothing"
+            for name, moved in sorted(moved_by_source.items())
+            if not moved
+        ),
+        *(
+            [
+                f"only {keys_compared} committed key(s) compared "
+                f"(floor {minimum_keys}) — a source has left the registry"
+            ]
+            if keys_compared < minimum_keys
+            else []
+        ),
+        *(
+            [
+                f"only {result['evidence_sources_compared']} source(s) compared "
+                f"(floor {minimum_sources})"
+            ]
+            if result["evidence_sources_compared"] < minimum_sources
+            else []
+        ),
+    ]
+    if reasons:
         result["gate_status"] = "unmeasured"
-        result["reasons"] = [
-            *(
-                [f"no evidence record was compared across {mutation}" for mutation in missing]
-                if missing
-                else []
-            ),
-            *skipped,
-        ]
+        result["reasons"] = [*reasons, *skipped]
     return result
+
+
+def record_evidence_stability(measured: dict[str, Any]) -> dict[str, Any]:
+    """What is committed, out of what was measured.
+
+    The gate that exists to stop exact denominators being committed does not get
+    to commit two of its own. `evidence_keys_compared` moves whenever any
+    registered record gains a field; `evidence_sources_compared` moves whenever a
+    module joins the registry. Both are asserted against their floors inside
+    `measure_evidence_stability`, and it is the floors that are written down.
+    """
+    committed = {
+        key: value
+        for key, value in measured.items()
+        if key not in ("evidence_keys_compared", "evidence_sources_compared")
+    }
+    committed["evidence_keys_compared_at_least"] = MINIMUM_EVIDENCE_KEYS_COMPARED
+    committed["evidence_sources_compared_at_least"] = MINIMUM_EVIDENCE_SOURCES_COMPARED
+    return committed
 
 
 def write_evidence_stability(
@@ -957,9 +1256,12 @@ def write_evidence_stability(
 ) -> dict[str, Any]:
     """Measure and record `status/evidence/T150.json`."""
     measured = measure_evidence_stability(repo_root)
+    committed = record_evidence_stability(measured)
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return measured
+    evidence.write_text(
+        json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return committed
 
 
 def _main(argv: list[str]) -> int:
@@ -1003,10 +1305,40 @@ def _main(argv: list[str]) -> int:
 
     d22 = measure() if args.check else write_evidence(Path(args.write_evidence))
     t85 = measure_evidence_reach() if args.check else write_evidence_reach()
-    t125 = record_formatting(measure_formatting()) if args.check else write_formatting_evidence()
-    t150 = measure_evidence_stability() if args.check else write_evidence_stability()
+    t125_measured = measure_formatting()
+    t125 = (
+        record_formatting(t125_measured)
+        if args.check
+        else write_formatting_evidence(measured=t125_measured)
+    )
+    t150_measured = measure_evidence_stability()
+    t150 = record_evidence_stability(t150_measured) if args.check else write_evidence_stability()
 
-    print(json.dumps({"D-22": d22, "T85": t85, "T125": t125, "T150": t150}, ensure_ascii=False))
+    # The live counts the records replaced with floors. Committing a census was
+    # the defect; hiding it was never the fix, and the sentence in
+    # `record_formatting` that says the number is still printed has to be true.
+    populations = {
+        "files_checked": t125_measured["files_checked"],
+        "files_checked_floor": MINIMUM_FILES_FORMATTED,
+        "python_files_checked": t125_measured["python_files_checked"],
+        "python_files_checked_floor": MINIMUM_PYTHON_FILES_FORMATTED,
+        "evidence_keys_compared": t150_measured["evidence_keys_compared"],
+        "evidence_keys_compared_floor": MINIMUM_EVIDENCE_KEYS_COMPARED,
+        "evidence_sources_compared": t150_measured["evidence_sources_compared"],
+        "evidence_sources_compared_floor": MINIMUM_EVIDENCE_SOURCES_COMPARED,
+    }
+    print(
+        json.dumps(
+            {
+                "D-22": d22,
+                "T85": t85,
+                "T125": t125,
+                "T150": t150,
+                "populations": populations,
+            },
+            ensure_ascii=False,
+        )
+    )
     for reason in d22["unenforced"]:
         print(reason, file=sys.stderr)
     if "ci_unmeasured_reason" in d22:

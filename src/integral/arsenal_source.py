@@ -95,9 +95,39 @@ def vendored_skills(root: Path = _REPO_ROOT) -> list[str]:
     return sorted(d.name for d in skills.iterdir() if (d / VENDOR_MARKER).is_file())
 
 
-def measure(root: Path = _REPO_ROOT) -> dict[str, Any]:
-    """T58's gate."""
-    files = tracked_files(root)
+#: The floor `bundle_files` is asserted against, and what the record carries in
+#: its place. `bundle_files` is a **denominator**: it exists so that
+#: `upstream_subtree_files == 0` cannot rest on a tree where the bundle is gone
+#: too. Committed as an exact value it moved on every bundle refresh that added
+#: one `references/*.md` — T125's `files_checked` and T55's `files_scanned` for
+#: the third time, and the instance that was still sitting in `T58.json` when
+#: T150's own gate reported a clean zero over it. The bundle holds 47 files
+#: today; the floor sits well below that, so upstream dropping a script is not a
+#: red gate and a deleted bundle still is.
+MINIMUM_BUNDLE_FILES = 30
+
+#: The same, for the vendored skills: `/init` owns eighteen today. This is what
+#: `_main`'s non-zero check already meant, said as a number — a tree with one
+#: skill folder left in it is not a vendored bundle either.
+MINIMUM_VENDORED_SKILLS = 10
+
+
+def measure(
+    root: Path = _REPO_ROOT,
+    *,
+    added: frozenset[str] = frozenset(),
+    archived: frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """T58's gate.
+
+    `added` names repo-relative paths to count as though git already tracked
+    them; `archived` is accepted and unused. Together they are the signature
+    T150's evidence-stability gate measures every registered source through, so
+    that one mutation of the **tree** moves every population derived from it at
+    once rather than one named integer at a time. Archiving a task file moves
+    nothing here — the path stays tracked and stays outside `claude-arsenal/`.
+    """
+    files = [*tracked_files(root), *sorted(added)]
     vendored = vendored_files(files)
     machinery = subtree_machinery()
     skills = vendored_skills(root)
@@ -115,11 +145,40 @@ def measure(root: Path = _REPO_ROOT) -> dict[str, Any]:
     }
 
 
+def record(measured: dict[str, Any]) -> dict[str, Any]:
+    """What is committed, out of what was measured.
+
+    The two differences are the two denominators, and they are `naming.record`'s
+    difference for `naming.record`'s reason (T100, T150): the live census goes
+    out and the floor it was checked against goes in. Neither number says
+    anything about whether the subtree is gone — they exist so that the zero
+    that says it is cannot rest on an empty tree — and committed exactly, both
+    moved on pull requests that had nothing to do with vendoring.
+    """
+    committed = {
+        key: value
+        for key, value in measured.items()
+        if key not in ("bundle_files", "vendored_skills")
+    }
+    committed["vendored_skills_at_least"] = MINIMUM_VENDORED_SKILLS
+    committed["bundle_files_at_least"] = MINIMUM_BUNDLE_FILES
+    return committed
+
+
+#: This module's declaration to T150's evidence-stability gate. See
+#: `naming.EVIDENCE_SOURCES`: the gate discovers these, so joining the check is
+#: one line beside the counting rather than an edit to a list in `repo_gate`.
+EVIDENCE_SOURCES = (("T58", measure, record),)
+
+
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     """Measure and record `status/evidence/T58.json`."""
     measured = measure()
+    committed = record(measured)
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    evidence.write_text(
+        json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return measured
 
 
@@ -135,11 +194,20 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 1
-    if not measured["vendored_skills"]:
+    if measured["vendored_skills"] < MINIMUM_VENDORED_SKILLS:
         print(
-            "vendored_skills: 0 — `.claude/skills/` carries no `/init`-owned skill. A cloud "
-            "session installs no plugins, so uncommitted skills do not exist there. "
-            "Run `/init`.",
+            f"vendored_skills: {measured['vendored_skills']} (floor "
+            f"{MINIMUM_VENDORED_SKILLS}) — `.claude/skills/` carries too few `/init`-owned "
+            "skills to be the vendored bundle. A cloud session installs no plugins, so "
+            "uncommitted skills do not exist there. Run `/init`.",
+            file=sys.stderr,
+        )
+        return 1
+    if measured["bundle_files"] < MINIMUM_BUNDLE_FILES:
+        print(
+            f"bundle_files: {measured['bundle_files']} (floor {MINIMUM_BUNDLE_FILES}) — "
+            "`claude-arsenal/` is too small to be the bundle every protocol step calls "
+            "into. A clean `upstream_subtree_files` over a missing bundle is not a pass.",
             file=sys.stderr,
         )
         return 1

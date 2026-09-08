@@ -157,7 +157,10 @@ def _is_allowlisted(relative: str) -> bool:
 
 
 def measure(
-    repo_root: Path = _REPO_ROOT, *, archived: frozenset[str] = frozenset()
+    repo_root: Path = _REPO_ROOT,
+    *,
+    archived: frozenset[str] = frozenset(),
+    added: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """T55's gate: surviving references to the old package and repository names.
 
@@ -166,12 +169,22 @@ def measure(
     so archiving a file *is* "this path stops being scanned" and nothing else
     — which is what lets `measure_archive_sensitivity` answer T100's question
     without moving anybody's task file on disk to find out.
+
+    `added` names repo-relative paths to measure as though git already tracked
+    them. It is the other half of the same idea, and it exists because git is
+    the population here: a file that is really on disk but not yet added is
+    invisible to `git ls-files`, so a caller that wants to know what this sweep
+    would report about a tree with one more file in it has to say which file.
+    `repo_gate`'s evidence-stability gate writes the file *and* passes it here,
+    so both halves of "a file was added" are true at once — the alternative,
+    adding one to a named count, can only ever move the key it was told about.
     """
     package: list[str] = []
     repository: list[str] = []
     scanned = 0
 
-    for path in _tracked_files(repo_root):
+    population = (*_tracked_files(repo_root), *(repo_root / name for name in sorted(added)))
+    for path in population:
         relative = path.relative_to(repo_root).as_posix()
         if relative in archived or _is_allowlisted(relative):
             continue
@@ -231,6 +244,15 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
     committed = {key: value for key, value in measured.items() if key != "files_scanned"}
     committed["files_scanned_at_least"] = MINIMUM_SCANNED
     return committed
+
+
+#: This module's declaration to T150's evidence-stability gate: the pair of
+#: callables that turn a tree into a committed record, named by the task whose
+#: evidence file they write. The gate *discovers* these rather than listing
+#: them, so a module that counts a population of files joins the check by
+#: saying so here — one line, next to the code that does the counting — rather
+#: than by somebody remembering to edit a tuple in `repo_gate`.
+EVIDENCE_SOURCES = (("T55", measure, record),)
 
 
 def first_task_file(repo_root: Path = _REPO_ROOT) -> str | None:
