@@ -54,37 +54,41 @@ list:
   # `Keyword: python` is the query, and it is a SPECIFICATION, not one
   # candidate's search: the corpus is drawn by specification and never from a
   # session's harvest.
+  #
+  # **Exactly the two keys the capture was taken with, and no third one.**
+  # `probe/captured.json` records this body; `connectors/ruled-out.yaml`'s
+  # `retest` line reproduces it; both read `{"Keyword":"python",
+  # "ResultsPerPage":25}`.
   body_json:
     Keyword: python
     # The board's own default and the value the capture was taken with.
     ResultsPerPage: 25
-    Page: "{page}"
   pagination:
-    # The page number lives in the body, not the URL — the shape T89 added
-    # `body_field` for, and the reason `pagination.param` names a body key here
-    # rather than a query-string key.
-    mode: body_field
-    param: Page
-    # Measured, not assumed: the response's own `Pager` reports
-    # `CurrentPageIndex: 1` and `FirstPageIndex: 1` for this first page, so the
-    # board indexes its pages from 1.
-    start: 1
-    # **1, and the reason is honesty about what was measured.** `Pager` reports
-    # `NumberOfPages: 2` for this query (`Total: 44`, `ItemsPerPage: 25`), so a
-    # second page exists — but only page 1 was captured, and the capture's
-    # request body carried NO page key at all. `Page` is the name the board's
-    # own `Pager` implies (`CurrentPageIndex` / `NextPageIndex`); it is **not
-    # verified as the request key**, and this connector therefore never issues
-    # a request whose page key matters.
+    # **`none`, because no capture ever measured a page key on this board (T113).**
     #
-    # Why the unverified key is nonetheless safe at `max_pages: 1`, in every
-    # branch: if the model binder has no `Page` property the extra key is
-    # ignored and page 1 is returned; if it has one, `Pager.FirstPageIndex: 1`
-    # says 1 is the first page and page 1 is returned. There is no third case.
+    # This connector used to send a third body key, `Page: "{page}"`, under
+    # `mode: body_field`. That name came out of the board's *response* — `Pager`
+    # reports `CurrentPageIndex` and `NextPageIndex` — which shows the board
+    # REPORTS a page index, not that it ACCEPTS one in the request under that
+    # spelling. No capture and no retest ever sent it.
     #
-    # Raising this needs one measurement, and only one: POST the same body with
-    # `"Page": 2` and check the rows differ from page 1. Do that before
-    # changing this number, not after.
+    # It was defended as inert at `max_pages: 1` ("an unbound key is ignored and
+    # returns page 1; a bound one returns page 1 too"), and that defence is
+    # exactly the shape T113 exists to refuse: it stops being inert the moment
+    # anybody raises `max_pages`, and if the board ignores the key then page 2
+    # is a duplicate of page 1, the fetcher collects duplicate offers, and
+    # nothing reports it. A key that may only ever be sent at one value is a key
+    # nothing needs.
+    #
+    # `Pager` does report `NumberOfPages: 2` for this query (`Total: 44`,
+    # `ItemsPerPage: 25`), so a second page does exist and this connector cannot
+    # reach it. Restoring it takes one measurement and one commit: POST the same
+    # body with `"Page": 2`, check the rows differ from page 1, commit that
+    # response as a second capture recording the body it was taken with, then
+    # set `mode: body_field`, `param: Page`, `start: 1`, `max_pages: 2` and add
+    # `Page: "{page}"` back. `integral.pagination_capture` refuses the key until
+    # that capture exists.
+    mode: none
     max_pages: 1
   # The response IS JSON — the board's own endpoint, no markup anywhere — which
   # is the simpler of the two `from_json` cases and the one this library would

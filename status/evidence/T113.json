@@ -1,0 +1,10 @@
+{
+  "paginated_request_keys_no_capture_measured": 0,
+  "example_packages_excluded": [
+    "examplejobs_es"
+  ],
+  "findings": [],
+  "fail_open": 0,
+  "gate_status": "measured",
+  "request_keys_scanned_at_least": 12
+}
