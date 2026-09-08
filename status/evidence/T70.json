@@ -1,7 +1,7 @@
 {
   "robots_verdicts_misread": 0,
-  "robots_verdicts_evaluated": 59,
-  "robots_verdicts_evaluated_at_least": 59,
+  "robots_verdicts_evaluated": 64,
+  "robots_verdicts_evaluated_at_least": 64,
   "gate_status": "measured",
   "misread_cases": []
 }

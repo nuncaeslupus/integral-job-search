@@ -883,7 +883,24 @@ REGRESSION_CASES_AT_LEAST = 6
 #: the number was not held down by choosing cases `robots.py` happens to pass —
 #: `$` is the one reserved octet absent from `_CHUNK_SAFE`, so a table built
 #: only from `$` would have kept this tuple at three while proving less.
-REPO_MATCHER_DISAGREEMENTS = (
+#:
+#: **T151 landed and this tuple is now empty.** `_CHUNK_SAFE` is gone: `robots.py`
+#: derives its held-out octets from RFC 3986 §2.2's `reserved` production, per
+#: region, so every reserved octet used as data encodes in a path and in a query
+#: alike and all nine rows above now agree with the RFC. Emptying it is not
+#: retiring the check — `test_the_same_table_is_run_against_the_repo_matcher_and_
+#: the_gap_is_pinned` asserts both directions, so a fresh fail-open in
+#: `integral.robots` fails that test by name against this empty tuple exactly as
+#: a tenth entry would have failed it against the nine.
+REPO_MATCHER_DISAGREEMENTS: tuple[str, ...] = ()
+
+#: The nine cases T151 closed, kept by name so emptying the tuple above cannot be
+#: achieved by deleting the cases that populated it. The pin test re-runs each
+#: through `integral.robots` and requires the RFC's own verdict, which is DISALLOW
+#: for every one of them: they were fail-OPEN, in the matcher that decides real
+#: fetches, and a regression that reopened any of them would otherwise only show
+#: up as the empty tuple staying empty.
+REPO_MATCHER_CASES_CLOSED_BY_T151 = (
     "reserved_octets_stay_encoded_in_query",
     "ampersand_as_query_data_is_encoded",
     "equals_as_query_data_is_encoded",

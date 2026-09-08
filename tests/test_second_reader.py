@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from integral import robots
 from integral import second_reader as sr
 from integral import second_reader_cases as cases
 
@@ -258,12 +259,38 @@ def test_the_same_table_is_run_against_the_repo_matcher_and_the_gap_is_pinned() 
         "fixed and this pin should be emptied with it."
     )
     assert measured["repo_matcher_verdicts_against_the_rfc"] == len(found)
-    # And the direction, asserted rather than assumed: the RFC refuses the path
-    # and the repo matcher allows it.
-    case = next(c for c in cases.CASES if c.id == sr.REPO_MATCHER_DISAGREEMENTS[0])
-    assert case.expected == cases.DISALLOW_VERDICT
-    assert case.direction == cases.FAIL_OPEN_RISK
-    assert sr.allows(case.robots_txt, case.agent, case.path) is False
+    # And the direction, asserted rather than assumed: every pinned case is one
+    # the RFC refuses and the repo matcher allows. Vacuous while the tuple is
+    # empty, which is the state T151 put it in — the assertions that carry the
+    # weight now are the ones below.
+    for case_id in sr.REPO_MATCHER_DISAGREEMENTS:
+        case = next(c for c in cases.CASES if c.id == case_id)
+        assert case.expected == cases.DISALLOW_VERDICT
+        assert case.direction == cases.FAIL_OPEN_RISK
+        assert sr.allows(case.robots_txt, case.agent, case.path) is False
+
+
+def test_the_nine_cases_t151_closed_are_still_refused_by_the_repo_matcher() -> None:
+    """An empty pin is only evidence if the cases that filled it still run.
+
+    `REPO_MATCHER_DISAGREEMENTS` emptying is the shape of both "the fail-open was
+    fixed" and "the nine cases were deleted", and the assertion above cannot tell
+    those apart: it compares a measurement over the table against a tuple, and
+    removing a row from the table satisfies it too. So the nine are named
+    separately and re-run here through `integral.robots` itself.
+
+    Each was fail-OPEN — RFC 9309 §2.2.2 requires the reserved octets they carry
+    to be percent-encoded before comparison, in the path as well as the query, so
+    the rule and the request are two spellings of one URI and the rule refuses.
+    `integral.robots` answered ALLOW for all nine until T151 replaced
+    `_CHUNK_SAFE` with a per-region reading of RFC 3986's `reserved` production.
+    """
+    assert len(sr.REPO_MATCHER_CASES_CLOSED_BY_T151) == 9
+    for case_id in sr.REPO_MATCHER_CASES_CLOSED_BY_T151:
+        case = next(c for c in cases.CASES if c.id == case_id)
+        assert case.expected == cases.DISALLOW_VERDICT, case_id
+        assert case.direction == cases.FAIL_OPEN_RISK, case_id
+        assert robots.allows_text(case.robots_txt, case.agent, case.path) is False, case_id
 
 
 def test_a_rule_reaching_the_query_through_a_wildcard_still_matches() -> None:

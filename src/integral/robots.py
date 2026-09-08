@@ -245,56 +245,244 @@ def _select_rules(groups: list[_Group], agent: str) -> tuple[list[tuple[bool, st
 # normalised the same way, and conflating them let two excluded paths through:
 # `*` is pattern syntax in a rule but an ordinary octet in a target, and `?`
 # must survive on both sides or a query rule can never match anything.
+# RFC 3986 §2.2's `reserved` production, written out in full so the rule below
+# is derived from the spec rather than from a list somebody typed. RFC 9309
+# §2.2.2 canonicalises over exactly this *set*: octets outside US-ASCII, and
+# those in the reserved range defined by RFC 3986, MUST be percent-encoded
+# prior to comparison. So the default is ENCODE, and every exemption has to be
+# argued — which is the whole of the fix below.
+#
+# The previous revision instead carried one hand-written allowlist,
+# `_CHUNK_SAFE = "/:@!&'()+,;=?~-._"`, and consulted it for the path and the
+# query alike. It left `: & = + , @ ! ; ' ( )` standing as raw octets in both
+# regions, so a rule and a request target that were two spellings of one URI
+# never compared equal and the rule matched nothing: `Disallow: /s?q=a%26b` did
+# not catch `/s?q=a&b`, and `Disallow: /jobs%3Aremote/list` did not catch
+# `/jobs:remote/list`. Nine spec-derived paths RFC 9309 refuses came back ALLOW,
+# in the matcher that decides real fetches. One allowlist, two regions.
+_GEN_DELIMS = ":/?#[]@"
+_SUB_DELIMS = "!$&'()*+,;="
+_RESERVED = frozenset(_GEN_DELIMS + _SUB_DELIMS)
+
 _UNRESERVED = frozenset(string.ascii_letters + string.digits + "-._~")
 
-# `%` stays safe so an escape already present is not re-encoded. `*` and `$` are
-# both absent on purpose, for one reason: they are the two pattern metacharacters,
-# so a rule can only spell either literally as an escape (`%2A`, `%24`). Encoding
-# them in the target too is what makes the two sides meet. An earlier revision
-# reasoned this out for `*` and then left `$` safe — half the symmetry, so
-# `Disallow: /report%24` never matched `/report$` and the target was permitted.
-# A raw `%` is NOT safe: it is only ever legitimate as the head of an escape,
-# and `_canon` quotes the runs *between* escapes, where any `%` left standing is
-# a literal one. Leaving it safe meant `/100%` canonicalised to itself while the
-# rule `Disallow: /100%25` canonicalised to `/100%25` — the same octet spelled
-# two ways, so the rule never matched and the target was permitted.
-_CHUNK_SAFE = "/:@!&'()+,;=?~-._"
+# The held-out octets, reasoned PER REGION — because the same octet is structure
+# in one region and data in the other, and that is precisely what a single
+# allowlist cannot express.
+#
+# `/` — RFC 3986 §3.3 makes it the path's segment separator. Inside a path it is
+#   structure, never data, so it must NOT encode there even though every other
+#   reserved octet must: `Disallow: /a%2Fb` and the request `/a/b` are different
+#   octet sequences and must not match. Inside a *query* it delimits nothing
+#   (§3.4 admits `/` and `?` as ordinary query octets), so there it is data and
+#   encodes like the rest — which is what makes
+#   `Disallow: /foo/bar?baz=https%3A%2F%2Ffoo.bar` catch
+#   `/foo/bar?baz=https://foo.bar`, §2.2.2's own example.
+_PATH_SAFE = "/"
+#
+# Nothing at all is held out inside the query: once the opening `?` has been
+# consumed as the region delimiter, no reserved octet after it delimits anything
+# this matcher can see. `&` and `=` separate parameters for the *server*, not for
+# a prefix comparison over octets, so treating them as structure would be reading
+# a form-encoding convention into §2.2.2's set.
+_QUERY_SAFE = ""
+#
+# Held out by construction rather than by these sets, because they are syntax and
+# never reach a literal run at all:
+#
+# `?` — the FIRST raw one is the path/query delimiter, and it is what makes "in
+#   the query" a decidable question in the first place; `_canon_region` splits on
+#   it and re-emits it literally, on both sides, so `Disallow: /search?` still
+#   catches `/search?q=x`. A `?` *after* that one delimits nothing and is query
+#   data, so it encodes.
+# `*` and `$` — RFC 9309 §2.2.3's two pattern metacharacters. In a rule they are
+#   removed before canonicalisation (`_normalize_rule` splits on `*` and strips a
+#   trailing `$`), so they never appear in a run. Everywhere else — anywhere in a
+#   request target, and a `$` that is not the rule's final octet — they are
+#   ordinary data and encode to `%2A` / `%24`, which is how a rule spelling
+#   either literally as an escape meets the target that carries it raw. An
+#   earlier revision reasoned this out for `*` and left `$` unencoded — half the
+#   symmetry, so `Disallow: /report%24` never matched `/report$`.
+# `%` — NOT held out. It is only ever legitimate as the head of an escape, and
+#   `_canon_run` quotes the runs *between* escapes, where any `%` left standing
+#   is a literal one. Leaving it safe meant `/100%` canonicalised to itself while
+#   `Disallow: /100%25` canonicalised to `/100%25` — the same octet spelled two
+#   ways, so the rule never matched.
+
+#: The one octet that separates the two regions, in a rule and in a target
+#: alike. It is re-emitted literally rather than encoded, which is what makes
+#: "in the query" a decidable question at all.
+_QUERY_DELIMITER = "?"
 
 _ESCAPE_RE = re.compile(r"%([0-9A-Fa-f]{2})")
 
 
-def _canon(chunk: str) -> str:
-    """One canonical octet form for a literal run of a path.
+def _canon_run(run: str, safe: str) -> str:
+    """One canonical octet form for a literal run lying wholly in one region.
 
     Escapes encoding an *unreserved* character are decoded, because `%62` and
     `b` denote the same octet and a `Disallow: /foo/%62ar` that fails to match
     `/foo/bar` is a fail-open. Every other escape is kept and upper-cased, so
     `%2A` survives as `%2A` rather than becoming a wildcard — which is how a
     rule spells a literal asterisk.
+
+    `safe` is the region's held-out set; everything else outside `_UNRESERVED`
+    is percent-encoded, which is §2.2.2's requirement applied to the whole of
+    RFC 3986's reserved range instead of to a sample of it.
     """
 
     out: list[str] = []
     pos = 0
-    for match in _ESCAPE_RE.finditer(chunk):
-        out.append(quote(chunk[pos : match.start()], safe=_CHUNK_SAFE))
+    for match in _ESCAPE_RE.finditer(run):
+        out.append(quote(run[pos : match.start()], safe=safe))
         char = chr(int(match.group(1), 16))
         out.append(char if char in _UNRESERVED else "%" + match.group(1).upper())
         pos = match.end()
-    out.append(quote(chunk[pos:], safe=_CHUNK_SAFE))
+    out.append(quote(run[pos:], safe=safe))
     return "".join(out)
 
 
-def _normalize_rule(pattern: str) -> tuple[list[str], bool]:
+def _canon_region(run: str, in_query: bool) -> tuple[str, bool]:
+    """Canonicalise one run, and report which region it ends in.
+
+    The region is decided by the first raw `?`: everything before it is path,
+    everything after is query. A rule is canonicalised run by run (the runs
+    between its wildcards), so the flag has to be carried across them — a `?`
+    in an earlier run puts every later run in the query.
+
+    A `*` may itself span the delimiter, and then the rule carries no raw `?`
+    of its own and every run is read as path. `/` is the only octet whose
+    canonical form differs between the two regions, so that is the only case
+    the ambiguity can reach: `Disallow: /*/x` denotes a literal separator and
+    does not match `/s?q=/x`, whose canonical query is `q%3D%2Fx`. That is a
+    consequence of comparing canonical forms, not a special case — the rule
+    that reaches it is `Disallow: /*%2Fx`.
+    """
+    if in_query:
+        return _canon_run(run, _QUERY_SAFE), True
+    head, delimiter, tail = run.partition(_QUERY_DELIMITER)
+    if not delimiter:
+        return _canon_run(head, _PATH_SAFE), False
+    return _canon_run(head, _PATH_SAFE) + _QUERY_DELIMITER + _canon_run(tail, _QUERY_SAFE), True
+
+
+def _canon(target: str) -> str:
+    """The canonical octet form of a whole request target — path, then query."""
+    canonical, _ = _canon_region(target, in_query=False)
+    return canonical
+
+
+#: One admissible spelling of a rule run: its canonical octets, and the region
+#: its FIRST octet has to lie in for that spelling to be the right one — `True`
+#: query, `False` path, and `None` for a run that canonicalises identically in
+#: both and is therefore admissible in either. See `_normalize_rule`.
+_Spelling = tuple[str, bool | None]
+
+
+def _normalize_rule(pattern: str) -> tuple[list[tuple[_Spelling, ...]], bool]:
     """A rule as canonical literal runs plus its end-anchor flag.
 
     Splitting on `*` before canonicalising is what keeps the wildcard as
-    syntax: only the runs between wildcards are percent-normalised.
+    syntax: only the runs between wildcards are percent-normalised. The region
+    flag threads through those runs, so a rule's query octets are canonicalised
+    as query octets even when a wildcard sits between them and the `?`.
+
+    **A `*` can itself span the delimiter, and then the pattern does not say
+    which region its later runs are in.** §2.2.3 makes `*` "any sequence of
+    characters", `?` included, so `Disallow: /*http://` is a rule about a query
+    as readily as one about a path — the pattern carries no `?` of its own to
+    decide it. Reading such a run as path octets is a FAIL-OPEN: `http://`
+    canonicalises to `http%3A//` there, the request `/out?url=http://evil.com`
+    canonicalises to `/out?url=http%3A%2F%2Fevil.com`, and the rule matches
+    nothing at all. So a run whose region the pattern leaves open is emitted in
+    BOTH spellings, and `_matches` accepts whichever suits the region of the
+    position it is testing. The two differ only where the run carries `/` or a
+    `?` of its own — the octets this matcher reads as structure in one region
+    and as data in the other — so every other run has nothing to get wrong and
+    collapses back to a single spelling admissible in either region.
     """
     body, anchored = (pattern[:-1], True) if pattern.endswith("$") else (pattern, False)
-    return [_canon(chunk) for chunk in body.split("*")], anchored
+    chunks: list[tuple[_Spelling, ...]] = []
+    in_query = False
+    # The first run starts at the first octet of the path, so its region is
+    # never in doubt. Every later run sits behind a `*`.
+    undetermined = False
+    for run in body.split("*"):
+        canonical, ends_in_query = _canon_region(run, in_query)
+        if in_query or not undetermined:
+            chunks.append(((canonical, in_query),))
+        else:
+            as_query, _ = _canon_region(run, True)
+            # Equal spellings are not one path spelling: they are a run with no
+            # region to get wrong, admissible on either side. Collapsing them to
+            # `(canonical, False)` instead re-opened a fail-open — `/*a$b` was
+            # confined to the path and stopped matching `/x?q=a%24b`.
+            chunks.append(
+                ((canonical, None),)
+                if as_query == canonical
+                else ((canonical, False), (as_query, True))
+            )
+        in_query = ends_in_query
+        undetermined = True
+    return chunks, anchored
 
 
-def _matches(chunks: list[str], anchored: bool, path: str) -> bool:
+def _region_of(position: int, boundary: int) -> bool:
+    """Whether `position` in a canonical target lies in the query region.
+
+    `boundary` is the index of the target's own `?`, or its length when it has
+    none. The delimiter itself belongs to the path side: a rule run may start at
+    it and run across it, which is exactly what `Disallow: /search?` does.
+    """
+    return position > boundary
+
+
+def _spelling_at(path: str, run: tuple[_Spelling, ...], at: int, boundary: int) -> int | None:
+    """The end of whichever spelling of `run` sits at exactly `at`, or `None`.
+
+    At most one can: two spellings of the same run differ only where it carries
+    `/`, so one demands a literal `/` at a position where the other demands
+    `%2F`, and no string satisfies both.
+    """
+    for text, in_query in run:
+        if in_query is not None and in_query != _region_of(at, boundary):
+            continue
+        if path.startswith(text, at):
+            return at + len(text)
+    return None
+
+
+def _find_spelling(path: str, run: tuple[_Spelling, ...], start: int, boundary: int) -> int | None:
+    """The earliest end position at or after `start` where `run` occurs.
+
+    Earliest END rather than earliest start, because two spellings of one run
+    have different lengths: taking the one that finishes soonest leaves the most
+    room for the runs after it, which is what keeps the greedy scan complete.
+
+    Each spelling is searched only in its own region — a path spelling must
+    START at or before the delimiter, a query spelling after it. A run carrying
+    no `?` cannot cover the delimiter octet, so bounding the start is enough to
+    keep it on one side; a run carrying its own `?` is meant to cross.
+    """
+    best: int | None = None
+    for text, in_query in run:
+        if in_query is None:
+            lower, upper = start, len(path)
+        elif in_query:
+            lower, upper = max(start, boundary + 1), len(path)
+        else:
+            lower, upper = start, min(len(path), boundary + len(text))
+        if lower > len(path):
+            continue
+        found = path.find(text, lower, upper)
+        if found == -1:
+            continue
+        if best is None or found + len(text) < best:
+            best = found + len(text)
+    return best
+
+
+def _matches(chunks: list[tuple[_Spelling, ...]], anchored: bool, path: str) -> bool:
     """Greedy wildcard match, iterative and bounded — never exponential.
 
     The previous revision compiled each rule to a regex with `.*` per wildcard.
@@ -305,26 +493,36 @@ def _matches(chunks: list[str], anchored: bool, path: str) -> bool:
     rather than by trusting the input.
 
     Each run is found once, left to right, never reconsidered: O(len(path) x
-    len(rule)).
+    len(rule)), and the at-most-two spellings a run can carry double that work
+    rather than branching it.
     """
     if not chunks:
         return True
+    boundary = path.find(_QUERY_DELIMITER)
+    if boundary == -1:
+        boundary = len(path)
     first, *rest = chunks
-    if not path.startswith(first):
+    prefix = _spelling_at(path, first, 0, boundary)
+    if prefix is None:
         return False
     if not rest:
-        return len(path) == len(first) if anchored else True
-    position = len(first)
-    for index, chunk in enumerate(rest):
+        return len(path) == prefix if anchored else True
+    position = prefix
+    for index, run in enumerate(rest):
         if index == len(rest) - 1 and anchored:
             # The final run must sit flush against the end of the path.
-            return len(path) - position >= len(chunk) and path.endswith(chunk)
-        if not chunk:
+            return any(
+                len(path) - len(text) >= position
+                and (in_query is None or in_query == _region_of(len(path) - len(text), boundary))
+                and path.endswith(text)
+                for text, in_query in run
+            )
+        if all(not text for text, _ in run):
             continue
-        found = path.find(chunk, position)
-        if found == -1:
+        found = _find_spelling(path, run, position, boundary)
+        if found is None:
             return False
-        position = found + len(chunk)
+        position = found
     return True
 
 
@@ -362,7 +560,11 @@ def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
         # Restoring only the wildcards is how `Disallow: /foo/*$` scored 6
         # against `Allow: /foo/x`, tied, and lost to the allow rule — which
         # permits a path the site anchored a rule to exclude.
-        length = sum(len(chunk) for chunk in chunks) + len(chunks) - 1 + int(anchored)
+        # `run[0][0]` is each run's first spelling — the one the pattern's own
+        # region reading produced, and for an undetermined run the path one. A
+        # length that varied with the spelling that happened to match would make
+        # precedence depend on the request rather than on the pattern.
+        length = sum(len(run[0][0]) for run in chunks) + len(chunks) - 1 + int(anchored)
         if length > best_len or (length == best_len and is_allow):
             best_len, best_allow = length, is_allow
     return best_allow
@@ -1260,6 +1462,87 @@ Disallow: /search?
             "no group matches and there is no `*` group, so no rules apply"
         ),
     ),
+    # ---------------------------------------------------------------
+    # T151, 2026-09-08. §2.2.2 canonicalisation over the WHOLE of RFC 3986's
+    # reserved range, in the path as well as the query. The nine cases that
+    # named the defect live in the independent table (`second_reader_cases`)
+    # and are re-run against this module from `test_second_reader.py`; what is
+    # committed here is one per region, so the primary matcher's own gate is
+    # not silent about the rule it now implements, plus the three controls that
+    # stop the fix degenerating into "encode every reserved octet everywhere".
+    _Fixture(
+        name="a_reserved_octet_used_as_path_data_is_encoded_before_comparison",
+        robots_txt="User-agent: *\nDisallow: /jobs%3Aremote/list\n",
+        agent="TestBot/1.0",
+        url="https://example.com/jobs:remote/list",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.2 — `:` is in RFC 3986 §2.2's reserved range, so both "
+            "spellings canonicalise to `/jobs%3Aremote/list` and the rule applies; "
+            "RFC 3986 §3.3 admits `:` inside a path segment as data"
+        ),
+    ),
+    _Fixture(
+        name="a_reserved_octet_used_as_query_data_is_encoded_before_comparison",
+        robots_txt="User-agent: *\nDisallow: /s?q=a%26b\n",
+        agent="TestBot/1.0",
+        url="https://example.com/s?q=a&b",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.2 — `&` is a sub-delim in RFC 3986 §2.2's reserved "
+            "range; it separates parameters for the server, not for an octet "
+            "comparison, so it is data here and both sides encode it"
+        ),
+    ),
+    _Fixture(
+        # The control for the region split: `/` is the one reserved octet that
+        # must NOT encode in a path, so an encoded one is data and a raw one is
+        # structure and the two are different octet sequences.
+        name="a_path_separator_is_not_the_same_octet_as_an_encoded_one",
+        robots_txt="User-agent: *\nDisallow: /a:b/c:d\n",
+        agent="TestBot/1.0",
+        url="https://example.com/a%3Ab%2Fc%3Ad",
+        expected_allowed=True,
+        citation=(
+            "RFC 3986 §3.3 — `/` delimits path segments, so RFC 9309 §2.2.2 "
+            "leaves it unencoded there while `:` encodes; the rule denotes two "
+            "segments and the request one, and they do not match"
+        ),
+    ),
+    _Fixture(
+        # A `*` is "any sequence of characters" (§2.2.3), the delimiter
+        # included, so a pattern with no `?` of its own does not say which
+        # region its later runs are in. Reading them as path octets leaves
+        # `http://` spelled `http%3A//` against a target spelled
+        # `http%3A%2F%2F`, and the rule matches nothing: fail-open, on the
+        # shorter and more natural of the two ways to write the rule.
+        name="a_rule_reaching_the_query_through_a_wildcard_still_matches",
+        robots_txt="User-agent: *\nDisallow: /*http://\n",
+        agent="TestBot/1.0",
+        url="https://example.com/out?url=http://evil.com",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.3 — `*` matches any sequence of characters, `?` "
+            "included, so the run behind it is admissible as query octets; "
+            "§2.2.2 then encodes the `/` in that region and both sides meet"
+        ),
+    ),
+    _Fixture(
+        # And the other direction of the same rule, so accepting a query
+        # spelling cannot become "accept either spelling anywhere": `%2F` in a
+        # PATH is data, and a rule whose run denotes a separator must not
+        # capture it. Without the region tag this over-blocks.
+        name="a_wildcard_rule_denoting_a_separator_does_not_capture_encoded_data",
+        robots_txt="User-agent: *\nDisallow: /*/x\n",
+        agent="TestBot/1.0",
+        url="https://example.com/a%2Fx",
+        expected_allowed=True,
+        citation=(
+            "RFC 9309 §2.2.2 with RFC 3986 §3.3 — the rule's `/` is a segment "
+            "separator and the request's `%2F` is an encoded data octet; they "
+            "are different octet sequences and the rule does not apply"
+        ),
+    ),
 )
 
 # The denominator of `robots_verdicts_misread`, asserted as a FLOOR and never as
@@ -1267,8 +1550,9 @@ Disallow: /search?
 # never turn this red; removing them must, because a clean zero over a shrunken
 # table is the failure this module keeps finding one level up. Raise it
 # deliberately when a round of cases lands -- T102 raised it from the 56 the
-# round-2 audit left to the 59 it now measures.
-FIXTURES_AT_LEAST = 59
+# round-2 audit left to the 59 it measured, and T151 raised it to 64 with the
+# five §2.2.2 region cases above.
+FIXTURES_AT_LEAST = 64
 
 
 def _verdict(fixture: _Fixture) -> bool:

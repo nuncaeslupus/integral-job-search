@@ -17,6 +17,7 @@ import pytest
 
 from integral import robots as robots_module
 from integral.robots import (
+    _RESERVED,
     FIXTURES,
     FIXTURES_AT_LEAST,
     REFUSAL_FIXTURES,
@@ -25,6 +26,7 @@ from integral.robots import (
     RobotsError,
     _allowed,
     _canon,
+    _canon_region,
     _Fixture,
     _main,
     _matches,
@@ -281,6 +283,66 @@ def test_a_raw_percent_canonicalises_to_its_escape() -> None:
     `Disallow: /100%25` never matched `/100%` and the fetch was permitted."""
     assert _canon("/100%") == _canon("/100%25") == "/100%25"
     assert _canon("/a%2Ab") == "/a%2Ab"  # a real escape is still not re-encoded
+
+
+def test_every_reserved_octet_used_as_data_is_encoded_in_both_regions() -> None:
+    """RFC 9309 §2.2.2 over RFC 3986 §2.2's whole `reserved` production.
+
+    §2.2.2 requires octets "in the reserved range defined by RFC 3986" to be
+    percent-encoded prior to comparison. That is a set, not the two octets its
+    example table happens to print, so this walks the set itself rather than a
+    list of the cases someone thought of — the exact hole `_CHUNK_SAFE` was: an
+    allowlist that left `: & = + , @ ! ; ' ( )` raw in both regions.
+
+    The single exemption is `/` in a PATH, RFC 3986 §3.3's segment separator,
+    which is structure and not data. Inside a query it delimits nothing, so
+    there it encodes like the rest — which is what makes
+    `Disallow: /a?b=https%3A%2F%2Fc` catch `/a?b=https://c`.
+    """
+    for octet in sorted(_RESERVED):
+        in_path = _canon(f"/x{octet}y")
+        in_query = _canon(f"/p?q={octet}")
+        if octet == "/":
+            assert in_path == "/x/y", f"the path separator must not encode: {in_path!r}"
+        elif octet == "?":
+            # The one raw `?` is the region delimiter itself: it is not an octet
+            # in the path, it is the end of the path. A SECOND one is query data
+            # and encodes — asserted by the `in_query` check below, which puts
+            # this octet after a `?` that has already been consumed.
+            assert in_path == "/x?y", f"the query delimiter must survive: {in_path!r}"
+        else:
+            assert octet not in in_path, f"{octet!r} left raw in a path: {in_path!r}"
+        assert in_query.endswith("%3D" + f"%{ord(octet):02X}"), (
+            f"{octet!r} left raw in a query: {in_query!r}"
+        )
+
+
+def test_a_rule_and_its_encoded_request_are_one_uri_in_either_region() -> None:
+    """The nine T151 cases in miniature, one per region, from the rule's side.
+
+    Both spellings canonicalise to the same octets, which is the only way a
+    longest-prefix comparison can see them as one URI. Before the fix each pair
+    differed and the rule matched nothing at all — a fail-open, in the matcher
+    that decides real fetches.
+    """
+    assert _canon("/jobs%3Aremote/list") == _canon("/jobs:remote/list")
+    assert _canon("/s?q=a%26b") == _canon("/s?q=a&b")
+    # And the control that stops this degenerating into "encode everything":
+    # a real separator is not the same octet sequence as an encoded one.
+    assert _canon("/a/b") != _canon("/a%2Fb")
+
+
+def test_the_region_flag_threads_across_a_rules_wildcards() -> None:
+    """A rule is canonicalised run by run, so the region has to be carried.
+
+    `Disallow: /s?a=1*b=2` splits into `/s?a=1` and `b=2`; the second run lies
+    in the query only because the first one opened it. Canonicalising it as a
+    path run would leave a `/` in it raw and stop it matching the target's
+    encoded one.
+    """
+    assert _canon_region("/s?a=1", False) == ("/s?a%3D1", True)
+    assert _canon_region("u=/x", True) == ("u%3D%2Fx", True)
+    assert _canon_region("u=/x", False) == ("u%3D/x", False)
 
 
 def test_an_empty_query_keeps_its_delimiter() -> None:
