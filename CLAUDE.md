@@ -153,9 +153,19 @@ behind one.
 
 ## The review half of `merge-policy` is a second session, not a bot
 
-**CodeRabbit is gone** — the account lost it for private repositories on 2026-09-04, and
-the owner's decision is to go without. `merge-policy` stays `after-ci-and-review`.
-Nothing external satisfies the review half any more, so this says what does.
+**CodeRabbit came back when the repository went public on 2026-09-07**, and the
+paragraph this replaces said it was gone for good. What is true now: it is
+installed on the OSS tier, it does **not** review automatically below 10 stars
+(its own comment on #398 says so, and its commit status reads *"Review skipped:
+manual review required for this OSS repository"*), and a `@coderabbitai review`
+comment triggers it by hand.
+
+**That changes nothing below.** A bot that has to be asked is not a standing
+reviewer; this repository has swapped review bots four times; and the measured
+comparison in this section is why the second-session read is the *primary*
+reviewer rather than the fallback, not a stopgap for the days the bot was away.
+Trigger it when a diff is worth a second opinion. It does not satisfy the review
+half on its own, and `merge-policy` stays `after-ci-and-review`.
 
 **A code PR may merge once a session other than its implementer has read it and
 reported on the PR.** That is the same discipline the section above already requires
@@ -338,16 +348,36 @@ Three more costs, each measured here:
 
 ## Known environment state
 
-**GitHub Actions has runner minutes again as of 2026-09-07 — a red CI is a
-signal again. Read it.** Measured 2026-09-07 23:20 UTC: two `pull_request` runs
-of the `CI` workflow concluding **`success`**, in **95 and 133 seconds**. Against
-the same workflow's last `push main` runs the day before — 4, 5, 5 and 9 seconds,
-every one `failure` — that is the difference between a runner that ran the jobs
-and a runner that died before any job body did.
+**This repository is PUBLIC as of 2026-09-07**, and that one change is behind
+every environment fact below. The API says so — `visibility: public`, `private:
+false`, MIT — and the paragraph this replaces was still describing the private
+repository's constraints. **Actions is free and unmetered on public
+repositories**, which is what this section itself had predicted would fix the
+outage: *"Going public would fix this."* It did.
 
-So the CI half of `merge-policy` is satisfiable by GitHub again: a task PR merges
-on a **green `CI` check on its head** plus a second-reader report, and a red one
-is about the code until the clock below says otherwise.
+So **GitHub Actions has runner minutes again — a red CI is a signal again. Read
+it.** Measured 2026-09-07 23:20 UTC: two `pull_request` runs of the `CI` workflow
+concluding **`success`**, in **95 and 133 seconds**. Against the same workflow's
+last `push main` runs the day before — 4, 5, 5 and 9 seconds, every one
+`failure` — that is the difference between a runner that ran the jobs and a
+runner that died before any job body did.
+
+The CI half of `merge-policy` is therefore satisfiable by GitHub again: a task PR
+merges on a **green `CI` check** plus a second-reader report, and a red one is
+about the code until the clock below says otherwise.
+
+**What that check is green *about* is not the head commit.** `ci.yml` fires on
+`pull_request`, and `actions/checkout@v4` with no `ref:` checks out
+`refs/pull/<n>/merge` — the PR merged into its base, a commit that exists in
+nobody's clone. So CI answers "does this change work *once merged*", which is the
+more useful question and is **not** the one `tools/verified_gate.sh` answers. The
+two are complementary rather than redundant, which is why both are required.
+
+**Do not read the cause as a billing period turning over.** That was the guess
+this session made from the run durations alone, and it is wrong in the way that
+matters: a rollover is a date that recurs, and going public is a decision that
+holds. Minutes are not being spent, so they cannot run out again — the next
+`0 seconds remaining` would have to come from somewhere new.
 
 **The way to tell is the clock, not the conclusion**, and that test outlives any
 particular outage. Read `created_at` and `updated_at` on the run: a whole run
@@ -362,13 +392,16 @@ can re-run by hand. So the discipline is unchanged — verdict block on the pull
 request, the four results quoted in the merge commit, and merge only while the
 head is still the SHA the block names. Do **not** reach for a bare
 `make host-gate` in the working tree instead. What changed is only that the block
-is no longer the *whole* evidence: a green `CI` check on the head is required
-beside it.
+is no longer the *whole* evidence: a green `CI` check is required beside it, and
+the two assert different things — CI over the PR's **merge ref**, the block over
+the **committed head**.
 
-**Going public would still be the fix for the next outage**, and it is the same
-decision as the corpus and the contribution guard (#352): Actions is free and
-unmetered on public repositories. 2000 minutes went in four days once and will
-again.
+**Going public was the fix, and it has been taken** — the same decision as the
+corpus and the contribution guard (#352). The old note here said it "would fix
+this" and left it as something somebody might one day do; it is done, so what is
+worth carrying forward is the size of the effect rather than the argument for it.
+2000 minutes went in four days on the private repository. On this one the meter
+is off.
 
 **This section has now been wrong three times, which is the point** — and this
 paragraph is the third rewrite, not the correction that ends them. It said
@@ -386,6 +419,11 @@ sentence here with a perfect record of going stale. `gh run list --json
 conclusion,createdAt,updatedAt` is the whole check and costs one command; on a
 surface with no `gh`, the MCP `actions_list` answers it, with `created_at` and
 `updated_at` on each run giving the clock.
+
+**And measure the cause, not only the symptom.** This session read two green runs
+and wrote "the billing period turned over" — a plausible story for the right
+observation, and false. The repository's visibility was one API field away and
+settles it. A run's duration says whether CI is reporting; it never says why.
 
 **Run the gate locally as well.** These are what CI runs, and all four must
 pass before a merge:
