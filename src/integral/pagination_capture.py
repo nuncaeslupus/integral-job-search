@@ -26,6 +26,19 @@ record also carries the `body` it was taken with; that field is optional and a
 capture predating it simply carries no body, which this reads as "no body was
 recorded", never as "the body was empty".
 
+**And how the record itself came to exist.** A capture says *when* and *from
+what URL*; until #406 it never said *how*, so a record transcribed from a
+command committed elsewhere and one written straight off the wire read
+identically, and the difference had to be argued in a pull-request comment
+rather than read in the file. `provenance` is that field — `live`,
+`transcribed`, or absent, which reads as `unrecorded` and is never written back.
+`usajobs_en` declares `transcribed`: its request record is byte-identical to the
+re-runnable `retest` curl `connectors/ruled-out.yaml` commits, and the response
+bytes beside it (`Total: 43`, `ItemsPerPage: 25`, 25 rows) are that command's
+output. Nothing here fails on an `unrecorded` capture — a provenance nobody has
+established is not a defect, and stamping one on twenty files to make a number
+go green would be the invention this module exists to refuse.
+
 **The rule, per `pagination.mode`:**
 
 * `query_param` — the named key must appear as a query-string key of the
@@ -70,6 +83,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
+import yaml
+
 from integral.connector_coverage import is_example_site, read_package
 from integral.connector_health import PROBE_CAPTURE_FILE
 from integral.connectors import (
@@ -78,7 +93,9 @@ from integral.connectors import (
     PROBE_DIRNAME,
     QUERY_PLACEHOLDER,
     ConnectorError,
+    build_list_urls,
     load_connector,
+    parse_connector,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +108,306 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T113.json"
 #: example-only `connectors/` would produce. Raise it when the library grows;
 #: it is a floor, not a target.
 MINIMUM_REQUEST_KEYS = 12
+
+
+# ---------------------------------------------------------------------------
+# the URL side of the rule, probed rather than asserted
+#
+# The scan above reads what a package DECLARES against what its capture
+# RECORDS, and that is only as strong as the coupling between `pagination.param`
+# and the key a request actually carries. On the body side `ListPage`'s
+# `_a_page_placeholder_and_a_body_field_imply_each_other` supplies that coupling
+# at load. On the URL side nothing did, and the second-reader round on #406
+# named three routes by which a package could send a page key no capture
+# measured while this gate reported zero:
+#
+#   1. `pagination.param` naming a key the `url_pattern` does not hold —
+#      `?p={page}` with `param: page`, over a capture of `?page=1`. The gate
+#      finds `page` in the captured URL and passes; every request carries `p`.
+#   2. `mode: none` with `{page}` still in the pattern. The scan short-circuits
+#      ("nothing to certify") while `build_list_urls` still substitutes on the
+#      text and fetches `?page=1` unchecked.
+#   3. `query_param` with no `{page}` anywhere — the identical URL issued
+#      `max_pages` times, which is the duplicate-offer harm this task is named
+#      for.
+#
+# `connectors._a_page_placeholder_and_a_query_key_imply_each_other` closes all
+# three at load. The probes below are how that is MEASURED rather than believed:
+# each is a whole connector document, parsed, and — when it is one of the legal
+# shapes — built into the requests it would issue. A probe that loads where the
+# rule refuses it, or is refused where the rule allows it, is a defect named in
+# the evidence. Reading the validator's source instead is the check T121's
+# three defeated rounds are about.
+
+
+@dataclass(frozen=True)
+class UrlProbe:
+    """One `url_pattern` / `pagination` pair, and the verdict the rule requires.
+
+    `loads` and `issues` are written from the rule — "the key carrying the page
+    number is the one the pagination names, it is the one a capture is read for,
+    and something must vary" — not from running the validator. A fixture whose
+    expected value was read off a run certifies the run.
+    """
+
+    name: str
+    url_pattern: str
+    pagination: dict[str, Any]
+    #: Whether a well-formed library may contain this shape at all.
+    loads: bool
+    #: For a shape that loads, the exact URLs it must issue. Empty when it does
+    #: not load, since there are none.
+    issues: tuple[str, ...]
+    #: The route this closes, or why the shape is legal. Cited, so a probe
+    #: cannot drift into testing something the rule never said.
+    route: str
+    #: A POST board — the `body_field` mirror of route 2 needs one.
+    body_json: dict[str, Any] | None = None
+
+
+_PROBE_QUERY = "python"
+
+URL_SIDE_PROBES: tuple[UrlProbe, ...] = (
+    # ---- route 1: the certified key and the sent key were never the same key.
+    UrlProbe(
+        name="param names a query key the pattern does not hold",
+        url_pattern="https://boards.test/jobs?p={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="route 1 — sends ?p=, and a capture of ?page= would certify it; fail-open",
+    ),
+    UrlProbe(
+        name="param names a key holding a literal while another key holds the placeholder",
+        url_pattern="https://boards.test/jobs?page=1&offset={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="route 1 — the named key is present in every URL and never varies, so a "
+        "capture carrying it certifies nothing about `offset`; fail-open",
+    ),
+    UrlProbe(
+        name="query_param mode over a placeholder that sits in the path",
+        url_pattern="https://boards.test/jobs/{page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="route 1 — no query key holds the page number, so `param` names nothing "
+        "the request carries; fail-open",
+    ),
+    # ---- route 2: a page key sent under a mode that certifies nothing.
+    UrlProbe(
+        name="mode none with the placeholder still in the pattern",
+        url_pattern="https://boards.test/jobs?page={page}",
+        pagination={"mode": "none", "max_pages": 1},
+        loads=False,
+        issues=(),
+        route="route 2 — `mode: none` short-circuits the scan while ?page=1 still goes "
+        "out, wholly unchecked; fail-open",
+    ),
+    UrlProbe(
+        name="body_field mode with a second page slot in the URL",
+        url_pattern="https://boards.test/Search/ExecuteSearch?page={page}",
+        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
+        body_json={"Keyword": _PROBE_QUERY, "Page": PAGE_PLACEHOLDER},
+        loads=False,
+        issues=(),
+        route="route 2, T109's shape on the URL half — the body key is certified and the "
+        "URL key is a second substitution nothing declared; fail-open",
+    ),
+    # ---- route 3: nothing varies, so every page is the same request.
+    UrlProbe(
+        name="query_param mode with no placeholder anywhere",
+        url_pattern="https://boards.test/jobs?page=1",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 3},
+        loads=False,
+        issues=(),
+        route="route 3 — the identical URL issued max_pages times, which is the "
+        "duplicate-offer harm the task names; fail-open",
+    ),
+    UrlProbe(
+        name="path_segment mode with no placeholder anywhere",
+        url_pattern="https://boards.test/jobs",
+        pagination={"mode": "path_segment", "param": "page", "start": 1, "max_pages": 3},
+        loads=False,
+        issues=(),
+        route="route 3, the positional flavour — nothing varies here either; fail-open",
+    ),
+    UrlProbe(
+        name="a percent-encoded placeholder, which never substitutes",
+        url_pattern="https://boards.test/jobs?page=%7Bpage%7D",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="route 3 in disguise — `%7Bpage%7D` decodes to the placeholder but "
+        "`build_list_urls` substitutes on the raw text, so nothing varies; counting "
+        "positions on `parse_qsl`'s decoded values would bless it. Fail-open",
+    ),
+    # ---- the T109 mirror: one page number, one position.
+    UrlProbe(
+        name="two query keys holding the placeholder, one of them named",
+        url_pattern="https://boards.test/jobs?page={page}&p={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T109 on the URL half — `p` also varies, and no capture is read for it; fail-open",
+    ),
+    UrlProbe(
+        name="the placeholder spelled into a query key's own name",
+        url_pattern="https://boards.test/jobs?page={page}&{page}=1",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T109 on the URL half — a key whose own spelling varies by page can never "
+        "be the key `param` names, and no capture can carry it; fail-open",
+    ),
+    # ---- the legal shapes. A check this aggressive would otherwise take the
+    # library down with it, and every one of these is a committed package's
+    # actual shape.
+    UrlProbe(
+        name="the ordinary shape: the named key holds the placeholder",
+        url_pattern="https://boards.test/jobs?page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=True,
+        issues=("https://boards.test/jobs?page=1", "https://boards.test/jobs?page=2"),
+        route="legal — arbeitnow_en, builtin_en, nofluffjobs_en, wellfound_en",
+    ),
+    UrlProbe(
+        name="a search slot beside the page slot, under a non-English key",
+        url_pattern="https://boards.test/ofertas?te={query}&pagina={page}",
+        pagination={"mode": "query_param", "param": "pagina", "start": 1, "max_pages": 2},
+        loads=True,
+        issues=(
+            "https://boards.test/ofertas?te=python&pagina=1",
+            "https://boards.test/ofertas?te=python&pagina=2",
+        ),
+        route="legal — tecnoempleo_es's shape; `{query}` is not a page slot",
+    ),
+    UrlProbe(
+        name="a positional page number in the path",
+        url_pattern="https://boards.test/jobs/{page}",
+        pagination={"mode": "path_segment", "param": "page", "start": 1, "max_pages": 2},
+        loads=True,
+        issues=("https://boards.test/jobs/1", "https://boards.test/jobs/2"),
+        route="legal — no key exists to name, which is why `path_segment` is certified "
+        "by matching the whole captured URL instead",
+    ),
+    UrlProbe(
+        name="a board with no second page, and no page slot",
+        url_pattern="https://boards.test/jobs",
+        pagination={"mode": "none", "max_pages": 1},
+        loads=True,
+        issues=("https://boards.test/jobs",),
+        route="legal — pythonorg_en, remotive_en, jobsacuk_en and eight more",
+    ),
+    UrlProbe(
+        name="a POST board whose page key is in the body and nowhere else",
+        url_pattern="https://boards.test/Search/ExecuteSearch",
+        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
+        body_json={"Keyword": _PROBE_QUERY, "Page": PAGE_PLACEHOLDER},
+        loads=True,
+        issues=(
+            "https://boards.test/Search/ExecuteSearch",
+            "https://boards.test/Search/ExecuteSearch",
+        ),
+        route="legal — the usajobs shape T89 added; two pages are the same URL and "
+        "differ only in the payload",
+    ),
+)
+
+#: The floor `URL_SIDE_PROBES` is checked against, committed in place of the
+#: count of the day for T100's reason. Fifteen probes ship today; the names that
+#: must stay are pinned by name in `tests/test_pagination_capture.py`, because a
+#: count is satisfied by any N probes and a floor protects only against bulk
+#: deletion.
+MINIMUM_URL_SIDE_PROBES = 12
+
+
+def _probe_document(probe: UrlProbe) -> str:
+    """`probe` as a whole connector document, ready for `parse_connector`."""
+    listing: dict[str, Any] = {
+        "url_pattern": probe.url_pattern,
+        "pagination": probe.pagination,
+    }
+    if probe.body_json is None:
+        listing["item"] = ".job"
+        listing["fields"] = {"text": {"css": ".body"}}
+    else:
+        listing["method"] = "POST"
+        listing["body_json"] = probe.body_json
+        listing["from_json"] = {
+            "items": "Jobs",
+            "fields": {"title": "Title", "text": "Summary", "detail_url": "Url"},
+        }
+    return yaml.safe_dump(
+        {
+            "site": "probeboard",
+            "locale": "en",
+            "version": "1.0.0",
+            "last_verified": "2026-09-08",
+            "auth": "none",
+            "list": listing,
+        },
+        sort_keys=False,
+    )
+
+
+def probe_url_side() -> tuple[list[str], int]:
+    """Run `URL_SIDE_PROBES`; return what disagreed with the rule, and how many ran.
+
+    Behavioural, not textual. Every probe is parsed as a connector document and
+    every loading one is built into the requests it would issue, so a validator
+    that was deleted, weakened or replaced by a comment fails here — which is
+    the lesson `integral.verified_gate` learned across three defeated rounds of
+    reading a file's text.
+    """
+    defects: list[str] = []
+    for probe in URL_SIDE_PROBES:
+        try:
+            connector = parse_connector(_probe_document(probe))
+        except ConnectorError as exc:
+            if probe.loads:
+                defects.append(f"{probe.name}: refused a legal shape ({exc}) — {probe.route}")
+            continue
+        if not probe.loads:
+            defects.append(f"{probe.name}: loaded a shape the rule refuses — {probe.route}")
+            continue
+        query = _PROBE_QUERY if QUERY_PLACEHOLDER in probe.url_pattern else None
+        issued = tuple(build_list_urls(connector, query=query))
+        if issued != probe.issues:
+            defects.append(
+                f"{probe.name}: issues {list(issued)}, not {list(probe.issues)} — {probe.route}"
+            )
+    return defects, len(URL_SIDE_PROBES)
+
+
+#: How a `probe/captured.json` came to hold what it holds.
+#:
+#: `#406`'s third finding: the record said *when* and *from what URL*, and never
+#: *how*, so "these bytes came off the wire into this file" and "this request was
+#: written down from a command committed elsewhere" were indistinguishable — the
+#: difference had to be argued in a pull-request comment, which is not where a
+#: reader of the package looks. Two values and a default, because a vocabulary
+#: nobody can spell wrongly is the only kind worth adding to twenty files.
+LIVE = "live"
+TRANSCRIBED = "transcribed"
+UNRECORDED = "unrecorded"
+
+#: The two a capture may declare. `UNRECORDED` is what a capture that declares
+#: nothing — or declares something outside this vocabulary — reads as; it is
+#: never written, so an old capture is not retro-labelled by a schema it predates.
+PROVENANCE = frozenset({LIVE, TRANSCRIBED})
+
+
+def read_provenance(declared: Any) -> str:
+    """`declared` as a provenance, `UNRECORDED` for anything unrecognised.
+
+    Fail-closed on the *claim*, not on the package: an unknown spelling is
+    "this capture does not say", never "this capture says something new". A
+    typo that silently became a third category would be a provenance nobody
+    agreed on, which is worse than an absence.
+    """
+    return declared if isinstance(declared, str) and declared in PROVENANCE else UNRECORDED
 
 
 @dataclass(frozen=True)
@@ -107,6 +424,9 @@ class Capture:
     present: bool
     url: str | None
     body: Any
+    #: How the record was produced — one of `PROVENANCE`, defaulting to
+    #: `UNRECORDED`.
+    provenance: str = UNRECORDED
 
 
 def read_capture(package: Path) -> Capture:
@@ -129,6 +449,7 @@ def read_capture(package: Path) -> Capture:
         present=True,
         url=url if isinstance(url, str) else None,
         body=payload.get("body"),
+        provenance=read_provenance(payload.get("provenance")),
     )
 
 
@@ -258,7 +579,8 @@ def check_package(package: Path) -> tuple[Finding | None, frozenset[str], int]:
                 package.name,
                 mode,
                 param,
-                f"the captured URL {capture.url!r} carries no {param!r} query key",
+                f"the captured URL {capture.url!r} ({capture.provenance}) carries no "
+                f"{param!r} query key",
             ),
             keys,
             1,
@@ -272,7 +594,8 @@ def check_package(package: Path) -> tuple[Finding | None, frozenset[str], int]:
                 package.name,
                 mode,
                 param,
-                f"the captured request body ({recorded}) carries no {param!r} key",
+                f"the captured request body ({recorded}, {capture.provenance}) carries no "
+                f"{param!r} key",
             ),
             keys,
             1,
@@ -328,6 +651,12 @@ def measure(directory: Path | None = None) -> dict[str, Any]:
         if finding is not None:
             findings.append(finding)
 
+    # The scan above says the committed library is clean; the probes say a
+    # library that was not could not load. Both are this gate: #406 found the
+    # library clean of all three URL-side routes and the schema silent about
+    # every one of them, which is a zero resting on nothing.
+    url_side_defects, url_side_probes = probe_url_side()
+
     measured: dict[str, Any] = {
         "paginated_request_keys_no_capture_measured": len(findings),
         "paginated_request_keys_checked": paginated_checked,
@@ -335,7 +664,11 @@ def measure(directory: Path | None = None) -> dict[str, Any]:
         "packages_scanned": scanned,
         "example_packages_excluded": examples,
         "findings": [finding.as_row() for finding in findings],
-        "fail_open": sum(1 for finding in findings if finding.as_row()["direction"] == "fail-open"),
+        "url_side_routes_open": len(url_side_defects),
+        "url_side_probes_checked": url_side_probes,
+        "url_side_defects": url_side_defects,
+        "fail_open": sum(1 for finding in findings if finding.as_row()["direction"] == "fail-open")
+        + len(url_side_defects),
         "gate_status": "measured",
     }
     if request_keys < MINIMUM_REQUEST_KEYS:
@@ -344,6 +677,14 @@ def measure(directory: Path | None = None) -> dict[str, Any]:
             f"only {request_keys} request key(s) across {scanned} package(s) "
             f"(floor {MINIMUM_REQUEST_KEYS}) — zero unmeasured page keys over a library "
             "nobody read is not a pass"
+        )
+    elif url_side_probes < MINIMUM_URL_SIDE_PROBES:
+        # The same refusal, for the same reason, on the other half: an emptied
+        # probe table reports zero open routes.
+        measured["gate_status"] = "unmeasured"
+        measured["unmeasured_reason"] = (
+            f"only {url_side_probes} URL-side probe(s) (floor {MINIMUM_URL_SIDE_PROBES}) "
+            "— zero open routes over a table nobody filled is not a pass"
         )
     return measured
 
@@ -361,10 +702,23 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
     still asserted by `test_the_scan_reaches_the_packages_that_paginate`: the
     number of paginating packages is a property of the library on the day, not
     of this gate.
+
+    `url_side_probes_checked` is dropped and floored too, and that one is not
+    about the library — it is `test_connector_pagination`'s argument that an
+    exact count in the evidence is doing a name's job badly: any N probes
+    satisfy it, so the protection it gives a particular probe is coincidental.
+    The probes that must stay are pinned **by name** in
+    `tests/test_pagination_capture.py`; the floor only refuses bulk deletion.
     """
-    dropped = ("request_keys_scanned", "packages_scanned", "paginated_request_keys_checked")
+    dropped = (
+        "request_keys_scanned",
+        "packages_scanned",
+        "paginated_request_keys_checked",
+        "url_side_probes_checked",
+    )
     committed = {key: value for key, value in measured.items() if key not in dropped}
     committed["request_keys_scanned_at_least"] = MINIMUM_REQUEST_KEYS
+    committed["url_side_probes_at_least"] = MINIMUM_URL_SIDE_PROBES
     return committed
 
 
@@ -401,7 +755,14 @@ def _main(argv: list[str]) -> int:
             f"({row['mode']}) — {row['reason']}",
             file=sys.stderr,
         )
-    return 1 if measured["paginated_request_keys_no_capture_measured"] else 0
+    for defect in measured["url_side_defects"]:
+        print(f"fail-open: url-side probe — {defect}", file=sys.stderr)
+    return (
+        1
+        if measured["paginated_request_keys_no_capture_measured"]
+        or measured["url_side_routes_open"]
+        else 0
+    )
 
 
 if __name__ == "__main__":

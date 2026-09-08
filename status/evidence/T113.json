@@ -4,7 +4,10 @@
     "examplejobs_es"
   ],
   "findings": [],
+  "url_side_routes_open": 0,
+  "url_side_defects": [],
   "fail_open": 0,
   "gate_status": "measured",
-  "request_keys_scanned_at_least": 12
+  "request_keys_scanned_at_least": 12,
+  "url_side_probes_at_least": 12
 }

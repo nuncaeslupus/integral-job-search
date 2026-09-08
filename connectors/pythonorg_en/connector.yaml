@@ -51,6 +51,27 @@ list:
   # `url_pattern` back to `https://www.python.org/jobs/?page={page}` with
   # `mode: query_param`, `param: page`, `start: 1`, `max_pages: 2`.
   # `integral.pagination_capture` refuses the key until that capture exists.
+  #
+  # **Attempted 2026-09-08 and blocked before robots could even be read.** The
+  # second reader on #406 recommended restoring rather than shipping the drop,
+  # and the reasoning is right: usajobs's `Page` was never sent and its name was
+  # inferred from a *response* field, while this board's `page` is its own
+  # emitted href, actually exercised, which answered 200 with six listings. What
+  # is missing here is only the artefact.
+  #
+  # The session that went to record it could not. Adjudication is the first step
+  # and it is the one that failed: `Robots().allows(...)` fetches
+  # `https://www.python.org/robots.txt`, and this environment's egress proxy
+  # answers `403 Forbidden` to the CONNECT — an organisation policy denial for
+  # the host, logged by the proxy as `connect_rejected`, not a robots verdict and
+  # not a matcher result. So the matcher returned nothing to act on, and **no
+  # fetch of `?page=2` was made**.
+  #
+  # It stays `mode: none` on that account, and deliberately: the one thing that
+  # must not happen here is a capture written from the 2026-08-30 sentence above,
+  # which would be a fabricated artefact certifying a request nobody re-issued —
+  # the exact defect T113 exists to refuse, committed under T113's own name. A
+  # task to record it belongs on the board; nothing on the board covers it today.
   url_pattern: "https://www.python.org/jobs/"
   pagination:
     mode: none

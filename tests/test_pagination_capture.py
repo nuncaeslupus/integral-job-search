@@ -24,7 +24,13 @@ import pytest
 import yaml
 
 from integral import pagination_capture as pc
-from integral.connectors import build_list_requests, load_connector
+from integral.connectors import (
+    ConnectorError,
+    build_list_requests,
+    build_list_urls,
+    load_connector,
+    load_connectors,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
@@ -487,3 +493,231 @@ def test_the_entry_point_exits_one_on_a_finding(
 
     assert pc._main(["pagination_capture", str(target)]) == 1
     assert json.loads(target.read_text(encoding="utf-8"))["findings"]
+
+
+# ---------------------------------------------------------------------------
+# the URL side of the rule — #406's three fail-open routes
+#
+# Each is written the same way, in two halves. The first half is the **harm**:
+# an object built with `model_copy(update=...)`, which never meets a validator,
+# so it is exactly what a package looked like before the load check existed —
+# and the scan above reports nothing about it, because the scan reads
+# `pagination.param` against a capture and every one of these routes leaves that
+# pair agreeing. The second half is the **fix**: the same shape, written as a
+# connector file, is refused at load.
+#
+# The first half is what makes the second load-bearing. A test that only
+# asserted the refusal would pass just as well over a rule nothing needed.
+
+
+def _skipping_validation(url_pattern: str, **pagination: Any) -> Any:
+    """The reference connector with a `list` no validator ever saw."""
+    connector = load_connector(_REFERENCE)
+    page = connector.list
+    return connector.model_copy(
+        update={
+            "list": page.model_copy(
+                update={
+                    "url_pattern": url_pattern,
+                    "pagination": page.pagination.model_copy(update=pagination),
+                }
+            )
+        }
+    )
+
+
+def _refused(library: Path, url_pattern: str, pagination: dict[str, Any]) -> str:
+    """The message `load_connector` refuses this `list` block with."""
+    _edit_connector(library, url_pattern=url_pattern, pagination=pagination)
+    with pytest.raises(ConnectorError) as raised:
+        load_connector(_package(library))
+    return str(raised.value)
+
+
+def test_a_param_naming_a_key_the_url_does_not_hold_is_refused(library: Path) -> None:
+    """Route 1. `?p={page}` under `param: page`, over a capture of `?page=1`:
+    the gate looks for `page` in the captured URL, finds it, and reports
+    measured — while every request goes out carrying `p`, a key no capture ever
+    recorded. The certified key and the sent key were never required to be the
+    same key."""
+    unvalidated = _skipping_validation(
+        "https://realboard.io/jobs?p={page}", mode="query_param", param="page", max_pages=2
+    )
+    assert build_list_urls(unvalidated) == [
+        "https://realboard.io/jobs?p=1",
+        "https://realboard.io/jobs?p=2",
+    ]
+    # And the capture that would certify it carries the OTHER key, so the scan
+    # is satisfied by a request nothing here ever issues.
+    assert "page" in pc.query_keys("https://realboard.io/jobs?page=1")
+    assert "page" not in pc.query_keys("https://realboard.io/jobs?p=1")
+
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?p={page}",
+        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+    )
+    assert "pagination.param is 'page'" in message
+    assert "query key 'p'" in message
+
+
+def test_mode_none_with_a_page_slot_still_in_the_pattern_is_refused(library: Path) -> None:
+    """Route 2. `mode: none` short-circuits the scan — "the package sends no
+    page key, so there is nothing to certify" — and `build_list_urls`
+    substitutes on the text regardless, so `?page=1` goes out with no capture
+    read for it at all."""
+    unvalidated = _skipping_validation(
+        "https://realboard.io/jobs?page={page}", mode="none", param=None, max_pages=1
+    )
+    assert build_list_urls(unvalidated) == ["https://realboard.io/jobs?page=1"]
+
+    message = _refused(
+        library, "https://realboard.io/jobs?page={page}", {"mode": "none", "max_pages": 1}
+    )
+    assert "pagination.mode is 'none'" in message
+    assert "query key 'page'" in message
+
+
+def test_query_param_with_nothing_to_vary_is_refused(library: Path) -> None:
+    """Route 3. No `{page}` anywhere, so `build_list_urls` returns the
+    **identical** URL `max_pages` times — the duplicate request, and then the
+    duplicate offers, this task is named for. The capture certifies `page`
+    because the literal `?page=1` is right there in the pattern."""
+    unvalidated = _skipping_validation(
+        "https://realboard.io/jobs?page=1", mode="query_param", param="page", max_pages=3
+    )
+    issued = build_list_urls(unvalidated)
+    assert issued == ["https://realboard.io/jobs?page=1"] * 3
+    assert len(set(issued)) == 1
+    assert "page" in pc.query_keys(issued[0])
+
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?page=1",
+        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 3},
+    )
+    assert "nothing would vary from page to page" in message
+
+
+def test_every_url_side_probe_agrees_with_the_rule() -> None:
+    """The measurement itself: every probe parsed, every legal one built into
+    the requests it would issue. Behavioural, so a validator deleted, weakened
+    or replaced by a comment fails here — which is what
+    `integral.verified_gate`'s three defeated rounds are about."""
+    defects, checked = pc.probe_url_side()
+
+    assert defects == []
+    assert checked >= pc.MINIMUM_URL_SIDE_PROBES
+
+
+def test_the_url_side_probe_table_carries_the_three_routes_and_meets_its_floor() -> None:
+    """Pinned **by name**, not by count, for `test_connector_pagination`'s
+    reason: a count is satisfied by any N probes, so the protection it gives a
+    particular shape is coincidental. These are the shapes #406 named, plus the
+    legal ones that stop the rule from taking the library down with it."""
+    assert len(pc.URL_SIDE_PROBES) >= pc.MINIMUM_URL_SIDE_PROBES
+    names = {probe.name for probe in pc.URL_SIDE_PROBES}
+    assert {
+        "param names a query key the pattern does not hold",
+        "param names a key holding a literal while another key holds the placeholder",
+        "query_param mode over a placeholder that sits in the path",
+        "mode none with the placeholder still in the pattern",
+        "body_field mode with a second page slot in the URL",
+        "query_param mode with no placeholder anywhere",
+        "path_segment mode with no placeholder anywhere",
+        "a percent-encoded placeholder, which never substitutes",
+        "two query keys holding the placeholder, one of them named",
+        "the placeholder spelled into a query key's own name",
+        "the ordinary shape: the named key holds the placeholder",
+        "a search slot beside the page slot, under a non-English key",
+        "a positional page number in the path",
+        "a board with no second page, and no page slot",
+        "a POST board whose page key is in the body and nowhere else",
+    } <= names, sorted(names)
+    # Both verdicts are represented. A table of refusals alone would pass over a
+    # validator that refuses everything — the fail-closed mirror of these
+    # routes, which would take the whole library out.
+    assert {probe.loads for probe in pc.URL_SIDE_PROBES} == {True, False}
+
+
+def test_the_committed_library_survives_the_url_side_rule() -> None:
+    """The other direction, over the real thing rather than over probes: a
+    check this aggressive would have taken the library down with it, and every
+    committed package still loads."""
+    assert len(load_connectors(_LIBRARY)) >= 15
+
+
+# ---------------------------------------------------------------------------
+# where a capture came from — #406's third finding
+
+
+def test_a_capture_that_declares_no_provenance_reads_as_unrecorded(library: Path) -> None:
+    """The default is an absence, not a guess. Every capture committed before
+    the field existed says nothing about how it was made, and reading that as
+    `live` would retro-label twenty files with a claim nobody checked."""
+    _write_capture(library, captured_at="2026-09-08", url="https://realboard.io/jobs", status=200)
+
+    assert pc.read_capture(_package(library)).provenance == pc.UNRECORDED
+
+
+def test_a_declared_provenance_is_read_back(library: Path) -> None:
+    """Both values, so the distinction the field exists for is legible in the
+    file rather than in a pull-request comment."""
+    for declared in (pc.LIVE, pc.TRANSCRIBED):
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url="https://realboard.io/jobs",
+            status=200,
+            provenance=declared,
+        )
+        assert pc.read_capture(_package(library)).provenance == declared
+
+
+def test_an_unrecognised_provenance_is_an_absence_not_a_third_category(library: Path) -> None:
+    """Fail-closed on the claim. A typo that silently became its own category
+    would be a provenance nobody agreed on, which is worse than saying nothing
+    — and `PROVENANCE` is the closed vocabulary that decides."""
+    for declared in ("Live", "recorded live", "", 1, None, ["live"]):
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url="https://realboard.io/jobs",
+            status=200,
+            provenance=declared,
+        )
+        assert pc.read_capture(_package(library)).provenance == pc.UNRECORDED
+    assert set(pc.PROVENANCE) == {pc.LIVE, pc.TRANSCRIBED}
+    assert pc.UNRECORDED not in pc.PROVENANCE
+
+
+def test_the_usajobs_capture_says_where_it_came_from() -> None:
+    """The board this task is named for. Its request record is byte-identical
+    to the re-runnable `retest` curl `connectors/ruled-out.yaml` commits, so
+    `transcribed` is what the file now says — and the reason the distinction
+    was worth a field is that `mode: none` means the scan never reads this
+    capture at all, leaving its worth entirely to whoever opens the package."""
+    capture = pc.read_capture(_LIBRARY / "usajobs_en")
+
+    assert capture.provenance == pc.TRANSCRIBED
+    assert capture.body == {"Keyword": "python", "ResultsPerPage": 25}
+
+
+def test_a_finding_names_the_provenance_of_the_capture_that_failed_to_certify(
+    library: Path, low_floor: None
+) -> None:
+    """A finding is read by somebody deciding what to do next, and "the capture
+    that does not carry this key was itself transcribed" is part of that
+    decision. Reported in the reason rather than left to a second lookup."""
+    _real_board(library)
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance=pc.TRANSCRIBED,
+    )
+
+    (finding,) = pc.measure(library)["findings"]
+
+    assert pc.TRANSCRIBED in finding["reason"]

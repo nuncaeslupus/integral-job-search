@@ -113,6 +113,7 @@ def test_the_gate_never_shells_out_over_a_malicious_url_pattern() -> None:
         "site: acme\nlocale: en\nversion: '1.0.0'\nlast_verified: '2026-01-01'\n"
         "list:\n"
         '  url_pattern: "https://x.test/$(rm -rf /)?page={page}"\n'
+        "  pagination:\n    mode: query_param\n    param: page\n    max_pages: 2\n"
         "  item: '.job'\n"
         "  fields:\n    text: {css: '.x'}\n"
     )
@@ -625,6 +626,7 @@ def _connector_yaml(name: str) -> str:
         f"site: {site}\nlocale: {locale}\nversion: '1.0.0'\nlast_verified: '2026-08-01'\n"
         "list:\n"
         "  url_pattern: 'https://x.test/jobs?page={page}'\n"
+        "  pagination:\n    mode: query_param\n    param: page\n    max_pages: 2\n"
         "  item: '.job'\n"
         "  fields:\n    text: {css: '.body'}\n"
     )
@@ -701,7 +703,7 @@ def test_a_search_result_is_not_presented_as_a_connector_result() -> None:
         parse_connector(
             f"site: {SEARCH_SOURCE}\nlocale: en\nversion: '1.0.0'\n"
             "last_verified: '2026-01-01'\n"
-            "list:\n  url_pattern: 'https://x.test/?page={page}'\n"
+            "list:\n  url_pattern: 'https://x.test/'\n"
             "  item: '.job'\n  fields:\n    text: {css: '.x'}\n"
         )
 
@@ -908,7 +910,7 @@ locale: en
 version: "1.0.0"
 last_verified: "2026-08-30"
 list:
-  url_pattern: "https://jsonboard.test/jobs?page={page}"
+  url_pattern: "https://jsonboard.test/jobs"
   from_json:
     embedded_in: 'script[type="application/ld+json"]'
     match:
@@ -2027,7 +2029,7 @@ def test_a_credential_in_the_url_query_is_refused_the_same_as_one_in_the_body() 
 
     # An ordinary query string is untouched — this is a credential check, not
     # a ban on query strings.
-    fine = "https://boards.test/search?q=python&page={page}&sort=date"
+    fine = "https://boards.test/search?q=python&sort=date"
     assert (
         parse_connector(
             post_board("https://boards.test/Search/ExecuteSearch", fine)
