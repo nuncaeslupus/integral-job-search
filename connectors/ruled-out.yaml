@@ -289,15 +289,25 @@ corrected:
       floor, and synthesising the other end would be inventing the employer's
       words.
     still_open: >
-      the page key. Only page 1 was captured, and its request body carried NO
-      page key at all, so `Page` — the name the board's own `Pager` implies
-      through `CurrentPageIndex`/`NextPageIndex` — is unverified as the REQUEST
-      key. The connector therefore ships `max_pages: 1`, which makes the
-      unverified name inert in every branch: an unbound key is ignored and
-      returns page 1, and a bound one returns page 1 too, because
-      `Pager.FirstPageIndex` is 1. One measurement raises it — POST the same
-      body with `"Page": 2` and check the rows differ from page 1 — and it must
-      be made before `max_pages` moves, not after.
+      the second page, and no longer a key nobody measured. T113 removed `Page`
+      from the shipped body and set `pagination.mode: none`: only page 1 was
+      ever captured, its request body carried NO page key at all, and `Page` —
+      the name the board's own `Pager` implies through
+      `CurrentPageIndex`/`NextPageIndex` — was read out of the RESPONSE, which
+      shows the board reports a page index rather than accepting one under that
+      spelling. The old defence ("inert at `max_pages: 1`, because an unbound
+      key is ignored and a bound one returns page 1 anyway") is what T113
+      refuses: it holds only while nobody raises the number, and if the board
+      ignores the key then page 2 duplicates page 1 and the fetcher collects
+      duplicate offers with nothing to report it. `probe/captured.json` now
+      records the request it was taken with — `method: POST` and the body
+      `{"Keyword":"python","ResultsPerPage":25}`, the same body the `retest`
+      line below reproduces — so the absence is checkable rather than inferred,
+      and `integral.pagination_capture` refuses the key across the whole
+      library until a capture carries it. One measurement reopens the page:
+      POST the same body with `"Page": 2`, check the rows differ from page 1,
+      and commit that response as a capture recording the body it was sent
+      with.
     lesson: >
       an API key on the *developer* API says nothing about the *website's* API.
       Yesterday's entry checked data.usajobs.gov (401 without an
