@@ -38,6 +38,26 @@ way). Without them the ranking is L1 and says so, ordered by salary alone.
 "A provisional ranking that is not labelled provisional is a defect, not a
 shortcut."
 
+**Paying more is a rule, not a weight (T138).** Two offers alike on every other
+ranked dimension used to come back in either order whenever neither had a
+salary-equivalent total — a priced dimension unknown on both leaves both totals
+`None`, both fall into the same bucket, and the tie broke on `offer_id`. So the
+2000 of an otherwise identical pair could be printed above the 5000. The order
+now breaks that tie on the salary itself, which makes "where two offers are
+equal on every other ranked dimension, the higher-paying one is never below the
+lower-paying one" a property of the sort rather than an accident of the
+alphabet. It costs no coefficient: nothing here decides what pay is worth
+against a commute, which is a preference and lives in T10's weights.
+`integral.pay_dominance` audits the published order against that rule from the
+outside, and `require_pay_coherence` is what makes the two agree — a published
+band has to carry a point reading inside it, or the number the sort uses would
+contradict the band the rule reads. `require_priced_dimensions_ranked` closes
+the other side of the same joint: a dimension the weights price but the ranking
+does not rank moves the order while the rule cannot see it, so the two disagree
+about the same list. The tiebreak reorders only the offers that published a
+salary (`_pay_before_the_alphabet`); a silent one keeps its place, because the
+rule makes no claim about it and neither may the order.
+
 Scope: `explanations` — the per-driver €/month contributions and their verbatim
 spans — belong to T19 (`integral.explain`), and the offer card to T44. This
 module produces the `rankings/<run_id>.json` those read, and carries each
@@ -48,6 +68,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -75,6 +96,36 @@ class RankingError(Exception):
     """The inputs do not support the ranking that was asked for."""
 
 
+#: A currency is an ISO 4217 code, matching `pay.CURRENCY_PATTERN`. Written out
+#: here rather than imported so this module keeps its one-way dependency on
+#: nothing but the extraction and profile types.
+_CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
+
+
+@dataclass(frozen=True)
+class PayBand:
+    """What the advert published, as T133's `range_low`/`range_high`/`currency`.
+
+    A point salary is the band whose ends coincide, so "a range against a
+    point" is not a second kind of comparison — it is this one with
+    `low == high` on one side. The third state is `Candidate.pay is None`: the
+    advert published no band at all, which is the common case (97 of 561
+    offers measured 2026-09-06 carried one) and is **not** a band of zero.
+    Reading it as zero would put every offer from a board that does not
+    publish below every offer from a board that does.
+    """
+
+    low: float
+    high: float
+    currency: str
+
+    def __post_init__(self) -> None:
+        if self.high < self.low:
+            raise RankingError(f"a band cannot end below where it starts: {self.low}-{self.high}")
+        if not _CURRENCY_RE.match(self.currency):
+            raise RankingError(f"{self.currency!r} is not an ISO 4217 code")
+
+
 @dataclass(frozen=True)
 class Candidate:
     """One offer as the ranker sees it: money, settled scores, and the gaps.
@@ -96,6 +147,14 @@ class Candidate:
     # happens, so a score with no wording behind it shows up as a number instead
     # of being rejected at a point where nothing could yet be done about it.
     spans: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # T138. The band the advert published, when it published one. `None` is not
+    # "zero" and not "unknown to us" — it is "the advert gave no band", and
+    # `pay_dominance.comparable_band` then falls back to `salary_per_month` as
+    # a point publication in the ranking's own numeraire. Carried beside
+    # `salary_per_month` rather than replacing it because the two answer
+    # different questions: this one is what was published, that one is the
+    # figure every other comparison in this module is denominated in.
+    pay: PayBand | None = None
 
     def __post_init__(self) -> None:
         overlap = set(self.scores) & self.unknown
@@ -176,6 +235,84 @@ def require_coverage(candidates: Sequence[Candidate], dimensions: Sequence[str])
                 f"{candidate.offer_id} accounts for neither a score nor an unknown on "
                 f"{missing} — a dimension nobody looked at is still an unknown, and "
                 "has to be named as one"
+            )
+
+
+def require_priced_dimensions_ranked(
+    dimensions: Sequence[str], priced: Mapping[str, float]
+) -> None:
+    """Every dimension the weights price has to be one the ranking ranks.
+
+    T138's rule reads "equal on every other **ranked** dimension" off
+    `dimensions`, and the order is `salary_equivalent_total`, which sums over
+    the **priced** ones. A dimension priced but not ranked drives the order
+    while being invisible to the rule, so two offers the rule calls alike can
+    have totals hundreds of euros apart: measured 2026-09-08, a 2000 priced at
+    `perks: 1.0` was printed above an otherwise identical 5000, and
+    `pay_dominance.violations` then reported `1` against a ranking this
+    function's caller had just produced. Neither half was wrong on its own —
+    nothing tied the two sets together, so the module contradicted itself.
+
+    Checked here rather than in `priced_dimensions` or `salary_equivalent_total`
+    because neither of those is told the ranked set; `rank` is the one place
+    that holds both, and it holds them before anything reads either. The
+    opposite inclusion is deliberately free: a ranked dimension with no price
+    is what makes a total `None`, which the level and the tiebreak already
+    handle.
+    """
+    unranked = sorted(name for name in priced if name not in set(dimensions))
+    if unranked:
+        raise RankingError(
+            f"the weights price {', '.join(unranked)}, which the ranking does not rank — "
+            "the order would move on a dimension the pay rule cannot see, so a lower-paying "
+            "offer could be printed above an otherwise identical one and read as alike"
+        )
+
+
+def require_pay_coherence(candidates: Sequence[Candidate], currency: str | None) -> None:
+    """A band published in the ranking's own currency must carry a point inside it.
+
+    T138's rule is read off the *band* (`pay_dominance.pays_more`) and enforced
+    by the *sort*, which orders on `salary_per_month`. The two agree only while
+    the point lies inside the band: given `a.low > b.high` and each point
+    inside its own band, `a.salary >= a.low > b.high >= b.salary`, so the sort
+    cannot place the higher-paying offer below. Drop either half of that and
+    the guarantee goes with it — a band with no point would sort last however
+    much it pays, and a point outside its band would order by a number the
+    advert contradicts.
+
+    Only a band in the ranking's currency is checked: one in another currency
+    is deliberately incomparable here (no rate with a date and a source lives
+    in this repository), so it constrains nothing and is not required to.
+    Checked once, here, where the currency is known — `require_coverage`'s
+    reason, one axis over.
+
+    **A ranking with no currency at all checks every band** (T138, second
+    reader, 2026-09-08). An L1 ranking with no weights and no `currency=`
+    argument has `None` here, and skipping on `None` used to switch the whole
+    guard off — a `4000-4200 EUR` band with no point reading sorted last,
+    beneath a published `3000`, and `pay_dominance` reported nothing because
+    its rule was off for the same reason. `None` is not a currency that
+    disagrees with the band; it is the absence of one to disagree with, and the
+    argument above never mentions the currency: the sort orders on the point,
+    so a band with no point is ranked as if unpaid whatever it is denominated
+    in.
+    """
+    for candidate in candidates:
+        band = candidate.pay
+        if band is None or (currency is not None and band.currency != currency):
+            continue
+        salary = candidate.salary_per_month
+        if salary is None:
+            raise RankingError(
+                f"{candidate.offer_id} publishes a {band.currency} band and no point reading "
+                "of it — the ranking orders on the point, so the band would be ranked as if "
+                "unpaid"
+            )
+        if not band.low <= salary <= band.high:
+            raise RankingError(
+                f"{candidate.offer_id} is ranked at {salary} against a published band of "
+                f"{band.low}-{band.high} {band.currency} — the order would contradict the advert"
             )
 
 
@@ -269,6 +406,9 @@ def rank(
             f"{currency!r} — converting between them is not this module's guess to make"
         )
     level: Sufficiency = "L2" if priced else "L1"
+    ranking_currency = weights_currency or currency
+    require_priced_dimensions_ranked(dimensions, priced)
+    require_pay_coherence(candidates, ranking_currency)
 
     # T79. A FAIL is removed *before* the frontier, not scored badly inside it:
     # dominance over a barred offer is meaningless, and an exclusion that
@@ -293,14 +433,26 @@ def rank(
     # neither sort last, in id order: a missing number is not a low one, and
     # the alternative — dropping them — is the collapse this module refuses
     # everywhere else.
-    ordering = totals if level == "L2" else _salaries(kept, by_id)
-    ordered = sorted(kept, key=lambda offer_id: (-ordering.get(offer_id, float("-inf")), offer_id))
+    salaries = _salaries(kept, by_id)
+    ordering = totals if level == "L2" else salaries
+    # T138: the salary breaks the tie, before the id does. Two offers alike on
+    # every other ranked dimension share a bucket here by construction — the
+    # same unknown set means either both have a total or neither does — so
+    # falling through to `offer_id` was the alphabet deciding which of them the
+    # candidate reads first. It is a tiebreak, not a weight: it never moves an
+    # offer past one the primary quantity ranks above it, so nothing here
+    # decides what pay is worth against a commute.
+    ordered = _pay_before_the_alphabet(
+        sorted(kept, key=lambda offer_id: (-ordering.get(offer_id, float("-inf")), offer_id)),
+        ordering,
+        salaries,
+    )
 
     return {
         "run_id": at,
         "profile_revision": revision.as_json(),
         "level": level,
-        "currency": weights_currency or currency,
+        "currency": ranking_currency,
         "dimensions": list(dimensions),
         "pareto": ordered,
         "dominated": dominated,
@@ -314,6 +466,47 @@ def rank(
             if by_id[offer_id].unknown & set(dimensions)
         },
     }
+
+
+def _pay_before_the_alphabet(
+    ordered: Sequence[str],
+    ordering: Mapping[str, float],
+    salaries: Mapping[str, float],
+) -> list[str]:
+    """Reorder each tie of the primary quantity by pay, leaving silent offers put.
+
+    T138's tiebreak, and the decided shape of it (second reader, 2026-09-08).
+    Inside one bucket of the primary quantity the offers that **published a
+    salary** take the same slots back in descending order of it, so the higher
+    paying of two alike offers is never printed below the lower — the property
+    the task asks for. An offer that published nothing keeps the slot the
+    alphabet gave it and is not moved at all.
+
+    That second half is the decision. A plain `-salary` key reads a missing
+    number as `-inf`, which is "an unpublished salary is a low one" — the
+    reading this package refuses in `pay_dominance.comparable_band`, where a
+    silent side is incomparable in *both* directions rather than cheap. At the
+    scale it runs at the two are not close: 97 of 561 offers measured
+    2026-09-06 published a band at all, so a tiebreak that sank the silent side
+    would put four offers in five beneath every tied offer from a board that
+    publishes, on the strength of a number nobody wrote down. The rule makes no
+    claim between a silent offer and a publishing one; the order it drives must
+    make none either, and the alphabet — which claims nothing about pay — is
+    what is left.
+    """
+    result = list(ordered)
+    start = 0
+    while start < len(result):
+        bucket = ordering.get(result[start], float("-inf"))
+        stop = start + 1
+        while stop < len(result) and ordering.get(result[stop], float("-inf")) == bucket:
+            stop += 1
+        slots = [index for index in range(start, stop) if result[index] in salaries]
+        by_pay = sorted((result[index] for index in slots), key=lambda o: (-salaries[o], o))
+        for index, offer_id in zip(slots, by_pay, strict=True):
+            result[index] = offer_id
+        start = stop
+    return result
 
 
 def _salaries(kept: Sequence[str], by_id: Mapping[str, Candidate]) -> dict[str, float]:

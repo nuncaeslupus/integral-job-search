@@ -3,13 +3,12 @@
   "boards_readable_only_by_post_evaluated": 1,
   "boards_refused_on_policy": 0,
   "ledger_entries_scanned": 34,
-  "get_connectors_still_plain_gets": 20,
-  "get_connectors_evaluated": 20,
   "credential_key_misjudged": 0,
   "credential_key_cases_checked": 102,
   "unreadable": [],
   "refused": [],
   "misjudged": [],
   "get_packages_changed": [],
-  "gate_status": "measured"
+  "gate_status": "measured",
+  "get_connectors_evaluated_at_least": 10
 }
