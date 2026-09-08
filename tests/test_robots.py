@@ -29,9 +29,11 @@ from integral.robots import (
     _canon_region,
     _Fixture,
     _main,
+    _match_octets,
     _matches,
     _normalize_rule,
     _product_token,
+    _region_of,
     _request_path,
     measure,
     measure_browser_recovery,
@@ -275,6 +277,150 @@ def test_specificity_counts_the_wildcard_octets() -> None:
     rules = [(False, "/a/b/c"), (True, "/a*b*c")]  # disallow 6, allow 6 -> allow wins the tie
 
     assert _allowed(rules, "/a/b/c") is True
+
+
+def test_precedence_is_scored_on_the_spelling_that_matched() -> None:
+    """RFC 9309 §2.2.2 weighs "the match that has the most octets".
+
+    A match is an event between a rule and a request, so its octets are the ones
+    that were compared. A run whose region the pattern leaves open carries two
+    canonical spellings of different lengths — `http%3A//evil` in a path,
+    `http%3A%2F%2Fevil` in a query — and only one of them can have matched.
+
+    Scoring the other was a fail-open, and a regression against the behaviour
+    that shipped: `Disallow: /*http://evil` matched 19 canonical octets of this
+    request and was scored on its 15-octet path spelling, so a strictly shorter
+    `Allow` beat it and the request was permitted. The Disallow alone refuses
+    it, and so does the same intent written without the `*`.
+    """
+    path = _request_path("https://x.test/out?url=http://evil.com")
+    disallow = _normalize_rule("/*http://evil")
+    allow = _normalize_rule("/out?url=http%3A")
+
+    # The count is what changed: the path spelling of that run is 13 octets and
+    # the query spelling 17, and it is the query one that met the request.
+    assert _match_octets(*disallow, path) == 18  # `/` + `http%3A%2F%2Fevil`
+    assert _match_octets(*allow, path) == 18
+    # Plus one octet for the `*` that `_normalize_rule` split away, which is
+    # what carries the Disallow past the Allow.
+    assert _allowed([(False, "/*http://evil"), (True, "/out?url=http%3A")], path) is False
+
+
+def test_a_wildcard_and_its_wildcard_free_spelling_reach_one_verdict() -> None:
+    """§2.2.2 canonicalises prior to comparison, so two spellings of one URI set
+    cannot disagree. The `*` form and the fully written form of the same intent
+    are checked against the same request and the same competing `Allow`."""
+    path = _request_path("https://x.test/out?url=http://evil.com")
+    allow = (True, "/out?url=http%3A")
+
+    with_star = _allowed([(False, "/*http://evil"), allow], path)
+    without_star = _allowed([(False, "/out?url=http%3A%2F%2Fevil"), allow], path)
+
+    assert with_star == without_star is False
+
+
+def test_no_shorter_allow_beats_a_wildcard_disallow_that_matched_more() -> None:
+    """The finding as a CLASS, not as the one row that exposed it.
+
+    Every `Disallow` whose post-`*` run carries `/` and lands in a query was
+    under-scored, so this walks a spread of them against every strictly shorter
+    matching `Allow` and requires the longest match to win each time. A single
+    triple would pass again the moment a new spelling was mis-scored.
+    """
+    path = _request_path("https://x.test/out?url=http://evil.com")
+    disallows = ["/*http://evil", "/*http://", "/out*http://", "/*%2F/", "/out*//", "/*?"]
+    allows = ["/out", "/out?", "/out?url=h", "/out?url=htt", "/out?url=http%3A"]
+
+    def score(pattern: str) -> int | None:
+        chunks, anchored = _normalize_rule(pattern)
+        octets = _match_octets(chunks, anchored, path)
+        return None if octets is None else octets + len(chunks) - 1 + int(anchored)
+
+    compared = 0
+    for disallow in disallows:
+        refusal = score(disallow)
+        assert refusal is not None, f"{disallow} must match the request at all"
+        for allow in allows:
+            permission = score(allow)
+            if permission is None or permission >= refusal:
+                continue
+            compared += 1
+            assert _allowed([(False, disallow), (True, allow)], path) is False, (
+                f"{allow!r} scores {permission} and must not beat {disallow!r} at {refusal}"
+            )
+    assert compared >= 12, f"the class must stay populated; compared {compared}"
+
+
+def test_a_rule_scores_what_the_same_rule_spelled_explicitly_would_score() -> None:
+    """The general form of the precedence finding, in both directions.
+
+    A run behind a `*` is region-ambiguous, so it carries two canonical
+    spellings — and the rule that spells those octets as escapes is not
+    ambiguous and carries one. When the ambiguous rule matches through its query
+    spelling, it has matched exactly what the explicit rule matches, so the two
+    must weigh the same. Scoring the ambiguous rule on its path spelling broke
+    that in BOTH directions: a `Disallow` was under-weighed and lost to a
+    shorter `Allow` (the fail-open), and an `Allow` was under-weighed and lost
+    to a `Disallow` it should have tied or beaten.
+
+    Stated this way it is an invariant rather than a list of triples, so a new
+    spelling that goes wrong fails it without anyone adding a row.
+    """
+    pairs = [
+        ("/*http://", "/*http%3A%2F%2F"),
+        ("/*http://evil", "/*http%3A%2F%2Fevil"),
+        ("/*/x", "/*%2Fx"),
+        ("/out*//", "/out*%2F%2F"),
+        ("/*?y", "/*%3Fy"),
+    ]
+    targets = [
+        "https://x.test/out?url=http://evil.com",
+        "https://x.test/a?b=/x",
+        "https://x.test/a/x",
+        "https://x.test/q?z=?y",
+        "https://x.test/x/http://y",
+    ]
+
+    def score(pattern: str, path: str) -> int | None:
+        chunks, anchored = _normalize_rule(pattern)
+        octets = _match_octets(chunks, anchored, path)
+        return None if octets is None else octets + len(chunks) - 1 + int(anchored)
+
+    compared = 0
+    for url in targets:
+        path = _request_path(url)
+        for ambiguous, explicit in pairs:
+            weighed, spelled_out = score(ambiguous, path), score(explicit, path)
+            if weighed is None or spelled_out is None:
+                continue
+            compared += 1
+            assert weighed == spelled_out, (
+                f"{ambiguous!r} scored {weighed} against {path!r} where the same rule "
+                f"written {explicit!r} scores {spelled_out}"
+            )
+    assert compared >= 5, f"the invariant must stay exercised; compared {compared}"
+
+
+def test_the_query_region_begins_after_the_delimiter_not_at_it() -> None:
+    """RFC 3986 §3.4 — the query component is indicated by the first `?` and
+    begins AFTER it, so the delimiter is the last octet before the query rather
+    than the first octet of it.
+
+    A rule run may therefore end on the delimiter while still being a path
+    spelling, which is what `Disallow: /*?$` does. Reading the delimiter's own
+    position as query (`>=` rather than `>`) rejects that spelling, the rule
+    matches nothing, and the request is permitted — fail-open.
+    """
+    path = _request_path("https://x.test/x=?")
+    assert path == "/x%3D?"
+    boundary = path.index("?")
+
+    assert _region_of(boundary - 1, boundary) is False
+    assert _region_of(boundary, boundary) is False, "the delimiter is not in the query"
+    assert _region_of(boundary + 1, boundary) is True
+
+    chunks, anchored = _normalize_rule("/*?$")
+    assert _matches(chunks, anchored, path) is True
 
 
 def test_a_raw_percent_canonicalises_to_its_escape() -> None:

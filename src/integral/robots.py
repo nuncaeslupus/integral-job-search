@@ -452,19 +452,24 @@ def _spelling_at(path: str, run: tuple[_Spelling, ...], at: int, boundary: int) 
     return None
 
 
-def _find_spelling(path: str, run: tuple[_Spelling, ...], start: int, boundary: int) -> int | None:
-    """The earliest end position at or after `start` where `run` occurs.
+def _find_spelling(
+    path: str, run: tuple[_Spelling, ...], start: int, boundary: int
+) -> tuple[int, int] | None:
+    """Where `run` first ends at or after `start`, and how many octets it spent.
 
     Earliest END rather than earliest start, because two spellings of one run
     have different lengths: taking the one that finishes soonest leaves the most
     room for the runs after it, which is what keeps the greedy scan complete.
+    The winning spelling's octet count is returned alongside its end position,
+    because that count — and not the other spelling's — is what `_allowed` has
+    to score. Nothing else knows which spelling matched.
 
     Each spelling is searched only in its own region — a path spelling must
     START at or before the delimiter, a query spelling after it. A run carrying
     no `?` cannot cover the delimiter octet, so bounding the start is enough to
     keep it on one side; a run carrying its own `?` is meant to cross.
     """
-    best: int | None = None
+    best: tuple[int, int] | None = None
     for text, in_query in run:
         if in_query is None:
             lower, upper = start, len(path)
@@ -477,15 +482,43 @@ def _find_spelling(path: str, run: tuple[_Spelling, ...], start: int, boundary: 
         found = path.find(text, lower, upper)
         if found == -1:
             continue
-        if best is None or found + len(text) < best:
-            best = found + len(text)
+        if best is None or found + len(text) < best[0]:
+            best = (found + len(text), len(text))
     return best
 
 
-def _matches(chunks: list[tuple[_Spelling, ...]], anchored: bool, path: str) -> bool:
-    """Greedy wildcard match, iterative and bounded — never exponential.
+def _anchored_spelling(
+    path: str, run: tuple[_Spelling, ...], floor: int, boundary: int
+) -> int | None:
+    """The octets a `$`-anchored final run spends flush against the end, or `None`.
 
-    The previous revision compiled each rule to a regex with `.*` per wildcard.
+    At most one spelling can satisfy this. Two spellings of a run differ in
+    length, so ending together means starting apart, and the shorter — always
+    the path one, since `/` costs one octet and `%2F` three — would have to
+    start LATER, past the delimiter, where a path spelling is not admissible.
+    The `max` is therefore a formality; it is written as one rather than as a
+    first-hit so that a case this argument has not foreseen scores the spelling
+    that consumed the most octets rather than whichever the tuple listed first.
+    """
+    best: int | None = None
+    for text, in_query in run:
+        at = len(path) - len(text)
+        if at < floor:
+            continue
+        if in_query is not None and in_query != _region_of(at, boundary):
+            continue
+        if not path.endswith(text):
+            continue
+        if best is None or len(text) > best:
+            best = len(text)
+    return best
+
+
+def _match_octets(chunks: list[tuple[_Spelling, ...]], anchored: bool, path: str) -> int | None:
+    """The literal octets the rule consumed, or `None` when it does not match.
+
+    Greedy wildcard match, iterative and bounded — never exponential. The
+    previous revision compiled each rule to a regex with `.*` per wildcard.
     Correct, but it backtracks catastrophically: a remote robots.txt could ship
     `/*a*a*a...b$` and hang the crawler on any path lacking the final `b`,
     turning a politeness check into a denial of service against ourselves. Any
@@ -495,35 +528,49 @@ def _matches(chunks: list[tuple[_Spelling, ...]], anchored: bool, path: str) -> 
     Each run is found once, left to right, never reconsidered: O(len(path) x
     len(rule)), and the at-most-two spellings a run can carry double that work
     rather than branching it.
+
+    **The count is the point of this function, not a by-product.** RFC 9309
+    §2.2.2 decides precedence by "the match that has the most octets", and a run
+    whose region the pattern leaves open has TWO canonical spellings of
+    different lengths — `/` in a path against `%2F` in a query. Exactly one of
+    them is the one that matched, and this walk is the only place that knows
+    which. Returning a bare `True` threw that away and left `_allowed` to guess
+    from the tuple's first entry; see the fail-open recorded there.
     """
     if not chunks:
-        return True
+        return 0
     boundary = path.find(_QUERY_DELIMITER)
     if boundary == -1:
         boundary = len(path)
     first, *rest = chunks
     prefix = _spelling_at(path, first, 0, boundary)
     if prefix is None:
-        return False
+        return None
+    # The first run starts at octet 0, so where it ends IS what it spent.
+    octets = prefix
     if not rest:
-        return len(path) == prefix if anchored else True
+        if anchored and len(path) != prefix:
+            return None
+        return octets
     position = prefix
     for index, run in enumerate(rest):
         if index == len(rest) - 1 and anchored:
             # The final run must sit flush against the end of the path.
-            return any(
-                len(path) - len(text) >= position
-                and (in_query is None or in_query == _region_of(len(path) - len(text), boundary))
-                and path.endswith(text)
-                for text, in_query in run
-            )
+            tail = _anchored_spelling(path, run, position, boundary)
+            return None if tail is None else octets + tail
         if all(not text for text, _ in run):
             continue
         found = _find_spelling(path, run, position, boundary)
         if found is None:
-            return False
-        position = found
-    return True
+            return None
+        position, spent = found
+        octets += spent
+    return octets
+
+
+def _matches(chunks: list[tuple[_Spelling, ...]], anchored: bool, path: str) -> bool:
+    """Whether the rule applies to `path` at all — `_match_octets`, thresholded."""
+    return _match_octets(chunks, anchored, path) is not None
 
 
 def _request_path(url: str) -> str:
@@ -552,19 +599,40 @@ def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
     best_len, best_allow = -1, True
     for is_allow, pattern in rules:
         chunks, anchored = _normalize_rule(pattern)
-        if not _matches(chunks, anchored, path):
+        matched = _match_octets(chunks, anchored, path)
+        if matched is None:
             continue
-        # Specificity is the length of the PATTERN, metacharacters included:
+        # Specificity is the octet count OF THE MATCH, metacharacters included:
         # `len(chunks) - 1` restores the `*` octets that splitting removed, and
         # `int(anchored)` the trailing `$` that `_normalize_rule` stripped.
         # Restoring only the wildcards is how `Disallow: /foo/*$` scored 6
         # against `Allow: /foo/x`, tied, and lost to the allow rule — which
         # permits a path the site anchored a rule to exclude.
-        # `run[0][0]` is each run's first spelling — the one the pattern's own
-        # region reading produced, and for an undetermined run the path one. A
-        # length that varied with the spelling that happened to match would make
-        # precedence depend on the request rather than on the pattern.
-        length = sum(len(run[0][0]) for run in chunks) + len(chunks) - 1 + int(anchored)
+        #
+        # **`matched` comes from the walk, not from the pattern, and that is the
+        # fix for a fail-open this module shipped.** Summing `run[0][0]` — each
+        # run's FIRST spelling, the path one — scored an undetermined run on a
+        # spelling that had not matched anything. Since the query spelling is
+        # never the shorter (`/`->`%2F`, `?`->`%3F`), a `Disallow` reaching the
+        # query through a `*` matched on the long spelling and was scored on the
+        # short one, and lost to an `Allow` it should have beaten:
+        #
+        #     Disallow: /*http://evil     matched 19 octets, scored 15
+        #     Allow:    /out?url=http%3A  scored 18
+        #     /out?url=http://evil.com -> ALLOW, where the Disallow alone refuses
+        #
+        # Twelve such triples exist, including this module's own showcase rule.
+        # The defence for `run[0][0]` was that precedence should depend "on the
+        # pattern rather than the request" — but §2.2.2 weighs "the match that
+        # has the most octets", and a match is an event between a rule and a
+        # request, so its octets are the ones that were actually compared. The
+        # code had already accepted that much by counting CANONICAL octets
+        # rather than raw pattern text (`specificity_must_be_computed_on_
+        # decoded_octets_not_raw_text` pins it); having two canonical forms for
+        # one run, it then chose the one that lost. The test of the rule is that
+        # the wildcard and non-wildcard spellings of one intent must agree, and
+        # under this count they do.
+        length = matched + len(chunks) - 1 + int(anchored)
         if length > best_len or (length == best_len and is_allow):
             best_len, best_allow = length, is_allow
     return best_allow
@@ -1543,6 +1611,135 @@ Disallow: /search?
             "are different octet sequences and the rule does not apply"
         ),
     ),
+    # ---------------------------------------------------------------
+    # T151 round 2, 2026-09-08. The second reader's BLOCK on #422 and the
+    # cases it named. The fix above gave an undetermined run TWO canonical
+    # spellings, and `_allowed` was scoring the one that had not matched: a
+    # fail-open, and a regression against `main`. These commit the class.
+    _Fixture(
+        # THE blocking case. `Disallow: /*http://evil` alone refuses this
+        # request; adding a strictly shorter `Allow` used to let it through,
+        # because the Disallow matched 19 canonical octets and was scored on
+        # its 15-octet path spelling against the Allow's 18.
+        name="a_wildcard_disallow_is_scored_on_the_octets_it_actually_matched",
+        robots_txt="User-agent: *\nDisallow: /*http://evil\nAllow: /out?url=http%3A\n",
+        agent="TestBot/1.0",
+        url="https://example.com/out?url=http://evil.com",
+        expected_allowed=False,
+        citation=(
+            'RFC 9309 §2.2.2 — the most specific match is "the match that has the '
+            'most octets", and a match is between a rule and a request, so the '
+            "octets counted are the ones compared: the Disallow meets 19 canonical "
+            "octets (`/` + `*` + `http%3A%2F%2Fevil`) against the Allow's 18"
+        ),
+    ),
+    _Fixture(
+        # The control the reader required beside it: the SAME intent written
+        # without a metacharacter. §2.2.2 canonicalises prior to comparison, so
+        # two spellings of one URI set cannot reach opposite verdicts. This
+        # already passed; it is committed so that a future scoring change
+        # cannot fix one spelling and break the other unobserved.
+        name="the_same_intent_without_a_wildcard_reaches_the_same_verdict",
+        robots_txt=(
+            "User-agent: *\nDisallow: /out?url=http%3A%2F%2Fevil\nAllow: /out?url=http%3A\n"
+        ),
+        agent="TestBot/1.0",
+        url="https://example.com/out?url=http://evil.com",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.2 — canonicalisation happens prior to comparison, so the "
+            "wildcard and non-wildcard spellings of one rule denote one URI set and "
+            "must produce one verdict; here the Disallow is the longer match either way"
+        ),
+    ),
+    _Fixture(
+        # The M9 differential: nothing observed `_region_of`'s comparison, and
+        # relaxing it to `>=` moves this row to ALLOW.
+        name="an_anchored_rule_may_end_on_the_query_delimiter",
+        robots_txt="User-agent: *\nDisallow: /*?$\n",
+        agent="TestBot/1.0",
+        url="https://example.com/x=?",
+        expected_allowed=False,
+        citation=(
+            "RFC 3986 §3.4 — the query component BEGINS AFTER the first `?`, so the "
+            "delimiter is the last octet of the target before the query and not the "
+            "first octet of it; RFC 9309 §2.2.3 — `*` is any sequence and `$` anchors "
+            "the end, so a rule ending at that delimiter matches a target ending there"
+        ),
+    ),
+    _Fixture(
+        name="a_raw_non_ascii_rule_matches_its_percent_encoded_request",
+        robots_txt="User-agent: *\nDisallow: /caf\u00e9\n",
+        agent="TestBot/1.0",
+        url="https://example.com/caf%C3%A9",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.2 — octets outside the US-ASCII range are percent-encoded "
+            "per RFC 3986 before comparison, so the rule's UTF-8 `é` and the "
+            "request's `%C3%A9` are one octet sequence"
+        ),
+    ),
+    _Fixture(
+        # And the other direction, which nothing covered: the escape is in the
+        # RULE and the raw octets are in the REQUEST.
+        name="a_percent_encoded_non_ascii_rule_matches_its_raw_request",
+        robots_txt="User-agent: *\nDisallow: /caf%C3%A9\n",
+        agent="TestBot/1.0",
+        url="https://example.com/caf\u00e9",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.2 — the same encoding requirement read from the request's "
+            "side; canonicalisation is applied to both, so which side carries the "
+            "escape cannot change the verdict"
+        ),
+    ),
+    _Fixture(
+        # The second direction of the hex-digit case, which
+        # `percent_encoding_hex_digit_case_insensitivity` only covered one way
+        # round (uppercase rule, lowercase request).
+        name="percent_encoding_hex_digit_case_insensitivity_from_the_rules_side",
+        robots_txt="User-agent: *\nDisallow: /caf%c3%a9\n",
+        agent="TestBot/1.0",
+        url="https://example.com/caf%C3%A9",
+        expected_allowed=False,
+        citation=(
+            "RFC 3986 §6.2.2.1 — the hexadecimal digits of a percent-encoding triplet "
+            "are case-insensitive and normalise to uppercase, so `%c3%a9` in the rule "
+            "and `%C3%A9` in the request are the same octets"
+        ),
+    ),
+    _Fixture(
+        # A `?`-bearing run behind a `*`, landing in a PATH: the rule's own `?`
+        # opens its query, so the run reads as `x` + delimiter + `y`, and it
+        # meets a request whose `?` is in the same place.
+        name="a_wildcard_run_carrying_its_own_delimiter_lands_in_a_path",
+        robots_txt="User-agent: *\nDisallow: /*x?y\n",
+        agent="TestBot/1.0",
+        url="https://example.com/ax?y",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.3 — `*` matches any sequence, so `/*x?y` denotes `/` then "
+            "anything then `x?y`; RFC 3986 §3.4 — the request's single `?` is its own "
+            "region delimiter, matching the rule's"
+        ),
+    ),
+    _Fixture(
+        # The same run landing in a QUERY, where its `?` is data on both sides.
+        # This is the case the two-spelling emission exists for: the rule's `?`
+        # must spell as `%3F` to meet a second `?` in the request, which §3.4
+        # makes ordinary query data.
+        name="a_wildcard_run_carrying_its_own_delimiter_lands_in_a_query",
+        robots_txt="User-agent: *\nDisallow: /*x?y\n",
+        agent="TestBot/1.0",
+        url="https://example.com/a?bx?y",
+        expected_allowed=False,
+        citation=(
+            "RFC 9309 §2.2.3 with RFC 3986 §3.4 — the request's FIRST `?` opens its "
+            "query and the second is query data, encoded `%3F`; the `*` may span the "
+            "first, so the run behind it is admissible as query octets and spells its "
+            "own `?` the same way"
+        ),
+    ),
 )
 
 # The denominator of `robots_verdicts_misread`, asserted as a FLOOR and never as
@@ -1550,9 +1747,10 @@ Disallow: /search?
 # never turn this red; removing them must, because a clean zero over a shrunken
 # table is the failure this module keeps finding one level up. Raise it
 # deliberately when a round of cases lands -- T102 raised it from the 56 the
-# round-2 audit left to the 59 it measured, and T151 raised it to 64 with the
-# five §2.2.2 region cases above.
-FIXTURES_AT_LEAST = 64
+# round-2 audit left to the 59 it measured, T151 raised it to 64 with the five
+# §2.2.2 region cases above, and T151's second-reader round raised it to 72
+# with the eight the BLOCK on #422 named.
+FIXTURES_AT_LEAST = 72
 
 
 def _verdict(fixture: _Fixture) -> bool:
