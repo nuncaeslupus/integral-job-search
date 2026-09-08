@@ -90,7 +90,7 @@ class SecondReaderError(Exception):
 #: `/foo/bar?baz=https%3A%2F%2Ffoo.bar`, showing the `:` and the two `/` encoded
 #: as data inside the value of `baz` — and that is an illustration of the rule,
 #: never its extent.
-_RESERVED = ":/?#[]@!$&\'()*+,;="
+_RESERVED = ":/?#[]@!$&'()*+,;="
 
 #: The two reserved octets held out, because §2.2.3 gives them a meaning inside
 #: a **pattern**: `*` "designates 0 or more instances of any character" and `$`
@@ -118,9 +118,7 @@ _PATTERN_METACHARACTERS = "*$"
 #: `canonical`: it is the octet that makes "in the query" decidable at all, so
 #: encoding it would leave nothing to be in. A *later* `?` is data and is
 #: encoded, on both sides, like any other reserved octet.
-_QUERY_DATA_OCTETS = "".join(
-    octet for octet in _RESERVED if octet not in _PATTERN_METACHARACTERS
-)
+_QUERY_DATA_OCTETS = "".join(octet for octet in _RESERVED if octet not in _PATTERN_METACHARACTERS)
 
 
 def _percent(octet: str) -> str:

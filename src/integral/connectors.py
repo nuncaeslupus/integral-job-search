@@ -96,7 +96,7 @@ from functools import lru_cache
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Final, Literal
-from urllib.parse import parse_qsl, quote, urlsplit
+from urllib.parse import parse_qsl, quote, unquote, urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -1295,6 +1295,62 @@ def _page_placeholder_paths(node: Any, where: tuple[Any, ...] = ()) -> list[tupl
     return []
 
 
+def _query_key_position(key: str) -> str:
+    """How a query-string key is named in a `url_pattern` position report.
+
+    One function so the position the validator *wants* and the positions it
+    *found* are spelled by the same code. Two format strings that have to agree
+    is the drift `_page_placeholder_paths` was written to end on the body side.
+    """
+    return f"query key {key!r}"
+
+
+#: How a `{page}` that is not a query-string value is named. There is no key to
+#: name it by, which is precisely why `mode: path_segment` is certified by
+#: matching the whole captured URL against the pattern instead.
+_PAGE_OUTSIDE_QUERY = "outside the query string (the path, host or fragment)"
+
+#: A `{page}` spelled into a query-string key's *own name*. Legal to
+#: `_pattern_uses_only_the_page_placeholder`, and it makes the key itself vary
+#: per page — so `pagination.param` can never name it and no capture can carry
+#: it under a fixed spelling.
+_PAGE_AS_QUERY_KEY_NAME = "a query-string key's own name"
+
+
+def _url_page_positions(pattern: str) -> list[str]:
+    """Every position in `url_pattern` holding `{page}`, one entry per occurrence.
+
+    The URL half of `_page_placeholder_paths`, and it exists for the same
+    reason: "is the placeholder anywhere" is not the question. `build_list_urls`
+    substitutes with `str.replace`, so it varies **every** occurrence — while
+    `pagination.param` names exactly one query key and
+    `integral.pagination_capture` certifies exactly that one against a recorded
+    request. Any other occurrence is a page number going out in a field no
+    capture measured, which is the fail-open shape T109 found in the body.
+
+    Counted on the **raw** query text, never on `parse_qsl`'s decoded values:
+    `?page=%7Bpage%7D` decodes to the placeholder but `build_list_urls` would
+    never substitute it, so reading it as a page slot would bless a pattern that
+    in fact issues the identical URL every time. Key *names* are decoded,
+    because that is the spelling `pagination.param` and `pagination_capture`'s
+    `query_keys` both use, and a name that only matches before decoding is not
+    the key a capture carries.
+    """
+    positions: list[str] = []
+    accounted = 0
+    query = urlsplit(pattern).query
+    for pair in query.split("&") if query else []:
+        raw_name, _, raw_value = pair.partition("=")
+        name = unquote(raw_name.replace("+", " "))
+        in_value = raw_value.count(PAGE_PLACEHOLDER)
+        in_name = raw_name.count(PAGE_PLACEHOLDER)
+        positions.extend([_query_key_position(name)] * in_value)
+        positions.extend([_PAGE_AS_QUERY_KEY_NAME] * in_name)
+        accounted += in_value + in_name
+    positions.extend([_PAGE_OUTSIDE_QUERY] * (pattern.count(PAGE_PLACEHOLDER) - accounted))
+    return positions
+
+
 #: T133 — the closed client vocabulary.
 #:
 #: The rule this relaxes is a real one and stays: **a connector cannot name a
@@ -1615,6 +1671,98 @@ class ListPage(Strict):
                     "that may hold the placeholder, so a nested or second occurrence is a "
                     "substitution nothing declared"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _a_page_placeholder_and_a_query_key_imply_each_other(self) -> ListPage:
+        """The URL half of the validator above — the half that was missing.
+
+        `_a_page_placeholder_and_a_body_field_imply_each_other` binds
+        `pagination.param` to the body key that actually varies. Nothing bound
+        it to the **URL** key, and a request has two halves: found by the
+        second-reader round on #406, which named three routes by which a package
+        could send a page key `integral.pagination_capture` reads as measured
+        while the gate reports zero. Each is reproduced as a probe in
+        `pagination_capture.URL_SIDE_PROBES` and as a test fixture.
+
+        1. **`param` naming a key the URL does not hold.**
+           `?p={page}` with `param: page` over a capture of `?page=1` — the
+           gate looks for `page` in the captured URL, finds it, and reports
+           measured, while every request goes out carrying `p`. The certified
+           key and the sent key were never required to be the same key.
+        2. **`mode: none` with `{page}` still in the pattern.** `mode: none`
+           short-circuits the gate ("the package sends no page key, so there is
+           nothing to certify") — but `build_list_urls` substitutes on the text,
+           so the connector still fetches `?page=1`, wholly unchecked.
+        3. **`query_param` with no `{page}` anywhere.** Nothing varies, so the
+           connector issues the *identical* URL `max_pages` times: the duplicate
+           request, and then the duplicate offers, that `mode: none`'s own
+           `max_pages` guard and `body_field`'s "nothing would vary" arm each
+           already refuse one layer down.
+
+        Fail-closed in every direction, and it costs a contributor one error
+        message in the file they just wrote.
+        """
+        positions = _url_page_positions(self.url_pattern)
+        mode = self.pagination.mode
+        param = self.pagination.param
+        if mode in {"none", "body_field"}:
+            # Route 2, and its `body_field` mirror: a POST board declares that
+            # the page number lives in the body, so a second one in the URL is
+            # a substitution nothing declared — T109's finding, on the other
+            # half of the request.
+            if positions:
+                raise ValueError(
+                    f"list.url_pattern carries {PAGE_PLACEHOLDER} at "
+                    f"{', '.join(sorted(positions))} but pagination.mode is {mode!r} — a URL "
+                    "that paginates must say so with mode: query_param (or path_segment), "
+                    f"and nothing certifies a page key sent under mode {mode!r}"
+                )
+            return self
+        if mode == "query_param":
+            wanted = _query_key_position(param) if param is not None else None
+            if not positions:
+                # Route 3.
+                raise ValueError(
+                    f"pagination.mode is 'query_param' but no {PAGE_PLACEHOLDER} placeholder "
+                    "appears in list.url_pattern — nothing would vary from page to page, so "
+                    "the identical URL would be requested max_pages times"
+                )
+            if wanted is None or wanted not in positions:
+                # Route 1.
+                raise ValueError(
+                    f"pagination.param is {param!r} but {PAGE_PLACEHOLDER} sits at "
+                    f"{', '.join(sorted(positions))} in list.url_pattern, not in a "
+                    f"query-string value under that key — the key carrying the page number "
+                    "is the one the pagination must name, and it is the one a capture is "
+                    "read for"
+                )
+            extra = sorted(positions)
+            extra.remove(wanted)
+            if extra:
+                raise ValueError(
+                    f"list.url_pattern holds {PAGE_PLACEHOLDER} at {', '.join(extra)} as well "
+                    f"as at {wanted} — the key carrying the page number is the only one that "
+                    "may hold the placeholder, so a second occurrence is a substitution "
+                    "nothing declared"
+                )
+            return self
+        # `path_segment`: the page number is positional, so there is no key to
+        # bind `param` to and the capture rule is a whole-URL match instead
+        # (`pagination_capture._path_segment_measured`). What still has to hold
+        # is that something varies, and that only one thing does.
+        if not positions:
+            raise ValueError(
+                f"pagination.mode is 'path_segment' but no {PAGE_PLACEHOLDER} placeholder "
+                "appears in list.url_pattern — nothing would vary from page to page, so "
+                "the identical URL would be requested max_pages times"
+            )
+        if len(positions) > 1:
+            raise ValueError(
+                f"list.url_pattern holds {PAGE_PLACEHOLDER} {len(positions)} times "
+                f"({', '.join(sorted(positions))}) — a page number occupies one position, "
+                "so a second occurrence is a substitution nothing declared"
+            )
         return self
 
 
