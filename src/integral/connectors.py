@@ -95,7 +95,7 @@ from datetime import date
 from functools import lru_cache
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Final, Literal
 from urllib.parse import parse_qsl, quote, urlsplit
 
 import yaml
@@ -760,11 +760,44 @@ class FieldSelector(Strict):
 # connectors leave salary unmapped for exactly that reason. A JSON number needs
 # no splitting, so the field it produces is either a real figure or nothing.
 
-#: A dotted path of object keys. No indices, no wildcards, no filters, no
+#: One key segment: what every segment of this grammar was, before T118.
+_JSON_PATH_KEY = r"[A-Za-z_@][\w@-]*"
+
+#: One index segment, in exactly one spelling: no sign, no leading zero, no
+#: separators, no `+`. `01` is a second spelling of `0` and `1_0` is not a
+#: number, so neither is an index here — they are refused at load rather than
+#: resolved to nothing at parse time.
+_JSON_PATH_INDEX = r"0|[1-9][0-9]*"
+
+#: A dotted path of object keys and array indices. No wildcards, no filters, no
 #: expression syntax — the same "too small to smuggle anything through"
-#: discipline as `SimpleSelector`, and for the same reason. A path that wants
-#: an array element is a path this library declines to describe.
-JSON_PATH = re.compile(r"^[A-Za-z_@][\w@-]*(?:\.[A-Za-z_@][\w@-]*)*$")
+#: discipline as `SimpleSelector`, and for the same reason: a path is consumed
+#: against this regex and never evaluated.
+#:
+#: T118 added the index segment, because `locations.0` was the only way to
+#: reach getmanfred's physical city and the grammar had no room for it. What
+#: the change decides is which spellings are **refused**, and the three rules
+#: below are stated here so none of them has to be discovered from `dig`:
+#:
+#: * `locations.0` is the one spelling. `locations[0]` is bracket syntax this
+#:   grammar does not have, `locations.-1` is a negative index, and
+#:   `locations.01` is a second spelling of the first. All three are refused.
+#: * An index segment indexes a **sequence and nothing else**. A dict whose key
+#:   is literally `"0"` is unreachable by this grammar: `locations.0` means
+#:   element 0, always. A board that keeps numeric string keys is a board this
+#:   library declines to describe, which is the same posture the grammar takes
+#:   toward every other shape it cannot name.
+#: * The **first** segment is always a key. A path names a field of a record,
+#:   and a bare leading index is also `str.format`'s positional syntax — the
+#:   very thing `compile_url_template` refuses a `{0}` slot for. `$` stays the
+#:   only way to name the document itself.
+JSON_PATH = re.compile(rf"^{_JSON_PATH_KEY}(?:\.(?:{_JSON_PATH_KEY}|{_JSON_PATH_INDEX}))*$")
+
+#: Which segments `_resolve` reads as indices. Compiled from the same source as
+#: the grammar above, so a segment can never be admitted by one and read by the
+#: other: a key segment must start with a letter, `_` or `@`, so no key can be
+#: mistaken for an index, and no index for a key.
+_INDEX_SEGMENT = re.compile(rf"(?:{_JSON_PATH_INDEX})")
 
 #: The one path that is not a key: the document itself. An API whose response
 #: *is* the array of adverts — workingnomads, remoteok — has no key to name, and
@@ -822,23 +855,66 @@ def compile_path(path: str) -> tuple[str, ...]:
     return tuple(path.split("."))
 
 
-def dig(document: Any, path: tuple[str, ...]) -> str | None:
-    """Follow `path` through nested objects and return the scalar at the end.
+#: "The path led nowhere", distinct from "the path led to `null`". Both are a
+#: miss for `dig`, but the walk itself must tell them apart or an index into a
+#: document holding `null` would keep walking.
+_MISSING: Final = object()
 
-    `None` for anything else — a missing key, a `null`, or a path that lands on
-    an object or an array. **Landing on a container is treated as a miss, not
-    as a value**: `str({...})` would hand `build_offer` a Python repr as though
-    the board had published it, and for a salary key that is the difference
-    between "no figure" and `Salary(stated=True)` carrying `"{'@type': ...}"`.
-    A `bool` is likewise not a value here; JSON's `true` is not a wage, a title
-    or a body.
+
+def _resolve(document: Any, path: tuple[str, ...]) -> Any:
+    """Walk `path` and return the node it names, or `_MISSING`.
+
+    One walker for both readers below, so the grammar has exactly one
+    interpretation. A key segment reads a mapping; an index segment reads a
+    **list**, and only a list — indexing a string would make `title.0` return
+    its first letter, and indexing a mapping would make `locations.0` mean two
+    different things depending on the document it is applied to.
+
+    Every way out of range is the same miss: there is no negative index in the
+    grammar, so nothing wraps around, and an index past the end returns
+    `_MISSING` rather than raising.
+
+    "Rather than raising" is why the digit count is compared **before**
+    `int(segment)`. CPython refuses to convert a decimal string of more than
+    `sys.get_int_max_str_digits()` digits and raises `ValueError`, so an index
+    of 4301 nines compiled cleanly and then blew up inside a walk whose whole
+    contract is that out of range is a miss. The comparison needs no limit
+    constant to be right: leading zeros are refused by the grammar, so a
+    segment of more digits than `len(node)` has is necessarily larger than any
+    index into `node`, and one of at most that many digits is small enough to
+    convert.
     """
     node: Any = document
-    for key in path:
-        if not isinstance(node, dict) or key not in node:
-            return None
-        node = node[key]
-    if isinstance(node, bool) or not isinstance(node, (str, int, float)):
+    for segment in path:
+        if _INDEX_SEGMENT.fullmatch(segment):
+            if not isinstance(node, list) or len(segment) > len(str(len(node))):
+                return _MISSING
+            index = int(segment)
+            if index >= len(node):
+                return _MISSING
+            node = node[index]
+            continue
+        if not isinstance(node, dict) or segment not in node:
+            return _MISSING
+        node = node[segment]
+    return node
+
+
+def dig(document: Any, path: tuple[str, ...]) -> str | None:
+    """Follow `path` through nested objects and arrays; return the scalar at the end.
+
+    `None` for anything else — a missing key, an index past the end of an
+    array, a `null`, or a path that lands on an object or an array.
+    **Landing on a container is treated as a miss, not as a value**:
+    `str({...})` would hand `build_offer` a Python repr as though the board had
+    published it, and for a salary key that is the difference between "no
+    figure" and `Salary(stated=True)` carrying `"{'@type': ...}"`. That rule is
+    unchanged by indexing, and is why `locations` still reads as absent while
+    `locations.0` reads as a city. A `bool` is likewise not a value here;
+    JSON's `true` is not a wage, a title or a body.
+    """
+    node = _resolve(document, path)
+    if node is _MISSING or isinstance(node, bool) or not isinstance(node, (str, int, float)):
         return None
     return str(node)
 
@@ -852,11 +928,7 @@ def dig_container(document: Any, path: tuple[str, ...]) -> list[Any]:
     reports as a staleness signal, and inventing a single-element list out of
     whatever was found would hide exactly that.
     """
-    node: Any = document
-    for key in path:
-        if not isinstance(node, dict) or key not in node:
-            return []
-        node = node[key]
+    node = _resolve(document, path)
     return node if isinstance(node, list) else []
 
 
@@ -1294,6 +1366,12 @@ class ListPage(Strict):
     #: The HTTP method the engine issues for this listing. `GET` by default,
     #: so every connector written before T89 is unchanged — a board whose
     #: search is a POST was simply unreachable, however public it was.
+    #:
+    #: `POST` and `body_json` imply each other, in both directions
+    #: (`_a_post_and_a_body_imply_each_other`): a body without a POST cannot be
+    #: sent, and a POST without a body has no declared form to derive a
+    #: `Content-Type` from, so it would go out with none. There is therefore no
+    #: legal bodyless POST — T110.
     method: Literal["GET", "POST"] = "GET"
     #: The request body, declared as **data** — a YAML mapping, which is a
     #: parsed structure before this schema ever sees it. There is deliberately
@@ -1455,14 +1533,33 @@ class ListPage(Strict):
         return body
 
     @model_validator(mode="after")
-    def _only_a_post_carries_a_body(self) -> ListPage:
-        # The default did not move: a GET connector sends no body, and one that
-        # declares a body has contradicted its own method rather than quietly
-        # getting a body it cannot send.
+    def _a_post_and_a_body_imply_each_other(self) -> ListPage:
+        # Both directions, because the schema having an opinion about one of
+        # them and none about the other is what T110 found. The default did
+        # not move: a GET connector sends no body, and one that declares a
+        # body has contradicted its own method rather than quietly getting a
+        # body it cannot send.
         if self.body_json is not None and self.method != "POST":
             raise ValueError(
                 f"list.body_json is declared but list.method is {self.method!r} — only a "
                 "POST carries a request body"
+            )
+        # The other direction (T110). `Content-Type` is derived from the
+        # declared body form and from nothing else — that is what stops a
+        # connector naming a header — so a POST with no `body_json` is the one
+        # shape this schema can express and the engine cannot send properly:
+        # `build_list_requests` took its bodyless branch and produced
+        # `method="POST"` with no `Content-Type`, which several back ends
+        # answer 400 or 415 to. Refused rather than blessed: a body is what
+        # makes a POST a POST here, so a POST without one is a connector file
+        # that means a GET, and the cost of being wrong that way is a
+        # contributor reading one error message. Blessing it would have meant
+        # inventing a second content type for a request with no content.
+        if self.method == "POST" and self.body_json is None:
+            raise ValueError(
+                "list.method is 'POST' but no list.body_json is declared — a POST carries a "
+                "body, and its Content-Type is derived from that body, so a bodyless POST "
+                "would go out with none; declare body_json, or say method: GET"
             )
         return self
 
@@ -2018,14 +2115,40 @@ def build_list_requests(
     A GET connector gets exactly what it always did — its URL, no body, no
     headers — which is the property the gate enumerates over every committed
     package rather than trusting to review.
+
+    The bodyless branch is a GET branch and says so (T110). It used to be
+    reached by `method: POST` with no `body_json` as well, and emitted a POST
+    with no `Content-Type` — a request no connector meant to describe.
+    `_a_post_and_a_body_imply_each_other` now refuses that document at load,
+    and the clamp is repeated here for the reason `build_list_urls` repeats
+    its own: an object built with `model_copy(update=...)` never met a
+    validator, so a property this module is asked to keep is kept where the
+    request is actually made and not only where the file is read.
     """
     page = connector.list
     urls = build_list_urls(connector, page_count=page_count, query=query)
     if page.body_json is None:
+        if page.method != "GET":
+            raise ConnectorError(
+                f"{connector.site}: list.method is {page.method!r} with no list.body_json — "
+                "the body is what a Content-Type is derived from, so this request would go "
+                "out with none; declare body_json, or say method: GET"
+            )
         derived = client_headers(page.client, page.client_target)
         return [
             ListRequest(url=url, method=page.method, headers=derived, body=None) for url in urls
         ]
+    if page.method != "POST":
+        # The other half of the same clamp (T110). `_a_post_and_a_body_imply_each_other`
+        # refuses this document too, and repeating only the bodyless-POST half here
+        # would have left the validator symmetric and the builder not: an object made
+        # with `model_copy(update=...)` could still reach this branch as a GET and be
+        # issued with a body and a `Content-Type` — a request in a shape no connector
+        # can declare, which is precisely what the clamp exists to make unreachable.
+        raise ConnectorError(
+            f"{connector.site}: list.body_json is declared but list.method is "
+            f"{page.method!r} — only a POST carries a request body"
+        )
     start = page.pagination.start
     # `pagination.param` names a *body* key only under `mode: body_field`; under
     # `query_param` and `path_segment` it names a URL key, and handing that name to
@@ -2497,6 +2620,263 @@ def partial_extraction_defects() -> list[str]:
     return failures
 
 
+class _Refused:
+    """The verdict "the grammar must not compile this path at all"."""
+
+    def __repr__(self) -> str:  # pragma: no cover - a label in a failure message
+        return "REFUSED"
+
+
+#: Distinct from `None`, and the distinction is the point: `None` is a path the
+#: grammar accepted and that resolved to nothing, `REFUSED` is a path
+#: `compile_path` must reject outright. A contract table that could not tell
+#: them apart would score a refused spelling and a silently-empty one the same.
+REFUSED: Final = _Refused()
+
+#: The one document nearly every array-path contract is read against. Written
+#: to hold, side by side, each shape the grammar has to have an answer for: a
+#: populated array, an empty one, an array of objects, an array of a number, of
+#: a bool and of a null, an object where an array might be, and a mapping whose
+#: key is literally `"0"`.
+_ARRAY_PATH_DOCUMENT: Final[dict[str, Any]] = {
+    "locations": ["Marbella, Espa\u00f1a", "Madrid, Espa\u00f1a"],
+    "empty": [],
+    "offices": [{"city": "Barcelona"}],
+    "figures": [50000],
+    "flags": [True],
+    "maybe": [None],
+    "company": {"name": "Manfred"},
+    "counts": {"0": "seven"},
+    "nested": {"tags": ["alpha"]},
+    "grid": [["alpha", "beta"]],
+}
+
+#: An index segment long enough that `int()` refuses to convert it. Built
+#: rather than typed out: the point is the digit count, and 4301 nines in a
+#: source file would be unreadable and unmaintainable.
+_OVERLONG_INDEX: Final = "locations." + "9" * 4301
+
+#: T118 — what an array path must resolve to, as a table derived from the
+#: **grammar** and kept beside it, in the shape `PARTIAL_EXTRACTION_CONTRACTS`
+#: established for `take:`. Each row cites why its verdict is what it is, and
+#: the fail-closed rows are the ones that matter: a location that is missing is
+#: a gap the candidate can see, while `{'city': 'Barcelona'}` or `M` landing in
+#: `location_raw` is a place that is simply wrong and looks fine.
+ARRAY_PATH_CONTRACTS: tuple[tuple[str, Any, str | _Refused | None, str], ...] = (
+    (
+        "locations.0",
+        _ARRAY_PATH_DOCUMENT,
+        "Marbella, Espa\u00f1a",
+        "getmanfred's physical city, which no path could reach before T118",
+    ),
+    ("locations.1", _ARRAY_PATH_DOCUMENT, "Madrid, Espa\u00f1a", "an index other than the first"),
+    ("locations.2", _ARRAY_PATH_DOCUMENT, None, "index past the end — FAIL-CLOSED"),
+    (
+        "empty.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        'getmanfred sends `"locations":[]` — absent, never an empty string — FAIL-CLOSED',
+    ),
+    (
+        "locations",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "the array itself is still a container, so still a miss — the rule indexing must "
+        "not relax — FAIL-CLOSED",
+    ),
+    (
+        "offices.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "the element is an object; `str({...})` must never reach `build_offer` — FAIL-CLOSED",
+    ),
+    ("offices.0.city", _ARRAY_PATH_DOCUMENT, "Barcelona", "a key after an index — `a.0.b`"),
+    ("nested.tags.0", _ARRAY_PATH_DOCUMENT, "alpha", "an index after two keys"),
+    (
+        "company.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "an object is not a sequence, so it is not indexable — FAIL-CLOSED",
+    ),
+    (
+        "counts.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        'a mapping key spelled "0" is not element 0: an index reads a sequence and '
+        "nothing else, and this is the row that states it — FAIL-CLOSED",
+    ),
+    (
+        "locations.0.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        'a string is not a sequence either: `"Marbella"[0]` is `M`, which is not a '
+        "place — FAIL-CLOSED",
+    ),
+    (
+        "figures.0",
+        _ARRAY_PATH_DOCUMENT,
+        "50000",
+        "a JSON number inside an array is a scalar like any other",
+    ),
+    (
+        "flags.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "JSON's `true` is not a wage, a title or a body, inside an array or out — FAIL-CLOSED",
+    ),
+    (
+        "maybe.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        'an element that is `null` is absent, never the text "None" — FAIL-CLOSED',
+    ),
+    (
+        "locations.9999",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "a far index misses rather than raising — FAIL-CLOSED",
+    ),
+    (
+        "locations.-1",
+        _ARRAY_PATH_DOCUMENT,
+        REFUSED,
+        "there is no negative index, so nothing wraps around to the last element",
+    ),
+    (
+        "locations.01",
+        _ARRAY_PATH_DOCUMENT,
+        REFUSED,
+        "one spelling per index, and `01` is a second one",
+    ),
+    ("locations[0]", _ARRAY_PATH_DOCUMENT, REFUSED, "bracket syntax the grammar does not have"),
+    (
+        "locations.1_0",
+        _ARRAY_PATH_DOCUMENT,
+        REFUSED,
+        "`_` is a Python numeric separator, not a JSON index",
+    ),
+    (
+        "0",
+        _ARRAY_PATH_DOCUMENT,
+        REFUSED,
+        "a bare leading index is `str.format`'s positional syntax, and a path names a "
+        "field of a record",
+    ),
+    (
+        "$",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "`$` still names the document, and a document is a container — `items:` reads it "
+        "through `dig_container`, never `dig` — FAIL-CLOSED",
+    ),
+    # The five below were accepted from the independent second read of #401,
+    # which found them absent rather than wrong. Each is derived from a rule
+    # the vocabulary already states, not from what the resolver returns.
+    (
+        "grid.0",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "the element at the index is itself an array, and `dig`'s container rule is about "
+        "what a path LANDS on, not about how it got there — `str([...])` reaching "
+        "`location_raw` is the same invented place as `str({...})` — FAIL-CLOSED",
+    ),
+    (
+        "grid.0.1",
+        _ARRAY_PATH_DOCUMENT,
+        "beta",
+        "index after index, both in range: the walk has one interpretation per segment, so "
+        "`a.0.1` composes exactly as `a.0.b` does",
+    ),
+    (
+        "offices.0.country",
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "`a.0.b` where the element carries no `b`: a key segment reads a mapping and the "
+        "key is absent, so it is a miss — an index earlier in the path buys no "
+        "leniency later — FAIL-CLOSED",
+    ),
+    (
+        "locations.",
+        _ARRAY_PATH_DOCUMENT,
+        REFUSED,
+        "a trailing dot names an empty segment, which is neither a key nor an index in "
+        "`JSON_PATH` — refused at load, where a typo is visible, rather than resolved to "
+        "nothing at parse time",
+    ),
+    (
+        _OVERLONG_INDEX,
+        _ARRAY_PATH_DOCUMENT,
+        None,
+        "an index of 4301 digits is past the end like any other, and `_resolve` promises "
+        "out of range is a miss 'rather than raising' — a `ValueError` escaping the walk "
+        "is neither the value nor the miss the grammar names",
+    ),
+)
+
+#: Floor, in `naming.MINIMUM_SCANNED`'s style: what is committed as the
+#: denominator is this number, never the count of the day. It **rises** with
+#: the table — CLAUDE.md requires the measured denominator to grow when a
+#: second reader's cases are accepted — and never falls, so a table quietly
+#: emptied reports `unmeasured` instead of a clean zero over nothing.
+MINIMUM_ARRAY_PATH_CONTRACTS = 26
+
+
+def _resolve_declared(path: str, document: Any) -> str | _Refused | None:
+    """One contract's verdict: what a connector declaring `path` would read.
+
+    Deliberately the whole journey a connector file takes — compile, then dig —
+    because the grammar's safety property is split across the two and a table
+    testing only `dig` would score `locations[0]` on whatever `dig` did with a
+    path that never should have compiled.
+    """
+    try:
+        compiled = compile_path(path)
+    except ConnectorError:
+        return REFUSED
+    return dig(document, compiled)
+
+
+def array_path_defects() -> list[str]:
+    """Every contract in `ARRAY_PATH_CONTRACTS` whose verdict is wrong."""
+    failures = []
+    for path, document, expected, why in ARRAY_PATH_CONTRACTS:
+        actual = _resolve_declared(path, document)
+        if actual != expected:
+            failures.append(f"{path!r} -> {actual!r}, expected {expected!r} ({why})")
+    return failures
+
+
+def measure_array_paths() -> dict[str, Any]:
+    """T118's record: array paths resolved against the grammar, then counted.
+
+    The defects are computed **before** the dict is built, so no run can write
+    the claim and then discover it was wrong — the ordering #297 asks for.
+    """
+    defects = array_path_defects()
+    pairs = len(ARRAY_PATH_CONTRACTS)
+    measured: dict[str, Any] = {
+        "connector_array_paths_misresolved": len(defects),
+        "connector_array_path_pairs_at_least": MINIMUM_ARRAY_PATH_CONTRACTS,
+        "connector_array_path_defects": defects,
+        "gate_status": "measured" if pairs >= MINIMUM_ARRAY_PATH_CONTRACTS else "unmeasured",
+    }
+    if pairs < MINIMUM_ARRAY_PATH_CONTRACTS:
+        measured["reasons"] = [
+            f"only {pairs} path/document pair(s) evaluated (floor "
+            f"{MINIMUM_ARRAY_PATH_CONTRACTS}) — zero misresolutions over a shrunken "
+            "table says nothing"
+        ]
+    return measured
+
+
+def write_array_path_evidence(evidence: Path) -> dict[str, Any]:
+    """Measure and record `status/evidence/T118.json`."""
+    measured = measure_array_paths()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def probe_connector_isolation() -> ProbeReport:
     """Try every way a connector file could try to run code, and count the
     ones that got through.
@@ -2945,6 +3325,9 @@ def _main(argv: list[str]) -> int:
     # to a scratch directory is not asking to have the other written into the
     # repository.
     charset = write_charset_evidence(target.parent / "T128.json")
+    # T118 beside them, for the same reason: array indexing is a property of
+    # this module's path grammar, not of any one connector package.
+    arrays = write_array_path_evidence(target.parent / "T118.json")
     print(json.dumps(measured, ensure_ascii=False))
     if charset["charset_contracts_failing"]:
         for failure in charset["failed_contracts"]:
@@ -2953,6 +3336,20 @@ def _main(argv: list[str]) -> int:
     for capture in charset["captures_outside_their_charset"]:
         print(f"capture outside its declared charset: {capture}", file=sys.stderr)
     if charset["captures_outside_their_charset"]:
+        return 1
+    for defect in arrays["connector_array_path_defects"]:
+        print(f"array path misresolved: {defect}", file=sys.stderr)
+    if arrays["connector_array_paths_misresolved"]:
+        return 1
+    if arrays["gate_status"] == "unmeasured":
+        print(
+            f"only {len(ARRAY_PATH_CONTRACTS)} path/document pair(s) evaluated (floor "
+            f"{MINIMUM_ARRAY_PATH_CONTRACTS})",
+            file=sys.stderr,
+        )
+        # `1`, not the `3` its neighbours return. `Makefile:58-70` maps exit 3 to
+        # `unmeasured (recorded)` and CONTINUES (#297, #309), so a gutted table
+        # would leave `make evidence` green over a gate nobody could fail.
         return 1
     if charset["gate_status"] == "unmeasured":
         print(
