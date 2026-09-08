@@ -1643,6 +1643,76 @@ Disallow: /a:b/c:d
 
 ---
 
+## The accepted loosening — the spelling `spellings()` does not offer
+
+Not a numbered row: rows 1–67 are the independent session's table, and this one comes from
+the **fifth** review round of the reader's pull request, which returned a CLEAR verdict with
+one finding attached. It lives in `second_reader.REGRESSION_CASES` rather than in
+`second_reader_cases.CASES` for that reason — the numbered table's whole value is that its
+author never saw the code, and a row added later must not borrow that provenance. It is
+transcribed here because an **accepted** finding is the one most likely to be lost: nothing
+went red, so nothing recorded it, and the next reader would meet the behaviour as an
+accident rather than as a decision.
+
+**The channel.** `spellings` offers three canonicalised readings of a target — the pattern's
+reading, the target's reading, and the path-region reading of the query-decoded form — and
+never the target **as written**. A rule whose wildcard crosses the `?` carries no literal
+one, so `canonical` reads the whole pattern as a path: its `/` stays literal (§3.3's segment
+separator) and its `%2F` stays encoded. A rule that spells the same octet **both** ways
+inside what it means as one query region therefore canonicalises to a *mixed* string, and no
+offered spelling of the target is mixed — spellings one and two encode every query `/` to
+`%2F`, spelling three decodes every `%2F` back to `/`. The rule matches nothing.
+
+Measured against a `spellings` that also offered the target as written: **697 verdict flips
+in 400,000 single-`Disallow` pairs**, 152 of 300,000 on realistic shapes, every one in the
+loosening direction. Neither differential corpus classifies it, which is why it took a
+reader rather than a fuzz.
+
+**Why it is accepted rather than fixed.** Every flip needs that mixed rule, and a rule
+mixing `/` and `%2F` in one query region is self-inconsistent under §2.2.2, which gives a
+URI one spelling to be compared in. All eight well-spelled shapes are unchanged and the two
+mixed ones tighten. Closing it would mean comparing an **un-canonicalised** string — the
+pass §2.2.2 orders "prior to comparison" — and would re-open the encoded/literal asymmetries
+rows 50–53 exist to refuse, plus the allow-side widening that
+`a_wildcard_allow_does_not_outrank_a_matching_disallow` was written for.
+
+**What would make it matter.** A real robots.txt carrying such a rule: a wildcard crossing
+the `?`, a literal `/` and a `%2F` in the same region, and no other reserved octet in the
+literal run that wildcard leads into. That last clause is why the channel is as narrow as it
+is — any `=` or `:` there closes it unaided, since the pattern encodes those and the
+as-written target does not. If one is found in the wild, this is the decision to revisit.
+
+### `a_mixed_spelling_rule_matches_no_offered_spelling`
+
+```
+User-agent: *
+Disallow: /*a/b%2Fc
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/p?a/b%2Fc`
+- **expected:** ALLOW
+- **section:** RFC 9309 §2.2.2 (implementer-derived)
+- **why:** §2.2.2 orders percent-encoding "prior to comparison", so what is compared is the
+  canonical rule against a canonical target. The target has one query region: the `/` there
+  is ordinary content (RFC 3986 §3.4) and encodes to `%2F`, the `%2F` stays —
+  `/p?a%2Fb%2Fc`. The rule carries no literal `?`, so it is canonicalised as a path: its `/`
+  is §3.3's segment separator and stays literal, its `%2F` stays encoded — `/*a/b%2Fc`. That
+  mixed string is no spelling of this target, so no rule matches, and a path no rule matches
+  is allowed. The verdict follows from the canonical forms; the judgement being pinned is
+  the decision **not** to refuse more than §2.2.2 requires.
+- **direction:** FAIL_OPEN_RISK — the risk it records is the channel's, not the row's. The
+  reader's answer here is the RFC's, and a matcher that also compared the target as written
+  would refuse this path. Pinned so the difference stays a decision.
+- **confidence:** HIGH about the verdict, which the canonical forms settle. The open
+  question is whether this reader should be stricter than the RFC, and the prose above is
+  the answer.
+- **mutation:** appending `target` to `spellings`' candidate tuple turns this row DISALLOW
+  and reddens `test_every_second_reader_fixture_reads_as_the_rfc_requires` with
+  `second_reader_verdicts_misread == 1`, naming this case and no other.
+
+---
+
 ## Using this table
 
 Each row is a fixture, not a comment. Per CLAUDE.md, an accepted case is only accepted once

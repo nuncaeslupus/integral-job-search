@@ -811,14 +811,14 @@ def allows(text: str, agent: str, target: str) -> bool:
 #: guaranteed without moving, and it is deliberately under what the table
 #: carries. Its job is to stop a clean zero resting on an empty table — a
 #: reader that reads nothing misreads nothing.
-FIXTURES_AT_LEAST = 48
+FIXTURES_AT_LEAST = 49
 
 #: Of those, how many must be cases a weak matcher would wrongly ALLOW. A table
 #: made only of paths a broken reader would wrongly refuse would score a clean
 #: zero while saying nothing about the direction that matters: a fail-closed
 #: bug costs one skipped fetch, a fail-open bug means the check said yes to
 #: something it exists to refuse.
-FAIL_OPEN_CASES_AT_LEAST = 33
+FAIL_OPEN_CASES_AT_LEAST = 34
 
 #: And how many paths this reader must refuse where `urllib.robotparser` does
 #: not. A "longest-match" reader that happens to agree with the stdlib on every
@@ -1215,6 +1215,69 @@ REGRESSION_CASES: tuple[Case, ...] = (
             "request's `#` unequal, and allow a path the operator wrote out."
         ),
         direction=FAIL_OPEN_RISK,
+    ),
+    # The one finding the second-reader report on #410 **accepted rather than
+    # closed**, pinned here because this repository's rule is that an accepted
+    # finding becomes a fixture: a report read and waved through leaves the code
+    # exactly as unprotected as it was.
+    #
+    # **The channel.** `spellings` offers three canonicalised readings of the
+    # target and never the target **as written**. A rule whose wildcard crosses
+    # the `?` carries no literal one, so `canonical` reads the whole pattern as a
+    # path: its `/` stays literal (§3.3's segment separator) and its `%2F` stays
+    # encoded. A rule that spells the same octet BOTH ways inside what it means
+    # as one query region therefore canonicalises to a MIXED string, and no
+    # offered spelling of the target is mixed — spellings one and two encode
+    # every query `/` to `%2F`, spelling three decodes every `%2F` back to `/`.
+    # The rule matches nothing. Measured against a `spellings` that also offered
+    # the target as written: **697 verdict flips in 400,000 single-`Disallow`
+    # pairs**, 152 of 300,000 on realistic shapes, every one of them in the
+    # loosening direction. Neither differential corpus classifies it, which is
+    # why it needed a reader rather than a fuzz.
+    #
+    # **Why it is accepted and not fixed.** Every flip needs that mixed rule, and
+    # a rule mixing `/` and `%2F` in one region is self-inconsistent under
+    # §2.2.2, which gives a URI one spelling to be compared in. All eight
+    # well-spelled shapes are unchanged and the two mixed ones tighten. Closing
+    # it would mean comparing an UN-canonicalised string — the pass §2.2.2 orders
+    # "prior to comparison" — and would re-open the encoded/literal asymmetries
+    # rows 50-53 exist to refuse, plus the allow-side widening
+    # `a_wildcard_allow_does_not_outrank_a_matching_disallow` was written for.
+    #
+    # **What would make it matter**, so the next reader meets a decision rather
+    # than an accident: a real robots.txt carrying such a rule — a wildcard
+    # crossing the `?`, a literal `/` and a `%2F` in the same region, and no
+    # other reserved octet in the literal run that wildcard leads into. That last
+    # clause is why the channel is as narrow as it is: any `=` or `:` there
+    # closes it unaided, since the pattern encodes those and the as-written
+    # target does not. If one is ever found in the wild, this is the row where
+    # the judgement is recorded and the row to revisit.
+    Case(
+        id="a_mixed_spelling_rule_matches_no_offered_spelling",
+        robots_txt="User-agent: *\nDisallow: /*a/b%2Fc\n",
+        agent="integral-job-search/0.1",
+        path="/p?a/b%2Fc",
+        expected=ALLOW_VERDICT,
+        section="RFC 9309 §2.2.2 (implementer-derived)",
+        why=(
+            "§2.2.2 orders percent-encoding 'prior to comparison', so what is compared is "
+            "the canonical rule against a canonical target. This target has one query "
+            "region: the `/` there is ordinary content (RFC 3986 §3.4) and encodes to "
+            "`%2F`, the `%2F` stays — `/p?a%2Fb%2Fc`. The rule carries no literal `?`, so "
+            "it is canonicalised as a path: its `/` is §3.3's segment separator and stays "
+            "literal, its `%2F` stays encoded — `/*a/b%2Fc`. That mixed string is no "
+            "spelling of this target, so no rule matches, and a path no rule matches is "
+            "allowed. The verdict follows from the canonical forms; what is a judgement "
+            "rather than a reading is the decision NOT to refuse more than §2.2.2 "
+            "requires by also offering the target as written, and the comment above is "
+            "that decision."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence_note=(
+            "HIGH about the verdict, which the canonical forms settle. The open question "
+            "the row pins is not what the RFC requires here but whether this reader "
+            "should be stricter than it — see the comment above for why it is not."
+        ),
     ),
 )
 
