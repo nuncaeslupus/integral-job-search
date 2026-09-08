@@ -120,6 +120,7 @@ from integral.cv_store import (
     ConversationTurn,
     CVMaster,
     Episode,
+    Experience,
     Skill,
     SourcedText,
     _atomic_write_json,
@@ -873,6 +874,14 @@ _FIXTURE_EPISODES: tuple[Episode, ...] = (
     ),
 )
 
+# Overlapping the win above by a whole eight-word shingle, which is what
+# `_withdrawn_by` matches on: retracting one has to withdraw the other.
+_FIXTURE_TWIN = Episode(
+    kind="achievement",
+    text="Cut the nightly billing run from six hours to forty minutes by rewriting the "
+    "ledger export.",
+)
+
 _FIXTURE_DETAILS = PersonalDetails(
     full_name="Gate Fixture",
     email="gate.fixture@example.invalid",
@@ -888,14 +897,27 @@ _PROBE_OFFER = "probe-1"
 
 # Every scenario `measure()` structurally cannot contain, because each one is a
 # defect on purpose and the gate is `== 0`.
-MINIMUM_PROBES = 14
+MINIMUM_PROBES = 16
 
 
-def _probe_master(headline: str = "Backend engineer — data platforms") -> CVMaster:
+def _probe_master(
+    headline: str = "Backend engineer — data platforms",
+    *,
+    experience: tuple[Experience, ...] = (),
+    episodes: tuple[Episode, ...] = _FIXTURE_EPISODES,
+) -> CVMaster:
+    """The probe candidate. `experience` and `episodes` are the axes T114's cases move.
+
+    A headline was the only line the sweep had ever been driven over, and an
+    experience bullet reaches the employer identically; two overlapping
+    episodes are what put `_withdrawn_by` and the document join in one
+    measurement. Both default to what every earlier probe already used.
+    """
     return CVMaster(
         headline=SourcedText(text=headline),
+        experience=experience,
         skills=(Skill(name="PostgreSQL", level="strong"),),
-        episodes=_FIXTURE_EPISODES,
+        episodes=episodes,
     )
 
 
@@ -1118,6 +1140,44 @@ def probe_boundary(root: Path) -> dict[str, Any]:
         measured["disclosures_unbacked_by_a_generated_document"] == 0
         and measured["unapproved_episode_disclosures"] == 0,
         "a document that agrees with its manifest was reported as a divergence",
+    )
+
+    # 15 — T114 one document over. The substance survives in a CV **experience
+    # bullet** rather than a headline, and §6.2 asks whether the story reaches
+    # the employer, never which line carries it. Probe 12 above is the headline
+    # shape; a sweep driven only over headlines is a sweep nothing has shown
+    # reads the rest of what is sent. Accepted from the second-reader round on
+    # #409, where the case passed and nothing pinned it.
+    bulleted = _probe_master(
+        headline="Data platform engineer",
+        experience=(
+            Experience(
+                title="Data engineer",
+                organisation="Probe S.A.",
+                description=win.rstrip("."),
+            ),
+        ),
+    )
+    store = fresh("bulleted", bulleted)
+    _probe_prepare(store, bulleted, approved=(0,))
+    letter = letter_of(store)
+    letter.write_text(
+        "\n".join(line for line in letter.read_text(encoding="utf-8").splitlines() if line != win)
+        + "\n",
+        encoding="utf-8",
+    )
+    store.path(*_version_parts(_PROBE_OFFER, 1), "approvals.json").unlink()
+    measured = measure_prepared(store, bulleted, _PROBE_OFFER, 1)
+    check(
+        any(
+            "the substance of a story-bank episode" in item
+            for item in measured["unapproved_episodes"]
+        ),
+        "an episode's substance surviving in a CV bullet was not swept",
+    )
+    check(
+        measured["disclosures_unbacked_by_a_generated_document"] == 1,
+        "the manifest row over the deleted line was not reported in the bullet case",
     )
 
     return {"detection_probes": checks, "detection_probe_failures": failures}
@@ -1465,7 +1525,7 @@ def probe_retracted_sends(root: Path) -> dict[str, Any]:
 # shrank would still clear an exact match. The corpus contributes one disclosure
 # per advert, so the floor here is a long way under what a healthy run measures
 # and a long way over what an empty scan could produce.
-MINIMUM_DISCLOSURE_PROBES = 18
+MINIMUM_DISCLOSURE_PROBES = 24
 MINIMUM_MANIFEST_DISCLOSURES_COMPARED = 100
 
 
@@ -1684,6 +1744,66 @@ def probe_unbacked_disclosures(root: Path) -> dict[str, Any]:
     check(divergences(store, ordinary) == 0, "an ordinary headline was read as a divergence")
     check(sends(store, ordinary, payload) is not None, "an ordinary clean draft was refused")
     scan(store, ordinary)
+
+    # 14 — the row re-pointed at a document that was **never generated**.
+    # Distinct from 7, where `cv.md` exists and is refused because a claim is
+    # scoped to the document it names: here there is nothing to ask at all, and
+    # the fail-open reading is that a name matching no file is "not applicable"
+    # and skipped — the manifest deciding its own exemption, which is the whole
+    # subject of this task. Accepted from the second-reader round on #409.
+    store = fresh("phantom-document", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    path = where(store) / "manifest.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    for claim in raw["claims"]:
+        if claim["section"] == "episodes":
+            claim["document"] = "portfolio.md"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    check(divergences(store, plain) == 1, "a row naming a document that never existed was skipped")
+
+    # 15 — two overlapping episodes with one retracted, and the retracted one's
+    # line deleted. D-24 withdraws the approval over anything carrying the
+    # retracted substance; T114 keeps the row over the deleted line visible. The
+    # fail-open reading is that the deletion removes what the withdrawal would
+    # have been reported over while the twin's line goes out carrying the same
+    # eight-word window, so both halves have to fire on one measurement.
+    # Accepted from the second-reader round on #409.
+    twins = _probe_master(
+        headline="Data platform engineer",
+        episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN),
+    )
+    store = fresh("overlapping", twins)
+    row = EvidenceLog(store).append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="history",
+        kind="episode",
+        text=win,
+        source="conversation",
+    )
+    _probe_prepare(store, twins, approved=(0, 1))
+    retract(EvidenceLog(store), row.id, at="2026-01-02T09:00:00+00:00")
+    drop_line(store, win)
+    check(divergences(store, twins) == 1, "the row over the deleted twin's line measured clean")
+    check(
+        any(
+            "retracted the evidence this approval was given over" in item
+            and _FIXTURE_TWIN.text in item
+            for item in sweep_findings(store, twins)
+        ),
+        "the surviving twin of a retracted episode was still sendable",
+    )
+
+    # 16 — the over-refusal control for 15, and a third clean tree for the
+    # aggregate. Two episodes sharing an eight-word window is not by itself a
+    # divergence: an untouched draft of them has to measure clean and still send.
+    store = fresh("overlapping-clean", twins)
+    payload = _probe_prepare(store, twins, approved=(0, 1))
+    check(divergences(store, twins) == 0, "an untouched pair of overlapping episodes was refused")
+    check(
+        sends(store, twins, payload) is not None,
+        "a clean draft of overlapping episodes was refused",
+    )
+    scan(store, twins)
 
     return {
         "disclosures_unbacked_by_a_generated_document": len(unbacked),

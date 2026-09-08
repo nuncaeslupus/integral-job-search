@@ -28,11 +28,13 @@ from pathlib import Path
 
 import pytest
 
+from integral import approval
 from integral.approval import (
     MINIMUM_DISCLOSURE_PROBES,
     MINIMUM_MANIFEST_DISCLOSURES_COMPARED,
     ApprovalError,
     PersonalDetails,
+    _disclosure_report,
     _refuse_unbacked_disclosures,
     _version_parts,
     disclosures_unbacked_by_a_document,
@@ -44,7 +46,14 @@ from integral.approval import (
     record_sent,
     write_disclosure_evidence,
 )
-from integral.cv_store import CVMaster, Episode, Skill, SourcedText, write_master
+from integral.cv_store import (
+    CVMaster,
+    Episode,
+    Experience,
+    Skill,
+    SourcedText,
+    write_master,
+)
 from integral.generate import read_manifest
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog
@@ -57,6 +66,7 @@ ADVERT = (
 OFFER = "girona-1"
 
 WIN = "Cut the nightly billing run from six hours to forty minutes by rewriting reconciliation."
+TWIN = "Cut the nightly billing run from six hours to forty minutes by rewriting the ledger job."
 FAILURE = (
     "Shipped a schema change without a backfill and left invoicing wrong for two days "
     "before anyone noticed."
@@ -436,3 +446,191 @@ def test_the_manifest_the_probes_read_is_the_one_on_disk(store: ProfileStore) ->
     claims = read_manifest(store, OFFER, version).claims
 
     assert [claim.text for claim in claims if claim.section == "episodes"] == [WIN]
+
+
+# ---------------------------------------------------------------------------
+# the cases the second-reader round on #409 derived and nothing pinned
+
+
+def test_an_episodes_substance_surviving_in_a_cv_bullet_is_flagged(store: ProfileStore) -> None:
+    """A bullet reaches the employer exactly as a headline does.
+
+    §6.2 asks whether an episode's substance reaches an employer with a per-use
+    approval behind it, and says nothing about *which* line carries it. The
+    headline is only the shape the defect was first found in; an experience
+    description on `cv.md` is the same route, and the letter's episode line
+    being deleted leaves the story going out of a second document with the
+    approval gone. A miss here is fail-open — unbacked substance in front of an
+    employer — so the case is pinned rather than left to the headline's.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        experience=(
+            Experience(
+                title="Data engineer",
+                organisation="Vall S.A.",
+                description=WIN.rstrip("."),
+            ),
+        ),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=FAILURE)),
+    )
+    write_master(store, master)
+    version = _prepare(store, master)
+    where = _where(store, version)
+    _drop_line(where / "letter.md", WIN)
+    (where / "approvals.json").unlink()
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["disclosures_unbacked_by_a_generated_document"] == 1
+    assert any(
+        "the substance of a story-bank episode" in finding and WIN in finding
+        for finding in measured["unapproved_episodes"]
+    )
+    assert measured["episode_approval_coverage"] != 1.0
+
+
+def test_a_manifest_row_naming_a_document_that_was_never_generated_is_unbacked(
+    store: ProfileStore,
+) -> None:
+    """A document that does not exist carries nothing, so the row is a finding.
+
+    Distinct from the row re-pointed at `cv.md`: that document is on disk and
+    could in principle answer, and the answer is refused because a claim is
+    scoped to the document it names. Here there is nothing to ask at all. The
+    fail-open reading is that a name matching no file is skipped as "not
+    applicable", which is the manifest deciding its own exemption — the shape
+    this whole task is about — so an absent document is unbacked.
+    """
+    master = _master(store)
+    version = _prepare(store, master)
+    path = _where(store, version) / "manifest.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    for claim in raw["claims"]:
+        if claim["section"] == "episodes":
+            claim["document"] = "portfolio.md"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["disclosures_unbacked_by_a_generated_document"] == 1
+    assert measured["unbacked_disclosures"] == [
+        f"{OFFER}/v{version} portfolio.md: {WIN} — the manifest records this episode as "
+        "disclosed, and the document does not carry it"
+    ]
+    # And the line the letter really carries is now backed by nothing, so it is
+    # reported too rather than passing on the strength of the redirected row.
+    assert measured["unapproved_episode_disclosures"] == 1
+    assert measured["episode_disclosures"] == 0
+
+
+def test_two_overlapping_episodes_with_one_retracted_are_both_stopped(
+    store: ProfileStore,
+) -> None:
+    """The twin is not a way around the retraction, and the deletion is not either.
+
+    D-24: a retraction withdraws the approval over the retracted evidence *and*
+    over anything carrying its substance, because otherwise re-approving a
+    near-copy sends the withdrawn story. T114: deleting the retracted line does
+    not delete the manifest row that says the letter discloses it. Together the
+    fail-open reading is that the deletion removes what the withdrawal would
+    have been reported over while the twin's line goes out carrying the same
+    eight-word window — so both halves must fire on one measurement.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+    )
+    write_master(store, master)
+    row = EvidenceLog(store).append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="history",
+        kind="episode",
+        text=WIN,
+        source="conversation",
+    )
+    version = _prepare(store, master, approved=(0, 1))
+    retract(EvidenceLog(store), row.id, at="2026-01-02T09:00:00+00:00")
+    _drop_line(_where(store, version) / "letter.md", WIN)
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    # T114's half: the row over the deleted line.
+    assert measured["disclosures_unbacked_by_a_generated_document"] == 1
+    assert WIN in measured["unbacked_disclosures"][0]
+    # D-24's half: the twin still on the page shares the withdrawn substance.
+    assert any(
+        "retracted the evidence this approval was given over" in finding and TWIN in finding
+        for finding in measured["unapproved_episodes"]
+    )
+    assert measured["episode_approval_coverage"] != 1.0
+
+
+def test_an_untouched_draft_of_two_overlapping_episodes_is_clean(store: ProfileStore) -> None:
+    """The over-refusal control for the case above — the overlap alone is not a defect."""
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+    )
+    write_master(store, master)
+    version = _prepare(store, master, approved=(0, 1))
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["disclosures_unbacked_by_a_generated_document"] == 0
+    assert measured["unapproved_episode_disclosures"] == 0
+    assert measured["episode_disclosures"] == 2
+
+
+# ---------------------------------------------------------------------------
+# the status is computed, not stated
+
+
+def test_the_gate_status_is_derived_from_what_was_compared_at_both_sites(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`unmeasured` means nothing if a site can simply say `measured` (T123's family).
+
+    The floor stops a forged `measured` over `compared: 0` from *passing* the
+    gate, but a floor is not an assertion that the status was computed at all:
+    hardcoding `"measured"` at both aggregate sites left the module's own main
+    and the whole suite green. `disclosures_unbacked_by_a_document` is pinned by
+    the two readings above; these are the two sites nothing reached, each driven
+    with a join that compared nothing and each of which must say so.
+    """
+    empty: dict[str, object] = {
+        "disclosures_unbacked_by_a_generated_document": 0,
+        "unbacked_disclosures": [],
+        "manifest_disclosures_compared": 0,
+        "gate_status": "unmeasured",
+    }
+
+    # The probe set's own aggregate. Its scan is stubbed out, so the probes read
+    # nothing back and the run has compared nothing — and it must not report a
+    # measurement it did not make. The vacuity check inside the probes fires too,
+    # which is the second half of the same property.
+    monkeypatch.setattr(
+        approval, "disclosures_unbacked_by_a_document", lambda store, master: dict(empty)
+    )
+    probed = probe_unbacked_disclosures(tmp_path / "probes")
+    assert probed["manifest_disclosures_compared"] == 0
+    assert probed["gate_status"] == "unmeasured"
+    assert probed["disclosure_probe_failures"] != []
+
+    # The recorded evidence's aggregate. Both halves compared nothing, so the
+    # written record has to say `unmeasured` — and `_disclosure_report` fails on
+    # it rather than on the floor alone.
+    monkeypatch.setattr(
+        approval,
+        "probe_unbacked_disclosures",
+        lambda root: {**empty, "disclosure_probes": 0, "disclosure_probe_failures": []},
+    )
+    written = write_disclosure_evidence(tmp_path / "T114.json", corpus=dict(empty))
+
+    assert written["gate_status"] == "unmeasured"
+    recorded = json.loads((tmp_path / "T114.json").read_text(encoding="utf-8"))
+    assert recorded["gate_status"] == "unmeasured"
+    assert _disclosure_report(written) == 1
