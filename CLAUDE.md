@@ -216,23 +216,49 @@ somebody else's report — and one whose author did not resolve at all counts fo
 nobody: an identity that cannot be shown to differ from the implementer's does
 not rule self-review out.
 
-**How an author becomes an identity is one rule, stated as what a login can be.**
-#408 took four review rounds because each of the first three normalised one more
-layer and stopped: a blank author, then case, then invisible padding — and the
-fourth found `@nuncaeslupus`, `nuncaeslupus.`, `(nuncaeslupus)`, the fullwidth
-`ｎｕｎｃａｅｓｌｕｐｕｓ` and `nunca es lupus` still clearing that account's own
-PR through this very CLI. A fifth strip-list would have been the fourth
-iteration of the mistake, so the rule inverts: **NFKC-fold, then keep only
-`[A-Za-z0-9-]` — the alphabet a GitHub login is drawn from — trim the hyphens a
-login may neither begin nor end with, and casefold.** There is no next
-decoration to discover, because nothing is enumerated. It is safe to make that
-aggressive because the transform only ever *merges* strings and the merged
-result is only ever compared to the PR's author: there is no reviewer roster to
-impersonate into, so every collision it creates pushes toward `blocked`.
+**How an author becomes an identity is one rule: the string must already BE a
+login.** #408 took **five** review rounds, and each of the first four normalised
+one more layer of decoration and stopped — a blank author, then case, then
+invisible padding, then visible padding (`@nuncaeslupus`, `nuncaeslupus.`,
+`(nuncaeslupus)`, the fullwidth `ｎｕｎｃａｅｓｌｕｐｕｓ`, `nunca es lupus`), every
+one of them clearing that account's own PR through this very CLI at exit 0. So
+the rule is now stated as a **validator**, not a transform:
+
+> `resolve_identity` trims outer whitespace, requires the whole string to match
+> `[A-Za-z0-9](?:-?[A-Za-z0-9])*`, and casefolds. **Anything else returns
+> `None`** — unresolvable, exit 2 — and is never repaired into an identity.
+
+**The paragraph this replaces was wrong, and the way it was wrong is the lesson.**
+Round 4's rule was *NFKC-fold, then delete everything outside `[A-Za-z0-9-]`*,
+defended here as safe because "the transform only ever *merges* strings … so
+every collision pushes toward `blocked`". Both halves are false:
+
+- **An allowlist applied as a deletion filter enumerates by complement.** It
+  removes only decoration made of characters *outside* the alphabet; decoration
+  made of characters *inside* it is **welded onto the login**, and a weld is a
+  different identity, which reads as somebody else and clears the PR.
+  `nuncaeslupus (OWNER)` — a `gh` association badge, one step past round 4's own
+  accepted `(nuncaeslupus)` — became `nuncaeslupusowner`: exit 0,
+  `merge_may_proceed: true`, on a PR authored by `nuncaeslupus`.
+- **The transform did not only merge.** Its own worked example refutes it:
+  `resolve_identity("straße")` returned `strae`, **not** `strasse`. Deletion
+  shortens and NFKC lengthens (`™`→`TM`, `№`→`No`, `Ⅷ`→`VIII`), so it **split**
+  too — and every split is **fail-open**, because a split moves a writer away
+  from the author and toward "somebody else". `²`, `Ⅷ`, `™`, `Ⓐ`, `½` and `㎏`
+  each resolved alone to a distinct identity and cleared the head at exit 0.
+
+The discriminator is therefore not whether the output *looks* like a login (`2`
+looks no worse than `reviewer`) but whether normalisation had to **rewrite the
+input into something else**. Validation cannot: it returns the login GitHub
+itself would case-fold, or nothing. `nunca-es-lupus` is the control that the
+strictness has not gone too far — the hyphen is in the grammar, so a hyphenated
+login is a different, real account and still clears at exit 0.
 
 `status/evidence/D28.json` is the gate: `merges_allowed_without_a_review_of_the_head`
-over thirty constructed states, `-1` and `review_reader_status: unmeasured`
-rather than a clean zero when the scan resolves nothing.
+over forty-seven constructed states — including the PR-**author**-side mirrors no
+round before the fifth had, which is structurally why each stopped one layer
+short — with `-1` and `review_reader_status: unmeasured` rather than a clean zero
+when the scan resolves nothing.
 
 ## Work each task in a linked worktree — that is the whole branch protocol
 
