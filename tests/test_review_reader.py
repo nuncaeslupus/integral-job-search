@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -809,8 +810,12 @@ def test_the_implementer_wearing_a_badge_still_clears_nothing_of_their_own() -> 
 def test_an_objection_from_nobody_is_still_an_objection(unattributable_first: bool) -> None:
     """The one direction an unattributable marker still decides the set.
 
-    CLAUDE.md § the review half: *"Exemption applies to a PR nobody objected to,
-    never over an objection somebody raised."* A clearance from nobody is
+    The rule is **this module's own** — `review_reader`'s D-28 docstring list,
+    older than #421 — and **not** CLAUDE.md's: *"Exemption applies to a PR
+    nobody objected to, never over an objection somebody raised."* `grep -c`
+    for that sentence over CLAUDE.md returns 0, which is #421's N2: a docstring
+    citing a rule the governing document does not contain is the same failure
+    as a gate asserting a property it does not test. A clearance from nobody is
     approval out of an absence; a BLOCK from nobody is a reason to look.
     """
     bot, human = _echo("github-actions[bot]", "BLOCK"), _report()
@@ -962,6 +967,70 @@ def test_states_that_are_not_distinct_are_one_state_measured_twice() -> None:
     assert rr.scope_exit_code_for(record) == 1
 
 
+def test_a_twin_state_under_another_name_is_still_one_state_measured_twice() -> None:
+    """#421 N1 — F4's own shape, one level up, inside F4's remedy.
+
+    Changing the new floor's `distinct` from the constructed inputs to
+    `len({case.name for case in evaluated})` survived the whole suite: 146
+    passed, metric 0, exit 0. Composed with F4's mutant the state set genuinely
+    collapsed to 16 while the gate reported a serene zero — the gate certifying
+    coverage it does not have, which is the exact defect the floor was added to
+    close.
+
+    The test beside it cannot catch that, and this is why: it seeds
+    `SCOPE_STATES[0]` itself, so the duplicate shares the **name** as well as
+    the input, both counts fall to 28 together, and nothing distinguishes them.
+    A discriminator that does not discriminate — the same shape as F4's
+    `endswith("first")` filter.
+
+    So the twin here carries a **distinct name over an identical input**: 29
+    names, 28 inputs. Only one of the two counts can be right about it.
+    """
+    original = rr.SCOPE_STATES[0]
+    twin = replace(original, name=original.name + "__twin")
+    states = (*rr.SCOPE_STATES[:-1], twin)
+
+    assert len({case.name for case in states}) == len(rr.SCOPE_STATES)
+    assert len({(case.pr.files, case.pr.comments) for case in states}) < len(rr.SCOPE_STATES)
+
+    record = rr.measure_marker_scope(states=states)
+    assert record["gate_status"] == "unmeasured"
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == -1
+    assert "distinct_constructed_states_at_least" in record["unmeasured_reason"]
+    assert rr.scope_exit_code_for(record) == 1
+
+
+def test_the_same_comments_on_another_authors_pr_is_not_the_same_state() -> None:
+    """The other edge of the same key, asked before concluding N1 was alone.
+
+    `(files, comments)` was the whole key when N1 was found, and it is narrower
+    than the input: `read` also reads `pr.author` and `pr.head_sha`, so two
+    states differing only in whose PR it is counted as **one**. That is the same
+    "counts part of the thing" shape, so the key is now every field `read`
+    reads — `number` excluded, since a per-state counter would make the floor
+    true by construction.
+
+    This fixture is what stops the key narrowing back: the twin below differs
+    from `SCOPE_STATES[0]` only in the PR's author, so a key blind to the author
+    sees 28 inputs and breaches the floor. Its expected verdict may or may not
+    still hold — the metric is not what is asserted here — but the distinctness
+    floor must not be the thing that fires.
+    """
+    original = rr.SCOPE_STATES[0]
+    assert original.pr.author != "somebodyelse"
+    twin = replace(
+        original,
+        name=original.name + "__on_another_authors_pr",
+        pr=replace(original.pr, author="somebodyelse"),
+    )
+    states = (*rr.SCOPE_STATES[:-1], twin)
+
+    assert len({(case.pr.files, case.pr.comments) for case in states}) < len(rr.SCOPE_STATES)
+
+    record = rr.measure_marker_scope(states=states)
+    assert "distinct_constructed_states_at_least" not in record.get("unmeasured_reason", "")
+
+
 def _pairings() -> dict[str, dict[str, rr.ScopeState]]:
     """The ordered states, grouped by the pairing they are two orders of."""
     grouped: dict[str, dict[str, rr.ScopeState]] = {}
@@ -1080,11 +1149,16 @@ def test_a_docs_only_pr_keeps_its_exemption_beside_a_marker_naming_nobody() -> N
 
 
 def test_the_exemption_still_does_not_survive_an_objection_from_nobody() -> None:
-    """F2's bound: the fail-open step is exactly one state wide.
+    """F2's bound: the fail-open step stops at an objection.
 
-    CLAUDE.md § review-half: *"Exemption applies to a PR nobody objected to,
-    never over an objection somebody raised."* An unattributable CLEAR is not an
-    objection; an unattributable BLOCK is.
+    The rule is **this module's own**, not CLAUDE.md's — see the sibling test
+    above, and `T155.json`'s `derived_from` for this state, which says so in the
+    wording committed there. It matters most at *this* fixture, because this is
+    the one that bounds F2's fail-open step: told the bound is the governing
+    document's, a later reader will not know a decision was taken here and is
+    revisable here. *"Exemption applies to a PR nobody objected to, never over
+    an objection somebody raised."* An unattributable CLEAR is not an objection;
+    an unattributable BLOCK is.
     """
     verdict = rr.read(_pr(files=DOCS, comments=(_echo("github-actions[bot]", "BLOCK"),)))
     assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)

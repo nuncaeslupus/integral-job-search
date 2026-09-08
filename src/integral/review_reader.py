@@ -145,8 +145,12 @@ bound it, and the second is why the recording is not decoration:
 **And the skip is not symmetric.** An unattributable **`BLOCK`** on the head is
 honoured — `unresolvable/2` — because the two error directions are not
 symmetric anywhere else in this module either: *"Exemption applies to a PR nobody
-objected to, never over an objection somebody raised."* A clearance from nobody
-is an approval out of an absence; an objection from nobody is a reason to look.
+objected to, never over an objection somebody raised."* **That sentence is this
+module's own rule — the D-28 list above — and not CLAUDE.md's**, which says only
+that docs-only PRs are exempt and spells out no carve-out over an objection.
+Cited to the governing document it would read as externally mandated; it is a
+decision taken here, and revisable here. A clearance from nobody is an approval
+out of an absence; an objection from nobody is a reason to look.
 So a marker naming nobody may still decide the answer for the set in exactly one
 direction, and it is the fail-closed one.
 
@@ -181,11 +185,26 @@ reasons:
   more force to the clearance, which is exactly the reasoning T155 rejected. The
   permissive branch is taken in the case where identity matters and the
   restrictive one in the case where it does not; that is not a defensible pair.
-* **The step is exactly one state wide, and the bound is committed.** An
-  unattributable **BLOCK** on a docs-only PR is still `unresolvable/2`, because
-  *"Exemption applies to a PR nobody objected to, never over an objection
-  somebody raised."* `a_docs_only_pr_an_unattributable_marker_objected_to` pins
-  it, beside the state it bounds.
+* **Every input that moves is one that already passed without the marker.**
+  #421's second reader bounded this step by exhaustion rather than by example:
+  it diffed this rule against the pre-fix commit over **2907 constructed
+  inputs** — every comment multiset of size 0-3 drawn from 16 comment kinds,
+  over three filesets. **371** move refuse→allow and **0** move allow→refuse;
+  all 371 are docs-only and none is a code PR; none carries a head-bound
+  `BLOCK` from an unattributable author or from any other reader; and deleting
+  the unattributable markers from all 371 leaves every one of them passing
+  anyway — **0** counterexamples. An unattributable author is never treated
+  more permissively than a resolvable one in the same position (0 violations).
+  That is the property this branch actually has, and it is stronger than the
+  sentence that stood here before it — *"the step is exactly one state wide"* —
+  which was true of `SCOPE_STATES` and not of the input space, and invited the
+  next reader to believe one fixture bounded the space.
+* **The bound is committed.** An unattributable **BLOCK** on a docs-only PR is
+  still `unresolvable/2`, because *"Exemption applies to a PR nobody objected
+  to, never over an objection somebody raised"* — again **this module's own
+  rule and not CLAUDE.md's**.
+  `a_docs_only_pr_an_unattributable_marker_objected_to` pins it, beside the
+  state it bounds.
 * **Nothing is granted that was not already granted.** CLAUDE.md defines the
   direction to fear as *"the check said yes to something it was built to
   refuse"* — and a docs-only PR is the one thing this check was built to say
@@ -201,7 +220,11 @@ reasons:
 re-derive: a capture path that decides `files` from the same mangled source as
 `author` — then one broken field really would impugn the other, and the
 conservative branch becomes the right one. Nothing in `pull_request_from` does
-that today; it validates `files` independently and refuses an empty list.
+that today: `pull_request_from` reads `files` and `author` from separate keys,
+and `is_docs_only` refuses an empty list as vacuous truth. It *filters* `files`
+rather than validating it — a non-string entry is dropped, which can only
+narrow a list toward the exemption — but that is unchanged here and equally
+true on `main`, and #421 recorded it as its own task rather than this diff's.
 
 `status/evidence/T155.json` is the gate:
 `unresolvable_marker_authors_with_an_unrecorded_effect` over `SCOPE_STATES` —
@@ -292,9 +315,17 @@ MINIMUM_SCOPE_STATES = 29
 #: the same tuple — changing only the label — left the count at 29, the metric at
 #: 0 and the whole suite green, so the gate certified coverage it did not have.
 #: `measure_marker_scope` therefore counts distinct constructed states — the
-#: `(files, comments)` pairs actually handed to `read` — and floors that too. A
-#: collapse now breaches this floor and the record reads `unmeasured`, which is
-#: the gate catching it rather than only a test beside the gate.
+#: inputs actually handed to `read` — and floors that too. A collapse now
+#: breaches this floor and the record reads `unmeasured`, which is the gate
+#: catching it rather than only a test beside the gate.
+#:
+#: #421's N1 is why the count is of the inputs and not of `case.name`: swapping
+#: the one for the other survived all 146 tests with the metric at 0, and
+#: composed with F4's own mutant it reported a serene zero over a state set
+#: genuinely collapsed to 16. A floor that counts labels rather than the things
+#: labelled is the defect it was added to close, so the discriminator has to be
+#: a state that is a twin under a *different* name — which is the one the
+#: fixtures now seed.
 MINIMUM_DISTINCT_SCOPE_STATES = 29
 
 #: The two phrases a verdict carries when an unattributable marker sits beside a
@@ -1632,8 +1663,11 @@ def _scope_states() -> tuple[ScopeState, ...]:
                     2,
                     who,
                     CLEARANCE_SET_ASIDE,
-                    f"{rule}: the exemption — and by the same asymmetry a clearance — is\n"
-                    "for a PR nobody objected to, never over an objection somebody raised.\n"
+                    "this module's own rule, in the D-28 list above and older than #421:\n"
+                    "the exemption — and by the same asymmetry a clearance — is for a PR\n"
+                    "nobody objected to, never over an objection somebody raised. That\n"
+                    f"carve-out is NOT spelled out by {rule},\n"
+                    "which is why it is cited here as ours.\n"
                     "An objection this reader cannot attribute is not a pass, so the one\n"
                     "direction in which an unattributable marker still decides the set is\n"
                     "the fail-closed one",
@@ -1852,10 +1886,19 @@ def measure_marker_scope(states: tuple[ScopeState, ...] | None = None) -> dict[s
 
     floor, breached = _floor(len(evaluated), MINIMUM_SCOPE_STATES)
     # What was actually handed to `read`, not what the labels claim. Two states
-    # carrying identical `(files, comments)` are one state measured twice (#421
-    # F4), and a count that cannot tell them apart is a coverage claim nobody
-    # checked.
-    distinct = len({(case.pr.files, case.pr.comments) for case in evaluated})
+    # carrying the same input are one state measured twice (#421 F4), and a
+    # count that cannot tell them apart is a coverage claim nobody checked.
+    #
+    # The key is every field `read` reads — author, head sha, files, comments —
+    # and deliberately **not** `number`, a per-state counter that would make
+    # distinctness true by construction. That is one vacuous version of this
+    # floor; `case.name` is the other, and it survived the entire suite until
+    # #421's N1 pinned it, which is F4's own shape one level up, inside F4's
+    # remedy. Both are pinned now: `..._is_still_one_state_measured_twice` kills
+    # the label count, `..._is_not_the_same_state` kills a key too narrow to see
+    # the author.
+    inputs = ((c.pr.author, c.pr.head_sha, c.pr.files, c.pr.comments) for c in evaluated)
+    distinct = len(set(inputs))
     distinct_floor, distinct_breached = _floor(distinct, MINIMUM_DISTINCT_SCOPE_STATES)
     record: dict[str, Any] = {
         "unresolvable_marker_authors_with_an_unrecorded_effect": len(unrecorded),
@@ -1878,9 +1921,9 @@ def measure_marker_scope(states: tuple[ScopeState, ...] | None = None) -> dict[s
     if distinct_breached:
         breaches.append(
             f"distinct_constructed_states_at_least: {len(evaluated)} states collapse to "
-            f"{distinct} distinct (files, comments) pairs, floor is "
-            f"{MINIMUM_DISTINCT_SCOPE_STATES} — states that are not distinct are one "
-            "state measured twice"
+            f"{distinct} distinct constructed inputs (author, head sha, files, comments), "
+            f"floor is {MINIMUM_DISTINCT_SCOPE_STATES} — states that are not distinct are "
+            "one state measured twice"
         )
     if breaches:
         record["unresolvable_marker_authors_with_an_unrecorded_effect"] = -1

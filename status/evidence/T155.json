@@ -108,7 +108,7 @@
       "observed": "unresolvable/2",
       "names_the_unattributable_author": true,
       "records_the_effect": true,
-      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the exemption — and by the same asymmetry a clearance — is\nfor a PR nobody objected to, never over an objection somebody raised.\nAn objection this reader cannot attribute is not a pass, so the one\ndirection in which an unattributable marker still decides the set is\nthe fail-closed one"
+      "derived_from": "this module's own rule, in the D-28 list above and older than #421:\nthe exemption — and by the same asymmetry a clearance — is for a PR\nnobody objected to, never over an objection somebody raised. That\ncarve-out is NOT spelled out by CLAUDE.md § The review half of `merge-policy` is a second session, not a bot,\nwhich is why it is cited here as ours.\nAn objection this reader cannot attribute is not a pass, so the one\ndirection in which an unattributable marker still decides the set is\nthe fail-closed one"
     },
     {
       "state": "an_unattributable_BLOCK_from_github_actions__clearance_first",
@@ -116,7 +116,7 @@
       "observed": "unresolvable/2",
       "names_the_unattributable_author": true,
       "records_the_effect": true,
-      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the exemption — and by the same asymmetry a clearance — is\nfor a PR nobody objected to, never over an objection somebody raised.\nAn objection this reader cannot attribute is not a pass, so the one\ndirection in which an unattributable marker still decides the set is\nthe fail-closed one"
+      "derived_from": "this module's own rule, in the D-28 list above and older than #421:\nthe exemption — and by the same asymmetry a clearance — is for a PR\nnobody objected to, never over an objection somebody raised. That\ncarve-out is NOT spelled out by CLAUDE.md § The review half of `merge-policy` is a second session, not a bot,\nwhich is why it is cited here as ours.\nAn objection this reader cannot attribute is not a pass, so the one\ndirection in which an unattributable marker still decides the set is\nthe fail-closed one"
     },
     {
       "state": "an_unattributable_BLOCK_from_a_blank_author__unattributable_first",
@@ -124,7 +124,7 @@
       "observed": "unresolvable/2",
       "names_the_unattributable_author": true,
       "records_the_effect": true,
-      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the exemption — and by the same asymmetry a clearance — is\nfor a PR nobody objected to, never over an objection somebody raised.\nAn objection this reader cannot attribute is not a pass, so the one\ndirection in which an unattributable marker still decides the set is\nthe fail-closed one"
+      "derived_from": "this module's own rule, in the D-28 list above and older than #421:\nthe exemption — and by the same asymmetry a clearance — is for a PR\nnobody objected to, never over an objection somebody raised. That\ncarve-out is NOT spelled out by CLAUDE.md § The review half of `merge-policy` is a second session, not a bot,\nwhich is why it is cited here as ours.\nAn objection this reader cannot attribute is not a pass, so the one\ndirection in which an unattributable marker still decides the set is\nthe fail-closed one"
     },
     {
       "state": "an_unattributable_BLOCK_from_a_blank_author__clearance_first",
@@ -132,7 +132,7 @@
       "observed": "unresolvable/2",
       "names_the_unattributable_author": true,
       "records_the_effect": true,
-      "derived_from": "CLAUDE.md § The review half of `merge-policy` is a second session, not a bot: the exemption — and by the same asymmetry a clearance — is\nfor a PR nobody objected to, never over an objection somebody raised.\nAn objection this reader cannot attribute is not a pass, so the one\ndirection in which an unattributable marker still decides the set is\nthe fail-closed one"
+      "derived_from": "this module's own rule, in the D-28 list above and older than #421:\nthe exemption — and by the same asymmetry a clearance — is for a PR\nnobody objected to, never over an objection somebody raised. That\ncarve-out is NOT spelled out by CLAUDE.md § The review half of `merge-policy` is a second session, not a bot,\nwhich is why it is cited here as ours.\nAn objection this reader cannot attribute is not a pass, so the one\ndirection in which an unattributable marker still decides the set is\nthe fail-closed one"
     },
     {
       "state": "an_unattributable_marker_for_another_commit__unattributable_first",
