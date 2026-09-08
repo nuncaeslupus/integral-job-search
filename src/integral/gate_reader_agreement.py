@@ -351,8 +351,8 @@ class Probe:
         *and* revert the classifier, and this property returns False for every
         arrangement: the run is red about the divergence, so `green` is False,
         and the metric reads **0** over a defect that is fully back. What fails
-        in that state is the fixture set — twenty-three cases, measured — not
-        the number. So the protection is real and it does not live in this
+        in that state is the fixture set — ten of its twenty-three cases go
+        red, measured — not the number. So the protection is real and it does not live in this
         metric, which is worth knowing before quoting the metric as though it
         were the whole check. Closing it means dropping to the simpler rule
         (*counted at all, or green*), which subsumes both signals and is a
