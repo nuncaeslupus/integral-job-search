@@ -1,7 +1,7 @@
 {
   "upstream_subtree_files": 0,
   "subtree_paths": [],
-  "vendored_skills": 18,
   "subtree_machinery_in_makefile": [],
-  "bundle_files": 47
+  "vendored_skills_at_least": 10,
+  "bundle_files_at_least": 30
 }

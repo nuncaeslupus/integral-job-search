@@ -1,6 +1,7 @@
 {
   "unformatted_files": 0,
-  "files_checked": 477,
   "lint_runs_the_check": true,
-  "gate_status": "measured"
+  "gate_status": "measured",
+  "files_checked_at_least": 300,
+  "python_files_checked_at_least": 150
 }
