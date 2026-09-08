@@ -890,7 +890,8 @@ def test_a_live_response_cannot_name_a_file_outside_its_own_package(
     repository — the fixture beside it, or another package's probe."""
     _real_board(library)
     honest = _live_response(_capture_probe(library))
-    for escape in ("../fixture/list.html", "/etc/hostname", "..", "sub/list.html", ""):
+    escapes = ("../fixture/list.html", "/etc/hostname", "..", "sub/list.html", "", "list.html\n")
+    for escape in escapes:
         _write_capture(
             library,
             captured_at="2026-09-08",
@@ -901,6 +902,50 @@ def test_a_live_response_cannot_name_a_file_outside_its_own_package(
         )
         (finding,) = _provenance_findings(library, today=date(2026, 9, 8))
         assert "plain filename" in finding["reason"], escape
+
+
+def test_a_live_response_file_that_is_a_symlink_is_not_a_committed_response(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """The half of the sentence above that a name check cannot deliver, and
+    which this test's neighbour claimed for two rounds without checking.
+
+    `_PLAIN_FILENAME` constrains the **name**; `read_bytes` then follows a
+    symlink, and git commits symlinks. So `probe/list.html` pointing at another
+    package's response — or at any file on the machine — would let a capture
+    certify itself against bytes it never received, with a `bytes` and a
+    `sha256` that both match because they were computed over the target. The
+    claim `live` makes is about what *this* board sent.
+    """
+    _real_board(library)
+    outsider = tmp_path / "somebody-elses.html"
+    outsider.write_bytes(b"<html>another package's response</html>")
+    probe = _package(library) / "probe"
+    probe.mkdir(exist_ok=True)
+
+    for target in (outsider, Path("/etc/hostname")):
+        link = probe / "list.html"
+        link.unlink(missing_ok=True)
+        link.symlink_to(target)
+        body = link.read_bytes()
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url=f"https://{_REAL_SITE}/jobs",
+            status=200,
+            provenance=pc.LIVE,
+            # Honest about the bytes on the other end of the link, which is
+            # exactly what makes the digest no defence here.
+            response={
+                "file": "list.html",
+                "bytes": len(body),
+                "sha256": hashlib.sha256(body).hexdigest(),
+            },
+        )
+
+        (finding,) = _provenance_findings(library, today=date(2026, 9, 8))
+        assert finding["claim"] == pc.LIVE
+        assert "does not resolve inside the package's own probe/" in finding["reason"], target
 
 
 def test_a_transcribed_capture_names_the_committed_request_it_came_from(
@@ -965,6 +1010,186 @@ def test_a_transcribed_capture_names_the_committed_request_it_came_from(
         assert expected in finding["reason"], (change, finding["reason"])
 
 
+def test_a_capture_cannot_cite_itself_as_the_request_it_was_transcribed_from(
+    library: Path, provenance_floor: None
+) -> None:
+    """A record is not a source for itself.
+
+    `captured.json` carries its own `url` and its own `body` by construction, so
+    a containment check pointed at it answers every question it can ask. That
+    makes self-citation the cheapest forgery the module could leave open — one
+    line, no new file, no command — sitting behind `transcribed`, the word that
+    sounds like somebody checked. The POST spelling matters as much as the GET
+    one: pretty-printed JSON happens to break the compact body needles, and
+    formatting is not a boundary — re-serialised compactly, the same forgery is
+    the same forgery.
+    """
+    _real_board(library)
+    repo_root = library.parent
+    myself = f"connectors/{_REFERENCE.name}/probe/captured.json"
+    url = f"https://{_REAL_SITE}/search"
+
+    # GET: the record's own `url` is the whole of what a containment check reads.
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from=myself,
+    )
+    (finding,) = _provenance_findings(library, repo_root=repo_root)
+    assert finding["claim"] == pc.TRANSCRIBED
+    assert "own probe/" in finding["reason"], finding["reason"]
+
+    # POST, written compactly so the body needles match the file byte for byte.
+    record = {
+        "captured_at": "2026-09-08",
+        "url": url,
+        "method": "POST",
+        "body": {"Keyword": "python", "ResultsPerPage": 25},
+        "status": 200,
+        "provenance": pc.TRANSCRIBED,
+        "transcribed_from": myself,
+    }
+    path = _package(library) / "probe" / "captured.json"
+    path.write_text(json.dumps(record, separators=(",", ":")), encoding="utf-8")
+    assert '"Keyword":"python"' in path.read_text(encoding="utf-8")
+
+    (finding,) = _provenance_findings(library, repo_root=repo_root)
+    assert finding["claim"] == pc.TRANSCRIBED
+    assert "own probe/" in finding["reason"], finding["reason"]
+
+
+def test_a_file_that_only_mentions_the_request_is_not_a_committed_command(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """T113's rule, applied to the field T113 created: **"a dated sentence in a
+    comment is not a capture."**
+
+    T113 refused to write `pythonorg_en`'s capture from a dated comment naming
+    the request, and `status/plan.md`'s T152 row records that the refusal was
+    right. A module enforcing T113's own marker cannot then accept the artefact
+    T113 refused — so containment is not the join. Each source below contains
+    the URL, and the last is worse than the rest: it records that the fetch was
+    **refused and never issued**, which is a source certifying the absence of
+    the very request it is cited for.
+    """
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = repo / "notes.md"
+
+    def _cited(text: str) -> dict[str, str]:
+        source.write_text(text, encoding="utf-8")
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            url=url,
+            status=200,
+            provenance=pc.TRANSCRIBED,
+            transcribed_from="notes.md",
+        )
+        (finding,) = _provenance_findings(library, repo_root=repo)
+        assert finding["claim"] == pc.TRANSCRIBED
+        return finding
+
+    mentions = [
+        # A file that denies the fetch ever happened, in the same breath.
+        f"We have NEVER fetched this board.\n{url}\n",
+        # T113's own case, verbatim in shape: a dated sentence in a comment.
+        f"# 2026-09-02: someone said they saw {url} return 200. Not verified.\n",
+        # A record of a REFUSAL, certifying the request it says was never made.
+        f"The fetch of {url} was REFUSED by robots.txt and never issued.\n",
+        # The URL alone, with nothing around it at all.
+        f"{url}\n",
+    ]
+    for text in mentions:
+        assert "commits no command for it" in _cited(text)["reason"], text
+
+    # And the same rule one level down: the pieces of a command are not a
+    # command. Two body fields mentioned in unrelated places never described a
+    # request anybody sent.
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        body={"Keyword": "python", "ResultsPerPage": 25},
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from="notes.md",
+    )
+    source.write_text(
+        f"curl -s {url}\n"
+        'Somewhere else entirely, we once discussed "Keyword":"python".\n'
+        'And in a third place, "ResultsPerPage":25.\n',
+        encoding="utf-8",
+    )
+    (finding,) = _provenance_findings(library, repo_root=repo)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+
+def test_a_transcribed_source_reached_through_a_symlink_is_not_committed_here(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """`transcribed_from` refuses `..` and an absolute path, which constrains
+    the string. A symlink is how that constraint is walked around: a path that
+    reads as repo-relative, resolving to a file the repository does not carry.
+    "Committed elsewhere in this repo" is the claim, and a link out of the tree
+    is not it."""
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    outside = tmp_path / "outside.sh"
+    outside.write_text(f"curl -s '{url}'\n", encoding="utf-8")
+    (repo / "ledger.yaml").symlink_to(outside)
+
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from="ledger.yaml",
+    )
+
+    (finding,) = _provenance_findings(library, repo_root=repo)
+    assert "does not resolve inside this repo" in finding["reason"], finding["reason"]
+
+
+def test_a_command_wrapped_over_several_lines_is_still_one_command(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """The other side of the one-line rule, so that "on one line" is a statement
+    about commands rather than about typography. A `curl` continued over four
+    physical lines with trailing backslashes is one command, and refusing it
+    would be fail-closed for nothing."""
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "retest.sh").write_text(
+        "curl -s -X POST \\\n"
+        "  -H 'Content-Type: application/json' \\\n"
+        '  -d \'{"Keyword":"python","ResultsPerPage":25}\' \\\n'
+        f"  '{url}'\n",
+        encoding="utf-8",
+    )
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        body={"Keyword": "python", "ResultsPerPage": 25},
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from="retest.sh",
+    )
+
+    assert _provenance_findings(library, repo_root=repo) == []
+
+
 def test_a_transcribed_body_resolves_whatever_order_the_command_spells_it_in(
     library: Path, tmp_path: Path, provenance_floor: None
 ) -> None:
@@ -1027,14 +1252,43 @@ def test_the_committed_library_has_no_unenforced_provenance() -> None:
 
 def test_the_usajobs_capture_names_a_resolvable_committed_request() -> None:
     """The one capture that claims anything. `connectors/ruled-out.yaml`'s
-    `retest` line for usajobs.gov carries the POST URL and both body fields, so
-    the claim is checkable rather than asserted."""
-    record = cp.read_record(_LIBRARY / "usajobs_en")
+    `retest` line for usajobs.gov is a single committed `curl` carrying the POST
+    URL and both body fields, so the claim is checkable rather than asserted —
+    and the stricter join this task shipped is one the genuine citation still
+    satisfies, which is the point of keeping it."""
+    package = _LIBRARY / "usajobs_en"
+    record = cp.read_record(package)
 
     assert record is not None
     assert record["provenance"] == pc.TRANSCRIBED
     assert record["transcribed_from"] == "connectors/ruled-out.yaml"
-    assert cp.check_transcribed(record) == []
+    assert cp.check_transcribed(package, record) == []
+
+
+def test_the_usajobs_claim_rests_on_the_committed_command_and_not_on_a_mention(
+    tmp_path: Path,
+) -> None:
+    """The join, exercised where it is actually load-bearing.
+
+    Over the shipped library exactly one capture makes a substantive claim, so a
+    weak join is invisible in the committed state — which is how bare
+    containment shipped. Here the ledger is copied with the one `retest` command
+    turned into prose about the same request: every string the check reads is
+    still present, and the claim must stop resolving.
+    """
+    repo = tmp_path / "repo"
+    (repo / "connectors").mkdir(parents=True)
+    ledger = _LIBRARY / "ruled-out.yaml"
+    prose = ledger.read_text(encoding="utf-8").replace(
+        'retest: "curl -s -X POST', 'retest: "we once ran a POST'
+    )
+    (repo / "connectors" / "ruled-out.yaml").write_text(prose, encoding="utf-8")
+    record = cp.read_record(_LIBRARY / "usajobs_en")
+    assert record is not None
+
+    (reason,) = cp.check_transcribed(_LIBRARY / "usajobs_en", record, repo)
+
+    assert "commits no command for it" in reason
 
 
 def test_a_fabricated_live_capture_over_the_real_library_raises_the_metric(
@@ -1143,7 +1397,7 @@ def test_the_committed_provenance_record_carries_the_floor_and_not_the_count(
     committed = json.loads(target.read_text(encoding="utf-8"))
 
     assert committed["captures_scanned_at_least"] == cp.MINIMUM_CAPTURES_SCANNED
-    for moving in ("captures_scanned", "claims"):
+    for moving in ("captures_scanned", "claims", "example_packages_excluded"):
         assert moving not in committed
     assert committed["captures_with_an_unenforced_provenance"] == 0
 
@@ -1170,15 +1424,22 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
 
     Measured against the real `origin/main` tree while T153 was being written:
     **20 of 20**, nineteen `absent` and one `transcribed` that could not name
-    its committed request. Reconstructed here rather than pinned to a commit so
-    it keeps holding as the library changes.
+    its committed request. The reconstruction is exactly that state — the
+    `provenance` key removed wherever this task added it, and `usajobs_en` left
+    carrying T113's `transcribed` with nothing to substantiate it — rather than
+    a flatter 20 `absent`, so the population it rebuilds is the one the
+    measurement above cites. Reconstructed rather than pinned to a commit so it
+    keeps holding as the library changes.
     """
     library = tmp_path / "connectors"
     shutil.copytree(_LIBRARY, library)
     for path in library.glob("*/probe/captured.json"):
         record = json.loads(path.read_text(encoding="utf-8"))
-        for advisory in ("provenance", "transcribed_from"):
-            record.pop(advisory, None)
+        # T113 shipped `transcribed` on usajobs_en and nothing anywhere else;
+        # `transcribed_from` is this task's, and so is every `unrecorded`.
+        record.pop("transcribed_from", None)
+        if record.get("provenance") == pc.UNRECORDED:
+            record.pop("provenance")
         path.write_text(json.dumps(record, indent=2), encoding="utf-8")
 
     before = cp.measure(library)
@@ -1186,5 +1447,6 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
 
     assert before["gate_status"] == "measured"
     assert before["captures_with_an_unenforced_provenance"] == before["captures_scanned"] > 0
-    assert {row["claim"] for row in before["findings"]} == {"absent"}
+    claims = sorted(row["claim"] for row in before["findings"])
+    assert claims == ["absent"] * (before["captures_scanned"] - 1) + [pc.TRANSCRIBED]
     assert after["captures_with_an_unenforced_provenance"] == 0

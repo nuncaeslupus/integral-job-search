@@ -46,8 +46,10 @@ hand-written one has nothing to leave. So the claim is held to the bytes in
   of a fetch that has not happened yet is not a record of a fetch.
 * `status` — an integer HTTP status in 100…599.
 * `response` — `{file, bytes, sha256}`, where `file` names a plain filename
-  inside the package's own `probe/`, and `bytes` and `sha256` **agree with the
-  committed file**.
+  that **resolves** inside the package's own `probe/` — a committed symlink is
+  refused, because `read_bytes` follows one and a link is how a capture would
+  certify itself against another package's response — and `bytes` and `sha256`
+  **agree with the committed file**.
 
 The digest is what makes the claim more than a form filled in. It binds `live`
 to the exact bytes it certifies: hand-edit `probe/list.html` afterwards and the
@@ -55,27 +57,51 @@ claim breaks, which is the property a reader actually wants from a word meaning
 "this is what the board sent". A capture claiming `live` over a package with no
 response committed cannot substantiate it and is counted.
 
-**What `transcribed` must name.** A transcribed record's whole content is
-"somebody else's committed command produced this", so it must say **which**,
-and that command must be resolvable here:
+**What `transcribed` must name, and what that establishes.** A transcribed
+record's whole content is "somebody else's committed command produced this".
+Both halves of that sentence are checked, because both are about **what a
+source has to be**:
 
-* `transcribed_from` — a repo-relative path (no absolute path, no `..`) that
-  exists.
-* that file's text must contain the captured **URL**.
-* and, for a POST, each top-level `key:value` of the captured body, rendered as
-  compact JSON.
+* **another artefact.** `transcribed_from` is a repo-relative path — no
+  absolute path, no `..`, no symlink out of the tree — that resolves, and that
+  does **not** resolve inside the citing capture's own `probe/`. A record is
+  not a source for itself: `captured.json` holds its own `url` and `body` by
+  construction, so a capture citing its own file would satisfy every question a
+  containment check can ask, at the cost of one line and no new file. That is
+  the cheapest forgery this module could leave open, and it would sit behind
+  its strongest-sounding word.
+* **a command for this request.** One line of that file must carry a
+  request-issuing command (`curl`, `wget`, `xh`, `Invoke-WebRequest`), the
+  captured URL, and every top-level body field — the three together, on that
+  line. Naming a URL is not issuing one. A prose sentence containing it, a
+  dated comment about it, and a note recording that the fetch was *refused and
+  never made* all contain the string; T113 decided that class when it refused
+  to write `pythonorg_en`'s capture from exactly such a comment, because **"a
+  dated sentence in a comment is not a capture"**. A module enforcing T113's
+  field cannot accept what T113 refused.
 
-The text is read with backslashes stripped before matching, because the
-committed command is usually a shell line inside a YAML scalar and
-`-d '{\\"Keyword\\":\\"python\\"…}'` is the same request as the body it is being
-compared to. Pairs are matched individually rather than as one serialised
-object so that a source spelling the body in a different key order still
-resolves — the claim is "this request is committed", not "these bytes are
-committed in this order".
+Lines are joined across a trailing `\\` before matching, since a `curl` wrapped
+over several lines is one command, and the text is then read with backslashes
+stripped, because the committed command is usually a shell line inside a YAML
+scalar and `-d '{\\"Keyword\\":\\"python\\"…}'` is the same request as the body it
+is being compared to. Body pairs are matched individually rather than as one
+serialised object so that a source spelling them in a different key order still
+resolves — but they must land on **one line**, so two keys mentioned in
+unrelated places are not a body anybody sent.
 
-`usajobs_en` is the one capture that declares anything today, and it now names
-`connectors/ruled-out.yaml`, whose `retest` line for usajobs.gov carries that
-URL and that body.
+So the honest reading of an enforced `transcribed` is **"this repo commits a
+command for this request, somewhere other than in this record"** — not "these
+bytes came back from that command". The method is not matched against the line;
+nothing establishes the command was ever run; "resolves in this repo" is not
+"is tracked by git"; and a client the vocabulary does not name reads as no
+command at all, which is fail-closed. `check_transcribed`'s docstring states
+each of those in full. Naming the ceiling is the point of the task: a marker
+whose strength is overstated in prose is the same defect as one nobody checks,
+one level up.
+
+`usajobs_en` is the one capture that declares anything today, and it names
+`connectors/ruled-out.yaml`, whose one-line `retest` command for usajobs.gov
+carries the `curl`, that URL and that body together.
 
 **A package with no readable capture is counted too.** Otherwise the cheapest
 way to satisfy a gate about capture provenance would be to delete the capture,
@@ -125,9 +151,22 @@ MINIMUM_CAPTURES_SCANNED = 15
 #: requires of the same field in the same file.
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-#: A plain filename inside `probe/`: no separators, no `.`/`..`, so a
-#: `response.file` cannot address anything outside the package it belongs to.
-_PLAIN_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+#: A plain filename: no separators, no `.`/`..`. This constrains the **name**
+#: and nothing else — `\Z` rather than `$` so a trailing newline is not a
+#: filename either. What keeps a `response.file` from addressing bytes outside
+#: the package is the containment check in `check_live`, not this pattern: a
+#: name matching here can still be a committed *symlink*, and `read_bytes`
+#: follows it.
+_PLAIN_FILENAME = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+
+#: The clients a committed request is written with. A line carrying none of them
+#: is prose *about* a request rather than a request, which is the distinction
+#: T113 drew when it refused `pythonorg_en`'s dated comment. The list is narrow
+#: on purpose: a request issued by a client it does not name reads as no command
+#: at all — fail-closed, and the fix is to add the name. `http` is deliberately
+#: absent, because every URL carries it and it would make the test trivially
+#: true.
+_REQUEST_COMMAND = re.compile(r"(?<![\w-])(?:curl|wget|xh|Invoke-WebRequest)(?![\w-])")
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -218,7 +257,21 @@ def check_live(package: Path, record: dict[str, Any], today: date) -> list[str]:
         reasons.append(f"response.file {name!r} is not a plain filename inside probe/")
         return reasons
 
-    path = package / PROBE_DIRNAME / name
+    # The name is inside `probe/`; the bytes must be too. `read_bytes` follows a
+    # symlink, and git commits symlinks, so a `list.html` pointing at another
+    # package's probe — or at anything else on the machine — would otherwise let
+    # a capture certify itself against bytes it never received. Resolving both
+    # sides is the check: a plain file under `probe/` resolves to exactly this
+    # path, and a link resolves somewhere else.
+    probe = package / PROBE_DIRNAME
+    path = probe / name
+    if path.resolve() != probe.resolve() / name:
+        reasons.append(
+            f"response.file {name!r} does not resolve inside the package's own "
+            "probe/ — a symlink is not a committed response"
+        )
+        return reasons
+
     try:
         body = path.read_bytes()
     except OSError:
@@ -257,13 +310,68 @@ def _body_needles(body: Any) -> list[str]:
     return [json.dumps(body, separators=(",", ":"), ensure_ascii=False)]
 
 
-def check_transcribed(record: dict[str, Any], repo_root: Path = _REPO_ROOT) -> list[str]:
-    """Why this `transcribed` claim names no resolvable committed request.
+def _command_lines(text: str) -> list[str]:
+    """The source's lines, as a shell would see them. Two normalisations, no more.
+
+    Physical lines ending in `\\` are **joined**, because a `curl` wrapped over
+    five lines is one command and splitting it would refuse a perfectly good
+    source. Backslashes are then dropped, because the committed command is
+    usually a shell line inside a YAML scalar and `-d '{\\"Keyword\\":\\"python\\"}'`
+    is the same request as the body it is being compared against.
+    """
+    joined = re.sub(r"\\[ \t]*\r?\n", " ", text)
+    return [line.replace("\\", "") for line in joined.splitlines()]
+
+
+def check_transcribed(
+    package: Path, record: dict[str, Any], repo_root: Path = _REPO_ROOT
+) -> list[str]:
+    """Why this `transcribed` claim names no committed command for this request.
 
     `transcribed` means "somebody else's committed command produced this
-    record", so the check is that the command is here and that it is a command
-    for *this* request — the URL, and every field of the body if one was
-    recorded.
+    record", and that sentence has two halves the check has to ask about
+    separately — because both are about **what a source has to be**, and a
+    source failing either one substantiates nothing.
+
+    *Somebody else's* — `transcribed_from` is a repo-relative path (no absolute
+    path, no `..`, no symlink out of the tree) that resolves, and that does not
+    resolve inside the citing capture's own `probe/`. A record is not a source
+    for itself: `captured.json` contains its own `url` and its own `body` by
+    construction, so a capture citing its own file would answer every question
+    the check can ask, at a cost of one line and no new file — the cheapest
+    forgery the module could possibly leave open, sitting behind its
+    strongest-sounding word.
+
+    *Command* — one line of that file must carry a request-issuing command
+    together with the URL and every top-level body field. Naming a URL is not
+    issuing one. A prose sentence containing it, a dated comment about it, and
+    a note recording that the fetch was **refused and never made** all contain
+    the string, and T113 already decided that class: it refused to write
+    `pythonorg_en`'s capture from exactly such a comment, because "a dated
+    sentence in a comment is not a capture". A module enforcing T113's own field
+    must not accept what T113 refused.
+
+    Body pairs are matched individually rather than as one serialised object, so
+    a source spelling the same request with its keys in another order still
+    resolves — but they must be found on **one line**, so two keys mentioned in
+    unrelated places do not add up to a body that was never sent.
+
+    **What this establishes, and what it does not.** The honest reading of an
+    enforced `transcribed` is *"this repo commits a command for this request,
+    somewhere other than in this record"* — not "these bytes came back from
+    that command". Specifically:
+
+    * the **method** is not matched against the line, so a committed `curl` of
+      the same URL carrying the same fields satisfies a `POST` claim and a
+      `GET` one alike;
+    * nothing establishes the command was ever **run**, or that its output is
+      what `captured.json` records — only that it is committed here;
+    * "resolves in this repo" is not "is tracked by git": an untracked working
+      -tree file satisfies it. `tools/verified_gate.sh` measures a clean
+      checkout, which makes that gap hard to reach rather than closed;
+    * the client vocabulary is a fixed list. A request issued by a client
+      `_REQUEST_COMMAND` does not name reads as no command at all — fail-closed,
+      and the fix is to add the name.
     """
     reasons: list[str] = []
 
@@ -280,25 +388,41 @@ def check_transcribed(record: dict[str, Any], repo_root: Path = _REPO_ROOT) -> l
         reasons.append(f"transcribed_from {source!r} is not a repo-relative path")
         return reasons
 
-    path = repo_root / candidate
+    root = repo_root.resolve()
+    path = root / candidate
+    if path.resolve() != root / candidate:
+        reasons.append(
+            f"transcribed_from {source!r} does not resolve inside this repo — "
+            "a symlink is not a committed source"
+        )
+        return reasons
+
+    probe = (package / PROBE_DIRNAME).resolve()
+    resolved = path.resolve()
+    if resolved == probe or probe in resolved.parents:
+        reasons.append(
+            f"transcribed_from {source!r} is inside the capture's own probe/ — "
+            "a record is not a source for itself"
+        )
+        return reasons
+
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         reasons.append(f"transcribed_from {source!r} does not resolve in this repo")
         return reasons
 
-    # The committed command is usually a shell line inside a YAML scalar, where
-    # the body's quotes arrive backslash-escaped. Stripping backslashes is what
-    # makes `-d '{\"Keyword\":\"python\"}'` and `{"Keyword": "python"}` the same
-    # request rather than two strings that merely look alike.
-    haystack = text.replace("\\", "")
+    lines = _command_lines(text)
+    haystack = "\n".join(lines)
 
     url = record.get("url")
     if not isinstance(url, str) or not url:
         reasons.append("no `url` to look for in the transcribed source")
-    elif url not in haystack:
+        return reasons
+    if url not in haystack:
         reasons.append(f"{source} does not carry the captured URL {url}")
 
+    needles = [url]
     body = record.get("body")
     if body is not None:
         missing = [needle for needle in _body_needles(body) if needle not in haystack]
@@ -306,7 +430,21 @@ def check_transcribed(record: dict[str, Any], repo_root: Path = _REPO_ROOT) -> l
             reasons.append(
                 f"{source} does not carry the captured body: " + ", ".join(sorted(missing))
             )
+        needles.extend(_body_needles(body))
 
+    if reasons:
+        return reasons
+
+    # Every piece is somewhere in the file. The claim is that a *command* for
+    # this request is committed, so they must be one command: a single line
+    # issuing a request, carrying the URL and the whole body.
+    commands = [line for line in lines if _REQUEST_COMMAND.search(line)]
+    if not any(all(needle in line for needle in needles) for line in commands):
+        reasons.append(
+            f"{source} mentions this request but commits no command for it — no single "
+            "line carries a request command together with the captured URL and every "
+            "body field, and a sentence about a fetch is not a fetch"
+        )
     return reasons
 
 
@@ -344,7 +482,7 @@ def check_capture(
     reasons = (
         check_live(package, record, today)
         if declared == LIVE
-        else check_transcribed(record, repo_root)
+        else check_transcribed(package, record, repo_root)
     )
     return None if not reasons else Finding(package.name, declared, "; ".join(reasons))
 
@@ -404,13 +542,17 @@ def measure(
 def record(measured: dict[str, Any]) -> dict[str, Any]:
     """What is committed, out of what was measured.
 
-    `captures_scanned` and `claims` are dropped and the floor committed in
-    their place: both move the moment anybody adds, retires or re-records a
-    connector, so committing them as exact values reddens `make evidence` on a
-    change that is not a finding (T100). What must not move is the numerator,
-    and it does not.
+    `captures_scanned`, `claims` and `example_packages_excluded` are dropped and
+    the floor committed in their place: all three move the moment anybody adds,
+    retires or re-records a connector, so committing them as exact values
+    reddens `make evidence` on a change that is not a finding (T100/T150).
+    The list of excluded examples is the one a second reader caught still being
+    committed exactly — it is a note about the scan, not a measurement, and
+    adding a second example package would have reddened the gate for a reason
+    unrelated to any provenance. What must not move is the numerator, and it
+    does not.
     """
-    dropped = ("captures_scanned", "claims")
+    dropped = ("captures_scanned", "claims", "example_packages_excluded")
     committed = {key: value for key, value in measured.items() if key not in dropped}
     committed["captures_scanned_at_least"] = MINIMUM_CAPTURES_SCANNED
     return committed
