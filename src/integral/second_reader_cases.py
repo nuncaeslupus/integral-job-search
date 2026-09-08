@@ -22,7 +22,15 @@ reader's pull request derived two more from §2.2.2's text, both `FAIL_OPEN_RISK
 and both ALLOW at the time against a table of 49 that was already green. The
 comment above them says what the first 49 missed. The rule the file is built on
 is unchanged — the session that writes a case is never the session whose code it
-judges — and it has now been applied twice.
+judges — and it has now been applied three times. Cases 54-59 came from the third
+round, and they are the inverse of what 52 and 53 closed: those two found §2.2.3's
+metacharacter hold-out wrongly applied to a request **target**, and this round found
+it wrongly applied to the **position** — every `$` in a pattern exempted, when
+§2.2.3 names one position and case 22 had already ruled the others ordinary octets.
+Five shapes, all fail-open. Three rounds have now each closed one side of the same
+equivalence, which is the argument for the discipline rather than against it: each
+round's fixtures were derived from the RFC by a session that had not written the
+fix, and each found what the previous round's author could not see.
 
 The prose it wrote — its provenance statement, its reading of the two
 specificity interpretations, and the full derivation of every row — is kept
@@ -529,11 +537,23 @@ Disallow: /a$b
         direction=FAIL_OPEN_RISK,
         confidence="LOW",
         confidence_note=(
-            "the RFC does not settle mid-pattern `$`. There is a second wrinkle: `$` is a "
-            "sub-delim under RFC 3986, so a request URI carrying it may arrive as `/a%24b`, in "
-            "which case whether a rule's literal `$` should be encoded before comparison is "
-            "also unsettled. Treat a matcher disagreeing here as a finding to discuss, not a "
-            "defect to fix blind."
+            "the RFC does not settle mid-pattern `$`: reading (a) and reading (b) both survive "
+            "§2.2.3's sentence, and this table takes (a) because it is the fail-closed one. "
+            "That much is unchanged. **The second wrinkle this note used to carry is now "
+            "settled and is recorded here rather than deleted.** It read: `$` is a sub-delim "
+            "under RFC 3986, so a request URI carrying it may arrive as `/a%24b`, and whether "
+            "a rule's literal `$` should be encoded before comparison is 'also unsettled'. It "
+            "is not independent of reading (a) — it is a consequence of it. Once a non-final "
+            "`$` is an ordinary octet (which is what (a) says, and what makes THIS row "
+            "DISALLOW), it is an ordinary octet in RFC 3986's reserved range, and §2.2.2 says "
+            "such octets 'MUST be percent-encoded ... prior to comparison' with no exception "
+            "for rules. So taking (a) and then exempting the `$` from §2.2.2 is not a second "
+            "open question, it is a contradiction: the same character called data by one "
+            "section's reading and a metacharacter by the other's. Cases 54-58 are where that "
+            "was measured — five shapes returning ALLOW under the exemption where §2.2.2 "
+            "requires DISALLOW — and case 59 pins the half of §2.2.3 that survives it, the "
+            "trailing `$`. What stays unsettled is only reading (a) versus (b); a matcher "
+            "disagreeing on THAT is a finding to discuss, not a defect to fix blind."
         ),
     ),
     # ---- 23. wildcard_specificity_readings_agree -------------------------
@@ -603,7 +623,22 @@ Allow: /a/b
         confidence="LOW",
         confidence_note=(
             'whether an anchor character contributes to "the match that has the most octets" is '
-            "exactly what the RFC leaves open."
+            "exactly what the RFC leaves open, and it stays open — this row is still "
+            "contested. What has been **narrowed** is which `$` the question is about, and the "
+            "narrowing is worth recording because a `$`'s contribution to a pattern's length "
+            "decides which rule wins. A **non-final** `$` is settled at three octets, and not "
+            "by a new judgement: §2.2.2 requires reserved octets percent-encoded 'prior to "
+            "comparison', the comparison and therefore the count run over the canonicalised "
+            "pattern, and a literal `$` canonicalises to `%24` exactly as a literal `=` "
+            "canonicalises to `%3D` and has always counted three. `$` and `=` are both "
+            "sub-delims; no reading of §2.2.2 encodes one and exempts the other. So the "
+            "shift from one octet to three is this table's existing rule applied "
+            "consistently, not a change of reading. A **final** `$` is the anchor: §2.2.3 "
+            "consumes it rather than comparing it, so §2.2.2 never reaches it, it stays one "
+            "octet — and whether that one octet counts toward specificity is the question "
+            "this row asks and does not answer. This row's own pattern, `/a/b$`, carries only "
+            "the final kind, so nothing above moves its verdict; it is (P) versus (M) as "
+            "written."
         ),
     ),
     # ---- 26. pct_unreserved_encoded_in_rule ------------------------------
@@ -1162,7 +1197,7 @@ Disallow: /admin/    # staff only, humans welcome
     # second time. Both were ALLOW when they were written down, in a reader
     # whose 49-row table was already green: the table exercised §2.2.2's
     # percent-encoding requirement only through the two octets the section's
-    # example table happens to print, so `_QUERY_DATA_OCTETS = ":/"` passed it
+    # example table happens to print, so an encode set of `":/"` passed it
     # while every other reserved octet used as query data escaped the
     # equivalence. That is the shape CLAUDE.md's T70 paragraph describes — a
     # green gate that is necessary and not sufficient — and the reason these
@@ -1278,6 +1313,176 @@ Disallow: /s?q=a%24b
             "only about the target, where there is no anchor for `$` to be."
         ),
         direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
+    # ---- 54. dollar_as_pattern_data_is_encoded ---------------------------
+    #
+    # Cases 54-58 are case 53's **inverse twin**, and they are here because that
+    # row said in as many words that it was not asking the other half: "whether
+    # a literal `$` written inside a *rule* should be encoded is still
+    # unsettled, and this row takes no position on it. It asks only about the
+    # target." Five shapes then reproduced the fail-open on the side it left
+    # alone, which is the third time in this file that a fix reaching one side
+    # of a two-sided equivalence left the other exactly as it was (cases 50/51,
+    # then 52/53). The general rule the three of them share: §2.2.2's
+    # canonicalisation is a property of the **comparison**, so it runs over both
+    # operands and over both kinds of rule; §2.2.3's metacharacters are a
+    # property of a **pattern**, and — case 54's own subject — of the position
+    # §2.2.3 names and no other.
+    Case(
+        id="dollar_as_pattern_data_is_encoded",
+        robots_txt="""User-agent: *
+Disallow: /s?q=a$b
+""",
+        agent="integral-job-search/0.1",
+        path="/s?q=a%24b",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "`$` is a sub-delim, so it is in RFC 3986's reserved range, and §2.2.2 requires "
+            "octets in that range to be percent-encoded 'prior to comparison' — in 'the URI "
+            "**and robots.txt paths**', so the rule's `$` and the target's `%24` are both "
+            "canonicalised to `%24` and compare equal. The only thing that could exempt this "
+            "`$` is §2.2.3's 'designates the end of the match pattern', and this `$` is not at "
+            "the end of the pattern: there is a `b` after it. §2.2.3's sentence describes one "
+            "position, and the matcher has already ruled on the others — a non-trailing `$` is "
+            "an ordinary octet held in the literal run around it, which is what makes "
+            "`Disallow: /a$b` cover the literal path `/a$b` in case 22. An ordinary octet in "
+            "the reserved range is exactly what §2.2.2 encodes. A matcher that exempts every "
+            "`$` in a pattern leaves the rule's `$` literal while the target's `%24` stays "
+            "encoded, so the two can never compare equal and a rule the operator wrote in "
+            "plain sight covers nothing."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
+    # ---- 55. dollar_in_both_roles_in_one_pattern -------------------------
+    Case(
+        id="dollar_in_both_roles_in_one_pattern",
+        robots_txt="""User-agent: *
+Disallow: /s?a=$b$
+""",
+        agent="integral-job-search/0.1",
+        path="/s?a=%24b",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "One pattern carrying `$` in **both** of its roles, which is the row that stops "
+            "either role's rule being stated as a fact about the octet. The first `$` has a "
+            "`b` after it, so §2.2.3's 'the end of the match pattern' does not describe it: it "
+            "is data, in RFC 3986's reserved range, and §2.2.2 encodes it to `%24` on both "
+            "sides. The second `$` is final, so §2.2.3 does describe it: it is the anchor, it "
+            "is consumed by the matcher rather than compared, and encoding it would delete the "
+            "anchoring the operator asked for. Canonicalised, the rule is `/s?a%3D%24b` "
+            "anchored, and the target canonicalises to exactly that — DISALLOW. A matcher "
+            "exempting every `$` cannot reach the target's `%24`; a matcher encoding every `$` "
+            "destroys the anchor. Only reading the position gets both, and this is the row "
+            "where a matcher must get both at once rather than one per file. The earlier "
+            "draft of this row paired `$` with `&` instead of with a second `$`; that made it "
+            "fail for `integral.robots` on the `&`, which case 51 already counts, so the row "
+            "would have re-counted a known defect under a new id instead of measuring this one."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
+    # ---- 56. dollar_as_pattern_data_opening_a_value ----------------------
+    Case(
+        id="dollar_as_pattern_data_opening_a_value",
+        robots_txt="""User-agent: *
+Disallow: /s?price=$5
+""",
+        agent="integral-job-search/0.1",
+        path="/s?price=%245",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "The realistic spelling of case 54: a currency sign opening a query value, which "
+            "is how a literal `$` actually reaches a robots.txt. Same derivation — `$` is a "
+            "sub-delim in RFC 3986's reserved range, it is not in the pattern's final "
+            "position, so §2.2.2 encodes it and §2.2.3 exempts nothing. The row is here "
+            "because a hold-out keyed on 'looks like an anchor' would have to decide what a "
+            "`$` immediately after `=` is, and the answer is not positional guesswork: it is "
+            "the one position §2.2.3 names, and this is not it."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
+    # ---- 57. dollar_as_pattern_data_reached_through_a_wildcard -----------
+    Case(
+        id="dollar_as_pattern_data_reached_through_a_wildcard",
+        robots_txt="""User-agent: *
+Disallow: /*?q=a$b
+""",
+        agent="integral-job-search/0.1",
+        path="/x?q=a%24b",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "Case 54 with the path reached through §2.2.3's `*`, so the rule carries both a "
+            "metacharacter and a literal `$` and a matcher must tell them apart within one "
+            "pattern. §2.2.3 gives `*` '0 or more instances of any character' with no position "
+            "attached, so it is held out wherever it stands; it gives `$` 'the end of the "
+            "match pattern', which is a claim about one position, and this `$` is not in it. "
+            "Encoding both, or exempting both, both fail: the first deletes the wildcard and "
+            "the rule stops matching `/x`, the second leaves the `$` unable to meet `%24`."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
+    # ---- 58. dollar_as_pattern_data_behind_a_path_wildcard ---------------
+    Case(
+        id="dollar_as_pattern_data_behind_a_path_wildcard",
+        robots_txt="""User-agent: *
+Disallow: /*a$b
+""",
+        agent="integral-job-search/0.1",
+        path="/x?q=a%24b",
+        expected=DISALLOW_VERDICT,
+        section="2.2.2 — RECOLLECTED",
+        why=(
+            "The same fault one function further on, and the row that stops the fix being a "
+            "pattern-side-only patch. This rule has no literal `?`, so 'which octets are in "
+            "the query' is undecidable from the pattern and its `$` is canonicalised as a "
+            "path octet — left literal, correctly, since §2.2.2's example table encodes "
+            "reserved octets that appear as data **inside a query**. The equivalence must "
+            "therefore be met from the target side, by offering the target's query with its "
+            "reserved-as-data escapes resolved — which is what case 50 established for `:` "
+            "and `/` under a wildcard. A matcher that resolves every reserved octet there "
+            "*except* `$` and `*` refuses this row: the target's `%24` stays encoded and the "
+            "rule's `$` stays literal. Nothing justifies that exception. The decode pass reads "
+            "a **request target**, and a target has no pattern for `*` to designate 0 or more "
+            "of and no end of a pattern for `$` to designate — case 52 and case 53's whole "
+            "argument, applied where it had not been applied."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="HIGH",
+    ),
+    # ---- 59. a_data_dollar_does_not_defeat_the_anchor_beside_it ----------
+    Case(
+        id="a_data_dollar_does_not_defeat_the_anchor_beside_it",
+        robots_txt="""User-agent: *
+Disallow: /s?a=$b$
+""",
+        agent="integral-job-search/0.1",
+        path="/s?a=%24bc",
+        expected=ALLOW_VERDICT,
+        section="2.2.3 — RECOLLECTED",
+        why=(
+            "Case 55's mirror, on the same pattern, and the reason the pair is here rather "
+            "than case 55 alone: 55 asks that the rule still REFUSE `/s?a=%24b`, and a "
+            "matcher can pass that by dropping §2.2.3's anchoring altogether and matching "
+            "the pattern as a plain prefix. This row is the path that separates the two. "
+            "§2.2.3's final `$` 'designates the end of the match pattern', so the rule "
+            "covers `/s?a=%24b` and nothing longer; `/s?a=%24bc` is longer, and a path no "
+            "rule matches is allowed. The first `$` is data — §2.2.2 encodes it to `%24` on "
+            "both sides, which is what lets the rule reach this target's spelling at all — "
+            "and encoding it must not consume the anchor after it, nor may anchoring on the "
+            "wrong `$` make the rule end at the first one. Fail-**closed** on its own, which "
+            "is exactly why it is pinned: no sweep for fail-opens would find a matcher that "
+            "refuses this path, and 55 and 59 together admit only the reading that tells the "
+            "two `$` apart by position."
+        ),
+        direction=FAIL_CLOSED_RISK,
         confidence="HIGH",
     ),
 )

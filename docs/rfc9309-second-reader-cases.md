@@ -1233,6 +1233,168 @@ Disallow: /s?q=a%24b
 
 ---
 
+## Rows 54-59 — the pattern side of §2.2.2, and the position §2.2.3 actually names
+
+Derived on the **third** review round of the reader's pull request, by a session other than
+the implementer, from §2.2.2 and §2.2.3 before opening the matcher — the same rule rows
+50-53 were added under.
+
+Row 53 closed the target side of the `$` equivalence and said in as many words that it was
+not asking the other half: *"whether a literal `$` written inside a rule should be encoded
+is still unsettled."* It is not unsettled, and rows 54-58 are the five shapes that showed
+why. Each returned **ALLOW** where §2.2.2 requires DISALLOW, all five fail-open, and
+`integral.robots` — the matcher this reader exists to audit — refuses four of the five.
+
+**The derivation, once, since all six rows share it.** §2.2.2 requires octets "in the
+reserved range defined by RFC3986" percent-encoded "prior to comparison", and states it
+over "the URI **and robots.txt paths**" — §2.2.3 defines that path as the value of an
+`allow` *or* a `disallow` rule, so the requirement is over rules, not over one kind of rule
+and not over targets only. `$` is a sub-delim, so it is in that range. The only text that
+could exempt it is §2.2.3's `$` "designates the end of the match pattern" — and that
+sentence describes **one position**. Row 22 already ruled on the others, and ruled them
+ordinary octets: that is what makes `Disallow: /a$b` cover the literal path `/a$b` rather
+than matching nothing. An ordinary octet in the reserved range is precisely what §2.2.2
+encodes. So exempting every `$` in a pattern is not a second open question; it contradicts
+row 22's answer to the first one, calling the same character data under one section and a
+metacharacter under the other. `*` differs: §2.2.3 gives it "0 or more instances of any
+character" with no position attached, so it is exempt wherever it stands.
+
+**What this settles, and what it does not.** Row 22's `confidence_note` carried two
+questions. Whether a non-final `$` anchors is still open, and row 22 stays `LOW`. Whether a
+literal `$` in a rule is encoded before comparison is **settled** — it follows from row
+22's own answer to the first. Row 25 is untouched: its pattern `/a/b$` carries only the
+final kind, and whether an *anchor* contributes to "the match that has the most octets"
+remains the open question it was. What row 25's note now records is a narrowing, not an
+answer — a **non-final** `$` contributes three octets, because the count runs over the
+canonicalised pattern and `$` canonicalises to `%24` exactly as `=` canonicalises to `%3D`
+and has always counted three. `$` and `=` are both sub-delims; no reading of §2.2.2 encodes
+one and exempts the other. A **final** `$` is consumed by §2.2.3 rather than compared, so
+§2.2.2 never reaches it and it stays one octet.
+
+### 54. `dollar_as_pattern_data_is_encoded`
+
+```
+User-agent: *
+Disallow: /s?q=a$b
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/s?q=a%24b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** The bare shape. The rule's `$` is not at the end of the pattern — a `b` follows
+  it — so §2.2.3 does not describe it and §2.2.2 encodes it to `%24`, matching the target's
+  own `%24`. A matcher exempting every `$` leaves the rule literal and the target encoded,
+  so the two never compare equal and a rule written in plain sight covers nothing.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 55. `dollar_in_both_roles_in_one_pattern`
+
+```
+User-agent: *
+Disallow: /s?a=$b$
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/s?a=%24b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** One pattern carrying `$` in both roles, so neither role's rule can be stated as a
+  fact about the octet. The first `$` is data and encodes; the second is final, so §2.2.3
+  makes it the anchor, it is consumed rather than compared, and encoding it would delete the
+  anchoring the operator asked for. Canonicalised the rule is `/s?a%3D%24b` anchored, which
+  is exactly the target. Exempting every `$` cannot reach `%24`; encoding every `$` destroys
+  the anchor. Only reading the position gets both, and this row demands both at once.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 56. `dollar_as_pattern_data_opening_a_value`
+
+```
+User-agent: *
+Disallow: /s?price=$5
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/s?price=%245`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** The realistic spelling — a currency sign opening a query value, which is how a
+  literal `$` actually reaches a robots.txt. Same derivation as row 54. Kept because a
+  hold-out keyed on "looks like an anchor" would have to decide what a `$` immediately after
+  `=` is, and the answer is not positional guesswork: §2.2.3 names one position and this is
+  not it.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 57. `dollar_as_pattern_data_reached_through_a_wildcard`
+
+```
+User-agent: *
+Disallow: /*?q=a$b
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/x?q=a%24b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** One pattern carrying a metacharacter and a data `$`, so a matcher must tell them
+  apart within a single rule rather than per file. `*` is exempt wherever it stands; this
+  `$` is exempt nowhere. Encoding both deletes the wildcard and the rule stops matching
+  `/x`; exempting both leaves the `$` unable to meet `%24`.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 58. `dollar_as_pattern_data_behind_a_path_wildcard`
+
+```
+User-agent: *
+Disallow: /*a$b
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/x?q=a%24b`
+- **expected:** DISALLOW
+- **section:** 2.2.2 — RECOLLECTED
+- **why:** The same fault one step further on, and the row that stops the fix being a
+  pattern-side-only patch. This rule has no literal `?`, so "which octets are in the query"
+  is undecidable from the pattern and its `$` is canonicalised as a path octet — left
+  literal, correctly, since §2.2.2 encodes reserved octets appearing as data *inside a
+  query*. The equivalence must therefore be met from the target side, by offering the
+  target's query with its reserved-as-data escapes resolved, which is what row 50 established
+  for `:` and `/` under a wildcard. A matcher resolving every reserved octet there *except*
+  `$` and `*` refuses this row. Nothing justifies that exception: the decode pass reads a
+  **request target**, and a target has no pattern for `*` to designate 0 or more of and no
+  end of a pattern for `$` to designate — rows 52 and 53's whole argument, applied where it
+  had not been applied.
+- **direction:** FAIL_OPEN_RISK
+- **confidence:** HIGH
+
+### 59. `a_data_dollar_does_not_defeat_the_anchor_beside_it`
+
+```
+User-agent: *
+Disallow: /s?a=$b$
+```
+
+- **agent:** `integral-job-search/0.1`
+- **path:** `/s?a=%24bc`
+- **expected:** ALLOW
+- **section:** 2.2.3 — RECOLLECTED
+- **why:** Row 55's mirror on the same pattern, and the reason the pair exists rather than 55
+  alone: 55 asks that the rule still refuse `/s?a=%24b`, and a matcher can pass that by
+  dropping anchoring altogether and matching the pattern as a plain prefix. This path
+  separates the two. §2.2.3's final `$` designates the end of the match pattern, so the rule
+  covers `/s?a=%24b` and nothing longer; `/s?a=%24bc` is longer, and a path no rule matches
+  is allowed. Encoding the first `$` must not consume the anchor after it, nor may anchoring
+  on the wrong `$` end the rule at the first one. Fail-**closed** on its own, which is why it
+  is pinned: no fail-open sweep would find a matcher that refuses this path.
+- **direction:** FAIL_CLOSED_RISK
+- **confidence:** HIGH
+
+---
+
 ## Using this table
 
 Each row is a fixture, not a comment. Per CLAUDE.md, an accepted case is only accepted once

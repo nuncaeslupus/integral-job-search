@@ -1,0 +1,16 @@
+{
+  "unstable_evidence_keys": 0,
+  "sources_compared": [
+    "T125",
+    "T55",
+    "T58"
+  ],
+  "mutations_compared": [
+    "a Markdown file is added",
+    "a task file is archived"
+  ],
+  "gate_status": "measured",
+  "unstable": [],
+  "evidence_keys_compared_at_least": 18,
+  "evidence_sources_compared_at_least": 3
+}

@@ -96,16 +96,25 @@ _RESERVED = ":/?#[]@!$&'()*+,;="
 #: "designates 0 or more instances of any character" and `$` "designates the end
 #: of the match pattern". Encoding them in a rule would delete that rule's own
 #: metacharacters, and `Disallow: /s?q=*` would stop matching anything.
-#: Case 22's `confidence_note` already records that whether a literal `$` in a
-#: pattern should be encoded before comparison is unsettled by the RFC; this is
-#: where that reading is taken, once, rather than in each caller.
 #:
 #: **The hold-out is a property of patterns, and of nothing else.** A request
 #: target is a sequence of octets: there is no pattern in it for `*` to
 #: designate 0 or more of, or for `$` to anchor the end of. So §2.2.2's
 #: requirement over RFC 3986's reserved range reaches a target's `*` and `$`
-#: like every other reserved octet, and `_encode_set` is what says so — see its
-#: docstring for the fail-open that reading the hold-out as two-sided produced.
+#: like every other reserved octet, and `_carries_pattern_semantics` is what
+#: says so — see it for the fail-open that reading the hold-out as two-sided
+#: produced.
+#:
+#: **And it is a property of the position, not only of the octet** — see
+#: `_carries_pattern_semantics`, which is where the two are told apart. `*`
+#: designates "0 or more instances of any character" wherever it stands, so it
+#: is held out throughout a pattern. `$` designates "the end of the match
+#: pattern", which is a claim about one position, and `_segments` has **already
+#: ruled** on the other ones: a `$` that is not final "is an ordinary octet and
+#: stays in the literal run around it". An ordinary reserved octet is precisely
+#: what §2.2.2 percent-encodes before comparison, so exempting a non-trailing
+#: `$` from that pass contradicts a decision this module had already made, and
+#: the contradiction is fail-open — see `_carries_pattern_semantics`.
 _PATTERN_METACHARACTERS = "*$"
 
 #: Reserved octets percent-encoded when they appear as **data** in a query.
@@ -123,33 +132,88 @@ _PATTERN_METACHARACTERS = "*$"
 #: `canonical`: it is the octet that makes "in the query" decidable at all, so
 #: encoding it would leave nothing to be in. A *later* `?` is data and is
 #: encoded, on both sides, like any other reserved octet.
-_QUERY_DATA_OCTETS = "".join(octet for octet in _RESERVED if octet not in _PATTERN_METACHARACTERS)
+#: There is no longer a *set* to subtract the metacharacters from. This constant
+#: was `_RESERVED` minus `_PATTERN_METACHARACTERS`, and its last consumer was
+#: `_decode_query_data`, which reads a **request target** — where, by this
+#: module's own ruling, no octet carries pattern semantics at all. Subtracting
+#: them there left `Disallow: /*a$b` unable to reach `/x?q=a%24b`: the rule's
+#: `$` is a path octet (no `?` in the pattern, so §2.2.2's query pass never
+#: reaches it) while the target's `%24` was excluded from the decode pass and
+#: stayed encoded. Fail-open, and the same fault as the pattern-side one, one
+#: function along. So the hold-out lives in exactly one place —
+#: `_carries_pattern_semantics` — and `_RESERVED` is used whole everywhere else.
 
 
-def _encode_set(*, as_pattern: bool) -> str:
-    """The reserved octets encoded as query data on one side of the comparison.
+def _carries_pattern_semantics(text: str, index: int, *, as_pattern: bool) -> bool:
+    r"""Is the octet at `index` a §2.2.3 metacharacter rather than data?
 
-    §2.2.2 states its requirement over RFC 3986's whole reserved range, and that
-    is what a **request target** gets: `_RESERVED`, entire. The two hold-outs
-    above are §2.2.3 pattern semantics, and §2.2.3 is a section about the
-    `Allow`/`Disallow` *value* — a target has no pattern in it for `*` to
-    designate 0 or more of, or for `$` to end.
+    Only a pattern has metacharacters at all, so a **request target** answers
+    `False` everywhere: `_ENCODE_SET` already says why, and this function is
+    where the *position* is read for the one octet whose meaning depends on it.
 
-    Reading the hold-out as two-sided is a **fail-open**, and it was measured on
-    this module: `Disallow: /s?q=a%2Ab` against `/s?q=a*b` returned ALLOW where
-    §2.2.2 requires DISALLOW, because the rule's `%2A` stayed encoded while the
-    target's `*` was held out of the encode pass and stayed literal, so the two
-    could never compare equal. The `%24`/`$` twin returned ALLOW for the same
-    reason. `integral.robots` — the matcher this reader exists to audit —
-    refuses both, so on those two octets the second reader was the more
-    permissive of the two, which is T116's failure mode inside its replacement.
+    §2.2.3 gives its two characters different scopes, in its own words:
 
-    The fix is this function rather than a list of exceptions-to-the-exception.
-    A literal list is what `_QUERY_DATA_OCTETS` used to be (`":/"`), and the
-    lesson of that round is that the rule has to be made right: pattern
-    semantics apply to patterns.
+    * `*` "designates 0 or more instances of any character" — a claim about the
+      character, with no position attached. Every `*` in a pattern is a
+      metacharacter, so every one is held out.
+    * `$` "designates the end of the match pattern" — a claim about **one
+      position**. A `$` that is not last designates nothing; there is no end of
+      the pattern there for it to be.
+
+    `_segments` had already taken exactly that reading, and took it for the
+    fail-closed reason recorded in its docstring: a trailing `$` anchors, and a
+    `$` "anywhere else is an ordinary octet and stays in the literal run around
+    it". So by this module's own settled ruling a non-trailing `$` is data — and
+    §2.2.2 says data in RFC 3986's reserved range "MUST be percent-encoded ...
+    prior to comparison". Holding it out of that pass therefore did not resolve
+    an open question; it contradicted a closed one.
+
+    The contradiction is **fail-open**, and it is the inverse twin of the case
+    the previous round fixed. That round found the hold-out wrongly applied to
+    the *target* side (`Disallow: /s?q=a%2Ab` could not reach `/s?q=a*b`); this
+    is the hold-out wrongly applied to the *pattern* side, with the encodings
+    swapped: `Disallow: /s?q=a$b` could not reach `/s?q=a%24b`, because the
+    rule's `$` stayed literal while the target's `%24` stayed encoded. Five
+    shapes reproduced it, all ALLOW where §2.2.2 requires DISALLOW, and
+    `integral.robots` — the matcher this reader audits — refuses all five.
+
+    **Not an exceptions list.** The previous two rounds were closed by widening
+    a literal set (`":/"` to `_RESERVED`) and then by splitting it by side;
+    this round is closed by asking §2.2.3 what each character's scope actually
+    is. `$` is exempt where §2.2.3 puts it and nowhere else.
     """
-    return _QUERY_DATA_OCTETS if as_pattern else _RESERVED
+    if not as_pattern:
+        return False
+    char = text[index]
+    if char == "*":
+        return True
+    return char == "$" and index == len(text) - 1
+
+
+#: The octets §2.2.2's encoding pass runs over, on **both** sides of the
+#: comparison and for **both** kinds of rule.
+#:
+#: §2.2.2 states its requirement over RFC 3986's whole reserved range, so
+#: `_RESERVED` entire is the set; which *occurrences* are held out is decided
+#: positionally by `_carries_pattern_semantics`, because `$`'s exemption is
+#: positional and `*`'s is not. Keeping the set whole and the hold-out
+#: positional is what stops this becoming a third literal exceptions list.
+#:
+#: **The set is the same for an `Allow` and for a `Disallow`, deliberately.**
+#: §2.2.2 states the encoding requirement over "the URI and robots.txt paths",
+#: and §2.2.3 defines that path as the value of an `allow` **or** a `disallow`
+#: rule — the requirement is stated over rules, never over one kind of rule.
+#: Canonicalisation is not a widening that could be pointed in a safe direction:
+#: it is the *definition of the comparison* §2.2.2 says happens "prior to" it,
+#: so canonicalising per kind would mean running two different comparison
+#: functions where the RFC defines one, and an `Allow` an operator wrote in
+#: plain sight would silently stop carving out what it says it carves out.
+#: `parse` reflects that by having no per-kind branch to begin with — an
+#: asymmetry here would have to be *added*. It is `spellings` that is
+#: one-directional, and correctly so: the extra spellings there absorb an
+#: ambiguity the RFC leaves open, and resolving an open question toward refusing
+#: is a different act from performing a step the RFC mandates.
+_ENCODE_SET = _RESERVED
 
 
 def _percent(octet: str) -> str:
@@ -183,12 +247,16 @@ def canonical(text: str, *, encode_query_data: bool = True, as_pattern: bool = T
       and by the same rule `?q=a&b` becomes `?q=a%26b`, so a rule written
       `/s?q=a%26b` matches a request written `/s?q=a&b`. The `/` inside a
       *path* is structure and stays, which is why this applies only after the
-      first `?`. The first `?` is held out on both sides, positionally; the two
-      pattern metacharacters `*` and `$` are held out **when canonicalising a
-      pattern and only then** (`as_pattern`, the default), because §2.2.3 gives
-      them a meaning in a rule and gives them none in a request target. Holding
-      them out of a target too is a fail-open, and `_encode_set` records the two
-      cases that measured it.
+      first `?`. The first `?` is held out on both sides, positionally; the
+      §2.2.3 metacharacters are held out **when canonicalising a pattern and
+      only then** (`as_pattern`, the default), because §2.2.3 gives them a
+      meaning in a rule and gives them none in a request target. Which
+      occurrences those are is `_carries_pattern_semantics`' decision and is
+      positional for `$`: every `*`, but only a **trailing** `$`, since that is
+      the one position §2.2.3's "the end of the match pattern" describes and the
+      one `_segments` anchors on. Holding them out of a target is a fail-open,
+      and holding a non-trailing `$` out of a pattern is its inverse twin —
+      both are recorded there.
 
       This produces a canonical string that is not, octet for octet, the
       example table's printed "path to match" column — `?baz=` there keeps its
@@ -209,7 +277,6 @@ def canonical(text: str, *, encode_query_data: bool = True, as_pattern: bool = T
     come to disagree, and the disagreement is always the fail-open way round:
     the rule stops matching.
     """
-    encode_set = _encode_set(as_pattern=as_pattern)
     out: list[str] = []
     index = 0
     length = len(text)
@@ -233,7 +300,12 @@ def canonical(text: str, *, encode_query_data: bool = True, as_pattern: bool = T
             # falls through to the reserved-octet branch below like any other.
             in_query = True
             out.append(char)
-        elif ord(char) > 127 or (encode_query_data and in_query and char in encode_set):
+        elif ord(char) > 127 or (
+            encode_query_data
+            and in_query
+            and char in _ENCODE_SET
+            and not _carries_pattern_semantics(text, index, as_pattern=as_pattern)
+        ):
             out.append(_percent(char))
         else:
             out.append(char)
@@ -476,15 +548,17 @@ def _decode_query_data(text: str) -> str:
     unmatched by a rule written literally, which is the same fail-open one step
     along. So the decoded form is offered as well.
 
-    Only octets after the first `?` are touched, and only `_QUERY_DATA_OCTETS`.
-    A `%2F` in a **path** stays encoded in every spelling: resolving it would
+    Only octets after the first `?` are touched, and every reserved octet is:
+    this reads a **target**, which has no `*` to designate 0 or more of and no
+    `$` to end a pattern, so nothing is held out. A `%2F` in a **path** stays
+    encoded in every spelling: resolving it would
     make a rule about `/a%2Fb` cover `/a/b`, which is the fail-open the case
     table's `pct_encoded_slash_is_not_a_separator` exists to refuse.
     """
     head, delimiter, query = text.partition("?")
     if not delimiter:
         return text
-    for octet in _QUERY_DATA_OCTETS:
+    for octet in _RESERVED:
         query = query.replace(_percent(octet), octet)
     return head + delimiter + query
 
@@ -608,14 +682,14 @@ def allows(text: str, agent: str, target: str) -> bool:
 #: guaranteed without moving, and it is deliberately under what the table
 #: carries. Its job is to stop a clean zero resting on an empty table — a
 #: reader that reads nothing misreads nothing.
-FIXTURES_AT_LEAST = 34
+FIXTURES_AT_LEAST = 40
 
 #: Of those, how many must be cases a weak matcher would wrongly ALLOW. A table
 #: made only of paths a broken reader would wrongly refuse would score a clean
 #: zero while saying nothing about the direction that matters: a fail-closed
 #: bug costs one skipped fetch, a fail-open bug means the check said yes to
 #: something it exists to refuse.
-FAIL_OPEN_CASES_AT_LEAST = 19
+FAIL_OPEN_CASES_AT_LEAST = 24
 
 #: And how many paths this reader must refuse where `urllib.robotparser` does
 #: not. A "longest-match" reader that happens to agree with the stdlib on every
@@ -682,7 +756,15 @@ REPO_MATCHER_DISAGREEMENTS = (
 #:   precedence depends on the request, and two paths could order the same two
 #:   rules differently.
 #: * **`$` anchors only in final position.** A mid-pattern `$` is an ordinary
-#:   octet, so `Disallow: /a$b` refuses `/a$b` rather than matching nothing.
+#:   octet, so `Disallow: /a$b` refuses `/a$b` rather than matching nothing —
+#:   and, being ordinary and in RFC 3986's reserved range, it is percent-encoded
+#:   before comparison like every other such octet (§2.2.2). That second half is
+#:   a consequence of the first, not a further choice: calling the octet data
+#:   and then exempting it from the pass that encodes data is a contradiction,
+#:   and it was a fail-open one. Cases 54-58 measured it; case 59 pins the
+#:   trailing `$`, which stays the anchor and stays one octet. Whether that one
+#:   octet counts toward §2.2.2 specificity is the part still contested, and
+#:   `dollar_specificity_readings_diverge` is where it is contested.
 CONTESTED_CASES = tuple(case.id for case in CASES if case.confidence == "LOW")
 
 
@@ -878,11 +960,11 @@ REGRESSION_CASES: tuple[Case, ...] = (
         ),
         direction=FAIL_OPEN_RISK,
     ),
-    # The three below pin the two decisions that generalising
-    # `_QUERY_DATA_OCTETS` from `":/"` to RFC 3986's reserved set forced, and
+    # The three below pin the two decisions that generalising the encode set
+    # from `":/"` to RFC 3986's reserved set (`_ENCODE_SET`) forced, and
     # they are here because a mutation round found both unreached: with the
     # 51-case spec table green, removing the first-`?` guard survived, and so
-    # did emptying `_PATTERN_METACHARACTERS`. Both surviving mutants are
+    # did emptying the metacharacter hold-out. Both surviving mutants are
     # fail-open. A generalised rule needs its exemptions pinned octet by octet
     # or the exemption list becomes the new `":/"`.
     Case(
@@ -1000,7 +1082,7 @@ def measure(cases: tuple[Case, ...] | None = None) -> dict[str, Any]:
             stdlib_disagreements.append({"id": case.id, "path": case.path})
 
     # The comparison the table was bought for and this module did not originally
-    # make: the same 49 cases through the matcher that decides real fetches.
+    # make: the spec-derived cases through the matcher that decides real fetches.
     spec_derived = [case for case in table if case in CASES]
     repo_disagreements = [
         {
