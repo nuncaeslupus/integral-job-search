@@ -1850,6 +1850,91 @@ def test_a_get_may_not_declare_a_body() -> None:
             parse_connector(post_board("  method: POST\n", swap))
 
 
+def test_a_post_with_no_body_is_refused_at_load_or_carries_a_content_type() -> None:
+    """T110. The other direction of the same rule, which the schema used to
+    leave unsaid.
+
+    `Content-Type` is *derived* from `body_json` and from nothing else — that
+    is what leaves a connector nowhere to write an `Authorization` — so a POST
+    with no body had nothing to derive a header from, loaded without complaint,
+    and became `ListRequest(method="POST", headers={}, body=None)`: a bodyless
+    POST with no content type, which several back ends answer 400 or 415 to.
+
+    The refusal is at load, in the direction that costs a contributor one error
+    message rather than the one that puts a malformed request on the wire. The
+    title's `or` is the alternative the task allowed — bless the shape and give
+    it a content type — and it was not taken: there is no content type for a
+    request with no content, and inventing one would mean the schema deriving a
+    header from nothing.
+    """
+    post_no_body = VALID.replace("list:\n", "list:\n  method: POST\n")
+    with pytest.raises(ConnectorError, match="a POST carries a body"):
+        parse_connector(post_no_body)
+
+    # And the shape it is refused *for* is unreachable, which is the property
+    # the error message only describes. An object built with
+    # `model_copy(update=...)` never met that validator — this module's own
+    # tests build several — so the clamp is repeated where the request is made.
+    connector = parse_connector(VALID)
+    unvalidated = connector.model_copy(
+        update={"list": connector.list.model_copy(update={"method": "POST"})}
+    )
+    with pytest.raises(ConnectorError, match="Content-Type is derived"):
+        build_list_requests(unvalidated, query="python")
+
+    # The legal POST is untouched and still carries the header, so this is not
+    # the fail-closed reading of the same rule.
+    first = build_list_requests(parse_connector(POST_BOARD))[0]
+    assert first.method == "POST"
+    assert first.headers["Content-Type"] == JSON_CONTENT_TYPE
+    assert first.body is not None
+
+
+def test_the_schema_states_a_verdict_for_both_directions() -> None:
+    """T110's actual finding: not that a bodyless POST was legal, but that the
+    schema had an opinion about one direction of `method`/`body_json` and none
+    about the other. A silence is not a permission a contributor can read.
+
+    Both halves are asserted on one validator, so a future edit cannot restore
+    the asymmetry by deleting the half that has no test of its own. The empty
+    mapping is here as the boundary: `{}` is a declared body — the schema's
+    test is `is None` — and it stays legal, because "no body" and "an empty
+    body" are different documents and only the first has no content type to
+    derive.
+    """
+    with pytest.raises(ConnectorError, match="only a POST carries a request body"):
+        parse_connector(post_board("  method: POST\n", "  method: GET\n"))
+    with pytest.raises(ConnectorError, match="a POST carries a body"):
+        parse_connector(VALID.replace("list:\n", "list:\n  method: POST\n"))
+
+    # Neither direction fires on the two shapes that are legal: the default
+    # (a GET with no body) and a POST with one.
+    assert build_list_requests(parse_connector(VALID))[0].method == "GET"
+    assert build_list_requests(parse_connector(POST_BOARD))[0].method == "POST"
+
+    # And the builder repeats BOTH halves, not just the new one. A clamp that
+    # covers one direction while the validator covers two leaves the shape
+    # `model_copy(update=...)` can still reach — here a GET issued with a body
+    # and a `Content-Type`, a request no connector can declare.
+    post = parse_connector(POST_BOARD)
+    as_a_get = post.model_copy(update={"list": post.list.model_copy(update={"method": "GET"})})
+    with pytest.raises(ConnectorError, match="only a POST carries a request body"):
+        build_list_requests(as_a_get)
+
+    empty_body = parse_connector(
+        post_board(
+            "  body_json:\n    Keyword: python\n    ResultsPerPage: 25\n" + PAGE_LINE + "\n",
+            "  body_json: {}\n",
+        ).replace(
+            "    mode: body_field\n    param: Page\n    start: 1\n    max_pages: 3\n",
+            "    mode: none\n",
+        )
+    )
+    request = build_list_requests(empty_body)[0]
+    assert request.body == b"{}"
+    assert request.headers["Content-Type"] == JSON_CONTENT_TYPE
+
+
 def test_the_page_field_and_the_body_placeholder_must_name_each_other() -> None:
     """Both directions, because the two failures differ and both are real.
 

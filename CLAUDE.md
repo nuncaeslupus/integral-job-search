@@ -153,9 +153,19 @@ behind one.
 
 ## The review half of `merge-policy` is a second session, not a bot
 
-**CodeRabbit is gone** — the account lost it for private repositories on 2026-09-04, and
-the owner's decision is to go without. `merge-policy` stays `after-ci-and-review`.
-Nothing external satisfies the review half any more, so this says what does.
+**CodeRabbit came back when the repository went public on 2026-09-07**, and the
+paragraph this replaces said it was gone for good. What is true now: it is
+installed on the OSS tier, it does **not** review automatically below 10 stars
+(its own comment on #398 says so, and its commit status reads *"Review skipped:
+manual review required for this OSS repository"*), and a `@coderabbitai review`
+comment triggers it by hand.
+
+**That changes nothing below.** A bot that has to be asked is not a standing
+reviewer; this repository has swapped review bots four times; and the measured
+comparison in this section is why the second-session read is the *primary*
+reviewer rather than the fallback, not a stopgap for the days the bot was away.
+Trigger it when a diff is worth a second opinion. It does not satisfy the review
+half on its own, and `merge-policy` stays `after-ci-and-review`.
 
 **A code PR may merge once a session other than its implementer has read it and
 reported on the PR.** That is the same discipline the section above already requires
@@ -209,14 +219,17 @@ worktrees are *unavailable* — `worktree_probe.sh` prints `available` here, so 
 would be a false record, and `task_select.py` reads it to clamp every future round to one
 task. The probe writes it itself when it is true; nothing else should.
 
-## No CI until the billing period turns over — `tools/verified_gate.sh` is the substitute
+## `tools/verified_gate.sh` — the local verdict block, run whatever CI is doing
 
-The account spent its **2000 monthly Actions minutes in four days** and ran dry on
-2026-09-04. Runs still start and still fail, in single-digit seconds with
-unreadable logs, so the section below about reading a red CI does not apply until
-the period turns over: **there is no CI to read.**
+Actions ran dry on 2026-09-04 — 2000 monthly minutes in four days — and for three
+days this script *replaced* the CI half of `merge-policy`. **It has minutes again
+as of 2026-09-07** (measured below), so the script is no longer a substitute for
+anything. It stays required anyway, and the reason is the one it was always worth
+running for rather than the outage: it measures the **committed** commit, and the
+working tree a session happens to have is not what a reviewer merges.
 
-`merge-policy` stays `after-ci-and-review`. What replaces the CI half is:
+`merge-policy` stays `after-ci-and-review`. Both halves are live again; this is
+what the local half runs:
 
 ```bash
 bash tools/verified_gate.sh <branch-or-sha>     # prints a verdict block
@@ -335,12 +348,36 @@ Three more costs, each measured here:
 
 ## Known environment state
 
-**GitHub Actions has no runner minutes, and has not since 2026-09-04.**
-Re-measured 2026-09-05 22:31 UTC: five consecutive runs — two `push main`, two
-`pull_request`, one `pull_request_target` — each completing in **3 to 6 seconds**
-with every job failed. That is the runner dying before any job body ran. **A red
-CI here says nothing about the code**, and there is no CI to read until the
-billing period turns over.
+**This repository is PUBLIC as of 2026-09-07**, and that one change is behind
+every environment fact below. The API says so — `visibility: public`, `private:
+false`, MIT — and the paragraph this replaces was still describing the private
+repository's constraints. **Actions is free and unmetered on public
+repositories**, which is what this section itself had predicted would fix the
+outage: *"Going public would fix this."* It did.
+
+So **GitHub Actions has runner minutes again — a red CI is a signal again. Read
+it.** Measured 2026-09-07 23:20 UTC: two `pull_request` runs of the `CI` workflow
+concluding **`success`**, in **95 and 133 seconds**. Against the same workflow's
+last `push main` runs the day before — 4, 5, 5 and 9 seconds, every one
+`failure` — that is the difference between a runner that ran the jobs and a
+runner that died before any job body did.
+
+The CI half of `merge-policy` is therefore satisfiable by GitHub again: a task PR
+merges on a **green `CI` check** plus a second-reader report, and a red one is
+about the code until the clock below says otherwise.
+
+**What that check is green *about* is not the head commit.** `ci.yml` fires on
+`pull_request`, and `actions/checkout@v4` with no `ref:` checks out
+`refs/pull/<n>/merge` — the PR merged into its base, a commit that exists in
+nobody's clone. So CI answers "does this change work *once merged*", which is the
+more useful question and is **not** the one `tools/verified_gate.sh` answers. The
+two are complementary rather than redundant, which is why both are required.
+
+**Do not read the cause as a billing period turning over.** That was the guess
+this session made from the run durations alone, and it is wrong in the way that
+matters: a rollover is a date that recurs, and going public is a decision that
+holds. Minutes are not being spent, so they cannot run out again — the next
+`0 seconds remaining` would have to come from somewhere new.
 
 **The way to tell is the clock, not the conclusion**, and that test outlives any
 particular outage. Read `created_at` and `updated_at` on the run: a whole run
@@ -348,27 +385,45 @@ under ~10 seconds with unreadable logs is the runner dying; a run of a minute or
 more is a verdict. Measured on #329 — 6 and 5 seconds with every log a 404,
 against ~95 seconds with real conclusions on #328 twenty minutes earlier.
 
-`tools/verified_gate.sh <ref>` is the substitute, and the section above says how
-to use it: verdict block on the pull request, the four results quoted in the
-merge commit, and merge only while the head is still the SHA the block names.
-Do **not** reach for a bare `make host-gate` in the working tree instead — that
-is the thing `verified_gate.sh` exists to stop, because the working tree is not
-what a reviewer merges.
+`tools/verified_gate.sh <ref>` is **not** retired by that, and the section above
+says why: it measures the committed commit rather than whatever tree the session
+happens to have, which is a different assertion from CI's and the one a reviewer
+can re-run by hand. So the discipline is unchanged — verdict block on the pull
+request, the four results quoted in the merge commit, and merge only while the
+head is still the SHA the block names. Do **not** reach for a bare
+`make host-gate` in the working tree instead. What changed is only that the block
+is no longer the *whole* evidence: a green `CI` check is required beside it, and
+the two assert different things — CI over the PR's **merge ref**, the block over
+the **committed head**.
 
-**Going public would fix this**, and it is the same decision as the corpus and
-the contribution guard (#352): Actions is free and unmetered on public
-repositories. Until then, every merge is on the local verdict block.
+**Going public was the fix, and it has been taken** — the same decision as the
+corpus and the contribution guard (#352). The old note here said it "would fix
+this" and left it as something somebody might one day do; it is done, so what is
+worth carrying forward is the size of the effect rather than the argument for it.
+2000 minutes went in four days on the private repository. On this one the meter
+is off.
 
-**This section has now been wrong twice, which is the point.** It said
+**This section has now been wrong three times, which is the point** — and this
+paragraph is the third rewrite, not the correction that ends them. It said
 "Actions has runner minutes again — a red CI is a signal again. Read it." That
 was true when written on 2026-09-01 and false by 2026-09-04, and it stood for a
 further day telling every session to trust a signal that had stopped existing.
+Then it said the opposite, and that was false by 2026-09-07 — the paragraph above
+is the first sentence again, restored by measurement rather than by memory.
 The same shape as the check-in that fired one morning saying *"RESOLVED — do not
 re-investigate: CodeRabbit runs on Free and never produces a review object"* —
 true when written, false by 10:12, and whose instruction not to look is what
 would have kept it false. A recorded environment fact is a snapshot, not a
-standing truth. **Re-measure before trusting this paragraph too**; `gh run list
---json conclusion,createdAt,updatedAt` is the whole check and costs one command.
+standing truth. **Re-measure before trusting this paragraph too** — it is the one
+sentence here with a perfect record of going stale. `gh run list --json
+conclusion,createdAt,updatedAt` is the whole check and costs one command; on a
+surface with no `gh`, the MCP `actions_list` answers it, with `created_at` and
+`updated_at` on each run giving the clock.
+
+**And measure the cause, not only the symptom.** This session read two green runs
+and wrote "the billing period turned over" — a plausible story for the right
+observation, and false. The repository's visibility was one API field away and
+settles it. A run's duration says whether CI is reporting; it never says why.
 
 **Run the gate locally as well.** These are what CI runs, and all four must
 pass before a merge:

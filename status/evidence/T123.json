@@ -1,0 +1,8 @@
+{
+  "category_named_metrics_recorded_without_a_denominator": 0,
+  "recorded_without_a_denominator": [],
+  "metric_naming_status": "measured",
+  "violations": [],
+  "metrics_classified_at_least": 100,
+  "category_named_metrics_recorded_at_least": 60
+}
