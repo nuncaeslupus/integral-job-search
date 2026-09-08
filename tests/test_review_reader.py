@@ -12,11 +12,13 @@ REST channel answers 403.
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import unicodedata
-from dataclasses import replace
+from dataclasses import fields, replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1029,6 +1031,185 @@ def test_the_same_comments_on_another_authors_pr_is_not_the_same_state() -> None
 
     record = rr.measure_marker_scope(states=states)
     assert "distinct_constructed_states_at_least" not in record.get("unmeasured_reason", "")
+
+
+#: Which numbered item in `read`'s docstring is which branch of its body. The
+#: numbers are stable names (#421 F1-F3, `T155.json` and the module docstring all
+#: cite them), so the list is not renumbered into execution order — it states the
+#: execution order instead, and the test below is what holds that statement to
+#: the code.
+_DOCSTRING_ITEM_BRANCH = {
+    5: "if unattributable:",
+    6: "if is_docs_only(pr.files):",
+    7: "if by_the_author:",
+}
+
+
+def test_the_execution_order_read_documents_is_the_order_read_runs() -> None:
+    """#421 N4, and the look-again on the commit that fixes it.
+
+    N4 was that the numbered checklist, read in the order its own opening calls
+    load-bearing, predicted `unresolvable/2` for all three of F1-F3's inputs
+    while the code returned `exempt/0`, `blocked/3` and `blocked/2`. The remedy
+    is a sentence saying check 5 runs last — and a sentence is precisely what
+    F4 and N3 were about: a claim in prose that nothing tests. F1-F3 pin the
+    three verdicts; nothing pinned the *document* to the code, which is what
+    both N4 and N2 were.
+
+    So the order is parsed out of the docstring rather than matched as a fixed
+    spelling, and checked against where the branches actually sit. Reorder the
+    body without editing the sentence and this fails; edit the sentence to
+    something the body does not do and it fails too. Deleting numbers to make
+    it pass fails the completeness assertion.
+    """
+    doc = inspect.getdoc(rr.read) or ""
+    stated = re.search(r"In execution order the list reads ([\d, ]+)\.", " ".join(doc.split()))
+    assert stated, "read's docstring no longer states an execution order"
+    documented = [int(n) for n in stated.group(1).split(",")]
+
+    # It must still be the whole list, so the claim cannot be made true by
+    # dropping the items that contradict it.
+    numbered = {int(m) for m in re.findall(r"^\s*(\d+)\. ", doc, re.M)}
+    assert numbered == set(documented) and len(documented) == len(numbered)
+
+    # …and an item added later cannot slip past the map unchecked. Items 1-4 are
+    # deliberately unmapped: they are the early-return group, all before the
+    # branches whose relative order is what N4 was about. Anything numbered past
+    # the last mapped item is new, and has to be mapped rather than skipped —
+    # otherwise this test quietly stops covering the item it was added for.
+    assert set(_DOCSTRING_ITEM_BRANCH) <= numbered
+    assert max(numbered) <= max(_DOCSTRING_ITEM_BRANCH), (
+        "read's docstring numbers an item past the last one mapped to a branch; "
+        "add it to _DOCSTRING_ITEM_BRANCH"
+    )
+
+    body = inspect.getsource(rr.read).split('"""')[2]
+
+    def at(branch: str) -> int:
+        # A missing branch is reported as what it is — the docstring naming a
+        # branch the body no longer spells that way — rather than as a bare
+        # ValueError from `str.index`.
+        assert branch in body, f"read's body no longer contains {branch!r}"
+        return body.index(branch)
+
+    ordered = [n for n in documented if n in _DOCSTRING_ITEM_BRANCH]
+    positions = [at(_DOCSTRING_ITEM_BRANCH[n]) for n in ordered]
+    assert positions == sorted(positions), (
+        f"read's docstring states the order {ordered}; its body runs them in another"
+    )
+
+    # Item 7 is two branches; both sit where the docstring says item 7 sits.
+    assert at("if is_docs_only(pr.files):") < at("if on_another_commit:")
+    assert at("if on_another_commit:") < at("if unattributable:")
+
+
+#: The `PullRequest` fields `read` actually consumes. Everything else hung off a
+#: `ScopeState` — on the PR or beside it — is a label, an expectation or a
+#: counter, and a distinctness key that reads any of them is true by
+#: construction. Written out from `read`'s own body rather than imported from
+#: the module, so this is the spec's list and not an echo of the key it bounds;
+#: the twin below then proves the list right by `read`ing across it.
+_INPUT_FIELDS = frozenset({"author", "head_sha", "files", "comments"})
+
+
+def _varied(value: object) -> Any:
+    """A different value of the same type.
+
+    Raises rather than skipping on a type it does not know: a field this helper
+    silently declined to vary is a field a too-fine key could hide behind, which
+    is the whole defect the twin below exists to close.
+    """
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, int):
+        return value + 1000
+    if isinstance(value, str):
+        return value + "__varied"
+    raise AssertionError(
+        f"no variation defined for {type(value).__name__} — a non-input field that "
+        "cannot be varied is one a distinctness key could still hide behind"
+    )
+
+
+def _twin_varying_every_non_input_field(original: rr.ScopeState) -> rr.ScopeState:
+    """`original` with every field `read` does not read varied, and the input kept.
+
+    Derived from `dataclasses.fields`, never enumerated: a field added to
+    `ScopeState` or `PullRequest` later is varied by this without anyone
+    remembering to update a list, which is the difference between bounding the
+    class and bounding the three spellings that happened to be known.
+    """
+    pr_changes = {
+        f.name: _varied(getattr(original.pr, f.name))
+        for f in fields(original.pr)
+        if f.name not in _INPUT_FIELDS
+    }
+    beside_changes = {
+        f.name: _varied(getattr(original, f.name)) for f in fields(original) if f.name != "pr"
+    }
+    assert pr_changes, "no non-input PullRequest field was varied"
+    assert beside_changes, "no field beside the PR was varied"
+    return replace(original, pr=replace(original.pr, **pr_changes), **beside_changes)
+
+
+def test_a_twin_varying_every_field_read_does_not_read_is_one_state() -> None:
+    """#421 N3 — the floor was bounded against one spelling, not against the class.
+
+    N1's twin varies only `name`; the author twin varies only `pr.author`.
+    Between them they forbid one too-fine key and require one field, and
+    #421's second reader measured what that leaves open: **three** further keys
+    passed the entire 148-test suite with metric 0, `measured` and exit 0 —
+    adding `pr.number`, keying on the whole `PullRequest`, and adding `order`.
+    Composed with F4's own mutant each certified 29 states over 16 genuinely
+    distinct inputs, which is byte-for-byte the table N1 was blocked on, one
+    field over. `(c.pr,)` is the one that matters: it is the tidier spelling of
+    the key's own stated intent, so it is the refactor a later session makes.
+
+    Three more twins would answer three more spellings, and this repository has
+    spent D-28's five rounds establishing that an enumeration has no last
+    element. So this twin varies **every** non-input field at once — derived
+    from the dataclasses, so one added tomorrow is covered — while holding the
+    input identical. Any key reading a label, an expectation or a counter sees
+    29 distinct states and passes; a key reading only the input sees 28.
+
+    The `read` assertion is the half that makes `_INPUT_FIELDS` a claim rather
+    than a restatement: if a varied field ever turns out to be one `read`
+    consumes, the two verdicts differ and this fails, saying the field belongs
+    in the key — so the fixture is pinned in both directions.
+    """
+    original = rr.SCOPE_STATES[0]
+    twin = _twin_varying_every_non_input_field(original)
+
+    # Every field that is not an input differs — including the three #421 N3
+    # measured surviving, named here so the fixture says which class it closes.
+    assert twin.name != original.name
+    assert twin.order != original.order
+    assert twin.pr.number != original.pr.number
+    beside = {
+        f.name
+        for f in fields(twin)
+        if f.name != "pr" and getattr(twin, f.name) != getattr(original, f.name)
+    }
+    assert beside == {f.name for f in fields(twin)} - {"pr"}
+    on_pr = {
+        f.name for f in fields(twin.pr) if getattr(twin.pr, f.name) != getattr(original.pr, f.name)
+    }
+    assert on_pr == {f.name for f in fields(twin.pr)} - _INPUT_FIELDS
+
+    # …and every field `read` reads is identical, so the two are one state.
+    for name in _INPUT_FIELDS:
+        assert getattr(twin.pr, name) == getattr(original.pr, name)
+    assert rr.read(twin.pr) == rr.read(original.pr)
+
+    states = (*rr.SCOPE_STATES[:-1], twin)
+    assert len(states) == len(rr.SCOPE_STATES)
+    assert len({case.name for case in states}) == len(rr.SCOPE_STATES)
+
+    record = rr.measure_marker_scope(states=states)
+    assert record["gate_status"] == "unmeasured"
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == -1
+    assert "distinct_constructed_states_at_least" in record["unmeasured_reason"]
+    assert rr.scope_exit_code_for(record) == 1
 
 
 def _pairings() -> dict[str, dict[str, rr.ScopeState]]:

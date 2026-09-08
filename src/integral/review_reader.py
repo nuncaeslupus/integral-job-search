@@ -549,7 +549,12 @@ def resolve_identity(raw: str) -> str | None:
 def read(pr: PullRequest) -> Verdict:
     """Does a second-reader report exist for this PR's head commit?
 
-    The order of the checks is load-bearing:
+    The order of the checks is load-bearing, and **it is not the order of this
+    list**. The numbers are stable names: #421's F1-F3, the module docstring,
+    the comment beside check 5 and `T155.json`'s citations all refer to these
+    branches by number, so 5 keeps its number and states its position instead
+    of being renumbered under them. In execution order the list reads
+    1, 2, 3, 4, 6, 7, 5.
 
     1. An unresolvable head or an empty file list is `unresolvable` — code 2,
        the same as no report, because neither is a pass. So is a marker whose
@@ -571,12 +576,25 @@ def read(pr: PullRequest) -> Verdict:
     4. A `CLEAR` on the head by somebody other than the author allows, and says
        in its reason that any unattributable marker beside it was discarded.
     5. An unattributable marker with nothing else on record is `unresolvable`,
-       exactly as before — there is then nothing else to count.
-    6. Docs-only, with nothing on record, is exempt.
-    7. Otherwise blocked — and if a marker exists for a *different* commit, the
-       code is 3 (stale) rather than 2 (absent), because "reviewed, then kept
-       coding" is a different situation from "never reviewed" and both are
-       hidden by a rollup that only shows a tick.
+       exactly as before — there is then nothing else to count. **Checked
+       last, after 6 and 7**: reaching that line is what "nothing else on
+       record" means. Read ahead of them — as this list said until #421's N4,
+       and as the code itself did until F1-F3 — it answers `unresolvable/2`
+       for all three of their inputs instead: a docs-only PR carrying only
+       such a marker (`exempt/0`, item 6), a stale genuine report beside one
+       (`blocked/3`, item 7), and the author's own marker beside one
+       (`blocked/2`, item 7). All three fail-closed, all three the shape T155
+       exists to remove.
+    6. Docs-only is exempt when no **head-bound report** is on record. An
+       unattributable marker beside it is not a report and does not withhold
+       the exemption — it is named in the reason as recorded-but-inert, which
+       is why "nothing on record" is the wrong reading of this item and item 5
+       does not race it.
+    7. Otherwise blocked — code 3 (stale) if a marker exists for a *different*
+       commit, because "reviewed, then kept coding" is a different situation
+       from "never reviewed" and both are hidden by a rollup that only shows a
+       tick; code 2 if the only marker on record is the PR author's own, who
+       is not a second reader.
     """
     if not _is_sha(pr.head_sha):
         return Verdict(UNRESOLVABLE, 2, f"head commit {pr.head_sha!r} does not resolve to a sha")
@@ -1891,12 +1909,28 @@ def measure_marker_scope(states: tuple[ScopeState, ...] | None = None) -> dict[s
     #
     # The key is every field `read` reads — author, head sha, files, comments —
     # and deliberately **not** `number`, a per-state counter that would make
-    # distinctness true by construction. That is one vacuous version of this
-    # floor; `case.name` is the other, and it survived the entire suite until
-    # #421's N1 pinned it, which is F4's own shape one level up, inside F4's
-    # remedy. Both are pinned now: `..._is_still_one_state_measured_twice` kills
-    # the label count, `..._is_not_the_same_state` kills a key too narrow to see
-    # the author.
+    # distinctness true by construction. `case.name` is the same vacuity in a
+    # second spelling, and it survived the entire suite until #421's N1 pinned
+    # it, which is F4's own shape one level up, inside F4's remedy.
+    #
+    # Pinning two spellings one at a time is not pinning the class, and #421's
+    # N3 measured the gap: with the name pinned and `number` argued against in
+    # this very comment, THREE further keys still passed all 148 tests with a
+    # serene zero and exit 0 — adding `number`, keying on the whole
+    # `PullRequest` (the tidier spelling of "every field `read` reads", and so
+    # the likeliest future refactor), and adding `order`. Each, composed with
+    # F4's mutant, certified 29 states over 16 genuinely distinct inputs. Being
+    # right about `number` in a comment is not the same as testing it.
+    #
+    # So the bound is stated as the class instead of as a list of spellings:
+    # `..._varying_every_field_read_does_not_read_is_one_state` twins a state
+    # across EVERY non-input field at once — derived from the dataclasses, not
+    # enumerated, so a field added later is varied without anyone remembering
+    # to — while holding the input identical and proving it identical by
+    # `read`ing both. Any key that reads a label, an expectation or a counter
+    # counts that twin as new; this key counts it as the repeat it is.
+    # `..._is_not_the_same_state` bounds the opposite side: a key too narrow to
+    # see the author.
     inputs = ((c.pr.author, c.pr.head_sha, c.pr.files, c.pr.comments) for c in evaluated)
     distinct = len(set(inputs))
     distinct_floor, distinct_breached = _floor(distinct, MINIMUM_DISTINCT_SCOPE_STATES)
