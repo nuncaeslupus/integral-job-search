@@ -1,0 +1,179 @@
+{
+  "absent_bands_read_as_zero": 0,
+  "absent_salaries_demoted_in_a_tie": 0,
+  "claiming_pairs_broken_when_reversed": 4,
+  "contradictions_refused": {
+    "a_dimension_priced_but_not_ranked": 1,
+    "a_published_band_with_no_point_where_the_ranking_names_no_currency": 1
+  },
+  "decided_cases": [
+    {
+      "because": "a ranking with no currency is not a ranking in some other currency \u2014 two bands that agree on theirs compare there as anywhere, and reading `None` as a disagreement switched the rule off for exactly the L1 ranking where `rank.require_pay_coherence` was off too, so the guard and the rule failed open together",
+      "case": "a_ranking_that_names_no_currency",
+      "claiming_pairs_broken_when_reversed": 1,
+      "incomparable_pairs_clean_in_either_order": 1,
+      "pairs": 2,
+      "pay_dominance_claimed": 1,
+      "violations": 0
+    },
+    {
+      "because": "the rule makes no claim between an offer that published a salary and one that did not, so the tiebreak the rule drives may make none either; sorting the silent side last reads the absence as a low number, and at 97 bands in 561 offers that buries four offers in five beneath every tied offer from a board that publishes",
+      "case": "an_absent_salary_keeps_the_place_the_alphabet_gave_it",
+      "claiming_pairs_broken_when_reversed": 0,
+      "incomparable_pairs_clean_in_either_order": 1,
+      "pairs": 1,
+      "pay_dominance_claimed": 0,
+      "violations": 0
+    },
+    {
+      "because": "a point is the band whose ends coincide, so a claim is made only when the two bands are disjoint; across currencies there is no claim at all, because converting needs a rate with a date and a source and none lives in this repository",
+      "case": "different_currencies_or_a_range_against_a_point",
+      "claiming_pairs_broken_when_reversed": 1,
+      "incomparable_pairs_clean_in_either_order": 2,
+      "pairs": 3,
+      "pay_dominance_claimed": 1,
+      "violations": 0
+    },
+    {
+      "because": "an unpublished salary is not a low one \u2014 97 of 561 offers measured 2026-09-06 carried a band at all, so reading the absence as zero buries every board that does not publish",
+      "case": "one_side_publishes_no_band",
+      "claiming_pairs_broken_when_reversed": 0,
+      "incomparable_pairs_clean_in_either_order": 1,
+      "pairs": 1,
+      "pay_dominance_claimed": 0,
+      "violations": 0
+    }
+  ],
+  "gate_status": "measured",
+  "pairs": [
+    {
+      "alike_apart_from_pay": true,
+      "case": "two_published_bands_disjoint",
+      "level": "L2",
+      "pay_dominance_claimed": 1,
+      "published_order": [
+        "z-band-4100",
+        "a-band-3100"
+      ],
+      "ranking_currency": "EUR",
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 1
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "two_point_salaries",
+      "level": "L2",
+      "pay_dominance_claimed": 1,
+      "published_order": [
+        "z-point-3800",
+        "a-point-3100"
+      ],
+      "ranking_currency": "EUR",
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 1
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "a_range_against_a_point_disjoint",
+      "level": "L2",
+      "pay_dominance_claimed": 1,
+      "published_order": [
+        "z-range-4200",
+        "a-point-3000"
+      ],
+      "ranking_currency": "EUR",
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 1
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "a_range_against_a_point_overlapping",
+      "level": "L2",
+      "pay_dominance_claimed": 0,
+      "published_order": [
+        "a-point-3500",
+        "z-range-3400"
+      ],
+      "ranking_currency": "EUR",
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 0
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "different_currencies",
+      "level": "L2",
+      "pay_dominance_claimed": 0,
+      "published_order": [
+        "a-eur-3100",
+        "z-usd-4100"
+      ],
+      "ranking_currency": "EUR",
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 0
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "one_side_publishes_no_band",
+      "level": "L2",
+      "pay_dominance_claimed": 0,
+      "published_order": [
+        "a-point-3000",
+        "z-silent"
+      ],
+      "ranking_currency": "EUR",
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 0
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "no_ranking_currency_two_published_bands",
+      "level": "L1",
+      "pay_dominance_claimed": 1,
+      "published_order": [
+        "z-noc-band-4100",
+        "a-noc-band-3100"
+      ],
+      "ranking_currency": null,
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 1
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "no_ranking_currency_overlapping_bands",
+      "level": "L1",
+      "pay_dominance_claimed": 0,
+      "published_order": [
+        "a-noc-point-3500",
+        "z-noc-span-3400"
+      ],
+      "ranking_currency": null,
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 0
+    },
+    {
+      "alike_apart_from_pay": true,
+      "case": "a_silent_salary_against_a_published_one_in_one_tie_bucket",
+      "level": "L2",
+      "pay_dominance_claimed": 0,
+      "published_order": [
+        "a-silent-tied",
+        "z-point-2000"
+      ],
+      "ranking_currency": "EUR",
+      "salary_equivalent_totals": 0,
+      "violations": 0,
+      "violations_when_the_order_is_reversed": 0
+    }
+  ],
+  "pairs_compared": 9,
+  "pairs_where_pay_dominance_is_claimed": 4,
+  "pay_dominance_violations": 0
+}

@@ -1,0 +1,7 @@
+{
+  "growth_sensitive_evidence_keys": 0,
+  "evidence_keys_compared": 12,
+  "gate_status": "measured",
+  "grown_by": "growthprobe_*",
+  "sensitive": []
+}
