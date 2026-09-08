@@ -265,20 +265,45 @@ def test_removing_a_metric_from_the_scan_moves_the_denominator(tmp_path: Path) -
     assert fewer["metrics_classified"] == both["metrics_classified"] - 1
 
 
-def test_a_run_under_the_floor_fails_and_writes_nothing(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "breached", ["MINIMUM_METRICS_CLASSIFIED", "MINIMUM_CATEGORY_NAMED_RECORDED"]
+)
+def test_a_run_under_the_floor_fails_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, breached: str
+) -> None:
     """T115's finding, applied on the day the floor was written.
 
     Exit **1**, not the 3 `make evidence` prints as "unmeasured (recorded)" and carries
     past — and no artefact, because the only record such a run could write is one
     asserting the floor it just missed.
+
+    Both halves are asserted, and the *fails* half is the load-bearing one: a breach
+    writes no file, so it produces **no drift**, so `_main`'s exit code is the only
+    channel by which either floor reaches `make evidence`. Left unasserted it was a
+    gate switchable off in one character — mutating `return 1 if breaches else 0` to
+    `return 0` kept the whole suite green. Each floor is breached **alone**, the other
+    lowered out of the way, so neither one's exit is carried by the other's.
     """
     plan = _plan(tmp_path, "orphan_task_rows == 0")
     tasks = tmp_path / "arsenal" / "tasks"
     _task(tasks, "t-0001", "orphan_task_rows == 0", "status/evidence/X.json")
     _payload(tmp_path, "status/evidence/X.json", {"orphan_task_rows": 0, "rows_at_least": 5})
+    other = (
+        "MINIMUM_CATEGORY_NAMED_RECORDED"
+        if breached == "MINIMUM_METRICS_CLASSIFIED"
+        else "MINIMUM_METRICS_CLASSIFIED"
+    )
+    monkeypatch.setattr(metric_naming, other, 1)
     evidence = tmp_path / "out.json"
     measured = metric_naming.write_evidence(evidence, plan, tasks, tasks / "_history", tmp_path)
-    assert metric_naming.floor_breaches(measured)
+    assert len(metric_naming.floor_breaches(measured)) == 1
+    assert not evidence.exists()
+
+    monkeypatch.setattr(metric_naming, "DEFAULT_PLAN", plan)
+    monkeypatch.setattr(metric_naming, "DEFAULT_TASKS", tasks)
+    monkeypatch.setattr(metric_naming, "DEFAULT_HISTORY", tasks / "_history")
+    monkeypatch.setattr(metric_naming, "_REPO_ROOT", tmp_path)
+    assert metric_naming._main([str(evidence)]) == 1
     assert not evidence.exists()
 
 
