@@ -113,6 +113,7 @@ def test_the_gate_never_shells_out_over_a_malicious_url_pattern() -> None:
         "site: acme\nlocale: en\nversion: '1.0.0'\nlast_verified: '2026-01-01'\n"
         "list:\n"
         '  url_pattern: "https://x.test/$(rm -rf /)?page={page}"\n'
+        "  pagination:\n    mode: query_param\n    param: page\n    max_pages: 2\n"
         "  item: '.job'\n"
         "  fields:\n    text: {css: '.x'}\n"
     )
@@ -625,6 +626,7 @@ def _connector_yaml(name: str) -> str:
         f"site: {site}\nlocale: {locale}\nversion: '1.0.0'\nlast_verified: '2026-08-01'\n"
         "list:\n"
         "  url_pattern: 'https://x.test/jobs?page={page}'\n"
+        "  pagination:\n    mode: query_param\n    param: page\n    max_pages: 2\n"
         "  item: '.job'\n"
         "  fields:\n    text: {css: '.body'}\n"
     )
@@ -701,7 +703,7 @@ def test_a_search_result_is_not_presented_as_a_connector_result() -> None:
         parse_connector(
             f"site: {SEARCH_SOURCE}\nlocale: en\nversion: '1.0.0'\n"
             "last_verified: '2026-01-01'\n"
-            "list:\n  url_pattern: 'https://x.test/?page={page}'\n"
+            "list:\n  url_pattern: 'https://x.test/'\n"
             "  item: '.job'\n  fields:\n    text: {css: '.x'}\n"
         )
 
@@ -908,7 +910,7 @@ locale: en
 version: "1.0.0"
 last_verified: "2026-08-30"
 list:
-  url_pattern: "https://jsonboard.test/jobs?page={page}"
+  url_pattern: "https://jsonboard.test/jobs"
   from_json:
     embedded_in: 'script[type="application/ld+json"]'
     match:
@@ -1604,9 +1606,14 @@ def test_the_usajobs_package_parses_its_fixture_to_offers() -> None:
     package = _CONNECTOR_LIBRARY / "usajobs_en"
     connector = load_connector(package)
 
-    # The request. A POST, a JSON body, and a URL that carries no page — two
-    # pages of this board differ only in the payload.
-    request = build_list_requests(connector)[0]
+    # The request. A POST, a JSON body, and exactly the body that was measured
+    # — `connectors/ruled-out.yaml`'s `retest` line and `probe/captured.json`
+    # both record `{"Keyword":"python","ResultsPerPage":25}`, and T113 removed
+    # the third key, `Page`, that no capture ever carried. One request, because
+    # `pagination.mode` is `none` until a capture reaches page 2.
+    requests = build_list_requests(connector)
+    assert len(requests) == 1, "a page nobody captured is a page this connector may not fetch"
+    request = requests[0]
     assert request.method == "POST"
     assert request.url == "https://www.usajobs.gov/Search/ExecuteSearch"
     assert request.headers == {"Content-Type": JSON_CONTENT_TYPE}
@@ -1614,7 +1621,6 @@ def test_the_usajobs_package_parses_its_fixture_to_offers() -> None:
     assert json.loads(request.body.decode("utf-8")) == {
         "Keyword": "python",
         "ResultsPerPage": 25,
-        "Page": 1,
     }
 
     rows = parse_list_page(connector, (package / "fixture" / "list.html").read_text("utf-8"))
@@ -2023,7 +2029,7 @@ def test_a_credential_in_the_url_query_is_refused_the_same_as_one_in_the_body() 
 
     # An ordinary query string is untouched — this is a credential check, not
     # a ban on query strings.
-    fine = "https://boards.test/search?q=python&page={page}&sort=date"
+    fine = "https://boards.test/search?q=python&sort=date"
     assert (
         parse_connector(
             post_board("https://boards.test/Search/ExecuteSearch", fine)
