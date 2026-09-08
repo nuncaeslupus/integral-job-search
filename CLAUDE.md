@@ -43,33 +43,56 @@ differs per surface. Run it; trust it over any memory of what worked last time.
 step of the protocol. `claim_task.sh` and `open_task_pr.sh` work as documented —
 no workaround is needed, and reaching for one costs a session real time.
 
-**In a cloud session it prints `rest`, and REST does not work there**: the proxy
-answers `403 GitHub access is not enabled for this session` (`claude-arsenal#182`).
-Don't probe it again — the MCP GitHub tools are the *API* channel, so every GitHub
-API step is performed with them, and the board JSON the scripts read is written to
-disk by hand from the tool result. In that session, and only there:
+**In a cloud session it prints `rest`, and REST now WORKS there — reads and writes
+both.** This paragraph said the opposite until 2026-09-08, and said "don't probe it
+again", which is the instruction that would have kept it wrong. Re-measured on that
+date against the live proxy:
 
-- `claim_task.sh` returns `manual POST`; `create_branch` on `arsenal/claims/<id>`
-  is the compare-and-swap. **201 = won, 422 = lost.**
-- **`open_task_pr.sh` works — `git push` is not restricted.** This file used to say
-  pushes were confined to the session's designated branch, and that was simply wrong:
-  a real push of a fresh branch returns exit 0 (measured 2026-08-25, not a `--dry-run`
-  — dry runs skip the receive hooks and prove nothing here). So the script cuts its
-  branch off `origin/main`, runs the gate, commits and pushes exactly as it does on
-  the laptop. Only its **last** step fails, because that step alone uses REST. Pass
-  `ARSENAL_TASK_ISSUE=<n>` — a 403 channel cannot resolve the issue number either —
-  let it push, then open the PR with the MCP tool. `Closes #<issue>` goes in **both**
-  the commit message and the PR body.
-- **Remote ref deletion is blocked.** `git push --delete` reports
-  `send-pack: unexpected disconnect` and then `Everything up-to-date`, and the ref is
-  still there. Never script a branch cleanup here: it looks like a failure and is
-  actually a no-op.
-- Merging works via the MCP `merge_pull_request` tool.
+```text
+github_channel.sh --detect                      rest
+GET  /repos/.../issues/417                      200
+POST (open_task_pr.sh's own last step)          opened PR #421 unaided
+DELETE /repos/.../git/refs/heads/probe/…        403
+git push --delete probe/…                       silent no-op, ref survives
+```
 
-## No session this one spawns can reach the GitHub API — the fleet is shaped by this
+**Going public is what changed it** — the same single cause behind CI having minutes
+again, and the `claude-arsenal#182` 403 was a private-repository symptom. So the
+split is now by **method**, not by channel: GET and POST are through, and only the
+destructive verbs are refused.
 
-**A spawned session has no `mcp__*` tools.** This holds for both ways of making one,
-and it is the single most expensive thing to rediscover:
+What that changes in practice:
+
+- **`open_task_pr.sh` runs end to end, last step included.** It resolves the issue,
+  cuts the branch off `origin/main`, runs the gate, commits, pushes **and opens the
+  pull request**. Measured on T155: the script opened #421 by itself from a spawned
+  worker with no MCP tools at all. `ARSENAL_TASK_ISSUE=<n>` is still worth passing
+  when the caller already knows the number — it skips a lookup — but it is no longer
+  load-bearing, and the "let it push, then open the PR with the MCP tool" two-step is
+  no longer needed. The script writes only the **title** into the commit message, so
+  a substantive message still has to be amended on afterwards.
+- `claim_task.sh` may return `manual POST` on this surface anyway; `create_branch` on
+  `arsenal/claims/<id>` remains the compare-and-swap either way. **201 = won,
+  422 = lost.**
+- **Remote ref deletion is still blocked, and now by two routes.** `git push --delete`
+  reports `send-pack: unexpected disconnect`, then `Everything up-to-date`, then exits
+  **0** with the ref still there; REST `DELETE` answers 403. Never script a branch
+  cleanup here — it looks like a failure and is actually a no-op, and there is no
+  working substitute. `refs/heads/probe/channel-remeasure` is the artefact of this
+  measurement and could not be removed afterwards, which is the evidence.
+- Merging works, via the MCP `merge_pull_request` tool or REST.
+
+**The MCP GitHub tools remain the right channel for an orchestrator**, because they
+are the only one a session has without reaching for a token. But REST being alive
+matters for the half of the fleet that has no MCP tools at all: see the next section,
+whose conclusion this narrows rather than overturns.
+
+## No session this one spawns has `mcp__*` tools — and that is now a smaller fact than it was
+
+**A spawned session has no `mcp__*` tools.** That much is still true, holds for both
+ways of making one, and is worth stating first — but read to the end of this section
+before concluding anything about what a child can do, because the heading here said
+*"cannot reach the GitHub API"* until 2026-09-08 and that conclusion is now wrong:
 
 - A Routine with `create_new_session_on_fire` says so at creation: *"this trigger
   stores no MCP connectors, so the sessions it fires will run without connector
@@ -79,25 +102,37 @@ and it is the single most expensive thing to rediscover:
   available to fetch task board"* and blocked. **Do not assume a child inherits the
   parent's connectors.** It does not.
 
-With REST already 403, a spawned session's only channel to GitHub is plain `git`.
-That is enough to fetch, to read claim refs
-(`git ls-remote origin 'refs/heads/arsenal/claims/*'`), to derive terminal state from
-`arsenal/tasks/_history/*.md` (each archived file carries `status: merged`, and
-`effective_state` reads it), and to **push a branch**. It is not enough to read
-issues, label or assign one, open a PR, or merge.
+**That premise held only while REST was 403, and it no longer is.** A spawned session
+has two channels, not one: plain `git`, and REST. `git` alone is enough to fetch, to
+read claim refs (`git ls-remote origin 'refs/heads/arsenal/claims/*'`), to derive
+terminal state from `arsenal/tasks/_history/*.md` (each archived file carries
+`status: merged`, and `effective_state` reads it), and to **push a branch**. REST adds
+what `git` could not do: read issues, label and assign, **open a pull request**, merge.
 
-So the split is forced, and it is the one `worker-loop.md` already specifies —
-*"workers never claim or release: the orchestrator owns the claim"*:
+The measurement that changed this: on 2026-09-08 a `create_session`-equivalent worker
+with no `mcp__*` tools ran `open_task_pr.sh` and the script **opened #421 itself**.
+Its last step is REST, and it went through.
+
+**The split below is therefore no longer forced by the channel — but keep it anyway,
+for the reason `worker-loop.md` gives rather than the one this file used to give:**
+*"workers never claim or release: the orchestrator owns the claim."* A claim is a
+compare-and-swap that decides which of several sessions does a task, and it belongs to
+whichever session can see all of them. Nothing about REST changes that, and a worker
+that starts claiming for itself recreates the double-claims the ref exists to prevent.
 
 | | holds the GitHub API | does the work |
 |---|---|---|
-| **Orchestrator** — an interactive session, woken by a **self-bound** routine (omit `create_new_session_on_fire`) | yes | fetch the board, claim with `create_branch` (201 won / 422 lost), dispatch children, open each PR, merge after review |
-| **Child** — one per task, via `create_session` | no | worktree, implement, `make host-gate`, `ARSENAL_TASK_ISSUE=<n> open_task_pr.sh` up to and including the push, then stop |
+| **Orchestrator** — an interactive session, woken by a **self-bound** routine (omit `create_new_session_on_fire`) | yes | fetch the board, claim with `create_branch` (201 won / 422 lost), dispatch children, review, merge |
+| **Child** — one per task, via `create_session` | REST only, and only for its own task | worktree, implement, `make host-gate`, `open_task_pr.sh` **through to the opened PR**, then stop |
 
-A child is told its task id, issue number and branch name by the orchestrator, so it
-never needs to resolve any of them. It ends when its task does, which is what keeps an
-unattended run from ever needing to compact: the only long-lived context is the
-orchestrator's, and everything it must remember is in GitHub, not in the window.
+What genuinely changed for a child is the last column: it now finishes at an open pull
+request rather than at a push, so the orchestrator no longer has to open one on its
+behalf. Two things follow. The script writes only the **title** into the commit
+message, so a child that wants a substantive one amends it after the script returns.
+And the child should still be **told** its task id, issue number and branch name — it
+can now resolve them, but a child that never has to guess cannot guess wrong, and it
+ends when its task does, which is what keeps an unattended run from ever needing to
+compact.
 
 Steps 3 and 4 of the protocol need no workaround on either surface — **in an
 orchestrator session**, run them as written; a child runs neither. Since the fetch drops `body`, issues resolve to tasks by **title**;
