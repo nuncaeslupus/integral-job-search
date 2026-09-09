@@ -16,6 +16,7 @@ while asserting nothing at all.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import subprocess
@@ -204,6 +205,60 @@ def test_the_floor_fires_on_the_first_deleted_fixture() -> None:
     assert any("arrangement(s) probed" in breach for breach in floor_breaches(one_short)), (
         "a fixture deleted from the module must breach the floor, not merely leave "
         "a diff line in the evidence for somebody to notice"
+    )
+
+
+def test_the_floor_is_a_literal_the_population_cannot_drag() -> None:
+    """The floor must be an integer literal — `len(ARRANGEMENTS) + 1` is dead.
+
+    #333's F3 is the precedent and this is its twin: `verified_gate`'s floor was
+    `x < x`, so it could never fire, and `tests/test_verified_gate.py`'s
+    `test_the_floor_is_a_literal_the_table_cannot_drag` is the fixture that
+    holds it to a literal. T122's floor is the same object and shipped without
+    the pin.
+
+    Written in the form the module's own docstring names and rejects — moved
+    below the definitions so it imports — both sides of `floor_breaches`'
+    comparison shrink together with every deleted arrangement, and the guard
+    can never fire. That restores `c26b8fe`'s fail-open exactly: `make evidence`
+    exits 0 over a deleted fixture, relaunders the record to twelve names, and
+    the suite stays green. **No behavioural fixture can see it**, because the
+    constant binds at import: rebinding `ARRANGEMENTS` in-process leaves it at
+    the value it was given. Measured by the second reader on #425 (round four),
+    where that one-line edit survived all fifty committed cases.
+
+    It is an AST fact rather than a substring so that a reformat cannot break it
+    and a comment cannot satisfy it — the same reason `integral.verified_gate`
+    reads behaviour rather than the script's text.
+
+    The last assertion is the derived expression, and the asymmetry is the whole
+    rule: right here, where it is read against the module, and wrong in the
+    module, where it would be read against itself. It is what makes an *added*
+    arrangement raise the floor rather than widen the slack, and it is the same
+    pairing #333's pin carries.
+
+    T158 (`arsenal/tasks/t-c982085a.md`) ships in this diff and makes "size that
+    floor to the list it is read against, and commit it as a literal" a rule for
+    the next floor. A rule nothing is forced to consult is the object this whole
+    task is about, one level up.
+    """
+    source = Path(gate_reader_agreement.__file__).read_text(encoding="utf-8")
+    assigned = [
+        node.value
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "MINIMUM_ARRANGEMENTS_PROBED"
+    ]
+    assert len(assigned) == 1, "the floor is assigned once, at module level"
+    assert isinstance(assigned[0], ast.Constant) and isinstance(assigned[0].value, int), (
+        "the floor must be an integer literal; derived from ARRANGEMENTS it shrinks "
+        "with the very deletion it exists to catch, and the guard can never fire"
+    )
+    assert len(ARRANGEMENTS) + 1 == MINIMUM_ARRANGEMENTS_PROBED, (
+        "the literal must equal the population `floor_breaches` reads it against — "
+        "the arrangements plus the ungated shape"
     )
 
 
