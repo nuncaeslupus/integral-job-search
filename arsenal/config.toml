@@ -128,3 +128,26 @@ host-setup = "uv sync --extra dev --locked"
 extract = true
 python = true
 workflow = true
+
+# Which model runs what. `workers` is written explicitly rather than left to the
+# script default it already matched, because a default is not a decision anyone
+# can see: reading this file gave no indication the key existed, and a session
+# naming its own model on each dispatch was contradicting nothing it could find.
+#
+# **Setting it does not enforce it, and that is the point of the comment.** On
+# 2026-09-08/09 about twenty agents ran on Opus while this resolved to `sonnet`,
+# costing 3–4M tokens and two exhausted quota windows. Three things must hold for
+# the value to arrive and on a cloud surface none does: the
+# `CLAUDE_CODE_SUBAGENT_MODEL` export dies with its Bash call (shell state is not
+# shared between calls there), an explicit `model:` on the dispatch outranks the
+# env var regardless, and omitting `model:` inherits the *orchestrator's* model
+# rather than falling back here. CLAUDE.md carries the operational rule for that
+# reason — it is read every turn and this file is not.
+#
+# The owner's policy is implementers on Sonnet, second readers on Opus. Only the
+# first half is below: `MODEL_KEYS` is `models.orchestrator` and `models.workers`,
+# so there is no `models.reviewers` to set — `--get` exits 2 on it, and writing it
+# here would be tolerated on read and wired to nothing, which is worse than an
+# absence because it looks configured. Upstream change, tracked in CLAUDE.md.
+[models]
+workers = "sonnet"
