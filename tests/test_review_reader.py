@@ -12,10 +12,13 @@ REST channel answers 403.
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import unicodedata
+from dataclasses import fields, replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -729,3 +732,644 @@ def test_an_unreadable_capture_is_never_a_pass(tmp_path: Path) -> None:
     broken = tmp_path / "broken.json"
     broken.write_text("{not json", encoding="utf-8")
     assert rr._main(["check", str(broken)]) == 2
+
+
+# --------------------------------------------------------------------------
+# T155 — the scope of an unattributable marker
+# --------------------------------------------------------------------------
+#
+# The defect: `read` returned `unresolvable/2` for the WHOLE pull request as
+# soon as any marker's comment author failed the login grammar, so one
+# `github-actions[bot]` comment discarded a genuine second reader's head-bound
+# CLEAR — in either comment order. The rule chosen (module docstring, T155) is
+# **skip the unattributable marker and record what it did**, with one
+# asymmetry: an unattributable BLOCK is honoured, because a clearance from
+# nobody is approval out of an absence and an objection from nobody is a reason
+# to look.
+
+
+def _echo(who: str, verdict: str = "CLEAR", head: str = HEAD) -> rr.Comment:
+    """A marker written by somebody this module cannot resolve to a login."""
+    return rr.Comment(who, f"Automated summary.\n\n{rr.marker_line(head, verdict)}")
+
+
+def test_no_unattributable_marker_author_has_an_unrecorded_effect() -> None:
+    """T155's named gate."""
+    record = rr.measure_marker_scope()
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == 0, record[
+        "states_with_an_unrecorded_effect"
+    ]
+    assert record["gate_status"] == "measured"
+
+
+@pytest.mark.parametrize(
+    "who",
+    ["github-actions[bot]", "dependabot[bot]", "coderabbitai[bot]", "", "r" * 40],
+)
+@pytest.mark.parametrize("unattributable_first", [True, False])
+def test_a_marker_naming_nobody_never_vetoes_a_second_reader(
+    who: str, unattributable_first: bool
+) -> None:
+    """Both orders: the old guard fired on presence, not on position."""
+    bot, human = _echo(who), _report()
+    comments = (bot, human) if unattributable_first else (human, bot)
+    verdict = rr.read(_pr(comments=comments))
+    assert (verdict.state, verdict.code) == (rr.ALLOWED, 0)
+    assert repr(who) in verdict.reason
+    assert rr.CLEARANCE_STANDS in verdict.reason
+
+
+def test_an_unattributable_marker_can_never_supply_a_clearance() -> None:
+    """The fail-open direction of the choice, pinned.
+
+    Skipping it means it counts for nothing — not that it counts for somebody.
+    With no other marker on record the PR is still `unresolvable/2`.
+    """
+    verdict = rr.read(_pr(comments=(_echo("github-actions[bot]"),)))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
+    assert repr("github-actions[bot]") in verdict.reason
+
+
+def test_the_implementer_wearing_a_badge_still_clears_nothing_of_their_own() -> None:
+    """The losing branch's risk, made a test.
+
+    `nuncaeslupus (OWNER)` is round 5's weld: it IS the implementer, under a
+    spelling that resolves to nobody. Alone it clears nothing; beside a real
+    second reader the clearance that stands is the OTHER account's.
+    """
+    badge = _echo("nuncaeslupus (OWNER)")
+    alone = rr.read(_pr(author="nuncaeslupus", comments=(badge,)))
+    assert (alone.state, alone.code) == (rr.UNRESOLVABLE, 2)
+
+    beside = rr.read(_pr(author="nuncaeslupus", comments=(badge, _report())))
+    assert (beside.state, beside.code) == (rr.ALLOWED, 0)
+    assert beside.reports == (_report(),)
+    assert repr("nuncaeslupus (OWNER)") in beside.reason
+
+
+@pytest.mark.parametrize("unattributable_first", [True, False])
+def test_an_objection_from_nobody_is_still_an_objection(unattributable_first: bool) -> None:
+    """The one direction an unattributable marker still decides the set.
+
+    The rule is **this module's own** — `review_reader`'s D-28 docstring list,
+    older than #421 — and **not** CLAUDE.md's: *"Exemption applies to a PR
+    nobody objected to, never over an objection somebody raised."* `grep -c`
+    for that sentence over CLAUDE.md returns 0, which is #421's N2: a docstring
+    citing a rule the governing document does not contain is the same failure
+    as a gate asserting a property it does not test. A clearance from nobody is
+    approval out of an absence; a BLOCK from nobody is a reason to look.
+    """
+    bot, human = _echo("github-actions[bot]", "BLOCK"), _report()
+    comments = (bot, human) if unattributable_first else (human, bot)
+    verdict = rr.read(_pr(comments=comments))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
+    assert repr("github-actions[bot]") in verdict.reason
+    assert rr.CLEARANCE_SET_ASIDE in verdict.reason
+
+
+def test_a_resolvable_block_still_wins_over_everything_beside_it() -> None:
+    verdict = rr.read(
+        _pr(comments=(_echo("github-actions[bot]"), _report(), _report("other", verdict="BLOCK")))
+    )
+    assert (verdict.state, verdict.code) == (rr.BLOCKED, 1)
+    assert rr.CLEARANCE_SET_ASIDE in verdict.reason
+    assert repr("github-actions[bot]") in verdict.reason
+
+
+def test_a_stale_marker_naming_nobody_is_not_a_stale_report() -> None:
+    """It binds nothing twice: wrong commit AND no writer, so code 3 is not it."""
+    verdict = rr.read(_pr(comments=(_echo("github-actions[bot]", "CLEAR", OLDER), _report())))
+    assert (verdict.state, verdict.code) == (rr.ALLOWED, 0)
+    alone = rr.read(_pr(comments=(_echo("github-actions[bot]", "CLEAR", OLDER),)))
+    assert (alone.state, alone.code) == (rr.UNRESOLVABLE, 2)
+
+
+def test_a_verdict_beside_no_unattributable_marker_says_nothing_about_one() -> None:
+    """The appendix is conditional: an ordinary clearance reads as it always did."""
+    verdict = rr.read(_pr(comments=(_report(),)))
+    assert verdict.reason == f"a second reader (reviewer) cleared {HEAD[:12]}"
+    assert rr.CLEARANCE_STANDS not in verdict.reason
+
+
+# The T155 ladder. `test_every_earlier_rule_still_reddens_its_own_controls`
+# keeps each historical `resolve_identity` measured; these keep each historical
+# — and each half-done — SCOPE rule measured, for the same reason. The second
+# rung is the one the gate's `or` exists for: it answers every state with the
+# right state and code and says nothing about the marker it dropped.
+
+
+#: The shipped reader, bound at import so a rung can delegate to it while
+#: `rr.read` is monkeypatched to the rung itself. Calling `rr.read` there is an
+#: infinite recursion, not a measurement.
+_SHIPPED_READ = rr.read
+
+
+def _wholesale_refusal(pr: rr.PullRequest) -> rr.Verdict:
+    """The rule this task replaced: any unattributable marker refuses the PR."""
+    for comment in pr.comments:
+        if rr.markers(comment.body) and rr.resolve_identity(comment.author) is None:
+            return rr.Verdict(
+                rr.UNRESOLVABLE,
+                2,
+                "a marker's author is unknown, so self-review cannot be ruled out",
+            )
+    return _SHIPPED_READ(pr)
+
+
+def _skip_without_recording(pr: rr.PullRequest) -> rr.Verdict:
+    """The same outcomes as the shipped rule, with the reason stripped bare."""
+    verdict = _SHIPPED_READ(pr)
+    return rr.Verdict(verdict.state, verdict.code, "no comment", verdict.reports)
+
+
+def _skip_including_an_objection(pr: rr.PullRequest) -> rr.Verdict:
+    """Symmetric skipping: an unattributable BLOCK dropped like a CLEAR."""
+    kept = tuple(
+        comment
+        for comment in pr.comments
+        if not rr.markers(comment.body) or rr.resolve_identity(comment.author) is not None
+    )
+    dropped = [c.author for c in pr.comments if c not in kept]
+    verdict = _SHIPPED_READ(
+        rr.PullRequest(pr.number, pr.author, pr.head_sha, pr.files, kept or pr.comments)
+    )
+    note = f"; a marker author naming nobody ({', '.join(repr(a) for a in dropped)}) was dropped"
+    stands = f", so {rr.CLEARANCE_STANDS}" if dropped else ""
+    return rr.Verdict(verdict.state, verdict.code, verdict.reason + note + stands, verdict.reports)
+
+
+SCOPE_LADDER: tuple[tuple[str, object], ...] = (
+    ("the rule T155 replaced — refuse the whole PR", _wholesale_refusal),
+    ("skipping without recording the effect — the gate's `or`", _skip_without_recording),
+    ("skipping an unattributable BLOCK too — the fail-open half", _skip_including_an_objection),
+)
+
+
+@pytest.mark.parametrize("label,rule", SCOPE_LADDER, ids=[row[0] for row in SCOPE_LADDER])
+def test_every_rule_this_one_replaced_still_reddens_the_scope_states(
+    label: str, rule: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rung scoring 0 is a rung whose own defect nothing is watching any more."""
+    monkeypatch.setattr(rr, "read", rule)
+    record = rr.measure_marker_scope()
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] > 0, (
+        f"{label} scores 0 against T155's states, so the gate would be satisfied by it"
+    )
+
+
+def test_the_rule_this_task_replaced_reddens_every_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The measurement the task required before the code was touched: 22 of 22.
+
+    Committed rather than reported, because "the metric was non-zero before"
+    is a claim a later reader cannot re-run from a session's scrollback.
+    """
+    monkeypatch.setattr(rr, "read", _wholesale_refusal)
+    record = rr.measure_marker_scope()
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == len(rr.SCOPE_STATES)
+
+
+def test_the_scope_gate_names_a_blank_author_by_repr_and_not_vacuously() -> None:
+    """`'' in reason` is true of every reason ever written; `"''" in reason` is not."""
+    blanks = [case for case in rr.SCOPE_STATES if case.unattributable == ""]
+    assert blanks
+    for case in blanks:
+        assert repr("") in rr.read(case.pr).reason
+
+
+def test_the_scope_states_only_grow() -> None:
+    """CLAUDE.md: *"the measured denominator must rise"* — the floor is how.
+
+    Two floors since #421: counting states says nothing about whether they are
+    distinct, and F4's mutant kept the count at 29 while collapsing eleven
+    pairings onto one tuple each.
+    """
+    record = rr.measure_marker_scope()
+    assert len(rr.SCOPE_STATES) >= rr.MINIMUM_SCOPE_STATES
+    assert record["marker_scope_states_at_least"] == rr.MINIMUM_SCOPE_STATES
+    assert record["distinct_constructed_states_at_least"] == rr.MINIMUM_DISTINCT_SCOPE_STATES
+
+
+def test_states_that_are_not_distinct_are_one_state_measured_twice() -> None:
+    """#421 F4, asserted on the gate rather than only beside it.
+
+    Handing `measure_marker_scope` a duplicated state keeps `len(states)` at the
+    floor and must still read `unmeasured`: a denominator counting the same
+    `(files, comments)` pair twice is a coverage claim that is not true.
+    """
+    duplicated = (*rr.SCOPE_STATES[:-1], rr.SCOPE_STATES[0])
+    assert len(duplicated) == len(rr.SCOPE_STATES)
+    record = rr.measure_marker_scope(states=duplicated)
+    assert record["gate_status"] == "unmeasured"
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == -1
+    assert "distinct_constructed_states_at_least" in record["unmeasured_reason"]
+    assert rr.scope_exit_code_for(record) == 1
+
+
+def test_a_twin_state_under_another_name_is_still_one_state_measured_twice() -> None:
+    """#421 N1 — F4's own shape, one level up, inside F4's remedy.
+
+    Changing the new floor's `distinct` from the constructed inputs to
+    `len({case.name for case in evaluated})` survived the whole suite: 146
+    passed, metric 0, exit 0. Composed with F4's mutant the state set genuinely
+    collapsed to 16 while the gate reported a serene zero — the gate certifying
+    coverage it does not have, which is the exact defect the floor was added to
+    close.
+
+    The test beside it cannot catch that, and this is why: it seeds
+    `SCOPE_STATES[0]` itself, so the duplicate shares the **name** as well as
+    the input, both counts fall to 28 together, and nothing distinguishes them.
+    A discriminator that does not discriminate — the same shape as F4's
+    `endswith("first")` filter.
+
+    So the twin here carries a **distinct name over an identical input**: 29
+    names, 28 inputs. Only one of the two counts can be right about it.
+    """
+    original = rr.SCOPE_STATES[0]
+    twin = replace(original, name=original.name + "__twin")
+    states = (*rr.SCOPE_STATES[:-1], twin)
+
+    assert len({case.name for case in states}) == len(rr.SCOPE_STATES)
+    assert len({(case.pr.files, case.pr.comments) for case in states}) < len(rr.SCOPE_STATES)
+
+    record = rr.measure_marker_scope(states=states)
+    assert record["gate_status"] == "unmeasured"
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == -1
+    assert "distinct_constructed_states_at_least" in record["unmeasured_reason"]
+    assert rr.scope_exit_code_for(record) == 1
+
+
+def test_the_same_comments_on_another_authors_pr_is_not_the_same_state() -> None:
+    """The other edge of the same key, asked before concluding N1 was alone.
+
+    `(files, comments)` was the whole key when N1 was found, and it is narrower
+    than the input: `read` also reads `pr.author` and `pr.head_sha`, so two
+    states differing only in whose PR it is counted as **one**. That is the same
+    "counts part of the thing" shape, so the key is now every field `read`
+    reads — `number` excluded, since a per-state counter would make the floor
+    true by construction.
+
+    This fixture is what stops the key narrowing back: the twin below differs
+    from `SCOPE_STATES[0]` only in the PR's author, so a key blind to the author
+    sees 28 inputs and breaches the floor. Its expected verdict may or may not
+    still hold — the metric is not what is asserted here — but the distinctness
+    floor must not be the thing that fires.
+    """
+    original = rr.SCOPE_STATES[0]
+    assert original.pr.author != "somebodyelse"
+    twin = replace(
+        original,
+        name=original.name + "__on_another_authors_pr",
+        pr=replace(original.pr, author="somebodyelse"),
+    )
+    states = (*rr.SCOPE_STATES[:-1], twin)
+
+    assert len({(case.pr.files, case.pr.comments) for case in states}) < len(rr.SCOPE_STATES)
+
+    record = rr.measure_marker_scope(states=states)
+    assert "distinct_constructed_states_at_least" not in record.get("unmeasured_reason", "")
+
+
+#: Which numbered item in `read`'s docstring is which branch of its body. The
+#: numbers are stable names (#421 F1-F3, `T155.json` and the module docstring all
+#: cite them), so the list is not renumbered into execution order — it states the
+#: execution order instead, and the test below is what holds that statement to
+#: the code.
+_DOCSTRING_ITEM_BRANCH = {
+    5: "if unattributable:",
+    6: "if is_docs_only(pr.files):",
+    7: "if by_the_author:",
+}
+
+
+def test_the_execution_order_read_documents_is_the_order_read_runs() -> None:
+    """#421 N4, and the look-again on the commit that fixes it.
+
+    N4 was that the numbered checklist, read in the order its own opening calls
+    load-bearing, predicted `unresolvable/2` for all three of F1-F3's inputs
+    while the code returned `exempt/0`, `blocked/3` and `blocked/2`. The remedy
+    is a sentence saying check 5 runs last — and a sentence is precisely what
+    F4 and N3 were about: a claim in prose that nothing tests. F1-F3 pin the
+    three verdicts; nothing pinned the *document* to the code, which is what
+    both N4 and N2 were.
+
+    So the order is parsed out of the docstring rather than matched as a fixed
+    spelling, and checked against where the branches actually sit. Reorder the
+    body without editing the sentence and this fails; edit the sentence to
+    something the body does not do and it fails too. Deleting numbers to make
+    it pass fails the completeness assertion.
+    """
+    doc = inspect.getdoc(rr.read) or ""
+    stated = re.search(r"In execution order the list reads ([\d, ]+)\.", " ".join(doc.split()))
+    assert stated, "read's docstring no longer states an execution order"
+    documented = [int(n) for n in stated.group(1).split(",")]
+
+    # It must still be the whole list, so the claim cannot be made true by
+    # dropping the items that contradict it.
+    numbered = {int(m) for m in re.findall(r"^\s*(\d+)\. ", doc, re.M)}
+    assert numbered == set(documented) and len(documented) == len(numbered)
+
+    # …and an item added later cannot slip past the map unchecked. Items 1-4 are
+    # deliberately unmapped: they are the early-return group, all before the
+    # branches whose relative order is what N4 was about. Anything numbered past
+    # the last mapped item is new, and has to be mapped rather than skipped —
+    # otherwise this test quietly stops covering the item it was added for.
+    assert set(_DOCSTRING_ITEM_BRANCH) <= numbered
+    assert max(numbered) <= max(_DOCSTRING_ITEM_BRANCH), (
+        "read's docstring numbers an item past the last one mapped to a branch; "
+        "add it to _DOCSTRING_ITEM_BRANCH"
+    )
+
+    body = inspect.getsource(rr.read).split('"""')[2]
+
+    def at(branch: str) -> int:
+        # A missing branch is reported as what it is — the docstring naming a
+        # branch the body no longer spells that way — rather than as a bare
+        # ValueError from `str.index`.
+        assert branch in body, f"read's body no longer contains {branch!r}"
+        return body.index(branch)
+
+    ordered = [n for n in documented if n in _DOCSTRING_ITEM_BRANCH]
+    positions = [at(_DOCSTRING_ITEM_BRANCH[n]) for n in ordered]
+    assert positions == sorted(positions), (
+        f"read's docstring states the order {ordered}; its body runs them in another"
+    )
+
+    # Item 7 is two branches; both sit where the docstring says item 7 sits.
+    assert at("if is_docs_only(pr.files):") < at("if on_another_commit:")
+    assert at("if on_another_commit:") < at("if unattributable:")
+
+
+#: The `PullRequest` fields `read` actually consumes. Everything else hung off a
+#: `ScopeState` — on the PR or beside it — is a label, an expectation or a
+#: counter, and a distinctness key that reads any of them is true by
+#: construction. Written out from `read`'s own body rather than imported from
+#: the module, so this is the spec's list and not an echo of the key it bounds;
+#: the twin below then proves the list right by `read`ing across it.
+_INPUT_FIELDS = frozenset({"author", "head_sha", "files", "comments"})
+
+
+def _varied(value: object) -> Any:
+    """A different value of the same type.
+
+    Raises rather than skipping on a type it does not know: a field this helper
+    silently declined to vary is a field a too-fine key could hide behind, which
+    is the whole defect the twin below exists to close.
+    """
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, int):
+        return value + 1000
+    if isinstance(value, str):
+        return value + "__varied"
+    raise AssertionError(
+        f"no variation defined for {type(value).__name__} — a non-input field that "
+        "cannot be varied is one a distinctness key could still hide behind"
+    )
+
+
+def _twin_varying_every_non_input_field(original: rr.ScopeState) -> rr.ScopeState:
+    """`original` with every field `read` does not read varied, and the input kept.
+
+    Derived from `dataclasses.fields`, never enumerated: a field added to
+    `ScopeState` or `PullRequest` later is varied by this without anyone
+    remembering to update a list, which is the difference between bounding the
+    class and bounding the three spellings that happened to be known.
+    """
+    pr_changes = {
+        f.name: _varied(getattr(original.pr, f.name))
+        for f in fields(original.pr)
+        if f.name not in _INPUT_FIELDS
+    }
+    beside_changes = {
+        f.name: _varied(getattr(original, f.name)) for f in fields(original) if f.name != "pr"
+    }
+    assert pr_changes, "no non-input PullRequest field was varied"
+    assert beside_changes, "no field beside the PR was varied"
+    return replace(original, pr=replace(original.pr, **pr_changes), **beside_changes)
+
+
+def test_a_twin_varying_every_field_read_does_not_read_is_one_state() -> None:
+    """#421 N3 — the floor was bounded against one spelling, not against the class.
+
+    N1's twin varies only `name`; the author twin varies only `pr.author`.
+    Between them they forbid one too-fine key and require one field, and
+    #421's second reader measured what that leaves open: **three** further keys
+    passed the entire 148-test suite with metric 0, `measured` and exit 0 —
+    adding `pr.number`, keying on the whole `PullRequest`, and adding `order`.
+    Composed with F4's own mutant each certified 29 states over 16 genuinely
+    distinct inputs, which is byte-for-byte the table N1 was blocked on, one
+    field over. `(c.pr,)` is the one that matters: it is the tidier spelling of
+    the key's own stated intent, so it is the refactor a later session makes.
+
+    Three more twins would answer three more spellings, and this repository has
+    spent D-28's five rounds establishing that an enumeration has no last
+    element. So this twin varies **every** non-input field at once — derived
+    from the dataclasses, so one added tomorrow is covered — while holding the
+    input identical. Any key reading a label, an expectation or a counter sees
+    29 distinct states and passes; a key reading only the input sees 28.
+
+    The `read` assertion is the half that makes `_INPUT_FIELDS` a claim rather
+    than a restatement: if a varied field ever turns out to be one `read`
+    consumes, the two verdicts differ and this fails, saying the field belongs
+    in the key — so the fixture is pinned in both directions.
+    """
+    original = rr.SCOPE_STATES[0]
+    twin = _twin_varying_every_non_input_field(original)
+
+    # Every field that is not an input differs — including the three #421 N3
+    # measured surviving, named here so the fixture says which class it closes.
+    assert twin.name != original.name
+    assert twin.order != original.order
+    assert twin.pr.number != original.pr.number
+    beside = {
+        f.name
+        for f in fields(twin)
+        if f.name != "pr" and getattr(twin, f.name) != getattr(original, f.name)
+    }
+    assert beside == {f.name for f in fields(twin)} - {"pr"}
+    on_pr = {
+        f.name for f in fields(twin.pr) if getattr(twin.pr, f.name) != getattr(original.pr, f.name)
+    }
+    assert on_pr == {f.name for f in fields(twin.pr)} - _INPUT_FIELDS
+
+    # …and every field `read` reads is identical, so the two are one state.
+    for name in _INPUT_FIELDS:
+        assert getattr(twin.pr, name) == getattr(original.pr, name)
+    assert rr.read(twin.pr) == rr.read(original.pr)
+
+    states = (*rr.SCOPE_STATES[:-1], twin)
+    assert len(states) == len(rr.SCOPE_STATES)
+    assert len({case.name for case in states}) == len(rr.SCOPE_STATES)
+
+    record = rr.measure_marker_scope(states=states)
+    assert record["gate_status"] == "unmeasured"
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == -1
+    assert "distinct_constructed_states_at_least" in record["unmeasured_reason"]
+    assert rr.scope_exit_code_for(record) == 1
+
+
+def _pairings() -> dict[str, dict[str, rr.ScopeState]]:
+    """The ordered states, grouped by the pairing they are two orders of."""
+    grouped: dict[str, dict[str, rr.ScopeState]] = {}
+    for case in rr.SCOPE_STATES:
+        if case.order == "single":
+            continue
+        grouped.setdefault(case.name.rsplit("__", 1)[0], {})[case.order] = case
+    return grouped
+
+
+def test_both_orders_carry_different_comment_sequences() -> None:
+    """#421 F4: the previous version of this test compared state NAMES.
+
+    Collapsing both orders onto the same comment tuple — changing only the label
+    — left 137 tests green and the metric at 0, so the gate certified coverage it
+    did not have. (Its `endswith("first")` filter was a no-op besides: BOTH
+    suffixes end in `first`.) The claim is about the constructed sequences, so
+    this asserts the sequences: they must differ, and the unattributable marker
+    must actually sit at opposite ends.
+    """
+    pairings = _pairings()
+    assert pairings
+    for prefix, pair in pairings.items():
+        assert set(pair) == {"unattributable_first", "clearance_first"}, prefix
+        head_first = pair["unattributable_first"].pr.comments
+        head_last = pair["clearance_first"].pr.comments
+        assert head_first != head_last, f"{prefix}: both 'orders' carry the same comment tuple"
+        assert head_first[0].author == pair["unattributable_first"].unattributable, prefix
+        assert head_last[-1].author == pair["clearance_first"].unattributable, prefix
+
+
+def test_a_single_comment_state_is_the_only_kind_with_no_second_order() -> None:
+    """`order='single'` is a claim about the state, so it is checked, not trusted."""
+    singles = [case for case in rr.SCOPE_STATES if case.order == "single"]
+    assert singles
+    for case in singles:
+        assert len(case.pr.comments) == 1, case.name
+    assert len(rr.SCOPE_STATES) == 2 * len(_pairings()) + len(singles)
+
+
+def test_a_scan_over_zero_scope_states_is_unmeasured_and_never_a_clean_zero() -> None:
+    record = rr.measure_marker_scope(states=())
+    assert record["gate_status"] == "unmeasured"
+    assert record["unresolvable_marker_authors_with_an_unrecorded_effect"] == -1
+    assert rr.scope_exit_code_for(record) == 1
+    assert rr.scope_exit_code_for(record) != 3
+
+
+def test_a_breached_scope_floor_records_what_was_observed() -> None:
+    record = rr.measure_marker_scope(states=rr.SCOPE_STATES[:3])
+    assert record["marker_scope_states_at_least"] == 3
+    assert record["gate_status"] == "unmeasured"
+
+
+def test_write_scope_evidence_records_exactly_what_was_measured(tmp_path: Path) -> None:
+    path = tmp_path / "T155.json"
+    written = rr.write_scope_evidence(path)
+    assert json.loads(path.read_text(encoding="utf-8")) == written
+    assert written["unresolvable_marker_authors_with_an_unrecorded_effect"] == 0
+    assert written["gate_status"] == "measured"
+
+
+def test_every_scope_state_cites_the_text_its_expectation_comes_from() -> None:
+    """And every required phrase is a NAMED one, not prose invented per state.
+
+    Widened from the two clearance phrases when #421's residuals were accepted:
+    F1-F3 pair the unattributable marker with a stale report, the docs-only
+    exemption or the author's own marker rather than with a clearance. The point
+    of the constraint is unchanged — a phrase a state makes up for itself is a
+    phrase no other state can hold the reader to.
+    """
+    named = {
+        rr.CLEARANCE_STANDS,
+        rr.CLEARANCE_SET_ASIDE,
+        rr.RECORDED_BUT_INERT,
+        rr.OBJECTION_HONOURED,
+        "so self-review cannot be ruled out",
+    }
+    for case in rr.SCOPE_STATES:
+        assert case.citation.strip()
+        assert case.effect in named, case.name
+
+
+# --------------------------------------------------------------------------
+# The residuals of T155's own defect (#421 F1-F3)
+# --------------------------------------------------------------------------
+#
+# Check 5 was guarded on `if unattributable:` but placed BEFORE the docs-only,
+# stale and author-only branches, while its own docstring scoped it to "nothing
+# else on record". So a bot's name still turned code 3 into code 2, still
+# withheld an exemption CLAUDE.md grants outright, and still emitted "the only
+# marker on record" beside a second marker. All three fail-closed; all three the
+# shape T155 was filed to remove, surviving one branch further down.
+
+
+@pytest.mark.parametrize("unattributable_first", [True, False])
+def test_a_stale_genuine_report_keeps_its_own_code(unattributable_first: bool) -> None:
+    """F1: 'reviewed, then kept coding' must stay distinguishable from 'never read'."""
+    bot, human = _echo("github-actions[bot]"), _report(head=OLDER)
+    comments = (bot, human) if unattributable_first else (human, bot)
+    verdict = rr.read(_pr(comments=comments))
+    assert (verdict.state, verdict.code) == (rr.BLOCKED, 3)
+    assert repr("github-actions[bot]") in verdict.reason
+    assert rr.RECORDED_BUT_INERT in verdict.reason
+    # Removing the bot must not change the answer — that it did was the finding.
+    assert rr.read(_pr(comments=(human,))).code == verdict.code
+
+
+def test_a_docs_only_pr_keeps_its_exemption_beside_a_marker_naming_nobody() -> None:
+    """F2: CLAUDE.md grants the exemption on the CHANGED PATHS, which resolve no identity."""
+    verdict = rr.read(_pr(files=DOCS, comments=(_echo("github-actions[bot]"),)))
+    assert (verdict.state, verdict.code) == (rr.EXEMPT, 0)
+    assert repr("github-actions[bot]") in verdict.reason
+    assert rr.RECORDED_BUT_INERT in verdict.reason
+    assert rr.read(_pr(files=DOCS)).code == verdict.code
+
+
+def test_the_exemption_still_does_not_survive_an_objection_from_nobody() -> None:
+    """F2's bound: the fail-open step stops at an objection.
+
+    The rule is **this module's own**, not CLAUDE.md's — see the sibling test
+    above, and `T155.json`'s `derived_from` for this state, which says so in the
+    wording committed there. It matters most at *this* fixture, because this is
+    the one that bounds F2's fail-open step: told the bound is the governing
+    document's, a later reader will not know a decision was taken here and is
+    revisable here. *"Exemption applies to a PR nobody objected to, never over
+    an objection somebody raised."* An unattributable CLEAR is not an objection;
+    an unattributable BLOCK is.
+    """
+    verdict = rr.read(_pr(files=DOCS, comments=(_echo("github-actions[bot]", "BLOCK"),)))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
+    assert rr.OBJECTION_HONOURED in verdict.reason
+
+
+@pytest.mark.parametrize("unattributable_first", [True, False])
+def test_the_authors_own_marker_keeps_its_own_reason(unattributable_first: bool) -> None:
+    """F3: same code either way; the shadowed reason was the informative one.
+
+    And the shadowing reason was false on its face — "the only marker on record"
+    beside a second marker.
+    """
+    blank, own = _echo(""), _report(author="nuncaeslupus")
+    comments = (blank, own) if unattributable_first else (own, blank)
+    verdict = rr.read(_pr(author="nuncaeslupus", comments=comments))
+    assert (verdict.state, verdict.code) == (rr.BLOCKED, 2)
+    assert "written by the PR's own author" in verdict.reason
+    assert "the only marker on record has an author naming nobody" not in verdict.reason
+    assert repr("") in verdict.reason
+    assert rr.RECORDED_BUT_INERT in verdict.reason
+
+
+def test_check_five_still_fires_when_its_own_sentence_is_true() -> None:
+    """The control that stops F1-F3's remedy degenerating into deleting the guard.
+
+    A code PR whose only marker names nobody has not been read by anybody, and
+    `unresolvable/2` is still the answer.
+    """
+    verdict = rr.read(_pr(comments=(_echo("github-actions[bot]"),)))
+    assert (verdict.state, verdict.code) == (rr.UNRESOLVABLE, 2)
+    assert verdict.merge_may_proceed is False
