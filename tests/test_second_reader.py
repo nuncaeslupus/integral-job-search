@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from integral import robots
 from integral import second_reader as sr
 from integral import second_reader_cases as cases
 
@@ -258,12 +259,138 @@ def test_the_same_table_is_run_against_the_repo_matcher_and_the_gap_is_pinned() 
         "fixed and this pin should be emptied with it."
     )
     assert measured["repo_matcher_verdicts_against_the_rfc"] == len(found)
-    # And the direction, asserted rather than assumed: the RFC refuses the path
-    # and the repo matcher allows it.
-    case = next(c for c in cases.CASES if c.id == sr.REPO_MATCHER_DISAGREEMENTS[0])
-    assert case.expected == cases.DISALLOW_VERDICT
-    assert case.direction == cases.FAIL_OPEN_RISK
+    # And the direction, asserted rather than assumed: every pinned case is one
+    # the RFC refuses and the repo matcher allows. Vacuous while the tuple is
+    # empty, which is the state T151 put it in — the assertions that carry the
+    # weight now are the ones below.
+    for case_id in sr.REPO_MATCHER_DISAGREEMENTS:
+        case = next(c for c in cases.CASES if c.id == case_id)
+        assert case.expected == cases.DISALLOW_VERDICT
+        assert case.direction == cases.FAIL_OPEN_RISK
+        assert sr.allows(case.robots_txt, case.agent, case.path) is False
+
+
+def test_the_implementer_table_is_run_against_the_repo_matcher_too_and_pinned() -> None:
+    """The population `repo_matcher_verdicts_against_the_rfc` does not reach.
+
+    That metric is computed over `CASES` alone — deliberately, because those
+    verdicts were written by a session that had seen neither matcher, and that
+    is what a zero there is worth. `REGRESSION_CASES` is a table of RFC-derived
+    verdicts too, and nothing ever ran `integral.robots` against it. So the
+    metric read a truthful **0** while the primary matcher disagreed with seven
+    rows of the other table, six of them fail-open — an honest number over an
+    unmeasured population, which is the exact defect this module exists to
+    catch, met one table over.
+
+    Measuring it does not make it T151's gate: the two numbers say different
+    things and are reported side by side. What this asserts is that the set is
+    pinned by **id and by direction**, so a new disagreement fails here by name
+    and a disappearing one has to be accounted for rather than absorbed.
+    """
+    measured = sr.measure()
+    found = tuple(case["id"] for case in measured["repo_matcher_regression_disagreement_cases"])
+
+    assert found == sr.REPO_MATCHER_REGRESSION_DISAGREEMENTS, (
+        "the set of implementer-derived cases where `integral.robots` departs from "
+        f"this table changed: {found} vs the pinned "
+        f"{sr.REPO_MATCHER_REGRESSION_DISAGREEMENTS}"
+    )
+    assert measured["repo_matcher_verdicts_against_the_implementer_table"] == len(found)
+    assert found, "an empty set here is the unmeasured state this pin replaced"
+
+    by_id = {case.id: case for case in sr.REGRESSION_CASES}
+    for record in measured["repo_matcher_regression_disagreement_cases"]:
+        case = by_id[record["id"]]
+        # The direction is recorded rather than assumed: six of these permit
+        # what the table refuses and one refuses what it permits, and collapsing
+        # them into a count would hide which kind grew.
+        assert record["direction"] in {"fail_open", "fail_closed"}
+        assert (record["direction"] == "fail_open") == (
+            record["repo_matcher"] == cases.ALLOW_VERDICT
+        )
+        assert record["expected"] == case.expected
+
+
+def test_the_divergence_between_the_two_matchers_is_pinned_and_live() -> None:
+    """The reading disagreement itself, kept measured while it waits for a task.
+
+    `integral.robots` emits a region-ambiguous run in BOTH canonical spellings,
+    for allows as well as disallows, and scores precedence on whichever matched
+    — reading (c). This module canonicalises the rule once and widens the
+    TARGET instead, one-directionally, so an ambiguity is never resolved into a
+    permission — reading (P). §2.2.2 returns Undefined for a contest involving a
+    wildcard rule, so its text chooses neither, and is un-silent that a crawler
+    must choose one.
+
+    Deferring that choice to a task is right; deferring it with **nothing
+    observing the gap** is what this repository built LOW-confidence contested
+    cases to avoid. So the archetype is committed, the reading this table takes
+    is the fail-closed one, and both halves are asserted live: if either module
+    moves, this fails rather than the divergence quietly closing or widening.
+    """
+    case = next(
+        c for c in sr.REGRESSION_CASES if c.id == "wildcard_region_spelling_readings_diverge"
+    )
+    assert case.confidence == "LOW"
+    assert "(P)" in case.why and "(c)" in case.why, "a contested row must name both readings"
+    assert case.expected == cases.DISALLOW_VERDICT, "this table takes the fail-closed reading"
+
+    # (P), here: the allow reaches no spelling this reader offers it.
     assert sr.allows(case.robots_txt, case.agent, case.path) is False
+    # (c), there: it reaches the query and outweighs the disallow.
+    assert robots.allows_text(case.robots_txt, case.agent, case.path) is True
+    assert case.id in sr.REPO_MATCHER_REGRESSION_DISAGREEMENTS
+
+
+def test_a_low_confidence_regression_row_states_its_argument() -> None:
+    """The same rule `CONTESTED_CASES` applies to the independent table.
+
+    A `LOW` with no argument behind it is not a case, it is a guess wearing a
+    label — and the implementer-derived table has no `CONTESTED_CASES` list of
+    its own, so nothing checked this side.
+    """
+    low = [case for case in sr.REGRESSION_CASES if case.confidence == "LOW"]
+    assert low, "the divergence row is LOW; a table with none has lost it"
+    for case in low:
+        assert case.confidence_note.strip(), f"{case.id}: LOW with no argument behind it"
+
+
+def test_the_regression_table_floor_tracks_the_table() -> None:
+    """A pin over a table that may silently shrink is not a pin.
+
+    `REPO_MATCHER_REGRESSION_DISAGREEMENTS` names seven rows of
+    `REGRESSION_CASES`; deleting those rows empties the set and satisfies the
+    pin. The floor is what stops that, and it sat at 6 while the table carried
+    18 — a floor that could not catch a table losing two thirds of itself.
+    """
+    assert len(sr.REGRESSION_CASES) >= sr.REGRESSION_CASES_AT_LEAST
+    assert len(sr.REPO_MATCHER_REGRESSION_DISAGREEMENTS) <= sr.REGRESSION_CASES_AT_LEAST
+    ids = {case.id for case in sr.REGRESSION_CASES}
+    for case_id in sr.REPO_MATCHER_REGRESSION_DISAGREEMENTS:
+        assert case_id in ids, f"{case_id} is pinned but no longer in the table"
+
+
+def test_the_nine_cases_t151_closed_are_still_refused_by_the_repo_matcher() -> None:
+    """An empty pin is only evidence if the cases that filled it still run.
+
+    `REPO_MATCHER_DISAGREEMENTS` emptying is the shape of both "the fail-open was
+    fixed" and "the nine cases were deleted", and the assertion above cannot tell
+    those apart: it compares a measurement over the table against a tuple, and
+    removing a row from the table satisfies it too. So the nine are named
+    separately and re-run here through `integral.robots` itself.
+
+    Each was fail-OPEN — RFC 9309 §2.2.2 requires the reserved octets they carry
+    to be percent-encoded before comparison, in the path as well as the query, so
+    the rule and the request are two spellings of one URI and the rule refuses.
+    `integral.robots` answered ALLOW for all nine until T151 replaced
+    `_CHUNK_SAFE` with a per-region reading of RFC 3986's `reserved` production.
+    """
+    assert len(sr.REPO_MATCHER_CASES_CLOSED_BY_T151) == 9
+    for case_id in sr.REPO_MATCHER_CASES_CLOSED_BY_T151:
+        case = next(c for c in cases.CASES if c.id == case_id)
+        assert case.expected == cases.DISALLOW_VERDICT, case_id
+        assert case.direction == cases.FAIL_OPEN_RISK, case_id
+        assert robots.allows_text(case.robots_txt, case.agent, case.path) is False, case_id
 
 
 def test_a_rule_reaching_the_query_through_a_wildcard_still_matches() -> None:
