@@ -188,6 +188,51 @@ wrong script against the wrong worktree. With several agents in mutate-restore
 cycles that is a live way to certify work nobody did. Never trust a scratch file
 you did not just write.
 
+## Name the model on every dispatch — `models.workers` cannot reach this surface
+
+**Implementers get `model: "sonnet"`. A second reader gets `model: "opus"`. Write
+it on the `Agent` call itself, every time.** Not because the config is wrong —
+`arsenal/config.toml` now says exactly this for the half it can express — but
+because nothing carries that value to the dispatch here, and the failure is
+silent in the expensive direction.
+
+On 2026-09-08/09 roughly twenty agents ran on Opus against a configuration whose
+`models.workers` resolved to `sonnet`, for 3–4M tokens and two exhausted quota
+windows. Nothing was misconfigured. Three separate things have to be true for the
+configured value to arrive, and on this surface none of them is:
+
+- **The export cannot survive.** `worker-loop.md` sets
+  `CLAUDE_CODE_SUBAGENT_MODEL` in a shell step. Cloud Bash calls do not share
+  shell state — measured here: `export ARSENAL_PROBE_XYZ=persisted` in one call,
+  `${ARSENAL_PROBE_XYZ:-<unset>}` in the next, prints `<unset>`. The variable is
+  gone before any dispatch reads it. On the laptop the same line works, which is
+  why this is worth writing down rather than assuming.
+- **An explicit `model:` outranks it anyway.** The `Agent` tool's parameter takes
+  precedence over the configured default subagent model, so a session that names
+  a model wins over the config every time and is told nothing.
+- **Omitting `model:` does not fall back to `sonnet`.** With no env var and no
+  agent-definition model, a subagent **inherits the parent's** — an Opus
+  orchestrator dispatches Opus workers by default. So both the documented path
+  and the do-nothing path yield Opus, and only naming `sonnet` yields Sonnet.
+
+**The reviewer half is not expressible at all.** `MODEL_KEYS` is
+`("models.orchestrator", "models.workers")`;
+`arsenal_config.py --get models.reviewers` exits 2 on an unknown key, and an
+unknown key written into `[models]` is tolerated on read but reaches nothing. The
+bundle's `agents/` holds `worker.md` and `reviewer.md`, and that reviewer is the
+**pre-PR** one spawned by `adversarial_review.sh` from a case file — the on-PR
+second reader `merge-policy` requires has no agent definition and no model key
+anywhere in the bundle. It exists only in this file's prose, which is why the
+model it runs on has to be named here too. Both gaps are upstream's
+(`claude-arsenal`), not fixable in this repo.
+
+**And this cannot be pinned.** No gate can observe which model a subagent ran on;
+the token report arrives after the spend. By the standard the section below sets
+out, that makes this a rule stated and unpinned in its own instance — the eighth
+face of the family, and honestly named rather than dressed up. The only thing
+working for it is that this file is in context on every turn and the remedy is
+one parameter.
+
 ## Fixtures for a correctness-critical gate are written by a second session
 
 A gate that a worker writes alongside its own implementation judges that implementation
