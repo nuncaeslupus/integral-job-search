@@ -1332,6 +1332,168 @@ def test_a_probe_linked_at_a_sibling_package_is_not_this_packages_capture(
     assert "symlinked probe/" in finding["reason"], finding["reason"]
 
 
+def test_a_symlinked_package_borrows_the_capture_it_reads_as_holding(
+    library: Path, provenance_floor: None
+) -> None:
+    """`test_a_probe_linked_at_a_sibling_package_is_not_this_packages_capture`,
+    one directory further up — and the fix for that one is what left this open.
+
+    The containment rule resolves its **base** by design, so whatever it is
+    asked from is the one path it cannot see. Asked from the package, the
+    package directory is exempt: a package that is a committed symlink at a
+    sibling — git stores one as mode `120000`, so this is a diff a reviewer
+    receives — answers `probe/captured.json`, `response.file`, the byte count
+    and the digest out of the sibling's artefact, all of them honest, none of
+    them **its**. A package committing no capture at all then reads as an
+    enforced `live`, which is exactly `test_deleting_the_capture_is_not_the_
+    cheapest_way_to_pass` reached by a link instead of a deletion, and it reads
+    as a pass rather than as a finding.
+
+    So the question is asked with the **library** as the base and the package's
+    own name as the first component of the path.
+    """
+    _real_board(library)
+    donor = _package(library)
+    probe = _capture_probe(library)
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance=pc.LIVE,
+        response=_live_response(probe),
+    )
+    # The donor's own claim is fully substantiated, so nothing below is about a
+    # broken capture: it is about which package holds it.
+    assert _provenance_findings(library, today=date(2026, 9, 8)) == []
+
+    borrower = library / "newboard_es"
+    borrower.symlink_to(Path(donor.name), target_is_directory=True)
+
+    measured = cp.measure(library, today=date(2026, 9, 8))
+    assert measured["captures_scanned"] == 2
+    (finding,) = measured["findings"]
+    assert finding["package"] == borrower.name
+    assert finding["claim"] == "absent"
+    assert "symlinked package" in finding["reason"], finding["reason"]
+    assert finding["direction"] == "fail-open"
+    # The donor's `live` is counted once, by the package that holds it. A
+    # borrowed claim is not a claim, so the tally does not read two.
+    assert measured["claims"]["live"] == 1
+
+    # And `check_capture` refuses it when handed the package directly, so the
+    # guarantee does not rest on `measure` having got there first — the shape
+    # `check_live` was blocked for in round three.
+    direct = cp.check_capture(borrower, today=date(2026, 9, 8))
+    assert direct is not None and "symlinked package" in direct.reason
+
+    # Nor on `check_capture` having got there first. `_borrowed_package` is a
+    # verdict about a package; the containment rule underneath it is a verdict
+    # about a path, and each reader has to hold on its own — a mutant that
+    # reverts the rule to asking from the package survived every assertion
+    # above, because the verdict was answering first. That is the exact defect
+    # F4 was blocked for, sitting inside F4's own fix, so it is pinned the way
+    # F4's was: by asking the readers directly.
+    record = json.loads((donor / "probe" / "captured.json").read_text(encoding="utf-8"))
+    assert cp.read_record(borrower) is None
+    reasons = cp.check_live(borrower, record, date(2026, 9, 8))
+    assert any("own probe/" in reason for reason in reasons), reasons
+
+    # The rule's own new argument. Making the package's name a component of the
+    # path means the name is now something that can point out of the library,
+    # and `..` is how: it resolves away to the parent, which is the shape the
+    # comparison is built to notice. Fail-closed, which is the safe direction
+    # for a name nothing legitimate spells.
+    assert cp._committed_in_package(library / "..", Path("probe")) is False
+
+
+def test_a_package_linked_at_an_excluded_one_is_not_excluded_with_it(
+    library: Path, provenance_floor: None
+) -> None:
+    """What the borrowed-package check introduces: an order.
+
+    `measure` reads a package's `site` to decide whether a reserved example
+    domain excludes it from the scan. Read out of a **borrowed** package that
+    is the donor's site, so a package linked at an excluded one is excluded by
+    a property it does not have — it vanishes from the denominator instead of
+    being counted, which is the quietest fail-open of the three: no finding, no
+    claim, and a `captures_scanned` that never knew it was there.
+
+    So the question is asked before anything is read out of the package. The
+    exclusion rule is exercised from both sides here as it is everywhere in
+    this file: the donor is still excluded, on its own domain.
+    """
+    borrower = library / "borrowedboard_es"
+    borrower.symlink_to(Path(_REFERENCE.name), target_is_directory=True)
+
+    measured = cp.measure(library, today=date(2026, 9, 8))
+    assert measured["gate_status"] == "measured"
+    assert measured["example_packages_excluded"] == [_REFERENCE.name]
+    assert measured["captures_scanned"] == 1
+    (finding,) = measured["findings"]
+    assert finding["package"] == borrower.name
+    assert "symlinked package" in finding["reason"], finding["reason"]
+
+
+def test_a_library_reached_through_a_symlink_is_still_measured(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """The control the case above is bounded by, and the reason the containment
+    rule resolves its base at all.
+
+    A path that leads through a link is not thereby a borrowed path: a checkout
+    under a symlinked home, a worktree reached through one, a `/tmp` that is
+    itself a link on some platforms. If the rule refused those, it would be
+    fail-closed for **every** package at once — a gate that fails everywhere is
+    as useless as one that passes everywhere, and it would fail for a reason
+    nobody could act on. The base is the caller's own argument and is trusted
+    as such; only what this module derives below it is checked.
+    """
+    _real_board(library)
+    probe = _capture_probe(library)
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance=pc.LIVE,
+        response=_live_response(probe),
+    )
+
+    through_a_link = tmp_path / "library-link"
+    through_a_link.symlink_to(library, target_is_directory=True)
+
+    measured = cp.measure(through_a_link, today=date(2026, 9, 8))
+    assert measured["gate_status"] == "measured"
+    assert measured["captures_scanned"] == 1
+    assert measured["findings"] == []
+    assert measured["claims"]["live"] == 1
+
+
+def test_the_library_the_gate_measures_is_the_one_this_repo_commits() -> None:
+    """The base the rule stops at, pinned where it can be — in the gate.
+
+    Moving the containment question up to the library closes the package
+    directory and makes the **library** the path nothing asks about, which is
+    the same shape one step out again. It cannot be closed inside the module:
+    the base is whatever the caller named, and refusing a caller's own root is
+    the fail-closed failure the control above exists to prevent. What can be
+    done is to ask it once about the root the shipped gate actually uses, which
+    is a fact about this repository rather than a rule about an argument. So
+    the recursion stops here, deliberately and in a test, rather than in a
+    sentence saying it does not matter.
+    """
+    assert cp._committed_at(_REPO_ROOT, Path("connectors"))
+    packages = [package for package in sorted(_LIBRARY.iterdir()) if package.is_dir()]
+    # A clean zero over a scan nobody made is the failure this module's own
+    # floor exists to refuse, and the list below is a scan.
+    assert len(packages) >= cp.MINIMUM_CAPTURES_SCANNED, len(packages)
+    borrowed = [
+        package.name for package in packages if not cp._committed_at(_LIBRARY, Path(package.name))
+    ]
+    assert borrowed == [], borrowed
+
+
 def test_the_request_under_test_may_not_supply_the_command_that_certifies_it(
     library: Path, tmp_path: Path, provenance_floor: None
 ) -> None:
@@ -1437,6 +1599,114 @@ def test_a_refusal_that_quotes_a_command_is_inside_the_disclosed_ceiling(
     # does refuse, and it is refused.
     (finding,) = _cited(f"The fetch of {url} was REFUSED by robots.txt and never issued.\n")
     assert "commits no command for it" in finding["reason"], finding["reason"]
+
+
+def test_the_check_may_not_manufacture_the_boundaries_it_looks_for(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """`test_the_request_under_test_may_not_supply_the_command_that_certifies_
+    it`, one level in — and the level the fix for it created.
+
+    That fix put the client word out of the needles' reach by striking them out
+    and replacing each with a space. A space is not a `[\\w-]` character, so
+    every strike **inserts two word boundaries**, and `_REQUEST_COMMAND` is a
+    rule about boundaries. `<url>curl<url>` carries no client word by this
+    module's own predicate — the `curl` sits inside the longer token
+    `apicurlhttps`, which `test_a_client_name_inside_a_longer_word_is_not_a_
+    client` establishes is not a client — and the check's own edit turned it
+    into ` curl ` and certified it. The needles did not supply the token there;
+    they supplied the **delimiters** that made a non-token into one, which is
+    the same independence property failing in a place it was not being watched.
+
+    Deletion is not the other answer, and the third case is why: it *splices*,
+    welding `cu<url>rl` into a `curl` that is in no committed file. Both
+    spellings rewrite the input and then measure the rewrite. The line is now
+    read as committed, and independence is a question about position.
+    """
+    _real_board(library)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    source = repo / "notes.md"
+    url = f"https://{_REAL_SITE}/api/job-board-api"
+
+    def _cited(text: str, **capture: Any) -> list[dict[str, str]]:
+        source.write_text(text, encoding="utf-8")
+        _write_capture(
+            library,
+            captured_at="2026-09-08",
+            status=200,
+            provenance=pc.TRANSCRIBED,
+            transcribed_from="notes.md",
+            **capture,
+        )
+        return _provenance_findings(library, repo_root=repo)
+
+    # The boundaries are manufactured on both sides of the client word by the
+    # two needle occurrences that surround it.
+    (finding,) = _cited(f"{url}curl{url}\n", url=url)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+    # One occurrence is enough when a body value supplies the other side, so
+    # the case does not depend on a source naming the URL twice.
+    body = {"page": 1}
+    needle = json.dumps(body, separators=(",", ":"))[1:-1]
+    (finding,) = _cited(f"{needle}curl{url}\n", url=url, body=body)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+    # The other direction, which is why a space was chosen over a deletion in
+    # the first place: removing the needle welds the halves into a client word.
+    (finding,) = _cited(f"cu{url}rl\n", url=url)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+    # A client word that a needle only **partially** covers is covered: the
+    # ambiguous case resolves fail-closed, since one character outside a URL is
+    # not a command.
+    short = f"https://{_REAL_SITE}/cur"
+    (finding,) = _cited(f"{short}l -s\n", url=short)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+    # And the same, welded by the one edit that happens *before* this check —
+    # `_command_lines` drops backslashes, so `…/cur` + `\\l` renders as `…/curl`.
+    # The property this rests on is not that the line is untouched (it is not)
+    # but that the span map and the search read the same string, so a client
+    # word made out of a needle's own characters still lands on that needle's
+    # span. This is the assertion that pins it.
+    (finding,) = _cited(f"{short}\\l -s\n", url=short)
+    assert "commits no command for it" in finding["reason"], finding["reason"]
+
+    # The controls. A real command whose URL is repeated, and a real command
+    # whose URL legitimately contains a client name, both still resolve — the
+    # fix must not buy its refusals by refusing everything.
+    assert _cited(f"curl -s '{url}' # against {url}\n", url=url) == []
+    curl_url = f"https://{_REAL_SITE}/curl/jobs"
+    assert _cited(f"curl -s '{curl_url}'\n", url=curl_url) == []
+
+
+def test_a_needle_that_is_not_there_covers_nothing(library: Path) -> None:
+    """What the fix above introduces, asked about before something else asks.
+
+    Independence is now a map of the character ranges the needles occupy, and
+    an **empty** needle occupies none. Recording its zero-length spans would
+    make it overlap every match instead — a span at 3 sits inside a match from
+    2 to 6 — so a single empty string would refuse every transcribed claim in
+    the library on the strength of something that is not in the file. It also
+    constrains nothing, `"" in line` being true of every line, so it was never
+    evidence to begin with.
+
+    Nothing produces one today: `_body_needles` renders through `json.dumps`,
+    whose shortest output is two characters, and `check_transcribed` refuses an
+    empty `url` before the list is built. This is the guard for the caller that
+    forgets, pinned rather than left to the next reader to rediscover — the
+    same reason `_committed_at`'s absolute-path behaviour is written down.
+    """
+    url = f"https://{_REAL_SITE}/search"
+    assert cp._issues_the_request(f"curl -s '{url}'", ["", url]) is True
+
+    # And the scan advances one character rather than one needle, so
+    # overlapping occurrences are all mapped: a span missed is a span a client
+    # word can hide behind.
+    assert cp._needle_spans("aaa", ["aa"]) == [(0, 2), (1, 3)]
+    assert cp._needle_spans("abc", [""]) == []
 
 
 def test_the_pieces_of_a_request_spread_over_several_commands_are_not_one_command(

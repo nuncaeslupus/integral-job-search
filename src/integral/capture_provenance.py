@@ -81,11 +81,17 @@ source has to be**:
 * **a command for this request.** One line of that file must carry a
   request-issuing command (`curl`, `wget`, `xh`, `Invoke-WebRequest`), the
   captured URL, and every top-level body field — the three together, on that
-  line — and the command must be found in what is **left of the line once the
-  URL and the body are struck out**. Naming a URL is not issuing one, and the
-  string under test may not supply the evidence about itself: a URL whose path
-  reads `/curl/`, or an ordinary job-board body of `{"q": "curl"}`, certified
-  its own capture until a second reader asked. So the refused class is exactly
+  line — and that command must sit **where the URL and the body do not**, at a
+  position in the committed line that no occurrence of either covers. Naming a
+  URL is not issuing one, and the string under test may not supply the evidence
+  about itself: a URL whose path reads `/curl/`, or an ordinary job-board body
+  of `{"q": "curl"}`, certified its own capture until a second reader asked.
+  The question is asked about the line the check is **given**, never about one
+  it has edited: a check that first strikes the needles out of its own input
+  supplies boundaries where they were, and `<url>curl<url>` — no client word by
+  this module's own predicate — certified itself on the two spaces the edit
+  left behind. `_command_lines` normalises before that, and says why its two
+  normalisations are a rendering rather than an invention. So the refused class is exactly
   **a mention that names no client command of its own** — a prose sentence
   carrying the URL, a dated comment about it, a note saying the fetch was
   refused. T113 decided that class when it refused to write `pythonorg_en`'s
@@ -216,9 +222,61 @@ def _committed_at(root: Path, relative: Path) -> bool:
     It says nothing about existence: a path with no file at it is "committed
     here" and fails later, on the read, with a reason about the file rather than
     about a link.
+
+    **Where the regress stops, stated rather than left to be discovered.**
+    Resolving the base means the base is the one path this rule never asks
+    about, so "is it committed here?" is only ever answered about the
+    components **below** it. That is not a hole to be closed by asking the same
+    question about the base's own parent — that recursion has no floor short of
+    `/`, and refusing a checkout reached through a symlink is fail-closed for
+    every package at once. It is a statement about who is trusted: the base is
+    the caller's own argument, and every path this module *derives* below it
+    must be committed. So the base has to be the widest thing the caller named.
+    A reader handed a package and asking about `probe/x` makes the package the
+    base and cannot see a symlinked package; `_committed_in_package` is that
+    reader with the library as its base instead, which is why every
+    package-relative question goes through it and not through here. The last
+    base of all — the library `measure` was pointed at, and the repo root
+    `check_transcribed` was handed — is the caller's, and
+    `test_the_library_the_gate_measures_is_the_one_this_repo_commits` is where
+    the shipped gate's own root is pinned.
+
+    "Committed" is a filesystem question everywhere it is asked, and it is the
+    same disclosure `check_transcribed` makes about its source: *resolves here*
+    is not *is tracked by git*. An untracked working-tree file satisfies it;
+    `tools/verified_gate.sh` measuring a clean checkout is what makes that gap
+    hard to reach rather than closed.
+
+    `relative` is assumed relative. An **absolute** one makes `base / relative`
+    the absolute path itself, which resolves to itself whenever no component of
+    it is a link, so the answer is `True` and says nothing about `root`. Every
+    caller here rejects an absolute path before asking (`check_transcribed`
+    explicitly, `check_live` behind `_PLAIN_FILENAME`, the other two by passing
+    a constant), and a fifth that forgets would get a fail-open out of a
+    function whose name promises containment.
     """
     base = root.resolve()
     return (base / relative).resolve() == base / relative
+
+
+def _committed_in_package(package: Path, relative: Path) -> bool:
+    """`_committed_at`, asked with the **library** as the base, not the package.
+
+    The same rule one level up, and the level that was missing. `_committed_at`
+    resolves its base by design, so a reader that makes the *package* the base
+    is asking a question the package directory itself is exempt from: a package
+    that is a committed symlink at a sibling — git stores one as mode `120000`
+    — answers every question out of the sibling's artefact, and a package
+    committing no capture at all reads as an enforced `live`. That is the
+    borrowing `read_record`'s guarantee refuses, moved up one directory from
+    `probe/` to the package.
+
+    So the base is `package.parent` — the library the package appears in — and
+    the package's own name becomes the first component of the relative path,
+    checked like every other component. A library reached *through* a symlink
+    still passes, because that base is resolved: the caller pointed at it.
+    """
+    return _committed_at(package.parent, Path(package.name) / relative)
 
 
 @dataclass(frozen=True)
@@ -264,8 +322,13 @@ def read_record(package: Path) -> dict[str, Any] | None:
     _not_the_cheapest_way_to_pass` with the deletion replaced by a link. Reading
     it here rather than in each check is what keeps `measure`'s claim tally and
     `check_capture`'s verdict from disagreeing about which file was read.
+
+    Asked through `_committed_in_package`, so the package directory is one of
+    the components the question covers rather than the base it is asked from:
+    a symlinked `probe/` and a symlinked package borrow the same bytes, and
+    only the first of the two was refused when the package was the base.
     """
-    if not _committed_at(package, Path(PROBE_DIRNAME) / PROBE_CAPTURE_FILE):
+    if not _committed_in_package(package, Path(PROBE_DIRNAME) / PROBE_CAPTURE_FILE):
         return None
     path = package / PROBE_DIRNAME / PROBE_CAPTURE_FILE
     try:
@@ -323,10 +386,13 @@ def check_live(package: Path, record: dict[str, Any], today: date) -> list[str]:
     # a capture certify itself against bytes it never received. `_committed_at`
     # is asked about the whole relative path rather than the leaf, so `probe/`
     # being a link is the same refusal as `list.html` being one: this check used
-    # to resolve both sides and could not see the directory at all.
+    # to resolve both sides and could not see the directory at all. Asked from
+    # the library rather than from the package, so the package directory is
+    # inside the question too — the base of a containment rule is the one path
+    # it cannot see.
     probe = package / PROBE_DIRNAME
     path = probe / name
-    if not _committed_at(package, Path(PROBE_DIRNAME) / name):
+    if not _committed_in_package(package, Path(PROBE_DIRNAME) / name):
         reasons.append(
             f"response.file {name!r} does not resolve inside the package's own "
             "probe/ — a symlink is not a committed response"
@@ -379,13 +445,54 @@ def _command_lines(text: str) -> list[str]:
     source. Backslashes are then dropped, because the committed command is
     usually a shell line inside a YAML scalar and `-d '{\\"Keyword\\":\\"python\\"}'`
     is the same request as the body it is being compared against.
+
+    **These two are the only edits made to a source line, and both are
+    renderings of what a shell reads rather than inventions of the check.** A
+    continuation becomes a space because a shell joins one that way; `cu\\rl`
+    becomes `curl` because a shell reads the backslash as an escape of an
+    ordinary character. Each can therefore put a word boundary where the raw
+    bytes have none — which is the accident `_issues_the_request` refuses to
+    commit itself, and the distinction is whose edit it is. A boundary a reader
+    of the file would also see is the file's; one that exists only because the
+    check deleted the string under test is the check's, and is not evidence.
+    Both happen **before** the independence question, over the same string it
+    is then asked about.
     """
     joined = re.sub(r"\\[ \t]*\r?\n", " ", text)
     return [line.replace("\\", "") for line in joined.splitlines()]
 
 
+def _needle_spans(line: str, needles: list[str]) -> list[tuple[int, int]]:
+    """Every character range of `line` that an occurrence of a needle occupies.
+
+    The scan advances **one character**, not one needle, so overlapping
+    occurrences of the same needle are all recorded: a span missed here is a
+    span a client word can hide behind, which is the fail-open direction.
+
+    An **empty** needle is skipped, and that is a decision rather than an
+    oversight. It occupies no characters, so it covers nothing; it also
+    constrains nothing, since `"" in line` is true of every line, so it was
+    never evidence about anything. Recording its zero-length spans would make
+    it cover *everything* instead — `start < match.end() and match.start() <
+    end` is true of a zero-length span sitting inside a match — and every
+    transcribed claim would be refused on the strength of a string that is not
+    there. `_body_needles` cannot produce one today (`json.dumps` of any value
+    is at least two characters) and `check_transcribed` rejects an empty `url`
+    before it builds the list; this is the guard for the caller that does not.
+    """
+    spans: list[tuple[int, int]] = []
+    for needle in needles:
+        if not needle:
+            continue
+        start = line.find(needle)
+        while start != -1:
+            spans.append((start, start + len(needle)))
+            start = line.find(needle, start + 1)
+    return spans
+
+
 def _issues_the_request(line: str, needles: list[str]) -> bool:
-    """Is this one line a committed command for exactly this request?
+    r"""Is this one line a committed command for exactly this request?
 
     Two conditions, and the second is the one a second reader found missing.
 
@@ -403,17 +510,45 @@ def _issues_the_request(line: str, needles: list[str]) -> bool:
     the check. So the command is looked for in what is **left of the line once
     the needles are struck out**.
 
-    They are replaced by a space rather than deleted, because deleting them
-    could splice a client word out of the two halves that surrounded one — a
-    fix that manufactured the evidence it removed would be the same defect
-    again, in the other direction.
+    **The line is not edited to ask that.** Striking the needles out — whether
+    by deletion or by replacing each with a space — is a check that rewrites
+    its own input, and both spellings are wrong in opposite directions.
+    Deletion can *splice* a client word out of the two halves that surrounded a
+    needle: `cu<url>rl` becomes `curl`. A space cannot splice, but a space is
+    not a `[\w-]` character, so every strike **inserts two word boundaries** —
+    and `_REQUEST_COMMAND` is a rule about boundaries. `<url>curl<url>` carries
+    no client word by the module's own predicate (`curl` sits inside the longer
+    token `apicurlhttps`, which
+    `test_a_client_name_inside_a_longer_word_is_not_a_client` establishes is
+    not a client), and striking turns it into ` curl ` and certifies it. Each
+    spelling manufactured the evidence it was supposed to be independent of:
+    one the token, the other the delimiters that make a non-token into one.
+
+    So this function edits nothing, and independence is asked as a question
+    about **position**: is there a client word at a span that no occurrence of
+    any needle covers? The needles then supply neither the word nor its edges.
+    A match that overlaps a needle at all — even partially — counts as covered,
+    which is the fail-closed direction of the only ambiguous case.
+
+    **The property is not "the line is untouched"** — `_command_lines` has
+    already joined continuations and dropped backslashes, and claiming
+    otherwise would be a docstring certifying something it does not check, the
+    thing this task exists to refuse. It is that the span map and the search
+    read the **same string**: whatever normalisation happened upstream happened
+    to both, so a client word welded out of a needle's own characters still
+    lands on that needle's span and is still covered. A URL ending `/cur`
+    followed by `\l` renders as `…/curl` and is refused for exactly that
+    reason. What the normalisations may fairly create is a boundary a *shell*
+    would also read there; what nothing may create is one that exists only
+    because the check removed the string it was measuring.
     """
     if not all(needle in line for needle in needles):
         return False
-    remainder = line
-    for needle in needles:
-        remainder = remainder.replace(needle, " ")
-    return _REQUEST_COMMAND.search(remainder) is not None
+    covered = _needle_spans(line, needles)
+    return any(
+        not any(start < match.end() and match.start() < end for start, end in covered)
+        for match in _REQUEST_COMMAND.finditer(line)
+    )
 
 
 def check_transcribed(
@@ -436,12 +571,15 @@ def check_transcribed(
     strongest-sounding word.
 
     *Command* — one line of that file must carry a request-issuing command
-    together with the URL and every top-level body field, and the command must
-    still be there once the URL and the body are **struck out of the line**.
-    Naming a URL is not issuing one, and the strings under test may not be the
-    evidence about themselves: a URL whose path reads `/curl/`, or a body of
-    `{"q": "curl"}` — an ordinary thing for this tool to have searched — used to
-    certify their own capture out of a file containing nothing else.
+    together with the URL and every top-level body field, and that command must
+    sit **somewhere the URL and the body do not**. Naming a URL is not issuing
+    one, and the strings under test may not be the evidence about themselves: a
+    URL whose path reads `/curl/`, or a body of `{"q": "curl"}` — an ordinary
+    thing for this tool to have searched — used to certify their own capture out
+    of a file containing nothing else. The question is asked about the line as
+    committed rather than about a line the check has edited, because an edit
+    that removes the needles supplies boundaries of its own; `_issues_the_
+    request` says what each spelling of that got wrong.
 
     So the refused class is precisely **a mention that names no client command
     of its own**: a prose sentence carrying the URL, a dated comment about it, a
@@ -559,15 +697,41 @@ def check_transcribed(
     return reasons
 
 
+def _borrowed_package(package: Path) -> Finding | None:
+    """The finding a package directory that is not the library's own raises.
+
+    `None` when the library commits a package at that name. One function rather
+    than a condition written out at both call sites, because two spellings of
+    one rule is the defect this task was blocked for twice: `check_capture`
+    asks it about the package it was handed, and `measure` asks it about every
+    package it enumerates, *before* reading anything out of one — including the
+    `site` the example-domain exclusion is decided from, which is otherwise a
+    decision made on borrowed bytes.
+    """
+    if _committed_at(package.parent, Path(package.name)):
+        return None
+    return Finding(
+        package.name,
+        "absent",
+        "the package directory is not the directory this library commits at that name "
+        "— a symlinked package borrows another package's capture instead of holding "
+        "one of its own",
+    )
+
+
 def check_capture(
     package: Path, repo_root: Path = _REPO_ROOT, today: date | None = None
 ) -> Finding | None:
     """The finding this package's capture raises, or `None` if it has none."""
     today = date.today() if today is None else today
 
+    borrowed = _borrowed_package(package)
+    if borrowed is not None:
+        return borrowed
+
     record = read_record(package)
     if record is None:
-        if not _committed_at(package, Path(PROBE_DIRNAME) / PROBE_CAPTURE_FILE):
+        if not _committed_in_package(package, Path(PROBE_DIRNAME) / PROBE_CAPTURE_FILE):
             return Finding(
                 package.name,
                 "absent",
@@ -631,6 +795,14 @@ def measure(
     claims: dict[str, int] = dict.fromkeys(sorted(DECLARABLE), 0)
     scanned = 0
     for package in packages:
+        # Before the site is read, because reading it out of a borrowed package
+        # reads it out of the donor: a package linked at an example one would be
+        # excluded by the donor's domain and never counted at all.
+        borrowed = _borrowed_package(package)
+        if borrowed is not None:
+            scanned += 1
+            findings.append(borrowed)
+            continue
         if is_example_site(read_package(package).site):
             examples.append(package.name)
             continue
