@@ -2,5 +2,6 @@
   "captured_at": "2026-09-02",
   "url": "https://himalayas.app/jobs/api?limit=20",
   "status": 200,
-  "surface": "laptop"
+  "surface": "laptop",
+  "provenance": "unrecorded"
 }

@@ -8,5 +8,6 @@
   },
   "status": 200,
   "surface": "laptop",
-  "provenance": "transcribed"
+  "provenance": "transcribed",
+  "transcribed_from": "connectors/ruled-out.yaml"
 }

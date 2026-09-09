@@ -2,5 +2,6 @@
   "captured_at": "2026-08-30",
   "url": "https://www.jobs.ac.uk/search/computer-science",
   "status": 200,
-  "surface": "laptop"
+  "surface": "laptop",
+  "provenance": "unrecorded"
 }
