@@ -106,6 +106,7 @@ from integral.connectors import (
     build_list_urls,
     load_connector,
     parse_connector,
+    query_pair_names,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -768,14 +769,29 @@ def write_evidence(evidence: Path | None = None, directory: Path | None = None) 
 # contains `page` and certifies the pair a server may or may not honour.
 #
 # `connectors._a_page_placeholder_and_a_query_key_imply_each_other` closes it
-# by counting **occurrences of the name**, not positions of the placeholder —
-# a rule over the query string's own grammar (RFC 3986 §3.4: a sequence of
-# `name=value` pairs, with no prohibition on a repeated name) rather than one
-# more shape added to a list. Measured the same way T113's own three routes
-# are: a well-formed library can never carry an instance of what the load-time
-# rule refuses, so a scan of the committed `connectors/` directory finds
-# nothing to certify either way — the probes below are what would notice the
-# rule going missing, weakening, or being satisfied by a comment instead.
+# by counting **occurrences of the name** (`connectors.query_pair_names`, over
+# both `&`- and `;`-separated pairs — see `connectors._QUERY_PAIR_SEPARATORS`),
+# not positions of the placeholder, checked once ahead of the per-`mode`
+# dispatch rather than inside `query_param`'s own branch — so it is closed on
+# two axes a first version answered as one enumerated case:
+#
+# * the **mode** axis — a duplicated query key is a defect of the URL, which
+#   every mode that names a `param` shares (`body_field` included: a POST
+#   board's *body* field can be certified while its *URL* repeats the same
+#   name, and a framework merging query/body namespaces may honour the fixed
+#   query occurrence instead);
+# * the **separator** axis — RFC 3986 §3.4 states no `name=value` pair
+#   grammar at all (its `query` ABNF is `*( pchar / "/" / "?" )`, and calls
+#   pairs only a frequent *usage*); the grammar this actually rests on is
+#   `application/x-www-form-urlencoded`, which `;` is not part of — but is a
+#   historical alternate (RFC 1866, pre-5.4 PHP) some servers still honour, so
+#   it counts as a pair boundary here beside `&`.
+#
+# Measured the same way T113's own three routes are: a well-formed library can
+# never carry an instance of what the load-time rule refuses, so a scan of the
+# committed `connectors/` directory finds nothing to certify either way — the
+# probes below are what would notice the rule going missing, weakening, or
+# being satisfied by a comment instead.
 DEFAULT_T154_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T154.json"
 
 DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
@@ -827,20 +843,79 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
         issues=("https://boards.test/jobs?page=1", "https://boards.test/jobs?page=2"),
         route="control — the shape every paginating GET package in this library actually uses",
     ),
+    # ---- the mode axis (F1): the first version lived inside `query_param`'s
+    # own branch, so `body_field` (and `none`) never reached it at all.
+    UrlProbe(
+        name="the named key sent twice, across mode: body_field's own query string",
+        url_pattern="https://boards.test/Search/ExecuteSearch?Page=1&Page=2",
+        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 3},
+        body_json={"Keyword": _PROBE_QUERY, "Page": PAGE_PLACEHOLDER},
+        loads=False,
+        issues=(),
+        route="T154 route 4, the mode axis (F1) — the certifying key lives in the body, "
+        "but the URL repeats its own name too; a framework that merges query and body "
+        "namespaces ($_REQUEST, Flask's request.values, Rails' params) may honour the "
+        "fixed query occurrence over the varying body one; fail-open",
+    ),
+    UrlProbe(
+        name="a body_field board with one fixed query pair beside the body field still loads",
+        url_pattern="https://boards.test/Search/ExecuteSearch?Page=1",
+        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
+        body_json={"Keyword": _PROBE_QUERY, "Page": PAGE_PLACEHOLDER},
+        loads=True,
+        issues=(
+            "https://boards.test/Search/ExecuteSearch?Page=1",
+            "https://boards.test/Search/ExecuteSearch?Page=1",
+        ),
+        route="control — a single, non-duplicated query pair beside the varying body field "
+        "is not this rule's business, on the mode axis the same way the unrelated-key "
+        "control is on the name axis",
+    ),
+    # ---- the separator axis (F2).
+    UrlProbe(
+        name="the named key sent twice via a ';'-separated pair",
+        url_pattern="https://boards.test/jobs?page=1;page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 route 4, the separator axis (F2) — ';' is the historical alternate "
+        "pair separator (RFC 1866, pre-5.4 PHP's arg_separator.input); a server that "
+        "still splits on it sees `page` twice, and one that does not sees a value "
+        "(`1;page=1`, `1;page=2`) that never parses as a page number either way; "
+        "fail-open under both readings",
+    ),
 )
 
 #: The floor `DUPLICATE_KEY_PROBES` is checked against, committed in place of
-#: the count of the day for T100's reason. Five probes ship today; the names
-#: that must stay are pinned **by name** in `tests/test_pagination_capture.py`,
-#: because a count alone is satisfied by any N probes and protects a
-#: particular shape only by coincidence.
-MINIMUM_DUPLICATE_KEY_PROBES = 4
+#: the count of the day for T100's reason — but set **equal** to today's count
+#: (8) rather than below it: the by-name pin in
+#: `tests/test_pagination_capture.py` already protects every individual shape,
+#: so a lower floor's only effect would be slack that absorbs a bulk deletion
+#: the pin does not happen to name — the second reader's point on F5. Equal to
+#: the population, the first deletion of any kind breaches it.
+MINIMUM_DUPLICATE_KEY_PROBES = 8
 
-#: The floor the real-library half of this gate is checked against: how many
-#: query-string keys the committed connectors declare between them (14 today,
-#: across 10 packages) — never the count of the day, for the same reason
-#: `MINIMUM_REQUEST_KEYS` is a floor rather than a snapshot.
-MINIMUM_QUERY_KEYS_SCANNED = 8
+#: The floor the real-library half of this gate is checked against.
+#:
+#: **Occurrences of a query key, not distinct names** (F6): `query_keys`
+#: returns a `frozenset`, so a `url_pattern` naming a key twice would
+#: contribute 1 to a count built from it — collapsing the very duplication
+#: this gate exists to measure out of its own denominator. `query_pair_names`
+#: (occurrences, `connectors.py`) is what this counts instead.
+#:
+#: **Scoped to the packages route 4 actually reaches** (F6): every package
+#: whose `pagination.mode` is not `"none"` — the same test route 4's own load
+#: check applies to, after the mode-axis fix (F1) — not every shipped package
+#: regardless of mode. Six packages ship in that scope today and declare
+#: eight occurrences between them (`arbeitnow_en`, `builtin_en`,
+#: `nofluffjobs_en`, `wellfound_en` one each; `jobfluent_es`, `tecnoempleo_es`
+#: two each). The floor leaves room for **one** of the two double-key
+#: packages to retire without a false alarm — losing `tecnoempleo_es` (2)
+#: leaves 6, still at or above the floor — while losing both would leave 4,
+#: below it, and staying far above what a library with no package this rule
+#: reaches would produce (0). Raise it when the library grows; it is a floor,
+#: not a target, mirroring `MINIMUM_REQUEST_KEYS`'s own stated margin.
+MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED = 5
 
 
 def probe_duplicate_page_keys() -> tuple[list[str], int]:
@@ -868,9 +943,9 @@ def probe_duplicate_page_keys() -> tuple[list[str], int]:
 
 
 def measure_duplicate_page_keys(directory: Path | None = None) -> dict[str, Any]:
-    """T154's evidence: the committed library's query keys (the denominator,
-    resolved at call time for the reason `measure` gives), plus the probes
-    above.
+    """T154's evidence: the committed library's query-key occurrences (the
+    denominator, resolved at call time for the reason `measure` gives), plus
+    the probes above.
 
     The real-library half can only ever find zero — a package carrying route
     4's shape cannot load once
@@ -880,12 +955,22 @@ def measure_duplicate_page_keys(directory: Path | None = None) -> dict[str, Any]
     routes 1-3, not a gap in this one: the scan says the committed library is
     clean, and the probes are what would notice the *rule* going missing
     rather than the library staying honest by construction.
+
+    **Scoped to `pagination.mode != "none"`, and counted in occurrences, not
+    distinct names (F6).** A package with `mode: "none"` sends no page key at
+    all — route 4 never reaches it, so pooling it into the denominator would
+    be measuring a population the rule does not touch. And `query_keys`
+    returns a `frozenset`: summing its length would make a `url_pattern`
+    naming a key twice contribute *fewer* occurrences to scan than one naming
+    two distinct keys once each, which erases the very phenomenon a
+    duplicate-key gate exists to count. `connectors.query_pair_names` returns
+    one entry per occurrence for exactly this reason.
     """
     directory = DEFAULT_CONNECTORS_DIR if directory is None else directory
     packages = sorted(p for p in directory.iterdir() if p.is_dir()) if directory.is_dir() else []
 
-    query_keys_scanned = 0
-    scanned = 0
+    query_key_occurrences_scanned = 0
+    paginated_packages_scanned = 0
     for package in packages:
         if is_example_site(read_package(package).site):
             continue
@@ -893,28 +978,34 @@ def measure_duplicate_page_keys(directory: Path | None = None) -> dict[str, Any]
             connector = load_connector(package)
         except ConnectorError:
             # An unreadable package is T113's finding, not this gate's, and it
-            # sends no request at all — contributing no query keys either way
+            # sends no request at all — contributing no occurrences either way
             # is the honest count, not a skipped one.
             continue
-        scanned += 1
-        query_keys_scanned += len(query_keys(connector.list.url_pattern))
+        if connector.list.pagination.mode == "none":
+            # Route 4 never reaches a package with no page key at all —
+            # pooling it in would count a population outside what the rule
+            # touches (F6).
+            continue
+        paginated_packages_scanned += 1
+        query_key_occurrences_scanned += len(query_pair_names(connector.list.url_pattern))
 
     defects, probes_checked = probe_duplicate_page_keys()
 
     measured: dict[str, Any] = {
         "duplicated_page_keys_certified": len(defects),
-        "query_keys_scanned": query_keys_scanned,
-        "packages_scanned": scanned,
+        "query_key_occurrences_scanned": query_key_occurrences_scanned,
+        "paginated_packages_scanned": paginated_packages_scanned,
         "duplicate_key_probes_checked": probes_checked,
         "defects": defects,
         "gate_status": "measured",
     }
-    if query_keys_scanned < MINIMUM_QUERY_KEYS_SCANNED:
+    if query_key_occurrences_scanned < MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED:
         measured["gate_status"] = "unmeasured"
         measured["unmeasured_reason"] = (
-            f"only {query_keys_scanned} query key(s) across {scanned} package(s) "
-            f"(floor {MINIMUM_QUERY_KEYS_SCANNED}) — zero certified duplicates over a "
-            "library nobody read is not a pass"
+            f"only {query_key_occurrences_scanned} query-key occurrence(s) across "
+            f"{paginated_packages_scanned} paginated package(s) "
+            f"(floor {MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED}) — zero certified duplicates "
+            "over a library nobody read is not a pass"
         )
     elif probes_checked < MINIMUM_DUPLICATE_KEY_PROBES:
         measured["gate_status"] = "unmeasured"
@@ -926,15 +1017,19 @@ def measure_duplicate_page_keys(directory: Path | None = None) -> dict[str, Any]
 
 
 def record_duplicate_page_keys(measured: dict[str, Any]) -> dict[str, Any]:
-    """What is committed, out of what was measured — `query_keys_scanned`,
-    `packages_scanned` and `duplicate_key_probes_checked` are dropped and
-    floored for T100's reason: they move the moment anybody adds or removes a
-    connector or a probe, and committing them as exact values would redden
-    `make evidence` on a change that is not a finding. The numerator is not
-    dropped."""
-    dropped = ("query_keys_scanned", "packages_scanned", "duplicate_key_probes_checked")
+    """What is committed, out of what was measured —
+    `query_key_occurrences_scanned`, `paginated_packages_scanned` and
+    `duplicate_key_probes_checked` are dropped and floored for T100's reason:
+    they move the moment anybody adds or removes a connector or a probe, and
+    committing them as exact values would redden `make evidence` on a change
+    that is not a finding. The numerator is not dropped."""
+    dropped = (
+        "query_key_occurrences_scanned",
+        "paginated_packages_scanned",
+        "duplicate_key_probes_checked",
+    )
     committed = {key: value for key, value in measured.items() if key not in dropped}
-    committed["query_keys_scanned_at_least"] = MINIMUM_QUERY_KEYS_SCANNED
+    committed["query_key_occurrences_scanned_at_least"] = MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED
     committed["duplicate_key_probes_at_least"] = MINIMUM_DUPLICATE_KEY_PROBES
     return committed
 
@@ -959,16 +1054,25 @@ def write_duplicate_page_keys_evidence(
 def _main(argv: list[str]) -> int:
     """`python -m integral.pagination_capture [evidence-path]` → T113's
     evidence and, in the same run, T154's — the fenced gate for both tasks
-    invokes only this module, so one entry point has to write both files."""
+    invokes only this module, so one entry point has to write both files.
+
+    The two gates' exit codes are combined by **severity**, not by which ran
+    last: `1` (a real failure) from either beats `3` (unmeasured) from the
+    other, which beats `0`. T154's own `unmeasured` reads `1`, not the `3`
+    T113's keeps — see the exit-code table in this function's body for why:
+    matching `capture_provenance._main` (T153, the same module family)
+    rather than repeating T113's older, `make evidence`-transparent
+    convention in a second gate that ships beside it (F3).
+    """
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     evidence_path = Path(positional[0]) if positional else None
     measured = write_evidence(evidence_path)
     print(json.dumps(measured, ensure_ascii=False))
 
-    exit_code = 0
+    t113_code = 0
     if measured["gate_status"] == "unmeasured":
         print(measured["unmeasured_reason"], file=sys.stderr)
-        exit_code = 3
+        t113_code = 3
     else:
         for row in measured["findings"]:
             print(
@@ -982,23 +1086,32 @@ def _main(argv: list[str]) -> int:
             measured["paginated_request_keys_no_capture_measured"]
             or measured["url_side_routes_open"]
         ):
-            exit_code = 1
+            t113_code = 1
 
     duplicate_evidence_path = None if evidence_path is None else evidence_path.parent / "T154.json"
     duplicate_measured = write_duplicate_page_keys_evidence(duplicate_evidence_path)
     print(json.dumps(duplicate_measured, ensure_ascii=False))
 
+    t154_code = 0
     if duplicate_measured["gate_status"] == "unmeasured":
         print(duplicate_measured["unmeasured_reason"], file=sys.stderr)
-        if exit_code == 0:
-            exit_code = 3
+        # T115/T153's rule, applied to this gate rather than merely cited
+        # beside it (F3): a floor breach that `make evidence` prints as
+        # "unmeasured (recorded)" and walks past — while the last-committed
+        # T154.json still reads `gate_status: measured` — is a floor that
+        # does not fail the gate, which is decoration. `1`, not `3`.
+        t154_code = 1
     else:
         for defect in duplicate_measured["defects"]:
             print(f"fail-open: duplicate-key probe — {defect}", file=sys.stderr)
-        if duplicate_measured["duplicated_page_keys_certified"] and exit_code != 1:
-            exit_code = 1
+        if duplicate_measured["duplicated_page_keys_certified"]:
+            t154_code = 1
 
-    return exit_code
+    if t113_code == 1 or t154_code == 1:
+        return 1
+    if t113_code == 3 or t154_code == 3:
+        return 3
+    return 0
 
 
 if __name__ == "__main__":

@@ -473,11 +473,14 @@ def test_a_query_key_repeated_with_a_fixed_value_is_refused_at_load() -> None:
     actually matters. Some servers honour the first occurrence, which pins
     every page this connector requests to page 1.
 
-    The rule is over the query string's own grammar — RFC 3986 §3.4 defines a
-    query as a sequence of `name=value` pairs and does not forbid a repeated
-    name — so it is checked by **counting occurrences of the name**
-    `pagination.param` holds, not by asking whether that name happens to spell
-    `page`. Exercised here under a name that does not."""
+    The rule is over the query string's own grammar — not RFC 3986 §3.4, whose
+    `query` ABNF (`*( pchar / "/" / "?" )`) states no `name=value` pair
+    grammar at all and calls pairs only a frequent *usage*, but
+    `application/x-www-form-urlencoded` (plus its historical `;` alternate,
+    RFC 1866 / pre-5.4 PHP — see `connectors._QUERY_PAIR_SEPARATORS`) — so it
+    is checked by **counting occurrences of the name** `pagination.param`
+    holds, not by asking whether that name happens to spell `page`.
+    Exercised here under a name that does not."""
     duplicated = VALID.replace(
         'url_pattern: "https://www.examplejobs.test/jobs?page={page}"',
         'url_pattern: "https://www.examplejobs.test/jobs?page=1&page={page}"',

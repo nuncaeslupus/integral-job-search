@@ -28,11 +28,13 @@ import yaml
 from integral import capture_provenance as cp
 from integral import pagination_capture as pc
 from integral.connectors import (
+    PAGE_PLACEHOLDER,
     ConnectorError,
     build_list_requests,
     build_list_urls,
     load_connector,
     load_connectors,
+    query_pair_names,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -718,6 +720,100 @@ def test_a_duplicate_under_an_unrelated_key_still_loads(library: Path) -> None:
     ]
 
 
+# ---------------------------------------------------------------------------
+# T154, round 2 — the second reader's F1 (mode axis) and F2 (separator axis)
+#
+# The first version's check lived inside `if mode == "query_param":`, so
+# `mode: body_field` never reached it, and it split only on `&`, so `;` never
+# registered as a second pair. Both are enumerations the closed rule (count
+# occurrences of `pagination.param`'s name, over every mode that names one and
+# over both conventional separators) now covers structurally rather than by
+# adding one more named shape per axis.
+
+
+def test_a_duplicate_query_key_under_mode_body_field_is_refused_at_load(library: Path) -> None:
+    """F1. A POST board whose *body* field is the certified page key can still
+    repeat that same name in its **URL**, and the first version of route 4
+    never reached a `body_field` package at all — `pagination_capture`'s
+    `body_field` arm reads only the captured body, so nothing certifies the
+    query string either. A framework that merges query and body namespaces
+    ($_REQUEST, Flask's `request.values`, Rails' `params`) may honour the
+    fixed query occurrence over the varying body one, which is the same
+    pinned-to-one-page harm on the other half of the request."""
+    _edit_connector(
+        library,
+        url_pattern=f"https://{_REAL_SITE}/Search/ExecuteSearch?Page=1&Page=2",
+        method="POST",
+        body_json={"Keyword": "python", "ResultsPerPage": 25, "Page": PAGE_PLACEHOLDER},
+        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 3},
+        item=None,
+        fields=None,
+        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
+    )
+    with pytest.raises(ConnectorError, match="names 'Page' 2 times"):
+        load_connector(_package(library))
+
+
+def test_a_single_fixed_query_pair_beside_a_body_field_still_loads(library: Path) -> None:
+    """The mode-axis control: a single, non-duplicated query pair beside the
+    varying body field is not this rule's business, the same way an
+    unrelated query-side duplicate under `query_param` mode is not."""
+    _edit_connector(
+        library,
+        url_pattern=f"https://{_REAL_SITE}/Search/ExecuteSearch?Page=1",
+        method="POST",
+        body_json={"Keyword": "python", "ResultsPerPage": 25, "Page": PAGE_PLACEHOLDER},
+        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
+        item=None,
+        fields=None,
+        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
+    )
+    connector = load_connector(_package(library))
+    assert build_list_urls(connector) == [
+        f"https://{_REAL_SITE}/Search/ExecuteSearch?Page=1",
+        f"https://{_REAL_SITE}/Search/ExecuteSearch?Page=1",
+    ]
+
+
+def test_a_semicolon_separated_duplicate_is_refused_at_load(library: Path) -> None:
+    """F2. `;` is not `application/x-www-form-urlencoded`'s pair separator —
+    that grammar recognises only `&` — but it is the historical alternate
+    (RFC 1866; PHP's `arg_separator.input` before 5.4), and RFC 3986 §3.4
+    itself states no pair grammar at all (`query = *( pchar / "/" / "?" )`,
+    pairs being only a stated *usage*). Either reading of
+    `?page=1;page={page}` is a harm this module already refuses: a server
+    that splits on `;` sees `page` sent twice (this task's own certified-
+    duplicate harm), and one that does not sees the single value
+    `1;page=1`/`1;page=2` — never an integer page number, so `page` never
+    actually varies (T113 route 3's "identical request" harm)."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?page=1;page={page}",
+        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+    )
+    assert "names 'page' 2 times" in message
+
+
+def test_a_value_that_merely_contains_an_equals_sign_is_not_a_second_pair(
+    library: Path,
+) -> None:
+    """The separator-axis control: a value that happens to spell `key=value`
+    inside itself is data, not a delimiter — `?q=page%3D1&page={page}` has
+    exactly one `page` pair after percent-decoding is set aside, the same way
+    `test_a_page_index_read_from_a_response_does_not_certify_a_request_key`
+    keeps a response body's own text from being read as a request."""
+    _edit_connector(
+        library,
+        url_pattern="https://realboard.io/jobs?q=page%3D1&page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+    )
+    connector = load_connector(_package(library))
+    assert build_list_urls(connector) == [
+        "https://realboard.io/jobs?q=page%3D1&page=1",
+        "https://realboard.io/jobs?q=page%3D1&page=2",
+    ]
+
+
 def test_every_duplicate_key_probe_agrees_with_the_rule() -> None:
     """The measurement itself, same shape as `test_every_url_side_probe_agrees_with_the_rule`:
     behavioural, so a validator deleted, weakened or replaced by a comment
@@ -741,6 +837,9 @@ def test_the_duplicate_key_probe_table_meets_its_floor_and_keeps_its_names() -> 
         "the same route under a name that does not spell 'page'",
         "a duplicate under an unrelated key is not this rule's business",
         "the ordinary single-occurrence shape still loads",
+        "the named key sent twice, across mode: body_field's own query string",
+        "a body_field board with one fixed query pair beside the body field still loads",
+        "the named key sent twice via a ';'-separated pair",
     } <= names, sorted(names)
     # Both verdicts represented, for the same reason the URL-side table needs
     # both: a table of refusals alone passes over a validator that refuses
@@ -756,7 +855,41 @@ def test_the_committed_library_has_no_duplicated_query_key() -> None:
     measured = pc.measure_duplicate_page_keys(_LIBRARY)
     assert measured["gate_status"] == "measured"
     assert measured["duplicated_page_keys_certified"] == 0
-    assert measured["query_keys_scanned"] >= pc.MINIMUM_QUERY_KEYS_SCANNED
+    assert measured["query_key_occurrences_scanned"] >= pc.MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED
+
+
+def test_the_denominator_counts_occurrences_not_a_set_of_names() -> None:
+    """F6, pinned directly: a `url_pattern` naming a key twice must contribute
+    **two** to a scan built for this gate, not the one a `frozenset` of names
+    (`pagination_capture.query_keys`, T113's own denominator) would give —
+    that difference is exactly the duplication this gate exists to measure,
+    so building its denominator on the set-shaped function would erase the
+    numerator's own phenomenon from it. No package on disk can carry this
+    shape (the load-time rule refuses it), which is why the comparison is
+    made directly against the two functions rather than through a fixture
+    library."""
+    url = "https://boards.test/jobs?page=1&page=2"
+    assert len(query_pair_names(url)) == 2  # what the denominator must use
+    assert len(pc.query_keys(url)) == 1  # what it must not use
+
+
+def test_the_denominator_is_scoped_to_the_packages_route_4_reaches() -> None:
+    """F6's other half: a `mode: none` package sends no page key at all, so
+    pooling it into the denominator would count a population route 4 never
+    touches — `foorilla_en`, `getmanfred_es`, `himalayas_en` and `landingjobs_en`
+    all carry a query key under `mode: none` and must **not** inflate the
+    count `test_the_committed_library_has_no_duplicated_query_key` reads."""
+    measured = pc.measure_duplicate_page_keys(_LIBRARY)
+    # Six packages ship `pagination.mode != "none"` with a query key today
+    # (see `MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED`'s own comment); the four
+    # `mode: none` packages named above must not appear in that count.
+    excluded_occurrences = 0
+    for name in ("foorilla_en", "getmanfred_es", "himalayas_en", "landingjobs_en"):
+        connector = load_connector(_LIBRARY / name)
+        assert connector.list.pagination.mode == "none"
+        excluded_occurrences += len(query_pair_names(connector.list.url_pattern))
+    assert excluded_occurrences > 0  # the exclusion is real, not vacuous
+    assert measured["query_key_occurrences_scanned"] < 14  # T113's old, unscoped total
 
 
 def test_a_library_too_small_to_scan_reports_unmeasured_for_duplicate_keys(
@@ -766,13 +899,13 @@ def test_a_library_too_small_to_scan_reports_unmeasured_for_duplicate_keys(
     one-package fixture with a single query key is exactly that."""
     measured = pc.measure_duplicate_page_keys(library)
     assert measured["gate_status"] == "unmeasured"
-    assert "query key" in measured["unmeasured_reason"]
+    assert "query-key occurrence" in measured["unmeasured_reason"]
 
 
 def test_a_breached_duplicate_key_floor_writes_nothing(
     library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(pc, "MINIMUM_QUERY_KEYS_SCANNED", 100)
+    monkeypatch.setattr(pc, "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED", 100)
     target = tmp_path / "T154.json"
 
     pc.write_duplicate_page_keys_evidence(target, _LIBRARY)
@@ -780,19 +913,55 @@ def test_a_breached_duplicate_key_floor_writes_nothing(
     assert not target.exists()
 
 
+def test_a_breached_duplicate_key_floor_fails_the_entrypoint(
+    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F3: T154's own instance of T115/T153's rule — a breached floor must
+    fail `_main` outright at exit **1**, not the 3 `make evidence` prints as
+    `unmeasured (recorded)` and walks past while the last-committed
+    `T154.json` still reads `gate_status: measured`.
+
+    T113 is given a real capture and left at its default floor so it reads
+    cleanly (`t113_code == 0`) — otherwise a `no probe/captured.json` finding
+    of T113's own would also read exit 1, and the assertion below would pass
+    without T154's branch having been reached at all."""
+    monkeypatch.setattr(pc, "MINIMUM_REQUEST_KEYS", 1)
+    monkeypatch.setattr(pc, "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED", 100)
+    monkeypatch.setattr(pc, "DEFAULT_CONNECTORS_DIR", library)
+    _real_board(library)
+    _write_capture(library, url="https://www.examplejobs.test/jobs?page=1")
+    target = tmp_path / "T113.json"
+
+    t113_only = pc.measure(library)
+    assert t113_only["gate_status"] == "measured"
+    assert t113_only["paginated_request_keys_no_capture_measured"] == 0
+    assert t113_only["url_side_routes_open"] == 0
+
+    assert pc._main(["pagination_capture", str(target)]) == 1
+    sibling = tmp_path / "T154.json"
+    assert not sibling.exists()
+
+
 def test_the_committed_duplicate_key_record_carries_the_floor_and_not_the_count(
     tmp_path: Path,
 ) -> None:
-    """T100's rule, applied to this gate: `query_keys_scanned`,
-    `packages_scanned` and `duplicate_key_probes_checked` all move whenever
-    anybody adds or retires a connector or a probe."""
+    """T100's rule, applied to this gate: `query_key_occurrences_scanned`,
+    `paginated_packages_scanned` and `duplicate_key_probes_checked` all move
+    whenever anybody adds or retires a connector or a probe."""
     target = tmp_path / "T154.json"
     pc.write_duplicate_page_keys_evidence(target, _LIBRARY)
     committed = json.loads(target.read_text(encoding="utf-8"))
 
-    assert committed["query_keys_scanned_at_least"] == pc.MINIMUM_QUERY_KEYS_SCANNED
+    assert (
+        committed["query_key_occurrences_scanned_at_least"]
+        == pc.MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED
+    )
     assert committed["duplicate_key_probes_at_least"] == pc.MINIMUM_DUPLICATE_KEY_PROBES
-    for moving in ("query_keys_scanned", "packages_scanned", "duplicate_key_probes_checked"):
+    for moving in (
+        "query_key_occurrences_scanned",
+        "paginated_packages_scanned",
+        "duplicate_key_probes_checked",
+    ):
         assert moving not in committed
     assert committed["duplicated_page_keys_certified"] == 0
 
