@@ -1,0 +1,258 @@
+{
+  "floors_that_do_not_refuse_the_first_deletion": 0,
+  "findings": [],
+  "dynamic_population_floors": [
+    {
+      "module": "arsenal_source",
+      "name": "MINIMUM_BUNDLE_FILES",
+      "line": 107
+    },
+    {
+      "module": "arsenal_source",
+      "name": "MINIMUM_VENDORED_SKILLS",
+      "line": 112
+    },
+    {
+      "module": "audit_followup",
+      "name": "CASES_AT_LEAST",
+      "line": 72
+    },
+    {
+      "module": "candidate",
+      "name": "MINIMUM_CASES",
+      "line": 1035
+    },
+    {
+      "module": "capture_provenance",
+      "name": "MINIMUM_CAPTURES_SCANNED",
+      "line": 173
+    },
+    {
+      "module": "connector_health",
+      "name": "MINIMUM_PROBES_COMPARED",
+      "line": 943
+    },
+    {
+      "module": "connector_policy",
+      "name": "PACKAGES_AT_LEAST",
+      "line": 485
+    },
+    {
+      "module": "connector_procedure",
+      "name": "MINIMUM_CASES",
+      "line": 68
+    },
+    {
+      "module": "constraints_step",
+      "name": "MINIMUM_CHECKS",
+      "line": 606
+    },
+    {
+      "module": "cv_store",
+      "name": "MINIMUM_CHECKS",
+      "line": 279
+    },
+    {
+      "module": "cv_store",
+      "name": "MINIMUM_READ_CHECKS",
+      "line": 1907
+    },
+    {
+      "module": "decline",
+      "name": "MINIMUM_ASKS",
+      "line": 277
+    },
+    {
+      "module": "elicit_extract",
+      "name": "MINIMUM_CHECKS",
+      "line": 738
+    },
+    {
+      "module": "extraction",
+      "name": "MIN_EVALUATION_LABELS_PER_DIMENSION",
+      "line": 96
+    },
+    {
+      "module": "freshness",
+      "name": "MINIMUM_OFFERS",
+      "line": 406
+    },
+    {
+      "module": "interview",
+      "name": "MINIMUM_TRAIT_EPISODES",
+      "line": 117
+    },
+    {
+      "module": "interview",
+      "name": "MINIMUM_TRAIT_OCCASIONS",
+      "line": 118
+    },
+    {
+      "module": "naming",
+      "name": "MINIMUM_SCANNED",
+      "line": 228
+    },
+    {
+      "module": "offers",
+      "name": "MINIMUM_CHECKS",
+      "line": 402
+    },
+    {
+      "module": "pagination_capture",
+      "name": "MINIMUM_REQUEST_KEYS",
+      "line": 120
+    },
+    {
+      "module": "question_bank",
+      "name": "MINIMUM_PROBES",
+      "line": 486
+    },
+    {
+      "module": "reader_notes",
+      "name": "MINIMUM_PROBES",
+      "line": 522
+    },
+    {
+      "module": "retraction",
+      "name": "MINIMUM_SCANNED",
+      "line": 342
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_DISTINCT_SCOPE_STATES",
+      "line": 329
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_PRS_EVALUATED",
+      "line": 305
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_REPORTS_FOUND",
+      "line": 306
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_SCOPE_STATES",
+      "line": 311
+    },
+    {
+      "module": "revision",
+      "name": "MINIMUM_AGED",
+      "line": 426
+    },
+    {
+      "module": "scoring",
+      "name": "MINIMUM_TURNS",
+      "line": 293
+    },
+    {
+      "module": "second_reader",
+      "name": "FAIL_OPEN_CASES_AT_LEAST",
+      "line": 830
+    },
+    {
+      "module": "second_reader",
+      "name": "FIXTURES_AT_LEAST",
+      "line": 821
+    },
+    {
+      "module": "second_reader",
+      "name": "REGRESSION_CASES_AT_LEAST",
+      "line": 859
+    },
+    {
+      "module": "sourcing",
+      "name": "MINIMUM_OFFERS_COLLECTED",
+      "line": 87
+    },
+    {
+      "module": "sourcing_cycles",
+      "name": "MINIMUM_NON_IMPROVING",
+      "line": 67
+    },
+    {
+      "module": "trait_sufficiency",
+      "name": "MINIMUM_CHECKS",
+      "line": 589
+    }
+  ],
+  "bounds_read_and_out_of_scope": [
+    "annotation.MIN_IDENTIFYING_LENGTH",
+    "approval.MINIMUM_DISCLOSURE_PROBES",
+    "approval.MINIMUM_MANIFEST_DISCLOSURES_COMPARED",
+    "approval.MINIMUM_PROBES",
+    "approval.MINIMUM_RETRACTED_APPROVALS_EVALUATED",
+    "approval.MINIMUM_RETRACTION_PROBES",
+    "bodyless_post.MINIMUM_PACKAGES",
+    "bulk_filter.MINIMUM_BATCH",
+    "connector_contract.MINIMUM_PACKAGES",
+    "connector_exchange.LEAK_NEEDLE_MINIMUM",
+    "connector_policy.ADJUDICATIONS_AT_LEAST",
+    "connector_transport.MINIMUM_CREDENTIAL_CASES",
+    "connector_transport.MINIMUM_GET_PACKAGES",
+    "connector_transport.MINIMUM_LEDGER_ENTRIES",
+    "connector_transport.MINIMUM_RECORD_KEYS_COMPARED",
+    "connectors.MINIMUM_PROBES",
+    "corpus.MIN_ADS_PER_FAMILY",
+    "corpus_scope.MINIMUM_CORPUS_ROWS",
+    "corpus_scope.MINIMUM_EVALUATION_POOL",
+    "corpus_scope.MINIMUM_SERVING_MODULES",
+    "corpus_scope.MINIMUM_STIMULUS_POOL",
+    "cue_audit.MINIMUM_CASES",
+    "cue_audit.MINIMUM_FAIL_OPEN_CASES",
+    "cue_audit.MINIMUM_MECHANISM_PINNED_CASES",
+    "cv_store.MINIMUM_FIELDS_MEASURED",
+    "dedup.MINIMUM_CLUSTER_PAIRS",
+    "dedup.MINIMUM_PAIRS",
+    "elicit_extract.MIN_ANSWER_CHARS",
+    "gate_reader_agreement.MINIMUM_ARRANGEMENTS_PROBED",
+    "gate_reader_agreement.MINIMUM_GATES_COMPARED",
+    "identity.MINIMUM_PROBES",
+    "interview.MINIMUM_CHECKS",
+    "interview_direction.MINIMUM_NON_SOFTWARE_ARTEFACT_FIELDS",
+    "interview_direction.MINIMUM_OPEN_TALK_STEPS",
+    "language_set.MINIMUM_LANGUAGE_DECLARATIONS",
+    "lifecycle.MINIMUM_SCENARIOS",
+    "metric_naming.MINIMUM_CATEGORY_NAMED_RECORDED",
+    "metric_naming.MINIMUM_METRICS_CLASSIFIED",
+    "pagination_capture.MINIMUM_URL_SIDE_PROBES",
+    "pay.MINIMUM_CHECKS",
+    "plan_v2.MINIMUM_BOARD_SIZE",
+    "plan_v2.MINIMUM_MERGED_TASKS",
+    "process_spec.MIN_ITEM_WORDS",
+    "profile_capture.MINIMUM_CHECKS",
+    "profile_capture.MINIMUM_SUBJECT_CHECKS",
+    "repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED",
+    "repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED",
+    "repo_gate.MINIMUM_FILES_FORMATTED",
+    "repo_gate.MINIMUM_PYTHON_FILES_FORMATTED",
+    "salary_recovery.HOUSE_ESTIMATE_MINIMUM",
+    "salary_recovery.MINIMUM_CORPUS_ADS",
+    "second_reader.STDLIB_DISAGREEMENTS_AT_LEAST",
+    "session.MINIMUM_PROBES",
+    "skill_budget.MIN_HEADROOM_CHARS",
+    "sourcing.MINIMUM_BOARDS",
+    "sourcing_exclusions.MINIMUM_PRESENTATIONS",
+    "sourcing_market.MINIMUM_EMPTY_MARKETS",
+    "sourcing_reentry.MINIMUM_TRIGGERS",
+    "sourcing_scope_review.MINIMUM_STANDING",
+    "sourcing_strategy.MINIMUM_SCOPE_CHANGES",
+    "sourcing_strategy.MINIMUM_TRIGGERS",
+    "spec_consistency.MINIMUM_DECLARATIONS_FOUND",
+    "step_gates.MINIMUM_STEPS_CHECKED",
+    "step_runtime.MINIMUM_PROBES",
+    "step_specs.MIN_FIELD_WORDS",
+    "strings.MINIMUM_STRINGS",
+    "task_gate.MINIMUM_EMITTED_FIELDS_SCANNED",
+    "task_gate.MINIMUM_GATES_READ",
+    "task_gate.MINIMUM_PRESENCE_RECORDING_FIELDS",
+    "task_gate.MINIMUM_RECORD_KEYS_COMPARED",
+    "task_gate.MINIMUM_STATUS_KEY_GATES",
+    "trait_sufficiency.MINIMUM_TRAITS",
+    "verified_gate.MINIMUM_CONTRACTS"
+  ],
+  "gate_status": "measured",
+  "floors_swept_at_least": 30
+}

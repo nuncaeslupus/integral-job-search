@@ -1028,7 +1028,11 @@ def probe_hard_filter() -> dict[str, Any]:
     }
 
 
-MINIMUM_CASES = 10
+#: A floor, never the count of the day (T100), on `probe_hard_filter`'s own running
+#: `checks` tally rather than a collection this module lists — the scripted scenario
+#: run *is* the fixture. Raised to what the probe carries — 19, zero slack — because
+#: 10 had drifted nine checks under with no margin argued for the gap (T159).
+MINIMUM_CASES = 19
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

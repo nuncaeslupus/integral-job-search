@@ -64,8 +64,10 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T109.json"
 # by changes that have nothing to do with what it measures. Here it also does
 # the job `MINIMUM_SCANNED` does in `naming`: zero disagreements over a probe
 # table somebody emptied is exactly the vacuous pass this module exists to
-# refuse.
-MINIMUM_PROBES = 21
+# refuse. Raised to what `PROBES` carries — 25, zero slack — because 21
+# tolerated four deleted probes silently, with no margin argued for the gap
+# (T159).
+MINIMUM_PROBES = 25
 
 # The rule, in one place, quoted by every probe's `clause`. Each line is a
 # clause a verdict may cite; nothing below cites the implementation.

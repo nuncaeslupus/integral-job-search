@@ -419,7 +419,11 @@ def probe_staleness(root: Path) -> dict[str, Any]:
     }
 
 
-MINIMUM_AGED = 4
+#: A floor, never the count of the day (T100), on `probe_staleness`'s own running
+#: tally of aged artefacts rather than a collection this module lists — the
+#: scripted scenario run *is* the fixture. Raised to what the probe carries — 6,
+#: zero slack — because 4 had drifted two under with no margin argued (T159).
+MINIMUM_AGED = 6
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

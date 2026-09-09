@@ -399,7 +399,11 @@ def probe_freshness(root: Path) -> dict[str, Any]:
     }
 
 
-MINIMUM_OFFERS = 3
+#: A floor, never the count of the day (T100), on `probe_freshness`'s own running
+#: tally of raised offers rather than a collection this module lists — the scripted
+#: scenario run *is* the fixture. Raised to what the probe carries — 5, zero slack —
+#: because 3 had drifted two under with no margin argued for the gap (T159).
+MINIMUM_OFFERS = 5
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

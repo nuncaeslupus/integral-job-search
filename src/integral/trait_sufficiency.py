@@ -581,7 +581,12 @@ def probe_trait_sufficiency(root: Path) -> dict[str, Any]:
     }
 
 
-MINIMUM_CHECKS = 15
+#: A floor, never the count of the day (T100), on `probe_trait_sufficiency`'s own
+#: running `checks` tally rather than a collection this module lists — the scripted
+#: scenario run *is* the fixture. Raised to what the probe carries — 17, zero slack
+#: — because 15 had drifted two checks under with no margin argued for the gap
+#: (T159).
+MINIMUM_CHECKS = 17
 
 
 def measure() -> dict[str, Any]:
