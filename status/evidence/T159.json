@@ -18,6 +18,11 @@
       "line": 72
     },
     {
+      "module": "bulk_filter",
+      "name": "MUST_KEEP_ROWS",
+      "line": 369
+    },
+    {
       "module": "candidate",
       "name": "MINIMUM_CASES",
       "line": 1035
@@ -73,9 +78,34 @@
       "line": 96
     },
     {
+      "module": "floor_sweep",
+      "name": "MINIMUM_FLOORS_SWEPT",
+      "line": 1495
+    },
+    {
       "module": "freshness",
       "name": "MINIMUM_OFFERS",
       "line": 406
+    },
+    {
+      "module": "gate_reader_agreement",
+      "name": "MINIMUM_ARRANGEMENTS_PROBED",
+      "line": 122
+    },
+    {
+      "module": "generate",
+      "name": "GENERATION_CAP",
+      "line": 73
+    },
+    {
+      "module": "interview",
+      "name": "MAX_EXTRA_EPISODE_ATTEMPTS",
+      "line": 123
+    },
+    {
+      "module": "interview",
+      "name": "MINIMUM_CHECKS",
+      "line": 944
     },
     {
       "module": "interview",
@@ -86,6 +116,11 @@
       "module": "interview",
       "name": "MINIMUM_TRAIT_OCCASIONS",
       "line": 118
+    },
+    {
+      "module": "lifecycle",
+      "name": "MINIMUM_SCENARIOS",
+      "line": 963
     },
     {
       "module": "naming",
@@ -101,6 +136,21 @@
       "module": "pagination_capture",
       "name": "MINIMUM_REQUEST_KEYS",
       "line": 120
+    },
+    {
+      "module": "pay",
+      "name": "MINIMUM_CHECKS",
+      "line": 709
+    },
+    {
+      "module": "profile_capture",
+      "name": "MINIMUM_CHECKS",
+      "line": 1152
+    },
+    {
+      "module": "profile_capture",
+      "name": "MINIMUM_SUBJECT_CHECKS",
+      "line": 1144
     },
     {
       "module": "question_bank",
@@ -164,6 +214,11 @@
     },
     {
       "module": "sourcing",
+      "name": "DETAIL_FETCH_CEILING",
+      "line": 95
+    },
+    {
+      "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
       "line": 87
     },
@@ -179,21 +234,27 @@
     }
   ],
   "bounds_read_and_out_of_scope": [
+    "annotation.EGRESS_SAMPLE",
     "annotation.MIN_IDENTIFYING_LENGTH",
     "approval.MINIMUM_DISCLOSURE_PROBES",
     "approval.MINIMUM_MANIFEST_DISCLOSURES_COMPARED",
     "approval.MINIMUM_PROBES",
     "approval.MINIMUM_RETRACTED_APPROVALS_EVALUATED",
     "approval.MINIMUM_RETRACTION_PROBES",
+    "approval.SCHEMA_VERSION",
     "bodyless_post.MINIMUM_PACKAGES",
     "bulk_filter.MINIMUM_BATCH",
+    "bulk_filter.PROBE_BATCH",
+    "calibration.TWENTY",
     "connector_contract.MINIMUM_PACKAGES",
     "connector_exchange.LEAK_NEEDLE_MINIMUM",
+    "connector_health.MAX_PROBE_ATTEMPTS",
     "connector_policy.ADJUDICATIONS_AT_LEAST",
     "connector_transport.MINIMUM_CREDENTIAL_CASES",
     "connector_transport.MINIMUM_GET_PACKAGES",
     "connector_transport.MINIMUM_LEDGER_ENTRIES",
     "connector_transport.MINIMUM_RECORD_KEYS_COMPARED",
+    "connectors.DEFAULT_STALE_AFTER_DAYS",
     "connectors.MINIMUM_PROBES",
     "corpus.MIN_ADS_PER_FAMILY",
     "corpus_scope.MINIMUM_CORPUS_ROWS",
@@ -204,36 +265,52 @@
     "cue_audit.MINIMUM_FAIL_OPEN_CASES",
     "cue_audit.MINIMUM_MECHANISM_PINNED_CASES",
     "cv_store.MINIMUM_FIELDS_MEASURED",
+    "cv_store.SCHEMA_VERSION",
+    "decline.DECLINES_BEFORE_STEP_SILENCE",
+    "decline.DECLINES_BEFORE_TOTAL_SILENCE",
     "dedup.MINIMUM_CLUSTER_PAIRS",
     "dedup.MINIMUM_PAIRS",
+    "dedup.SHINGLE_SIZE",
+    "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
-    "gate_reader_agreement.MINIMUM_ARRANGEMENTS_PROBED",
+    "elicit_extract.NEGATION_WINDOW_CHARS",
+    "freshness.DEFAULT_ELAPSED_DAYS",
     "gate_reader_agreement.MINIMUM_GATES_COMPARED",
+    "generate.SCHEMA_VERSION",
     "identity.MINIMUM_PROBES",
-    "interview.MINIMUM_CHECKS",
     "interview_direction.MINIMUM_NON_SOFTWARE_ARTEFACT_FIELDS",
     "interview_direction.MINIMUM_OPEN_TALK_STEPS",
+    "interview_log.SCHEMA_VERSION",
     "language_set.MINIMUM_LANGUAGE_DECLARATIONS",
-    "lifecycle.MINIMUM_SCENARIOS",
+    "lifecycle.PURGE_HORIZON_DAYS",
+    "lifecycle.TOMBSTONE_HASH_VERSION",
     "metric_naming.MINIMUM_CATEGORY_NAMED_RECORDED",
     "metric_naming.MINIMUM_METRICS_CLASSIFIED",
+    "mock_interview.MAX_QUESTIONS",
+    "mock_interview.SCHEMA_VERSION",
     "pagination_capture.MINIMUM_URL_SIDE_PROBES",
-    "pay.MINIMUM_CHECKS",
+    "pay.STALE_AFTER_DAYS",
     "plan_v2.MINIMUM_BOARD_SIZE",
     "plan_v2.MINIMUM_MERGED_TASKS",
+    "presentation.DEFAULT_LIMIT",
+    "presentation_log.PASS_OVER_THRESHOLD",
     "process_spec.MIN_ITEM_WORDS",
-    "profile_capture.MINIMUM_CHECKS",
-    "profile_capture.MINIMUM_SUBJECT_CHECKS",
     "repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED",
     "repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED",
     "repo_gate.MINIMUM_FILES_FORMATTED",
     "repo_gate.MINIMUM_PYTHON_FILES_FORMATTED",
+    "review_reader.MAXIMUM_LOGIN_LENGTH",
     "salary_recovery.HOUSE_ESTIMATE_MINIMUM",
     "salary_recovery.MINIMUM_CORPUS_ADS",
+    "scoring.BATCH_THRESHOLD",
     "second_reader.STDLIB_DISAGREEMENTS_AT_LEAST",
     "session.MINIMUM_PROBES",
+    "skill_budget.BUDGET_GRANULARITY",
+    "skill_budget.FALLBACK_BUDGET_CHARS",
     "skill_budget.MIN_HEADROOM_CHARS",
+    "skill_budget.UPSTREAM_DEFAULT_BUDGET_CHARS",
     "sourcing.MINIMUM_BOARDS",
+    "sourcing.PHRASE_CEILING",
     "sourcing_exclusions.MINIMUM_PRESENTATIONS",
     "sourcing_market.MINIMUM_EMPTY_MARKETS",
     "sourcing_reentry.MINIMUM_TRIGGERS",
@@ -242,6 +319,8 @@
     "sourcing_strategy.MINIMUM_TRIGGERS",
     "spec_consistency.MINIMUM_DECLARATIONS_FOUND",
     "step_gates.MINIMUM_STEPS_CHECKED",
+    "step_gates.UNCERTIFIABLE",
+    "step_gates.VOCABULARY_SILENT",
     "step_runtime.MINIMUM_PROBES",
     "step_specs.MIN_FIELD_WORDS",
     "strings.MINIMUM_STRINGS",
@@ -250,9 +329,11 @@
     "task_gate.MINIMUM_PRESENCE_RECORDING_FIELDS",
     "task_gate.MINIMUM_RECORD_KEYS_COMPARED",
     "task_gate.MINIMUM_STATUS_KEY_GATES",
+    "test_mode.PASTE_CHARS",
     "trait_sufficiency.MINIMUM_TRAITS",
-    "verified_gate.MINIMUM_CONTRACTS"
+    "verified_gate.MINIMUM_CONTRACTS",
+    "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 30
+  "floors_swept_at_least": 54
 }

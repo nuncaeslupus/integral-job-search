@@ -952,12 +952,15 @@ def probe_lifecycle() -> dict[str, Any]:
     }
 
 
-MINIMUM_SCENARIOS = 20
 # Comfortably below what the fixture above actually runs (every §7.1 table
 # cell checked both ways, plus the retention/purge/tombstone/collection/
 # revival scenarios) and comfortably above what any trivial fixture could
 # produce — "zero over nothing is not a measurement" (payload, and every
-# other T*/S* gate module's floor).
+# other T*/S* gate module's floor). Moved above the assignment it explains
+# (T159): a comment placed below is invisible to a sweep reading "the comment
+# above a declaration", and this floor was exactly that until round 2's
+# parameter-via-callers tracing made it visible for the first time.
+MINIMUM_SCENARIOS = 20
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

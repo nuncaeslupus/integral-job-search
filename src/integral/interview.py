@@ -934,7 +934,14 @@ def probe_interview(root: Path) -> dict[str, Any]:
     }
 
 
-MINIMUM_CHECKS = 12
+#: A floor, never the count of the day (T100), on `measure`'s own running `checks`
+#: tally rather than a collection this module lists — the scripted scenario run
+#: *is* the fixture. Raised to what the probe carries — 13, zero slack — because
+#: this floor sat undocumented and one check under the real count, unreached by
+#: T159 round 1's narrower sweep, until round 2's broadened tracing found it and
+#: this task's own fixture rule ("dynamic never means unchecked") demanded a
+#: comment (T159 round 2).
+MINIMUM_CHECKS = 13
 
 
 def measure() -> dict[str, Any]:

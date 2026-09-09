@@ -1136,10 +1136,20 @@ def write_subject_evidence(evidence: Path = DEFAULT_D8_EVIDENCE_PATH) -> dict[st
     return measured
 
 
-MINIMUM_SUBJECT_CHECKS = 12
+#: A floor, never the count of the day (T100), on `probe_subject_linkage`'s own
+#: running `checks` tally rather than a collection this module lists — the
+#: scripted scenario run *is* the fixture. Raised to what the probe carries —
+#: 16, zero slack — because this floor sat undocumented and four checks under
+#: the real count, unreached by T159 round 1's narrower sweep (T159 round 2).
+MINIMUM_SUBJECT_CHECKS = 16
 
 
-MINIMUM_CHECKS = 15
+#: A floor, never the count of the day (T100), on `measure`'s own running
+#: `checks` tally rather than a collection this module lists — the scripted
+#: scenario run *is* the fixture. Raised to what the probe carries — 20, zero
+#: slack — because this floor sat undocumented and five checks under the real
+#: count, unreached by T159 round 1's narrower sweep (T159 round 2).
+MINIMUM_CHECKS = 20
 
 
 def measure() -> dict[str, Any]:
