@@ -140,6 +140,54 @@ v0.36.1 made that robust and `query_status.py` names anything that still fails t
 resolve. Trust that list over `handle_sync.py`'s proposals — only one of the two is
 wired to an action.
 
+## Two to three concurrent workers, not five — the quota is shared and the pipeline serialises anyway
+
+**Run 2–3 agents at once.** The account's usage window is a rolling five hours
+shared by the orchestrator *and* every session it spawns, and it is easy to spend
+without noticing: on 2026-09-08/09 it was exhausted **twice**, and the second
+exhaustion idled the run for **nine hours**.
+
+The arithmetic, so the number is not a guess. Each agent reported **135k–280k
+tokens** on completion; twenty-odd runs is roughly **3–4M**. The orchestrator's own
+context was barely touched — this is entirely the fleet. And the work is expensive
+by nature rather than by waste: one reviewer ran 54 mutations, another 30, each
+re-running a 3,300-test suite, and `verified_gate.sh` checks out a clean tree and
+runs the whole gate again.
+
+**Higher concurrency buys less than it looks like it should**, because the loop is
+implement → review → fix → re-review and each stage waits on the last. Five agents
+running means four PRs in different stages plus idle capacity, not five times the
+throughput. Three is enough to keep every stage fed.
+
+Three cheaper habits, each measured here:
+
+- **Match the model to the role.** A second reader deriving cases from a spec and
+  running its own mutations earns the strongest model available. A round that
+  re-applies a named mutation table and pastes a verdict block does not.
+- **Scope the test run.** `uv run pytest tests/test_x.py` during a mutation cycle;
+  `make host-gate` once, at the end, before the push. A full suite per mutation is
+  the single largest avoidable cost.
+- **Re-review only what changed.** When a prior independent session has verified
+  the engineering and the new diff is prose, say so in the brief and ask for the
+  narrow check — but require the reviewer to *prove* the diff is what it claims
+  (an AST comparison with docstrings stubbed, not an eyeball), because if it is
+  not, the carried-over verdict is about a different tree.
+
+**A killed session leaves unsourced numbers behind, and that is a correctness
+problem rather than lost time.** When the limit bit mid-round, the next worker
+correctly refused to trust the dead session's uncommitted figures and said so in
+the task file — and the same unreproducible measurement still shipped in a module
+docstring two files away, refuted by that very commit. **Nothing tests prose.**
+After any mid-round kill, treat every number the dead session left as unsourced
+until regenerated, and grep the diff for figures stated as measured that no
+committed artefact supports.
+
+**Namespace scratch per agent.** The scratchpad is shared: a concurrent session
+overwrote another agent's `mutate.py` mid-run, so one mutation round executed the
+wrong script against the wrong worktree. With several agents in mutate-restore
+cycles that is a live way to certify work nobody did. Never trust a scratch file
+you did not just write.
+
 ## Fixtures for a correctness-critical gate are written by a second session
 
 A gate that a worker writes alongside its own implementation judges that implementation
@@ -185,6 +233,57 @@ catch what the fifth did. The fix is a second reader, not a more diligent first 
 
 **A green gate is necessary and is not sufficient.** Every one of those ten defects was
 behind one.
+
+### What the second reader keeps finding: being right is not being pinned
+
+Seventeen review rounds across four pull requests on 2026-09-08/09 produced
+seventeen findings and **no empty round**. All were fail-open; all were behind a
+green `make host-gate`, a PASS `verified_gate.sh` block and green CI. Eight were
+the same defect, and three of the four pull requests had a round whose finding
+sat **inside the remedy written for the previous round**.
+
+Stated once, it is:
+
+> **A check pinned against a proxy for the property, rather than against the
+> property.**
+
+The faces it wore, so it is recognisable next time — a gate certifying coverage
+it does not have (collapsing two constructed orders to one left 137 tests green,
+because the test compared state *names*); a metric independent of its own inputs
+(severing either half left it at 0 with 68 tests green); a floor counting labels
+rather than the things labelled; **a bound derived from the thing it bounds**
+(`MINIMUM_FIELDS_CHECKED = len(X)` compared against `len(X)` — false for every X,
+a guard that has never fired and cannot); a bound one short of its population, so
+the first deletion breaches nothing; an invariant whose population never reaches
+the branch it is about (reverting one of two fixed sites survived the whole gate
+at exit 0 and permitted 38 refused requests); **a fixture whose execution path
+never arrives** (the mutant reverting the fix survived because another guard
+answered first and the test only reached the code through the aggregate — green
+fixture, live defect, invisible to reading); and a rule stated, mandated for
+others in the same diff, and unpinned in its own instance.
+
+**The lesson generalises past gates.** T155's argument for excluding a field from
+its distinctness key was *correct* — the reviewer checked the data and confirmed
+it — and nothing tested it, so the next tidier refactor would have walked
+straight through. A true sentence in a docstring, a correct constant, an accurate
+comment: none of them is a check. **Being right in fact is not the same as being
+pinned.**
+
+**What works, and it is cheap.** Before pushing a fix, go looking for this family
+in the diff you are about to ship, and report what you found — *including
+"nothing, and here is where I looked"*. That found four real defects in one
+night, every one by the implementer rather than a reviewer, and a self-caught
+finding costs one push instead of a whole review cycle. The best of them: a task
+about markers that read as evidence and are not, whose own evidence file carried
+a `fail_open` count arithmetically identical to its metric — two numbers that
+could not disagree, the second corroborating nothing.
+
+**What does not work is enumeration.** Every round that answered a finding with
+one more case got another finding. The rounds that ended a thread replaced the
+enumeration with a closed rule: a twin derived from `dataclasses.fields` so a
+field added later is varied without anyone remembering to; a stub wrong in every
+direction at once; an encode set derived from RFC 3986's `reserved` production
+rather than listed. An enumeration has no last element.
 
 ## The review half of `merge-policy` is a second session, not a bot
 
@@ -416,6 +515,47 @@ certifying work it did not do — the exact class of failure the discipline exis
 to catch. So delete `src/**/__pycache__/*.pyc` after every write in a
 mutate-restore cycle, and never conclude a mutation round from a run whose source
 edit and test invocation fell in the same second.
+
+**There is a third direction, and clearing `__pycache__` does not close it.** A
+module already **resident in the interpreter** is not re-read at all, whatever is
+on disk. Measured twice on 2026-09-09, independently, on #425: a driver whose
+import order left the pre-mutation module loaded scored `metric=11` — identical
+to the head — where a fresh subprocess scored `1`. The mutant was dead and the
+run said it survived.
+
+That points the opposite way to the two cases above, and it is worse to act on.
+The `.pyc` failures hide a real defect; this one **manufactures a finding that
+does not exist** — a session then reports a hole, files a task, or blocks a pull
+request over code that is correct. A reviewer nearly did, and caught it only by
+re-measuring a surprising number a second way.
+
+So **run each measurement in a fresh subprocess**, not merely with the cache
+cleared, and treat any mutation result that matches the unmutated head *exactly*
+as unproven until a second method agrees. `PYTHONDONTWRITEBYTECODE=1` addresses
+the disk half and does nothing for this one.
+
+## Two branches can write the same value for different reasons, and git will not see it
+
+`make evidence` regenerates every measurement, so an evidence key that moves is
+normally either a real change or a conflict. There is a third case, met on
+2026-09-09 merging #425.
+
+Both sides moved `status/evidence/T85.json`'s `gate_modules_discovered` from 104
+to **105** — the branch because it added `gate_reader_agreement.py`, main because
+#423 had added `capture_provenance.py`. Two different modules, **the same
+resulting text**. Git saw identical content on both sides, merged it silently
+with no conflict, and the merged tree measures **106**.
+
+Nothing about that is a mistake either side made. It is a property of a **census**
+key: its value names a count rather than the thing counted, so two additions
+collide at the number. `make host-gate` caught it, the fix is to **regenerate,
+never pick a side** — and the reason to write it down is that the silence is the
+hazard. A merge with no conflict reads as a merge with nothing to check.
+
+Twenty-two committed evidence keys are census-shaped and could take the same path;
+fifty are already committed as floors, which cannot (a floor is a literal, so both
+sides changing it *is* a conflict). That asymmetry is one more argument for the
+floor convention T100 and T122 arrived at from other directions.
 
 ## Spending the context window deliberately
 
