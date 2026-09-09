@@ -320,15 +320,32 @@ PROBES: tuple[Probe, ...] = (
         varies=(),
         clause="R7 — `page` names a URL key here, so no body position varies",
     ),
+    # T154 round 3 (R1's mirror), on `connectors.py`'s own separate rule
+    # (`_a_page_placeholder_and_a_query_key_imply_each_other`, route 4): this
+    # probe used to load, on R7's own reasoning below — the *builder* never
+    # touches a body key `param` does not name, so nothing here is R7's
+    # concern. But `query_param`'s URL genuinely varies `page` while this
+    # body fixes it, and a framework whose merged `request.values` /
+    # `$_REQUEST` / `params` honours the body's fixed value over the query's
+    # varying one is pinned to page 25 regardless — the same merged-namespace
+    # harm route 4 refuses on the `body_field` side, reached from the other
+    # direction. Refused at load now, before R7's builder question is ever
+    # reached; R7's own point stays true and simply never gets exercised for
+    # this shape, the way every route-4-refused shape leaves every later
+    # check moot.
     Probe(
         name="literal POST body under query_param pagination, with a key of that name",
         body_json={"Keyword": "python", "page": 25},
         mode="query_param",
         param="page",
-        loads=True,
+        loads=False,
         varies=(),
         clause="R7 — `page` names a URL key here; the body's own `page` is a "
-        "declared literal and must not be overwritten",
+        "declared literal and must not be overwritten. Refused before R7 is even "
+        "reached: `connectors._a_page_placeholder_and_a_query_key_imply_each_other`'s "
+        "route 4 (T154, round 3) refuses a query_param board whose body repeats the "
+        "URL key's own name, fixed — a merged query/body namespace may honour the "
+        "body's stale value over the query's varying one",
     ),
     # R7 says "any other mode", and there are two of them. Probing only
     # `query_param` left `path_segment` covered by nothing: widening the

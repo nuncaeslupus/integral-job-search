@@ -324,10 +324,31 @@ URL_SIDE_PROBES: tuple[UrlProbe, ...] = (
         route="legal — the usajobs shape T89 added; two pages are the same URL and "
         "differ only in the payload",
     ),
+    # ---- T154 round 3, R2: a regression in route 1's own reading, not a new
+    # route. `_url_page_positions` briefly shared its separator with route 4's
+    # permissive `[&;]` union (round 2's F2 fix), which re-parses this pattern
+    # as two keys — `filter` and `page` — exactly the shape an `&`-spelled
+    # capture of the real request would show, while the wire request
+    # `build_list_urls` actually sends still holds one key, `filter`, whose
+    # value is the literal text `a;page=1`. Refused again now that
+    # `_url_page_positions` always splits on `&` alone
+    # (`_STRICT_QUERY_PAIR_SEPARATOR`).
+    UrlProbe(
+        name="a page slot embedded in another key's value under the strict, '&'-only reading",
+        url_pattern="https://boards.test/jobs?filter=a;page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 round 3 (R2), a regression — refused at 42edcb7, loaded at 53fb771 "
+        "once route 4's permissive splitting reached position-matching too; refused via "
+        "route 1 (param names 'page', but under '&'-only splitting the placeholder sits "
+        "in query key 'filter''s value, not in a key named 'page'); fail-open under the "
+        "permissive reading",
+    ),
 )
 
 #: The floor `URL_SIDE_PROBES` is checked against, committed in place of the
-#: count of the day for T100's reason. Fifteen probes ship today; the names that
+#: count of the day for T100's reason. Sixteen probes ship today; the names that
 #: must stay are pinned by name in `tests/test_pagination_capture.py`, because a
 #: count is satisfied by any N probes and a floor protects only against bulk
 #: deletion.
@@ -775,17 +796,26 @@ def write_evidence(evidence: Path | None = None, directory: Path | None = None) 
 # dispatch rather than inside `query_param`'s own branch — so it is closed on
 # two axes a first version answered as one enumerated case:
 #
-# * the **mode** axis — a duplicated query key is a defect of the URL, which
-#   every mode that names a `param` shares (`body_field` included: a POST
-#   board's *body* field can be certified while its *URL* repeats the same
-#   name, and a framework merging query/body namespaces may honour the fixed
-#   query occurrence instead);
+# * the **mode** axis — a duplicated query key, or a single fixed one where
+#   the declared mode has no legitimate occurrence there at all, is a defect
+#   of the request, which every mode that names a `param` shares (`body_field`
+#   included: a POST board's *body* field can be certified while its *URL*
+#   repeats the same name once, fixed — round 3's own finding, R1, on round
+#   2's own remedy — and a framework merging query/body namespaces may honour
+#   the fixed occurrence instead of the varying one, on either half of the
+#   request);
 # * the **separator** axis — RFC 3986 §3.4 states no `name=value` pair
 #   grammar at all (its `query` ABNF is `*( pchar / "/" / "?" )`, and calls
 #   pairs only a frequent *usage*); the grammar this actually rests on is
-#   `application/x-www-form-urlencoded`, which `;` is not part of — but is a
-#   historical alternate (RFC 1866, pre-5.4 PHP) some servers still honour, so
-#   it counts as a pair boundary here beside `&`.
+#   `application/x-www-form-urlencoded`, which `;` is not part of — but is
+#   RFC 1866 §8.2.1's documented historical alternate, and not merely a
+#   historical curiosity: `urllib.parse.parse_qsl` itself grew a `separator`
+#   parameter over this exact ambiguity (CVE-2021-23336), so it counts as a
+#   pair boundary here beside `&` — for **counting** only, never for deciding
+#   *where* the placeholder sits (`connectors._url_page_positions` always
+#   splits on `&` alone; see `connectors._QUERY_PAIR_SEPARATORS`'s own
+#   docstring for round 3's R2, the regression that came from blurring that
+#   line).
 #
 # Measured the same way T113's own three routes are: a well-formed library can
 # never carry an instance of what the load-time rule refuses, so a scan of the
@@ -858,18 +888,34 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
         "fixed query occurrence over the varying body one; fail-open",
     ),
     UrlProbe(
-        name="a body_field board with one fixed query pair beside the body field still loads",
+        name="a single fixed query pair repeating the body field's own name is refused",
         url_pattern="https://boards.test/Search/ExecuteSearch?Page=1",
+        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
+        body_json={"Keyword": _PROBE_QUERY, "Page": PAGE_PLACEHOLDER},
+        loads=False,
+        issues=(),
+        route="T154 round 3 (R1) — this shipped as round 2's own mode-axis *control*, "
+        "justified as 'the same as the unrelated-key control'; it is not, because it "
+        "repeats pagination.param's own name rather than an unrelated one. Body_field's "
+        "one legitimate occurrence is in the body, so the query has none, and a single "
+        "fixed `?Page=1` is the identical merged-namespace harm as the two-occurrence "
+        "shape above at a threshold of one, not two: a capture of either page's request "
+        "still shows the same, unvarying `?Page=1`, and `no_capture_measured` reads 0 "
+        "over a request that never actually varied; fail-open",
+    ),
+    UrlProbe(
+        name="a body_field board with an unrelated query key still loads",
+        url_pattern="https://boards.test/Search/ExecuteSearch?Keyword=python",
         pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
         body_json={"Keyword": _PROBE_QUERY, "Page": PAGE_PLACEHOLDER},
         loads=True,
         issues=(
-            "https://boards.test/Search/ExecuteSearch?Page=1",
-            "https://boards.test/Search/ExecuteSearch?Page=1",
+            "https://boards.test/Search/ExecuteSearch?Keyword=python",
+            "https://boards.test/Search/ExecuteSearch?Keyword=python",
         ),
-        route="control — a single, non-duplicated query pair beside the varying body field "
-        "is not this rule's business, on the mode axis the same way the unrelated-key "
-        "control is on the name axis",
+        route="control — the real mode-axis mirror of the name-axis control above: a "
+        "query key that does not spell pagination.param at all is not this rule's "
+        "business, on the mode axis the same way an unrelated filter is on the name axis",
     ),
     # ---- the separator axis (F2).
     UrlProbe(
@@ -878,22 +924,47 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
         pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
         loads=False,
         issues=(),
-        route="T154 route 4, the separator axis (F2) — ';' is the historical alternate "
-        "pair separator (RFC 1866, pre-5.4 PHP's arg_separator.input); a server that "
-        "still splits on it sees `page` twice, and one that does not sees a value "
-        "(`1;page=1`, `1;page=2`) that never parses as a page number either way; "
-        "fail-open under both readings",
+        route="T154 route 4, the separator axis (F2) — ';' is RFC 1866 §8.2.1's "
+        "documented historical alternate pair separator, and the asymmetry it exploits "
+        "is the one `urllib.parse.parse_qsl` itself grew a `separator` parameter over "
+        "(CVE-2021-23336); a server that still splits on it sees `page` twice, and one "
+        "that does not sees a value (`1;page=1`, `1;page=2`) that never parses as a page "
+        "number either way; fail-open under both readings",
+    ),
+    # ---- the namespace axis, the mirror (round 3, R1): a query_param board
+    # whose body — not its query — repeats param's own name, fixed.
+    UrlProbe(
+        name="the named key sent twice, across mode: query_param's own body",
+        url_pattern="https://boards.test/jobs?page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        body_json={"page": "1"},
+        loads=False,
+        issues=(),
+        route="T154 round 3 (R1's mirror) — the certifying key lives in the query and "
+        "varies correctly there, but the POST body repeats its own name fixed at a "
+        "value no capture ever measured; the identical merged-namespace harm as F1, on "
+        "the other half of the request; fail-open",
+    ),
+    UrlProbe(
+        name="a query_param board with an unrelated body field still loads",
+        url_pattern="https://boards.test/jobs?page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        body_json={"other": "1"},
+        loads=True,
+        issues=("https://boards.test/jobs?page=1", "https://boards.test/jobs?page=2"),
+        route="control — a body field that does not spell pagination.param at all is "
+        "not this rule's business, the namespace-axis mirror of the other controls above",
     ),
 )
 
 #: The floor `DUPLICATE_KEY_PROBES` is checked against, committed in place of
 #: the count of the day for T100's reason — but set **equal** to today's count
-#: (8) rather than below it: the by-name pin in
+#: (11) rather than below it: the by-name pin in
 #: `tests/test_pagination_capture.py` already protects every individual shape,
 #: so a lower floor's only effect would be slack that absorbs a bulk deletion
 #: the pin does not happen to name — the second reader's point on F5. Equal to
 #: the population, the first deletion of any kind breaches it.
-MINIMUM_DUPLICATE_KEY_PROBES = 8
+MINIMUM_DUPLICATE_KEY_PROBES = 11
 
 #: The floor the real-library half of this gate is checked against.
 #:

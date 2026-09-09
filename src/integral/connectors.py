@@ -1317,43 +1317,83 @@ _PAGE_OUTSIDE_QUERY = "outside the query string (the path, host or fragment)"
 _PAGE_AS_QUERY_KEY_NAME = "a query-string key's own name"
 
 
-#: Both `&` and `;` split a query string into `name=value` pairs, here.
+#: `application/x-www-form-urlencoded`'s own pair separator — WHATWG URL
+#: Standard §5, the parser behind `urllib.parse.parse_qsl`'s default, and the
+#: reading a real request `build_list_urls` sends is actually parsed under.
+#: `_url_page_positions` splits on this one alone, never on
+#: `_QUERY_PAIR_SEPARATORS` below — see that constant's own docstring for why
+#: sharing one reading between the two was round 2's regression.
+_STRICT_QUERY_PAIR_SEPARATOR = re.compile(r"&")
+
+#: Both `&` and `;` split a query string into `name=value` pairs, **for
+#: counting occurrences of a name** — `query_pair_names`'s own reading, used
+#: by route 4's duplicate-key check
+#: (`_a_page_placeholder_and_a_query_key_imply_each_other`) and nothing else.
 #:
 #: RFC 3986 §3.4 draws no line on this: its ABNF for `query` is
 #: `*( pchar / "/" / "?" )`, and it calls "key=value" pairs only a frequent
 #: *usage*, never a grammar — `;` is simply a `sub-delim` the production
 #: admits as ordinary query data. The pair grammar this file actually
-#: depends on is `application/x-www-form-urlencoded` (WHATWG URL Standard
-#: §5, the parser behind `urllib.parse.parse_qsl`'s default), which
-#: recognises only `&`. `;` was the historical alternate — RFC 1866 (HTML
-#: 2.0) recommended accepting it, and PHP's default `arg_separator.input`
-#: split on it before 5.4 — so a board built on an older or non-browser
-#: stack may still. This engine cannot know which a given board runs, and
+#: depends on is `application/x-www-form-urlencoded`, which recognises only
+#: `&` — `;` was RFC 1866 §8.2.1's documented historical alternate, and the
+#: asymmetry is not merely historical: `urllib.parse.parse_qsl` itself grew a
+#: `separator` parameter over exactly this ambiguity (CVE-2021-23336, a
+#: parameter-injection weakness reachable precisely because callers disagreed
+#: on which characters end a pair), so `;` is not a fringe reading invented
+#: here — it is the one the standard library's own maintainers had to name.
+#: This engine cannot know which reading a given board's server takes, and
 #: `?page=1;page={page}` is a harm either way: a server that splits on `;`
 #: sees `page` sent twice (T154's certified-duplicate harm), and one that
 #: does not sees the single value `1;page=1` / `1;page=2` — never a page
 #: number, so `page` never actually varies (T113 route 3's "identical
-#: request" harm). Recognising both here refuses the shape under either
-#: reading rather than picking one, which is this file's usual posture
-#: toward an ambiguous request (see `read_provenance` in
-#: `pagination_capture` for another instance of the same choice).
+#: request" harm). Recognising both here, **for counting**, refuses the
+#: shape under either reading rather than picking one, which is this file's
+#: usual posture toward an ambiguous request (see `read_provenance` in
+#: `pagination_capture` for another instance of the same choice) — counting
+#: is safe to widen because a wider count only ever finds *more* occurrences
+#: to refuse, never fewer.
+#:
+#: **That safety argument does not carry to `_url_page_positions` (round 3,
+#: R2 — a regression, not a design choice).** Deciding *where* the
+#: placeholder sits is a single, committed reading, not a count: the
+#: permissive union re-parses `?filter=a;page={page}` as two keys, `filter`
+#: and `page` — exactly the shape an `&`-spelled capture of the real request
+#: would show — while the wire request `build_list_urls` actually sends
+#: still holds one key, `filter`, whose value is the literal text
+#: `a;page=1` (no server this engine cannot assume splits on `;` ever sees a
+#: second key). Sharing this constant with `_url_page_positions` let that
+#: reading reach position-matching too: `?filter=a;page={page}` was refused
+#: by route 1 at 42edcb7 and loaded at 53fb771, and against an `&`-spelled
+#: capture of the real request, `pagination_capture.measure()`'s reading of
+#: the identical connector moved from 1 (refused) to 0 (certified). So
+#: `_query_pairs` takes the separator pattern as a parameter, defaulting to
+#: `_STRICT_QUERY_PAIR_SEPARATOR`; only `query_pair_names` passes this one.
 _QUERY_PAIR_SEPARATORS = re.compile(r"[&;]")
 
 
-def _query_pairs(pattern: str) -> list[tuple[str, str]]:
+def _query_pairs(
+    pattern: str, separators: re.Pattern[str] = _STRICT_QUERY_PAIR_SEPARATOR
+) -> list[tuple[str, str]]:
     """`url_pattern`'s query string as raw `(name, value)` pairs.
 
-    Split on `_QUERY_PAIR_SEPARATORS`, on the **raw** text — never on
-    `parse_qsl`'s decoded values, for `_url_page_positions`'s reason: a
-    percent-encoded separator or placeholder does not vary anything
-    `build_list_urls` (`str.replace`) would actually substitute. Neither half
-    of a pair is decoded here; a caller decodes whichever half it needs.
+    Split on `separators`, on the **raw** text — never on `parse_qsl`'s
+    decoded values, for `_url_page_positions`'s reason: a percent-encoded
+    separator or placeholder does not vary anything `build_list_urls`
+    (`str.replace`) would actually substitute. Neither half of a pair is
+    decoded here; a caller decodes whichever half it needs.
+
+    Defaults to `_STRICT_QUERY_PAIR_SEPARATOR` (`&` alone) because that
+    default is `_url_page_positions`'s own call — position-matching commits
+    to one reading and may not use the permissive union
+    (`_QUERY_PAIR_SEPARATORS`'s own docstring explains why, under "round 3,
+    R2"). `query_pair_names` is the one caller that passes the permissive
+    pattern explicitly.
     """
     query = urlsplit(pattern).query
     if not query:
         return []
     pairs: list[tuple[str, str]] = []
-    for chunk in _QUERY_PAIR_SEPARATORS.split(query):
+    for chunk in separators.split(query):
         raw_name, _, raw_value = chunk.partition("=")
         pairs.append((raw_name, raw_value))
     return pairs
@@ -1368,8 +1408,14 @@ def query_pair_names(pattern: str) -> list[str]:
     `_a_page_placeholder_and_a_query_key_imply_each_other`'s route 4 exists to
     count, so collapsing duplicates here would erase the numerator from the
     very function a caller measures a denominator over it with.
+
+    Reads `_QUERY_PAIR_SEPARATORS` (the permissive `[&;]` union) explicitly —
+    the one caller allowed to, per that constant's own docstring.
     """
-    return [unquote(raw_name.replace("+", " ")) for raw_name, _ in _query_pairs(pattern)]
+    return [
+        unquote(raw_name.replace("+", " "))
+        for raw_name, _ in _query_pairs(pattern, _QUERY_PAIR_SEPARATORS)
+    ]
 
 
 def _url_page_positions(pattern: str) -> list[str]:
@@ -1390,6 +1436,12 @@ def _url_page_positions(pattern: str) -> list[str]:
     because that is the spelling `pagination.param` and `pagination_capture`'s
     `query_keys` both use, and a name that only matches before decoding is not
     the key a capture carries.
+
+    Split on `_STRICT_QUERY_PAIR_SEPARATOR` (`_query_pairs`'s default) —
+    `&` alone, never the permissive `[&;]` union `query_pair_names` uses —
+    because a *position* is a single committed reading of the query string,
+    not a count: widening it here was round 2's regression (round 3, R2; see
+    `_QUERY_PAIR_SEPARATORS`'s own docstring).
     """
     positions: list[str] = []
     accounted = 0
@@ -1755,33 +1807,71 @@ class ListPage(Strict):
            request, and then the duplicate offers, that `mode: none`'s own
            `max_pages` guard and `body_field`'s "nothing would vary" arm each
            already refuse one layer down.
-        4. **The named key sent twice — over every mode that names one, not
-           only `query_param`.** `?page=1&page={page}` under `mode: query_param`
-           sends a second, wholly literal pair under the identical name; a
-           capture of the request this issues still carries that name (that is
-           what the literal pair supplies), so `pagination_capture.query_keys` —
-           a *set* of names, not a count — certifies it regardless of which of
-           the two positions a server actually reads. The first version of this
-           check lived inside `if mode == "query_param":`, which is itself
-           route 4's own shape one axis over: a POST board can name its
+        4. **The named key sent twice, or sent once where it has no business
+           being sent at all — over every mode that names one, `none`
+           included.** `?page=1&page={page}` under `mode: query_param` sends a
+           second, wholly literal pair under the identical name; a capture of
+           the request this issues still carries that name (that is what the
+           literal pair supplies), so `pagination_capture.query_keys` — a
+           *set* of names, not a count — certifies it regardless of which of
+           the two positions a server actually reads. The first version of
+           this check lived inside `if mode == "query_param":`, which is
+           itself route 4's own shape one axis over: a POST board can name its
            **body** field `Page` while its **URL** happens to repeat `Page` in
            the query (`?Page=1&Page=2` beside `body_json: {Page: "{page}"}`),
            and a framework that merges query and body namespaces
            (`$_REQUEST`, Flask's `request.values`, Rails' `params`) may honour
            the fixed query occurrence over the varying body one — the same
            harm, reached because `mode: body_field` returned before this
-           check was ever reached. So it is checked once, for every mode that
-           names a `param` at all (every mode but `none`), rather than
-           re-declared per branch. Counted by **occurrences of the name** in
-           the query string (`query_pair_names`, over `&`- and
-           `;`-separated pairs — see `_QUERY_PAIR_SEPARATORS`), not by
-           positions of the placeholder: RFC 3986 §3.4 does not define a
-           `name=value` pair grammar at all (its `query` ABNF is
-           `*( pchar / "/" / "?" )`, and it calls pairs only a frequent
-           *usage*); the pair grammar this rests on is
+           check was ever reached.
+
+           **A *second* occurrence is only the `query_param` threshold, and
+           treating it as the threshold for every mode was round 2's own gap
+           (round 3, R1).** `query_param` is the one mode whose **one**
+           legitimate occurrence lives in the query string — routes 1-3 below
+           verify it is the placeholder itself — so a second one there is the
+           defect. `body_field`'s legitimate occurrence lives in the *body*
+           (`_a_page_placeholder_and_a_body_field_imply_each_other` requires
+           exactly one); the query has no legitimate occurrence of that name
+           at all under this mode, so `?Page=1` beside
+           `body_json: {Page: "{page}"}` is the identical merged-namespace
+           harm at a *single* occurrence, not two, and counting "more than
+           one" missed it. The mirror is symmetric: a `query_param` board
+           whose *body* carries a fixed, non-placeholder field spelling the
+           same name (`body_json: {page: "1"}` beside `?page={page}`) puts the
+           identical fixed value on the other half of a POST whose query
+           already pages correctly, and nothing before this bound `param` to
+           "at most one body key of that name" the way it already bound it to
+           "at most one query occurrence." So the query-side count that
+           matters is not "more than one" uniformly; it is **more occurrences
+           than the declared mode accounts for**, checked once, ahead of the
+           per-mode dispatch.
+
+           **The body-side mirror is scoped to `query_param` alone, not
+           `path_segment` too, and that scoping is deliberate rather than an
+           oversight this file's own probes would otherwise repeat.**
+           `path_segment` binds `param` to a URL *position* — there is no key
+           at all to name (see below) — and a framework's merged
+           `request.values` / `$_REQUEST` / `params` never sees a positional
+           path segment in the first place (a router consumes it before any
+           such merge happens), so the query/body-merge harm this mirror
+           guards against cannot occur there. A `body_json` field spelling
+           `param`'s name under `path_segment` is instead exactly
+           `page_placeholder`'s own R7 shape — a declared literal the
+           *builder* must leave alone — which `#338` already covers and this
+           rule must not re-refuse.
+
+           Query occurrences are counted by **occurrences of the name**
+           (`query_pair_names`, over `&`- and `;`-separated pairs — see
+           `_QUERY_PAIR_SEPARATORS`), not by positions of the placeholder: RFC
+           3986 §3.4 does not define a `name=value` pair grammar at all (its
+           `query` ABNF is `*( pchar / "/" / "?" )`, and it calls pairs only a
+           frequent *usage*); the pair grammar this rests on is
            `application/x-www-form-urlencoded`, as `query_pair_names`
            implements it — see `_QUERY_PAIR_SEPARATORS`'s own docstring for
-           why `;` is included beside the `&` that grammar alone would use.
+           why `;` is included beside the `&` that grammar alone would use,
+           and for why that reading is **route 4's own reading and not
+           `_url_page_positions`'s** (round 3, R2).
 
         Fail-closed in every direction, and it costs a contributor one error
         message in the file they just wrote.
@@ -1790,20 +1880,69 @@ class ListPage(Strict):
         mode = self.pagination.mode
         param = self.pagination.param
 
-        # Route 4 (T154), ahead of the per-mode dispatch below: a duplicated
-        # key in `url_pattern`'s query string is a defect of the URL, which
-        # every mode that names one (every mode but `none`) shares — it does
-        # not belong inside any one mode's branch. See the docstring's item 4.
+        # Route 4 (T154), ahead of the per-mode dispatch below: an occurrence
+        # of `param`'s own name anywhere in the merged query/body namespace
+        # other than the one slot the declared mode actually binds it to is a
+        # defect of the request, which every mode that names one (`none`
+        # included) shares — it does not belong inside any one mode's branch,
+        # and it is not just "more than one" uniformly (round 3, R1 — see the
+        # docstring's item 4).
         if param is not None:
-            occurrences = query_pair_names(self.url_pattern).count(param)
-            if occurrences > 1:
-                raise ValueError(
-                    f"list.url_pattern's query string names {param!r} {occurrences} times "
-                    "(counting '&'- and ';'-separated pairs) — the key a capture certifies "
-                    "must be the only occurrence of that name, or a fixed occurrence no "
-                    "capture ever measures decides the request instead of the one that "
-                    "actually varies"
-                )
+            query_occurrences = query_pair_names(self.url_pattern).count(param)
+            body_has_param = isinstance(self.body_json, dict) and param in self.body_json
+            if mode == "none":
+                # `none` never varies at all, so there is no "legitimate
+                # occurrence" to protect and no fixed value anywhere could be
+                # honoured over a varying one that does not exist — a
+                # *repeated* name in the query is still refused, simply
+                # because two literal pairs sharing a name is never a
+                # sensible connector, not for the merged-namespace reason the
+                # other modes guard against.
+                if query_occurrences > 1:
+                    raise ValueError(
+                        f"list.url_pattern's query string names {param!r} "
+                        f"{query_occurrences} times — a repeated query key is never a "
+                        "well-formed request, whatever pagination.mode is"
+                    )
+            else:
+                # The one legitimate query occurrence: `query_param` binds
+                # `param` to a query key (routes 1-3, below, verify it is the
+                # placeholder itself), so it accounts for exactly one; every
+                # other mode binds `param` to something that is not a query
+                # key at all (`body_field`'s body, or `path_segment`'s
+                # position, which has no key), so the query has zero
+                # legitimate occurrences under either.
+                allowed_in_query = 1 if mode == "query_param" else 0
+                if query_occurrences > allowed_in_query:
+                    raise ValueError(
+                        f"list.url_pattern's query string names {param!r} "
+                        f"{query_occurrences} time{'s' if query_occurrences != 1 else ''}, "
+                        f"but pagination.mode {mode!r} accounts for {allowed_in_query} "
+                        "there (counting '&'- and ';'-separated pairs) — a fixed "
+                        "occurrence no capture ever measures decides the request instead "
+                        "of, or alongside, the one that actually varies"
+                    )
+                # The mirror, on the body half: a `query_param` board whose
+                # POST body also carries a *fixed* (non-placeholder) field of
+                # the exact same name puts a value in the merged namespace
+                # that no capture ever measured, on the other half of the
+                # request — the harm F1 fixed for `body_field`'s own query
+                # occurrence, reached from the opposite direction. Scoped to
+                # `query_param` alone, not `path_segment` too: `path_segment`
+                # binds `param` to a URL *position*, never a key a framework's
+                # merged `request.values`/`$_REQUEST`/`params` could ever read
+                # in the first place (a router consumes a path segment before
+                # any such merge happens), so a body field of that name there
+                # is `page_placeholder`'s own R7 shape — a declared literal
+                # the *builder* must leave alone — and not this rule's harm.
+                if mode == "query_param" and body_has_param:
+                    raise ValueError(
+                        f"list.body_json also declares {param!r}, fixed, alongside the "
+                        f"occurrence pagination.mode {mode!r} already accounts for — a "
+                        "framework that merges query and body namespaces ($_REQUEST, "
+                        "Flask's request.values, Rails' params) may honour the body's "
+                        "fixed value over the one that actually varies"
+                    )
 
         if mode in {"none", "body_field"}:
             # Route 2, and its `body_field` mirror: a POST board declares that
