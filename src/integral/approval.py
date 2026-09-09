@@ -144,6 +144,33 @@ measured exactly why that failed:
    none, and a module that says so plainly is worth more than one asserting a
    number it cannot support.
 
+**A third-round finding, fixed rather than left open**: the "confirmed present"
+check above (`elif _carries(..., episode.text)`) was matching against *every*
+written line, including lines backed by a **different, approved** episode's
+own rendered text. An unapproved episode sharing an eight-word window with
+somebody else's approved sentence therefore read as "confirmed present" and
+was cleared from every channel — not a finding, and not `episodes_undecidable`
+either, which is a worse fail-open than an honest "undecided" would have been:
+the reported comment above the branch said this could only happen for a line
+already named by `findings`, and that was false whenever the matched line was
+approved rather than unbacked. The fix narrows that check's target to the
+*unbacked* lines only — the ones that actually produced a finding. For an
+episode whose own text does not straddle a line boundary this can only remove
+a match, never manufacture one; the residual risk that narrowing a `\n`-joined
+text can put two lines together that were not adjacent on the page is one this
+function already accepts for `intact` (see the `elif`'s own comment), not one
+this fix introduces.
+
+**The three sites that must all name an undecidable episode in a refusal are
+pinned by a rule, not by three separate tests.** `prepare`'s raise, `record_sent`'s
+raise, and `_refuse_unbacked_disclosures`'s raise (called from both) each append
+`_undecidable_suffix(measured)`; a fourth `raise ApprovalError(...)` added later
+that constructs its message from `measured` and forgets the suffix is caught by
+`test_every_raise_site_over_measured_names_the_undecidable_episodes` in
+`test_substance_sweep.py`, which parses this module's own source and asserts the
+property structurally over every such site, present or future, rather than
+naming three functions by hand.
+
 **The measurement cannot construct both sides of its own equality.** `measure()`
 writes approvals and documents in one call from one tuple, so they agree by
 construction: on its own it proves only that `generate` emits the indices it was
@@ -708,11 +735,10 @@ def measure_prepared(
     documents = {path.name: path.read_text(encoding="utf-8") for path in sorted(where.glob("*.md"))}
     findings: list[str] = []
     surviving: list[str] = []
-    written: list[str] = []
+    unbacked: list[str] = []
     for name, body in documents.items():
         for line in _claim_lines(body):
             key = (name, line)
-            written.append(line)
             if backed[key] > 0:
                 backed[key] -= 1
                 # Lines an approval explicitly names are excluded from the
@@ -726,6 +752,7 @@ def measure_prepared(
                 # Unbackable is unapproved. A line nothing backs is exactly what
                 # an episode looks like after the candidate tidies it out of
                 # their story bank, and it used to measure clean.
+                unbacked.append(line)
                 findings.append(
                     f"{offer_id}/v{version} {name}: {line} — "
                     + (
@@ -804,7 +831,7 @@ def measure_prepared(
     undecidable: list[str] = []
     undecidable_texts: set[str] = set()
     intact = "\n".join(surviving)
-    written_text = "\n".join(written)
+    unbacked_text = "\n".join(unbacked)
     for episode in master.episodes:
         if episode.text in disclosed or episode.text in approved:
             continue
@@ -814,14 +841,36 @@ def measure_prepared(
                 f"{offer_id}/v{version}: {episode.text} — the substance of a story-bank "
                 "episode, carried by an entry no per-use approval names"
             )
-        elif _carries(written_text, episode.text):
-            # Confirmed present verbatim somewhere in the raw document — a
-            # planted, unbacked line reads as one of `findings`' unbackable
-            # rows above without needing to be re-attributed to this episode,
-            # so it is not appended there a second time. It is not
-            # `undecidable` either: this branch is reached only when there
-            # **is** positive evidence, which is the one thing the third state
-            # exists to withhold judgement in the absence of.
+        elif _carries(unbacked_text, episode.text):
+            # Confirmed present verbatim in a line this sweep has *already*
+            # reported above — one of `findings`' unbackable rows — so this
+            # episode's substance reached the page and is not re-attributed to
+            # it a second time. It is not `undecidable` either: this branch is
+            # reached only when there **is** positive evidence.
+            #
+            # Checked against `unbacked` — the lines that produced a finding —
+            # and never against every written line. A written-but-*backed*
+            # line can be a **different, approved** episode's own rendered
+            # sentence, and this episode's shingle landing inside somebody
+            # else's approved wording is not evidence that *this* episode's
+            # own substance is on the page. Checking the wider set used to let
+            # that coincidence silently clear this episode from every
+            # channel — not a finding, and not `undecidable` either, which is
+            # a worse fail-open than reporting it undecidable would have been
+            # (`test_two_unrelated_episodes_sharing_a_window_are_not_conflated`
+            # in `test_substance_sweep.py` pins the corrected behaviour).
+            # `unbacked` cannot itself contain an approved line — an approved
+            # episode claim is exactly what makes a line backed — so, for any
+            # episode whose *own* text does not straddle a line boundary, this
+            # narrowing can only remove a match, never manufacture one. It
+            # inherits, rather than introduces, the one imprecision `_carries`
+            # already accepts throughout this function: joining a subset of
+            # lines with `\n` can put two lines that were not adjacent on the
+            # page next to each other in the joined text, and a shingle could
+            # in principle straddle that seam. `intact` (`surviving`, above)
+            # already takes the same risk for the same reason, and closing it
+            # for both is the docstring's named upgrade path (an embedding
+            # comparison), not a fix this narrowing owes on its own.
             pass
         else:
             undecidable_texts.add(episode.text)

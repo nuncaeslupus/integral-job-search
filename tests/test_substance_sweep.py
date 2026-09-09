@@ -23,6 +23,8 @@ refusing.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import json
 from pathlib import Path
 
@@ -39,6 +41,7 @@ from integral.approval import (
     _disclosure_report,
     _paraphrase_report,
     _refuse_unbacked_disclosures,
+    _undecidable_suffix,
     _version_parts,
     disclosures_unbacked_by_a_document,
     measure_prepared,
@@ -441,6 +444,132 @@ def test_the_refusal_helper_fires_only_on_a_divergence() -> None:
             },
             "so nothing here is sendable",
         )
+
+
+def test_undecidable_suffix_appends_only_when_something_is_undecidable() -> None:
+    """`_undecidable_suffix` on its own: empty when there is nothing to add,
+    otherwise the episode text and the word "undecid" that every raise site's
+    message is checked for below.
+    """
+    assert _undecidable_suffix({}) == ""
+    assert _undecidable_suffix({"episodes_undecidable": 0, "undecidable_episodes": []}) == ""
+
+    measured = {
+        "episodes_undecidable": 1,
+        "undecidable_episodes": ["girona-1/v1: a mystery episode — no evidence either way"],
+    }
+    suffix = _undecidable_suffix(measured)
+    assert "undecid" in suffix
+    assert "mystery episode" in suffix
+
+
+def test_the_refusal_helper_names_an_undecidable_episode_too() -> None:
+    """N1 (#435 round 3): `_refuse_unbacked_disclosures`'s own raise, pinned directly.
+
+    Round 2 pinned `_undecidable_suffix` only at `record_sent`'s raise
+    (`test_the_boundary_refusal_names_an_undecidable_episode_too` below).
+    Dropping the suffix from *this* function's raise instead left every test
+    in the suite green — the reader had to call this helper directly, with an
+    undecidable episode in the measured dict, to see it at all. Driven here
+    rather than through `prepare`/`record_sent` so the assertion is about this
+    raise's own construction, not about whichever caller happens to route
+    through it.
+    """
+    measured = {
+        "disclosures_unbacked_by_a_generated_document": 1,
+        "unbacked_disclosures": ["girona-1/v1 letter.md: a story — no line carries it"],
+        "episodes_undecidable": 1,
+        "undecidable_episodes": ["girona-1/v1: a mystery episode — no evidence either way"],
+    }
+
+    with pytest.raises(ApprovalError) as excinfo:
+        _refuse_unbacked_disclosures(measured, "so nothing here is sendable")
+
+    message = str(excinfo.value)
+    assert "undecid" in message
+    assert "mystery episode" in message
+
+
+def test_prepares_own_refusal_names_an_undecidable_episode_too(store: ProfileStore) -> None:
+    """N1 (#435 round 3): `prepare`'s own raise is a distinct site from
+    `record_sent`'s, pinned directly rather than only through the helper above.
+
+    A headline carrying WIN's text verbatim fires `prepare`'s refusal without
+    ever reaching `record_sent` — the module docstring's own point that
+    `record_sent` is not the only public path to this raise. FAILURE is
+    genuinely unrelated to anything on the page, so it lands in
+    `undecidable_episodes` in the same measurement, and the message `prepare`
+    raises must say so.
+    """
+    master = _master(store, headline=WIN.rstrip("."))
+
+    with pytest.raises(ApprovalError) as excinfo:
+        _prepare(store, master, approved=())
+
+    message = str(excinfo.value)
+    assert "undecid" in message
+    assert FAILURE in message
+
+
+def test_every_raise_site_over_measured_names_the_undecidable_episodes() -> None:
+    """N1 (#435 round 3): a closed rule over the raise sites, not three more tests.
+
+    Three sites read `measured` today and must each append
+    `_undecidable_suffix(measured)`: `prepare`'s raise, `record_sent`'s raise,
+    and `_refuse_unbacked_disclosures`'s raise (called from both). The three
+    tests above drive each of them directly and would each go red on its own
+    if the suffix were dropped there — but three hand-written tests are an
+    enumeration with no last element, and a fourth raise site added tomorrow
+    would simply not be one of them.
+
+    So this reads `approval.py`'s own source instead of naming functions: every
+    `raise ApprovalError(...)` whose constructed message reads the name
+    `measured` must also call `_undecidable_suffix` somewhere in that same
+    raise statement. A raise that never touches `measured` at all (a bad
+    confirmation digest, an already-sent record, a version never written) is
+    correctly untouched by this rule — it has no undecidable episodes to lose.
+    """
+    tree = ast.parse(inspect.getsource(approval))
+
+    def _reads_name(node: ast.AST, name: str) -> bool:
+        return any(isinstance(child, ast.Name) and child.id == name for child in ast.walk(node))
+
+    def _calls(node: ast.AST, func_name: str) -> bool:
+        return any(
+            isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Name)
+            and child.func.id == func_name
+            for child in ast.walk(node)
+        )
+
+    sites: list[tuple[int, bool]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Raise) or node.exc is None:
+            continue
+        call = node.exc
+        is_approval_error = (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == "ApprovalError"
+        )
+        if is_approval_error and _reads_name(call, "measured"):
+            sites.append((node.lineno, _calls(call, "_undecidable_suffix")))
+
+    # A rule with nothing to check is not a rule — see CLAUDE.md's fixtures
+    # section on a check whose population never reaches the branch it is
+    # about. Three sites are known to exist today (`prepare`, `record_sent`,
+    # `_refuse_unbacked_disclosures`); this floor catches the rule going
+    # vacuous if every one of them were ever refactored away from `measured`.
+    assert len(sites) >= 3, (
+        f"expected at least 3 `raise ApprovalError(...)` sites reading `measured` in "
+        f"approval.py, found {len(sites)} — this rule cannot check what does not exist"
+    )
+    unpinned = [lineno for lineno, pinned in sites if not pinned]
+    assert unpinned == [], (
+        "raise ApprovalError(...) at approval.py line(s) "
+        f"{unpinned} builds its message from `measured` without also calling "
+        "_undecidable_suffix(measured)"
+    )
 
 
 def test_the_manifest_the_probes_read_is_the_one_on_disk(store: ProfileStore) -> None:
@@ -851,6 +980,37 @@ def test_a_literal_planted_line_is_confirmed_not_undecidable(store: ProfileStore
 
     assert measured["unapproved_episode_disclosures"] == 1
     assert not any(FAILURE in item for item in measured["undecidable_episodes"])
+
+
+def test_two_unrelated_episodes_sharing_a_window_are_not_conflated(store: ProfileStore) -> None:
+    """N2 (#435 round 3): a shingle match against an *approved* line is not
+    evidence for a *different*, unapproved episode.
+
+    WIN is approved and rendered; TWIN is a second, distinct episode that is
+    never approved and never rendered, but shares WIN's own eight-word run
+    almost word for word (see the two constants' definitions above). Before
+    this fix the `elif` in `measure_prepared` checked the raw text of every
+    *written* line, approved ones included — so TWIN's shingle matched WIN's
+    own approved sentence and TWIN was silently cleared from every channel:
+    not a finding, and not `episodes_undecidable` either. That is a worse
+    fail-open than an honest "undecided" would have been — TWIN's own,
+    distinguishing substance ("the ledger job") is nowhere on the page, and
+    nothing said so. The comment above the `elif` in `approval.py` was wrong
+    about exactly this case; this fixture is what makes the corrected
+    behaviour a checked property rather than a comment nothing runs.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+    )
+    write_master(store, master)
+    version = _prepare(store, master, approved=(0,))
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["unapproved_episode_disclosures"] == 0
+    assert any(TWIN in item for item in measured["undecidable_episodes"])
 
 
 def test_an_approved_disclosed_episode_is_never_flagged_undecidable(
