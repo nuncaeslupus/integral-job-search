@@ -168,6 +168,45 @@ def test_a_thin_scan_is_a_floor_breach_rather_than_a_clean_zero() -> None:
     assert any("arrangement(s) probed" in breach for breach in breaches)
 
 
+def test_the_floor_is_sized_to_the_set_it_is_read_against() -> None:
+    """The floor counts the probed list — the arrangements *plus* the ungated shape.
+
+    `floor_breaches` compares `MINIMUM_ARRANGEMENTS_PROBED` against
+    `len(measured["arrangements_probed"])`, and `measure` builds that list from
+    `ARRANGEMENTS` **and** `UNGATED_ARRANGEMENT`. Sized to `ARRANGEMENTS` alone
+    the constant sat one under the population it guards, so the first deleted
+    fixture cleared it (#425, round three).
+
+    The committed record is a census of a real run, so it is the honest
+    statement of that population, and reading the constant against it is what
+    makes an *added* arrangement raise the floor instead of widening the slack —
+    the half of the rule the constant's own comment says is easy to skip.
+    """
+    committed = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+    assert len(committed["arrangements_probed"]) == MINIMUM_ARRANGEMENTS_PROBED
+
+
+def test_the_floor_fires_on_the_first_deleted_fixture() -> None:
+    """One arrangement short of the committed set is a breach, not a pass.
+
+    The boundary case, and it is a *pair*: the full set must be clean and the
+    set minus one must not be. Only the pair discriminates — without it
+    ``probed < MINIMUM_ARRANGEMENTS_PROBED - 1`` passes every other case in this
+    file, which is how one unit of slack survived a round of review inside the
+    guard whose own message is that "a clean zero reached by deleting the
+    fixtures is the defect, not the fix".
+    """
+    probed = sorted(json.loads(EVIDENCE.read_text(encoding="utf-8"))["arrangements_probed"])
+    full = {"gates_compared": MINIMUM_GATES_COMPARED, "arrangements_probed": probed}
+    assert floor_breaches(full) == [], "the committed set is what a healthy run probes"
+
+    one_short = {"gates_compared": MINIMUM_GATES_COMPARED, "arrangements_probed": probed[:-1]}
+    assert any("arrangement(s) probed" in breach for breach in floor_breaches(one_short)), (
+        "a fixture deleted from the module must breach the floor, not merely leave "
+        "a diff line in the evidence for somebody to notice"
+    )
+
+
 def test_the_record_commits_the_floor_and_not_the_census() -> None:
     """T100's precedent: a count committed exactly goes stale on someone else's merge."""
     committed = record(
@@ -590,6 +629,39 @@ def test_a_floor_breach_writes_no_evidence_file(tmp_path: Path) -> None:
 
     assert floor_breaches(measured), "the stub board is deliberately thin"
     assert not evidence.exists(), "a breaching run must leave no artefact behind"
+
+
+def test_a_deleted_fixture_cannot_be_laundered_by_regenerating_the_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The committed-name check dissolves on regeneration. The floor must not.
+
+    Round three on #425 measured the whole sequence: delete one arrangement, run
+    the module the way `make evidence` runs it (no `--check`), and
+    `test_the_committed_evidence_names_every_arrangement_the_module_probes` is
+    green again over a record naming twelve. It worked only because the floor
+    was silent by one, so nothing stopped the write.
+
+    The case above and this one are different halves: that one says the
+    arrangements floor fires, this one says firing it is *sufficient* to refuse
+    the record, with every other denominator healthy. `write_evidence` reads
+    `floor_breaches` before it writes for exactly this reason.
+    """
+    one_short: dict[str, object] = dict(_clean_measurement())
+    probed = sorted(json.loads(EVIDENCE.read_text(encoding="utf-8"))["arrangements_probed"])
+    one_short["arrangements_probed"] = probed[:-1]
+    breaches = floor_breaches(one_short)
+    assert not any("payload(s) compared" in breach for breach in breaches), (
+        "only the fixture set is thin here — the board census is untouched"
+    )
+    monkeypatch.setattr(gate_reader_agreement, "measure", lambda *a, **k: one_short)
+
+    evidence = tmp_path / "T122.json"
+    gate_reader_agreement.write_evidence(evidence=evidence)
+    assert not evidence.exists(), (
+        "a run that lost a fixture must not be allowed to rewrite the record that "
+        "names the fixtures"
+    )
 
 
 def test_the_default_run_is_the_one_that_rewrites_the_record(

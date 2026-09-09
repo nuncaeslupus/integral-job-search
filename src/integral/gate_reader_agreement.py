@@ -95,7 +95,31 @@ MINIMUM_GATES_COMPARED = 150
 #: `heading_pluralised`. Raising the floor with them is the half of that rule
 #: that is easy to skip — an accepted case answered in a comment and not
 #: committed leaves the code exactly as unprotected as the report found it.
-MINIMUM_ARRANGEMENTS_PROBED = 12
+#:
+#: **It is thirteen, not twelve, and the gap between those is the whole of what
+#: a floor is for.** `measure` probes `ARRANGEMENTS` *and* `UNGATED_ARRANGEMENT`,
+#: so the list this is read against is `len(ARRANGEMENTS) + 1`. Sized to
+#: `ARRANGEMENTS` alone it carried exactly one unit of slack and the first
+#: deleted fixture cleared it — measured on `c26b8fe` by the second reader on
+#: #425: delete one arrangement and `floor_breaches` returns `[]`. That is worse
+#: than a silent guard, because `write_evidence` then *writes*, and the
+#: committed-name check named as the backstop goes green again the moment
+#: `make evidence` regenerates the record. A bound sized to one collection and
+#: read against a larger one is not a floor; it is an off-by-one wearing one's
+#: name.
+#:
+#: It stays a **literal** for the reason the same paragraph implies. Written
+#: `len(ARRANGEMENTS) + 1` it would track the very deletion it exists to catch:
+#: both sides of the comparison would shrink together and the guard could never
+#: fire — which is `profile.MINIMUM_FIELDS_CHECKED`'s shape, and it is dead by
+#: construction. So the number is committed here by hand, and two cases hold it
+#: to the population rather than to itself:
+#: `test_the_floor_is_sized_to_the_set_it_is_read_against` makes an *added*
+#: arrangement raise it, and `test_the_floor_fires_on_the_first_deleted_fixture`
+#: pins it at its boundary — without which nothing tells this constant apart
+#: from one weakened by one, which is precisely the mutant that survived
+#: forty-seven cases.
+MINIMUM_ARRANGEMENTS_PROBED = 13
 
 _FRONT_MATTER = """---
 id: {task_id}
