@@ -1,5 +1,6 @@
 {
-  "paraphrase_states_evaluated": 18,
+  "paraphrase_states_evaluated": 11,
+  "paraphrase_checks_evaluated": 21,
   "paraphrased_substance_reported_as_withheld": 0,
   "paraphrase_probe_failures": [],
   "gate_status": "measured"

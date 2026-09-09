@@ -30,17 +30,14 @@ import pytest
 
 from integral import approval
 from integral.approval import (
-    _THRESHOLD_EPISODE,
-    _THRESHOLD_MEETS,
-    _THRESHOLD_MISSES,
     MINIMUM_DISCLOSURE_PROBES,
     MINIMUM_MANIFEST_DISCLOSURES_COMPARED,
+    MINIMUM_PARAPHRASE_CHECKS,
     MINIMUM_PARAPHRASE_STATES,
     ApprovalError,
     PersonalDetails,
     _disclosure_report,
     _paraphrase_report,
-    _plausible_paraphrase,
     _refuse_unbacked_disclosures,
     _version_parts,
     disclosures_unbacked_by_a_document,
@@ -647,16 +644,26 @@ def test_the_gate_status_is_derived_from_what_was_compared_at_both_sites(
 # ---------------------------------------------------------------------------
 # T156 — a paraphrase must be reported as undecidable, never as withheld
 #
-# `approval._carries`'s own docstring is explicit about the limit: eight-word
-# shingles beat punctuation, spacing, case, truncation and extension, but "it
-# does not beat a genuine paraphrase, and nothing cheap does." Before this
-# task the sweep spoke past that limit anyway — an episode neither disclosed
-# nor shingle-matched was folded into `episodes_withheld`, a name promising
-# "not on this page" over a check that can only promise "no eight-word window
-# of it is on this page." Every case below is derived from that gap and from
-# §6.2 (an episode reaches an employer only with a per-use approval, so a
-# false "withheld" is exactly the confidence this module must not sell) —
-# never from what `measure_prepared` happens to return.
+# Rewritten once already. The first version added a normalised-word-overlap
+# proxy for "is this a paraphrase" and derived its over-refusal controls from
+# the proxy's own threshold constants — a check argued from the code, not from
+# the spec, which is the circularity CLAUDE.md's fixtures section exists to
+# break. A second reader measured that proxy end to end against 8 constructed
+# genuine paraphrases and 30 constructed innocent same-domain documents and
+# found it anti-correlated with the property it was meant to proxy: 0 of 8
+# caught, 21 of 30 wrongly flagged.
+#
+# The rule below needs no threshold. `approval._carries`'s own docstring states
+# the limit plainly: eight-word shingles beat punctuation, spacing, case,
+# truncation and extension, but "it does not beat a genuine paraphrase, and
+# nothing cheap does." A check that can only ever confirm *presence* can never
+# confirm *absence*, so an episode that is neither manifest-disclosed nor
+# shingle-matched is a case this sweep has **no evidence about**, full stop —
+# not a case in some vocabulary band and not a case outside it. Every case
+# below is derived from that limit and from §6.2 (an episode reaches an
+# employer only with a per-use approval, so a false "withheld" is exactly the
+# confidence this module must not sell) — never from what `measure_prepared`
+# happens to return.
 
 # A reordering of WIN that keeps most of its long, specific words — the
 # eight-word window is gone (verified in the first test below), but a human
@@ -666,52 +673,57 @@ PARAPHRASE = (
     "down to forty minutes each night."
 )
 
-# The module docstring's recorded open risk of choosing "report undecidability"
-# over "detect more": a rewording thorough enough that even a word-overlap
-# heuristic cannot tell it from an unrelated document. Pinned in
-# `test_a_thorough_paraphrase_is_the_recorded_open_risk` below as a known
-# limitation, not folded into the pass/fail metric — CLAUDE.md's fixtures
-# section is about not certifying work a check does not do, and asserting
-# this gate catches a case it was explicitly not built to catch would be
-# exactly that in reverse.
+# The second reader's C3 case by name: a paraphrase thorough enough to share
+# almost none of the win episode's surface vocabulary (synonym substitution
+# rather than reordering). This is the exact shape a word-overlap proxy cannot
+# reach, because a paraphrase substitutes content words *by definition* — and
+# it is no longer excluded from this gate's numerator, because the
+# unconditional rule needs no vocabulary to catch it.
 THOROUGH_PARAPHRASE = (
     "By reworking how the ledgers were reconciled, the overnight invoicing "
     "job that used to take six hours now finishes in well under an hour."
 )
 
+# Same-domain, retells nothing: shares "nightly", "billing", "reconciliation"
+# with WIN but describes an ongoing role rather than the six-hours-to-forty-
+# minutes event. This is the shape the second reader's report measured the
+# retired proxy wrongly flagging (`billing-ownership`, `support-escalation`);
+# under the unconditional rule there is no vocabulary check left to trip.
+INNOCENT_WIN_ADJACENT = (
+    "Owns the nightly billing reconciliation runbook and leads the on-call "
+    "rotation for finance systems."
+)
+
 
 def test_a_paraphrase_shares_no_eight_word_window_with_the_episode_it_retells() -> None:
-    """The fixture's own precondition, pinned rather than assumed.
+    """The fixtures' own precondition, pinned rather than assumed.
 
-    If this ever failed, every test below it would be exercising the shingle
+    If this ever failed, the tests below would be exercising the shingle
     matcher `_carries` already covers, not the gap this task closes.
     """
     from integral.approval import _carries
 
     assert not _carries(PARAPHRASE, WIN)
+    assert not _carries(THOROUGH_PARAPHRASE, WIN)
 
 
 def test_a_paraphrased_headline_is_undecidable_not_withheld(store: ProfileStore) -> None:
     """§6.2: a false "withheld" is a confidence this sweep did not earn.
 
     The episode is never approved and never named in any manifest row, so
-    before this task `episodes_withheld` counted it — a name promising "not on
-    this page" that the shingle test alone cannot back. The fix does not
-    upgrade the shingle test (rejected in the module docstring: "nothing cheap
-    does" beat a genuine paraphrase); it stops the sweep from rounding
-    "cannot confirm absent" up to "confirmed absent".
+    before this task `episodes_withheld` counted it. `_carries` can confirm
+    presence and never absence, so a shingle miss proves nothing — the fix is
+    not a cleverer detector, it is refusing to round "cannot confirm absent"
+    up to "confirmed absent".
     """
     master = _master(store, headline=PARAPHRASE)
     version = _prepare(store, master, approved=())
 
     measured = measure_prepared(store, master, OFFER, version)
 
-    # FAILURE — the fixture's other episode — is genuinely absent from a
-    # headline that only paraphrases WIN, so it stays confidently withheld;
-    # WIN is the one this task's fix moves out of that bucket.
-    assert measured["episodes_withheld"] == 1, "FAILURE remains genuinely and confidently absent"
-    assert measured["episodes_undecidable"] == 1
+    assert measured["episodes_undecidable"] == 2
     assert any(WIN in item for item in measured["undecidable_episodes"])
+    assert any(FAILURE in item for item in measured["undecidable_episodes"])
     # Not a confirmed disclosure either — the sweep does not know that, and
     # §6.2's boundary must not block a draft over what it cannot confirm.
     assert measured["unapproved_episode_disclosures"] == 0
@@ -737,86 +749,76 @@ def test_a_paraphrased_cv_bullet_is_undecidable_not_withheld(store: ProfileStore
 
     measured = measure_prepared(store, master, OFFER, version)
 
-    # FAILURE stays genuinely and confidently absent; WIN, paraphrased in the
-    # bullet, is the one that must not be.
-    assert measured["episodes_withheld"] == 1
-    assert measured["episodes_undecidable"] == 1
+    assert measured["episodes_undecidable"] == 2
+    assert any(WIN in item for item in measured["undecidable_episodes"])
 
 
-def test_a_boundary_case_overlap_is_flagged_undecidable(store: ProfileStore) -> None:
-    """The threshold this must fire at: four of seven significant words.
+def test_a_thorough_paraphrase_is_caught_by_the_unconditional_rule(store: ProfileStore) -> None:
+    """The case a threshold-based proxy could not reach — this rule needs no threshold.
 
-    Not a comfortable margin past `_PARAPHRASE_MIN_OVERLAP` and
-    `_PARAPHRASE_MIN_RATIO` — exactly at it (4/7 ≈ 0.57) — so this pins the
-    boundary the constants state rather than a case well clear of it.
+    Measured by the second reader on #435 (C3): a rewording sharing almost no
+    surface vocabulary with the episode it retells defeated the word-overlap
+    proxy exactly as it defeats `_carries`. It does not defeat "was there a
+    shingle match, yes or no" — nothing about this rule asks how much
+    vocabulary is shared.
     """
-    master = CVMaster(
-        headline=SourcedText(text=_THRESHOLD_MEETS),
-        skills=(Skill(name="PostgreSQL", level="strong"),),
-        episodes=(_THRESHOLD_EPISODE, Episode(kind="failure", text=FAILURE)),
-    )
-    write_master(store, master)
+    master = _master(store, headline=THOROUGH_PARAPHRASE)
     version = _prepare(store, master, approved=())
 
     measured = measure_prepared(store, master, OFFER, version)
 
-    assert measured["episodes_undecidable"] == 1
-    assert measured["episodes_withheld"] == 1, "FAILURE remains genuinely and confidently absent"
+    assert any(WIN in item for item in measured["undecidable_episodes"])
 
 
-def test_a_below_floor_overlap_stays_confidently_withheld(store: ProfileStore) -> None:
-    """The over-refusal control: sharing a theme is not sharing a paraphrase.
+def test_an_innocent_same_domain_document_is_not_a_confirmed_disclosure(
+    store: ProfileStore,
+) -> None:
+    """The over-refusal shape the retired proxy actually failed on.
 
-    Three of the same seven significant words clears neither
-    `_PARAPHRASE_MIN_OVERLAP` nor `_PARAPHRASE_MIN_RATIO`, despite the document
-    being about the same kind of work as the episode. A check that flags this
-    is `episodes_withheld` renamed to a word that sounds more careful, not a
-    narrower one — CLAUDE.md's family of a check pinned against a proxy for
-    the property, here vocabulary overlap standing in for paraphrase.
+    A document that shares an episode's vocabulary while retelling none of its
+    event must never be treated as a confirmed disclosure — that would block a
+    clean draft, the direction CLAUDE.md's fixtures section weights hardest
+    against. It may still land in `episodes_undecidable` (this sweep has no
+    more evidence that it is absent than that it is present), and that is not
+    an over-refusal: nothing is blocked, nothing is asserted falsely.
     """
-    master = CVMaster(
-        headline=SourcedText(text=_THRESHOLD_MISSES),
-        skills=(Skill(name="PostgreSQL", level="strong"),),
-        episodes=(_THRESHOLD_EPISODE,),
+    master = _master(store, headline=INNOCENT_WIN_ADJACENT)
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("PostgreSQL",),
+        approved_episodes=(),
     )
-    write_master(store, master)
-    version = _prepare(store, master, approved=())
+
+    measured = measure_prepared(store, master, OFFER, payload.version)
+
+    assert measured["unapproved_episode_disclosures"] == 0
+    assert payload.version == 1
+
+
+def test_a_genuinely_unrelated_episode_is_undecidable_like_any_other(store: ProfileStore) -> None:
+    """No vocabulary check means no special case for "shares no vocabulary" either.
+
+    An episode with no textual relationship at all to the document is treated
+    identically to a genuine paraphrase: undecidable, because this sweep has
+    exactly the same (lack of) evidence about both. Sharing more or less
+    vocabulary was never the property in question.
+    """
+    master = _master(store, headline="Data engineer — billing systems")
+    version = _prepare(store, master, approved=(0,))
 
     measured = measure_prepared(store, master, OFFER, version)
 
-    assert measured["episodes_undecidable"] == 0
-    assert measured["episodes_withheld"] == 1
-
-
-def test_a_single_shared_significant_word_is_never_enough(store: ProfileStore) -> None:
-    """`_PARAPHRASE_MIN_OVERLAP` guards against one coincidental long word.
-
-    Mirrors the reasoning CodeRabbit's whole-word padding already established
-    for `_carries` (`test_a_short_episode_does_not_match_a_longer_word`): a
-    single point of contact is not evidence of anything, whatever the rest of
-    the episode says.
-    """
-    assert not _plausible_paraphrase(
-        "Our platform runs on Snowflake today.", _THRESHOLD_EPISODE.text
-    )
-
-    master = CVMaster(
-        headline=SourcedText(
-            text="Our platform runs entirely on Snowflake for a variety of reporting purposes."
-        ),
-        skills=(Skill(name="PostgreSQL", level="strong"),),
-        episodes=(_THRESHOLD_EPISODE,),
-    )
-    write_master(store, master)
-    version = _prepare(store, master, approved=())
-
-    measured = measure_prepared(store, master, OFFER, version)
-
-    assert measured["episodes_undecidable"] == 0
+    assert any(FAILURE in item for item in measured["undecidable_episodes"])
+    assert measured["unapproved_episode_disclosures"] == 0
 
 
 def test_exact_substance_is_a_confirmed_finding_not_a_downgrade(store: ProfileStore) -> None:
-    """`_plausible_paraphrase` is only ever asked when `_carries` already said no.
+    """The `elif` that reaches "undecidable" is only ever tried after `_carries` fails.
 
     An exact match is the case T46 already catches with full confidence, and
     this task must not weaken that into a hedge.
@@ -830,23 +832,46 @@ def test_exact_substance_is_a_confirmed_finding_not_a_downgrade(store: ProfileSt
     measured = measure_prepared(store, master, OFFER, 1)
 
     assert measured["unapproved_episode_disclosures"] == 1
-    assert measured["episodes_undecidable"] == 0
+    assert not any(WIN in item for item in measured["undecidable_episodes"])
+
+
+def test_a_literal_planted_line_is_confirmed_not_undecidable(store: ProfileStore) -> None:
+    """Present verbatim in the raw document is positive evidence, not "no evidence".
+
+    The line is unbacked, so it is already named by the unbackable-line
+    finding; it must not *also* read as a case this sweep cannot adjudicate,
+    which would understate the confidence a verbatim match actually supports.
+    """
+    master = _master(store)
+    version = _prepare(store, master, approved=(0,))
+    letter = _where(store, version) / "letter.md"
+    letter.write_text(letter.read_text(encoding="utf-8") + FAILURE + "\n", encoding="utf-8")
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["unapproved_episode_disclosures"] == 1
+    assert not any(FAILURE in item for item in measured["undecidable_episodes"])
 
 
 def test_an_approved_disclosed_episode_is_never_flagged_undecidable(
     store: ProfileStore,
 ) -> None:
     """An episode backed by its own approval shares heavy vocabulary with its
-
     own rendered line by construction, and that is not ambiguity.
+
+    Both episodes are approved and disclosed here so nothing is left over for
+    the third state to (correctly) report: FAILURE approved on its own would
+    otherwise land in `episodes_undecidable` too, which is not this test's
+    subject and would make a passing assertion here accidental rather than
+    about the property named in the docstring.
     """
     master = _master(store)
-    version = _prepare(store, master, approved=(0,))
+    version = _prepare(store, master, approved=(0, 1))
 
     measured = measure_prepared(store, master, OFFER, version)
 
     assert measured["episodes_undecidable"] == 0
-    assert measured["episode_disclosures"] == 1
+    assert measured["episode_disclosures"] == 2
 
 
 def test_payload_names_the_undecidable_episode(store: ProfileStore) -> None:
@@ -868,36 +893,55 @@ def test_payload_names_the_undecidable_episode(store: ProfileStore) -> None:
         approved_episodes=(),
     )
 
-    assert len(payload.undecidable_episodes) == 1
-    assert WIN in payload.undecidable_episodes[0]
+    assert any(WIN in item for item in payload.undecidable_episodes)
     assert (
         read_payload(store, OFFER, payload.version).undecidable_episodes
         == payload.undecidable_episodes
     )
 
 
-def test_a_thorough_paraphrase_is_the_recorded_open_risk(store: ProfileStore) -> None:
-    """The losing branch's risk, recorded in the module docstring, pinned here.
+def test_the_boundary_refusal_names_an_undecidable_episode_too(store: ProfileStore) -> None:
+    """F4: the docstring's claim that the boundary is "told which one they got" — pinned.
 
-    "Detect more" was rejected because "nothing cheap does" beat a genuine
-    paraphrase; this is a paraphrase thorough enough to prove the point — a
-    rewording sharing almost no exact vocabulary with the episode it retells
-    slips past the word-overlap check exactly as it slips past the shingle
-    one. This is not a defect this gate claims to catch: it is the honestly
-    recorded edge of what "report undecidability" delivers, so it stays a
-    pinned expectation rather than a silent gap nobody measured.
+    A refusal fired for one, confirmed reason (a verbatim planted line) must
+    not go silent about a second, genuinely undecidable episode sitting in the
+    same draft. Not itself a refusal — §6.2 only requires stopping over a
+    *known* unapproved disclosure — so it rides along on a refusal that is
+    already happening for another reason.
     """
-    master = _master(store, headline=THOROUGH_PARAPHRASE)
-    version = _prepare(store, master, approved=())
+    smuggled = Episode(
+        kind="achievement", text="Renegotiated the hosting contract and cut spend by a third."
+    )
+    master = CVMaster(
+        headline=SourcedText(text=PARAPHRASE.replace("Rewriting", "Reworking")),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(
+            Episode(kind="achievement", text=WIN),
+            Episode(kind="failure", text=FAILURE),
+            smuggled,
+        ),
+    )
+    write_master(store, master)
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("PostgreSQL",),
+        approved_episodes=(0,),
+    )
+    letter = _where(store, payload.version) / "letter.md"
+    letter.write_text(letter.read_text(encoding="utf-8") + smuggled.text + "\n", encoding="utf-8")
 
-    measured = measure_prepared(store, master, OFFER, version)
+    with pytest.raises(ApprovalError) as excinfo:
+        record_sent(store, master, OFFER, payload.version, confirms=payload_digest(payload))
 
-    # Neither episode is flagged undecidable: WIN's paraphrase is too thorough
-    # for the word-overlap heuristic to catch (the point of this test), and
-    # FAILURE is genuinely unrelated. Both therefore read as withheld — WIN
-    # wrongly, which is exactly the recorded, open risk.
-    assert measured["episodes_undecidable"] == 0
-    assert measured["episodes_withheld"] == 2
+    message = str(excinfo.value)
+    assert smuggled.text in message
+    assert "undecid" in message
+    assert FAILURE in message
 
 
 # ---------------------------------------------------------------------------
@@ -917,9 +961,31 @@ def test_the_recorded_paraphrase_evidence_clears_its_own_floor(tmp_path: Path) -
     measured = write_paraphrase_evidence(tmp_path / "T156.json")
 
     assert measured["paraphrase_states_evaluated"] >= MINIMUM_PARAPHRASE_STATES
+    assert measured["paraphrase_checks_evaluated"] >= MINIMUM_PARAPHRASE_CHECKS
     assert measured["paraphrased_substance_reported_as_withheld"] == 0
     assert measured["gate_status"] == "measured"
     assert json.loads((tmp_path / "T156.json").read_text(encoding="utf-8")) == measured
+
+
+def test_deleting_an_over_refusal_state_breaches_the_floor(tmp_path: Path) -> None:
+    """F3, pinned directly: the floor must guard *states*, not merely `check()` calls.
+
+    Deleting a state's `fresh()` call and every `check()` beneath it must lower
+    `paraphrase_states_evaluated` below `MINIMUM_PARAPHRASE_STATES` — so this
+    drives the real function and asserts the floor would in fact catch a
+    shrunken states list, rather than trusting the constant's comment. Both
+    floors are pinned to the actual count, so either kind of shrinkage — fewer
+    states, or the same states with fewer assertions each — is caught by one
+    of the two rather than by neither.
+    """
+    measured = probe_paraphrase_undecidability(tmp_path / "profiles")
+    # The actual probe already clears both floors with no margin to spare a
+    # deletion: both constants are the exact counts, so simulating one fewer
+    # of either is simply one less than what was measured.
+    assert measured["paraphrase_states_evaluated"] - 1 < MINIMUM_PARAPHRASE_STATES
+    assert measured["paraphrase_checks_evaluated"] - 1 < MINIMUM_PARAPHRASE_CHECKS
+    assert measured["paraphrase_states_evaluated"] == MINIMUM_PARAPHRASE_STATES
+    assert measured["paraphrase_checks_evaluated"] == MINIMUM_PARAPHRASE_CHECKS
 
 
 def test_the_paraphrase_report_fails_on_a_nonzero_metric(
@@ -931,47 +997,33 @@ def test_the_paraphrase_report_fails_on_a_nonzero_metric(
     printed but not acted on, which reads as a passing gate from the exit code
     `open_task_pr.sh` and CI actually check.
     """
+    passing = {
+        "paraphrase_states_evaluated": MINIMUM_PARAPHRASE_STATES,
+        "paraphrase_checks_evaluated": MINIMUM_PARAPHRASE_CHECKS,
+        "paraphrased_substance_reported_as_withheld": 0,
+        "paraphrase_probe_failures": [],
+        "gate_status": "measured",
+    }
+    assert _paraphrase_report(dict(passing)) == 0
+    assert _paraphrase_report({**passing, "paraphrased_substance_reported_as_withheld": 1}) == 1
     assert (
         _paraphrase_report(
-            {
-                "paraphrase_states_evaluated": MINIMUM_PARAPHRASE_STATES,
-                "paraphrased_substance_reported_as_withheld": 0,
-                "paraphrase_probe_failures": [],
-                "gate_status": "measured",
-            }
-        )
-        == 0
-    )
-
-    assert (
-        _paraphrase_report(
-            {
-                "paraphrase_states_evaluated": MINIMUM_PARAPHRASE_STATES,
-                "paraphrased_substance_reported_as_withheld": 1,
-                "paraphrase_probe_failures": [],
-                "gate_status": "measured",
-            }
+            {**passing, "paraphrase_states_evaluated": 0, "gate_status": "unmeasured"}
         )
         == 1
     )
-
-    assert (
-        _paraphrase_report(
-            {
-                "paraphrase_states_evaluated": 0,
-                "paraphrased_substance_reported_as_withheld": 0,
-                "paraphrase_probe_failures": [],
-                "gate_status": "unmeasured",
-            }
-        )
-        == 1
-    )
+    # The checks floor, on its own, guards against padding the states count
+    # with an empty `fresh()` call — the "floor counting the wrong population"
+    # shape F3 named — by catching a states count that clears its own floor
+    # while the checks beneath it thin out.
+    assert _paraphrase_report({**passing, "paraphrase_checks_evaluated": 0}) == 1
 
     monkeypatch.setattr(
         approval,
         "probe_paraphrase_undecidability",
         lambda root: {
             "paraphrase_states_evaluated": 0,
+            "paraphrase_checks_evaluated": 0,
             "paraphrased_substance_reported_as_withheld": 0,
             "paraphrase_probe_failures": [],
             "gate_status": "unmeasured",

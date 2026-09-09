@@ -75,48 +75,74 @@ green over the wrong thing, and here the code was answering a question
 (is this episode's *text* present?) that the module's own promise (does this
 *substance* reach an employer?) never asked.
 
-Two answers were open, and only one is taken:
+Two answers were open, and only one is taken — and this section was rewritten
+once already, because the first cut of "report undecidability" was itself a
+second detector wearing that name, and the second-reader round on #435 (C1-C5)
+measured exactly why that failed:
 
 1. *Detect more* — spend the docstring's named upgrade path, or a cheaper
    stand-in for it, so the sweep can call a paraphrase a paraphrase. **Rejected**,
    and the module's own words are the reason: "nothing cheap does" beat a
    genuine paraphrase, so a cheap stand-in cannot deliver the confident verdict
    this sweep exists to give — it can only ever be a different wrong confidence,
-   traded for the current one. Worse, its failure mode is the one this
-   repository has paid for before (CLAUDE.md, "Fixtures for a correctness-critical
-   gate"): a matcher tuned against the fixtures its own author wrote, scored
-   against over-refusal only as hard as the author happened to think of, with
-   every vocabulary-sharing draft it blocks landing as a regeneration the
-   candidate pays for and never as a finding anyone reads. **The recorded risk
-   of not taking this path**: a paraphrase that shares almost no surface
-   vocabulary with the episode it retells — a rewrite thorough enough to beat
-   even a word-overlap heuristic — still reaches the employer with nothing
-   this module says about it. That is exactly the gap the docstring already
-   named as needing a model call per episode per document, and it is still
-   open after this task; nothing here claims otherwise.
-2. *Report undecidability* — **taken**. The shingle matcher is unchanged, and a
-   normalised-word overlap test (`_plausible_paraphrase`) is added beside it,
-   *not* in place of it, with a narrower job: not "is this a paraphrase" but
-   "is the coincidence of this much shared vocabulary unlikely enough that a
-   confident verdict would be a promise this sweep cannot keep." When it fires,
-   the episode leaves `episodes_withheld` and enters a third state,
-   `episodes_undecidable`, reported in `payload.json` and named in the
-   boundary's refusal message precisely because it is not itself a refusal —
+   traded for the current one. This is no longer only an argument: the first
+   version of this fix built exactly such a stand-in (`_plausible_paraphrase`,
+   a normalised-word-overlap test with two tuned floors) and a second reader
+   measured it end to end. It caught **0 of 8** constructed genuine paraphrases
+   — overlap was exactly 0 on all eight, because a paraphrase is *by
+   definition* a substitution of the content words, so the overlap it leaves
+   behind is empty — and flagged **21 of 30** innocent same-domain documents
+   that retold no substance at all, because two documents about the same kind
+   of work *by definition* share their content words. Both failures come from
+   the same fact, so no choice of thresholds fixes one without the other: a
+   word-overlap proxy is not weakly correlated with paraphrase, it is
+   anti-correlated with it. **The recorded risk of not taking this path**: the
+   docstring's named upgrade (an embedding comparison, at a model call per
+   episode per document) is the only thing that could ever tell a paraphrase
+   from a shared subject, and it is still not built; nothing here claims
+   otherwise.
+2. *Report undecidability, unconditionally* — **taken**. Not "detect more
+   cheaply, then call the residue undecidable" — that is answer 1 with an extra
+   step, and it is what the rejected first cut actually was. The rule instead
+   needs no constant and derives directly from `_carries`'s own limit: `_carries`
+   can *confirm presence* (a shingle matched) and can never *confirm absence*
+   (nothing cheap beats a paraphrase, so a shingle miss proves nothing about
+   whether the substance is there some other way). An episode that is neither
+   manifest-disclosed nor shingle-matched is therefore a case this sweep has
+   **no evidence about**, full stop — not a case in some vocabulary-overlap
+   band and not a case outside it. So every such episode enters the third
+   state, `episodes_undecidable`, uniformly, and the old `episodes_withheld`
+   field is retired rather than kept at whatever it now computes to (see the
+   "second, sharper risk" below for why keeping it would itself be the family
+   this repository keeps finding). Reported in `payload.json`, and named in
+   the boundary's refusal message when a refusal
+   fires for another reason, precisely because it is not itself a refusal —
    §6.2 asks this module to stop drafting or recording a send over a *known*
    unapproved disclosure, and an undecidable case is not known to be one. This
    is the reading CLAUDE.md's fixtures section calls the durable half of a fix:
    it converts a silent fail-open (a false "withheld") into a visible one (an
-   honest "cannot tell"), rather than trading it for a false "unapproved" that
-   blocks a candidate's clean draft. **The recorded risk of taking this path**:
-   an undecidable case does not stop `prepare` or `record_sent` by itself, so a
-   paraphrase landing inside the overlap band still reaches the employer on the
-   candidate's own say-so — this converts the silence into a visible flag for a
-   human to weigh, it does not convert it into a refusal. That is the same
-   trade the module already makes at the boundary of what §6.2 can check by
-   text at all (see "What this boundary is, and what it is not" below): this
-   file stops one step short of sending regardless, and an honest "undecided"
-   is a stronger thing to hand the candidate at that step than a wrong
-   "withheld" was.
+   honest "cannot tell"), rather than trading it for a second false confidence
+   dressed up as caution. **The recorded risk of taking this path**: an
+   undecidable case does not stop `prepare` or `record_sent` by itself, so a
+   paraphrase still reaches the employer on the candidate's own say-so — this
+   converts the silence into a visible flag for a human to weigh, it does not
+   convert it into a refusal. That is the same trade the module already makes
+   at the boundary of what §6.2 can check by text at all (see "What this
+   boundary is, and what it is not" below): this file stops one step short of
+   sending regardless, and an honest "undecided" is a stronger thing to hand
+   the candidate at that step than a wrong "withheld" was. **A second, sharper
+   risk this design accepts on purpose**: because the rule is unconditional,
+   almost every episode not manifest-disclosed now lands in `episodes_undecidable`
+   rather than in any "confirmed absent" bucket, since almost nothing on a real
+   page is a verbatim eight-word match for prose nobody wrote to match it. A
+   `episodes_withheld` field kept in the schema after this change could
+   therefore only ever read at or near zero — a metric that cannot move with
+   its own inputs is precisely the "metric independent of its own inputs" face
+   CLAUDE.md's fixtures section names, so the field is deleted rather than kept
+   at a number that would look like a measurement without being one. That is
+   the honest size of what a shingle test alone can prove about absence: almost
+   none, and a module that says so plainly is worth more than one asserting a
+   number it cannot support.
 
 **The measurement cannot construct both sides of its own equality.** `measure()`
 writes approvals and documents in one call from one tuple, so they agree by
@@ -345,60 +371,30 @@ def _carries(document: str, episode: str) -> bool:
     )
 
 
-# T156: word-level, not shingle — a paraphrase reorders and resynonymises, so
-# the consecutive window `_carries` looks for is gone by construction exactly
-# where this is meant to fire. Two floors, and both have to clear, because
-# either alone fails in its own direction: the ratio alone lets a two-word
-# episode ("Cut costs.") trip on any document mentioning "costs" and one other
-# long word, and the count alone lets a fifty-word episode sharing four
-# incidental terms with an unrelated document trip too. Neither floor is
-# derived from the other or from any population this module counts — both are
-# stated constants, chosen once, here.
-_SIGNIFICANT_MIN_LENGTH = 5
-_PARAPHRASE_MIN_OVERLAP = 4
-_PARAPHRASE_MIN_RATIO = 0.5
-
-
-def _significant_words(text: str) -> frozenset[str]:
-    """The normalised words of `text` long enough to carry meaning on their own.
-
-    A length floor rather than a stopword list: a list is a fixed vocabulary
-    that Spanish and Catalan — supported identically to English by `_words`,
-    per D-4 — would each need their own copy of, and a short function word
-    almost never survives into a paraphrase's overlap by coincidence anyway.
-    The words that do are the long, specific ones a genuine rewording keeps,
-    because they are the ones carrying the substance rather than the grammar.
-    """
-    return frozenset(word for word in _words(text) if len(word) >= _SIGNIFICANT_MIN_LENGTH)
-
-
-def _plausible_paraphrase(document: str, episode: str) -> bool:
-    """Does `document` share enough of `episode`'s vocabulary to be an undetected paraphrase?
-
-    Not a claim that it *is* one. See the module docstring's T156 section: this
-    exists only to tell a genuine coincidence (two documents about the same
-    kind of work, sharing a handful of ordinary long words) from a coincidence
-    unlikely enough that a confident "this episode is absent" would be a
-    promise the word-level evidence does not support. `_PARAPHRASE_MIN_OVERLAP`
-    stops a short episode from ever tripping this on a single shared word;
-    `_PARAPHRASE_MIN_RATIO` stops a long episode from tripping it on a handful
-    of incidental terms borrowed from an otherwise unrelated document. Both are
-    checked against the episode's own vocabulary size, never the document's,
-    so a long document cannot dilute its way to a lower bar.
-    """
-    significant = _significant_words(episode)
-    if len(significant) < _PARAPHRASE_MIN_OVERLAP:
-        return False
-    overlap = significant & _significant_words(document)
-    return (
-        len(overlap) >= _PARAPHRASE_MIN_OVERLAP
-        and len(overlap) / len(significant) >= _PARAPHRASE_MIN_RATIO
-    )
-
-
 def _squash(text: str) -> str:
     """Letters and digits only — a detail written a slightly different way."""
     return re.sub(r"[^0-9a-z]+", "", text.casefold())
+
+
+def _undecidable_suffix(measured: dict[str, Any]) -> str:
+    """T156: tell the boundary's refusal message which episodes are undecided.
+
+    Called from every `ApprovalError` this module raises over `measure_prepared`'s
+    output, so that a refusal fired for a *different*, confirmed reason does not
+    stay silent about an undecidable episode sitting in the same draft — the
+    module docstring's claim that the boundary is "told which one they got" is
+    this line, not a description of behaviour that does not exist. Appending
+    rather than raising on its own: an undecidable case is not itself a refusal
+    (§6.2 only requires stopping over a *known* unapproved disclosure), so this
+    never fires unless something else already has.
+    """
+    if not measured.get("episodes_undecidable"):
+        return ""
+    return (
+        " (also undecidable, not itself a refusal: "
+        + "; ".join(measured["undecidable_episodes"])
+        + ")"
+    )
 
 
 def _refuse_unbacked_disclosures(measured: dict[str, Any], consequence: str) -> None:
@@ -417,7 +413,9 @@ def _refuse_unbacked_disclosures(measured: dict[str, Any], consequence: str) -> 
     if measured["disclosures_unbacked_by_a_generated_document"]:
         raise ApprovalError(
             f"the manifest records a disclosure this version's documents do not carry, "
-            f"{consequence}: " + "; ".join(measured["unbacked_disclosures"])
+            f"{consequence}: "
+            + "; ".join(measured["unbacked_disclosures"])
+            + _undecidable_suffix(measured)
         )
 
 
@@ -471,7 +469,7 @@ def prepare(
     if measured["unapproved_episode_disclosures"]:
         raise ApprovalError(
             "this draft discloses something no per-use approval backs, so no payload was "
-            "written: " + "; ".join(measured["unapproved_episodes"])
+            "written: " + "; ".join(measured["unapproved_episodes"]) + _undecidable_suffix(measured)
         )
     _refuse_unbacked_disclosures(measured, "so no payload was written")
 
@@ -522,7 +520,9 @@ def record_sent(
     if measured["unapproved_episode_disclosures"]:
         raise ApprovalError(
             "these documents disclose something no per-use approval backs, so nothing here "
-            "is sendable: " + "; ".join(measured["unapproved_episodes"])
+            "is sendable: "
+            + "; ".join(measured["unapproved_episodes"])
+            + _undecidable_suffix(measured)
         )
     _refuse_unbacked_disclosures(measured, "so nothing here is sendable")
     payload = read_payload(store, offer_id, version)
@@ -783,16 +783,28 @@ def measure_prepared(
     # Checked over the backed lines only, so a line already reported above is not
     # counted a second time.
     carried = 0
-    # T156: episodes the shingle test cannot confirm carried, but that share
-    # enough vocabulary with the document that calling them "withheld" would be
-    # a confidence this sweep did not earn. See the module docstring's T156
-    # section for why this is a third state rather than a third way to fail
-    # `unapproved_episode_disclosures`. Tracked by text, not by index, for the
-    # same reason `EpisodeApproval` names text: a position in `master.episodes`
-    # is not a stable handle across the one loop that reads it.
+    # T156: every episode this loop reaches is either confirmed carried
+    # (above), confirmed present some other way (below), or a case this sweep
+    # has **no evidence about at all** — and that third bucket is reported
+    # uniformly, not guessed at by a second heuristic. See the module
+    # docstring's T156 section: `_carries` can only ever confirm *presence*,
+    # never *absence* (nothing cheap beats a genuine paraphrase), so a shingle
+    # miss proves nothing and every one of them is undecidable, full stop. A
+    # first version of this rule tried a normalised-word-overlap proxy instead
+    # of an unconditional third state, and a second reader measured it to be
+    # anti-correlated with the property it was meant to proxy — 0 of 8
+    # constructed genuine paraphrases caught, 21 of 30 innocent same-domain
+    # documents wrongly flagged — because a paraphrase substitutes content
+    # words *by definition*, so its overlap is empty, while two documents
+    # about the same job share content words *by definition*, so theirs is
+    # not. No threshold separates those populations; only "confirmed or not"
+    # does. Tracked by text, not by index, for the same reason `EpisodeApproval`
+    # names text: a position in `master.episodes` is not a stable handle
+    # across the one loop that reads it.
     undecidable: list[str] = []
     undecidable_texts: set[str] = set()
     intact = "\n".join(surviving)
+    written_text = "\n".join(written)
     for episode in master.episodes:
         if episode.text in disclosed or episode.text in approved:
             continue
@@ -802,12 +814,22 @@ def measure_prepared(
                 f"{offer_id}/v{version}: {episode.text} — the substance of a story-bank "
                 "episode, carried by an entry no per-use approval names"
             )
-        elif _plausible_paraphrase(intact, episode.text):
+        elif _carries(written_text, episode.text):
+            # Confirmed present verbatim somewhere in the raw document — a
+            # planted, unbacked line reads as one of `findings`' unbackable
+            # rows above without needing to be re-attributed to this episode,
+            # so it is not appended there a second time. It is not
+            # `undecidable` either: this branch is reached only when there
+            # **is** positive evidence, which is the one thing the third state
+            # exists to withhold judgement in the absence of.
+            pass
+        else:
             undecidable_texts.add(episode.text)
             undecidable.append(
-                f"{offer_id}/v{version}: {episode.text} — shares enough wording with an "
-                "entry no per-use approval names that this sweep cannot rule out a "
-                "paraphrase, and reports it as undecided rather than withheld"
+                f"{offer_id}/v{version}: {episode.text} — no per-use approval names it, "
+                "no manifest row claims it, and no shingle match confirms it present "
+                "anywhere on the page — this sweep has no evidence either way, so it is "
+                "reported as undecided rather than withheld"
             )
 
     # Over the disclosures that actually happened, never the rows that claim one.
@@ -827,28 +849,18 @@ def measure_prepared(
         "disclosures_unbacked_by_a_generated_document": len(unwritten),
         "unbacked_disclosures": sorted(unwritten),
         "episode_disclosures": written_claims + carried,
-        # T156: a third state, alongside disclosed and withheld — see the module
-        # docstring. Not a per-use approval's business (it is not a finding
-        # against coverage) and not a clean bill of health either: reported so
+        # T156: the third state, replacing `episodes_withheld` — see the module
+        # docstring. `episodes_withheld` was a claim of *confirmed absence* that
+        # nothing in this module can actually make (the same limit `_carries`'s
+        # own docstring already stated), so it is not kept at a permanent 0:
+        # a field that cannot read anything but 0 is the "metric independent
+        # of its own inputs" shape CLAUDE.md's fixtures section warns about,
+        # not a safer version of the field it replaces. `episodes_undecidable`
+        # is not a per-use approval's business (it is not a finding against
+        # coverage) and not a clean bill of health either: reported so
         # `payload.json` and the boundary can say what they actually know.
         "episodes_undecidable": len(undecidable),
         "undecidable_episodes": sorted(undecidable),
-        # Measured against **every** line on disk, not just the backed ones. A
-        # planted episode is excluded from `surviving`, so counting withholding
-        # over `intact` reported the same sentence as disclosed and withheld in
-        # one call — a summary contradicting itself. An episode this sweep
-        # cannot confirm absent (T156) is excluded here too, for the same
-        # reason: `undecidable_texts` was built over `intact`, a subset of
-        # `written`, so a plausible match over the smaller text is a plausible
-        # match over the larger one too — membership is checked directly rather
-        # than recomputed, so the two counts can never name a case differently.
-        "episodes_withheld": sum(
-            1
-            for episode in master.episodes
-            if episode.text not in disclosed
-            and episode.text not in undecidable_texts
-            and not _carries("\n".join(written), episode.text)
-        ),
     }
 
 
@@ -1967,72 +1979,113 @@ def probe_unbacked_disclosures(root: Path) -> dict[str, Any]:
 
 # ---------------------------------------------------------------------------
 # T156 — a paraphrase must be reported as undecidable, never as withheld
+#
+# Rewritten once already. The first version added a normalised-word-overlap
+# proxy (`_plausible_paraphrase`) and threshold fixtures whose expected
+# verdicts were computed from the proxy's own constants — arithmetic run
+# backwards from the thing being checked, per CLAUDE.md's fixtures section.
+# A second reader measured that proxy end to end and found it anti-correlated
+# with paraphrase (0 of 8 genuine paraphrases caught, 21 of 30 innocent
+# same-domain documents wrongly flagged). The fixtures below are the
+# replacement: no thresholds, no synthetic "boundary" pair, and the innocent
+# controls are same-domain documents that share an episode's vocabulary
+# without retelling its event — the shape the second reader's own report used.
 
-# The win episode's substance, reordered with most of its long words kept, so
-# no eight-word window matches (asserted inside the probe itself, never taken
-# on faith) while `_plausible_paraphrase` can still tell it from a document
-# about something else. This is the shape the task names: "rewritten,
-# reordered, or synonym-substituted such that no normalised eight-word window
-# survives."
+# A genuine paraphrase of the win episode with several of its long words kept
+# (billing, reconciliation, rewriting, hours, minutes) — reordered so no
+# eight-word window matches (asserted inside the probe, never taken on faith).
 _FIXTURE_PARAPHRASE = (
     "Rewriting the reconciliation step cut billing run time from six hours down "
     "to forty minutes each night."
 )
 
-# The module docstring's T156 section records this as the open risk of the
-# chosen answer: a rewording thorough enough that the word-overlap heuristic
-# cannot tell it from an unrelated document either. It is deliberately not one
-# of the states below — folding it into `paraphrased_substance_reported_as_withheld`
-# would make the gate assert a property this task chose not to deliver, which
-# is the shape CLAUDE.md's fixtures section warns against from the other
-# direction. `test_a_thorough_paraphrase_is_the_recorded_open_risk` pins it
-# instead, as a known limitation rather than a defect this gate catches.
+# A thorough paraphrase of the same episode — synonym-substituted rather than
+# reordered, so it shares almost none of the win episode's surface vocabulary.
+# This is the shape the second reader's C3 finding named directly: the state a
+# threshold-based proxy structurally cannot reach, because a paraphrase
+# substitutes content words *by definition*. The unconditional rule below
+# catches it precisely because it asks "is there a shingle match", not "how
+# much vocabulary is shared" — there is no overlap-based fixture left for this
+# one to defeat.
 _FIXTURE_THOROUGH_PARAPHRASE = (
     "By reworking how the ledgers were reconciled, the overnight invoicing job "
     "that used to take six hours now finishes in well under an hour."
 )
 
-# A synthetic episode for the threshold cases, where the exact count of shared
-# significant words has to be countable by hand rather than estimated: seven
-# words of at least five letters, no two of which repeat and none of which is
-# `nightly`/`billing`/etc. above, so this fixture cannot be confused with that
-# one under any normalisation.
-_THRESHOLD_EPISODE = Episode(
-    kind="achievement",
-    text="Migrated the legacy warehouse pipeline onto Snowflake ahead of schedule.",
+# Same-domain, retells nothing: shares "nightly", "billing", "reconciliation"
+# with the win episode, but describes an ongoing role rather than the specific
+# six-hours-to-forty-minutes event. Under the retired word-overlap proxy this
+# was exactly the shape of case the second reader's report measured being
+# wrongly flagged (`support-escalation`, `billing-ownership`); under the
+# unconditional rule it is treated identically to every other unconfirmed
+# episode — undecidable, not blocked — which is the point: there is no special
+# case for "shares vocabulary" any more because there is no vocabulary check.
+_FIXTURE_INNOCENT_WIN_ADJACENT = (
+    "Owns the nightly billing reconciliation runbook and leads the on-call "
+    "rotation for finance systems."
 )
-# Four of the seven significant words — meets both `_PARAPHRASE_MIN_OVERLAP`
-# and `_PARAPHRASE_MIN_RATIO` (4/7 ≈ 0.57).
-_THRESHOLD_MEETS = "The warehouse migrated pipeline was rebuilt on Snowflake this quarter."
-# Three of the seven — clears neither floor (3 < 4; 3/7 ≈ 0.43 < 0.5) — despite
-# sharing the same data-infrastructure theme as the episode. The point of this
-# case is that an ordinary coincidence of domain vocabulary must not trip the
-# check; the threshold cases together are what make that a measurement rather
-# than an assertion about one hand-picked pair.
-_THRESHOLD_MISSES = "The warehouse pipeline sat ahead of a totally unrelated project this quarter."
 
-# Ten constructed states, each contributing at least one `check()` call below.
-# A floor, not a count, for T100's reason: it is the denominator this gate's
-# numerator is measured against, so a states list that quietly shrank to
-# nothing must not still clear a `== 0` gate on the numerator alone.
-MINIMUM_PARAPHRASE_STATES = 10
+# The same shape against the failure episode: shares "schema" and "invoicing"
+# but describes a review process, not the outage.
+_FIXTURE_INNOCENT_FAILURE_ADJACENT = (
+    "Reviews every schema change proposal for the invoicing service before it reaches production."
+)
+
+# A third episode, distinct from the fixture pair above, planted verbatim to
+# create a confirmed finding alongside a genuinely undecidable one — the
+# combination the boundary-message state below needs.
+_FIXTURE_SMUGGLED_EPISODE = Episode(
+    kind="achievement",
+    text="Negotiated a vendor contract renewal that saved forty thousand euros over two years.",
+)
+
+# A paraphrase of the failure episode, for the boundary-message state: reworded
+# so no shingle matches, while the smuggled episode above is planted verbatim
+# in the same draft.
+_FIXTURE_FAILURE_PARAPHRASE = (
+    "The invoicing numbers went wrong for two days after a database change went "
+    "out with no backfill, and nobody caught it right away."
+)
+
+
+def _named_undecidable(measured: dict[str, Any], episode_text: str) -> bool:
+    """Does `measured["undecidable_episodes"]` name this exact episode?"""
+    return any(episode_text in item for item in measured["undecidable_episodes"])
+
+
+def _named_as_finding(measured: dict[str, Any], episode_text: str) -> bool:
+    """Does `measured["unapproved_episodes"]` name this exact episode?"""
+    return any(episode_text in item for item in measured["unapproved_episodes"])
+
+
+# Eleven constructed profiles (`fresh()` calls), one per numbered state below —
+# a floor over the population the second reader's F3 finding named (states,
+# not `check()` calls), set to the actual count rather than to a margin nobody
+# argued: deleting one state now breaches this floor immediately.
+MINIMUM_PARAPHRASE_STATES = 11
+# Both denominators asserted, per the same reasoning T150 gives for
+# `MINIMUM_EVIDENCE_KEYS_COMPARED`/`MINIMUM_EVIDENCE_SOURCES_COMPARED`: a floor
+# on `states` alone is satisfiable by an empty `fresh()` call that asserts
+# nothing, which is exactly the "floor counting the wrong population" shape
+# F3 named. Also set to the actual count, so thinning a state's own checks
+# without deleting the state trips this one instead.
+MINIMUM_PARAPHRASE_CHECKS = 21
 
 
 def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     """T156: a paraphrase must leave the sweep saying "undecided", never "withheld".
 
     Every state is derived from the module docstring's T156 section and from
-    §6.2 by way of `_plausible_paraphrase`'s own docstring — never from what
-    the sweep happens to return, which is the circularity CLAUDE.md's fixtures
-    section exists to break. Direction matters here exactly as it does in
-    `probe_unbacked_disclosures`: the positive states (1-4) are what the fix is
-    for, and the negative ones (5-10) are the over-refusal this must not
-    become — a matcher that calls every shared-vocabulary document ambiguous
-    is not a fix, it is `episodes_withheld` renamed to a word that sounds more
-    careful.
+    §6.2 — never from what the sweep happens to return, which is the
+    circularity CLAUDE.md's fixtures section exists to break. Direction
+    matters exactly as it does in `probe_unbacked_disclosures`: states 1-3 are
+    genuine paraphrases the fix exists to stop mislabelling, states 4-9 are the
+    over-refusal and boundary-scope controls this must not become or overstate,
+    and 10-11 pin the two channels the third state is reported through.
     """
     failures: list[str] = []
     checks = 0
+    states = 0
     reported_as_withheld = 0
 
     def check(condition: bool, message: str) -> None:
@@ -2042,36 +2095,44 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
             failures.append(message)
 
     def fresh(handle: str, master: CVMaster) -> ProfileStore:
+        nonlocal states
+        states += 1
         identity = create_profile(root, "Probe", handle=handle, language="en")
         store = ProfileStore(root, identity.handle)
         write_master(store, master)
         return store
 
-    win = _FIXTURE_EPISODES[0].text
+    win, failure = (episode.text for episode in _FIXTURE_EPISODES)
+
+    def check_genuine_paraphrase(measured: dict[str, Any], text: str, label: str) -> None:
+        """The three assertions every genuine-paraphrase state makes, named once."""
+        nonlocal reported_as_withheld
+        if not _named_undecidable(measured, text) and not _named_as_finding(measured, text):
+            # Named by neither channel: the shape `episodes_withheld` used to
+            # have, silently claiming confirmed absence. This is the numerator.
+            reported_as_withheld += 1
+        check(_named_undecidable(measured, text), f"{label}: not reported as undecidable")
+        check(
+            measured["unapproved_episode_disclosures"] == 0,
+            f"{label}: an undecided paraphrase was treated as a confirmed disclosure",
+        )
 
     # 1 — the defect itself: a paraphrase in the headline, never approved and
     # never named in any manifest row. Before this task this measured a
-    # confident `episodes_withheld == 1`.
+    # confident `episodes_withheld == 1`; before the second-reader round, a
+    # word-overlap proxy that happened to catch this one specific shape.
     paraphrased = _probe_master(headline=_FIXTURE_PARAPHRASE, episodes=(_FIXTURE_EPISODES[0],))
     store = fresh("paraphrase-headline", paraphrased)
-    _probe_prepare(store, paraphrased)
+    payload = _probe_prepare(store, paraphrased)
     measured = measure_prepared(store, paraphrased, _PROBE_OFFER, 1)
-    if measured["episodes_withheld"] >= 1:
-        reported_as_withheld += 1
-    check(measured["episodes_withheld"] == 0, "a paraphrased headline was still reported withheld")
-    check(
-        measured["episodes_undecidable"] == 1
-        and any(win in item for item in measured["undecidable_episodes"]),
-        "a paraphrased headline was not reported as undecidable",
-    )
-    check(
-        measured["unapproved_episode_disclosures"] == 0,
-        "an undecided paraphrase was treated as a confirmed unapproved disclosure",
-    )
+    check_genuine_paraphrase(measured, win, "paraphrase-headline")
+    # Confirms answer 2's own recorded trade directly: an undecidable-only
+    # draft is not itself a refusal, so `prepare` returns a payload.
+    check(payload.version == 1, "an undecidable-only draft was refused rather than prepared")
 
     # 2 — the same substance, in a CV experience bullet rather than a headline.
-    # T114 already established that the sweep must not be blind to a document
-    # other than the headline; this is that same axis for T156.
+    # T114 established the sweep must not be blind to a document other than
+    # the headline; this is that same axis for T156.
     bulleted = CVMaster(
         headline=SourcedText(text="Data platform engineer"),
         experience=(
@@ -2087,101 +2148,78 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     store = fresh("paraphrase-bullet", bulleted)
     _probe_prepare(store, bulleted)
     measured = measure_prepared(store, bulleted, _PROBE_OFFER, 1)
-    if measured["episodes_withheld"] >= 1:
-        reported_as_withheld += 1
-    check(measured["episodes_withheld"] == 0, "a paraphrased CV bullet was still reported withheld")
-    check(
-        measured["episodes_undecidable"] == 1,
-        "a paraphrased CV bullet was not reported as undecidable",
-    )
+    check_genuine_paraphrase(measured, win, "paraphrase-bullet")
 
-    # 3 — the threshold case that must fire: four of seven significant words,
-    # which is the boundary `_PARAPHRASE_MIN_OVERLAP` and `_PARAPHRASE_MIN_RATIO`
-    # state, not a comfortable margin past it.
-    meets = _probe_master(headline=_THRESHOLD_MEETS, episodes=(_THRESHOLD_EPISODE,))
-    store = fresh("threshold-meets", meets)
-    _probe_prepare(store, meets)
-    measured = measure_prepared(store, meets, _PROBE_OFFER, 1)
-    if measured["episodes_withheld"] >= 1:
-        reported_as_withheld += 1
-    check(measured["episodes_withheld"] == 0, "a boundary-case overlap was still reported withheld")
-    check(
-        measured["episodes_undecidable"] == 1, "a boundary-case overlap was not flagged undecidable"
+    # 3 — the second-reader's C3 case by name: a paraphrase thorough enough to
+    # share almost no surface vocabulary with the episode it retells. The
+    # retired word-overlap proxy caught 0 of 8 cases shaped like this one;
+    # the unconditional rule needs no vocabulary at all to catch it.
+    thorough = _probe_master(
+        headline=_FIXTURE_THOROUGH_PARAPHRASE, episodes=(_FIXTURE_EPISODES[0],)
     )
+    store = fresh("paraphrase-thorough", thorough)
+    _probe_prepare(store, thorough)
+    measured = measure_prepared(store, thorough, _PROBE_OFFER, 1)
+    check_genuine_paraphrase(measured, win, "paraphrase-thorough")
 
-    # 4 — the same episode, spoken about elsewhere with an unrelated advert —
-    # a second document shape for the same boundary case, so state 3 is not
-    # the only tree the numerator can be measured over.
-    meets_ad = _probe_master(
-        headline="Backend engineer — data platforms",
+    # 4 and 5 — the over-refusal shape the retired proxy actually failed on:
+    # a same-domain document that shares an episode's vocabulary while
+    # retelling none of its event. Under the unconditional rule there is no
+    # vocabulary check left to trip, so this is not a "control" in the old
+    # threshold sense — it is confirmation that sharing a subject is no longer
+    # treated as evidence of anything, in either direction. Both drafts must
+    # still prepare cleanly: nothing here is a confirmed finding.
+    innocent_win = _probe_master(
+        headline=_FIXTURE_INNOCENT_WIN_ADJACENT, episodes=(_FIXTURE_EPISODES[0],)
+    )
+    store = fresh("innocent-win-adjacent", innocent_win)
+    payload = _probe_prepare(store, innocent_win)
+    measured = measure_prepared(store, innocent_win, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 0,
+        "an innocent same-domain document was treated as a confirmed disclosure",
+    )
+    check(payload.version == 1, "an innocent same-domain document blocked the draft")
+
+    innocent_failure = _probe_master(
+        headline="Data engineer — billing systems",
         experience=(
             Experience(
-                title="Platform engineer",
-                organisation="Other Co",
-                description=_THRESHOLD_MEETS,
+                title="Data engineer",
+                organisation="Probe S.A.",
+                description=_FIXTURE_INNOCENT_FAILURE_ADJACENT,
             ),
         ),
-        episodes=(_THRESHOLD_EPISODE,),
+        episodes=(_FIXTURE_EPISODES[1],),
     )
-    store = fresh("threshold-meets-bullet", meets_ad)
-    _probe_prepare(store, meets_ad)
-    measured = measure_prepared(store, meets_ad, _PROBE_OFFER, 1)
-    if measured["episodes_withheld"] >= 1:
-        reported_as_withheld += 1
+    store = fresh("innocent-failure-adjacent", innocent_failure)
+    payload = _probe_prepare(store, innocent_failure)
+    measured = measure_prepared(store, innocent_failure, _PROBE_OFFER, 1)
     check(
-        measured["episodes_withheld"] == 0,
-        "a boundary-case overlap in a bullet was still reported withheld",
+        measured["unapproved_episode_disclosures"] == 0,
+        "an innocent same-domain bullet was treated as a confirmed disclosure",
     )
-    check(
-        measured["episodes_undecidable"] == 1,
-        "a boundary-case overlap in a bullet was not flagged undecidable",
-    )
+    check(payload.version == 1, "an innocent same-domain bullet blocked the draft")
 
-    # 5 — the over-refusal control this must not become: a genuinely unrelated
-    # episode reaching no part of the document must stay confidently withheld.
+    # 6 — a genuinely unrelated episode, sharing no vocabulary at all, is
+    # treated identically to states 1-5: undecidable, because the rule is
+    # unconditional rather than conditioned on how much text is shared.
     plain = _probe_master()
     store = fresh("unrelated", plain)
     _probe_prepare(store, plain, approved=(0,))
     measured = measure_prepared(store, plain, _PROBE_OFFER, 1)
     check(
-        measured["episodes_withheld"] == 1,
-        "an episode with no textual relationship to the document was not confidently withheld",
+        _named_undecidable(measured, failure),
+        "a genuinely unrelated episode was not reported as undecidable",
     )
-    check(measured["episodes_undecidable"] == 0, "an unrelated episode was flagged undecidable")
-
-    # 6 — the threshold case that must NOT fire: three of the same seven words,
-    # sharing the episode's general theme, must not tip into "undecidable" —
-    # otherwise this is `episodes_withheld` renamed, not a narrower check.
-    misses = _probe_master(headline=_THRESHOLD_MISSES, episodes=(_THRESHOLD_EPISODE,))
-    store = fresh("threshold-misses", misses)
-    _probe_prepare(store, misses)
-    measured = measure_prepared(store, misses, _PROBE_OFFER, 1)
-    check(measured["episodes_undecidable"] == 0, "a below-floor overlap was flagged undecidable")
     check(
-        measured["episodes_withheld"] == 1,
-        "a below-floor overlap left the episode unaccounted for",
+        measured["unapproved_episode_disclosures"] == 0,
+        "a genuinely unrelated episode was treated as a confirmed disclosure",
     )
 
-    # 7 — a single shared significant word must never be enough on its own,
-    # whatever the rest of the episode says — `_PARAPHRASE_MIN_OVERLAP` is the
-    # floor that stops one coincidental long word from reading as ambiguity.
-    one_shared = _probe_master(
-        headline=(
-            "Our platform runs entirely on Snowflake for a variety of reporting purposes today."
-        ),
-        episodes=(_THRESHOLD_EPISODE,),
-    )
-    store = fresh("one-shared-word", one_shared)
-    _probe_prepare(store, one_shared)
-    measured = measure_prepared(store, one_shared, _PROBE_OFFER, 1)
-    check(
-        measured["episodes_undecidable"] == 0,
-        "a single shared significant word was enough to flag an episode undecidable",
-    )
-
-    # 8 — exact substance still reads as a confirmed finding, not a downgrade
-    # to undecidable: `_plausible_paraphrase` is checked only in the `elif`
-    # branch, and this pins that it never gets there first.
+    # 7 — exact substance still reads as a confirmed finding, never a
+    # downgrade to undecidable: the `elif` in `measure_prepared` is reached
+    # only when the `if` (shingle match) already failed.
     smuggled = _probe_master(headline=win.rstrip("."))
     store = fresh("exact-smuggled", smuggled)
     with contextlib.suppress(ApprovalError):
@@ -2191,11 +2229,28 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         measured["unapproved_episode_disclosures"] == 1,
         "an exact match was not reported as a confirmed disclosure",
     )
-    check(measured["episodes_undecidable"] == 0, "an exact match was downgraded to undecidable")
+    check(not _named_undecidable(measured, win), "an exact match was downgraded to undecidable")
 
-    # 9 — an episode that is both approved and disclosed shares heavy
-    # vocabulary with its own document by construction; it must never appear
-    # in `undecidable_episodes` for that reason alone.
+    # 8 — a literal, unbacked planted line: present verbatim in the raw
+    # document, so this sweep *does* have evidence — it must not be reported
+    # as undecidable (no evidence) or counted twice against `findings`.
+    store = fresh("planted-unbacked", plain)
+    _probe_prepare(store, plain, approved=(0,))
+    letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+    letter.write_text(letter.read_text(encoding="utf-8") + failure + "\n", encoding="utf-8")
+    measured = measure_prepared(store, plain, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 1,
+        "a planted unbacked line was not reported as a confirmed disclosure",
+    )
+    check(
+        not _named_undecidable(measured, failure),
+        "a literal planted line was reported as undecidable despite being confirmed present",
+    )
+
+    # 9 — an episode that is both approved and disclosed shares its own
+    # vocabulary with its own rendered line by construction; it must never
+    # appear in `undecidable_episodes` for that reason alone.
     store = fresh("approved-overlap", plain)
     _probe_prepare(store, plain, approved=(0, 1))
     measured = measure_prepared(store, plain, _PROBE_OFFER, 1)
@@ -2213,11 +2268,36 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         "an undecidable episode was prepared without payload.json naming it",
     )
 
+    # 11 — the boundary's refusal message names the undecidable episode when a
+    # refusal fires for a *different*, confirmed reason (F4): a draft holding
+    # one approved-and-disclosed episode, one paraphrased-and-undecidable
+    # episode, and one verbatim-planted-and-confirmed episode.
+    combined = CVMaster(
+        headline=SourcedText(text=_FIXTURE_FAILURE_PARAPHRASE),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(_FIXTURE_EPISODES[0], _FIXTURE_EPISODES[1], _FIXTURE_SMUGGLED_EPISODE),
+    )
+    store = fresh("boundary-message", combined)
+    payload = _probe_prepare(store, combined, approved=(0,))
+    letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+    letter.write_text(
+        letter.read_text(encoding="utf-8") + _FIXTURE_SMUGGLED_EPISODE.text + "\n",
+        encoding="utf-8",
+    )
+    try:
+        record_sent(store, combined, _PROBE_OFFER, 1, confirms=payload_digest(payload))
+        message = ""
+    except ApprovalError as exc:
+        message = str(exc)
+    check(_FIXTURE_SMUGGLED_EPISODE.text in message, "the confirmed finding was not named")
+    check("undecid" in message and failure in message, "the undecidable episode was not named")
+
     return {
-        "paraphrase_states_evaluated": checks,
+        "paraphrase_states_evaluated": states,
+        "paraphrase_checks_evaluated": checks,
         "paraphrased_substance_reported_as_withheld": reported_as_withheld,
         "paraphrase_probe_failures": failures,
-        "gate_status": "measured" if checks else "unmeasured",
+        "gate_status": "measured" if states else "unmeasured",
     }
 
 
@@ -2250,7 +2330,7 @@ def measure(
     ads = load_store(store_path or DEFAULT_STORE_PATH)
 
     disclosures = 0
-    withheld = 0
+    undecidable_total = 0
     unapproved: list[str] = []
     recorded = 0
     with tempfile.TemporaryDirectory() as scratch:
@@ -2271,7 +2351,7 @@ def measure(
             )
             measured = measure_prepared(store, master, ad.id, payload.version)
             disclosures += measured["episode_disclosures"]
-            withheld += measured["episodes_withheld"]
+            undecidable_total += measured["episodes_undecidable"]
             unapproved.extend(measured["unapproved_episodes"])
             if position < _RECORDED_SENDS:
                 record_sent(store, master, ad.id, payload.version, confirms=payload_digest(payload))
@@ -2301,7 +2381,7 @@ def measure(
         "unbacked_disclosures": unbacked["unbacked_disclosures"],
         "manifest_disclosures_compared": unbacked["manifest_disclosures_compared"],
         "episode_disclosures": disclosures,
-        "episodes_withheld": withheld,
+        "episodes_undecidable": undecidable_total,
         "personal_details_in_master": leaked,
         "sends_without_confirmation": unconfirmed,
         "applications_recorded": recorded,
@@ -2423,13 +2503,13 @@ def _paraphrase_report(measured: dict[str, Any]) -> int:
             file=sys.stderr,
         )
         failures += 1
-    if measured["paraphrase_states_evaluated"] < MINIMUM_PARAPHRASE_STATES:
-        print(
-            f"paraphrase_states_evaluated is {measured['paraphrase_states_evaluated']}, "
-            f"below the floor of {MINIMUM_PARAPHRASE_STATES}",
-            file=sys.stderr,
-        )
-        failures += 1
+    for key, floor in (
+        ("paraphrase_states_evaluated", MINIMUM_PARAPHRASE_STATES),
+        ("paraphrase_checks_evaluated", MINIMUM_PARAPHRASE_CHECKS),
+    ):
+        if measured[key] < floor:
+            print(f"{key} is {measured[key]}, below the floor of {floor}", file=sys.stderr)
+            failures += 1
     # The probes always construct at least one paraphrase, so `unmeasured` here
     # is a probe set that stopped reaching the check — a broken gate, not an
     # unscored one, exactly as for T114 and D-24 above.
