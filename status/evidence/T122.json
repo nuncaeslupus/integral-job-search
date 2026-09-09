@@ -1,0 +1,25 @@
+{
+  "gates_counted_as_asserted_but_never_read": 0,
+  "readable_gates_the_verifier_stopped_asserting": 0,
+  "ungated_tasks_refused_as_faulty": 0,
+  "divergent": [],
+  "stopped_asserting": [],
+  "refused_as_faulty": [],
+  "gate_reader_agreement_status": "measured",
+  "gates_compared_at_least": 150,
+  "arrangements_probed": [
+    "bold_label",
+    "fence_above_the_heading",
+    "fence_after_the_section_ends",
+    "fence_carries_an_info_string",
+    "fence_never_closed",
+    "fence_quoted_in_prose_only",
+    "heading_pluralised",
+    "heading_with_no_space_after_the_hashes",
+    "label_in_a_later_section",
+    "no_fence_at_all",
+    "no_section_heading_at_all",
+    "second_acceptance_gate_section",
+    "second_fence_after_the_first"
+  ]
+}
