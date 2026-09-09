@@ -25,8 +25,10 @@ from integral.robots import (
     Robots,
     RobotsError,
     _allowed,
+    _anchored_spelling,
     _canon,
     _canon_region,
+    _find_spelling,
     _Fixture,
     _main,
     _match_octets,
@@ -38,6 +40,19 @@ from integral.robots import (
     measure,
     measure_browser_recovery,
 )
+
+#: Floors for the two scoring sites `_match_octets` feeds, asserted separately.
+#: One number over both would stay green on a population that had drained out of
+#: the anchored branch — which is precisely how reverting the anchored count to
+#: `run[0][0]` survived the full gate. See
+#: `test_a_rule_scores_what_the_same_rule_spelled_explicitly_would_score`.
+UNANCHORED_PAIRS_COMPARED_AT_LEAST = 16
+ANCHORED_PAIRS_COMPARED_AT_LEAST = 9
+
+#: And for the counts themselves, in
+#: `test_the_octets_a_spelling_reports_are_the_octets_that_matched`.
+SPELLING_COUNTS_CHECKED_AT_LEAST = 9
+ANCHORED_SPELLING_COUNTS_CHECKED_AT_LEAST = 7
 
 # Trimmed from the live files on 2026-08-24, keeping the groups that decide the
 # cases below. Frozen on purpose: a test that re-fetches measures the boards'
@@ -352,7 +367,8 @@ def test_no_shorter_allow_beats_a_wildcard_disallow_that_matched_more() -> None:
 
 
 def test_a_rule_scores_what_the_same_rule_spelled_explicitly_would_score() -> None:
-    """The general form of the precedence finding, in both directions.
+    """The general form of the precedence finding, in both directions, at BOTH
+    scoring sites.
 
     A run behind a `*` is region-ambiguous, so it carries two canonical
     spellings — and the rule that spells those octets as escapes is not
@@ -363,8 +379,21 @@ def test_a_rule_scores_what_the_same_rule_spelled_explicitly_would_score() -> No
     shorter `Allow` (the fail-open), and an `Allow` was under-weighed and lost
     to a `Disallow` it should have tied or beaten.
 
-    Stated this way it is an invariant rather than a list of triples, so a new
-    spelling that goes wrong fails it without anyone adding a row.
+    **The octet count is produced in two different places, and the first
+    revision of this test reached only one of them.** `_match_octets` scores an
+    ordinary run through `_find_spelling` and a `$`-ANCHORED FINAL run through
+    `_anchored_spelling`, adding each to the total on its own line. That
+    revision carried five unanchored pairs and not one anchored one, so
+    reverting the anchored line to `octets + len(run[0][0])` — the identical
+    defect this round exists to remove, in the branch the fix forgot — survived
+    the whole of `make host-gate` with no evidence drift and permitted 38
+    requests the fixed matcher refuses. An invariant whose population never
+    reaches the code the invariant is about is not a class-level test.
+
+    So every pair below is weighed TWICE: once as written, where the trailing
+    run goes through `_find_spelling`, and once with `$` appended to both sides,
+    where it goes through `_anchored_spelling`. A revert at either scoring site
+    reddens this.
     """
     pairs = [
         ("/*http://", "/*http%3A%2F%2F"),
@@ -372,6 +401,7 @@ def test_a_rule_scores_what_the_same_rule_spelled_explicitly_would_score() -> No
         ("/*/x", "/*%2Fx"),
         ("/out*//", "/out*%2F%2F"),
         ("/*?y", "/*%3Fy"),
+        ("/*://", "/*%3A%2F%2F"),
     ]
     targets = [
         "https://x.test/out?url=http://evil.com",
@@ -379,6 +409,15 @@ def test_a_rule_scores_what_the_same_rule_spelled_explicitly_would_score() -> No
         "https://x.test/a/x",
         "https://x.test/q?z=?y",
         "https://x.test/x/http://y",
+        # Targets that END on the ambiguous run, so the `$`-anchored form of
+        # each pair matches something rather than skipping. Without these the
+        # anchored half of the loop is a population of zero.
+        "https://x.test/out?url=http://",
+        "https://x.test/out?url=http://evil",
+        "https://x.test/out?q=//",
+        "https://x.test/s?a=?y",
+        "https://x.test/p/x",
+        "https://x.test/p?q=://",
     ]
 
     def score(pattern: str, path: str) -> int | None:
@@ -386,19 +425,86 @@ def test_a_rule_scores_what_the_same_rule_spelled_explicitly_would_score() -> No
         octets = _match_octets(chunks, anchored, path)
         return None if octets is None else octets + len(chunks) - 1 + int(anchored)
 
-    compared = 0
+    compared = {"": 0, "$": 0}
     for url in targets:
         path = _request_path(url)
         for ambiguous, explicit in pairs:
-            weighed, spelled_out = score(ambiguous, path), score(explicit, path)
-            if weighed is None or spelled_out is None:
+            for anchor in ("", "$"):
+                weighed = score(ambiguous + anchor, path)
+                spelled_out = score(explicit + anchor, path)
+                if weighed is None or spelled_out is None:
+                    continue
+                compared[anchor] += 1
+                assert weighed == spelled_out, (
+                    f"{ambiguous + anchor!r} scored {weighed} against {path!r} where the "
+                    f"same rule written {explicit + anchor!r} scores {spelled_out}"
+                )
+    # Floored per scoring site, because one number over both would go green on a
+    # population that had drained out of the anchored branch entirely — which is
+    # the exact shape this test was reworked to close.
+    assert compared[""] >= UNANCHORED_PAIRS_COMPARED_AT_LEAST, compared
+    assert compared["$"] >= ANCHORED_PAIRS_COMPARED_AT_LEAST, compared
+
+
+def test_the_octets_a_spelling_reports_are_the_octets_that_matched() -> None:
+    """The number itself, not the verdict it feeds.
+
+    `_find_spelling` and `_anchored_spelling` each return how many octets the
+    run spent, and `_allowed` scores precedence on it. The test above pins what
+    `_allowed` DOES with the number; nothing pinned the number. Returning
+    `max(len(text) for text, _ in run)` from `_find_spelling` — the longest
+    spelling rather than the one that matched — survives `make host-gate` at
+    exit 0 with no evidence drift and permits 26 requests head refuses, because
+    the two spellings differ only when the SHORT one matched, and the invariant
+    above skips those pairs (the explicit rule spelling the escapes does not
+    match a path that carries the octet raw, so there is nothing to compare to).
+
+    So this asserts the contract directly: the count reported is the length of a
+    spelling of that run which is literally present in the target at the
+    position it was reported for. A count borrowed from the other spelling
+    fails, whichever direction it is borrowed in.
+    """
+    probes = [
+        # (pattern, url) — chosen so that between them both spellings of an
+        # ambiguous run win: the short path one, and the long query one.
+        ("/*/x", "https://x.test/a/x"),
+        ("/*/x", "https://x.test/a?b=/x"),
+        ("/*?y", "https://x.test/a?b=?y"),
+        ("/*?y", "https://x.test/ax?y"),
+        ("/*http://", "https://x.test/out?url=http://evil.com"),
+        ("/*http://", "https://x.test/x/http://y"),
+        ("/*//", "https://x.test/p?q=//"),
+        ("/*//", "https://x.test/p//"),
+        ("/*://", "https://x.test/p?q=://"),
+    ]
+
+    unanchored = anchored = 0
+    for pattern, url in probes:
+        path = _request_path(url)
+        boundary = path.find("?")
+        if boundary == -1:
+            boundary = len(path)
+        chunks, _ = _normalize_rule(pattern)
+        for run in chunks[1:]:
+            if all(not text for text, _ in run):
                 continue
-            compared += 1
-            assert weighed == spelled_out, (
-                f"{ambiguous!r} scored {weighed} against {path!r} where the same rule "
-                f"written {explicit!r} scores {spelled_out}"
-            )
-    assert compared >= 5, f"the invariant must stay exercised; compared {compared}"
+            found = _find_spelling(path, run, 0, boundary)
+            if found is not None:
+                end, spent = found
+                unanchored += 1
+                assert any(text == path[end - spent : end] for text, _ in run), (
+                    f"{pattern!r} reported {spent} octets ending at {end} of {path!r}, "
+                    f"which is {path[end - spent : end]!r} — no spelling of {run}"
+                )
+            tail = _anchored_spelling(path, run, 0, boundary)
+            if tail is not None:
+                anchored += 1
+                assert any(len(text) == tail and path.endswith(text) for text, _ in run), (
+                    f"{pattern!r} reported {tail} anchored octets of {path!r}, "
+                    f"which no spelling of {run} ending there has"
+                )
+    assert unanchored >= SPELLING_COUNTS_CHECKED_AT_LEAST, unanchored
+    assert anchored >= ANCHORED_SPELLING_COUNTS_CHECKED_AT_LEAST, anchored
 
 
 def test_the_query_region_begins_after_the_delimiter_not_at_it() -> None:

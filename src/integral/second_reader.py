@@ -808,30 +808,55 @@ def allows(text: str, agent: str, target: str) -> bool:
 
 #: The floor the case table is committed against. A count of the day would make
 #: every added case an evidence drift (T100); a floor says what the scan
-#: guaranteed without moving, and it is deliberately under what the table
-#: carries. Its job is to stop a clean zero resting on an empty table — a
-#: reader that reads nothing misreads nothing.
-FIXTURES_AT_LEAST = 49
+#: guaranteed without moving. Its job is to stop a clean zero resting on an
+#: empty table — a reader that reads nothing misreads nothing.
+#:
+#: **It said "deliberately under what the table carries" and had drifted to 18
+#: rows under it.** 49 was the table's size when this was written; the table is
+#: 67 now and the floor never moved, so a table shrinking by more than a quarter
+#: would have kept scoring `measured`. Slack under a floor is not caution, it is
+#: the shrunken-table hole this constant exists to close, held open by the
+#: constant itself. Raised to what `CASES` carries, and raised again whenever it
+#: grows — the same rule `robots.FIXTURES_AT_LEAST` follows.
+FIXTURES_AT_LEAST = 67
 
 #: Of those, how many must be cases a weak matcher would wrongly ALLOW. A table
 #: made only of paths a broken reader would wrongly refuse would score a clean
 #: zero while saying nothing about the direction that matters: a fail-closed
 #: bug costs one skipped fetch, a fail-open bug means the check said yes to
-#: something it exists to refuse.
-FAIL_OPEN_CASES_AT_LEAST = 34
+#: something it exists to refuse. Raised from 34 to what the table carries, for
+#: the reason given above: a floor 30 rows under its own population cannot catch
+#: the table losing them.
+FAIL_OPEN_CASES_AT_LEAST = 64
 
 #: And how many paths this reader must refuse where `urllib.robotparser` does
 #: not. A "longest-match" reader that happens to agree with the stdlib on every
 #: committed case has demonstrated nothing at all — the stdlib's inability to
 #: refuse is the whole reason this module exists, so the table has to contain
 #: the disagreement rather than assert it in prose.
+#:
+#: **This one keeps its slack, and the reason is not the reason the other two
+#: had.** It measures 23, and the two floors above were raised to their
+#: populations in the same pass. This is not, because it is the only floor here
+#: whose value depends on a THIRD PARTY: `urllib.robotparser` decides how many
+#: of these paths it allows, and a Python release that made the stdlib refuse
+#: four more of them would turn this gate red over a change in the direction
+#: this module wants. A floor pinned to another project's behaviour reports that
+#: project's version, not this table's health.
 STDLIB_DISAGREEMENTS_AT_LEAST = 8
 
 #: The floor on cases derived here rather than by the independent session. It is
-#: a floor for T100's reason, and it is small on purpose: this tuple exists to
+#: a floor for T100's reason, and it was small on purpose: this tuple exists to
 #: cover branches the spec table does not reach, and if it ever grows large the
 #: honest reading is that the independent table needs extending, not this one.
-REGRESSION_CASES_AT_LEAST = 6
+#:
+#: It stayed at 6 while the tuple reached 18, which is a floor that could not
+#: catch a table shrinking by two thirds. Raised to what the table carries when
+#: `REPO_MATCHER_REGRESSION_DISAGREEMENTS` started pinning rows in it, because a
+#: pin over a table that may silently shrink is the shape
+#: `test_the_nine_cases_t151_closed_are_still_refused_by_the_repo_matcher` was
+#: written to refuse.
+REGRESSION_CASES_AT_LEAST = 18
 
 
 #: Cases where `integral.robots` — the repository's PRIMARY matcher, the one
@@ -910,6 +935,45 @@ REPO_MATCHER_CASES_CLOSED_BY_T151 = (
     "comma_as_path_data_is_encoded",
     "at_sign_as_path_data_is_encoded",
     "plus_as_path_data_is_encoded",
+)
+
+#: The same comparison over the IMPLEMENTER-derived table — and the reason this
+#: constant exists is that the one above never reached it.
+#:
+#: `repo_matcher_verdicts_against_the_rfc` is computed over `CASES` alone, which
+#: is deliberate and is the whole of its authority: those verdicts were written
+#: down by a session that had never seen either matcher, so a zero there is a
+#: statement about an independent reading. But `REGRESSION_CASES` is a table of
+#: real verdicts too, and nothing ran `integral.robots` against it — so that
+#: metric read a truthful 0 while the primary matcher disagreed with **seven**
+#: rows of the other table, five of them fail-open. An honest number over a
+#: population it does not reach is the defect this module was built to catch,
+#: met one table over.
+#:
+#: Pinned by id and by direction, so a new disagreement is a named failure and a
+#: disappearing one has to be noticed rather than absorbed. Measured on
+#: `origin/main` at 6b58be5 the set held seven ids; T151's diff closed three of
+#: them (`the_same_rule_against_an_already_encoded_request`,
+#: `a_later_question_mark_is_query_data`,
+#: `precedence_shifts_when_a_path_octet_is_encoded`) and OPENED two, which is
+#: the fact this pin exists to make visible rather than to hide: emitting a
+#: region-ambiguous run in both spellings for allows as well as disallows is
+#: reading (c), and these two rows are (P). See
+#: `wildcard_region_spelling_readings_diverge` for both readings by name.
+#:
+#: Not this task's gate, and not folded into one. `repo_matcher_verdicts_against_
+#: the_rfc == 0` is T151's committed contract over the independent table and it
+#: still holds; this is the second number, reported beside it, because a metric
+#: with an unmeasured population and a metric that is wrong are different
+#: failures and the fix for the first is to measure, not to relabel.
+REPO_MATCHER_REGRESSION_DISAGREEMENTS: tuple[str, ...] = (
+    "a_wildcard_allow_does_not_outrank_a_matching_disallow",
+    "a_wildcard_allow_reaching_an_encoded_query_does_not_rescue_a_refusal",
+    "rules_under_an_empty_user_agent_line_are_not_dropped",
+    "a_byte_order_mark_does_not_disable_the_file",
+    "a_fragment_marker_is_data_not_a_delimiter",
+    "a_mixed_spelling_rule_matches_no_offered_spelling",
+    "wildcard_region_spelling_readings_diverge",
 )
 
 #: Cases the deriving session marked LOW confidence: RFC 9309's text admits more
@@ -1296,6 +1360,69 @@ REGRESSION_CASES: tuple[Case, ...] = (
             "should be stricter than it — see the comment above for why it is not."
         ),
     ),
+    # **The divergence between this repository's two matchers, stated by name.**
+    # It is not a corner: measured over 4,830 wildcard-bearing (Disallow, Allow,
+    # target) triples the two modules answer differently on 91, and the second
+    # reader on #422 measured 150 of 1,836 (8.2%) over its own generator, skewed
+    # 7:1 toward `integral.robots` being the more permissive side. This row is
+    # the archetype, committed so the gap is measured while it waits rather than
+    # deferred to a task with nothing observing it.
+    #
+    # Two readings of §2.2.2's canonicalisation clause, both admissible:
+    #
+    # * **(P)** — the one THIS module takes. A rule is canonicalised once, as
+    #   written, and it is the TARGET that is offered in more than one spelling;
+    #   the widening is deliberately one-directional (`Disallow` only), because
+    #   an ambiguity resolved into a permission is a fail-open. So specificity
+    #   has a single well-defined pattern length, and `Allow: /*/x` never
+    #   reaches a `%2F` in a query at all.
+    # * **(c)** — the one `integral.robots` takes since T151. A run behind a `*`
+    #   whose region the pattern leaves open is emitted in BOTH canonical
+    #   spellings, for allows and disallows alike, and precedence is scored on
+    #   whichever one matched. So `Allow: /*/x` does reach the query, weighing 6
+    #   octets there and 4 in a path.
+    #
+    # §2.2.2's own example table returns **Undefined** for a contest involving a
+    # wildcard rule, so its text does not choose between them — but it is
+    # entirely un-silent that a crawler must choose: "The most specific match
+    # found MUST be used." A repository whose two matchers choose differently
+    # has no single such rule, which is why this is pinned rather than left to
+    # the task that settles it.
+    #
+    # This table keeps (P), which is the FAIL-CLOSED side here, per the same
+    # rule cases 24 and 25 follow. What `integral.robots` answers is recorded by
+    # `REPO_MATCHER_REGRESSION_DISAGREEMENTS` below rather than argued away.
+    Case(
+        id="wildcard_region_spelling_readings_diverge",
+        robots_txt="User-agent: *\nDisallow: /a*\nAllow: /*/x\n",
+        agent="integral-job-search/0.1",
+        path="/a?b=/x",
+        expected=DISALLOW_VERDICT,
+        section="RFC 9309 §2.2.2 (implementer-derived, contested)",
+        why=(
+            "Under **(P)** the canonical target is `/a?b%3D%2Fx` and the canonical rule "
+            "`Allow: /*/x` carries RFC 3986 §3.3's segment separator, which stays "
+            "literal — so the allow matches no spelling this reader offers it, "
+            "`Disallow: /a*` is the only matching rule, and the verdict is DISALLOW. "
+            "Under **(c)** the `*` may span the delimiter (§2.2.3 makes it any "
+            "sequence), so the run `/x` is admissible as query octets `%2Fx` (§3.4 "
+            "makes `/` data there), the allow matches at 6 octets against the "
+            "disallow's 3, and the verdict flips to ALLOW. §2.2.2 canonicalises "
+            "'prior to comparison' and does not say which of the two spellings a rule "
+            "denotes when its own text does not decide; its example table returns "
+            "Undefined for wildcard contests. This table takes (P), the fail-closed "
+            "reading: DISALLOW."
+        ),
+        direction=FAIL_OPEN_RISK,
+        confidence="LOW",
+        confidence_note=(
+            "the divergence is the point, and it is live: `integral.robots` answers "
+            "ALLOW here and is pinned as doing so. A matcher answering ALLOW has taken "
+            "reading (c) and is not necessarily wrong — report it as a reading "
+            "disagreement and make the repo pick one deliberately, in writing, rather "
+            "than changing either module to match the other."
+        ),
+    ),
 )
 
 
@@ -1385,6 +1512,31 @@ def measure(cases: tuple[Case, ...] | None = None) -> dict[str, Any]:
     ]
 
     regression = [case for case in table if case not in CASES]
+    # And the same comparison over the implementer-derived rows. Kept apart in
+    # the record rather than added to the number above, because the two say
+    # different things: that one is what an INDEPENDENT reading finds the
+    # primary matcher doing, this one is what a table written alongside the
+    # readers finds. Reported because it was not reported at all, which let a
+    # true zero stand over a population of seven disagreements.
+    repo_regression_disagreements = [
+        {
+            "id": case.id,
+            "section": case.section,
+            "expected": case.expected,
+            "confidence": case.confidence,
+            "repo_matcher": verdict,
+            "direction": ("fail_open" if verdict == ALLOW_VERDICT else "fail_closed"),
+        }
+        for case in regression
+        if (
+            verdict := (
+                ALLOW_VERDICT
+                if _repo_matcher_allows(case.robots_txt, case.agent, case.path)
+                else DISALLOW_VERDICT
+            )
+        )
+        != case.expected
+    ]
     fail_open_cases = [case for case in table if case.direction == FAIL_OPEN_RISK]
     floored = (
         len(spec_derived) >= FIXTURES_AT_LEAST
@@ -1414,6 +1566,10 @@ def measure(cases: tuple[Case, ...] | None = None) -> dict[str, Any]:
         # that was already here, recorded so it cannot be shipped and forgotten.
         "repo_matcher_verdicts_against_the_rfc": len(repo_disagreements),
         "repo_matcher_disagreement_cases": repo_disagreements,
+        # The population the line above does not reach, measured rather than
+        # assumed empty. See `REPO_MATCHER_REGRESSION_DISAGREEMENTS`.
+        "repo_matcher_verdicts_against_the_implementer_table": len(repo_regression_disagreements),
+        "repo_matcher_regression_disagreement_cases": repo_regression_disagreements,
         "contested_readings_gating": list(CONTESTED_CASES),
         # `unmeasured` is the honest reading of a table too small, too
         # one-directional, or too agreeable with the stdlib to mean anything.
