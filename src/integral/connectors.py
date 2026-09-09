@@ -1683,7 +1683,10 @@ class ListPage(Strict):
         second-reader round on #406, which named three routes by which a package
         could send a page key `integral.pagination_capture` reads as measured
         while the gate reports zero. Each is reproduced as a probe in
-        `pagination_capture.URL_SIDE_PROBES` and as a test fixture.
+        `pagination_capture.URL_SIDE_PROBES` and as a test fixture. A fourth
+        route (T154) was found and deliberately kept out of that same diff so
+        the first three could be verified on their own; it is closed below,
+        after the position checks that gave it cover.
 
         1. **`param` naming a key the URL does not hold.**
            `?p={page}` with `param: page` over a capture of `?page=1` — the
@@ -1699,6 +1702,20 @@ class ListPage(Strict):
            request, and then the duplicate offers, that `mode: none`'s own
            `max_pages` guard and `body_field`'s "nothing would vary" arm each
            already refuse one layer down.
+        4. **`?page=1&page={page}` — the named key sent twice.** Routes 1-3
+           are all read off *where the placeholder sits*, and this one sends a
+           second, wholly literal pair under the identical name instead of
+           substituting anywhere new — so it holds none of the shapes those
+           checks are looking for and passes every one of them. A capture
+           taken of the request this issues carries the name `param` wants
+           (that is what the literal pair supplies), so
+           `pagination_capture.query_keys` — a *set* of names — reports it
+           certified regardless of which of the two positions a server
+           actually reads. Closed by counting **occurrences of the name**,
+           not positions of the placeholder: RFC 3986 §3.4 defines a query as
+           a sequence of `name=value` pairs and does not forbid a repeated
+           name, so a capture that can only carry one value per name can never
+           certify a key sent twice.
 
         Fail-closed in every direction, and it costs a contributor one error
         message in the file they just wrote.
@@ -1745,6 +1762,38 @@ class ListPage(Strict):
                     f"as at {wanted} — the key carrying the page number is the only one that "
                     "may hold the placeholder, so a second occurrence is a substitution "
                     "nothing declared"
+                )
+            # Route 4 (T154): the placeholder sits at exactly one position under
+            # `param`'s name, and every check above reads *positions of the
+            # placeholder* — so a query string carrying a second, wholly literal
+            # pair under that same name (`?page=1&page={page}`) is invisible to
+            # all three, because that pair never held `{page}` in the first
+            # place. `pagination_capture.query_keys` decodes the captured URL
+            # into a *set* of names, so the literal `page=1` a capture happens to
+            # record satisfies "the key is present" on its own — a capture never
+            # measures the position that varies, and a server free to honour
+            # either duplicate can pin every page to the fixed one. The rule is
+            # over the query string's own grammar (RFC 3986 §3.4 defines it as a
+            # sequence of `name=value` pairs; nothing forbids a repeated name)
+            # rather than this one spelling: any name `parse_qsl` reports more
+            # than once under `param` is refused, whatever value the other
+            # occurrence carries and whatever `param` happens to be spelled.
+            names = [
+                name
+                for name, _ in parse_qsl(urlsplit(self.url_pattern).query, keep_blank_values=True)
+            ]
+            # `wanted is None` above already raised (Route 1) whenever `param`
+            # is `None`, so by construction this line is never reached with
+            # one — spelled out for mypy, which cannot see across the earlier
+            # raise.
+            assert param is not None
+            occurrences = names.count(param)
+            if occurrences > 1:
+                raise ValueError(
+                    f"list.url_pattern's query string names {param!r} {occurrences} times — "
+                    "the key a capture certifies must be the only occurrence of that name, "
+                    "or a fixed occurrence no capture ever measures decides the request "
+                    "instead of the one that actually varies"
                 )
             return self
         # `path_segment`: the page number is positional, so there is no key to

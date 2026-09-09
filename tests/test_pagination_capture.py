@@ -651,6 +651,175 @@ def test_the_committed_library_survives_the_url_side_rule() -> None:
 
 
 # ---------------------------------------------------------------------------
+# T154 — the fourth URL-side route: a query key sent twice
+#
+# Found by the second reader on #406 and deliberately kept out of that diff so
+# the first three routes could be verified on their own. `?page=1&page={page}`
+# holds the placeholder at exactly one position, under exactly the name
+# `pagination.param` names, so routes 1-3's own checks — all read off *where
+# the placeholder sits* — are satisfied. The request this issues nonetheless
+# carries `page` twice, once fixed at a value no capture was ever taken at
+# that position, and `pagination_capture.query_keys` reads a captured URL into
+# a *set* of names — so a capture of either page's request still contains
+# `page` and certifies a key a server is free to ignore.
+
+
+def test_a_query_key_sent_twice_is_refused_at_load(library: Path) -> None:
+    """Route 4. The harm half first: a `list` no validator ever saw issues the
+    identical fixed `page=1` on every request, alongside the one that varies —
+    and the capture that would certify it needs only the *name*, so a capture
+    of page 1's own request (`?page=1&page=1`) already contains `page` before
+    a second page is ever fetched."""
+    unvalidated = _skipping_validation(
+        "https://realboard.io/jobs?page=1&page={page}",
+        mode="query_param",
+        param="page",
+        max_pages=2,
+    )
+    assert build_list_urls(unvalidated) == [
+        "https://realboard.io/jobs?page=1&page=1",
+        "https://realboard.io/jobs?page=1&page=2",
+    ]
+    assert "page" in pc.query_keys("https://realboard.io/jobs?page=1&page=1")
+
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?page=1&page={page}",
+        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+    )
+    assert "names 'page' 2 times" in message
+
+
+def test_the_refusal_does_not_depend_on_the_name_being_page(library: Path) -> None:
+    """The same route, under a name that does not spell `page` — the check
+    counts occurrences of whatever `pagination.param` names, not the literal
+    string `page`."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?p=1&p={page}",
+        {"mode": "query_param", "param": "p", "start": 1, "max_pages": 2},
+    )
+    assert "names 'p' 2 times" in message
+
+
+def test_a_duplicate_under_an_unrelated_key_still_loads(library: Path) -> None:
+    """The fail-closed control: only the name `pagination.param` certifies is
+    counted, so a board that happens to repeat some other filter is
+    unaffected — refusing this would take a real shape down with the fix."""
+    _edit_connector(
+        library,
+        url_pattern="https://realboard.io/jobs?tag=a&tag=b&page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+    )
+    connector = load_connector(_package(library))
+    assert build_list_urls(connector) == [
+        "https://realboard.io/jobs?tag=a&tag=b&page=1",
+        "https://realboard.io/jobs?tag=a&tag=b&page=2",
+    ]
+
+
+def test_every_duplicate_key_probe_agrees_with_the_rule() -> None:
+    """The measurement itself, same shape as `test_every_url_side_probe_agrees_with_the_rule`:
+    behavioural, so a validator deleted, weakened or replaced by a comment
+    fails here."""
+    defects, checked = pc.probe_duplicate_page_keys()
+
+    assert defects == []
+    assert checked >= pc.MINIMUM_DUPLICATE_KEY_PROBES
+
+
+def test_the_duplicate_key_probe_table_meets_its_floor_and_keeps_its_names() -> None:
+    """Pinned **by name**, for the same reason
+    `test_the_url_side_probe_table_carries_the_three_routes_and_meets_its_floor`
+    is: a count alone is satisfied by any N probes and protects a particular
+    shape only by coincidence."""
+    assert len(pc.DUPLICATE_KEY_PROBES) >= pc.MINIMUM_DUPLICATE_KEY_PROBES
+    names = {probe.name for probe in pc.DUPLICATE_KEY_PROBES}
+    assert {
+        "the named key sent twice, the fixed value first",
+        "the named key sent twice, the fixed value second",
+        "the same route under a name that does not spell 'page'",
+        "a duplicate under an unrelated key is not this rule's business",
+        "the ordinary single-occurrence shape still loads",
+    } <= names, sorted(names)
+    # Both verdicts represented, for the same reason the URL-side table needs
+    # both: a table of refusals alone passes over a validator that refuses
+    # everything.
+    assert {probe.loads for probe in pc.DUPLICATE_KEY_PROBES} == {True, False}
+
+
+def test_the_committed_library_has_no_duplicated_query_key() -> None:
+    """The real thing rather than the probes: the committed library cannot
+    carry route 4's shape once the load-time rule refuses it, so the scan over
+    `connectors/` reports a clean zero — and it is a real scan, not a rule
+    nobody exercises, per `test_the_committed_library_survives_the_url_side_rule`."""
+    measured = pc.measure_duplicate_page_keys(_LIBRARY)
+    assert measured["gate_status"] == "measured"
+    assert measured["duplicated_page_keys_certified"] == 0
+    assert measured["query_keys_scanned"] >= pc.MINIMUM_QUERY_KEYS_SCANNED
+
+
+def test_a_library_too_small_to_scan_reports_unmeasured_for_duplicate_keys(
+    library: Path,
+) -> None:
+    """The floor refuses a clean zero over a library nobody read — a
+    one-package fixture with a single query key is exactly that."""
+    measured = pc.measure_duplicate_page_keys(library)
+    assert measured["gate_status"] == "unmeasured"
+    assert "query key" in measured["unmeasured_reason"]
+
+
+def test_a_breached_duplicate_key_floor_writes_nothing(
+    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pc, "MINIMUM_QUERY_KEYS_SCANNED", 100)
+    target = tmp_path / "T154.json"
+
+    pc.write_duplicate_page_keys_evidence(target, _LIBRARY)
+
+    assert not target.exists()
+
+
+def test_the_committed_duplicate_key_record_carries_the_floor_and_not_the_count(
+    tmp_path: Path,
+) -> None:
+    """T100's rule, applied to this gate: `query_keys_scanned`,
+    `packages_scanned` and `duplicate_key_probes_checked` all move whenever
+    anybody adds or retires a connector or a probe."""
+    target = tmp_path / "T154.json"
+    pc.write_duplicate_page_keys_evidence(target, _LIBRARY)
+    committed = json.loads(target.read_text(encoding="utf-8"))
+
+    assert committed["query_keys_scanned_at_least"] == pc.MINIMUM_QUERY_KEYS_SCANNED
+    assert committed["duplicate_key_probes_at_least"] == pc.MINIMUM_DUPLICATE_KEY_PROBES
+    for moving in ("query_keys_scanned", "packages_scanned", "duplicate_key_probes_checked"):
+        assert moving not in committed
+    assert committed["duplicated_page_keys_certified"] == 0
+
+
+def test_the_committed_duplicate_key_evidence_matches_what_the_code_measures_now(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "T154.json"
+    pc.write_duplicate_page_keys_evidence(target, _LIBRARY)
+
+    assert json.loads(target.read_text(encoding="utf-8")) == json.loads(
+        pc.DEFAULT_T154_EVIDENCE_PATH.read_text(encoding="utf-8")
+    )
+
+
+def test_the_entry_point_writes_both_t113_and_t154_evidence(tmp_path: Path) -> None:
+    """The fenced gate for both tasks invokes only `python -m
+    integral.pagination_capture`, so one run has to produce both files."""
+    target = tmp_path / "T113.json"
+
+    assert pc._main(["pagination_capture", str(target)]) == 0
+    assert json.loads(target.read_text(encoding="utf-8"))["gate_status"] == "measured"
+    sibling = tmp_path / "T154.json"
+    assert json.loads(sibling.read_text(encoding="utf-8"))["duplicated_page_keys_certified"] == 0
+
+
+# ---------------------------------------------------------------------------
 # where a capture came from — #406's third finding
 
 

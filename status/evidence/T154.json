@@ -1,0 +1,7 @@
+{
+  "duplicated_page_keys_certified": 0,
+  "defects": [],
+  "gate_status": "measured",
+  "query_keys_scanned_at_least": 8,
+  "duplicate_key_probes_at_least": 4
+}

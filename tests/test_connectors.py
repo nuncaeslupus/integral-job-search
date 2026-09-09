@@ -462,6 +462,68 @@ def test_build_list_urls_honours_pagination_mode_none() -> None:
     ]
 
 
+def test_a_query_key_repeated_with_a_fixed_value_is_refused_at_load() -> None:
+    """T154. `?page=1&page={page}` under `param: page` holds the placeholder at
+    exactly one position and under the right name, so every check that reads
+    *where the placeholder sits* — routes 1-3's own validator — is satisfied.
+    The request this issues nonetheless carries `page` twice, once fixed at
+    `1`: `integral.pagination_capture.query_keys` reads a captured URL into a
+    *set* of names, so a capture of either page's request still contains
+    `page` and certifies a key no capture ever measured in the position that
+    actually matters. Some servers honour the first occurrence, which pins
+    every page this connector requests to page 1.
+
+    The rule is over the query string's own grammar — RFC 3986 §3.4 defines a
+    query as a sequence of `name=value` pairs and does not forbid a repeated
+    name — so it is checked by **counting occurrences of the name**
+    `pagination.param` holds, not by asking whether that name happens to spell
+    `page`. Exercised here under a name that does not."""
+    duplicated = VALID.replace(
+        'url_pattern: "https://www.examplejobs.test/jobs?page={page}"',
+        'url_pattern: "https://www.examplejobs.test/jobs?page=1&page={page}"',
+    )
+    assert "page=1&page={page}" in duplicated  # the replace actually matched
+    with pytest.raises(ConnectorError, match="names 'page' 2 times"):
+        parse_connector(duplicated)
+
+    # Renamed throughout, so nothing about the refusal is keyed to the literal
+    # spelling "page" — a duplicated `p` is refused exactly the same way.
+    renamed = VALID.replace(
+        'url_pattern: "https://www.examplejobs.test/jobs?page={page}"',
+        'url_pattern: "https://www.examplejobs.test/jobs?p=1&p={page}"',
+    ).replace("param: page", "param: p")
+    assert "p=1&p={page}" in renamed and "param: p\n" in renamed
+    with pytest.raises(ConnectorError, match="names 'p' 2 times"):
+        parse_connector(renamed)
+
+    # A duplicate under some OTHER key is not this rule's business: the
+    # certifying key is the one `pagination.param` names, and a board that
+    # happens to repeat an unrelated filter still has exactly one `page`.
+    unrelated_duplicate = VALID.replace(
+        'url_pattern: "https://www.examplejobs.test/jobs?page={page}"',
+        'url_pattern: "https://www.examplejobs.test/jobs?tag=a&tag=b&page={page}"',
+    )
+    assert build_list_urls(parse_connector(unrelated_duplicate), page_count=2) == [
+        "https://www.examplejobs.test/jobs?tag=a&tag=b&page=1",
+        "https://www.examplejobs.test/jobs?tag=a&tag=b&page=2",
+    ]
+
+
+def test_a_single_page_key_still_loads() -> None:
+    """The control for the test above: a `param` key that appears exactly
+    once, holding the placeholder, is the ordinary shape and must keep
+    loading — a check this aggressive would otherwise take the whole library
+    down with it. `VALID` itself already is this shape; asserted directly so
+    a future edit to the fixture cannot silently stop exercising it."""
+    connector = parse_connector(VALID)
+    assert connector.list.pagination.mode == "query_param"
+    assert connector.list.pagination.param == "page"
+    assert build_list_urls(connector, page_count=2) == [
+        "https://www.examplejobs.test/jobs?page=1",
+        "https://www.examplejobs.test/jobs?page=2",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # the selector grammar itself
 
