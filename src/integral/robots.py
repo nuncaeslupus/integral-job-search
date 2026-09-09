@@ -1908,10 +1908,18 @@ Disallow: /search?
         # saying which region the run landed in — which §2.2.2 already makes
         # part of canonicalisation, before any comparison happens.
         #
-        # The alternative — always score the longest spelling — is worse in the
-        # same direction: `/*/x` would weigh 6 against `/a/x`, four of those
-        # octets being a `%2F` that is nowhere in the request. That is not "the
-        # match that has the most octets" under any reading of §2.2.2.
+        # The alternative — always score the longest spelling — would weigh
+        # `/*/x` at 6 against `/a/x`, four of those octets being a `%2F` that
+        # is nowhere in the request. **That is a preference for match-shaped
+        # counting, not something §2.2.2's text excludes**, and it is stated
+        # that way deliberately: an earlier revision of this comment called it
+        # "not the match that has the most octets under any reading", which is
+        # an (M) intuition wearing a spec citation. Under (P), counting octets
+        # the comparison never consumed is the ORDINARY case — `/a*` counts 3
+        # against `/abc` while its `*` consumed three more, deliberately. So
+        # (b) is declined here on the per-region canonicalisation argued just
+        # above, not ruled out by the RFC. Which reading the repository takes
+        # is D-30's to settle, and this comment must not prejudge it.
         #
         # **This row records a reading, and the reading is contested — see
         # D-30.** `integral.second_reader` canonicalises a rule once as written

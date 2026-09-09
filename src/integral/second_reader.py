@@ -946,7 +946,7 @@ REPO_MATCHER_CASES_CLOSED_BY_T151 = (
 #: statement about an independent reading. But `REGRESSION_CASES` is a table of
 #: real verdicts too, and nothing ran `integral.robots` against it — so that
 #: metric read a truthful 0 while the primary matcher disagreed with **seven**
-#: rows of the other table, five of them fail-open. An honest number over a
+#: rows of the other table, six of them fail-open. An honest number over a
 #: population it does not reach is the defect this module was built to catch,
 #: met one table over.
 #:
@@ -1361,12 +1361,18 @@ REGRESSION_CASES: tuple[Case, ...] = (
         ),
     ),
     # **The divergence between this repository's two matchers, stated by name.**
-    # It is not a corner: measured over 4,830 wildcard-bearing (Disallow, Allow,
-    # target) triples the two modules answer differently on 91, and the second
-    # reader on #422 measured 150 of 1,836 (8.2%) over its own generator, skewed
-    # 7:1 toward `integral.robots` being the more permissive side. This row is
-    # the archetype, committed so the gap is measured while it waits rather than
-    # deferred to a task with nothing observing it.
+    # It is not a corner, and the scale is measured by two generators that
+    # share no population: the second reader on #422 answered differently on
+    # 150 of 1,836 (8.2%) over its own, and T151's own 20-pattern x 15-target
+    # sweep on 239 of 5,940 (4.0%), both skewed toward `integral.robots` being
+    # the more permissive side — 7:1 and 2.9:1. The rate tracks how
+    # wildcard-heavy the generator is, so the two bracket it rather than
+    # disagreeing. A third figure, 91 of 4,830, was reported by an earlier
+    # session that was killed with its generator lost; it could NOT be
+    # reproduced here, so it is not recorded as measured — see
+    # `arsenal/tasks/t-f0f2b642.md`. This row is the archetype, committed so
+    # the gap is measured while it waits rather than deferred to a task with
+    # nothing observing it.
     #
     # Two readings of §2.2.2's canonicalisation clause, both admissible:
     #

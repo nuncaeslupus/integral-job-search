@@ -278,7 +278,7 @@ def test_the_implementer_table_is_run_against_the_repo_matcher_too_and_pinned() 
     is what a zero there is worth. `REGRESSION_CASES` is a table of RFC-derived
     verdicts too, and nothing ever ran `integral.robots` against it. So the
     metric read a truthful **0** while the primary matcher disagreed with seven
-    rows of the other table, five of them fail-open — an honest number over an
+    rows of the other table, six of them fail-open — an honest number over an
     unmeasured population, which is the exact defect this module exists to
     catch, met one table over.
 
@@ -301,7 +301,7 @@ def test_the_implementer_table_is_run_against_the_repo_matcher_too_and_pinned() 
     by_id = {case.id: case for case in sr.REGRESSION_CASES}
     for record in measured["repo_matcher_regression_disagreement_cases"]:
         case = by_id[record["id"]]
-        # The direction is recorded rather than assumed: five of these permit
+        # The direction is recorded rather than assumed: six of these permit
         # what the table refuses and one refuses what it permits, and collapsing
         # them into a count would hide which kind grew.
         assert record["direction"] in {"fail_open", "fail_closed"}
