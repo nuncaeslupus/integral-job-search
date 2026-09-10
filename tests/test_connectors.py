@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlsplit
 
 import pytest
 import yaml
@@ -25,9 +26,11 @@ from pydantic import ValidationError
 from integral import connector_coverage, connector_transport, connectors, process_spec, step_skills
 from integral.connectors import (
     ARRAY_PATH_CONTRACTS,
+    DOT_SEGMENTS,
     JSON_CONTENT_TYPE,
     MINIMUM_ARRAY_PATH_CONTRACTS,
     MINIMUM_PROBES,
+    QUERY_PLACEHOLDER,
     SEARCH_SOURCE,
     ConnectorError,
     FieldSelector,
@@ -2810,6 +2813,66 @@ def test_a_board_that_asks_what_to_search_for_is_not_searched_for_nothing() -> N
     for nothing in (None, "", "   "):
         with pytest.raises(ConnectorError):
             build_list_urls(connector, page_count=1, query=nothing)
+
+
+def _with_path_query_slot() -> str:
+    """The worked example with its `{query}` slot in the path, as #455's
+    `infojobs_es` has it (`…/ofertas-trabajo/{query}/barcelona`)."""
+    connector = parse_connector(VALID)
+    parts = urlsplit(connector.list.url_pattern)
+    moved = f"{parts.scheme}://{parts.netloc}{parts.path}/{{query}}/barcelona?{parts.query}"
+    return VALID.replace(connector.list.url_pattern, moved)
+
+
+@pytest.mark.parametrize("dot_segment", [".", ".."])
+def test_a_dot_segment_query_in_a_path_slot_is_refused(dot_segment: str) -> None:
+    """T175: RFC 3986 §5.2.4 removes the segment, so `…/{query}/barcelona`
+    with `..` is fetched as `…/barcelona`, carrying no search at all. It is
+    the blank query's outcome, refused the same way."""
+    connector = parse_connector(_with_path_query_slot())
+    assert QUERY_PLACEHOLDER in urlsplit(connector.list.url_pattern).path
+    with pytest.raises(ConnectorError, match="dot-segment"):
+        build_list_urls(connector, page_count=1, query=dot_segment)
+
+
+@pytest.mark.parametrize("dot_segment", [".", ".."])
+def test_a_dot_segment_query_in_the_query_string_is_a_literal_search(dot_segment: str) -> None:
+    """In the query component nothing removes it: `?q=..` asks the board for `..`."""
+    connector = parse_connector(_with_query_slot())
+    url = build_list_urls(connector, page_count=1, query=dot_segment)[0]
+    assert url.endswith(f"&q={dot_segment}")
+
+
+@pytest.mark.parametrize("query", ["...", ".x", "x..", "%2e%2e", " .. ", "python"])
+def test_a_path_slot_still_takes_every_query_that_is_not_a_dot_segment(query: str) -> None:
+    """Only the two dot-segments are refused. `%2e%2e` is quoted to
+    `%252e%252e` before the check, so no percent-spelling needs a case."""
+    connector = parse_connector(_with_path_query_slot())
+    url = build_list_urls(connector, page_count=1, query=query)[0]
+    assert f"/{quote(query, safe='')}/barcelona?" in url
+
+
+def test_the_two_builders_read_one_dot_segment_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_templated_url` refused dot-segments with its own literal. T175 moved it
+    into `DOT_SEGMENTS`, and this shows behaviourally, not by reading source,
+    that both builders read it. With the set swapped for another value, both
+    refuse that value and both let `..` through. The real set is RFC 3986
+    §3.3's two, written out here from the RFC."""
+    assert frozenset({".", ".."}) == DOT_SEGMENTS
+    monkeypatch.setattr(connectors, "DOT_SEGMENTS", frozenset({"swapped"}))
+    listing = parse_connector(_with_path_query_slot())
+    template = parse_connector(TEMPLATE_CONNECTOR)
+
+    def detail_url(value: str) -> object:
+        record = {"id": value, "slug": "x", "position": "P"}
+        (row,) = parse_list_page(template, json.dumps([record]))
+        return row.get("detail_url")
+
+    with pytest.raises(ConnectorError, match="dot-segment"):
+        build_list_urls(listing, page_count=1, query="swapped")
+    assert detail_url("swapped") is None
+    assert build_list_urls(listing, page_count=1, query="..")
+    assert detail_url("..") is not None
 
 
 def test_a_board_with_no_query_slot_reports_that_rather_than_pretending() -> None:

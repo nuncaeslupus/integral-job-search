@@ -191,6 +191,14 @@ PAGE_PLACEHOLDER = "{page}"
 # segment or a query string. Without this a board's query is whatever its
 # `url_pattern` was written with, so every candidate gets the same search.
 QUERY_PLACEHOLDER = "{query}"
+
+#: RFC 3986 §3.3's two dot-segments. `quote(value, safe="")` escapes every
+#: reserved character, so a substituted value lands as one opaque segment,
+#: except for these two: `.` is unreserved and survives whole. §5.2.4 then
+#: removes the segment and moves the URL around it. Both builders that
+#: substitute into a path refuse them: `_templated_url` for a record's value
+#: and `build_list_urls` for the candidate's query.
+DOT_SEGMENTS = frozenset({".", ".."})
 # ponytail: URL slot only. `list.body_json` still admits `{page}` alone, so a
 # POST board carrying its search in the body (only `usajobs_en` today) cannot
 # be steered yet — widen `_body_uses_only_the_page_placeholder` when a second
@@ -1022,7 +1030,7 @@ def _templated_url(document: Any, template: str) -> str | None:
         if value is None or not _present(value):
             return None
         encoded = quote(value, safe="")
-        if encoded in {".", ".."}:
+        if encoded in DOT_SEGMENTS:
             # The "one opaque segment" property above is false for exactly two
             # strings. `.` is unreserved, so `quote` leaves it alone and `..`
             # survives whole, steering the composed URL up a level —
@@ -2929,7 +2937,18 @@ def _list_targets(
                 "search terms were supplied — a board that asks what to search "
                 "for must not be searched for nothing"
             )
-        pattern = pattern.replace(QUERY_PLACEHOLDER, quote(query, safe=""))
+        encoded = quote(query, safe="")
+        # The same refusal, for the same outcome: in a path, §5.2.4 removes a
+        # dot-segment query, so `…/ofertas-trabajo/../barcelona` is fetched as
+        # `…/barcelona` and its unfiltered answer reads as a search. `urlsplit`
+        # decides the component. In the query string `..` is a literal search.
+        if encoded in DOT_SEGMENTS and QUERY_PLACEHOLDER in urlsplit(pattern).path:
+            raise ConnectorError(
+                f"{connector.site}: the query {query!r} is a dot-segment in "
+                f"url_pattern's path, which RFC 3986 removes, so the request would "
+                "carry no search terms"
+            )
+        pattern = pattern.replace(QUERY_PLACEHOLDER, encoded)
     if EMPLOYER_PLACEHOLDER in pattern:
         # Repeated from `ListPage` for the reason the clamp above is: a
         # `model_copy(update=...)` object never met the validator.
