@@ -102,7 +102,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from integral.dimensions import Language
-from integral.offers import Location, Offer, Salary, compute_offer_id
+from integral.offers import Location, Offer, Salary, SourceKind, compute_offer_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -2713,6 +2713,11 @@ class Connector(Strict):
     version: str = Field(pattern=VERSION.pattern)
     last_verified: date
     auth: AuthMode = "none"
+    #: T172. What this board is, relative to the employers whose adverts it
+    #: carries: `employer` for the employer's own board. Declared, never
+    #: inferred (T75). An `{employer}` slot alone does not say it, because a job
+    #: board's company page takes one too (#462 second reader, F1).
+    source_kind: SourceKind | None = None
     list: ListPage
     detail: DetailPage | None = None
 
@@ -3283,6 +3288,16 @@ def _as_wage(value: str | None) -> float | None:
     return parsed
 
 
+def source_kind_of(connector: Connector) -> SourceKind | None:
+    """What this connector's results are, relative to their employer (T172).
+
+    Only what `connector.yaml` declares in `source_kind`. Nothing is inferred
+    from the URL or its `{employer}` slot, and an undeclared board is `None`,
+    never a guessed `"aggregator"`.
+    """
+    return connector.source_kind
+
+
 def build_offer(
     connector: Connector,
     *,
@@ -3333,6 +3348,7 @@ def build_offer(
         return Offer(
             id=compute_offer_id(text),
             source=connector.site,
+            source_kind=source_kind_of(connector),
             source_ref=source_ref or merged.get("source_ref"),
             url=url or merged.get("url"),
             title=merged.get("title"),

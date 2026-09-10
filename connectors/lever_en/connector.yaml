@@ -26,6 +26,7 @@ site: lever
 locale: en
 version: "1.0.0"
 last_verified: "2026-09-10"
+source_kind: employer
 auth: none
 
 list:

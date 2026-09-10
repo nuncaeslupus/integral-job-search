@@ -1,5 +1,7 @@
 {
   "ats_host_connectors_conforming": 5,
   "ats_host_connectors_floor": 5,
-  "not_conforming": {}
+  "not_conforming": {},
+  "source_kind_defects": 0,
+  "source_kind_offers_checked": 3
 }
