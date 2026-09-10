@@ -338,6 +338,26 @@ def test_a_genuinely_new_ad_is_not_swallowed_by_the_tombstone_gate(store: Profil
     assert store.path("offers", f"{brand_new.id}.json").exists()
 
 
+def test_a_resighted_live_offer_keeps_its_lifecycle(store: ProfileStore) -> None:
+    """T168: a board lists the same ad every day. Re-collecting an offer that
+    is stored and not tombstoned must leave its status, history and purge
+    clock alone — the next sourcing run used to reset a shortlist to `new`."""
+    first = connect_manual(WAREHOUSE_AD, url="https://portal-a.example.com/j/1")
+    collect_offer(store, first, at=_old(NOW))
+    offer, record = load_lifecycle_offer(store, first.id)
+    offer, record = transition(offer, record, "shortlisted", at=_old(NOW))
+    save_lifecycle_offer(store, offer, record)
+    body = store.path("offers", f"{offer.id}.json").read_bytes()
+
+    again = connect_manual(WAREHOUSE_AD, url="https://portal-a.example.com/j/1?utm_source=x")
+    outcome = collect_offer(store, again, at=_iso(NOW))
+
+    assert outcome.added_as_new is False
+    assert outcome.matched_tombstone is None
+    assert load_lifecycle_offer(store, offer.id) == (offer, record)
+    assert store.path("offers", f"{offer.id}.json").read_bytes() == body
+
+
 def test_explicit_revival_restores_and_keeps_the_tombstone(store: ProfileStore) -> None:
     """§7.4: 'the revival is recorded, and the tombstone survives so the
     ad's history stays continuous.' And revival must be distinguishable from
