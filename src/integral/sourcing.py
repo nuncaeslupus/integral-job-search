@@ -60,6 +60,7 @@ from integral.connectors import (
     collect_listing,
     load_connector,
     parse_detail_page,
+    source_kind_of,
 )
 from integral.identity import ProfileStore
 from integral.lifecycle import (
@@ -67,7 +68,7 @@ from integral.lifecycle import (
     save_lifecycle_offer,
     track_new_offer,
 )
-from integral.offers import Offer, compute_offer_id
+from integral.offers import Offer, SourceKind, compute_offer_id
 from integral.robots import Robots, RobotsError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -154,6 +155,9 @@ class BoardOutcome:
     #: are still read, and the failures are named here rather than ending the
     #: round with every counter lost.
     employers_failed: tuple[str, ...] = ()
+    #: T172. `"employer"` when the board read was the employer's own — the
+    #: same `source_kind_of` every offer it stored carries.
+    source_kind: SourceKind | None = None
 
     @property
     def reached_the_board(self) -> bool:
@@ -209,6 +213,16 @@ class Run:
         return self._boards(lambda o: not o.steered and o.reached_the_board)
 
     @property
+    def employer_boards(self) -> list[str]:
+        """Declared employers' own boards that returned rows this round (T172).
+
+        Rows, not `reached_the_board`: a board refused on its first request is
+        neither skipped nor an error, and named here it would claim results it
+        never gave (#462 round 2, G3). One refused part-way did give some.
+        """
+        return self._boards(lambda o: o.source_kind == "employer" and o.items > 0)
+
+    @property
     def refused(self) -> list[str]:
         """Boards that refused the read. Never to be read as "no jobs there"."""
         return self._boards(lambda o: o.refused is not None)
@@ -232,6 +246,10 @@ class Run:
             lines.append(f"  searched for your terms: {', '.join(self.steered)}")
         if self.unsteered:
             lines.append(f"  returned their whole list: {', '.join(self.unsteered)}")
+        if self.employer_boards:
+            lines.append(
+                f"  the employers' own boards, not a job board: {', '.join(self.employer_boards)}"
+            )
         for outcome in self.outcomes:
             if outcome.refused:
                 lines.append(f"  REFUSED {outcome.connector}: {outcome.refused}")
@@ -455,6 +473,7 @@ def _one_board(
             detail_needed=detail_needed,
             detail_fetched=detail_fetched,
             employers_failed=tuple(failed),
+            source_kind=source_kind_of(connector),
             skipped=skipped,
             error=error,
             refused=refused,

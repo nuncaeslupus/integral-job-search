@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
@@ -18,9 +18,16 @@ from integral.connectors import (
     build_list_urls,
     parse_connector,
 )
-from integral.employer_boards import MINIMUM_CONFORMING, measure, record
+from integral.employer_boards import (
+    ATTRIBUTION_BOARDS,
+    MINIMUM_CONFORMING,
+    measure,
+    measure_attribution,
+    record,
+)
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import load_lifecycle_offer
+from integral.offers import SourceKind
 from integral.robots import Robots
 from integral.sourcing import FETCH_LOG, Response, source
 
@@ -693,3 +700,70 @@ def test_the_crawl_delay_is_kept_between_one_hosts_requests(
     answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
     _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\nCrawl-delay: 2\n")
     assert pauses == [2.0, 2.0]
+
+
+def test_a_result_says_it_came_from_the_employers_own_board() -> None:
+    """T172 (#445 F14): the stored offer and the round summary both say which
+    results the employer's own board produced, and a job board's say nothing."""
+    measured = measure_attribution()
+    assert measured["source_kind_defect_list"] == []
+    assert (measured["source_kind_defects"], measured["source_kind_offers_checked"]) == (0, 6)
+
+
+def test_the_round_covers_every_kind_slot_and_outcome() -> None:
+    assert {kind for kind, _, _ in ATTRIBUTION_BOARDS.values()} == {*get_args(SourceKind), None}
+    assert len(ATTRIBUTION_BOARDS) == (len(get_args(SourceKind)) + 1) * 2 * 3
+
+
+def test_the_attribution_metric_reads_a_board_marked_wrongly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The control: the metric is not independent of what it measures."""
+    import integral.connectors as connectors
+
+    monkeypatch.setattr(connectors, "source_kind_of", lambda connector: "employer")
+    wrong = sorted(
+        site
+        for site, (kind, _, outcome) in ATTRIBUTION_BOARDS.items()
+        if outcome == "read" and kind != "employer"
+    )
+    assert sorted(measure_attribution()["source_kind_defect_list"]) == [
+        f"{site}: stored source_kind 'employer'" for site in wrong
+    ]
+
+
+@pytest.mark.parametrize(
+    "silent",
+    sorted(site for site, (_, _, outcome) in ATTRIBUTION_BOARDS.items() if outcome == "read"),
+)
+def test_any_read_board_storing_nothing_is_not_a_clean_zero(
+    monkeypatch: pytest.MonkeyPatch, silent: str
+) -> None:
+    """#462 F2/G2: whichever board goes quiet, its label would be checked by
+    nobody, so the round is unmeasured rather than clean."""
+    import integral.sourcing as sourcing
+    from integral.connectors import build_offer as real
+
+    def refuse_one(connector: Any, **kwargs: Any) -> Any:
+        if connector.site == silent:
+            raise ConnectorError("no offer")
+        return real(connector, **kwargs)
+
+    monkeypatch.setattr(sourcing, "build_offer", refuse_one)
+    measured = measure_attribution()
+    assert measured["source_kind_offers_checked"] == 5
+    assert measured["source_kind_defects"] == -1
+
+
+def test_the_committed_employer_boards_declare_it() -> None:
+    """#462 F1: the kind is declared, never read off the slot, so a package
+    losing its declaration would be stored as a job board's without a sound."""
+    from integral.connectors import load_connector
+
+    declared = {
+        package.name
+        for package in _CONNECTORS.iterdir()
+        if (package / "connector.yaml").is_file()
+        and load_connector(package).source_kind == "employer"
+    }
+    assert declared == {"ashby_en", "greenhouse_en", "lever_en", "rippling_en", "workable_en"}

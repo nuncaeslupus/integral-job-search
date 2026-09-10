@@ -23,15 +23,20 @@ cannot raise it.
 The committed value is the floor it cleared, never above it (T100's reason: an
 exact package total drifts on the next connector anyone adds). Below the floor
 the measured value is committed, and the gate reads it and fails.
+
+T172 adds `source_kind_defects` to the same record (`measure_attribution`). A
+result read from the employer's own board has to say so, both on the stored
+offer and in the round summary, and a job board's result must not.
 """
 
 from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import urllib.error
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 from urllib.parse import urlsplit
 
 from integral.connector_contract import check_package
@@ -44,9 +49,11 @@ from integral.connectors import (
     DEFAULT_CONNECTORS_DIR,
     EMPLOYER_PLACEHOLDER,
     ConnectorError,
+    ListRequest,
     build_list_urls,
     load_connector,
 )
+from integral.offers import SourceKind
 from integral.robots import Robots, RobotsError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -140,8 +147,114 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: T172's constructed round, as a closed product rather than a list of cases:
+#: every declarable kind (each `SourceKind` value, plus none), crossed with
+#: having an `{employer}` slot or not, crossed with how the one request ends.
+#: A kind added to `SourceKind` joins the round without anyone remembering to
+#: (#462 round 2, G1/G4).
+ATTRIBUTION_OUTCOMES = ("read", "timeout", "refused")
+ATTRIBUTION_BOARDS: dict[str, tuple[SourceKind | None, bool, str]] = {
+    f"{kind or 'undeclared'}{'slot' if slot else 'plain'}{outcome}": (kind, slot, outcome)
+    for kind in (*get_args(SourceKind), None)
+    for slot in (True, False)
+    for outcome in ATTRIBUTION_OUTCOMES
+}
+EMPLOYER_BOARDS_LINE = "  the employers' own boards, not a job board: "
+
+
+def measure_attribution() -> dict[str, Any]:
+    """T172: one sourcing round over `ATTRIBUTION_BOARDS`, each with a known answer.
+
+    - Every stored offer carries exactly its board's **declared** kind. The
+      slot never decides it: a job board's company page takes one too (F1).
+    - The summary's employers line names exactly the declared employer boards
+      that were **read**. A board that timed out or refused names nothing (F3, G3).
+    - `-1`, not a clean zero, when any board that was read stored no offer: its
+      label would then be checked by nobody (F2, G2).
+
+    Constructed rather than read from the library, for two reasons. The ATS
+    packages are `GLOBAL`, which `sourcing.packages_for` never selects (T167).
+    And a metric over the committed packages would move whenever one is added.
+    The expected answers come from the table, never from `source_kind_of`.
+    """
+    from integral.candidate import Aim, CandidateConstraints, Location
+    from integral.identity import ProfileStore, create_profile
+    from integral.lifecycle import load_lifecycle_offer
+    from integral.sourcing import Response, source
+
+    meta = (DEFAULT_CONNECTORS_DIR / "greenhouse_en" / "meta.yaml").read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp) / "connectors"
+        for site, (kind, slot, _) in ATTRIBUTION_BOARDS.items():
+            package = directory / f"{site}_en"
+            package.mkdir(parents=True)
+            url = (
+                f"https://{site}.test/b/{{employer}}/jobs" if slot else f"https://{site}.test/jobs"
+            )
+            (package / "connector.yaml").write_text(
+                f"site: {site}\nlocale: en\nversion: '1.0.0'\nlast_verified: '2026-09-10'\n"
+                + (f"source_kind: {kind}\n" if kind else "")
+                + f"list:\n  url_pattern: '{url}'\n  pagination: {{mode: none, max_pages: 1}}\n"
+                "  from_json:\n    items: jobs\n    fields: {title: title, text: body}\n"
+                + ("  employers:\n    acme: Acme\n" if slot else ""),
+                encoding="utf-8",
+            )
+            (package / "meta.yaml").write_text(meta.replace("GLOBAL", "ES"), encoding="utf-8")
+        create_profile(Path(tmp) / "p", "Fixture", handle="fixture", language="en", fiction=True)
+        store = ProfileStore(Path(tmp) / "p", "fixture")
+
+        def fetch(request: ListRequest) -> Response:
+            site = (urlsplit(request.url).hostname or "").removesuffix(".test")
+            outcome = ATTRIBUTION_BOARDS[site][2]
+            if outcome == "timeout":
+                return Response(None, "", error="timed out")
+            if outcome == "refused":
+                return Response(429, json.dumps({"jobs": []}))
+            return Response(200, json.dumps({"jobs": [{"title": site, "body": f"at {site}"}]}))
+
+        run = source(
+            store,
+            CandidateConstraints(
+                location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+            ),
+            Aim(state="stated", terms=("python",)),
+            fetch=fetch,
+            at="2026-01-01T00:00:00+00:00",
+            directory=directory,
+            robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+        )
+        offers = [
+            load_lifecycle_offer(store, path.stem)[0]
+            for path in store.path("offers").glob("sha256:*.json")
+        ]
+    defects = [
+        f"{offer.source}: stored source_kind {offer.source_kind!r}"
+        for offer in offers
+        if offer.source not in ATTRIBUTION_BOARDS
+        or offer.source_kind != ATTRIBUTION_BOARDS[offer.source][0]
+    ]
+    read = {site for site, (_, _, outcome) in ATTRIBUTION_BOARDS.items() if outcome == "read"}
+    named = ", ".join(
+        f"{site}_en" for site in sorted(read) if ATTRIBUTION_BOARDS[site][0] == "employer"
+    )
+    lines = [line for line in run.summary().split("\n") if line.startswith(EMPLOYER_BOARDS_LINE)]
+    if lines != [EMPLOYER_BOARDS_LINE + named]:
+        defects.append(f"the summary's employers line reads {lines!r}, not {named!r}")
+    complete = {offer.source for offer in offers} == read
+    return {
+        "source_kind_defects": len(defects) if complete else -1,
+        "source_kind_offers_checked": len(offers),
+        "source_kind_defect_list": defects,
+    }
+
+
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
-    committed = record(measure())
+    attribution = measure_attribution()
+    committed = {
+        **record(measure()),
+        "source_kind_defects": attribution["source_kind_defects"],
+        "source_kind_offers_checked": attribution["source_kind_offers_checked"],
+    }
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(
         json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
@@ -152,8 +265,11 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
 def _main(argv: list[str]) -> int:
     """`python -m integral.employer_boards` — measure, record, exit 1 below the floor."""
     measured = measure()
-    write_evidence()
+    committed = write_evidence()
     print(json.dumps(measured, ensure_ascii=False))
+    if committed["source_kind_defects"] != 0:
+        print(f"source_kind_defects = {committed['source_kind_defects']}", file=sys.stderr)
+        return 1
     if measured["ats_host_connectors_conforming"] < MINIMUM_CONFORMING:
         print(
             f"only {measured['ats_host_connectors_conforming']} ATS host(s) conform "

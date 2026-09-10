@@ -123,7 +123,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from integral.offers import Offer, Strict
+from integral.offers import Offer, SourceKind, Strict
 
 # §4.6's site: the two-pass shingled Jaccard score, and §4.4's `dedup_precision`.
 METHODS_REF = "METHODS.md#46-near-duplicate-detection--shingled-jaccard-similarity"
@@ -400,8 +400,8 @@ def find_duplicates(
 # T75 — survivor selection prefers the employer's own posting, never blindly
 
 
-SourceKind = Literal["employer", "aggregator"]
-# Declared by whoever assembles the batch — a connector's own metadata, once
+# `SourceKind` lives beside `Offer`, which carries it since T172. It is
+# declared by whoever assembles the batch — a connector's own metadata, once
 # a caller wires that up — never guessed here from a URL, a company name, or
 # a hard-coded list of aggregator domains (the task's "what it must not
 # become"). A `source` absent from this mapping is treated exactly like a
