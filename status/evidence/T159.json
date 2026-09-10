@@ -155,12 +155,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 95
+      "line": 96
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 87
+      "line": 88
     },
     {
       "module": "spec_consistency",
@@ -206,7 +206,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3836,
+      "line": 3969,
       "population": 15
     },
     {
@@ -242,14 +242,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2777,
-      "population": 39
+      "line": 2779,
+      "population": 40
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2710,
-      "population": 74
+      "line": 2712,
+      "population": 75
     },
     {
       "module": "freshness",
@@ -372,6 +372,7 @@
     "connector_transport.MINIMUM_LEDGER_ENTRIES",
     "connector_transport.MINIMUM_RECORD_KEYS_COMPARED",
     "connectors.DEFAULT_STALE_AFTER_DAYS",
+    "connectors.MAX_EMPLOYERS",
     "corpus.MIN_ADS_PER_FAMILY",
     "corpus_scope.MINIMUM_CORPUS_ROWS",
     "corpus_scope.MINIMUM_EVALUATION_POOL",
@@ -449,6 +450,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 74,
+  "floors_swept_at_least": 75,
   "floors_arithmetically_checked_at_least": 36
 }
