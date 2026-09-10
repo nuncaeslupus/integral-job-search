@@ -40,17 +40,12 @@
     {
       "module": "cv_store",
       "name": "MINIMUM_CHECKS",
-      "line": 292
+      "line": 300
     },
     {
       "module": "elicit_extract",
       "name": "MINIMUM_CHECKS",
       "line": 738
-    },
-    {
-      "module": "extraction",
-      "name": "MIN_EVALUATION_LABELS_PER_DIMENSION",
-      "line": 96
     },
     {
       "module": "extraction",
@@ -76,16 +71,6 @@
       "module": "interview",
       "name": "MINIMUM_CHECKS",
       "line": 944
-    },
-    {
-      "module": "interview",
-      "name": "MINIMUM_TRAIT_EPISODES",
-      "line": 117
-    },
-    {
-      "module": "interview",
-      "name": "MINIMUM_TRAIT_OCCASIONS",
-      "line": 118
     },
     {
       "module": "naming",
@@ -228,7 +213,7 @@
     {
       "module": "cv_store",
       "name": "MINIMUM_READ_CHECKS",
-      "line": 1922,
+      "line": 1930,
       "population": 16
     },
     {
@@ -252,14 +237,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2475,
+      "line": 2766,
       "population": 39
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2433,
-      "population": 76
+      "line": 2699,
+      "population": 73
     },
     {
       "module": "freshness",
@@ -398,11 +383,14 @@
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
+    "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
     "extraction._NEGATION_WINDOW",
     "floor_sweep._MAX_DELEGATION_DEPTH",
     "freshness.DEFAULT_ELAPSED_DAYS",
     "gate_reader_agreement.MINIMUM_GATES_COMPARED",
     "generate.SCHEMA_VERSION",
+    "interview.MINIMUM_TRAIT_EPISODES",
+    "interview.MINIMUM_TRAIT_OCCASIONS",
     "interview_direction.MINIMUM_NON_SOFTWARE_ARTEFACT_FIELDS",
     "interview_direction.MINIMUM_OPEN_TALK_STEPS",
     "interview_log.SCHEMA_VERSION",

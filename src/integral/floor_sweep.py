@@ -252,8 +252,9 @@ metric still `0`.** Five separate root causes, not one:
    already was: a second, identically-deferred self-floor,
    `MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`, checked against a new
    `arithmetically_checked` count once `measure()`'s own loop has finished.
-   Deleting the evidence files (or shipping a wrong one, which drops the same
-   count for the same reason) now visibly breaches this floor.
+   Deleting the evidence files now visibly breaches this floor. **"Or shipping
+   a wrong one" was false, corrected in round 5 (R4-1) rather than repeated
+   here** — see `MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`'s own comment.
 2. **The one floor this task owns could not fail (F2/F3), twice over.** The
    self-floor's own comment ("Committed at 64, three points of slack") and
    `robots.FIXTURES_AT_LEAST`/`salary_recovery.MINIMUM_WORDING_CASES`'s
@@ -336,6 +337,103 @@ the same margin every round has used for the same reason) — the increase is
 F4's reclassification of seven already-in-scope-adjacent floors plus the two
 new self-floors, not new discovery. `MINIMUM_FLOORS_ARITHMETICALLY_CHECKED: 36`
 against a measured 39, new this round.
+
+## Round 5 — being right is not being pinned, four rounds running
+
+A second reader BLOCKED round 4 with seven findings — the direction stated in
+the review itself: two closed rules already written elsewhere in this module
+("count only what is derivable from source"; "decline rather than pick"),
+not a fourth traced shape or a fifth phrase.
+
+1. **R4-2 — the closed rule, applied to `_collection_kind`.** A `Starred`
+   element in a list/tuple/set literal, or a `None` key (a `**` unpack) in a
+   dict literal, is one AST node standing in for however many items its own
+   operand contributes at runtime — `len(expr.elts)`/`len(expr.keys)` counted
+   the node, not the items, and `(*BASE, "extra")` (`BASE` a 20-tuple) was
+   sweep-counted `2` against a real `21`, cleared as compliant, and counted
+   into `arithmetically_checked`. Fixed by classifying either shape `_DYNAMIC`
+   rather than `_LITERAL` — the identical rule already used for a
+   comprehension or a `.split()` result, applied to the one collection shape
+   it had not yet reached.
+2. **R4-3 — the closed rule, applied to `_compare_sites`.** More than one
+   comparison site for the same floor name is resolved independently at every
+   site rather than picked from `site[0]`; agreement (any site would answer
+   identically) is used, disagreement is declined — the same shape three
+   sibling functions in this module already use
+   (`_resolve_parameter_via_callers`, `_resolve_evidence_path_expr`,
+   `_evidence_calls_for`). Closes a real, live exposure, not only the reader's
+   constructed fixture: `extraction.MIN_EVALUATION_LABELS_PER_DIMENSION` and
+   `interview.MINIMUM_TRAIT_EPISODES`/`MINIMUM_TRAIT_OCCASIONS` each compare
+   the same floor against genuinely different quantities at different sites (a
+   list length at one, a per-dimension running tally at another), and whether
+   they landed `dynamic` or `bounds_read_and_out_of_scope` already depended on
+   source order. `MINIMUM_FLOORS_SWEPT: 76 -> 73` is this — see its own
+   comment for why that is zero slack, not a narrowed margin.
+3. **R4-1 — the self-floor's own claim, corrected rather than made true by
+   force.** `MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`'s comment claimed
+   "shipping a wrong [evidence file] visibly breaches this floor"; measured,
+   an *understated* wrong value does not (`margin <= 0` reads compliant,
+   identically to a genuinely smaller-but-real population). Making
+   `margin < 0` always a finding was tried and reverted: it also flags every
+   floor legitimately set stricter than its own population for an unrelated
+   reason, a real, deliberate, tested shape
+   (`test_a_floor_already_breaching_its_population_needs_no_argument`). The
+   report offered two fixes — "make a wrong value breach, or delete the
+   claim" — and the first one costs a real invariant this module has always
+   protected, so the comment states the true, narrower claim instead: an
+   *overstated* wrong value is still caught (it pushes `margin` positive, the
+   arithmetic every other floor gets); an understated one is indistinguishable
+   from a correctly-shrunk population, and this module does not guess which.
+4. **R4-5 — round 3's F2, unclosed a second time, closed the third.**
+   `_MARGIN_ARGUED_RE`'s bare-keyword fallback decided compliance from
+   *anywhere* in a comment, and a self-floor's own comment accretes one
+   paragraph per round — deleting the sentence that actually argued this
+   floor's margin left `margin`/`slack` alive in an earlier paragraph
+   describing this module's own mechanism, not this floor's gap. Retiring the
+   keyword fallback entirely was tried and reverted too: it breaks a real,
+   intentional shape
+   (`test_a_margin_argued_in_writing_is_not_flagged`,
+   `second_reader.STDLIB_DISAGREEMENTS_AT_LEAST`'s "this one keeps its slack"
+   on the live tree) — a floor pinned to a third party's own behaviour is
+   allowed to argue its margin in free prose with no number to verify. Fixed
+   by scoping the fallback to `_last_comment_paragraph`: the block after the
+   last blank `#`/`#:` line, the same place every real numeric claim and every
+   real free-form argument in this repository already lives.
+5. **R4-6 — F3's "independent recomputation" was entailed, not independent.**
+   `measure()`'s internal call to `_margin_finding` and the live-tree test's
+   "second" call passed the identical six arguments derived from the
+   identical source, so it could not disagree — and the `next(...)` locating
+   the pinned record raised `StopIteration` before the recomputation ran on
+   any tree where it would have. Fixed with a hand-written regex *in the test
+   file*, never calling `_claimed_current_value`/`_claimed_margin_size` or
+   anything else `_margin_finding` itself uses, so the two live-tree tests now
+   check the comment's numeric claim against reality by a genuinely separate
+   method — and report which half failed (not pinned, vs. pinned but stale)
+   rather than raising `StopIteration`.
+6. **R4-4 — a live instance of this task's own defect.**
+   `cv_store.MINIMUM_CHECKS = 17` against `probe_intake`'s own measured 22 —
+   five deletions breaching nothing, in a comment the *previous* round wrote
+   one line below the floor it raised correctly. Raised to 22, zero slack,
+   verified the same way `MINIMUM_FIELDS_MEASURED` above it was: by running
+   `probe_intake` directly. Not reachable by this sweep for the identical
+   reason (`_main` picks its evidence path through `argparse`).
+7. **R4-7 — three more zero-slack spellings.** "nothing **to** spare" (the
+   natural English of the accepted "nothing spare"), "slack: zero" (noun and
+   number reversed from every other accepted spelling), "no headroom
+   whatsoever" (kept as one literal three-word phrase, not a `no`-led noun-set
+   join, for the same collision reasons round 4 already gave).
+
+**Settable-to-`0`-or-`1` with the gate still exit-0**, measured against copies
+of `src/integral` (152 mutations, fresh subprocess each, `PYTHONDONTWRITEBYTECODE=1`):
+round 4 measured 30 of 76 (39%); this round is committed with the number this
+round actually measured — see the pull request for the after-fix figure,
+regenerated the same way. All of round 4's 30 survivors were the `dynamic`
+branch, unconstrained by `arithmetically_checked`; R4-2 and R4-3 correct two
+`arithmetic`-branch miscounts and one order-dependent scope decision, not the
+`dynamic` branch's own weaker check, which the report's own framing (and
+`test_a_margin_argued_in_writing_is_not_flagged`) says is a deliberate,
+narrower guarantee by design — carries an explanation, never a computed
+margin — not a defect this round's two closed rules were about.
 
 ## The denominator
 
@@ -448,9 +546,26 @@ _MARGIN_ARGUED_RE = re.compile(
 #: this task. `no slack` (round 2's original, collision-free) and the literal
 #: `no margin at all` (the report's own attack phrase, specific enough not to
 #: match "no margin argued") are kept as the two `no`-led exceptions.
+#:
+#: **Round 5 (R4-7):** a second reader found three more real-sounding spellings
+#: sliding past the round-4 pattern at floor `1` against a stated population of
+#: 19 — "nothing **to** spare" (the natural English of the accepted "nothing
+#: spare", broken by the inserted "to"), "slack: zero" (the noun and the number
+#: in the opposite order from every other accepted spelling), and "no headroom
+#: whatsoever" (a specific three-word phrase, not the bare "no headroom" this
+#: module deliberately keeps out of the noun-set-wide `no` join above — the
+#: same collision risk as before: `connector_policy.py`'s unrelated "no second
+#: reader whatsoever" and `skill_budget.py`'s "a budget with no headroom" would
+#: both be false accusations under a bare `no\s+headroom` or `no\s+\w+\s+
+#: whatsoever`, so this stays the one literal three-word phrase, not a second
+#: `no`-led noun-set join). "nothing spare" is widened to allow an optional
+#: "to"; a `noun[:]? zero` alternative is added for the reversed order, kept
+#: exactly as narrow as the forward `zero noun` form (three nouns, no `no`
+#: variant) so it inherits the same collision safety rather than a fresh one.
 _ZERO_SLACK_CLAIM_RE = re.compile(
-    r"\bzero[\s-]+(?:slack|margin|headroom)\b|\bnothing\s+spare\b|"
-    r"\bno\s+slack\b|\bno\s+margin\s+at\s+all\b",
+    r"\bzero[\s-]+(?:slack|margin|headroom)\b|\bnothing\s+(?:to\s+)?spare\b|"
+    r"\b(?:slack|margin|headroom)\s*:\s*zero\b|"
+    r"\bno\s+slack\b|\bno\s+margin\s+at\s+all\b|\bno\s+headroom\s+whatsoever\b",
     re.IGNORECASE,
 )
 
@@ -612,6 +727,29 @@ def _normalize_comment_text(comment: str) -> str:
         if stripped:
             words.append(stripped)
     return " ".join(words)
+
+
+def _last_comment_paragraph(comment: str) -> str:
+    """The final paragraph of `comment` — the run of non-blank `#`-lines after
+    the last blank comment line (a bare `#`/`#:`), or the whole comment when
+    it has none. Round 5 (R4-5): a self-floor's own comment accretes one
+    paragraph per round, each separated from the last by a blank `#:` line
+    (this module's own convention, used throughout); the "Committed at
+    N"/"N points of slack"/"N, zero slack" claim — and any genuine free-form
+    margin argument — always lives in the paragraph beside the declaration,
+    never an earlier one recounting history. Scoping the keyword fallback in
+    `_margin_finding` to this paragraph is what stops an incidental "margin"/
+    "slack" in an earlier round's narrative (describing this module's own
+    mechanism, not this floor's gap) from surviving deletion of the sentence
+    that actually argued the current margin."""
+    paragraphs: list[list[str]] = [[]]
+    for line in comment.splitlines():
+        if re.sub(r"^\s*#:?\s*", "", line.strip()):
+            paragraphs[-1].append(line)
+        elif paragraphs[-1]:
+            paragraphs.append([])
+    non_empty = [p for p in paragraphs if p]
+    return "\n".join(non_empty[-1]) if non_empty else ""
 
 
 #: A backtick-quoted code span (`` `_D6_FIXTURE` ``, `` `PROBES` ``) — stripped out
@@ -1246,8 +1384,28 @@ def _collection_kind(
         return _UNKNOWN, None
 
     if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
+        # Round 5 (R4-2): `len(expr.elts)` counts AST *elements*, not runtime
+        # items, and a `Starred` element is one AST node standing in for
+        # however many items its own operand unpacks to at runtime -- unknown
+        # from source, never `1`. A second reader measured `(*BASE, "extra")`
+        # (`BASE` a 20-tuple) sweep-counted as population `2` while the real
+        # length is `21`, cleared as compliant and counted toward
+        # `arithmetically_checked`. The closed rule this repository already
+        # states elsewhere for exactly this shape (T159's own task file: "count
+        # only what is derivable from source") — any `Starred` element makes
+        # the count undecidable from the literal alone, so this is `_DYNAMIC`,
+        # never a silently-wrong `_LITERAL` count.
+        if any(isinstance(elt, ast.Starred) for elt in expr.elts):
+            return _DYNAMIC, None
         return _LITERAL, len(expr.elts)
     if isinstance(expr, ast.Dict):
+        # Round 5 (R4-2): the mirror case for `{**BASE, "x": 1}` — a `**`
+        # unpacking shows up as a `None` key in `expr.keys`, one AST slot for
+        # however many keys `BASE` actually contributes at runtime. Measured:
+        # sweep-counted population `2` against a real `9`. Same rule, same
+        # reason: undecidable from source ⇒ `_DYNAMIC`.
+        if any(key is None for key in expr.keys):
+            return _DYNAMIC, None
         return _LITERAL, len(expr.keys)
     if isinstance(expr, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
         return _DYNAMIC, None
@@ -2064,6 +2222,17 @@ def _margin_finding(
     route."""
     margin = population - literal_value
     if margin <= 0:
+        # `margin < 0` (the floor already exceeds its recorded population) is
+        # deliberately treated identically to `margin == 0`: a floor already
+        # above what it guards already refuses every deletion, and needs no
+        # written argument (`test_a_floor_already_breaching_its_population_
+        # needs_no_argument`) — this holds regardless of whether the
+        # population is real or (R4-1) an understated evidence value, because
+        # this module cannot tell the two apart from source, and forcing a
+        # finding here would flag the same "already stricter than it has to
+        # be" shape this module has always accepted as safe. See
+        # `MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`'s own comment (round 5) for
+        # what this means for its "a wrong value visibly breaches" claim.
         return None
 
     # Past this point margin is strictly positive, so a comment claiming "zero
@@ -2089,36 +2258,71 @@ def _margin_finding(
     # slack" clearing unchanged at floor `1` (margin 66, comment still true by
     # `_MARGIN_ARGUED_RE`'s keyword match alone), and the same escape on
     # `robots.FIXTURES_AT_LEAST` and `salary_recovery.MINIMUM_WORDING_CASES`.
+    # These two are checked against the WHOLE comment, deliberately not scoped
+    # to the last paragraph the way the keyword fallback below now is: every
+    # real instance of either idiom in this repository already sits in the
+    # final paragraph next to the declaration, so widening costs nothing, and
+    # narrowing here would just be a second copy of the same restriction.
     claimed_value = _claimed_current_value(comment)
-    if claimed_value is not None and claimed_value != literal_value:
-        return FloorFinding(
-            module=module_stem,
-            name=name,
-            lineno=lineno,
-            reason="stale_margin_claim",
-            detail=(
-                f"{name} is {literal_value}, but its comment claims it was "
-                f"'committed at {claimed_value}' — the value the comment argues for and "
-                "the value the code now declares have drifted apart"
-            ),
-        )
+    if claimed_value is not None:
+        if claimed_value != literal_value:
+            return FloorFinding(
+                module=module_stem,
+                name=name,
+                lineno=lineno,
+                reason="stale_margin_claim",
+                detail=(
+                    f"{name} is {literal_value}, but its comment claims it was "
+                    f"'committed at {claimed_value}' — the value the comment argues for and "
+                    "the value the code now declares have drifted apart"
+                ),
+            )
+        return None
 
     claimed_margin = _claimed_margin_size(comment)
-    if claimed_margin is not None and claimed_margin != margin:
-        return FloorFinding(
-            module=module_stem,
-            name=name,
-            lineno=lineno,
-            reason="stale_margin_claim",
-            detail=(
-                f"{name} is {literal_value}, population is {population} (margin {margin}), "
-                f"but its comment claims {claimed_margin} point(s) of slack/margin — the "
-                "number the comment argues for and the margin actually computed have "
-                "drifted apart"
-            ),
-        )
+    if claimed_margin is not None:
+        if claimed_margin != margin:
+            return FloorFinding(
+                module=module_stem,
+                name=name,
+                lineno=lineno,
+                reason="stale_margin_claim",
+                detail=(
+                    f"{name} is {literal_value}, population is {population} (margin {margin}), "
+                    f"but its comment claims {claimed_margin} point(s) of slack/margin — the "
+                    "number the comment argues for and the margin actually computed have "
+                    "drifted apart"
+                ),
+            )
+        return None
 
-    if _MARGIN_ARGUED_RE.search(_normalize_comment_text(comment)):
+    # Round 5 (R4-5): round 3's F2 was never fully closed. Neither numeric
+    # idiom fired above, so this floor's compliance came down to
+    # `_MARGIN_ARGUED_RE` matching *somewhere* in the whole comment — and a
+    # second reader deleted exactly the sentence carrying this self-floor's
+    # own "Committed at 73, three points of slack" claim and watched the gate
+    # stay GREEN at floor `1`, because `margin`/`slack` remain in an *earlier*
+    # paragraph of the same accreted, multi-round comment, in prose that is
+    # *about* this module's own mechanism ("the one branch that never computes
+    # a margin", "is this margin real") — never a claim about this floor's own
+    # gap. Retiring the keyword fallback entirely (tried here first) breaks a
+    # real, intentional shape this module supports on purpose
+    # (`test_a_margin_argued_in_writing_is_not_flagged`,
+    # `second_reader.STDLIB_DISAGREEMENTS_AT_LEAST`'s "this one keeps its
+    # slack ... [no number stated]" for a floor pinned to a third party's own
+    # behaviour) — a floor is allowed to argue its margin in free prose with no
+    # falsifiable number at all, and that argument is not required to sit next
+    # to a number this check could otherwise verify. What is not legitimate is
+    # a keyword surviving *because it is describing something else entirely*,
+    # several paragraphs of unrelated history away from the declaration. So
+    # the fallback is scoped to `_last_comment_paragraph`: the block of
+    # comment lines immediately above the declaration, after the last blank
+    # `#`/`#:` separator line — the same place every real "Committed at
+    # N"/"N points of slack"/"N, zero slack" claim in this repository already
+    # lives, and where a genuine free-form argument belongs too, since it is
+    # an argument *for this floor*, not a chronicle of every round that has
+    # touched this file.
+    if _MARGIN_ARGUED_RE.search(_normalize_comment_text(_last_comment_paragraph(comment))):
         return None
 
     return FloorFinding(
@@ -2132,6 +2336,28 @@ def _margin_finding(
             "and no comment above the declaration argues the gap"
         ),
     )
+
+
+def _resolved_population_for_site(
+    other: ast.expr,
+    tree: ast.Module,
+    func: ast.FunctionDef | ast.AsyncFunctionDef | None,
+    site_lineno: int,
+) -> tuple[bool, int | None]:
+    """The full `(in_scope, population)` one comparison site resolves to —
+    trying a literal in-repo count first and this repository's own
+    committed-evidence idiom second, the same two routes `_classify_floor`
+    tries for whichever single site it ends up using. Factored out so a floor
+    with more than one comparison site (R4-3, round 5) can ask every site the
+    identical question before deciding whether they agree, rather than
+    resolving only the one site that gets used."""
+    in_scope, population = _population_for(other, tree, func, site_lineno)
+    if in_scope and population is not None:
+        return True, population
+    pinned_population = _committed_evidence_population(other, tree, func, site_lineno)
+    if pinned_population is not None:
+        return True, pinned_population
+    return in_scope, None
 
 
 def _classify_floor(
@@ -2170,8 +2396,33 @@ def _classify_floor(
     other: ast.expr | None = None
     func: ast.FunctionDef | ast.AsyncFunctionDef | None = None
     site_lineno = lineno
-    if site:
+    if len(site) == 1:
         other, func, site_lineno = site[0]
+    elif len(site) > 1:
+        # Round 5 (R4-3): more than one comparison site is not "pick the
+        # first" — the same refuse-rather-than-guess rule this module already
+        # applies elsewhere (`_resolve_parameter_via_callers`: only when every
+        # call site binds the parameter the same way; `_resolve_evidence_path_
+        # expr`: refuse rather than guess when both sides resolve and
+        # disagree; `_evidence_calls_for`: followed only when `func` has
+        # exactly one call site). A second reader constructed one floor with
+        # two comparison sites — a small sanity check and the real
+        # measurement — and found the verdict (population 3 vs 12, finding
+        # present vs absent) decided purely by which function `ast.walk`
+        # reached first, since `site[0]` took whichever that was. Two of this
+        # repository's own real floors (`extraction.
+        # MIN_EVALUATION_LABELS_PER_DIMENSION`, `interview.
+        # MINIMUM_TRAIT_EPISODES`/`MINIMUM_TRAIT_OCCASIONS`) had the identical
+        # exposure: whether they landed `dynamic` or `bounds_read_and_out_of_
+        # scope` already depended on which of their own sites came first.
+        # Resolved independently, every site must agree — including on
+        # whether the floor is in scope at all — before any of them is used;
+        # agreement is not "picking", since any one of them would answer the
+        # same, and disagreement is declined rather than guessed at.
+        resolved = [_resolved_population_for_site(o, module.tree, f, ln) for o, f, ln in site]
+        if all(r == resolved[0] for r in resolved):
+            other, func, site_lineno = site[0]
+        # else: declined — `other` stays `None`, never judged on the first.
     else:
         delegated = _delegated_other_operand(module.tree, name)
         if delegated is not None:
@@ -2419,13 +2670,28 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: reordering below moves seven floors from `bounds_read_and_out_of_scope`
 #: into `evidence_pinned_floors` — a reclassification, not new discovery, so it
 #: raises `arithmetically_checked` without changing what counts as "in scope"
-#: here. Measured at 76 today. Committed at 73, three points of slack, the same
-#: margin round 2 and round 3 each used for the same reason: narrow enough that
-#: hiding more than a couple of floors breaches it, wide enough that an
-#: unrelated, honest change elsewhere in this file does not turn this floor red
-#: by accident. Per-module detail is deliberately not repeated here: a
-#: hand-typed roll call of "already compliant" modules is exactly the prose a
-#: second reader has twice now shown cannot be trusted.
+#: here. Measured at 76 after round 4.
+#:
+#: **Round 5 (R4-3) moves it to 73, and it is committed at exactly that —
+#: zero slack, not a narrowed margin.** `_compare_sites` used to pick
+#: `site[0]` whenever a floor had more than one comparison site, so three
+#: floors this repository actually owns (`extraction.
+#: MIN_EVALUATION_LABELS_PER_DIMENSION`, `interview.MINIMUM_TRAIT_EPISODES`/
+#: `MINIMUM_TRAIT_OCCASIONS`) landed `dynamic` or `bounds_read_and_out_of_
+#: scope` depending purely on which of their own multiple, genuinely
+#: differently-shaped comparison sites (a list length at one site, a
+#: per-dimension running tally at another) `ast.walk` reached first — the
+#: same order-dependence the reader's constructed fixture demonstrated for an
+#: arithmetic verdict, one level up, deciding whether a floor is swept at
+#: all. Declining rather than picking correctly moves those three out of
+#: scope, and `floors_swept` drops by exactly that many: 76 → 73. Zero slack
+#: is not a weaker guarantee than three points of it — this module has always
+#: treated `margin == 0` as fully compliant (immediate breach on the first
+#: deletion) — it is what happens when a round's fix legitimately narrows the
+#: population, and the committed floor already sat at the new true count.
+#: Per-module detail is deliberately not repeated further than the paragraph
+#: above: a hand-typed roll call of "already compliant" modules is exactly
+#: the prose a second reader has twice now shown cannot be trusted.
 #: `status/evidence/T159.json`'s own `dynamic_population_floors`,
 #: `evidence_pinned_floors` and `bounds_read_and_out_of_scope` are regenerated
 #: every run and are the only account of *which* floors are which that this
@@ -2446,9 +2712,34 @@ MINIMUM_FLOORS_SWEPT = 73
 #:
 #: Checked exactly like `MINIMUM_FLOORS_SWEPT` — matched by identity, deferred
 #: until `measure()`'s own loop has finished, checked by the same
-#: `_margin_finding` arithmetic — so deleting the evidence files, or shipping a
-#: wrong one, now visibly breaches this floor instead of silently moving a
-#: number nothing asserts against. Measured 30 before round 4 (11
+#: `_margin_finding` arithmetic — so *deleting* the evidence files now visibly
+#: breaches this floor instead of silently moving a number nothing asserts
+#: against.
+#:
+#: **Round 5 (R4-1): "or shipping a wrong one" above was false, and this is the
+#: correction rather than a fifth exemption.** A second reader edited
+#: `status/evidence/T34.json`'s `probes_run` 13 → 1 → 0 against
+#: `step_runtime.MINIMUM_PROBES = 13` and watched `arithmetically_checked` stay
+#: 39 and the gate stay GREEN at every value — an *understated* wrong value
+#: still resolves through `_committed_evidence_population`, still reaches
+#: `_margin_finding`, still counts here, and `margin = population - literal_
+#: value` comes out zero or negative, which this module has always treated as
+#: compliant (the same rule `test_a_floor_already_breaching_its_population_
+#: needs_no_argument` pins: a floor already at or above what it guards already
+#: refuses every deletion and needs no argument). Making a negative margin a
+#: finding was tried and reverted here — it would also flag every floor
+#: *legitimately* set stricter than its own population for an unrelated
+#: reason, which is a real, deliberate, tested shape, not a defect. So this is
+#: the "delete the claim" half of the report's own two offered fixes: an
+#: *overstated* wrong value (which pushes `margin` positive) is still caught
+#: below, by the identical `_margin_finding` arithmetic every other floor
+#: gets; an *understated* one is indistinguishable, from source, from a floor
+#: correctly sized to a shrunken-but-real population, and this module does not
+#: guess which. What full protection against evidence-file corruption would
+#: need — an independent check that the committed number matches what
+#: `make evidence` would regenerate — is `make evidence`'s own drift check,
+#: not something an AST sweep over `src/integral` can add. Measured 30 before
+#: round 4 (11
 #: literal-population, 18 evidence-pinned, 1 deferred self-floor: `swept`
 #: unchanged, but `arithmetically_checked` is the number that answers "how many
 #: of those 67 reach an arithmetic check" — the exact question the reader who
@@ -2552,8 +2843,10 @@ def _main(argv: list[str] | None = None) -> int:
     if measured["arithmetically_checked"] < MINIMUM_FLOORS_ARITHMETICALLY_CHECKED:
         print(
             f"only {measured['arithmetically_checked']} floor(s) reached an arithmetic "
-            f"check (floor {MINIMUM_FLOORS_ARITHMETICALLY_CHECKED}) — a deleted or wrong "
-            "committed evidence file can shrink this without changing floors_swept at all",
+            f"check (floor {MINIMUM_FLOORS_ARITHMETICALLY_CHECKED}) — a deleted committed "
+            "evidence file can shrink this without changing floors_swept at all (round 5, "
+            "R4-1: a *wrong-but-present* value does not shrink this count — it still "
+            "resolves and still reaches arithmetic — only deletion does)",
             file=sys.stderr,
         )
         return 1

@@ -288,8 +288,16 @@ MINIMUM_FIELDS_MEASURED = 7
 # floors sit one line apart, and `_comment_block_above` reads a shared block
 # for adjacent bare declarations, so a comment written for one that states a
 # specific number reads as a (false) claim about the other too (T159, round 4
-# self-scan).
-MINIMUM_CHECKS = 17
+# self-scan). Committed at 17 while `probe_intake` already ran 22 — five
+# deletions breach nothing, with no margin argued (T159, round 5, R4-4: a live
+# instance of this task's own defect, found in a comment the previous round
+# itself wrote one line below the floor it raised correctly). Raised to what
+# `probe_intake` carries — 22, zero slack — verified the same way, by running
+# it directly: not reachable by T159's sweep for the same reason
+# `MINIMUM_FIELDS_MEASURED` above is not (`_main` picks its evidence path
+# through `argparse`), so a fixture cannot pin this one; only re-running
+# `probe_intake` can.
+MINIMUM_CHECKS = 22
 
 # The only `master.json` shape this module understands. A bare `int` field
 # validates `schema_version: 2` against the version-1 model as long as its

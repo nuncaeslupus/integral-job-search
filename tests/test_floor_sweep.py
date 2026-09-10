@@ -13,6 +13,7 @@ is the separate, complementary check that today's actual tree is clean.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -1878,25 +1879,59 @@ def probe_one(probes=PROBES):
     assert pinned["population"] == 2
 
 
+def _raw_committed_at_claim(comment: str) -> int | None:
+    """A hand-written, minimal re-implementation of the "Committed at N" parse
+    — deliberately never calling `_claimed_current_value`/`_normalize_comment_
+    text`/`_nearest_number_after`, the exact functions the R4-6 finding is
+    about. Used only by the two live-tree self-floor tests below, so their
+    "independent recomputation" is independent of the module under test, not
+    merely of `measure()`'s own internal call to the same functions."""
+    joined = " ".join(re.sub(r"^\s*#:?\s*", "", line) for line in comment.splitlines())
+    match = re.search(r"[Cc]ommitted at (\d+)", joined)
+    return int(match.group(1)) if match else None
+
+
+def _raw_points_of_slack_claim(comment: str) -> int | None:
+    """The mirror hand-written parse for "N points of slack", same rationale."""
+    joined = " ".join(re.sub(r"^\s*#:?\s*", "", line) for line in comment.splitlines())
+    match = re.search(r"(\d+) points? of (?:slack|margin)", joined)
+    return int(match.group(1)) if match else None
+
+
 def test_the_sweeps_own_floor_is_pinned_compliant_on_the_live_tree() -> None:
     """Round 4, F3: **not** `pinned["population"] == measured["floors_swept"]` on
     its own — a second reader found that assertion `swept == swept`, since
     `population` **is** `swept`, assigned three lines above in `measure()`
     itself. It is true for every tree and every floor value (verified: it still
     passed with `MINIMUM_FLOORS_SWEPT` mutated to `1`, where 66/66 tests
-    passed) and so is not a check on anything. It stays here as a sanity check
-    on the plumbing, but the actual compliance claim is now proven a second,
-    independent way: reading the real module's real comment straight from
-    source and calling `_margin_finding` directly with the real declared value
-    — a genuinely separate computation from the one `measure()` performed
-    internally, so a comment gone stale against its own declaration (F2) is
-    still caught on the one tree that ships, not merely asserted to agree with
-    itself."""
+    passed) and so is not a check on anything.
+
+    Round 4's own fix for that ("call `_margin_finding` a second way, against
+    the real comment read fresh from source") was **round 5's R4-6 finding**:
+    it is not independent either. `measure()`'s internal call and this test's
+    call pass `_margin_finding` the identical six arguments derived from the
+    identical source, so it is mathematically entailed to return the identical
+    answer — and the `next(...)` locating `pinned` raises `StopIteration`
+    *before* the recomputation runs whenever the floor is not pinned at all,
+    so the "independent" call is only ever reached on the branch where it
+    cannot disagree. Genuinely independent this time: a hand-written regex in
+    *this test file* (`_raw_committed_at_claim`, never calling `_claimed_
+    current_value` or anything else `_margin_finding` itself uses) reads the
+    comment's own numeric claim and compares it directly against the real
+    declared value and the real measured population — no call into the module
+    under test at all for that half of the check."""
     measured = floor_sweep.measure()
     pinned = next(
-        p
-        for p in measured["evidence_pinned_floors"]
-        if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_SWEPT"
+        (
+            p
+            for p in measured["evidence_pinned_floors"]
+            if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_SWEPT"
+        ),
+        None,
+    )
+    assert pinned is not None, (
+        "MINIMUM_FLOORS_SWEPT is not pinned compliant on the live tree — it produced a "
+        f"finding instead: {measured['findings']}"
     )
     assert pinned["population"] == measured["floors_swept"]
     assert not any(
@@ -1915,27 +1950,38 @@ def test_the_sweeps_own_floor_is_pinned_compliant_on_the_live_tree() -> None:
         if name == "MINIMUM_FLOORS_SWEPT"
     )
     comment = floor_sweep._comment_block_above(module_info.lines, lineno)
-    finding = floor_sweep._margin_finding(
-        "floor_sweep",
-        "MINIMUM_FLOORS_SWEPT",
-        lineno,
-        floor_sweep.MINIMUM_FLOORS_SWEPT,
-        measured["floors_swept"],
-        comment,
-    )
-    assert finding is None, finding
+
+    committed_at = _raw_committed_at_claim(comment)
+    if committed_at is not None:
+        assert committed_at == floor_sweep.MINIMUM_FLOORS_SWEPT, (
+            f"comment claims 'Committed at {committed_at}', but the real declaration is "
+            f"{floor_sweep.MINIMUM_FLOORS_SWEPT}"
+        )
+    points_of_slack = _raw_points_of_slack_claim(comment)
+    if points_of_slack is not None:
+        real_margin = measured["floors_swept"] - floor_sweep.MINIMUM_FLOORS_SWEPT
+        assert points_of_slack == real_margin, (
+            f"comment claims {points_of_slack} points of slack, but the real margin is "
+            f"{real_margin} ({measured['floors_swept']} measured minus "
+            f"{floor_sweep.MINIMUM_FLOORS_SWEPT} declared)"
+        )
 
 
 def test_the_arithmetically_checked_self_floor_is_pinned_compliant_on_the_live_tree() -> None:
-    """The same second, independent computation as above, for round 4's own
-    denominator (`MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`) — F1's floor gets the
-    same non-tautological proof F3 gave the older one, rather than shipping a
-    second instance of the exact defect this task is about."""
+    """The same genuinely-independent recomputation as above (R4-6, round 5),
+    for round 4's own denominator (`MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`)."""
     measured = floor_sweep.measure()
     pinned = next(
-        p
-        for p in measured["evidence_pinned_floors"]
-        if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED"
+        (
+            p
+            for p in measured["evidence_pinned_floors"]
+            if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED"
+        ),
+        None,
+    )
+    assert pinned is not None, (
+        "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED is not pinned compliant on the live tree "
+        f"— it produced a finding instead: {measured['findings']}"
     )
     assert pinned["population"] == measured["arithmetically_checked"]
 
@@ -1950,15 +1996,23 @@ def test_the_arithmetically_checked_self_floor_is_pinned_compliant_on_the_live_t
         if name == "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED"
     )
     comment = floor_sweep._comment_block_above(module_info.lines, lineno)
-    finding = floor_sweep._margin_finding(
-        "floor_sweep",
-        "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-        lineno,
-        floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED,
-        measured["arithmetically_checked"],
-        comment,
-    )
-    assert finding is None, finding
+
+    committed_at = _raw_committed_at_claim(comment)
+    if committed_at is not None:
+        assert committed_at == floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED, (
+            f"comment claims 'Committed at {committed_at}', but the real declaration is "
+            f"{floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED}"
+        )
+    points_of_slack = _raw_points_of_slack_claim(comment)
+    if points_of_slack is not None:
+        real_margin = (
+            measured["arithmetically_checked"] - floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED
+        )
+        assert points_of_slack == real_margin, (
+            f"comment claims {points_of_slack} points of slack, but the real margin is "
+            f"{real_margin} ({measured['arithmetically_checked']} measured minus "
+            f"{floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED} declared)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2439,13 +2493,23 @@ def measure():
         "19, zero headroom.",
         "19 — exactly the population, nothing spare.",
         "19, zero-slack.",
+        # Round 5 (R4-7): three more real-sounding spellings a second reader
+        # measured escaping the round-4 pattern.
+        "19, nothing to spare.",
+        "19; slack: zero.",
+        "19, no headroom whatsoever.",
     ],
 )
 def test_a_previously_unrecognised_zero_slack_spelling_is_now_caught(comment: str) -> None:
     """F7, half one: round 3's `_ZERO_SLACK_CLAIM_RE` was a literal alternation
     of three exact phrases; a second reader measured four more real-sounding
     spellings sliding past it. All four now contradict a mutated floor of `1`
-    against a stated `19`."""
+    against a stated `19`. Round 5 (R4-7) adds three more: "nothing **to**
+    spare" (the natural English of the accepted "nothing spare"), "slack:
+    zero" (noun and number in the opposite order from every other accepted
+    spelling), and "no headroom whatsoever" (a specific phrase, deliberately
+    not a bare `no\\s+headroom` join — see `_ZERO_SLACK_CLAIM_RE`'s own
+    comment for the collisions that join would cause)."""
     from integral.floor_sweep import _zero_slack_claim_contradicts
 
     assert _zero_slack_claim_contradicts(comment, 1) is True
@@ -2499,3 +2563,292 @@ def measure(probes=PROBES):
     measured = floor_sweep.measure(tmp_path)
     assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
     del fixture
+
+
+# ---------------------------------------------------------------------------
+# Round 5 — PR #436 round 4's independent second reader's seven findings.
+# R4-2 (a `Starred`/`**`-unpacked collection is counted by AST element count,
+# not runtime length, and cleared as compliant), R4-3 (`_compare_sites` picked
+# `site[0]`, so a two-site floor's verdict depended on source order), R4-5
+# (round 3's F2 unclosed a second time: a keyword surviving in an *earlier*
+# paragraph of a self-floor's own accreted comment), R4-7 (three more
+# zero-slack spellings, folded into the existing parametrized test above).
+# R4-1, R4-4 and R4-6 are pinned by the live-tree behaviour they changed
+# rather than a constructed fixture: R4-1 by
+# `test_a_floor_already_breaching_its_population_needs_no_argument` staying
+# green (the fix that would have "closed" R4-1 literally was reverted for
+# breaking that legitimate, deliberate shape — see `_margin_finding`'s own
+# comment); R4-4 by `tests/test_cv_store.py`'s existing `MINIMUM_CHECKS`
+# assertions against the raised floor; R4-6 by the two rewritten
+# `..._is_pinned_compliant_on_the_live_tree` tests above, which is where the
+# tautology lived.
+# ---------------------------------------------------------------------------
+
+
+def test_a_starred_unpacked_tuple_population_is_dynamic_not_miscounted(tmp_path: Path) -> None:
+    """R4-2. `(*BASE, "extra")` has two AST elements (a `Starred` node and a
+    literal) and twenty-one runtime items — `_collection_kind`'s old
+    `len(expr.elts)` believed `2`, clearing `MINIMUM_PROBES = 2` as exactly
+    compliant while nineteen deletions would breach nothing silently. Fixed:
+    any `Starred` element makes the population `_DYNAMIC`, never a literal
+    count — so with no comment this is now a real (fail-closed, safe)
+    `undocumented` finding rather than a fail-open `compliant`."""
+    fixture = _write(
+        tmp_path,
+        """
+BASE_PROBES = tuple(f"p{i}" for i in range(20))
+PROBES = (*BASE_PROBES, "extra")
+MINIMUM_PROBES = 2
+
+
+def measure():
+    if len(PROBES) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert not any(
+        p["module"] == "mod" and p["name"] == "MINIMUM_PROBES"
+        for p in measured["evidence_pinned_floors"]
+    )
+    finding = next(
+        f for f in measured["findings"] if f["module"] == "mod" and f["name"] == "MINIMUM_PROBES"
+    )
+    assert finding["reason"] == "undocumented"
+    del fixture
+
+
+def test_a_starred_unpacked_tuple_population_with_a_comment_is_dynamic_and_compliant(
+    tmp_path: Path,
+) -> None:
+    """The same shape, commented — proves the fix reclassifies to `_DYNAMIC`
+    rather than merely breaking compliance for the uncommented case."""
+    fixture = _write(
+        tmp_path,
+        """
+BASE_PROBES = tuple(f"p{i}" for i in range(20))
+PROBES = (*BASE_PROBES, "extra")
+
+# This population is built with a starred unpack, so it cannot be counted
+# from source; kept small on purpose.
+MINIMUM_PROBES = 2
+
+
+def measure():
+    if len(PROBES) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert any(
+        d["module"] == "mod" and d["name"] == "MINIMUM_PROBES"
+        for d in measured["dynamic_population_floors"]
+    )
+    del fixture
+
+
+def test_a_double_star_unpacked_dict_population_is_dynamic_not_miscounted(tmp_path: Path) -> None:
+    """R4-2's mirror case: `{**BASE, "x": 1}` shows up as a `None` key in
+    `expr.keys`, one AST slot for however many keys `BASE` contributes at
+    runtime (nine, against a believed population of two)."""
+    fixture = _write(
+        tmp_path,
+        """
+BASE_TABLE = {f"k{i}": i for i in range(8)}
+TABLE = {**BASE_TABLE, "extra": 1}
+MINIMUM_KEYS = 2
+
+
+def measure():
+    if len(TABLE) < MINIMUM_KEYS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert not any(
+        p["module"] == "mod" and p["name"] == "MINIMUM_KEYS"
+        for p in measured["evidence_pinned_floors"]
+    )
+    finding = next(
+        f for f in measured["findings"] if f["module"] == "mod" and f["name"] == "MINIMUM_KEYS"
+    )
+    assert finding["reason"] == "undocumented"
+    del fixture
+
+
+def test_two_disagreeing_comparison_sites_are_declined_regardless_of_order(
+    tmp_path: Path,
+) -> None:
+    """R4-3. A second reader constructed one floor with two comparison sites —
+    a small sanity check (population 3) and the real measurement (population
+    12) — and found the verdict decided purely by which function `ast.walk`
+    reached first. Declined (never judged on the first) with the sanity check
+    defined *before* the real measurement..."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+MINIMUM_PROBES = 3
+
+
+def sanity_check(probes=(1, 2, 3)):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert "mod.MINIMUM_PROBES" in measured["bounds_read_and_out_of_scope"]
+    assert not any(f["module"] == "mod" for f in measured["findings"])
+    assert not any(d["module"] == "mod" for d in measured["dynamic_population_floors"])
+    del fixture
+
+
+def test_two_disagreeing_comparison_sites_are_declined_in_the_other_order_too(
+    tmp_path: Path,
+) -> None:
+    """...and identically declined with the real measurement defined *first* —
+    the same tree, the two functions swapped, proving the verdict no longer
+    depends on which one `ast.walk` happens to reach first."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+MINIMUM_PROBES = 3
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+
+
+def sanity_check(probes=(1, 2, 3)):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert "mod.MINIMUM_PROBES" in measured["bounds_read_and_out_of_scope"]
+    assert not any(f["module"] == "mod" for f in measured["findings"])
+    del fixture
+
+
+def test_two_agreeing_comparison_sites_still_resolve_arithmetically(tmp_path: Path) -> None:
+    """The other half of "decline rather than pick": when every comparison
+    site resolves to the *same* population, that is agreement, not a guess —
+    any one of them would answer identically, so this floor is still checked
+    arithmetically rather than declined merely for having more than one site
+    (`connectors.MINIMUM_ARRAY_PATH_CONTRACTS`'s real shape on the live
+    tree)."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+MINIMUM_PROBES = 2
+
+
+def check_a(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+
+
+def check_b(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    finding = measured["findings"][0]
+    assert finding["module"] == "mod" and finding["name"] == "MINIMUM_PROBES"
+    assert finding["reason"] == "silent_margin"
+    del fixture
+
+
+def test_a_keyword_argued_only_in_an_earlier_paragraph_is_not_accepted(tmp_path: Path) -> None:
+    """R4-5. Round 3's F2 was reopened a second time: a self-floor's own
+    comment accretes one paragraph per round, separated by blank `#:` lines,
+    and `_MARGIN_ARGUED_RE`'s bare keyword match used to fire on *any*
+    paragraph — including one describing this module's own mechanism rather
+    than arguing this floor's own gap. Deleting the sentence that actually
+    argued the margin left the keyword alive one paragraph up, and the gate
+    stayed green. Fixed: the fallback keyword check now reads only the last
+    paragraph, the same place a real argument (or the specific "Committed
+    at"/"points of slack" idioms, checked separately against the whole
+    comment) already lives."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# An earlier round discussed this module's own margin arithmetic at length,
+# and whether a margin was computed at all.
+#
+# This paragraph states no number and argues nothing about the floor below.
+MINIMUM_PROBES = 2
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(
+        f for f in measured["findings"] if f["module"] == "mod" and f["name"] == "MINIMUM_PROBES"
+    )
+    assert finding["reason"] == "silent_margin"
+    del fixture
+
+
+def test_a_keyword_argued_in_the_last_paragraph_is_still_accepted(tmp_path: Path) -> None:
+    """The control: the identical history paragraph, with the actual
+    argument moved into the final paragraph beside the declaration — still
+    compliant, proving the restriction is about *where* the argument sits,
+    not whether a free-form (non-numeric) argument is allowed at all
+    (`test_a_margin_argued_in_writing_is_not_flagged`,
+    `second_reader.STDLIB_DISAGREEMENTS_AT_LEAST` on the live tree)."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# An earlier round discussed this module's own margin arithmetic at length,
+# and whether a margin was computed at all.
+#
+# Kept small on purpose: this floor is pinned to a third party's own
+# behaviour, not to this table's own size.
+MINIMUM_PROBES = 2
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    del fixture
+
+
+def test_last_comment_paragraph_returns_the_whole_comment_when_there_is_no_break() -> None:
+    """Unit-pins `_last_comment_paragraph`'s fallback: a comment with no blank
+    `#`/`#:` separator is entirely its own last (and only) paragraph, exactly
+    the shape every short, single-paragraph real floor comment in this
+    repository already has."""
+    comment = "# Raised to what the table carries -- 9, zero slack."
+    assert floor_sweep._last_comment_paragraph(comment) == comment
+
+
+def test_last_comment_paragraph_drops_earlier_paragraphs() -> None:
+    """Unit-pins the split itself: only the text after the last blank
+    separator line survives."""
+    comment = "# First paragraph, mentions margin.\n#\n# Second paragraph, mentions nothing."
+    result = floor_sweep._last_comment_paragraph(comment)
+    assert "margin" not in result
+    assert "Second paragraph" in result
