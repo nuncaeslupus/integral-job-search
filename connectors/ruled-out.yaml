@@ -402,7 +402,10 @@ javascript_rendered:
       Barcelona: Catalan offers go through the COFB, under
       `authentication_required`.
     next_step: "capture the portal with a filter submitted and read the admin-ajax request (test 3), then re-run test 1 on it"
-    retest: "GET the portal and count offer links; zero today."
+    retest: >
+      curl -s --compressed -A integral-job-search
+      'https://www.farmaceuticos.com/farmaceuticos/recursos-farmaceuticos/portal-de-empleo/' |
+      grep -oE 'href="[^"]*(oferta|vacante)[^"]*"' | wc -l  # prints 0 today
   # getmanfred.com, remoteok.com and usajobs.gov were here until 2026-08-31.
   # Their served HTML is exactly as empty as this section said — the entries
   # were not sloppy — and all three fetch their adverts from an endpoint a plain
@@ -831,12 +834,16 @@ policy_unreadable:
     retest: >
       uv run python -c "from integral.robots import Robots;
       print(Robots().allows('https://www.jobatus.es/trabajo-tecnico-farmacia-en-barcelona'))"
+      — raises RobotsError today (a traceback ending "could not be read: <urlopen
+      error timed out>"), which IS the refusal; True or False means this changed.
   - site: laboris.net
     checked: "2026-09-10"
     detail: "RobotsError: /robots.txt fails with SSL CERTIFICATE_VERIFY_FAILED, so the path is refused"
     retest: >
       uv run python -c "from integral.robots import Robots;
       print(Robots().allows('https://www.laboris.net/ofertas?q=farmacia'))"
+      — raises RobotsError today (a traceback ending in CERTIFICATE_VERIFY_FAILED,
+      hostname mismatch), which IS the refusal; True or False means this changed.
 
   - site: snagajob.com
     checked: 2026-08-30
@@ -1013,7 +1020,11 @@ engine_gap_offer_url:
     blocked_on: "an engine change — a mapped `url` field should outrank the detail fetch URL"
     retest: >
       curl -s -A integral-job-search 'https://api.pmfarma.com/api/ofertas?pais=28' |
-      python3 -c "import json,sys; print(json.load(sys.stdin)['meta']['total'])"
+      python3 -c "import json,sys; d=json.load(sys.stdin); f=d['filtros'];
+      print(d['meta']['total'], [e['total'] for e in f['estados'] if e['slug']=='barcelona'],
+      [c['total'] for c in f['cargos'] if c['id']==30])"  # prints 157 [47] [111] on 2026-09-10;
+      and curl -sL -A integral-job-search -o /dev/null -w '%{size_download}' https://www.pmfarma.com/empleo/
+      prints 618 (the app shell)
 
 engine_gap_charset:
   # The connector schema has nowhere to declare a board's character set, and

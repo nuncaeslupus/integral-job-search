@@ -2745,7 +2745,9 @@ def test_the_committed_library_has_no_unenforced_provenance() -> None:
 
     assert measured["gate_status"] == "measured"
     assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
-    assert measured["claims"] == {"live": 0, "transcribed": 1, "unrecorded": 19}
+    # T166 recorded `trabajos_es`'s probe live, with its response committed —
+    # the first capture in the library to substantiate that claim.
+    assert measured["claims"] == {"live": 1, "transcribed": 1, "unrecorded": 18}
     assert measured["example_packages_excluded"] == ["examplejobs_es"]
 
 
@@ -2937,8 +2939,11 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
         # T113 shipped `transcribed` on usajobs_en and nothing anywhere else;
         # `transcribed_from` is this task's, and so is every `unrecorded`.
         record.pop("transcribed_from", None)
-        if record.get("provenance") == pc.UNRECORDED:
+        # A capture recorded `live` since (T166's `trabajos_es`) carried no
+        # provenance in T113's library either, so it reverts to `absent`.
+        if record.get("provenance") in (pc.UNRECORDED, pc.LIVE):
             record.pop("provenance")
+            record.pop("response", None)
         path.write_text(json.dumps(record, indent=2), encoding="utf-8")
 
     before = cp.measure(library)

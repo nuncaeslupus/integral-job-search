@@ -40,12 +40,16 @@ list:
   # `CADENA` is the board's own keyword search. Until 2026-09-10 this pointed
   # at the `atencion_al_cliente` category, so every candidate got the same
   # forty customer-service adverts whatever they had asked for — a pharmacy
-  # technician's four phrases found nothing relevant on this board. Measured that
-  # day: `técnico farmacia` returns 40 rows led by pharmacy roles, `python`
-  # returns developer roles, and a nonsense word returns zero rows rather than
-  # a fallback list, so an empty answer here means empty. The search page
-  # serves the same `.listado2014.card.oferta` markup as the category page the
-  # fixture was recorded from.
+  # technician's four phrases found nothing relevant on this board. Both halves
+  # of the search are committed: `probe/` is the board's answer to `técnico
+  # farmacia` (40 rows, 19 of them titled farm-/dermo-/cosm-), and
+  # `tests/fixtures/connectors/trabajos_es_no_hits.html` is its answer to a
+  # nonsense word — zero rows, not a fallback list, so an empty answer here
+  # means empty. `tests/test_connect_portal.py` pins both, including that this
+  # pattern rebuilds the probe's URL exactly: a key the board ignores would
+  # still carry `{query}` and pass every other test. The search page serves the
+  # same `.listado2014.card.oferta` markup as the category page `fixture/` was
+  # recorded from.
   url_pattern: "https://www.trabajos.com/ofertas-empleo/?CADENA={query}"
   pagination:
     mode: none

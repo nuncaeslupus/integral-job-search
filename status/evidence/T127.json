@@ -181,8 +181,8 @@
       "reason": null,
       "fixture_offers": 40,
       "probe_offers": 40,
-      "shared_offers": 19,
-      "overlap": 0.475,
+      "shared_offers": 0,
+      "overlap": 0.0,
       "repeats_the_fixture": false,
       "byte_identical": false
     },

@@ -159,3 +159,37 @@ def test_the_committed_fixture_carries_excerpts_not_whole_adverts() -> None:
     assert len(body) <= BODY_CEILING, (
         f"the detail body is {len(body)} chars — that is an advert, not an excerpt"
     )
+
+
+# ---------------------------------------------------------------------------
+# T166 — the board searches the candidate's terms, and a miss is empty
+
+NO_HITS_HTML = (
+    DEFAULT_PACKAGE.parents[1] / "tests" / "fixtures" / "connectors" / "trabajos_es_no_hits.html"
+).read_text(encoding="utf-8")
+
+
+def test_the_probe_was_recorded_from_the_request_the_connector_sends() -> None:
+    """`{query}` being in `url_pattern` proves the connector sends *a* query,
+    not that the board reads it. The second reader on #447 swapped `CADENA`
+    for `q` — a key trabajos.com ignores, answering with forty unrelated
+    adverts — and every test and `make evidence` stayed green. The probe is a
+    live capture of the board's own search, so the connector must rebuild its
+    URL exactly from the query that capture carries."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from integral.connectors import build_list_urls
+
+    captured = json.loads((DEFAULT_PACKAGE / "probe" / "captured.json").read_text("utf-8"))
+    (query,) = parse_qs(urlsplit(captured["url"]).query)["CADENA"]
+
+    assert build_list_urls(CONNECTOR, page_count=1, query=query) == [captured["url"]]
+
+
+def test_a_search_with_no_hits_parses_to_no_rows() -> None:
+    """A miss must be empty, not a fallback list — infoempleo.com's page is
+    ruled out in `connectors/ruled-out.yaml` for exactly that. The capture is
+    the board's answer to a nonsense word, and it echoes the word back in its
+    own search box, so this is a results page and not an empty file."""
+    assert 'name="CADENA" class="liviano" value="zzqxvw"' in NO_HITS_HTML
+    assert parse_list_page(CONNECTOR, NO_HITS_HTML) == []

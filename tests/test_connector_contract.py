@@ -619,11 +619,18 @@ def test_no_committed_capture_carries_an_ip_address() -> None:
     named a directory. The docstring said the next board would write it
     somewhere else; what actually happened is that the same board wrote it in
     the next directory over, which is the same mistake one level up.
+
+    **And every recorded page in the repository, not every package.** T166
+    committed trabajos.com's answer to a no-hit search under
+    `tests/fixtures/connectors/`, outside the library, where this guard did not
+    look — the third time the same board's pages landed one directory over.
     """
     quad = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    repo = _LIBRARY.parent
+    pages = [*_LIBRARY.rglob("*.html"), *(repo / "tests" / "fixtures").rglob("*.html")]
     offenders = {
-        str(path.relative_to(_LIBRARY)): sorted(set(quad.findall(path.read_text(encoding="utf-8"))))
-        for path in sorted(_LIBRARY.rglob("*.html"))
+        str(path.relative_to(repo)): sorted(set(quad.findall(path.read_text(encoding="utf-8"))))
+        for path in sorted(pages)
         if quad.search(path.read_text(encoding="utf-8"))
     }
     assert not offenders, f"recorded pages carry IP addresses: {offenders}"
