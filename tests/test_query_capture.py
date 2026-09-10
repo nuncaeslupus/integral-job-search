@@ -166,6 +166,23 @@ def test_an_unreadable_package_is_named_not_skipped(library: Path) -> None:
         ("https://b.test/s=1/{query}/", "https://b.test/s=1/../", False),
         ("https://b.test/s=1/{query}/", "https://b.test/s=1/a+b/", False),
         ("https://b.test/s=1/{query}/", "https://b.test/s=1/a%20b/", True),
+        # Round 3, R3-1: a dot-segment anywhere in the path removes the slot
+        # (RFC 3986 §5.2.4), not only one the slot holds.
+        ("https://b.test/jobs/{query}/../x", "https://b.test/jobs/python/../x", False),
+        ("https://b.test/jobs/{query}/..", "https://b.test/jobs/python/..", False),
+        ("https://b.test/jobs/{query}/%2E%2E/x", "https://b.test/jobs/python/%2E%2E/x", False),
+        ("https://b.test/jobs/{query}/.%2e/x", "https://b.test/jobs/python/.%2e/x", False),
+        ("https://b.test/jobs/{query}/./x", "https://b.test/jobs/python/./x", False),
+        # ...while `..` inside a segment is not a dot-segment and survives.
+        ("https://b.test/jobs/x-{query}/", "https://b.test/jobs/x-../", True),
+        # ...and §5.2.4 is about the path: `/..` in the query string stays.
+        ("https://b.test/jobs?next=/{query}", "https://b.test/jobs?next=/..", True),
+        # R3-2: which component each of two slots is in.
+        ("https://b.test/{query}/x?q={query}", "https://b.test/a+b/x?q=a%20b", False),
+        ("https://b.test/{query}/x?q={query}", "https://b.test/../x?q=..", False),
+        ("https://b.test/{query}/x?q={query}", "https://b.test/a%20b/x?q=a+b", True),
+        # A pattern with no slot measures no query, even over its own URL.
+        ("https://b.test/jobs", "https://b.test/jobs", False),
     ],
 )
 def test_query_measured(pattern: str, captured: str | None, measured: bool) -> None:

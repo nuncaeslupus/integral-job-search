@@ -44,10 +44,19 @@ three conditions on `q` itself:
   capture copied from the pattern.
 
 **Where a slot is.** `urlsplit` decides which component each slot is in,
-following RFC 3986's grammar. A slot in the path must not decode to `.` or
-`..`: §3.3 names those dot-segments, and §5.2.4 removes them, taking the query
-with them. A slot in the fragment, the host or the scheme is never measured.
-§3.5 keeps the fragment with the client, so a board is never asked it.
+following RFC 3986's grammar. A slot in the fragment, the host or the scheme is
+never measured. §3.5 keeps the fragment with the client, so a board is never
+asked it.
+
+**What a request still carries.** The captured path must already be in
+normalised form. After `%2E` is decoded (§6.2.2.2), no segment may be `.` or
+`..`, which is exactly the condition under which §5.2.4's
+`remove_dot_segments` leaves a path unchanged. Round 2 checked only the slot's
+own value. Round 3's reader then showed a literal `/../` *after* the slot
+(`…/jobs/{query}/../x`) removes the slot just as surely. Browsers and
+normalising servers send `…/jobs/x`, so the board never sees the query. A
+rule about the whole path covers both, and it also accepts `x-..`: a slot
+inside a segment that no normalisation removes.
 
 Only the page's value is left free, since it is T113's to certify. It must
 still be ASCII digits: `\\d` would accept `٢`, which the connector never
@@ -113,6 +122,16 @@ _QUERY_SLOT = r"([^&#]*)"
 _DOT_SEGMENTS = frozenset({".", ".."})
 
 
+def _normalised_path(url: str) -> bool:
+    """Would §5.2.4's `remove_dot_segments` leave this URL's path as it is?
+
+    It does exactly when no segment is a dot-segment, once `%2E` (an escaped
+    unreserved `.`, §6.2.2.2) is read as the `.` it is.
+    """
+    path = re.sub("%2[eE]", ".", urlsplit(url).path)
+    return not _DOT_SEGMENTS.intersection(path.split("/"))
+
+
 def _slot_components(url_pattern: str) -> list[bool] | None:
     """For each `{query}` slot in order, whether it is in the query component.
 
@@ -135,15 +154,13 @@ def _decoded(raw: str, in_query_component: bool) -> str | None:
     spellings = {quote(value, safe=""), quote_plus(value, safe="")}
     if raw not in spellings or not value.strip() or QUERY_PLACEHOLDER in value:
         return None
-    if not in_query_component and value in _DOT_SEGMENTS:
-        return None
     return value
 
 
 def query_measured(url_pattern: str, captured: str | None) -> bool:
     """Is `captured` a URL `url_pattern` issues for one filled query?"""
     components = _slot_components(url_pattern)
-    if captured is None or components is None:
+    if captured is None or components is None or not _normalised_path(captured):
         return False
     slots = iter(components)
     regex = "".join(
