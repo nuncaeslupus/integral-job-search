@@ -1,172 +1,148 @@
 # Session handover
 
-**2026-09-08 → 09.** Six PRs merged: #418, #421, #422, #423, #424, #425 (and
-#428, this one). Four were code PRs and each took **four or five review rounds**.
-`origin/main` is at the T122 merge.
+**2026-09-09 → 10, overnight.** Three tasks taken, three PRs open, **none merged**.
+Eleven second-reader rounds run; **not one came back empty.** The session ended on
+the account's 5-hour limit at 01:14 UTC (resets 02:40), which killed three agents
+mid-flight.
 
-An unattended run: one orchestrator holding the GitHub API, workers in linked
-worktrees, and a second-reader session per pull request — re-dispatched after
-every fix push, because a review of an earlier tree is not a review of this one.
+`origin/main` is unchanged at the #433 merge. Everything below is on branches.
 
-## 1. The number this session exists to record
+## 1. State of the three PRs — all green, all reviewed, all still blocked
 
-**Seventeen second-reader rounds. Every single one found something real.** Not
-one round came back empty, and no round was cleared to end a loop.
+| PR | task | issue | head | rounds | where it stands |
+|---|---|---|---|---|---|
+| #434 | T154 `t-e6f2d418` | #414 | `7807824b` | 4 fix / 3 review | **awaiting round-4 review** (reader killed at start) |
+| #435 | T156 `t-3ca8f7b1` | #419 | `fd633ac5` | 5 fix / 4 review | **round-5 push is UNVERIFIED — see §4** |
+| #436 | T159 `t-6f2b9c14` | #429 | `639371b6` | 3 fix / 2 review | **awaiting round-3 review** (reader killed at start) |
 
-| PR | task | rounds | what the last round still found |
-|---|---|---|---|
-| #421 | T155 | 4 | three too-fine distinctness keys surviving all 148 tests |
-| #422 | T151 | 4 | a figure from a rate-limited session shipped as measured |
-| #423 | T153 | 4 | the same shape one step out from **both** of the previous round's fixes |
-| #425 | T122 | 5 | the floor's literal-ness argued in the docstring, mandated by T158, pinned by nothing |
+CI is green on all three heads and `mergeable_state` is `clean` on all three. Green
+is not the question — every finding this session sat behind a green gate.
 
-Every finding was **fail-open**. Every one sat behind a green `make host-gate`,
-a PASS `verified_gate.sh` block, and green CI.
+## 2. Eleven rounds, zero empty ones, and the family held
 
-CLAUDE.md says a green gate is necessary and not sufficient. Last session
-measured that at 6-of-6 green, 5-of-6 defective. This session measured what
-happens when you keep reading: **the defect survives its own fix, repeatedly.**
+Round counts by PR: #434 → 6, 5, 7 findings. #435 → 5, 2, 1, 1. #436 → 6, 9.
+**Thirty-two findings; the large majority fail-open.**
 
-## 2. One defect family, eight instances, and it is now nameable
-
-The same thing was found eight times across four independent PRs. Several times
-it was found **inside the remedy written for the previous instance**.
+Last session named the family and this session did not dent it:
 
 > **A check pinned against a proxy for the property, rather than against the
 > property.**
 
-Its faces, each measured here:
+Two new faces worth adding to the list, both of which cost a full round:
 
-1. **A gate certifying coverage it does not have.** T155's floor claimed "both
-   comment orders" while collapsing them to one order left 137 tests green — the
-   order test compared state *names*, and its `endswith("first")` filter was a
-   no-op because both suffixes end in "first".
-2. **A metric independent of its own inputs.** T122: severing either the fixture
-   half or the board half left the metric at 0 with 68 tests green.
-3. **A floor counting labels, not things.** T155 round two — and then round three
-   found the key counted only two of the four fields `read` consumes.
-4. **A bound derived from the thing it bounds.** `profile.MINIMUM_FIELDS_CHECKED
-   = len(_D6_FIXTURE)` compared against `len(_D6_FIXTURE)`: `len(X) < len(X)`,
-   **false for every X**. That floor has never fired and cannot. Filed as T159.
-5. **A bound one short of its population.** T122's floor was 12 against a probed
-   set of 13, so the first deleted fixture breached nothing — the guard named as
-   holding a disclosed residue was silent.
-6. **An invariant whose population never reaches the code it is about.** T151
-   fixed precedence in two branches and pinned one: reverting the anchored branch
-   survived the full green gate at exit 0 with no drift, permitting 38 requests
-   the head refuses.
-7. **A fixture whose execution path never arrives.** T153: a mutant reverting the
-   fix survived because `_borrowed_package` answered first and the test only ever
-   reached the code through `measure()`. Green fixture, live defect, one call
-   layer apart. **Invisible to reading; only mutation shows it.**
-8. **A rule stated, mandated for others, and unpinned in its own instance.** T122
-   wrote "commit the floor as a literal" into T158 *in the same diff*, argued it
-   correctly in its own docstring — and the exact form it rejects passed all 50
-   tests and restored the fail-open.
+- **A checker whose accept-set is seeded by its own trigger word.**
+  `floor_sweep._zero_slack_claim_contradicts` scanned a window *including* the
+  matched phrase, and `_spelled_out_numbers("zero slack") == {0}` — so `claimed`
+  always contained `0` and `literal_value == 0` was never a contradiction. **16 of
+  19 floors could be set to 0 with the metric still reading 0.** Written as the
+  remedy for floors that cannot fail.
+- **An exemption whose scope is set by what keeps a fixture green.** #434's
+  `path_segment` carve-out was defended on a premise contradicted twice — a
+  loadable config with *no path segment in it*, and Rails' `params`, which the
+  diff's own error string names as a merging namespace. The reader's diagnosis is
+  the sentence to carry forward: *extending the mirror to `path_segment` breaks
+  only `page_placeholder`'s probe.* In the same round a **fixture's expected
+  verdict was changed to accommodate the new rule** while still citing R7 — inside
+  a module whose stated standard is "derived from the rule's text, never from
+  running the code", and whose metric is named `…_resolved_inconsistently`.
 
-**The generalisation, and it is the thing to carry forward:**
+**A category is not a classification if nothing in it is ever checked.** #436's
+round 1 said the arithmetic branch had 11 of 46 members; round 2 broadened the
+sweep to 57 and the branch still had **exactly 11**. Every newly-swept floor landed
+in `dynamic`, where no margin was computed. Round 3 finally attacked that.
 
-> **Being right in fact is not the same as being pinned.**
+**What worked, again, was the pre-push self-scan.** It caught, by the implementer
+rather than a reviewer: a drafted `"fail_open": len(defects)` field (a numerator
+restated as a second measurement); an `episodes_withheld` that would have become a
+metric independent of its own inputs, deleted rather than patched; three of a
+worker's own new tests asserting "no finding" without asserting the sweep saw
+anything; and — the best of the night — a first-draft comment claiming a narrowing
+"can only ever move an episode out of this branch, never the reverse", traced,
+found false via `_words()`'s treatment of `\n`, and **softened rather than shipped,
+in a PR whose whole subject was false justification comments.**
 
-T155's argument for excluding `pr.number` was *correct* — the reviewer checked
-the data and confirmed it — and nothing tested it, so the next tidier refactor
-would have walked straight through. Same for T122's literal rule. Same for a
-docstring citing a rule that does not exist (found four times in `T155.json`'s
-shipped evidence).
+**What worked for reviewers: demanding the reviewer's own populations.** #435's
+readers each built their own paraphrases and innocents rather than reusing the
+implementer's, and the numbers moved 0/8 and 21/30 → 8/8 and 12/12 → 9/9 and 30/30.
 
-**What worked against it:** attaching *"before you push, go looking for this
-family in what you are about to ship, and report what you found — including
-'nothing, and here is where I looked'"* to every fix brief. It paid off **four
-times**, each time found by the *implementer* rather than a reviewer — which is
-cheaper, since a self-caught finding costs one push instead of a review cycle.
-The best of them: T153 found its own `Finding.direction` defaulted to
-`"fail-open"` and was never set otherwise, so the committed `fail_open` count was
-arithmetically identical to the metric — two numbers that cannot disagree, the
-second corroborating nothing. Inside the diff written to name that defect.
+## 3. `tools/verified_gate.sh:143` prints a false line in every verdict block
 
-**What did not work: enumeration.** Every round that answered a finding with one
-more case got another finding. The rounds that ended a thread replaced the
-enumeration with a closed rule — T155's twin derived from `dataclasses.fields`
-(so a field added later is varied without anyone remembering to), T122's stub
-verifier wrong in every direction at once, T151's per-region derivation from RFC
-3986's `reserved` production. **An enumeration has no last element.**
+`echo "commit ... CI is unavailable; this is the substitute CLAUDE.md names"` is
+**hardcoded**, not a live check. It is a leftover from the 2026-09-04 outage and has
+been false since the 7th, so every verdict block pasted on a PR since then carries
+a false claim about CI. Found independently by two workers and confirmed at source.
 
-## 3. Environment: three facts corrected, two hazards new
+**Not yet filed as a task — do that first thing.** CLAUDE.md's § *Known environment
+state* is the section with a perfect record of going stale, and this is that
+staleness leaking into the evidence artefact itself.
 
-**REST works in a cloud session now — and "don't probe it again" is what kept
-that hidden.** Corrected in #424 with the measurement. GET and POST are through,
-`DELETE` is 403, `git push --delete` still exits 0 having done nothing. Going
-public is the cause. Corroborated three times by workers with no `mcp__*` tools
-each having `open_task_pr.sh` open its own PR; two flagged it unprompted as
-contradicting their brief. **The two-step (push, then open the PR with the MCP
-tool) is gone.**
+## 4. The killed round left an unverified push — treat it as unsourced
 
-**The `.pyc` trap fires in BOTH directions.** CLAUDE.md documents it as leaving a
-*fixed* tree green over unrestored code. Measured here twice, independently, in
-reverse: a stale import made a **killed mutant look like a survivor**
-(`metric=11` resident, `1` in a fresh subprocess). That manufactures a **false
-finding** rather than hiding a real one. **Measure in a fresh subprocess**, not
-just with `__pycache__` cleared.
+**#435's head `fd633ac5` was pushed by an agent that died before running
+`verified_gate.sh` and before reporting.** CI is green on it, but no verdict block
+exists, no mutation results were reported, and no self-scan was run. Per CLAUDE.md's
+rule after a mid-round kill: **treat every number it left as unsourced until
+regenerated**, and grep its diff for figures stated as measured that no committed
+artefact supports. The intended round-5 content was: filter `unbacked` by
+`if line not in approved`, add both routes as probe states, and add a
+`status/plan.md` row naming `intact`'s seam. Verify what actually landed.
 
-**A merge hazard git cannot see.** Both the T122 branch and main independently
-moved `T85.json`'s `gate_modules_discovered` 104 → 105 — for *different* modules
-— writing **identical text**. Git merged it silently; the merged tree measures
-**106**. `make host-gate` caught it. Two branches making the same textual change
-for different reasons is invisible by construction. 22 committed evidence keys
-are census-shaped and could take the same path.
+The other two killed agents (readers for #434 and #436) died in their first tool
+call and left nothing.
 
-**The shared scratchpad is contended.** A concurrent session overwrote another
-agent's `mutate.py` mid-run, so one mutation round executed the wrong script
-against the wrong worktree. With four agents running mutation cycles at once this
-is a live way to certify work that was never done. **Namespace scratch per agent;
-never trust a scratch file you did not just write.**
+## 5. Merging is blocked by an identity fact, not by the reviews
 
-## 4. The rate limit, and the pacing that caused it
+**Every session on this surface posts as `nuncaeslupus`, which is also the PR
+author.** So `review_reader check` reads exit 2 for every one of these heads: a
+marker written by the PR's own author never counts. The reviews are genuinely
+independent — separate sessions, spec read before implementation, own mutations,
+own populations — but the mechanism compares logins and cannot see that.
 
-The account's 5-hour window was exhausted **twice** (resets 20:50 and 01:50 UTC),
-the second costing **nine hours of wall clock**. Cause: 4–5 concurrent Opus
-agents, each reporting 135k–280k tokens, roughly 3–4M across ~20 runs. The
-orchestrator's own context was barely touched.
+Both readers that reached the end flagged this unprompted. It is D-28's remaining
+gap, and it now blocks three mergeable PRs.
 
-The work is expensive by nature — one reviewer ran 54 mutations, another 30, each
-re-running a 3,300-test suite. But the same findings were available for less:
-**2–3 concurrent agents** (the pipeline serialises on review→fix→re-review
-anyway), Opus for reviewers but not for mechanical rounds, and scoped `pytest`
-rather than full `make host-gate` on every cycle.
+**Open question for the owner, asked and not yet answered:** (a) a separate
+identity for reader sessions, (b) `review_reader` extended to attest something
+other than a login, or (c) merges proceed on the reader's verdict with the identity
+check recorded honestly as unsatisfiable on this surface. The owner's instruction
+this session ("merge when CI green") reads as (c), and the intent was to say so in
+the merge commit rather than imply the check passed.
 
-**The crash caused a correctness problem, not just lost time.** A worker was
-killed mid-round; the next correctly refused to trust its uncommitted numbers and
-said so in the task file — and the same unreproducible "91 of 4,830" figure still
-shipped in a module docstring two files away. **Nothing tests prose.** Only a
-spot-check found it. If a session is killed mid-round, treat every number it left
-behind as unsourced until regenerated.
+## 6. Pacing — the 2–3 worker rule held, the per-agent cost did not
 
-## 5. Open, and what to pick up
+Concurrency stayed at 3 and never exceeded it. The limit was still hit at 01:14.
+Per-agent totals ran **270k–530k tokens**, well above the 135k–280k the last session
+recorded, because every PR went to four or five rounds and each round re-ran
+mutations. The orchestrator's own context was again barely touched.
 
-**D-30** (`t-f0f2b642`) — `integral.robots` and `integral.second_reader` disagree
-on **150 of 1,836** contested wildcard triples (8.2%), skewed **7:1** toward the
-primary matcher being the more permissive side, while
-`repo_matcher_verdicts_against_the_rfc` honestly reads **0** across all of it: the
-metric's population never reaches the disagreement. RFC 9309's example table
-returns *Undefined* for a wildcard rule, so neither reading is refuted. Pinned
-`LOW`-confidence in the reader's regression cases only — **never in the
-independent case table**, which is the separation T120 exists to protect.
+Two concrete costs worth removing next time:
 
-**T159** and **T160** (this PR) — the floor family above, and both literal-pins
-missing a rebinding one block deep.
+- **Workers repeatedly ended their turn parked on a `Monitor` instead of polling.**
+  Four separate agents did this, several times each; every one needed a nudge to
+  read the output file it was already waiting on. `make host-gate` is ~3 minutes
+  (pytest alone ~170s), which is longer than a poll interval — say so in the brief
+  and tell them to poll the file, never to stop on a monitor.
+- **Handing a fix round to the original implementer past ~450k tokens is a false
+  economy.** Fresh workers took over #434, #435 and #436 mid-stream and were
+  cheaper than resuming, because the brief carried the findings anyway.
 
-**T158** — T122's detector still reads 0 over a fully-reverted defect when two
-signals are removed together; the remedy is a redesign deliberately kept out of
-that round.
+## 7. Pick up here
 
-**T156**, **T157** — the T114 residuals (a paraphrase past the eight-word
-shingle; `payload.json` reporting a story as withheld while a headline carries
-it).
+1. **File the `verified_gate.sh:143` task** (§3). Nothing else depends on it, and it
+   is corrupting every verdict block in the meantime.
+2. **Resolve the identity question** (§5) — three PRs wait on it.
+3. **Regenerate #435's unverified round-5 numbers** (§4) before reviewing it.
+4. **Dispatch the three outstanding reader rounds**: #434 round 4 on `7807824b`,
+   #436 round 3 on `639371b6`, #435 round 5 on whatever its head is once §4 is done.
+   Briefs for all three are in this session's transcript; the standing questions are
+   #434's case-insensitivity widening (a fail-closed cost to weigh, not assume) and
+   #436's new dependency on committed evidence files (a floor checked against a
+   recorded number is only as good as that record).
+5. Untouched and unclaimed: **T157** (#420), **T158** (#427), **D-30** (#426),
+   **D-29** (#314). **T152** (#412) still needs egress this environment does not have.
 
-**T152** still needs a session with egress — this environment's proxy answers 403
-to the CONNECT for python.org, and fabricating the capture was correctly refused.
-
-**One known ungated task:** `t-62612ae0` (T124) carries an executable `bash` gate
-but no ```` ```gate ```` block and no evidence file. Both readers agree it has no
-fence, so it is a genuine gap rather than a reader disagreement — do not
-re-investigate that part.
+**One thing not to re-derive:** on the real corpus T156's undecidable state fires
+for **100% of unapproved episodes (208/208)**. It is disclosed in the docstring as
+an accepted risk and a reader declined to raise it. A state that always fires
+carries no discriminating information, so it is worth a task — but it is a known,
+argued position, not an oversight.
