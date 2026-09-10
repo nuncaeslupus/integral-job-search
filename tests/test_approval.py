@@ -161,7 +161,11 @@ def test_episode_without_per_use_approval_never_enters_a_document(
     assert measured["unapproved_episode_disclosures"] == 0
     assert measured["unapproved_episodes"] == []
     assert measured["episode_disclosures"] == 1
-    assert measured["episodes_withheld"] == 1
+    # T156: FAILURE is genuinely absent, but this sweep can only ever *confirm
+    # presence* — it cannot confirm absence, so a genuinely absent episode is
+    # reported identically to one this sweep simply has no evidence about.
+    assert measured["episodes_undecidable"] == 1
+    assert any(FAILURE in item for item in measured["undecidable_episodes"])
 
 
 def test_the_gate_notices_a_planted_disclosure(store: ProfileStore, master: CVMaster) -> None:
@@ -528,13 +532,17 @@ def test_a_short_episode_does_not_match_a_longer_word(store: ProfileStore) -> No
     )
 
 
-def test_a_planted_episode_is_not_counted_as_withheld(
+def test_a_planted_episode_is_not_counted_as_undecidable(
     store: ProfileStore, master: CVMaster
 ) -> None:
-    """CodeRabbit — disclosed and withheld in one call is a summary contradicting itself.
+    """CodeRabbit — disclosed and undecidable in one call is a summary contradicting itself.
 
-    `intact` deliberately excludes lines nothing backs, so measuring withholding
-    over it could not see the very line it had just reported.
+    `intact` deliberately excludes lines nothing backs, so measuring the third
+    state over it alone could not see the very line just reported as a finding.
+    T156's `measure_prepared` guards this with a second check over the
+    `unbacked` lines specifically (round 4: one line at a time, never joined)
+    so a confirmed-present episode is never also reported as one this sweep
+    "has no evidence about".
     """
     offer_id, version = _prepare(store, master, approved=(0,))
     letter = _letter(store, offer_id, version)
@@ -543,7 +551,7 @@ def test_a_planted_episode_is_not_counted_as_withheld(
     measured = measure_prepared(store, master, offer_id, version)
     assert measured["unapproved_episode_disclosures"] == 1
     assert FAILURE in measured["unapproved_episodes"][0]
-    assert measured["episodes_withheld"] == 0, "it is in the document; it was not withheld"
+    assert measured["episodes_undecidable"] == 0, "it is in the document; there is evidence of it"
 
 
 # ---------------------------------------------------------------------------
