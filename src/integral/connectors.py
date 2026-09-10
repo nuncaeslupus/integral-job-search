@@ -3831,7 +3831,9 @@ def probe_connector_isolation() -> ProbeReport:
 
 # A run that tried fewer than this measured nothing — the same "pass over
 # nothing is not a pass" floor `identity.py`'s `MINIMUM_PROBES` enforces.
-MINIMUM_PROBES = 10
+# Raised to what `probe_connector_isolation` carries — 15, zero slack — because
+# 10 tolerated five deleted probes silently, with no margin argued (T159).
+MINIMUM_PROBES = 15
 
 
 # ---------------------------------------------------------------------------

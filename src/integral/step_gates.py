@@ -413,6 +413,14 @@ def gate_ownership(
     return readings
 
 
+#: A floor, never the count of the day (T100), on D-7's own `steps_checked`
+#: tally — `len(readings)` inside `measure_gate_ownership`, one reading per step
+#: in the live model, not a fixed collection this module lists. Raised to what
+#: the register carries today — 13, zero slack — because this floor was
+#: undocumented and unreached by both sweeps before it: `readings: list[
+#: OwnershipReading] = []` is an *annotated* initial assignment, and neither
+#: swept it until the sweep learned to read `AnnAssign` targets, not only
+#: `Assign` (T159 round 3).
 MINIMUM_STEPS_CHECKED = 13
 
 

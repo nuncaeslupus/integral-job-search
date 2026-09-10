@@ -395,7 +395,11 @@ def probe_offers() -> dict[str, Any]:
     }
 
 
-MINIMUM_CHECKS = 8
+#: A floor, never the count of the day (T100), on `probe_offers`'s own running
+#: `checked` tally rather than a collection this module lists — the scripted
+#: scenario run *is* the fixture. Raised to what the probe carries — 10, zero
+#: slack — because 8 had drifted two checks under with no margin argued (T159).
+MINIMUM_CHECKS = 10
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

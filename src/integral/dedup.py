@@ -886,11 +886,14 @@ def tombstone_match(
 # the gate
 
 
-MINIMUM_PAIRS = 15
-# "A precision of 1.0 over two pairs is not a measurement" (payload). 15 is
-# comfortably above what any two- or three-ad fixture could produce and is
-# met by the seeded batch below (7 offers -> C(7,2) = 21 judged pairs) with
-# room to add offers later without a rewrite.
+# "A precision of 1.0 over two pairs is not a measurement" (payload). Raised to
+# what the seeded batch below carries — 21, zero slack — because 15 tolerated
+# six deleted pairs silently, with no margin argued for the gap (T159). The
+# margin this used to argue lived in a comment *below* the assignment
+# (`_comment_block_above` only reads the block above a declaration, so it was
+# invisible to the sweep regardless of what it said) — 7 offers -> C(7,2) = 21
+# judged pairs is still exactly what the fixture batch below produces.
+MINIMUM_PAIRS = 21
 
 
 def _fixture_batch() -> tuple[list[Offer], frozenset[frozenset[str]]]:

@@ -46,8 +46,9 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T67.json"
 
 #: The probe has to *re-surface* something, not merely fail to hide a thing — an
 #: opening with no standing decisions covers every one of them by there being
-#: none. Two, so an acceptance and a refusal are both shown.
-MINIMUM_STANDING = 2
+#: none. Raised to what `probe_resurfacing` carries — 3, zero slack — because 2
+#: tolerated the first deleted decision silently, with no margin argued (T159).
+MINIMUM_STANDING = 3
 
 #: What the correction is prompted by. A `trigger` is required of every §5.5 row
 #: and is half of the re-ask rule, so a decision changed on review carries the

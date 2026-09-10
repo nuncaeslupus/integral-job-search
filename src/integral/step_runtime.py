@@ -452,7 +452,9 @@ def probe_runtime(root: Path, steps: StepList | None = None) -> tuple[int, list[
     return probes, failures
 
 
-MINIMUM_PROBES = 8
+# Raised to what `probe_runtime` carries — 13, zero slack — because 8
+# tolerated five deleted probes silently, with no margin argued (T159).
+MINIMUM_PROBES = 13
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

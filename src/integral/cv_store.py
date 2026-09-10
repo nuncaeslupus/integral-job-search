@@ -274,9 +274,30 @@ DOC_ID = re.compile(r"^doc-(\d{6,})$")
 _DOC_ID_WIDTH = 6
 
 # Below this many fields exercised, a clean score is "1.0 over nothing" — the
-# same floor T6/T28/D-6 each set for their own probes.
-MINIMUM_FIELDS_MEASURED = 5
-MINIMUM_CHECKS = 17
+# same floor T6/T28/D-6 each set for their own probes. Raised to what
+# `probe_intake` carries — 7, zero slack — because 5 tolerated two deleted
+# fields silently, with no margin argued (T159, F4/F5). Not reachable by
+# T159's sweep: `_main` picks its evidence path through `argparse`
+# (`Path(args.write_evidence)`), not the traceable `target = Path(argv[0]) if
+# argv else DEFAULT_EVIDENCE_PATH` idiom every module the sweep pins reads —
+# raised here by hand, verified by running `probe_intake` directly.
+MINIMUM_FIELDS_MEASURED = 7
+
+# `probe_intake`'s own running `checks_run` tally floor — deliberately its own
+# comment (not the block above, which is `MINIMUM_FIELDS_MEASURED`'s): the two
+# floors sit one line apart, and `_comment_block_above` reads a shared block
+# for adjacent bare declarations, so a comment written for one that states a
+# specific number reads as a (false) claim about the other too (T159, round 4
+# self-scan). Committed at 17 while `probe_intake` already ran 22 — five
+# deletions breach nothing, with no margin argued (T159, round 5, R4-4: a live
+# instance of this task's own defect, found in a comment the previous round
+# itself wrote one line below the floor it raised correctly). Raised to what
+# `probe_intake` carries — 22, zero slack — verified the same way, by running
+# it directly: not reachable by T159's sweep for the same reason
+# `MINIMUM_FIELDS_MEASURED` above is not (`_main` picks its evidence path
+# through `argparse`), so a fixture cannot pin this one; only re-running
+# `probe_intake` can.
+MINIMUM_CHECKS = 22
 
 # The only `master.json` shape this module understands. A bare `int` field
 # validates `schema_version: 2` against the version-1 model as long as its
@@ -1903,8 +1924,10 @@ DEFAULT_T97_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T97.json"
 # Five ways a read can go wrong, one clean read, and the acknowledgement path.
 # The floor exists for the reason every floor in this repository exists: zero
 # unreported failures over zero attempted reads is a clean number measured on
-# nothing, and it is the exact shape of the defect being fixed.
-MINIMUM_READ_CHECKS = 14
+# nothing, and it is the exact shape of the defect being fixed. Raised to what
+# the probe carries — 16, zero slack — because 14 tolerated the first two
+# deleted checks silently, with no margin argued for the gap (T159).
+MINIMUM_READ_CHECKS = 16
 
 # A distinctive line standing in for something the candidate wrote, so
 # `import_log_carries_document_text` is answered by looking for it rather than

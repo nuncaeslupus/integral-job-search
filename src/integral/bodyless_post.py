@@ -74,8 +74,10 @@ DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
 MINIMUM_PACKAGES = 20
 
 # Likewise for the probe table, which is the half that survives an empty
-# `connectors/` directory.
-MINIMUM_PROBES = 8
+# `connectors/` directory. Raised to what `PROBES` carries — 9, zero slack —
+# because 8 tolerated the first deleted probe silently: `len(PROBES) == 9` and
+# nothing short of the whole table breached it (T159).
+MINIMUM_PROBES = 9
 
 # Some packages carry `{query}` in their URL and refuse to be built for
 # nothing. What the search term is does not matter to this measurement; that

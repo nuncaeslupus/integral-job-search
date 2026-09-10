@@ -478,7 +478,12 @@ def probe_answer_filter() -> dict[str, Any]:
     return {"checks_run": 2, "failures": failures}
 
 
-MINIMUM_PROBES = 4
+#: A floor, never the count of the day (T100), on `probe_bank_generation`'s own
+#: running `checks_run` tally rather than a collection this module lists — the
+#: scripted scenario run *is* the fixture. Raised to what the probe carries — 5,
+#: zero slack — because 4 tolerated the first deleted check silently, with no
+#: margin argued (T159).
+MINIMUM_PROBES = 5
 
 
 def probe_bank_generation() -> dict[str, Any]:

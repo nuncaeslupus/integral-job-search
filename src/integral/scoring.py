@@ -285,7 +285,12 @@ def probe_scoring(root: Path, *, threshold: int = 5) -> dict[str, Any]:
     }
 
 
-MINIMUM_TURNS = 6
+#: A floor, never the count of the day (T100), on `probe_scoring`'s own running
+#: tally of evaluated turns rather than a collection this module lists — the
+#: scripted scenario run *is* the fixture. Raised to what the probe carries — 7,
+#: zero slack — because 6 tolerated the first deleted turn silently, with no
+#: margin argued (T159).
+MINIMUM_TURNS = 7
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

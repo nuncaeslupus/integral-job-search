@@ -672,6 +672,26 @@ def test_cli_exits_nonzero_when_intake_field_provenance_is_below_one(
             said="I once promised a date I could not keep. I always confirm dates now.",
             recorded_at="2026-08-18T09:00:03Z",
         )
+        good_master = add_conversation_entry(
+            store,
+            good_master,
+            "experience",
+            {"title": "e", "organisation": "f"},
+            said="Earlier still I did an internship at a startup.",
+            recorded_at="2026-08-18T09:00:04Z",
+        )
+        good_master = add_conversation_entry(
+            store,
+            good_master,
+            "episodes",
+            {"kind": "lesson", "text": "I learned to ask for scope up front."},
+            said="A project once grew past its brief. I learned to ask for scope up front.",
+            recorded_at="2026-08-18T09:00:05Z",
+        )
+        # Six fields with provenance plus the one stripped below — seven total,
+        # matching `MINIMUM_FIELDS_MEASURED` (T159, F5): this scenario tests
+        # provenance *coverage* dropping below 1.0, not the field-count floor,
+        # so the fixture must clear the second floor to isolate the first.
         master = good_master.model_copy(update={"experience": (*good_master.experience, stripped)})
         result = measure_provenance(store, master)
         return {

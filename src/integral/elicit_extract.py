@@ -729,7 +729,13 @@ def probe_linkage_guarantee_is_load_bearing(root: Path) -> dict[str, Any]:
     }
 
 
-MINIMUM_CHECKS = 22
+#: A floor, never the count of the day (T100), on `probe_extraction`'s own running
+#: `checks` tally rather than a collection this module lists — the scripted
+#: scenario run *is* the fixture. Raised to what the probe carries — 25, zero
+#: slack — because 22 had drifted three checks under with no margin argued for the
+#: gap: `checks_run` had grown to 25 while this stayed put, so up to three of the
+#: probe's own assertions could be deleted before this noticed (T159).
+MINIMUM_CHECKS = 25
 
 
 def measure() -> dict[str, Any]:

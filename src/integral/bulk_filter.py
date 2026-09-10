@@ -369,8 +369,11 @@ _TODAY = "2026-09-03"
 MUST_KEEP_ROWS = 3
 
 #: A floor, not the count of the day. A denominator committed as an exact value
-#: drifts on an unrelated change; `>=` is what the key actually asserts.
-MINIMUM_BATCH = 300
+#: drifts on an unrelated change; `>=` is what the key actually asserts. Raised
+#: to what `measure()`'s own `offers_in` carries today — 325, zero slack —
+#: because 300 tolerated the first 25 deletions from the batch silently, with
+#: no margin argued for the gap (T159).
+MINIMUM_BATCH = 325
 
 
 def _probe_candidate() -> CandidateEligibility:

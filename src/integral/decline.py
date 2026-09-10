@@ -270,7 +270,11 @@ def probe_declines(root: Path) -> dict[str, Any]:
     }
 
 
-MINIMUM_ASKS = 8
+#: A floor, never the count of the day (T100), on `probe_declines`'s own running
+#: `asks` tally rather than a collection this module lists — the scripted scenario
+#: run *is* the fixture. Raised to what the probe carries — 9, zero slack — because
+#: 8 tolerated the first deleted ask silently, with no margin argued (T159).
+MINIMUM_ASKS = 9
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

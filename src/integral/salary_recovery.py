@@ -143,11 +143,24 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T92.json"
 LANGUAGES: tuple[str, ...] = ("es", "ca", "en")
 
 #: Floors, not counts of the day (T100). A census that reports a clean zero over
-#: an empty scan is the failure this whole increment is about.
-MINIMUM_CORPUS_ADS = 150
+#: an empty scan is the failure this whole increment is about. Raised to what
+#: `load_ads()` carries — 208, zero slack — because 150 tolerated deleting
+#: fifty-eight of the corpus's own adverts before this noticed, with no margin
+#: argued (T159, F4/F5): this exact gap, 150 against a real 208, was the module
+#: T159's own task file cited as "the contrast, not a fourth member" — right
+#: that this comment argued its history rather than staying silent, wrong that
+#: the gap itself had never been measured. `load_ads` lives in `corpus.py`, one
+#: module over, and T159's sweep only resolves a same-module call — genuinely
+#: out of its reach, not a gap in the reordering that pulled in the other nine
+#: (F4): raised here by hand, verified by running `load_ads()` directly.
+MINIMUM_CORPUS_ADS = 208
 #: Raised from 40 when the second-reader audit landed 54 more cases: a floor
 #: that sits far below the set it guards stops guarding anything. Still a floor
-#: — never the count of the day.
+#: — never the count of the day. Committed at 120, 33 points of slack against
+#: `_check_wording`'s 153 (T159, F2): deliberate, not silent — every wording
+#: case scripted here is small and hand-written, so this floor stays far under
+#: the real count on purpose, exactly the shape a per-item scalar check has
+#: none of.
 MINIMUM_WORDING_CASES = 120
 
 Route = Literal["advert_text", "duplicate", "detail_page", "estimate"]

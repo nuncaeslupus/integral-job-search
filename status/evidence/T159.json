@@ -1,0 +1,446 @@
+{
+  "floors_that_do_not_refuse_the_first_deletion": 0,
+  "findings": [],
+  "dynamic_population_floors": [
+    {
+      "module": "approval",
+      "name": "_SHINGLE",
+      "line": 162
+    },
+    {
+      "module": "arsenal_source",
+      "name": "MINIMUM_BUNDLE_FILES",
+      "line": 107
+    },
+    {
+      "module": "arsenal_source",
+      "name": "MINIMUM_VENDORED_SKILLS",
+      "line": 112
+    },
+    {
+      "module": "capture_provenance",
+      "name": "MINIMUM_CAPTURES_SCANNED",
+      "line": 173
+    },
+    {
+      "module": "connector_health",
+      "name": "MINIMUM_PROBES_COMPARED",
+      "line": 943
+    },
+    {
+      "module": "connector_policy",
+      "name": "PACKAGES_AT_LEAST",
+      "line": 485
+    },
+    {
+      "module": "connector_procedure",
+      "name": "MINIMUM_CASES",
+      "line": 68
+    },
+    {
+      "module": "cv_store",
+      "name": "MINIMUM_CHECKS",
+      "line": 300
+    },
+    {
+      "module": "elicit_extract",
+      "name": "MINIMUM_CHECKS",
+      "line": 738
+    },
+    {
+      "module": "extraction",
+      "name": "_CONFIRMING_MATCHES_FOR_BIPOLAR",
+      "line": 154
+    },
+    {
+      "module": "gate_reader_agreement",
+      "name": "MINIMUM_ARRANGEMENTS_PROBED",
+      "line": 122
+    },
+    {
+      "module": "generate",
+      "name": "GENERATION_CAP",
+      "line": 73
+    },
+    {
+      "module": "interview",
+      "name": "MAX_EXTRA_EPISODE_ATTEMPTS",
+      "line": 123
+    },
+    {
+      "module": "interview",
+      "name": "MINIMUM_CHECKS",
+      "line": 944
+    },
+    {
+      "module": "naming",
+      "name": "MINIMUM_SCANNED",
+      "line": 228
+    },
+    {
+      "module": "pagination_capture",
+      "name": "MINIMUM_REQUEST_KEYS",
+      "line": 120
+    },
+    {
+      "module": "plan_v2",
+      "name": "_MIN_TASK_CELLS",
+      "line": 138
+    },
+    {
+      "module": "profile_capture",
+      "name": "MINIMUM_CHECKS",
+      "line": 1152
+    },
+    {
+      "module": "profile_capture",
+      "name": "MINIMUM_SUBJECT_CHECKS",
+      "line": 1144
+    },
+    {
+      "module": "question_bank",
+      "name": "MINIMUM_PROBES",
+      "line": 486
+    },
+    {
+      "module": "reader_notes",
+      "name": "MINIMUM_PROBES",
+      "line": 522
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_DISTINCT_SCOPE_STATES",
+      "line": 329
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_PRS_EVALUATED",
+      "line": 305
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_REPORTS_FOUND",
+      "line": 306
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_SCOPE_STATES",
+      "line": 311
+    },
+    {
+      "module": "second_reader",
+      "name": "FAIL_OPEN_CASES_AT_LEAST",
+      "line": 830
+    },
+    {
+      "module": "second_reader",
+      "name": "FIXTURES_AT_LEAST",
+      "line": 821
+    },
+    {
+      "module": "second_reader",
+      "name": "REGRESSION_CASES_AT_LEAST",
+      "line": 859
+    },
+    {
+      "module": "second_reader",
+      "name": "STDLIB_DISAGREEMENTS_AT_LEAST",
+      "line": 846
+    },
+    {
+      "module": "sourcing",
+      "name": "DETAIL_FETCH_CEILING",
+      "line": 95
+    },
+    {
+      "module": "sourcing",
+      "name": "MINIMUM_OFFERS_COLLECTED",
+      "line": 87
+    },
+    {
+      "module": "spec_consistency",
+      "name": "MINIMUM_DECLARATIONS_FOUND",
+      "line": 108
+    },
+    {
+      "module": "step_gates",
+      "name": "MINIMUM_STEPS_CHECKED",
+      "line": 424
+    },
+    {
+      "module": "trait_sufficiency",
+      "name": "MINIMUM_CHECKS",
+      "line": 589
+    }
+  ],
+  "evidence_pinned_floors": [
+    {
+      "module": "audit_followup",
+      "name": "CASES_AT_LEAST",
+      "line": 72,
+      "population": 35
+    },
+    {
+      "module": "bulk_filter",
+      "name": "MINIMUM_BATCH",
+      "line": 376,
+      "population": 325
+    },
+    {
+      "module": "bulk_filter",
+      "name": "MUST_KEEP_ROWS",
+      "line": 369,
+      "population": 3
+    },
+    {
+      "module": "candidate",
+      "name": "MINIMUM_CASES",
+      "line": 1035,
+      "population": 19
+    },
+    {
+      "module": "connectors",
+      "name": "MINIMUM_PROBES",
+      "line": 3213,
+      "population": 15
+    },
+    {
+      "module": "constraints_step",
+      "name": "MINIMUM_CHECKS",
+      "line": 606,
+      "population": 19
+    },
+    {
+      "module": "cv_store",
+      "name": "MINIMUM_READ_CHECKS",
+      "line": 1930,
+      "population": 16
+    },
+    {
+      "module": "decline",
+      "name": "MINIMUM_ASKS",
+      "line": 277,
+      "population": 9
+    },
+    {
+      "module": "dedup",
+      "name": "MINIMUM_CLUSTER_PAIRS",
+      "line": 1049,
+      "population": 3
+    },
+    {
+      "module": "dedup",
+      "name": "MINIMUM_PAIRS",
+      "line": 896,
+      "population": 21
+    },
+    {
+      "module": "floor_sweep",
+      "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
+      "line": 2766,
+      "population": 39
+    },
+    {
+      "module": "floor_sweep",
+      "name": "MINIMUM_FLOORS_SWEPT",
+      "line": 2699,
+      "population": 73
+    },
+    {
+      "module": "freshness",
+      "name": "MINIMUM_OFFERS",
+      "line": 406,
+      "population": 5
+    },
+    {
+      "module": "identity",
+      "name": "MINIMUM_PROBES",
+      "line": 896,
+      "population": 14
+    },
+    {
+      "module": "lifecycle",
+      "name": "MINIMUM_SCENARIOS",
+      "line": 965,
+      "population": 72
+    },
+    {
+      "module": "offers",
+      "name": "MINIMUM_CHECKS",
+      "line": 402,
+      "population": 10
+    },
+    {
+      "module": "pay",
+      "name": "MINIMUM_CHECKS",
+      "line": 709,
+      "population": 36
+    },
+    {
+      "module": "retraction",
+      "name": "MINIMUM_SCANNED",
+      "line": 342,
+      "population": 5
+    },
+    {
+      "module": "revision",
+      "name": "MINIMUM_AGED",
+      "line": 426,
+      "population": 6
+    },
+    {
+      "module": "scoring",
+      "name": "MINIMUM_TURNS",
+      "line": 293,
+      "population": 7
+    },
+    {
+      "module": "session",
+      "name": "MINIMUM_PROBES",
+      "line": 431,
+      "population": 9
+    },
+    {
+      "module": "sourcing_cycles",
+      "name": "MINIMUM_NON_IMPROVING",
+      "line": 67,
+      "population": 2
+    },
+    {
+      "module": "sourcing_market",
+      "name": "MINIMUM_EMPTY_MARKETS",
+      "line": 77,
+      "population": 2
+    },
+    {
+      "module": "sourcing_reentry",
+      "name": "MINIMUM_TRIGGERS",
+      "line": 35,
+      "population": 2
+    },
+    {
+      "module": "sourcing_scope_review",
+      "name": "MINIMUM_STANDING",
+      "line": 51,
+      "population": 3
+    },
+    {
+      "module": "sourcing_strategy",
+      "name": "MINIMUM_SCOPE_CHANGES",
+      "line": 116,
+      "population": 2
+    },
+    {
+      "module": "sourcing_strategy",
+      "name": "MINIMUM_TRIGGERS",
+      "line": 105,
+      "population": 3
+    },
+    {
+      "module": "step_runtime",
+      "name": "MINIMUM_PROBES",
+      "line": 457,
+      "population": 13
+    }
+  ],
+  "bounds_read_and_out_of_scope": [
+    "annotation.EGRESS_SAMPLE",
+    "annotation.MIN_IDENTIFYING_LENGTH",
+    "approval.MINIMUM_DISCLOSURE_PROBES",
+    "approval.MINIMUM_MANIFEST_DISCLOSURES_COMPARED",
+    "approval.MINIMUM_PROBES",
+    "approval.MINIMUM_RETRACTED_APPROVALS_EVALUATED",
+    "approval.MINIMUM_RETRACTION_PROBES",
+    "approval.SCHEMA_VERSION",
+    "approval._RECORDED_SENDS",
+    "bodyless_post.MINIMUM_PACKAGES",
+    "bulk_filter.PROBE_BATCH",
+    "calibration.TWENTY",
+    "connector_contract.MINIMUM_PACKAGES",
+    "connector_exchange.LEAK_NEEDLE_MINIMUM",
+    "connector_health.MAX_PROBE_ATTEMPTS",
+    "connector_policy.ADJUDICATIONS_AT_LEAST",
+    "connector_transport.MINIMUM_CREDENTIAL_CASES",
+    "connector_transport.MINIMUM_GET_PACKAGES",
+    "connector_transport.MINIMUM_LEDGER_ENTRIES",
+    "connector_transport.MINIMUM_RECORD_KEYS_COMPARED",
+    "connectors.DEFAULT_STALE_AFTER_DAYS",
+    "corpus.MIN_ADS_PER_FAMILY",
+    "corpus_scope.MINIMUM_CORPUS_ROWS",
+    "corpus_scope.MINIMUM_EVALUATION_POOL",
+    "corpus_scope.MINIMUM_SERVING_MODULES",
+    "corpus_scope.MINIMUM_STIMULUS_POOL",
+    "cue_audit.MINIMUM_CASES",
+    "cue_audit.MINIMUM_FAIL_OPEN_CASES",
+    "cue_audit.MINIMUM_MECHANISM_PINNED_CASES",
+    "cv_store.MINIMUM_FIELDS_MEASURED",
+    "cv_store.SCHEMA_VERSION",
+    "cv_store._DOC_ID_WIDTH",
+    "cv_store._MAX_DOC_ID_RESERVE_ATTEMPTS",
+    "decline.DECLINES_BEFORE_STEP_SILENCE",
+    "decline.DECLINES_BEFORE_TOTAL_SILENCE",
+    "dedup.SHINGLE_SIZE",
+    "elicit_extract.MAX_ANSWER_CHARS",
+    "elicit_extract.MIN_ANSWER_CHARS",
+    "elicit_extract.NEGATION_WINDOW_CHARS",
+    "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
+    "extraction._NEGATION_WINDOW",
+    "floor_sweep._MAX_DELEGATION_DEPTH",
+    "freshness.DEFAULT_ELAPSED_DAYS",
+    "gate_reader_agreement.MINIMUM_GATES_COMPARED",
+    "generate.SCHEMA_VERSION",
+    "interview.MINIMUM_TRAIT_EPISODES",
+    "interview.MINIMUM_TRAIT_OCCASIONS",
+    "interview_direction.MINIMUM_NON_SOFTWARE_ARTEFACT_FIELDS",
+    "interview_direction.MINIMUM_OPEN_TALK_STEPS",
+    "interview_log.SCHEMA_VERSION",
+    "interview_log._ID_WIDTH",
+    "language_set.MINIMUM_LANGUAGE_DECLARATIONS",
+    "lifecycle.PURGE_HORIZON_DAYS",
+    "lifecycle.TOMBSTONE_HASH_VERSION",
+    "metric_naming.MINIMUM_CATEGORY_NAMED_RECORDED",
+    "metric_naming.MINIMUM_METRICS_CLASSIFIED",
+    "mock_interview.MAX_QUESTIONS",
+    "mock_interview.SCHEMA_VERSION",
+    "mock_interview._ID_WIDTH",
+    "pagination_capture.MINIMUM_URL_SIDE_PROBES",
+    "pay.STALE_AFTER_DAYS",
+    "plan_v2.MINIMUM_BOARD_SIZE",
+    "plan_v2.MINIMUM_MERGED_TASKS",
+    "presentation.DEFAULT_LIMIT",
+    "presentation_log.PASS_OVER_THRESHOLD",
+    "process_spec.MIN_ITEM_WORDS",
+    "profile._ID_WIDTH",
+    "repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED",
+    "repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED",
+    "repo_gate.MINIMUM_FILES_FORMATTED",
+    "repo_gate.MINIMUM_PYTHON_FILES_FORMATTED",
+    "review_reader.MAXIMUM_LOGIN_LENGTH",
+    "salary_recovery.HOUSE_ESTIMATE_MINIMUM",
+    "salary_recovery.MINIMUM_CORPUS_ADS",
+    "scoring.BATCH_THRESHOLD",
+    "skill_budget.BUDGET_GRANULARITY",
+    "skill_budget.FALLBACK_BUDGET_CHARS",
+    "skill_budget.MIN_HEADROOM_CHARS",
+    "skill_budget.UPSTREAM_DEFAULT_BUDGET_CHARS",
+    "sourcing.MINIMUM_BOARDS",
+    "sourcing.PHRASE_CEILING",
+    "sourcing_exclusions.MINIMUM_PRESENTATIONS",
+    "step_gates.UNCERTIFIABLE",
+    "step_gates.VOCABULARY_SILENT",
+    "step_specs.MIN_FIELD_WORDS",
+    "strings.MINIMUM_STRINGS",
+    "task_gate.MINIMUM_EMITTED_FIELDS_SCANNED",
+    "task_gate.MINIMUM_GATES_READ",
+    "task_gate.MINIMUM_PRESENCE_RECORDING_FIELDS",
+    "task_gate.MINIMUM_RECORD_KEYS_COMPARED",
+    "task_gate.MINIMUM_STATUS_KEY_GATES",
+    "test_mode.PASTE_CHARS",
+    "trait_sufficiency.MINIMUM_TRAITS",
+    "verified_gate.MINIMUM_CONTRACTS",
+    "weights.MAX_CHOICES"
+  ],
+  "gate_status": "measured",
+  "floors_swept_at_least": 73,
+  "floors_arithmetically_checked_at_least": 36
+}

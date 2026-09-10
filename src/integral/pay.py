@@ -701,7 +701,12 @@ def probe_pay(taxes_dir: Path) -> dict[str, Any]:
     }
 
 
-MINIMUM_CHECKS = 10
+#: A floor, never the count of the day (T100), on `probe_pay`'s own running
+#: `checked` tally rather than a collection this module lists — the scripted
+#: scenario run *is* the fixture. Raised to what the probe carries — 36, zero
+#: slack — because this floor sat undocumented and 26 checks under the real
+#: count, unreached by T159 round 1's narrower sweep (T159 round 2).
+MINIMUM_CHECKS = 36
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

@@ -100,7 +100,9 @@ EXHAUSTION_REPEAT_SHARE = 0.8
 
 #: The probe has to fire the rule, not merely fail to break it — a run that
 #: triggered nothing would report zero reasonless triggers by never having one.
-MINIMUM_TRIGGERS = 2
+#: Raised to what `probe_exhaustion` carries — 3, zero slack — because 2
+#: tolerated the first deleted trigger silently, with no margin argued (T159).
+MINIMUM_TRIGGERS = 3
 
 #: The scope probe has to *offer* something, not merely fail to offer a bad
 #: thing — a run that proposed nothing would report zero one-way proposals by
