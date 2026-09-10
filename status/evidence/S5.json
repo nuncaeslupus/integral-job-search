@@ -1,6 +1,7 @@
 {
   "resurrected_purged_offers": 0,
   "resurrected_offer_ids": [],
-  "scenarios_checked": 72,
+  "live_offers_reset_by_recollection": 0,
+  "scenarios_checked": 78,
   "violations": []
 }

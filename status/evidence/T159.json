@@ -271,8 +271,8 @@
     {
       "module": "lifecycle",
       "name": "MINIMUM_SCENARIOS",
-      "line": 965,
-      "population": 72
+      "line": 999,
+      "population": 78
     },
     {
       "module": "offers",
