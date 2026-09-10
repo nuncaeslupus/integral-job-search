@@ -345,13 +345,34 @@ URL_SIDE_PROBES: tuple[UrlProbe, ...] = (
         "in query key 'filter''s value, not in a key named 'page'); fail-open under the "
         "permissive reading",
     ),
+    # ---- round 5: route 1, decided the OPPOSITE way from route 4's NF7 fix
+    # (see `DUPLICATE_KEY_PROBES`'s own "differing only in case" probe), and
+    # a rule-set cannot assert both. `pagination.param: "page"` against
+    # `?Page={page}` was refused here — "not in a query-string value under
+    # that key" — while an ASP.NET board (the family route 4's NF7 comment
+    # cites) reads `Page` and `page` as one field. Reverting NF7 instead
+    # would reopen the exact fail-open gap it closed, so route 1 is the one
+    # that moved: a case-only difference between `pagination.param` and the
+    # URL key it names now loads, agreeing with route 4 rather than
+    # contradicting it.
+    UrlProbe(
+        name="pagination.param and the URL key it names differ only in case",
+        url_pattern="https://boards.test/jobs?Page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=True,
+        issues=("https://boards.test/jobs?Page=1", "https://boards.test/jobs?Page=2"),
+        route="T154 round 5 — route 1 now agrees with route 4's NF7 comparator "
+        "(case-insensitive, citing ASP.NET's NameValueCollection): 'Page' and 'page' are "
+        "the one server family this rule is modelled on's own reading of the same key, so "
+        "this is a legal shape rather than the mismatched-key harm route 1 exists to catch",
+    ),
 )
 
 #: The floor `URL_SIDE_PROBES` is checked against, committed in place of the
-#: count of the day for T100's reason. Sixteen probes ship today; the names that
-#: must stay are pinned by name in `tests/test_pagination_capture.py`, because a
-#: count is satisfied by any N probes and a floor protects only against bulk
-#: deletion.
+#: count of the day for T100's reason. Seventeen probes ship today; the names
+#: that must stay are pinned by name in `tests/test_pagination_capture.py`,
+#: because a count is satisfied by any N probes and a floor protects only
+#: against bulk deletion.
 MINIMUM_URL_SIDE_PROBES = 12
 
 
@@ -822,6 +843,28 @@ def write_evidence(evidence: Path | None = None, directory: Path | None = None) 
 # committed `connectors/` directory finds nothing to certify either way — the
 # probes below are what would notice the rule going missing, weakening, or
 # being satisfied by a comment instead.
+#
+# **Round 5 found three more gaps, all fail-open, all in what "counting" and
+# "case-insensitive" turned out to mean in practice rather than in the closed
+# rule stated above:**
+#
+# * **F1** — the mode axis was still incomplete. The body-side mirror (a
+#   fixed field of `param`'s own name puts a stale value in the merged
+#   namespace) was checked only for `query_param` and `path_segment`,
+#   because `body_field`'s own certified occurrence is *always* present in
+#   its body and a membership test could never tell it apart from a second,
+#   differently-cased one beside it. `connectors._a_page_placeholder_and_a_
+#   query_key_imply_each_other` now counts body occurrences the way it
+#   always counted query occurrences, for every mode.
+# * **F2** — the query half's case-insensitive comparator (NF7) was pinned
+#   by a probe; the body half's identical comparator was not, so reverting
+#   it to `==` survived the whole suite. Pinned now, alongside F1's fixture.
+# * **F3** — the separator axis's own claim, that a wider split "only ever
+#   finds more occurrences ... never fewer," was false: splitting on `;`
+#   *fragments* a `pagination.param` that itself contains `;`, undercounting
+#   a genuine duplicate to zero. `connectors._query_key_occurrences` runs
+#   the strict and the permissive readings independently and takes the
+#   larger, rather than trusting one blended split to be monotonic.
 DEFAULT_T154_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T154.json"
 
 DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
@@ -1042,17 +1085,78 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
         "the same key to the one server family this rule is modelled on, so a "
         "case-sensitive count would miss the identical duplicate-key harm; fail-open",
     ),
+    # ---- round 5, F1: `body_field`'s own body, not a second namespace. The
+    # old check was `any(...)` — membership — which can never distinguish
+    # `body_field`'s own certified occurrence (always present, by
+    # construction) from a second, differently-cased key fixed beside it, so
+    # the mirror below was scoped away from `body_field` entirely rather than
+    # made to work there. Counting occurrences the way the query half always
+    # did closes it without a mode exclusion.
+    UrlProbe(
+        name="the named key sent twice, both inside mode: body_field's own body",
+        url_pattern="https://boards.test/Search/ExecuteSearch",
+        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
+        body_json={"Keyword": _PROBE_QUERY, "Page": PAGE_PLACEHOLDER, "page": "1"},
+        loads=False,
+        issues=(),
+        route="T154 round 5 (F1) — `Page` holds the certified placeholder and `page` "
+        "fixes the identical key (case-insensitively) at '1'; ASP.NET's "
+        "NameValueCollection — the same comparer NF7 already cites — reads both as one "
+        "form field, so whichever the server honours may never be the varying one; "
+        "fail-open, and invisible to a membership test that only ever asks whether "
+        "`param`'s name is present at all",
+    ),
+    # ---- round 5, F2: the query half's NF7 fix (a case-only difference is
+    # not a different key) was pinned by the probe above; the body half's
+    # identical comparison was not. Reverting it to `==` survived the full
+    # suite (round 5's own finding) because nothing exercised a case-only
+    # difference on this side.
+    UrlProbe(
+        name="a fixed body field repeating the query's own name, differing only in case",
+        url_pattern="https://boards.test/jobs?page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        body_json={"Page": "1"},
+        loads=False,
+        issues=(),
+        route="T154 round 5 (F2) — the namespace-axis mirror "
+        "('the named key sent twice, across mode: query_param's own body'), differing "
+        'only in case: `?page={page}` beside `body_json: {Page: "1"}` is the identical '
+        "merged-namespace harm, read by the ASP.NET comparer NF7 already cites; a "
+        "case-sensitive body comparison misses it while the query-side NF7 probe above "
+        "still passes, which is exactly how this escaped the full suite; fail-open",
+    ),
+    # ---- round 5, F3: `_QUERY_PAIR_SEPARATORS`'s own docstring claimed a
+    # wider split "only ever finds more occurrences ... never fewer" — false,
+    # measured. Splitting on `;` fragments a `pagination.param` that itself
+    # contains `;` into pieces that no longer spell it, undercounting a
+    # genuine duplicate to zero.
+    UrlProbe(
+        name="a param name containing the permissive separator defeats a single blended split",
+        url_pattern="https://boards.test/jobs?a;b=1&a;b={page}",
+        pagination={"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 round 5 (F3) — the permissive `[&;]` split cuts the literal key "
+        "`a;b` into `a` and `b`, neither of which is `a;b`, so a name occurring twice "
+        "in the real, `&`-only request "
+        "(`build_list_urls` substitutes on the raw text, and no server this engine "
+        "cannot assume splits on `;` sees more than the one key `filter`-style values "
+        "already establish) counts as zero under that split alone; "
+        "`_query_key_occurrences` runs the strict `&`-only reading too and reports the "
+        "larger of the two, which still catches this; fail-open under a single blended "
+        "split",
+    ),
 )
 
 #: The floor `DUPLICATE_KEY_PROBES` is checked against, committed in place of
 #: the count of the day for T100's reason — but set **equal** to today's count
-#: (17, after round 4's NF2/NF3/NF4/NF5/NF7 probes) rather than below it: the
-#: by-name pin in `tests/test_pagination_capture.py` already protects every
-#: individual shape, so a lower floor's only effect would be slack that
-#: absorbs a bulk deletion the pin does not happen to name — the second
-#: reader's point on F5. Equal to the population, the first deletion of any
-#: kind breaches it.
-MINIMUM_DUPLICATE_KEY_PROBES = 17
+#: (20, after round 4's NF2/NF3/NF4/NF5/NF7 probes and round 5's F1/F2/F3)
+#: rather than below it: the by-name pin in `tests/test_pagination_capture.py`
+#: already protects every individual shape, so a lower floor's only effect
+#: would be slack that absorbs a bulk deletion the pin does not happen to
+#: name — the second reader's point on F5. Equal to the population, the first
+#: deletion of any kind breaches it.
+MINIMUM_DUPLICATE_KEY_PROBES = 20
 
 #: The floor the real-library half of this gate is checked against.
 #:

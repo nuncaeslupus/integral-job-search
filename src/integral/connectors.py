@@ -1349,9 +1349,26 @@ _STRICT_QUERY_PAIR_SEPARATOR = re.compile(r"&")
 #: request" harm). Recognising both here, **for counting**, refuses the
 #: shape under either reading rather than picking one, which is this file's
 #: usual posture toward an ambiguous request (see `read_provenance` in
-#: `pagination_capture` for another instance of the same choice) — counting
-#: is safe to widen because a wider count only ever finds *more* occurrences
-#: to refuse, never fewer.
+#: `pagination_capture` for another instance of the same choice).
+#:
+#: **"A wider count only ever finds more occurrences, never fewer" stood here
+#: until round 5 (F3), and it is false — measured, not merely doubted.**
+#: `query_pair_names` used to run a single split over this one pattern and
+#: nothing else, and a single blended split does not just add match
+#: candidates: splitting *on* a character also **fragments** any key name
+#: that contains that character, which can only ever lose matches for that
+#: name, never gain them. `?a;b=1&a;b={page}` with `pagination.param: "a;b"`
+#: is the measured counter-example: splitting on `[&;]` cuts the literal key
+#: `a;b` into two pieces, `a` and `b`, neither of which is `a;b`, so a name
+#: that occurs **twice** in the real, `&`-only request counts as **zero**
+#: occurrences under the permissive split alone — undercounting, not
+#: overcounting, and the load-time rule missed the duplicate entirely.
+#: `_query_key_occurrences` is the fix: it runs the strict and the permissive
+#: readings **separately**, over the unmodified `query_pair_names`, and takes
+#: the larger of the two counts, so a name the permissive split fragments is
+#: still caught under the strict one that never touches it. Two independent
+#: counts taken as a maximum are monotonic in the way one blended split is
+#: not.
 #:
 #: **That safety argument does not carry to `_url_page_positions` (round 3,
 #: R2 — a regression, not a design choice).** Deciding *where* the
@@ -1399,7 +1416,9 @@ def _query_pairs(
     return pairs
 
 
-def query_pair_names(pattern: str) -> list[str]:
+def query_pair_names(
+    pattern: str, *, separators: re.Pattern[str] = _QUERY_PAIR_SEPARATORS
+) -> list[str]:
     """Every query-string key name in `pattern`, one entry per occurrence —
     percent-decoded the way `pagination.param` and `pagination_capture`'s
     `query_keys` both spell a name.
@@ -1409,12 +1428,15 @@ def query_pair_names(pattern: str) -> list[str]:
     count, so collapsing duplicates here would erase the numerator from the
     very function a caller measures a denominator over it with.
 
-    Reads `_QUERY_PAIR_SEPARATORS` (the permissive `[&;]` union) explicitly —
-    the one caller allowed to, per that constant's own docstring.
+    Defaults to `_QUERY_PAIR_SEPARATORS` (the permissive `[&;]` union) — the
+    default caller (route 4's occurrence count) reads under both readings
+    separately (round 5, F3; see `_query_key_occurrences`) rather than
+    trusting this one split alone, so `separators` exists to let that caller
+    ask for the **strict** `&`-only reading too, over the same function
+    rather than a second, drifting copy of it.
     """
     return [
-        unquote(raw_name.replace("+", " "))
-        for raw_name, _ in _query_pairs(pattern, _QUERY_PAIR_SEPARATORS)
+        unquote(raw_name.replace("+", " ")) for raw_name, _ in _query_pairs(pattern, separators)
     ]
 
 
@@ -1454,6 +1476,39 @@ def _url_page_positions(pattern: str) -> list[str]:
         accounted += in_value + in_name
     positions.extend([_PAGE_OUTSIDE_QUERY] * (pattern.count(PAGE_PLACEHOLDER) - accounted))
     return positions
+
+
+def _query_key_occurrences(pattern: str, folded_name: str) -> int:
+    """How many times `folded_name` (already lower-cased) names a query key
+    in `pattern`, measured **twice** and reported as the larger reading —
+    round 5's fix for F3, and the reason `_QUERY_PAIR_SEPARATORS`'s docstring
+    was wrong.
+
+    A single split of the query string on the permissive `[&;]` union
+    **fragments** any key name that itself contains `;` — `a;b` splits into
+    `a` and `b`, neither of which is `a;b` — so a name spelled with a `;`
+    could occur twice in the real, `&`-only request and count as zero under
+    that one split. Running the strict `&`-only reading separately, over the
+    same `query_pair_names`, never fragments that name (there is nothing to
+    split it on), so the true count survives there even when the permissive
+    split loses it. The maximum of the two is what "count under either
+    reading" actually requires — a single blended split is not the same
+    operation, and the fixed docstring for `_QUERY_PAIR_SEPARATORS` says why.
+
+    Compared case-insensitively (`folded_name` is expected pre-lowered) for
+    the reason `_a_page_placeholder_and_a_query_key_imply_each_other`'s own
+    docstring gives: this library's POST-paginated boards are ASP.NET-shaped,
+    and ASP.NET's `NameValueCollection` compares keys with an ordinal,
+    case-insensitive comparer.
+    """
+    return max(
+        sum(1 for name in query_pair_names(pattern) if name.lower() == folded_name),
+        sum(
+            1
+            for name in query_pair_names(pattern, separators=_STRICT_QUERY_PAIR_SEPARATOR)
+            if name.lower() == folded_name
+        ),
+    )
 
 
 #: T133 — the closed client vocabulary.
@@ -1892,6 +1947,41 @@ class ListPage(Strict):
            rule. `query_pair_names` and `body_json` keys are both compared
            this way; a case difference is not a different key here.
 
+           **The comparator is `.lower()`, not `.casefold()` (round 5).**
+           `.casefold()` is documented to fold strictly more than an ordinal,
+           case-insensitive comparer does — it merges multi-character
+           equivalents an ordinal comparer never does (`"straße".casefold()
+           == "strasse"`, an equality `StringComparer.OrdinalIgnoreCase`
+           does not hold; `"straße".lower() != "strasse"`) — so citing
+           `NameValueCollection`'s ordinal comparer while comparing with
+           `.casefold()` claimed more equivalence than that citation
+           supports, and every extra equivalence it grants is a fail-open
+           one: two keys `.casefold()` treats as identical but the cited
+           server does not would be certified as "the same key" here while
+           actually reaching the server as two different ones. `.lower()`
+           does not special-case multi-character folds and is the closer
+           match to what is actually being cited.
+
+           **The named key sent twice inside `body_field`'s own body is now
+           refused too (round 5, F1).** The check above used to ask only
+           `any(...)` — "is a key of this name present in the body at all" —
+           which is exactly the wrong question for `mode: body_field`
+           itself: its own certified key is *always* present (that is what
+           makes it certified), so membership could never tell that one
+           legitimate occurrence apart from a second, differently-cased key
+           fixed beside it. `body_json: {"Page": "{page}", "page": "1"}`
+           loaded under that membership test — the paginating occurrence and
+           a `page` fixed at `"1"` are the identical key to the
+           `NameValueCollection` this rule already cites, and which one
+           wins is exactly the ambiguity route 4 exists to refuse on the
+           query side. Counting occurrences on the body half the same way
+           the query half always did — and weighing the count against what
+           each mode legitimately accounts for there (one for `body_field`,
+           zero for `query_param` and `path_segment`) — replaces the
+           membership test everywhere, so `body_field` is covered by the
+           same check rather than by a mode exclusion that could never see
+           its own duplicate.
+
            Query occurrences are counted by **occurrences of the name**
            (`query_pair_names`, over `&`- and `;`-separated pairs — see
            `_QUERY_PAIR_SEPARATORS`), not by positions of the placeholder: RFC
@@ -1903,6 +1993,35 @@ class ListPage(Strict):
            why `;` is included beside the `&` that grammar alone would use,
            and for why that reading is **route 4's own reading and not
            `_url_page_positions`'s** (round 3, R2).
+
+           **That count is now two readings, maxed, not one blended split
+           (round 5, F3).** `_QUERY_PAIR_SEPARATORS`'s own docstring said a
+           wider split "only ever finds more occurrences to refuse, never
+           fewer" — false, measured: `?a;b=1&a;b={page}` with
+           `pagination.param: "a;b"` splits the literal key `a;b` into `a`
+           and `b` under the permissive union, so neither piece is `a;b` and
+           a name that occurs **twice** in the real, `&`-only request counts
+           as **zero**. `_query_key_occurrences` runs the strict and the
+           permissive readings independently and takes the larger, so a name
+           the permissive split fragments is still caught by the strict one.
+
+           **Route 1, three routes up, did not follow NF7's widening, and
+           now does (round 5).** It bound `pagination.param` to a query key
+           by building the literal label `_query_key_position(param)` and
+           checking it for membership in the placeholder's observed
+           positions — a case-sensitive string comparison — so `param:
+           "page"` against `url_pattern: ".../jobs?Page={page}"` was refused
+           there as "not in a query-string value under that key" while route
+           4, four paragraphs up, would treat `Page` and `page` as the one
+           key an ASP.NET board reads them as. A rule-set cannot assert both
+           that two spellings are the same key and that they differ; the
+           direction is route 4's, because reverting it would restore the
+           exact NF7 fail-open gap this file already chose to close, while
+           bringing route 1 to case-insensitive costs only the shapes this
+           section already accepted the cost of: a connector whose `param`
+           casing happens to differ from its URL's, on a board that does not
+           actually distinguish them, now loads instead of being refused for
+           a difference the server it is modelled on does not see.
 
         Fail-closed in every direction, and it costs a contributor one error
         message in the file they just wrote.
@@ -1919,7 +2038,9 @@ class ListPage(Strict):
         # and it is not just "more than one" uniformly (round 3, R1 — see the
         # docstring's item 4).
         if param is not None:
-            # Case-**insensitive** (round 4, NF7): this library's POST boards
+            # Compared case-insensitively (round 4, NF7; round 5 changed the
+            # comparator itself — see the docstring's paragraph on why
+            # `.lower()` replaced `.casefold()`): this library's POST boards
             # are ASP.NET-shaped, and ASP.NET's `NameValueCollection` compares
             # both its query and its form collections ordinally,
             # case-insensitively — so `?Page=1&page={page}` is the identical
@@ -1927,31 +2048,55 @@ class ListPage(Strict):
             # case-sensitive count would miss it for the one server family
             # this rule is modelled on. See the docstring's own paragraph on
             # this decision for the reasoning weighed against fail-closed.
-            folded_param = param.casefold()
-            query_occurrences = sum(
-                1 for name in query_pair_names(self.url_pattern) if name.casefold() == folded_param
-            )
-            body_has_param = isinstance(self.body_json, dict) and any(
-                isinstance(key, str) and key.casefold() == folded_param for key in self.body_json
+            folded_param = param.lower()
+            # Two independent readings, maxed (round 5, F3) — see
+            # `_query_key_occurrences`'s own docstring and
+            # `_QUERY_PAIR_SEPARATORS`'s corrected one for why a single
+            # blended `[&;]` split undercounts a `param` that itself contains
+            # `;`.
+            query_occurrences = _query_key_occurrences(self.url_pattern, folded_param)
+            # The body-side mirror, by **count** now rather than membership
+            # (round 5, F1): `any(...)` only ever answered "is `param` present
+            # at all", which is exactly wrong for `mode: body_field` itself —
+            # its own certified key is *always* present in the body, so a
+            # membership test could never distinguish that one legitimate
+            # occurrence from a second, differently-cased body key fixed
+            # beside it (`body_json: {"Page": "{page}", "page": "1"}`, ASP.NET
+            # reading both as the same form field). Counting occurrences and
+            # weighing the count against what each mode legitimately accounts
+            # for — the same shape the query half already used — closes that
+            # gap without needing a mode exclusion at all.
+            body_occurrences = sum(
+                1
+                for key in (self.body_json if isinstance(self.body_json, dict) else {})
+                if isinstance(key, str) and key.lower() == folded_param
             )
             if mode == "none":
                 # `none` never varies at all, so there is no "legitimate
                 # occurrence" to protect and no fixed value anywhere could be
                 # honoured over a varying one that does not exist — a
-                # *repeated* name in the query is still refused, simply
-                # because two literal pairs sharing a name is never a
-                # sensible connector, not for the merged-namespace reason the
-                # other modes guard against. This branch is only ever reached
-                # when `pagination.param` is set at all, which `mode: none`
-                # never requires (round 4, NF5) — a `mode: none` connector
-                # naming no `param` is untouched by this check, however many
-                # times any query key repeats, so the claim below is scoped
-                # to "the key `pagination.param` names," never to query keys
-                # in general.
+                # *repeated* name in the query, or in the body, is still
+                # refused, simply because two literal pairs sharing a name is
+                # never a sensible connector, not for the merged-namespace
+                # reason the other modes guard against. This branch is only
+                # ever reached when `pagination.param` is set at all, which
+                # `mode: none` never requires (round 4, NF5) — a `mode: none`
+                # connector naming no `param` is untouched by this check,
+                # however many times any query or body key repeats, so the
+                # claim below is scoped to "the key `pagination.param`
+                # names," never to query or body keys in general.
                 if query_occurrences > 1:
                     raise ValueError(
                         f"list.url_pattern's query string names {param!r} "
                         f"{query_occurrences} times while pagination.mode is 'none' — "
+                        "pagination.param names a key nothing under this mode ever varies, "
+                        "so a repeated occurrence of it is a malformed request on its own, "
+                        "independent of the merged-namespace reasoning below"
+                    )
+                if body_occurrences > 1:
+                    raise ValueError(
+                        f"list.body_json's top-level keys name {param!r} "
+                        f"{body_occurrences} times while pagination.mode is 'none' — "
                         "pagination.param names a key nothing under this mode ever varies, "
                         "so a repeated occurrence of it is a malformed request on its own, "
                         "independent of the merged-namespace reasoning below"
@@ -1970,22 +2115,43 @@ class ListPage(Strict):
                         f"list.url_pattern's query string names {param!r} "
                         f"{query_occurrences} time{'s' if query_occurrences != 1 else ''}, "
                         f"but pagination.mode {mode!r} accounts for {allowed_in_query} "
-                        "there (counting '&'- and ';'-separated pairs) — a fixed "
-                        "occurrence no capture ever measures decides the request instead "
-                        "of, or alongside, the one that actually varies"
+                        "there (counting '&'- and ';'-separated pairs, under both "
+                        "readings) — a fixed occurrence no capture ever measures decides "
+                        "the request instead of, or alongside, the one that actually varies"
                     )
-                # The mirror, on the body half: a board whose POST body also
-                # carries a *fixed* (non-placeholder) field of the exact same
-                # name puts a value in the merged namespace that no capture
-                # ever measured, on the other half of the request — the harm
-                # F1 fixed for `body_field`'s own query occurrence, reached
-                # from the opposite direction. Covers `path_segment` beside
-                # `query_param` (round 4, NF2/NF3 — round 3 scoped this to
-                # `query_param` alone on a premise this file no longer
-                # defends; see the docstring's own paragraph on why). Not
-                # `body_field`: there, the same-named body key is the
-                # *declared* varying position, not a stray fixed one.
-                if mode in {"query_param", "path_segment"} and body_has_param:
+                # The body-side mirror, symmetric with the query check above
+                # (round 5, F1) — `body_field`'s own certified occurrence
+                # accounts for exactly one there; every other mode has none:
+                # `query_param` binds `param` to a query key and
+                # `path_segment` to a URL position, neither of which is a
+                # body key at all.
+                allowed_in_body = 1 if mode == "body_field" else 0
+                if body_occurrences > allowed_in_body:
+                    if mode == "body_field":
+                        # The harm is now *within* the body's own top-level
+                        # keys, not a second namespace: a second, merely
+                        # differently-cased key beside the one
+                        # `_a_page_placeholder_and_a_body_field_imply_each_other`
+                        # already certified as holding the placeholder.
+                        raise ValueError(
+                            f"list.body_json's top-level keys name {param!r} "
+                            f"{body_occurrences} times (counting case-insensitively), but "
+                            f"pagination.mode {mode!r} accounts for {allowed_in_body} there "
+                            "— a second, differently-spelled key sharing the certified "
+                            "one's name is a fixed occurrence no capture ever measures, "
+                            "decided by whichever a framework's merged form-field reading "
+                            "honours"
+                        )
+                    # `query_param` / `path_segment`: a board whose POST body
+                    # also carries a *fixed* (non-placeholder) field of the
+                    # exact same name puts a value in the merged namespace
+                    # that no capture ever measured, on the other half of the
+                    # request — the harm F1 fixed for `body_field`'s own
+                    # query occurrence, reached from the opposite direction.
+                    # Covers `path_segment` beside `query_param` (round 4,
+                    # NF2/NF3 — round 3 scoped this to `query_param` alone on
+                    # a premise this file no longer defends; see the
+                    # docstring's own paragraph on why).
                     raise ValueError(
                         f"list.body_json also declares {param!r}, fixed, alongside the "
                         f"occurrence pagination.mode {mode!r} already accounts for — a "
@@ -2017,7 +2183,20 @@ class ListPage(Strict):
                     "appears in list.url_pattern — nothing would vary from page to page, so "
                     "the identical URL would be requested max_pages times"
                 )
-            if wanted is None or wanted not in positions:
+            # Case-insensitive (round 5): route 4, three paragraphs of this
+            # docstring up, treats `Page` and `page` as the same key so a
+            # duplicate under either casing is caught — this route must agree
+            # rather than treat them as different keys, or the rule-set would
+            # assert both at once (round 5's finding: it did, until now). The
+            # comparison is `.lower()`, not `.casefold()`, for the same reason
+            # the docstring gives below.
+            folded_wanted = wanted.lower() if wanted is not None else None
+            matches = [
+                position
+                for position in positions
+                if folded_wanted is not None and position.lower() == folded_wanted
+            ]
+            if not matches:
                 # Route 1.
                 raise ValueError(
                     f"pagination.param is {param!r} but {PAGE_PLACEHOLDER} sits at "
@@ -2027,7 +2206,7 @@ class ListPage(Strict):
                     "read for"
                 )
             extra = sorted(positions)
-            extra.remove(wanted)
+            extra.remove(matches[0])
             if extra:
                 raise ValueError(
                     f"list.url_pattern holds {PAGE_PLACEHOLDER} at {', '.join(extra)} as well "

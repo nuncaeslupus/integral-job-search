@@ -641,6 +641,8 @@ def test_the_url_side_probe_table_carries_the_three_routes_and_meets_its_floor()
         "a positional page number in the path",
         "a board with no second page, and no page slot",
         "a POST board whose page key is in the body and nowhere else",
+        # round 5 — route 1/route 4 agreement.
+        "pagination.param and the URL key it names differ only in case",
     } <= names, sorted(names)
     # Both verdicts are represented. A table of refusals alone would pass over a
     # validator that refuses everything — the fail-closed mirror of these
@@ -1025,6 +1027,97 @@ def test_a_value_that_merely_contains_an_equals_sign_is_not_a_second_pair(
     ]
 
 
+# ---------------------------------------------------------------------------
+# T154, round 5 — F1 (the mode axis, still incomplete), F2 (the same
+# comparator, unpinned on the body half) and F3 (the separator axis's own
+# claim, false)
+
+
+def test_a_duplicate_body_field_key_differing_only_in_case_is_refused(library: Path) -> None:
+    """F1. `body_field`'s own certified occurrence is *always* present in its
+    body, so `any(...)` — is `param`'s name present at all — could never tell
+    it apart from a second, differently-cased key fixed beside it. `Page`
+    holds the placeholder correctly; `page` fixes the identical key
+    (case-insensitively, per NF7's own comparator) at `'1'` — the merged-form
+    harm NF7 already refuses on the query side, unrefused here because the
+    body-side check was scoped away from `body_field` entirely rather than
+    made to count."""
+    message = _refused(
+        library,
+        f"https://{_REAL_SITE}/Search/ExecuteSearch",
+        {"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
+        method="POST",
+        body_json={"Keyword": "python", "Page": PAGE_PLACEHOLDER, "page": "1"},
+        item=None,
+        fields=None,
+        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
+    )
+    assert "body_json's top-level keys name 'Page' 2 times" in message
+
+
+def test_a_fixed_body_field_repeating_the_query_key_differing_only_in_case_is_refused(
+    library: Path,
+) -> None:
+    """F2. The query half's case-insensitive comparator (NF7) is pinned by
+    `test_a_case_only_difference_still_counts_as_the_same_key`; the identical
+    comparator on the body half was not, and reverting it to `==` survived
+    the whole suite. `?page={page}` beside `body_json: {Page: "1"}` is the
+    same merged-namespace harm as
+    `test_a_query_param_board_with_a_fixed_body_field_of_the_same_name_is_refused`,
+    differing only in case."""
+    _edit_connector(
+        library,
+        url_pattern="https://realboard.io/jobs?page={page}",
+        method="POST",
+        body_json={"Page": "1"},
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        item=None,
+        fields=None,
+        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
+    )
+    with pytest.raises(ConnectorError, match=r"list\.body_json also declares 'page'"):
+        load_connector(_package(library))
+
+
+def test_a_param_name_containing_the_permissive_separator_is_still_caught(
+    library: Path,
+) -> None:
+    """F3. `_QUERY_PAIR_SEPARATORS`'s own docstring claimed a wider split
+    "only ever finds more occurrences ... never fewer" — false, measured
+    here: splitting `?a;b=1&a;b={page}` on the permissive `[&;]` union cuts
+    the literal key `a;b` into `a` and `b`, neither of which is `a;b`, so a
+    name occurring twice in the real, `&`-only request counts as *zero*
+    under that split alone. `connectors._query_key_occurrences` runs the
+    strict `&`-only reading too and reports the larger of the two, which
+    still sees this."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?a;b=1&a;b={page}",
+        {"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
+    )
+    assert "names 'a;b' 2 times" in message
+
+
+def test_a_case_only_difference_between_param_and_the_url_key_now_loads(library: Path) -> None:
+    """Route 1 did not follow NF7's case-insensitive widening, so the
+    rule-set asserted both that `Page` and `page` are the same key (route 4,
+    the test above and `test_a_case_only_difference_still_counts_as_the_same_key`)
+    and that they differ (route 1, this shape, refused before round 5).
+    Route 1 now agrees with route 4's own citation — ASP.NET's
+    `NameValueCollection` — rather than the other way around, which would
+    reopen NF7's fail-open gap."""
+    _edit_connector(
+        library,
+        url_pattern="https://realboard.io/jobs?Page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+    )
+    connector = load_connector(_package(library))
+    assert build_list_urls(connector) == [
+        "https://realboard.io/jobs?Page=1",
+        "https://realboard.io/jobs?Page=2",
+    ]
+
+
 def test_every_duplicate_key_probe_agrees_with_the_rule() -> None:
     """The measurement itself, same shape as `test_every_url_side_probe_agrees_with_the_rule`:
     behavioural, so a validator deleted, weakened or replaced by a comment
@@ -1082,6 +1175,10 @@ def test_the_duplicate_key_probe_table_meets_its_floor_and_keeps_its_names() -> 
         "mode: none naming param anyway, with a duplicate of it",
         "mode: none naming no param at all still loads a duplicate key",
         "the named key sent twice, differing only in case",
+        # round 5 (F1, F2, F3).
+        "the named key sent twice, both inside mode: body_field's own body",
+        "a fixed body field repeating the query's own name, differing only in case",
+        "a param name containing the permissive separator defeats a single blended split",
     } <= names, sorted(names)
     # Both verdicts represented, for the same reason the URL-side table needs
     # both: a table of refusals alone passes over a validator that refuses
