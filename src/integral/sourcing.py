@@ -67,6 +67,7 @@ from integral.connectors import (
     load_connector,
     parse_detail_page,
 )
+from integral.gate_exit import worst
 from integral.identity import ProfileStore
 from integral.lifecycle import (
     collect_offer,
@@ -152,7 +153,9 @@ def from_captures(paths: Iterable[Path]) -> Fetch:
     pages = dict(read_capture(Path(path)) for path in paths)
 
     def fetch(request: ListRequest) -> Response:
-        body = pages.get(request.url)
+        # A saved page is what one GET rendered; it cannot stand for a POST's
+        # body-dependent pages, which all share one URL (#455, F4).
+        body = pages.get(request.url) if request.method == "GET" else None
         if body is None:
             return Response(
                 None, "", error=f"no page from the candidate's browser for {request.url}"
@@ -413,7 +416,11 @@ def browser_urls(
         if steerable and not phrases:
             continue
         for query in phrases if steerable else (None,):
-            for request in build_list_requests(connector, page_count=page_count, query=query):
+            try:
+                requests = build_list_requests(connector, page_count=page_count, query=query)
+            except ConnectorError:
+                continue  # `source` reports the same phrase as an error; nothing to open
+            for request in requests:
                 if _may_fetch(adjudicator, request.url) and request.url not in urls:
                     urls.append(request.url)
     return urls
@@ -979,8 +986,13 @@ def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
 
 
 def _main(argv: list[str] | None = None) -> int:
-    """`python -m integral.sourcing` — T126's and T166's evidence."""
-    status = 0
+    """`python -m integral.sourcing` — T126's and T166's evidence.
+
+    The two gates' exits are combined by `gate_exit.worst`, never by hand: a
+    hand-rolled "unmeasured wins" let one gate's failure hide behind the
+    other's `unmeasured` (second reader on #455, F1).
+    """
+    codes: list[int] = []
     for path, measured, key in (
         (
             DEFAULT_EVIDENCE_PATH,
@@ -996,15 +1008,12 @@ def _main(argv: list[str] | None = None) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(json.dumps(measured, ensure_ascii=False))
+        failed = measured[key] or measured.get("offers_collected_from_a_capture_of_another_search")
         if measured["gate_status"] == "unmeasured":
             for reason in measured.get("reasons", ()):
                 print(reason, file=sys.stderr)
-            status = 3
-        elif status != 3 and (
-            measured[key] or measured.get("offers_collected_from_a_capture_of_another_search")
-        ):
-            status = 1
-    return status
+        codes.append(1 if failed else 3 if measured["gate_status"] == "unmeasured" else 0)
+    return worst(*codes)
 
 
 if __name__ == "__main__":

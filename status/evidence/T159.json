@@ -155,12 +155,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 109
+      "line": 110
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 101
+      "line": 102
     },
     {
       "module": "spec_consistency",
@@ -206,7 +206,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3846,
+      "line": 3850,
       "population": 15
     },
     {

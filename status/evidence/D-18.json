@@ -49,7 +49,7 @@
       "expected": "unverified",
       "presented": false,
       "expired": false,
-      "reason": "the capture is a challenge page, not a listing ('no podemos identificar tu navegador') — being blocked is not the advert being open",
+      "reason": "the page names itself a block page ('no podemos identificar tu navegador') — being blocked is not the advert being open",
       "reasons": []
     },
     {

@@ -1662,6 +1662,10 @@ class ListPage(Strict):
                     f"client_target {self.client_target!r} is not an element id: it must start "
                     "with a letter and hold only letters, digits, _ . : or -"
                 )
+        if self.client == "browser" and self.method != "GET":
+            # T166. A browser capture is one page per URL, and a POST search's
+            # pages share one URL — one capture would answer all of them.
+            raise ValueError("client: browser reads saved pages, one per URL — only a GET")
         return self
 
     url_pattern: str = Field(min_length=1)

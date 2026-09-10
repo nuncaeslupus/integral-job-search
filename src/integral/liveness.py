@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from integral.connector_health import rate_limited
+from integral.connector_health import BLOCK_PAGE_MARKERS
 from integral.connectors import SEARCH_SOURCE
 from integral.gate_exit import worst
 from integral.offers import Offer
@@ -263,12 +263,21 @@ def read_response(
         return SourceCheck(offer_id, "dead", f"the advert's own page says {phrase!r}")
     # T166. With no title to compare, a bot-check page served 200 used to read
     # `live` — infojobs.net serves exactly that to this tool for every advert
-    # (measured 2026-09-10). Consulted only when there is no title, because
-    # the identity check below is the stronger signal and every marker can
-    # occur in a real advert's text.
-    if title is None and (refusal := rate_limited(body, status)) is not None:
+    # (measured 2026-09-10). Only the page's own `<title>`/`<h1>` is read, and
+    # only when there is no title: the whole body is not evidence, because a
+    # real page carries `h-captcha` in its markup and an advert can say "rate
+    # limit" (second reader on #455, F5), while a challenge page names itself.
+    if title is None and (
+        marker := next(
+            (m for f in identity_fields(body) for m in BLOCK_PAGE_MARKERS if m in f.casefold()),
+            None,
+        )
+    ):
         return SourceCheck(
-            offer_id, "unverified", f"{refusal} — being blocked is not the advert being open"
+            offer_id,
+            "unverified",
+            f"the page names itself a block page ({marker!r}) — being blocked is not the "
+            "advert being open",
         )
     if title is not None and not title_in_body(title, body):
         return SourceCheck(

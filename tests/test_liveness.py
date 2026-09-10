@@ -212,3 +212,20 @@ def test_a_match_may_not_span_two_identity_fields() -> None:
     """`<title>` and `<h1>` are separate claims. Concatenating them would let a
     phrase neither contains be assembled across the join."""
     assert liveness.title_in_body("Acme CISO", "<title>Acme</title><h1>CISO</h1>") is False
+
+
+def test_a_block_page_is_known_by_what_it_calls_itself_not_by_its_markup() -> None:
+    """T166, and the second reader's F5 on #455. With no title to compare, a
+    page naming itself a block page is `unverified`; a real advert carrying
+    `h-captcha` in its markup or "rate limiting" in its text is not one."""
+    blocked = (
+        "<html><head><title>InfoJobs</title></head><body>"
+        "<h1>No podemos identificar tu navegador</h1></body></html>"
+    )
+    advert = (
+        "<html><head><title>Research Fellow - jobs.ac.uk</title></head><body>"
+        '<h1>Research Fellow</h1><div class="h-captcha" data-sitekey="x"></div>'
+        "<p>You will design our API rate limiting.</p></body></html>"
+    )
+    assert liveness.read_response("a", 200, blocked).liveness == "unverified"
+    assert liveness.read_response("b", 200, advert).liveness == "live"

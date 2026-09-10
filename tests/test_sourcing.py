@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from integral.candidate import Aim, CandidateConstraints, Location
-from integral.connectors import ListRequest
+from integral.connectors import ListRequest, build_list_urls, load_connector
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.sourcing import (
@@ -583,24 +583,6 @@ def test_a_page_the_candidates_browser_saved_becomes_offers(
     assert offers_without_a_recorded_fetch(store) == []
 
 
-def test_a_saved_page_answers_only_the_search_it_names(store: ProfileStore, tmp_path: Path) -> None:
-    """A page saved for one search standing in for another hands the candidate
-    the wrong adverts as if they were the answer."""
-    other = "https://www.infojobs.net/ofertas-trabajo/enfermera/barcelona"
-    run = source(
-        store,
-        _spain(),
-        _pharmacy(),
-        fetch=_plain_recording([]),
-        at=AT,
-        directory=_CONNECTORS,
-        robots=_robots(),
-        browser=from_captures([_saved_page(tmp_path, other)]),
-    )
-    outcome = _infojobs(run)
-    assert outcome.added == 0 and outcome.error and _INFOJOBS_SEARCH in outcome.error, outcome
-
-
 def test_a_saved_page_that_does_not_name_its_url_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "page.html"
     path.write_text("<html><body>a listing</body></html>", encoding="utf-8")
@@ -632,3 +614,165 @@ def test_the_browser_route_gate_measures_a_real_run() -> None:
     assert measured["browser_boards_fetched_over_plain_http"] == 0
     assert measured["offers_collected_from_a_capture_of_another_search"] == 0
     assert measured["offers_collected_through_the_browser"] > 0
+
+
+# Second reader on #455 — each accepted finding, committed as a fixture.
+
+
+def _browser_variant(tmp_path: Path, side: str) -> Any:
+    """foorilla_en with `client: browser` on its list page or its advert page.
+
+    The only installed browser board has no advert page, so the advert half of
+    the rule needs a board that has one (#455, F2).
+    """
+    import shutil
+
+    from integral.connector_coverage import installed_packages
+
+    root = tmp_path / "connectors"
+    shutil.copytree(_CONNECTORS / "foorilla_en", root / "foorilla_en")
+    path = root / "foorilla_en" / "connector.yaml"
+    target = '"mc_1"' if side == "list" else '"mc_2"'
+    old = f"  client: htmx\n  client_target: {target}\n"
+    text = path.read_text(encoding="utf-8")
+    assert text.count(old) == 1
+    path.write_text(text.replace(old, "  client: browser\n"), encoding="utf-8")
+    [package] = [p for p in installed_packages(root) if p.name == "foorilla_en"]
+    return package, root
+
+
+def test_a_browser_board_s_adverts_never_reach_the_plain_fetch(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """F2: list page in the browser, advert pages still sent to the plain fetch."""
+    from integral.sourcing import _one_board
+
+    package, root = _browser_variant(tmp_path, "list")
+    connector = load_connector(root / "foorilla_en")
+    [url] = build_list_urls(connector, query="agentic")
+    listing = (root / "foorilla_en" / "fixture" / "list.html").read_text(encoding="utf-8")
+    saved = tmp_path / "list-capture.html"
+    saved.write_text(f"<!-- integral-capture: {url} -->\n{listing}", encoding="utf-8")
+    asked: list[str] = []
+    outcome = _one_board(
+        store,
+        package,
+        "agentic",
+        fetch=_plain_recording(asked),
+        at=AT,
+        directory=root,
+        page_count=1,
+        robots=_robots(),
+        browser=from_captures([saved]),
+    )
+    assert outcome.detail_fetched, "the advert path was never exercised"
+    assert asked == [], asked
+
+
+def test_a_board_whose_adverts_need_a_browser_is_a_browser_board(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """F2: `needs_browser` reading only `list.client` sends this board's
+    listing — and then its adverts — to the plain fetch."""
+    from integral.sourcing import _one_board
+
+    package, root = _browser_variant(tmp_path, "detail")
+    asked: list[str] = []
+    outcome = _one_board(
+        store,
+        package,
+        "agentic",
+        fetch=_plain_recording(asked),
+        at=AT,
+        directory=root,
+        page_count=1,
+        robots=_robots(),
+    )
+    assert asked == [], asked
+    assert outcome.skipped and "real browser" in outcome.skipped, outcome
+
+
+@pytest.mark.parametrize(
+    "named",
+    [
+        "https://www.infojobs.net/ofertas-trabajo/enfermera/barcelona",
+        # F3: the same path, another query — matching on the path alone answers it.
+        _INFOJOBS_SEARCH + "?keyword=enfermera",
+    ],
+)
+def test_a_saved_page_answers_no_search_but_its_own(
+    store: ProfileStore, tmp_path: Path, named: str
+) -> None:
+    run = source(
+        store,
+        _spain(),
+        _pharmacy(),
+        fetch=_plain_recording([]),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+        browser=from_captures([_saved_page(tmp_path, named)]),
+    )
+    assert _infojobs(run).added == 0, run.summary()
+
+
+def test_a_saved_page_never_answers_a_post(tmp_path: Path) -> None:
+    """F4: every page of a POST search shares one URL, so one capture would
+    answer them all. Refused at load, and again where the page is served."""
+    import yaml
+
+    from integral.connectors import ConnectorError, parse_connector
+
+    fetch = from_captures([_saved_page(tmp_path, _INFOJOBS_SEARCH)])
+    post = ListRequest(url=_INFOJOBS_SEARCH, method="POST", headers={}, body=b'{"q": 1}')
+    assert fetch(post).error is not None
+    document = yaml.safe_load((_CONNECTORS / "usajobs_en" / "connector.yaml").read_text())
+    document["list"]["client"] = "browser"
+    with pytest.raises(ConnectorError, match="only a GET"):
+        parse_connector(yaml.safe_dump(document))
+
+
+def test_a_phrase_the_board_cannot_take_does_not_end_the_list(tmp_path: Path) -> None:
+    """F6: `source` reports such a phrase and carries on; so does this."""
+    aim = Aim(state="stated", terms=("   ", "farmaceutico"))
+    assert browser_urls(_spain(), aim, directory=_CONNECTORS, robots=_robots()) == [
+        _INFOJOBS_SEARCH
+    ]
+
+
+@pytest.mark.parametrize(
+    ("fixture_gate", "browser_gate", "expected"),
+    [
+        ("unmeasured", "misfiled", 1),
+        ("failed", "unmeasured", 1),
+        ("unmeasured", "clean", 3),
+        ("clean", "clean", 0),
+    ],
+)
+def test_one_gate_failing_is_never_hidden_by_the_other_being_unmeasured(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    fixture_gate: str,
+    browser_gate: str,
+    expected: int,
+) -> None:
+    """F1: the exits are combined by `gate_exit.worst`, so a failure outranks
+    an `unmeasured` from either side."""
+    import integral.sourcing as sourcing
+
+    def reading(key: str, state: str) -> dict[str, Any]:
+        return {
+            key: 1 if state == "failed" else 0,
+            "offers_collected_from_a_capture_of_another_search": 3 if state == "misfiled" else 0,
+            "gate_status": "unmeasured" if state == "unmeasured" else "measured",
+        }
+
+    fixture_key = "sourced_offers_without_a_recorded_fetch"
+    browser_key = "browser_boards_fetched_over_plain_http"
+    monkeypatch.setattr(sourcing, "measure_fixture", lambda: reading(fixture_key, fixture_gate))
+    monkeypatch.setattr(
+        sourcing, "measure_browser_route", lambda: reading(browser_key, browser_gate)
+    )
+    monkeypatch.setattr(sourcing, "DEFAULT_EVIDENCE_PATH", tmp_path / "a.json")
+    monkeypatch.setattr(sourcing, "DEFAULT_BROWSER_EVIDENCE_PATH", tmp_path / "b.json")
+    assert sourcing._main([]) == expected
