@@ -27,5 +27,5 @@ list:
       location_raw: city
       text: description
   employers:
-    huggingface: Hugging Face
     codurance: Codurance
+    huggingface: Hugging Face

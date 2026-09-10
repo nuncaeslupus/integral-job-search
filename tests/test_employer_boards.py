@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -65,10 +66,17 @@ def test_the_slot_and_the_employers_imply_each_other(url: str, employers: str) -
 @pytest.mark.parametrize(
     ("url", "why"),
     [
-        ("https://{employer}.ats.test/jobs", "URL path"),  # every employer its own origin
-        ("https://api.ats.test/jobs?company={employer}", "URL path"),
-        ("https://api.ats.test/jobs#{employer}", "URL path"),
+        ("https://{employer}.ats.test/jobs", "in the path"),  # every employer its own origin
+        ("https://api.ats.test/jobs?company={employer}", "in the path"),
+        ("https://api.ats.test/jobs#{employer}", "in the path"),
+        ("https://{employer}@api.ats.test/jobs", "in the path"),  # userinfo is the netloc
+        ("https://api.ats.test:{employer}/jobs", "in the path"),
         ("https://api.ats.test/{employer}/{employer}", "once"),
+        # #445 second reader, E20a/c/d: `urlsplit` files each of these slots
+        # under `path`, and each still decides the origin.
+        ("{employer}://api.ats.test/jobs", "in the path"),
+        ("{employer}.evil.example/jobs", "in the path"),
+        (r"https:\\{employer}.evil.example/jobs", "in the path"),
     ],
 )
 def test_the_slot_sits_once_in_the_path(url: str, why: str) -> None:
@@ -86,6 +94,38 @@ def test_a_post_listing_cannot_carry_the_slot() -> None:
 def test_a_slug_that_is_not_one_path_segment_is_refused(slug: str) -> None:
     with pytest.raises(ConnectorError, match="slug"):
         parse_connector(_yaml(GOOD, f"  employers:\n    '{slug}': Name\n"))
+
+
+def test_a_slug_with_a_trailing_newline_is_refused() -> None:
+    """#445 E11b/E13b: `$` matches before a final newline; the rule says a slug
+    holds only letters, digits, . _ or -."""
+    with pytest.raises(ConnectorError, match="slug"):
+        parse_connector(_yaml(GOOD, '  employers:\n    "acme\\n": Name\n'))
+    with pytest.raises(ConnectorError, match="slug"):
+        parse_connector(_yaml(GOOD, '  employers:\n    acme: A\n    "acme\\n": B\n'))
+
+
+def test_a_placeholder_spliced_from_two_others_is_refused() -> None:
+    """#445 E17: removing `{query}` from `{emp{query}loyer}` forms `{employer}`;
+    a chain of `.replace` then removed that too and a brace shipped."""
+    with pytest.raises(ConnectorError, match="placeholders"):
+        parse_connector(_yaml("https://api.ats.test/{emp{query}loyer}", ""))
+    with pytest.raises(ConnectorError, match="placeholders"):
+        parse_connector(_yaml("https://api.ats.test/{que{page}ry}", ""))
+
+
+def test_a_copied_connector_cannot_move_the_slot_where_the_validator_refused_it() -> None:
+    """#445 E18: `model_copy(update=...)` skips validators, so the rules are
+    asked again where URLs are built — the module's own posture (T110)."""
+    connector = parse_connector(_yaml(GOOD))
+    for update in (
+        {"url_pattern": "https://{employer}.evil.example/jobs"},
+        {"method": "POST", "body_json": {"q": "x"}},
+        {"employers": {"..": "Dots"}},
+    ):
+        copied = connector.model_copy(update={"list": connector.list.model_copy(update=update)})
+        with pytest.raises(ConnectorError):
+            build_list_requests(copied)
 
 
 def test_two_slugs_differing_only_in_case_are_refused() -> None:
@@ -275,3 +315,151 @@ def test_the_record_commits_the_floor_and_nothing_that_grows() -> None:
         "not_conforming": {},
     }
     assert record(below)["ats_host_connectors_conforming"] == 3
+
+
+# ---------------------------------------------------------------------------
+# #445 second reader: fixtures for what the first round let through
+
+
+def _ledger_with(tmp: Path, package: str, **changes: object) -> Path:
+    """The real ledger, with one package's row changed — through YAML, not text."""
+    import yaml
+
+    doc = yaml.safe_load(_LEDGER.read_text(encoding="utf-8"))
+    for row in doc["adjudications"]:
+        if row.get("package") == f"connectors/{package}":
+            row.update(changes)
+            for key, value in list(row.items()):
+                if value is None:
+                    del row[key]
+    ledger = tmp / "ledger.yaml"
+    ledger.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    return ledger
+
+
+def test_a_row_whose_own_robots_txt_refuses_the_package_does_not_count(tmp_path: Path) -> None:
+    """G1: well-formed row, and its committed file disallows the list path."""
+    directory = _library(tmp_path, "lever_en")
+    ledger = _ledger_with(
+        tmp_path,
+        "lever_en",
+        robots_txt="User-agent: *\nDisallow: /v0/\n",
+        allowed=None,
+        standing="single_parser",
+    )
+    measured = measure(directory, ledger)
+    assert measured["ats_host_connectors_conforming"] == 0
+    assert any("disallows" in why for why in measured["not_conforming"]["lever_en"])
+
+
+def test_a_row_for_another_host_does_not_count(tmp_path: Path) -> None:
+    """G2: the verdict must be about the host the package fetches."""
+    directory = _library(tmp_path, "greenhouse_en")
+    ledger = _ledger_with(tmp_path, "greenhouse_en", site="unrelated.example")
+    measured = measure(directory, ledger)
+    assert measured["ats_host_connectors_conforming"] == 0
+
+
+def test_a_row_with_nothing_to_replay_does_not_count(tmp_path: Path) -> None:
+    directory = _library(tmp_path, "ashby_en")
+    ledger = _ledger_with(tmp_path, "ashby_en", robots_status=None)
+    measured = measure(directory, ledger)
+    assert measured["ats_host_connectors_conforming"] == 0
+    assert any("nothing to replay" in why for why in measured["not_conforming"]["ashby_en"])
+
+
+@pytest.mark.parametrize(
+    ("status", "counts"), [(401, True), (404, True), (403, False), (500, False)]
+)
+def test_a_recorded_status_is_replayed_through_the_matcher(
+    tmp_path: Path, status: int, counts: bool
+) -> None:
+    """401 and 404 are what `integral.robots` reads as no rules; anything else
+    refuses, and the row saying otherwise is itself a problem."""
+    directory = _library(tmp_path, "ashby_en")
+    ledger = _ledger_with(tmp_path, "ashby_en", robots_status=status)
+    measured = measure(directory, ledger)
+    assert (measured["ats_host_connectors_conforming"] == 1) is counts
+
+
+def test_lever_reads_the_requirements_the_api_keeps_apart() -> None:
+    """F2: the list's `descriptionPlain` omits Lever's `lists`, where this
+    advert's language requirement sits. Mapped from it, the requirement read
+    as "none stated". The body now comes from the advert's own page."""
+    from integral.connectors import build_offer, load_connector, parse_detail_page, parse_list_page
+
+    package = _CONNECTORS / "lever_en"
+    connector = load_connector(package)
+    row = parse_list_page(connector, (package / "fixture" / "list.html").read_text())[0]
+    assert "text" not in row
+    detail = parse_detail_page(connector, (package / "fixture" / "detail.html").read_text())
+    offer = build_offer(connector, list_fields=row, detail_fields=detail, url=row["detail_url"])
+    assert "Full professional proficiency in French and English" in offer.text
+
+
+def _three_employer_run(tmp_path: Path, answers: dict[str, Response], robots_txt: str) -> Any:
+    directory = _package(tmp_path)
+    package = directory / "atshost_en"
+    text = (package / "connector.yaml").read_text(encoding="utf-8")
+    (package / "connector.yaml").write_text(
+        text.replace("    beta: Beta Inc\n", "    gone: Gone Co\n    beta: Beta Inc\n"),
+        encoding="utf-8",
+    )
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    store = ProfileStore(tmp_path / "p", "test")
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url.split("/")[-2])
+        return answers[asked[-1]]
+
+    run = source(
+        store,
+        CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+        ),
+        Aim(state="stated", terms=("python",)),
+        fetch=fetch,
+        at=AT,
+        directory=directory,
+        robots=Robots(fetch=lambda url: robots_txt),
+    )
+    return run, asked
+
+
+def _jobs(title: str) -> Response:
+    return Response(200, json.dumps({"jobs": [{"title": title, "body": f"about {title}"}]}))
+
+
+def test_one_failing_employer_does_not_end_the_host(tmp_path: Path) -> None:
+    """F4: each request is a different employer's board."""
+    answers = {"acme": _jobs("A"), "gone": Response(404, "", error="HTTP 404"), "beta": _jobs("B")}
+    run, asked = _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
+    assert asked == ["acme", "gone", "beta"]
+    (outcome,) = run.outcomes
+    assert outcome.added == 2
+    assert outcome.employers_failed == ("Gone Co (HTTP 404)",)
+    assert outcome.error is None
+    assert "PARTIAL atshost_en: 1 employer board(s) not read" in run.summary()
+
+
+def test_every_employer_failing_is_an_error(tmp_path: Path) -> None:
+    failure = Response(None, "", error="timed out")
+    run, _ = _three_employer_run(
+        tmp_path, dict.fromkeys(("acme", "gone", "beta"), failure), "User-agent: *\nAllow: /\n"
+    )
+    (outcome,) = run.outcomes
+    assert outcome.error and not outcome.reached_the_board
+
+
+def test_the_crawl_delay_is_kept_between_one_hosts_requests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F11: api.lever.co states `Crawl-delay: 1`; a host is now many requests."""
+    import integral.sourcing as sourcing
+
+    pauses: list[float] = []
+    monkeypatch.setattr(sourcing, "_pause", pauses.append)
+    answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
+    _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\nCrawl-delay: 2\n")
+    assert pauses == [2.0, 2.0]

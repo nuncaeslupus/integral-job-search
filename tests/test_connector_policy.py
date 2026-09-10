@@ -978,3 +978,31 @@ def test_the_default_second_reader_is_one_that_can_refuse() -> None:
     default = cp.READERS[cp.DEFAULT_SECOND_READER]
     assert robots.allows_text(document, agent, "/apply") is False
     assert default(document, agent, "/apply") is False
+
+
+@pytest.mark.parametrize(
+    ("changes", "complaint"),
+    [
+        ({"robots_status": 403}, "not one `integral.robots` reads as no rules"),
+        ({"robots_status": 401, "robots_txt": "User-agent: *\nAllow: /\n"}, "both a robots.txt"),
+    ],
+)
+def test_a_recorded_robots_status_must_be_one_that_admits(
+    changes: dict[str, object], complaint: str
+) -> None:
+    """T144: `robots_status` exists so a verdict with no file can be replayed.
+    A status the matcher refuses on, or one beside a file, is not that."""
+    row = cp.RobotsAdjudication.from_mapping(
+        {
+            "site": "api.example.test",
+            "package": "connectors/examplejobs_es",
+            "checked": "2026-09-10",
+            "agent": "integral-job-search/0.1",
+            "standing": cp.NO_NEGATIVE_CONTROL_POSSIBLE,
+            "second_reader": "urllib.robotparser",
+            "source": "connectors/robots-adjudications.yaml",
+            "reason": "no file",
+            **changes,
+        }
+    )
+    assert any(complaint in problem for problem in row.problems())

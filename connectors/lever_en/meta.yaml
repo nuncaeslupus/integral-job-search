@@ -17,6 +17,8 @@ policy:
 # candidate was reading. Excerpted: two postings per response, each long body
 # field cut to its first 600 characters with the cut marked in the text.
 # `probe/list.html` is a second read naming postings the fixture does not.
+# `fixture/detail.html` is one advert page cut down to its `div.content`, kept
+# whole: the requirements inside it are what the detail route exists to read.
 fixture:
   provenance: sampled
   recorded: "2026-09-10"

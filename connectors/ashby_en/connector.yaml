@@ -29,64 +29,63 @@ list:
       source_ref: id
       title: title
       location_raw: location
-      location_remote: workplaceType
       text: descriptionPlain
   # Postings carry no employer name, so this is where `company` comes from.
   employers:
-    posthog: PostHog
-    openai: OpenAI
-    cursor: Cursor
-    notion: Notion
-    linear: Linear
-    supabase: Supabase
-    replit: Replit
-    langchain: LangChain
-    llamaindex: LlamaIndex
-    elevenlabs: ElevenLabs
-    deepl: DeepL
-    sentry: Sentry
-    clickhouse: ClickHouse
-    modal: Modal
-    baseten: Baseten
-    cohere: Cohere
-    perplexity: Perplexity
-    sierra: Sierra
-    decagon: Decagon
-    writer: Writer
-    zapier: Zapier
-    neon: Neon
-    render: Render
-    railway: Railway
-    n8n: n8n
-    dust: Dust
-    photoroom: Photoroom
-    anyscale: Anyscale
-    pinecone: Pinecone
-    weaviate: Weaviate
-    temporal: Temporal
-    prefect: Prefect
-    astronomer: Astronomer
-    airbyte: Airbyte
-    hightouch: Hightouch
-    docker: Docker
-    coder: Coder
     1password: 1Password
-    oyster: Oyster
+    airbyte: Airbyte
+    anyscale: Anyscale
+    astronomer: Astronomer
+    baseten: Baseten
     buffer: Buffer
-    gitbook: GitBook
-    mintlify: Mintlify
-    vapi: Vapi
-    livekit: LiveKit
-    runway: Runway
-    synthesia: Synthesia
-    poolside: Poolside
+    clickhouse: ClickHouse
+    coder: Coder
     cognition: Cognition
-    zed: Zed
+    cohere: Cohere
+    cursor: Cursor
+    decagon: Decagon
+    deepl: DeepL
+    deepnote: Deepnote
+    docker: Docker
+    dust: Dust
+    elevenlabs: ElevenLabs
+    gitbook: GitBook
     graphite: Graphite
     greptile: Greptile
     hex: Hex
-    deepnote: Deepnote
-    rerun: Rerun
-    lovable: Lovable
+    hightouch: Hightouch
     incident: incident.io
+    langchain: LangChain
+    linear: Linear
+    livekit: LiveKit
+    llamaindex: LlamaIndex
+    lovable: Lovable
+    mintlify: Mintlify
+    modal: Modal
+    n8n: n8n
+    neon: Neon
+    notion: Notion
+    openai: OpenAI
+    oyster: Oyster
+    perplexity: Perplexity
+    photoroom: Photoroom
+    pinecone: Pinecone
+    poolside: Poolside
+    posthog: PostHog
+    prefect: Prefect
+    railway: Railway
+    render: Render
+    replit: Replit
+    rerun: Rerun
+    runway: Runway
+    sentry: Sentry
+    sierra: Sierra
+    supabase: Supabase
+    synthesia: Synthesia
+    temporal: Temporal
     vanta: Vanta
+    vapi: Vapi
+    weaviate: Weaviate
+    writer: Writer
+    zapier: Zapier
+    zed: Zed

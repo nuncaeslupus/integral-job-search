@@ -133,7 +133,7 @@ def test_a_401_on_robots_txt_is_unavailable_and_permits_everything() -> None:
     assert robots.allows("https://api.ashbyhq.com/posting-api/job-board/example")
 
 
-@pytest.mark.parametrize("failure", [400, 410, 429, 500, 503])
+@pytest.mark.parametrize("failure", [400, 402, 405, 407, 410, 429, 451, 500, 503])
 def test_an_unreadable_robots_txt_refuses_rather_than_assumes(failure: int) -> None:
     """An unanswered question is not a yes. Absent rules are not permissive rules.
 
@@ -147,6 +147,20 @@ def test_an_unreadable_robots_txt_refuses_rather_than_assumes(failure: int) -> N
 
     with pytest.raises(RobotsError):
         Robots(fetch=fetch).allows("https://example.test/ofertas")
+
+
+def test_a_403_whose_browser_retry_answers_401_still_refuses() -> None:
+    """#445 R3: the 401 reading is for our own agent's answer. A 403 keeps its
+    T71 route, and that route failing is a refusal, whatever status it failed on."""
+
+    def fetch(url: str) -> str:
+        raise urllib.error.HTTPError(url, 403, "blocked", {}, None)  # type: ignore[arg-type]
+
+    def browser(url: str) -> str:
+        raise urllib.error.HTTPError(url, 401, "Unauthorized", {}, None)  # type: ignore[arg-type]
+
+    with pytest.raises(RobotsError):
+        Robots(fetch=fetch, browser_fetch=browser).allows("https://example.test/ofertas")
 
 
 def test_a_network_failure_refuses_too() -> None:

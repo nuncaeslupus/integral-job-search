@@ -458,7 +458,11 @@ adjudications:
   # ---------------------------------------------------------------------
   # T144 — ATS hosts. One row covers every employer the package lists,
   # because `{employer}` may sit in the URL path only (`ListPage` refuses it
-  # in the host), so every request of the package goes to this one origin.
+  # in the host), so every LIST request of the package goes to this one
+  # origin. Advert pages on another host (Lever, Rippling) are adjudicated per
+  # URL at fetch time by `sourcing._may_fetch`, and named in the row's reason.
+  # `integral.employer_boards` replays each row's `robots_txt` or
+  # `robots_status` through `integral.robots` against the package's own URL.
   # Measured 2026-09-10 with `connector-new`'s `query_board.py`.
   # ---------------------------------------------------------------------
   - site: boards-api.greenhouse.io
@@ -469,7 +473,7 @@ adjudications:
     second_reader: "urllib.robotparser"
     source: connectors/greenhouse_en/meta.yaml
     allowed:
-      - /v1/boards/grafanalabs/jobs?content=true
+      - /v1/boards/wikimedia/jobs?content=true
     second_reader_refused:
       - /embed/job_board?for=x
       - /embed/job_app?token=1
@@ -492,6 +496,14 @@ adjudications:
     reason: >
       The whole file is `User-agent: *`, `Allow: /`, `Crawl-delay: 1`. Nothing
       on this host is refused to any agent, so no negative control can exist.
+      The engine honours the Crawl-delay between requests. Advert bodies come
+      from jobs.lever.co pages. That file's `*` group is `Allow: /` with
+      `Crawl-delay: 1` and a `Content-Signal: search=yes,ai-train=no,
+      use=reference` line; it disallows `/` for named crawlers (ClaudeBot,
+      GPTBot, CCBot, Google-Extended, Amazonbot, Bytespider and others). Those
+      groups do not bind this tool's own token, per RFC 9309 §2.2.1 and
+      CLAUDE.md's ClaudeBot section, and a candidate's search is neither
+      training nor bulk collection. Stated here so it is read, not rediscovered.
     robots_txt: |
       User-agent: *
       Allow: /
@@ -504,6 +516,7 @@ adjudications:
     standing: no_negative_control_possible
     second_reader: "urllib.robotparser"
     source: connectors/ashby_en/meta.yaml
+    robots_status: 401
     reason: >
       /robots.txt answers 401 "Unauthorized", with no rules to read. RFC 9309
       §2.3.1.3 calls a 4xx "unavailable" and lets a crawler access any
@@ -538,6 +551,7 @@ adjudications:
     standing: no_negative_control_possible
     second_reader: "urllib.robotparser"
     source: connectors/rippling_en/meta.yaml
+    robots_status: 404
     reason: >
       The list host's /robots.txt answers 404 — no rules, so no control can
       exist there. The package also fetches each advert page from

@@ -10,10 +10,11 @@
 # is the employer's boilerplate, left out of the body on purpose.
 #
 # ponytail: the engine fetches at most `DETAIL_FETCH_CEILING` (40) advert pages
-# per board per run, so of Rippling's own 664 postings 40 become offers and the
-# rest are reported dropped for "no text" (measured live 2026-09-10). Upgrade
-# path is the engine's, not this file's: a detail budget that rotates across
-# runs, or a list filter applied before details are fetched.
+# per board per run. Rippling's own list is ~663 rows but ~347 postings — a row
+# per location — so those 40 fetches reach about 22 distinct postings, and the
+# rest are reported dropped for "no text" (measured 2026-09-10). Upgrade path is
+# the engine's, not this file's: collapse rows sharing a detail URL, rotate the
+# detail budget across runs, or filter the list before details are fetched.
 site: rippling
 locale: en
 version: "1.0.0"

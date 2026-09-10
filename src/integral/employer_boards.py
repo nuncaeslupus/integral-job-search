@@ -11,8 +11,11 @@ What counts, per package whose `url_pattern` carries that slot:
 
 - it passes T53's contract pack (`connector_contract.check_package`) — its
   fixture parses to an offer, so the package is not a file that fetches nothing;
-- it has a row in `connectors/robots-adjudications.yaml` whose `problems()` are
-  empty — the host's robots verdict, recorded once for every employer on it.
+- it has a row in `connectors/robots-adjudications.yaml` for **its own host**,
+  whose `problems()` are empty, and whose recorded answer — the committed
+  `robots_txt`, or the `robots_status` a server gave instead of a file — when
+  **replayed through `integral.robots`**, admits the URL the package fetches.
+  A row's shape is not a verdict: a well-formed row can refuse its own path.
 
 The count is of **distinct hosts**, so a second package pointed at the same API
 cannot raise it.
@@ -26,18 +29,25 @@ from __future__ import annotations
 
 import json
 import sys
+import urllib.error
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from integral.connector_contract import check_package
-from integral.connector_policy import DEFAULT_ADJUDICATIONS_PATH, adjudications
+from integral.connector_policy import (
+    DEFAULT_ADJUDICATIONS_PATH,
+    RobotsAdjudication,
+    adjudications,
+)
 from integral.connectors import (
     DEFAULT_CONNECTORS_DIR,
     EMPLOYER_PLACEHOLDER,
     ConnectorError,
+    build_list_urls,
     load_connector,
 )
+from integral.robots import Robots, RobotsError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T144.json"
@@ -68,7 +78,7 @@ def measure(
         if row is None:
             why.append("no row in connectors/robots-adjudications.yaml")
         else:
-            why += row.problems()
+            why += row.problems() + _replay(row, build_list_urls(connector, query="python")[0])
         if why:
             not_conforming[package.name] = why
             continue
@@ -80,6 +90,32 @@ def measure(
         "employers_listed": employers,
         "not_conforming": not_conforming,
     }
+
+
+def _replay(row: RobotsAdjudication, url: str) -> list[str]:
+    """Why `row` does not admit `url` when its recorded answer is re-asked."""
+    host = urlsplit(url).hostname or ""
+    if row.site != host:
+        return [f"the robots row is for {row.site!r}, and the package fetches {host!r}"]
+    if row.robots_txt.strip():
+        answer = row.robots_txt
+
+        def fetch(robots_url: str) -> str:
+            return answer
+
+    elif row.robots_status is not None:
+        status = row.robots_status
+
+        def fetch(robots_url: str) -> str:
+            raise urllib.error.HTTPError(robots_url, status, "recorded", {}, None)  # type: ignore[arg-type]
+
+    else:
+        return ["the robots row records neither robots_txt nor robots_status — nothing to replay"]
+    try:
+        allowed = Robots(fetch=fetch, browser_fetch=fetch).allows(url)
+    except RobotsError as exc:
+        return [f"the recorded robots answer refuses {url}: {exc}"]
+    return [] if allowed else [f"the recorded robots.txt disallows {url}"]
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:

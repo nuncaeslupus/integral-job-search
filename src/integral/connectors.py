@@ -205,9 +205,40 @@ EMPLOYER_PLACEHOLDER = "{employer}"
 #: What an employer's slug may be before it is percent-encoded into the path.
 #: Leading alphanumeric, so neither `.` nor `..` can be a whole segment.
 EMPLOYER_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+_KNOWN_PLACEHOLDER = re.compile(r"\{(?:page|query|employer)\}")
 #: One request per employer per page, so the list is also a request count.
 # ponytail: a fixed cap; per-run budgeting across packages if lists grow.
 MAX_EMPLOYERS = 200
+
+
+def _employer_slot_problem(pattern: str, method: str) -> str | None:
+    """Why `{employer}` may not sit in `pattern`, or `None` when it may.
+
+    Asked at load (`ListPage`) and again where URLs are built (`_list_targets`),
+    because a `model_copy(update=...)` object never met the validator.
+    The URL must be http(s) with a host of its own before the slot is
+    trusted to sit in the path: `urlsplit` files a slot in the scheme, or
+    before a bare host, under `path` (#445, second reader F8).
+    """
+    if pattern.count(EMPLOYER_PLACEHOLDER) != 1:
+        return f"list.url_pattern may carry {EMPLOYER_PLACEHOLDER} once"
+    if method != "GET":
+        # `build_list_requests` numbers a POST's pages by request position,
+        # which several employers would shift.
+        return f"{EMPLOYER_PLACEHOLDER} is supported on a GET listing only"
+    filled = urlsplit(pattern.replace(EMPLOYER_PLACEHOLDER, "a0"))
+    if (
+        filled.scheme not in ("http", "https")
+        or not filled.hostname
+        or EMPLOYER_PLACEHOLDER not in urlsplit(pattern).path
+    ):
+        return (
+            f"{EMPLOYER_PLACEHOLDER} must sit in the path of an http(s) URL with a fixed "
+            "host — in the host each employer is its own origin, and one robots verdict "
+            "no longer covers them"
+        )
+    return None
+
 
 #: The `Content-Type` a JSON request body implies. Derived from the body's
 #: declared form (`ListPage.body_json`) rather than being a header a connector
@@ -1711,7 +1742,7 @@ class ListPage(Strict):
             )
         folded: set[str] = set()
         for slug, name in employers.items():
-            if not EMPLOYER_SLUG.match(slug):
+            if not EMPLOYER_SLUG.fullmatch(slug):
                 raise ValueError(
                     f"list.employers slug {slug!r} must start with a letter or digit and hold "
                     "only letters, digits, . _ or - (at most 100)"
@@ -1738,19 +1769,9 @@ class ListPage(Strict):
                 f"list.url_pattern {'carries' if slots else 'lacks'} {EMPLOYER_PLACEHOLDER} "
                 f"but list.employers is {'empty' if slots else 'not'} — each implies the other"
             )
-        if not slots:
-            return self
-        if slots > 1:
-            raise ValueError(f"list.url_pattern may carry {EMPLOYER_PLACEHOLDER} once")
-        if EMPLOYER_PLACEHOLDER not in urlsplit(self.url_pattern).path:
-            raise ValueError(
-                f"{EMPLOYER_PLACEHOLDER} must sit in the URL path — in the host each "
-                "employer is its own origin, and one robots verdict no longer covers them"
-            )
-        if self.method != "GET":
-            # `build_list_requests` numbers a POST's pages by request position,
-            # which several employers would shift.
-            raise ValueError(f"{EMPLOYER_PLACEHOLDER} is supported on a GET listing only")
+        problem = _employer_slot_problem(self.url_pattern, self.method) if slots else None
+        if problem:
+            raise ValueError(problem)
         return self
 
     @field_validator("item")
@@ -1847,11 +1868,10 @@ class ListPage(Strict):
         # though it stops short of code execution — refusing any brace other
         # than the literal `{page}` closes that off structurally, rather than
         # trusting every future caller to keep using `str.replace`.
-        bare = (
-            pattern.replace(PAGE_PLACEHOLDER, "")
-            .replace(QUERY_PLACEHOLDER, "")
-            .replace(EMPLOYER_PLACEHOLDER, "")
-        )
+        # One pass over all three, never a chain of `.replace`: removing one
+        # placeholder can splice another out of what is left — `{emp{query}loyer}`
+        # became `{employer}` and was then removed too, leaving a brace behind.
+        bare = _KNOWN_PLACEHOLDER.sub("", pattern)
         if bare.count("{") or bare.count("}"):
             raise ValueError(
                 "url_pattern may only use the literal {page}, {query} and {employer} "
@@ -2907,6 +2927,13 @@ def _list_targets(
                 "for must not be searched for nothing"
             )
         pattern = pattern.replace(QUERY_PLACEHOLDER, quote(query, safe=""))
+    if EMPLOYER_PLACEHOLDER in pattern:
+        # Repeated from `ListPage` for the reason the clamp above is: a
+        # `model_copy(update=...)` object never met the validator.
+        problem = _employer_slot_problem(connector.list.url_pattern, connector.list.method)
+        bad = [s for s in connector.list.employers if not EMPLOYER_SLUG.fullmatch(s)]
+        if problem or bad:
+            raise ConnectorError(f"{connector.site}: {problem or f'bad employer slug(s) {bad!r}'}")
     per_employer: list[tuple[str, str | None]] = (
         [
             (pattern.replace(EMPLOYER_PLACEHOLDER, quote(slug, safe="")), name)

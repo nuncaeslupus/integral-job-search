@@ -34,59 +34,59 @@ list:
       text: content
   # Slug → the name the board itself answers with in `company_name`.
   employers:
-    grafanalabs: Grafana Labs
-    gitlab: GitLab
-    elastic: Elastic
-    datadog: Datadog
-    cloudflare: Cloudflare
-    mongodb: MongoDB
-    anthropic: Anthropic
-    vercel: Vercel
-    databricks: Databricks
-    cockroachlabs: Cockroach Labs
-    twilio: Twilio
-    dropbox: Dropbox
-    reddit: Reddit
-    figma: Figma
-    discord: Discord
-    netlify: Netlify
-    fastly: Fastly
-    newrelic: New Relic
-    honeycomb: Honeycomb.io
-    planetscale: PlanetScale
-    canonical: Canonical
-    wikimedia: Wikimedia Foundation
-    mozilla: Mozilla
-    chainguard: Chainguard
-    tailscale: Tailscale
-    sourcegraph91: Sourcegraph
-    typeform: Typeform
-    wallapop: Wallapop
-    launchdarkly: LaunchDarkly
-    pagerduty: PagerDuty
-    circleci: CircleCI
-    jfrog: JFrog
-    intercom: Intercom
-    hubspotjobs: HubSpot
-    algolia: Algolia
-    neo4j: Neo4j
-    yugabyte: YugabyteDB
-    starburst: Starburst
-    scaleai: Scale AI
-    togetherai: Together AI
-    labelbox: Labelbox
-    polyai: PolyAI
-    speechmatics: Speechmatics
-    wayve: Wayve
-    duolingo: Duolingo
-    khanacademy: Khan Academy
-    coursera: Coursera
-    udemy: Udemy
-    ghost: Ghost
-    jetbrains: JetBrains
-    postman: Postman
-    sumologic: Sumo Logic
-    axiom: Axiom
     airtable: Airtable
+    algolia: Algolia
+    anthropic: Anthropic
+    axiom: Axiom
+    canonical: Canonical
+    chainguard: Chainguard
+    circleci: CircleCI
+    cloudflare: Cloudflare
+    cockroachlabs: Cockroach Labs
+    coursera: Coursera
+    databricks: Databricks
+    datadog: Datadog
+    discord: Discord
+    dropbox: Dropbox
+    duolingo: Duolingo
+    elastic: Elastic
+    fastly: Fastly
+    figma: Figma
+    ghost: Ghost
+    gitlab: GitLab
+    grafanalabs: Grafana Labs
+    honeycomb: Honeycomb.io
+    hubspotjobs: HubSpot
+    intercom: Intercom
+    jetbrains: JetBrains
+    jfrog: JFrog
+    khanacademy: Khan Academy
+    labelbox: Labelbox
+    launchdarkly: LaunchDarkly
+    mongodb: MongoDB
+    mozilla: Mozilla
+    neo4j: Neo4j
+    netlify: Netlify
+    newrelic: New Relic
+    pagerduty: PagerDuty
+    planetscale: PlanetScale
+    polyai: PolyAI
+    postman: Postman
+    reddit: Reddit
+    scaleai: Scale AI
+    sourcegraph91: Sourcegraph
+    speechmatics: Speechmatics
     stackblitz: Bolt.new
+    starburst: Starburst
+    sumologic: Sumo Logic
+    tailscale: Tailscale
+    togetherai: Together AI
+    twilio: Twilio
+    typeform: Typeform
+    udemy: Udemy
+    vercel: Vercel
+    wallapop: Wallapop
     warp: Warp
+    wayve: Wayve
+    wikimedia: Wikimedia Foundation
+    yugabyte: YugabyteDB

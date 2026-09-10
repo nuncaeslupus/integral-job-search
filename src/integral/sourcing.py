@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -148,6 +149,11 @@ class BoardOutcome:
     #: robots stopped one, which is a truncated pass and not an empty board.
     detail_needed: int = 0
     detail_fetched: int = 0
+    #: T144. On an ATS host each request is a different employer's board, so
+    #: one employer's failure is that employer's, never the host's: the others
+    #: are still read, and the failures are named here rather than ending the
+    #: round with every counter lost.
+    employers_failed: tuple[str, ...] = ()
 
     @property
     def reached_the_board(self) -> bool:
@@ -240,6 +246,11 @@ class Run:
                 lines.append(f"  skipped {outcome.connector}: {outcome.skipped}")
             elif outcome.error:
                 lines.append(f"  ERROR   {outcome.connector}: {outcome.error}")
+            if outcome.employers_failed and not outcome.error:
+                lines.append(
+                    f"  PARTIAL {outcome.connector}: {len(outcome.employers_failed)} employer "
+                    f"board(s) not read — {', '.join(outcome.employers_failed)}"
+                )
         return "\n".join(lines)
 
 
@@ -257,6 +268,10 @@ def packages_for(constraints: CandidateConstraints, directory: Path | None = Non
         return []
     wanted = location.country.strip().upper()
     return [p for p in packages if p.usable and p.country == wanted]
+
+
+#: `time.sleep`, named so a test can replace it rather than wait.
+_pause = time.sleep
 
 
 def _connector_of(package: Package, directory: Path) -> Connector:
@@ -412,8 +427,9 @@ def _one_board(
     detail_fetched = 0
     drop_reason: str | None = None
     stale = False
+    failed: list[str] = []
     last: Response | None = None
-    for request in requests:
+    for index, request in enumerate(requests):
         # Adjudicated per URL, before the request is made. A board that
         # disallows one path may allow another, so this cannot be hoisted to
         # the board — and a robots.txt that cannot be read is a refusal, not a
@@ -421,6 +437,9 @@ def _one_board(
         # could confirm we may.
         try:
             if not robots.allows(request.url):
+                if request.employer:
+                    failed.append(f"{request.employer} (robots.txt disallows it)")
+                    continue
                 return BoardOutcome(
                     package.name,
                     request.url,
@@ -429,6 +448,9 @@ def _one_board(
                     skipped=f"robots.txt disallows {request.url}",
                 )
         except (RobotsError, OSError) as exc:
+            if request.employer:
+                failed.append(f"{request.employer} (robots.txt unreadable)")
+                continue
             return BoardOutcome(
                 package.name,
                 request.url,
@@ -436,8 +458,26 @@ def _one_board(
                 query,
                 skipped=f"robots.txt could not be read, so the path is not permitted: {exc}",
             )
+        if index:
+            # The site's own Crawl-delay between one board's requests. Moot
+            # while a board was one page per run; an ATS host is dozens (T144).
+            _pause(robots.delay(request.url, 0.0))
         response = fetch(request)
         last = response
+        if response.error is not None and request.employer:
+            failed.append(f"{request.employer} ({response.error})")
+            _record_fetch(
+                store,
+                connector=package.name,
+                url=request.url,
+                status=response.status,
+                items=0,
+                steered=steerable,
+                query=query,
+                at=at,
+                offer_ids=[],
+            )
+            continue
         if response.error is not None:
             return BoardOutcome(
                 package.name, request.url, steerable, query, response.status, error=response.error
@@ -466,6 +506,7 @@ def _one_board(
                 # produced zero offers for as long as nothing fetched it.
                 detail_needed += 1
                 if detail_fetched < DETAIL_FETCH_CEILING and _may_fetch(robots, detail_url):
+                    _pause(robots.delay(detail_url, 0.0))
                     detail_fetched += 1
                     fields = _detail_record(connector, detail_url, fetch=fetch)
                     if fields:
@@ -502,6 +543,12 @@ def _one_board(
         stale=stale,
         detail_needed=detail_needed,
         detail_fetched=detail_fetched,
+        employers_failed=tuple(failed),
+        error=(
+            f"every employer board failed: {', '.join(failed)}"
+            if failed and len(failed) == len(requests)
+            else None
+        ),
     )
 
 
