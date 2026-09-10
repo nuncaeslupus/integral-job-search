@@ -888,7 +888,11 @@ def probe_leaks(root: Path) -> ProbeReport:
 
 # Below this, a run has skipped so much that its zero means nothing. Only the
 # two symlink probes may be absent (a platform without symlinks), so the floor
-# is every other probe.
+# is every other probe. Committed at 12, two points of slack against
+# `probe_leaks`'s 14 — deliberate, not silent (T159): a platform with no
+# symlinks genuinely runs two probes fewer, and a floor sitting at the full
+# count would fail there for a reason that has nothing to do with a deleted
+# probe.
 MINIMUM_PROBES = 12
 
 

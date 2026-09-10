@@ -198,6 +198,28 @@ ACCEPTED_FIXTURE_PROVENANCE = "sampled"
 # directory reads identically to "0 violations" from a directory that was
 # checked — which is the failure mode every gate in this repository is built to
 # refuse.
+#
+# T159 (F4/F5) looked at this floor against this repository's own 21-package
+# `connectors/` directory and, on that comparison alone, called it the
+# strongest instance of a silent gap in the repository — 1 against 21, twenty
+# deletions tolerated. Raising it to 21 broke three tests
+# (`test_the_contributors_command_leaves_our_committed_evidence_alone`,
+# `test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_
+# status`, `test_the_command_exits_non_zero_when_a_package_violates`), and the
+# reason is real, not a fixture that needs updating: `evidence_target`'s own
+# docstring says this command is *the contributor's*, run over *their own*
+# directory (`docs/distribution.md` §5), and a conforming third-party library
+# can legitimately be one package. So this floor's true population is not
+# "this repository's own library" — it is "whatever directory this particular
+# invocation was given", which varies by caller the same way
+# `corpus.MIN_ADS_PER_FAMILY` and `salary_recovery.HOUSE_ESTIMATE_MINIMUM`
+# (both named in `floor_sweep`'s own docstring) compare against a per-group
+# count that is never the length of a fixed collection. `1` stays a floor in
+# the sense this task cares about (a run over zero packages is refused, at
+# `evidence_target(positional, own_library) is not None`'s own check above),
+# not an accidentally-shrunk one. Left at `1`, deliberately, and out of T159's
+# scope for the reason `_population_for`'s own docstring gives for those two:
+# never itself the length of one fixed collection.
 MINIMUM_PACKAGES = 1
 
 

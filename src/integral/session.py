@@ -426,7 +426,9 @@ def probe_resumption(root: Path) -> tuple[int, list[str]]:
     return probes, failures
 
 
-MINIMUM_PROBES = 6
+# Raised to what `probe_resumption` carries — 9, zero slack — because 6
+# tolerated three deleted probes silently, with no margin argued (T159).
+MINIMUM_PROBES = 9
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

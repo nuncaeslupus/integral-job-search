@@ -274,8 +274,21 @@ DOC_ID = re.compile(r"^doc-(\d{6,})$")
 _DOC_ID_WIDTH = 6
 
 # Below this many fields exercised, a clean score is "1.0 over nothing" — the
-# same floor T6/T28/D-6 each set for their own probes.
-MINIMUM_FIELDS_MEASURED = 5
+# same floor T6/T28/D-6 each set for their own probes. Raised to what
+# `probe_intake` carries — 7, zero slack — because 5 tolerated two deleted
+# fields silently, with no margin argued (T159, F4/F5). Not reachable by
+# T159's sweep: `_main` picks its evidence path through `argparse`
+# (`Path(args.write_evidence)`), not the traceable `target = Path(argv[0]) if
+# argv else DEFAULT_EVIDENCE_PATH` idiom every module the sweep pins reads —
+# raised here by hand, verified by running `probe_intake` directly.
+MINIMUM_FIELDS_MEASURED = 7
+
+# `probe_intake`'s own running `checks_run` tally floor — deliberately its own
+# comment (not the block above, which is `MINIMUM_FIELDS_MEASURED`'s): the two
+# floors sit one line apart, and `_comment_block_above` reads a shared block
+# for adjacent bare declarations, so a comment written for one that states a
+# specific number reads as a (false) claim about the other too (T159, round 4
+# self-scan).
 MINIMUM_CHECKS = 17
 
 # The only `master.json` shape this module understands. A bare `int` field

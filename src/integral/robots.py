@@ -1973,7 +1973,12 @@ Disallow: /search?
 # with the eight the BLOCK on #422 named, and its THIRD round to 80: two rows
 # pinning the two scoring sites a surviving mutant reached, five pinning the
 # ALLOW-ward direction that had no committed row at all, and one closing the
-# escape-loop nit.
+# escape-loop nit. Committed at 80, zero slack (T159, F2): this raise-history
+# states the *history* of the number, not a claim T159's sweep can check
+# against the current declaration on its own — a second reader measured this
+# floor clearing unchanged when mutated to 1, since the keyword match alone
+# (`raised`) does not care what number sits beside it. Restated once, plainly,
+# so it does.
 FIXTURES_AT_LEAST = 80
 
 

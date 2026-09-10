@@ -40,7 +40,7 @@
     {
       "module": "cv_store",
       "name": "MINIMUM_CHECKS",
-      "line": 279
+      "line": 292
     },
     {
       "module": "elicit_extract",
@@ -214,6 +214,12 @@
       "population": 19
     },
     {
+      "module": "connectors",
+      "name": "MINIMUM_PROBES",
+      "line": 3213,
+      "population": 15
+    },
+    {
       "module": "constraints_step",
       "name": "MINIMUM_CHECKS",
       "line": 606,
@@ -222,7 +228,7 @@
     {
       "module": "cv_store",
       "name": "MINIMUM_READ_CHECKS",
-      "line": 1909,
+      "line": 1922,
       "population": 16
     },
     {
@@ -232,16 +238,40 @@
       "population": 9
     },
     {
+      "module": "dedup",
+      "name": "MINIMUM_CLUSTER_PAIRS",
+      "line": 1049,
+      "population": 3
+    },
+    {
+      "module": "dedup",
+      "name": "MINIMUM_PAIRS",
+      "line": 896,
+      "population": 21
+    },
+    {
+      "module": "floor_sweep",
+      "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
+      "line": 2475,
+      "population": 39
+    },
+    {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2067,
-      "population": 67
+      "line": 2433,
+      "population": 76
     },
     {
       "module": "freshness",
       "name": "MINIMUM_OFFERS",
       "line": 406,
       "population": 5
+    },
+    {
+      "module": "identity",
+      "name": "MINIMUM_PROBES",
+      "line": 896,
+      "population": 14
     },
     {
       "module": "lifecycle",
@@ -280,6 +310,12 @@
       "population": 7
     },
     {
+      "module": "session",
+      "name": "MINIMUM_PROBES",
+      "line": 431,
+      "population": 9
+    },
+    {
       "module": "sourcing_cycles",
       "name": "MINIMUM_NON_IMPROVING",
       "line": 67,
@@ -298,10 +334,28 @@
       "population": 2
     },
     {
+      "module": "sourcing_scope_review",
+      "name": "MINIMUM_STANDING",
+      "line": 51,
+      "population": 3
+    },
+    {
       "module": "sourcing_strategy",
       "name": "MINIMUM_SCOPE_CHANGES",
-      "line": 114,
+      "line": 116,
       "population": 2
+    },
+    {
+      "module": "sourcing_strategy",
+      "name": "MINIMUM_TRIGGERS",
+      "line": 105,
+      "population": 3
+    },
+    {
+      "module": "step_runtime",
+      "name": "MINIMUM_PROBES",
+      "line": 457,
+      "population": 13
     }
   ],
   "bounds_read_and_out_of_scope": [
@@ -326,7 +380,6 @@
     "connector_transport.MINIMUM_LEDGER_ENTRIES",
     "connector_transport.MINIMUM_RECORD_KEYS_COMPARED",
     "connectors.DEFAULT_STALE_AFTER_DAYS",
-    "connectors.MINIMUM_PROBES",
     "corpus.MIN_ADS_PER_FAMILY",
     "corpus_scope.MINIMUM_CORPUS_ROWS",
     "corpus_scope.MINIMUM_EVALUATION_POOL",
@@ -341,8 +394,6 @@
     "cv_store._MAX_DOC_ID_RESERVE_ATTEMPTS",
     "decline.DECLINES_BEFORE_STEP_SILENCE",
     "decline.DECLINES_BEFORE_TOTAL_SILENCE",
-    "dedup.MINIMUM_CLUSTER_PAIRS",
-    "dedup.MINIMUM_PAIRS",
     "dedup.SHINGLE_SIZE",
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
@@ -352,7 +403,6 @@
     "freshness.DEFAULT_ELAPSED_DAYS",
     "gate_reader_agreement.MINIMUM_GATES_COMPARED",
     "generate.SCHEMA_VERSION",
-    "identity.MINIMUM_PROBES",
     "interview_direction.MINIMUM_NON_SOFTWARE_ARTEFACT_FIELDS",
     "interview_direction.MINIMUM_OPEN_TALK_STEPS",
     "interview_log.SCHEMA_VERSION",
@@ -381,7 +431,6 @@
     "salary_recovery.HOUSE_ESTIMATE_MINIMUM",
     "salary_recovery.MINIMUM_CORPUS_ADS",
     "scoring.BATCH_THRESHOLD",
-    "session.MINIMUM_PROBES",
     "skill_budget.BUDGET_GRANULARITY",
     "skill_budget.FALLBACK_BUDGET_CHARS",
     "skill_budget.MIN_HEADROOM_CHARS",
@@ -389,11 +438,8 @@
     "sourcing.MINIMUM_BOARDS",
     "sourcing.PHRASE_CEILING",
     "sourcing_exclusions.MINIMUM_PRESENTATIONS",
-    "sourcing_scope_review.MINIMUM_STANDING",
-    "sourcing_strategy.MINIMUM_TRIGGERS",
     "step_gates.UNCERTIFIABLE",
     "step_gates.VOCABULARY_SILENT",
-    "step_runtime.MINIMUM_PROBES",
     "step_specs.MIN_FIELD_WORDS",
     "strings.MINIMUM_STRINGS",
     "task_gate.MINIMUM_EMITTED_FIELDS_SCANNED",
@@ -407,5 +453,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 64
+  "floors_swept_at_least": 73,
+  "floors_arithmetically_checked_at_least": 36
 }

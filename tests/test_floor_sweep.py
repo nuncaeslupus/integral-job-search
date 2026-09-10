@@ -1879,6 +1879,19 @@ def probe_one(probes=PROBES):
 
 
 def test_the_sweeps_own_floor_is_pinned_compliant_on_the_live_tree() -> None:
+    """Round 4, F3: **not** `pinned["population"] == measured["floors_swept"]` on
+    its own — a second reader found that assertion `swept == swept`, since
+    `population` **is** `swept`, assigned three lines above in `measure()`
+    itself. It is true for every tree and every floor value (verified: it still
+    passed with `MINIMUM_FLOORS_SWEPT` mutated to `1`, where 66/66 tests
+    passed) and so is not a check on anything. It stays here as a sanity check
+    on the plumbing, but the actual compliance claim is now proven a second,
+    independent way: reading the real module's real comment straight from
+    source and calling `_margin_finding` directly with the real declared value
+    — a genuinely separate computation from the one `measure()` performed
+    internally, so a comment gone stale against its own declaration (F2) is
+    still caught on the one tree that ships, not merely asserted to agree with
+    itself."""
     measured = floor_sweep.measure()
     pinned = next(
         p
@@ -1890,3 +1903,599 @@ def test_the_sweeps_own_floor_is_pinned_compliant_on_the_live_tree() -> None:
         d["module"] == "floor_sweep" and d["name"] == "MINIMUM_FLOORS_SWEPT"
         for d in measured["dynamic_population_floors"]
     )
+
+    module_info = next(
+        m
+        for m in floor_sweep._module_infos(floor_sweep._SRC_DIR)
+        if m.path.resolve() == floor_sweep._THIS_FILE
+    )
+    lineno = next(
+        lineno
+        for name, lineno, _ in floor_sweep._module_constant_candidates(module_info.tree)
+        if name == "MINIMUM_FLOORS_SWEPT"
+    )
+    comment = floor_sweep._comment_block_above(module_info.lines, lineno)
+    finding = floor_sweep._margin_finding(
+        "floor_sweep",
+        "MINIMUM_FLOORS_SWEPT",
+        lineno,
+        floor_sweep.MINIMUM_FLOORS_SWEPT,
+        measured["floors_swept"],
+        comment,
+    )
+    assert finding is None, finding
+
+
+def test_the_arithmetically_checked_self_floor_is_pinned_compliant_on_the_live_tree() -> None:
+    """The same second, independent computation as above, for round 4's own
+    denominator (`MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`) — F1's floor gets the
+    same non-tautological proof F3 gave the older one, rather than shipping a
+    second instance of the exact defect this task is about."""
+    measured = floor_sweep.measure()
+    pinned = next(
+        p
+        for p in measured["evidence_pinned_floors"]
+        if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED"
+    )
+    assert pinned["population"] == measured["arithmetically_checked"]
+
+    module_info = next(
+        m
+        for m in floor_sweep._module_infos(floor_sweep._SRC_DIR)
+        if m.path.resolve() == floor_sweep._THIS_FILE
+    )
+    lineno = next(
+        lineno
+        for name, lineno, _ in floor_sweep._module_constant_candidates(module_info.tree)
+        if name == "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED"
+    )
+    comment = floor_sweep._comment_block_above(module_info.lines, lineno)
+    finding = floor_sweep._margin_finding(
+        "floor_sweep",
+        "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
+        lineno,
+        floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED,
+        measured["arithmetically_checked"],
+        comment,
+    )
+    assert finding is None, finding
+
+
+# ---------------------------------------------------------------------------
+# Round 4 — PR #436 round 3's second reader's seven findings, reproduced as
+# fixtures. F1 (the arithmetic branch has no floor of its own), F2 (a
+# positive-margin claim's own number was never re-checked), F4 (evidence-
+# pinning never got a turn on a floor `_population_for` could not classify at
+# all), F6 (five more constructed shapes), F7 (the zero-slack check's own
+# enumeration and window). F3's fix lives with the test it replaced, above.
+# ---------------------------------------------------------------------------
+
+
+def test_deleting_the_committed_evidence_drops_a_pinned_floor_to_dynamic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F1's exact attack, reproduced on a tiny constructed tree rather than by
+    deleting real files: with the evidence file present, this floor is
+    evidence-pinned and checked arithmetically; with it absent, `_population_for`
+    still says "dynamic" (a real, if uncountable, tally) but no number backs
+    it — `floors_swept` does not move (it counted this floor as in-scope both
+    times), only `arithmetically_checked` does, which is the whole reason F1
+    exists: `floors_swept` alone cannot tell these two cases apart."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    source = """
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
+
+# On a scripted probe's own running tally, chosen to match what it carries.
+MINIMUM_CHECKS = 19
+
+
+def probe():
+    checks = 0
+    for _ in range(19):
+        checks += 1
+    return {"checks_run": checks}
+
+
+def write_evidence(evidence=DEFAULT_EVIDENCE_PATH):
+    return probe()
+
+
+def _main():
+    measured = write_evidence()
+    if measured["checks_run"] < MINIMUM_CHECKS:
+        raise SystemExit(1)
+"""
+    _write(tmp_path, source)
+
+    _write_evidence(tmp_path, "status/evidence/T900.json", {"checks_run": 19})
+    with_evidence = floor_sweep.measure(tmp_path)
+    pinned_names = {p["name"] for p in with_evidence["evidence_pinned_floors"]}
+    assert "MINIMUM_CHECKS" in pinned_names
+    assert with_evidence["arithmetically_checked"] == 1
+
+    (tmp_path / "status" / "evidence" / "T900.json").unlink()
+    without_evidence = floor_sweep.measure(tmp_path)
+    assert without_evidence["floors_swept"] == with_evidence["floors_swept"]
+    assert without_evidence["arithmetically_checked"] == 0
+    dynamic_names = {d["name"] for d in without_evidence["dynamic_population_floors"]}
+    assert "MINIMUM_CHECKS" in dynamic_names
+    assert without_evidence["floors_that_do_not_refuse_the_first_deletion"] == 0
+
+
+def test_write_evidence_refuses_when_too_few_floors_are_arithmetically_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F1's floor, checked the same way `test_write_evidence_refuses_when_too_
+    few_floors_are_swept` already checks `MINIMUM_FLOORS_SWEPT`: a tree with
+    plenty of *swept* floors but none of them arithmetically checked (every
+    comparison reads a genuinely dynamic population with no evidence file
+    behind it) must still refuse to write, because `floors_swept` alone would
+    have called this tree `measured` and moved on."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    _write(
+        src_dir,
+        """
+MINIMUM_TURNS = 3
+
+# A floor on a scripted probe's own running tally, argued in writing.
+# Deliberately no committed evidence file backs this one.
+def probe():
+    turns = 0
+    for _ in range(5):
+        turns += 1
+    return {"turns_run": turns}
+
+
+def check():
+    measured = probe()
+    if measured["turns_run"] < MINIMUM_TURNS:
+        raise SystemExit(1)
+""",
+        name="mod0",
+    )
+    monkeypatch.setattr(floor_sweep, "_SRC_DIR", src_dir)
+    monkeypatch.setattr(floor_sweep, "MINIMUM_FLOORS_SWEPT", 1)
+    monkeypatch.setattr(floor_sweep, "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED", 1)
+    evidence_path = tmp_path / "evidence.json"
+    result = floor_sweep.write_evidence(evidence_path, src_dir)
+    assert result["floors_swept"] >= 1
+    assert result["arithmetically_checked"] == 0
+    assert not evidence_path.exists()
+
+
+def test_a_committed_at_claim_that_no_longer_matches_the_declaration_is_a_violation(
+    tmp_path: Path,
+) -> None:
+    """F2: the self-floor's own idiom, "Committed at N", generalised. Round 3's
+    reader measured `MINIMUM_FLOORS_SWEPT`'s real comment ("Committed at 64,
+    three points of slack") clear unchanged when the floor was mutated to `1` —
+    the keyword match (`raised`, `slack`) never re-checked either number beside
+    it."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# Committed at 9, zero points of slack.
+MINIMUM_PROBES = 1
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PROBES")
+    assert finding["reason"] == "stale_margin_claim"
+    assert "committed at 9" in finding["detail"].lower()
+    del fixture
+
+
+def test_a_correct_committed_at_claim_is_compliant(tmp_path: Path) -> None:
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# Committed at 6, three points of slack.
+MINIMUM_PROBES = 6
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    del fixture
+
+
+def test_a_points_of_slack_claim_that_no_longer_matches_the_real_margin_is_a_violation(
+    tmp_path: Path,
+) -> None:
+    """F2's other idiom: "N point(s) of slack/margin" states the margin itself,
+    not the declaration — `robots.FIXTURES_AT_LEAST`'s and `salary_recovery.
+    MINIMUM_WORDING_CASES`'s own shape, generalised the same way."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# One point of slack, deliberately.
+MINIMUM_PROBES = 1
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PROBES")
+    assert finding["reason"] == "stale_margin_claim"
+    del fixture
+
+
+def test_a_correct_points_of_slack_claim_is_compliant(tmp_path: Path) -> None:
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# Eight points of slack, deliberately.
+MINIMUM_PROBES = 1
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    del fixture
+
+
+def test_a_committed_at_claim_is_silent_not_accused_when_it_makes_no_such_claim(
+    tmp_path: Path,
+) -> None:
+    """A comment that argues a margin in free-form prose (`robots.
+    FIXTURES_AT_LEAST`'s own raise-history, before this task restated it) makes
+    no "Committed at N" or "N points of slack" claim at all — `_claimed_current_
+    value`/`_claimed_margin_size` must return `None`, deferring silently to the
+    keyword match, rather than inventing a claim to hold the floor to."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# Raised it from 4 to 9 when the review round landed five more probes.
+MINIMUM_PROBES = 1
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    # Not proven compliant by this check (the keyword-only path still nods this
+    # through, F2's documented residual) — but not misfired on by treating "4"
+    # or "9" as a claim about the *current*, mutated value either. Read
+    # directly: neither helper should manufacture a claim here.
+    from integral.floor_sweep import _claimed_current_value, _claimed_margin_size
+
+    comment = "# Raised it from 4 to 9 when the review round landed five more probes."
+    assert _claimed_current_value(comment) is None
+    assert _claimed_margin_size(comment) is None
+    del measured, fixture
+
+
+def test_an_evidence_backed_population_read_through_an_attribute_access_is_now_pinned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F4's root cause, reproduced exactly: `_collection_kind` has no branch for
+    `ast.Attribute` at all, so `measured["packages_checked"] < MINIMUM_PACKAGES`
+    — whose right side is `len(report.packages)` a few lines above, the real
+    shape of `connector_contract.py` — was ruled `out_of_scope` before
+    evidence-pinning ever got a turn. Fixed by trying
+    `_committed_evidence_population` whenever `_population_for` did not already
+    resolve a literal count, rather than only when it resolved `dynamic`."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    _write_evidence(tmp_path, "status/evidence/T900.json", {"packages_checked": 21})
+    _write(
+        tmp_path,
+        """
+from dataclasses import dataclass, field
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
+
+MINIMUM_PACKAGES = 1
+
+
+@dataclass
+class Report:
+    packages: list = field(default_factory=list)
+
+
+def check_library(directory):
+    return Report(packages=list(range(21)))
+
+
+def measure(directory=None):
+    report = check_library(directory)
+    return {"packages_checked": len(report.packages)}
+
+
+def write_evidence(evidence=DEFAULT_EVIDENCE_PATH, directory=None):
+    return measure(directory)
+
+
+def _main():
+    measured = write_evidence()
+    if measured["packages_checked"] < MINIMUM_PACKAGES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PACKAGES")
+    assert finding["reason"] == "silent_margin"
+    assert "MINIMUM_PACKAGES" not in {
+        e.split(".")[-1] for e in measured["bounds_read_and_out_of_scope"]
+    }
+
+
+def test_a_literal_population_is_preferred_over_a_possibly_stale_evidence_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F4's reordering must not *replace* the original, most-trusted route: a
+    floor `_population_for` can already count exactly from a live, in-repo
+    collection is checked against that fresh count, never against a
+    same-shaped evidence file that could be stale — even when one happens to
+    exist under the same key."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    # A wrong, stale evidence value — if this were consulted at all, it would
+    # wrongly clear a floor that the live AST count correctly flags.
+    _write_evidence(tmp_path, "status/evidence/T900.json", {"probes_checked": 1})
+    _write(
+        tmp_path,
+        """
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
+
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+MINIMUM_PROBES = 1
+
+
+def measure():
+    return {"probes_checked": len(PROBES)}
+
+
+def write_evidence(evidence=DEFAULT_EVIDENCE_PATH):
+    return measure()
+
+
+def _main():
+    measured = write_evidence()
+    if measured["probes_checked"] < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PROBES")
+    # If the stale evidence file (population 1) had been consulted instead of
+    # the live count (population 9), this would report a margin of 0, not 8.
+    assert "margin 8" in finding["detail"]
+    assert measured["evidence_pinned_floors"] == []
+
+
+# ---------------------------------------------------------------------------
+# F6: five constructed shapes the sweep still cannot see, reproduced exactly
+# as the reader built them — each a real floor, each two deletions from
+# breaching, none of them arithmetically checked. Per CLAUDE.md ("what does
+# not work is enumeration"), the fix round 4 takes is not a sixth traced
+# shape: it is F1's own floor, which makes the *count* of what the sweep can
+# check visible and breachable, and F4's reordering, which is the general
+# mechanism that already closed the shape these five most resemble
+# (`report.packages`). These fixtures pin today's honest limit — each stays
+# `bounds_read_and_out_of_scope`, counted, not silently miscounted as
+# compliant — so a future round that *does* close one of them has a red test
+# telling it so, and nobody has to re-discover the gap by reading the sweep.
+# ---------------------------------------------------------------------------
+
+
+def test_a_tuple_unpacked_tally_is_a_known_invisible_shape(tmp_path: Path) -> None:
+    fixture = _write(
+        tmp_path,
+        """
+POPULATION = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+FLOOR = 2
+
+
+def probe():
+    checks, failures = 0, []
+    for item in POPULATION:
+        checks += 1
+    return checks, failures
+
+
+def measure():
+    checks, failures = probe()
+    if checks < FLOOR:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert "mod.FLOOR" in measured["bounds_read_and_out_of_scope"]
+    del fixture
+
+
+def test_a_dataclass_attribute_population_is_a_known_invisible_shape(tmp_path: Path) -> None:
+    fixture = _write(
+        tmp_path,
+        """
+from dataclasses import dataclass, field
+
+FLOOR = 2
+
+
+@dataclass
+class Report:
+    items: list = field(default_factory=lambda: list(range(10)))
+
+
+def measure():
+    report = Report()
+    if len(report.items) < FLOOR:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert "mod.FLOOR" in measured["bounds_read_and_out_of_scope"]
+    del fixture
+
+
+def test_a_walrus_bound_population_is_a_known_invisible_shape(tmp_path: Path) -> None:
+    fixture = _write(
+        tmp_path,
+        """
+POPULATION = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+FLOOR = 2
+
+
+def measure():
+    if (n := len(POPULATION)) < FLOOR:
+        raise SystemExit(1)
+    return n
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert "mod.FLOOR" in measured["bounds_read_and_out_of_scope"]
+    del fixture
+
+
+def test_a_chained_comparison_population_is_a_known_invisible_shape(tmp_path: Path) -> None:
+    fixture = _write(
+        tmp_path,
+        """
+POPULATION = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+FLOOR = 2
+
+
+def measure():
+    if 0 <= len(POPULATION) < FLOOR:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert "mod.FLOOR" in measured["bounds_read_and_out_of_scope"]
+    del fixture
+
+
+def test_a_dict_keys_population_is_a_known_invisible_shape(tmp_path: Path) -> None:
+    fixture = _write(
+        tmp_path,
+        """
+TABLE = {str(i): i for i in range(10)}
+FLOOR = 2
+
+
+def measure():
+    if len(TABLE.keys()) < FLOOR:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert "mod.FLOOR" in measured["bounds_read_and_out_of_scope"]
+    del fixture
+
+
+# ---------------------------------------------------------------------------
+# F7: `_zero_slack_claim_contradicts`'s own two residual holes, both measured
+# by the round-3 reader directly against the function rather than through a
+# constructed module (the function is what the finding is about).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "comment",
+    [
+        "19, no margin at all.",
+        "19, zero headroom.",
+        "19 — exactly the population, nothing spare.",
+        "19, zero-slack.",
+    ],
+)
+def test_a_previously_unrecognised_zero_slack_spelling_is_now_caught(comment: str) -> None:
+    """F7, half one: round 3's `_ZERO_SLACK_CLAIM_RE` was a literal alternation
+    of three exact phrases; a second reader measured four more real-sounding
+    spellings sliding past it. All four now contradict a mutated floor of `1`
+    against a stated `19`."""
+    from integral.floor_sweep import _zero_slack_claim_contradicts
+
+    assert _zero_slack_claim_contradicts(comment, 1) is True
+    assert _zero_slack_claim_contradicts(comment, 19) is False
+
+
+@pytest.mark.parametrize(
+    "comment",
+    [
+        "Raised to 1 in 2026; the probe carries 19, zero slack.",
+        "Round 1 raised this. The probe carries 19, zero slack.",
+        "One more scenario was added. The probe carries 19, zero slack.",
+    ],
+)
+def test_a_decoy_number_earlier_in_the_comment_no_longer_clears_a_stale_claim(
+    comment: str,
+) -> None:
+    """F7, half two: round 3 accepted *any* number in an 80-character
+    look-behind window, so a decoy earlier in the same comment (a year, a round
+    number) could sit beside the real claim and clear it. Only the number
+    *nearest* the phrase is the claim now."""
+    from integral.floor_sweep import _zero_slack_claim_contradicts
+
+    assert _zero_slack_claim_contradicts(comment, 1) is True
+    assert _zero_slack_claim_contradicts(comment, 19) is False
+
+
+def test_the_no_margin_argued_idiom_does_not_collide_with_the_broadened_zero_slack_check(
+    tmp_path: Path,
+) -> None:
+    """Self-scan, committed as a fixture: an early version of F7's fix joined
+    `no` to the whole slack-noun set, and this repository's own, unrelated,
+    pre-existing "with no margin argued for the gap" idiom — real prose in
+    fourteen comments — collided with it. A floor whose comment carries that
+    exact phrase, with a real, argued, zero margin, must stay compliant."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# Raised to what the probe carries — 9, zero slack — because 6 had drifted
+# three checks under with no margin argued for the gap (T159).
+MINIMUM_PROBES = 9
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    del fixture
