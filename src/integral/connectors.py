@@ -226,12 +226,15 @@ def _employer_slot_problem(pattern: str, method: str) -> str | None:
         # `build_list_requests` numbers a POST's pages by request position,
         # which several employers would shift.
         return f"{EMPLOYER_PLACEHOLDER} is supported on a GET listing only"
-    filled = urlsplit(pattern.replace(EMPLOYER_PLACEHOLDER, "a0"))
-    if (
-        filled.scheme not in ("http", "https")
-        or not filled.hostname
-        or EMPLOYER_PLACEHOLDER not in urlsplit(pattern).path
-    ):
+    try:
+        filled = urlsplit(pattern.replace(EMPLOYER_PLACEHOLDER, "a0"))
+        path = urlsplit(pattern).path
+        hostname = filled.hostname
+    except ValueError as exc:
+        # `https://[h/...` — a bare ValueError at the point of use would end
+        # the whole run, not this one board (#445 round 2, N6).
+        return f"list.url_pattern is not a URL: {exc}"
+    if filled.scheme not in ("http", "https") or not hostname or EMPLOYER_PLACEHOLDER not in path:
         return (
             f"{EMPLOYER_PLACEHOLDER} must sit in the path of an http(s) URL with a fixed "
             "host — in the host each employer is its own origin, and one robots verdict "

@@ -22,7 +22,7 @@ from integral.employer_boards import MINIMUM_CONFORMING, measure, record
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import load_lifecycle_offer
 from integral.robots import Robots
-from integral.sourcing import Response, source
+from integral.sourcing import FETCH_LOG, Response, source
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CONNECTORS = _REPO_ROOT / "connectors"
@@ -122,6 +122,11 @@ def test_a_copied_connector_cannot_move_the_slot_where_the_validator_refused_it(
         {"url_pattern": "https://{employer}.evil.example/jobs"},
         {"method": "POST", "body_json": {"q": "x"}},
         {"employers": {"..": "Dots"}},
+        # round 2: `.match` would pass this one where `.fullmatch` refuses (M14)
+        {"employers": {"acme\n": "Newline"}},
+        # round 2 N6: `urlsplit` raising ValueError must reach the caller as
+        # the board's ConnectorError, not end the run
+        {"url_pattern": "https://[h/{employer}/jobs"},
     ):
         copied = connector.model_copy(update={"list": connector.list.model_copy(update=update)})
         with pytest.raises(ConnectorError):
@@ -397,7 +402,29 @@ def test_lever_reads_the_requirements_the_api_keeps_apart() -> None:
     assert "Full professional proficiency in French and English" in offer.text
 
 
-def _three_employer_run(tmp_path: Path, answers: dict[str, Response], robots_txt: str) -> Any:
+def test_a_row_admitting_only_the_first_employer_does_not_count(tmp_path: Path) -> None:
+    """#445 round 2, B1: the gate replayed the first list URL only, so a
+    well-formed row refusing 12 of Lever's 13 employer boards still counted."""
+    directory = _library(tmp_path, "lever_en")
+    ledger = _ledger_with(
+        tmp_path,
+        "lever_en",
+        robots_txt="User-agent: *\nAllow: /v0/postings/aircall\nDisallow: /v0/postings/\n",
+        standing="two_parsers_agreed",
+        allowed=["/v0/postings/aircall?mode=json"],
+        second_reader_refused=["/v0/postings/blablacar?mode=json"],
+    )
+    measured = measure(directory, ledger)
+    assert measured["ats_host_connectors_conforming"] == 0
+    why = measured["not_conforming"]["lever_en"]
+    # Every reason is the replay's — the row's own checks pass, so this case
+    # reaches the code it pins rather than being refused earlier.
+    assert len(why) == 12 and all("disallows" in w for w in why), why
+
+
+def _three_employer_run(
+    tmp_path: Path, answers: dict[str, Response], robots_txt: str | Robots
+) -> Any:
     directory = _package(tmp_path)
     package = directory / "atshost_en"
     text = (package / "connector.yaml").read_text(encoding="utf-8")
@@ -422,7 +449,9 @@ def _three_employer_run(tmp_path: Path, answers: dict[str, Response], robots_txt
         fetch=fetch,
         at=AT,
         directory=directory,
-        robots=Robots(fetch=lambda url: robots_txt),
+        robots=robots_txt
+        if isinstance(robots_txt, Robots)
+        else Robots(fetch=lambda url: robots_txt),
     )
     return run, asked
 
@@ -441,6 +470,143 @@ def test_one_failing_employer_does_not_end_the_host(tmp_path: Path) -> None:
     assert outcome.employers_failed == ("Gone Co (HTTP 404)",)
     assert outcome.error is None
     assert "PARTIAL atshost_en: 1 employer board(s) not read" in run.summary()
+    store = ProfileStore(tmp_path / "p", "test")
+    logged = [r for r in store.read_jsonl("offers", FETCH_LOG) if "/gone/" in r["url"]]
+    assert [(r["status"], r["items"]) for r in logged] == [(404, 0)]
+
+
+def test_an_employer_whose_path_robots_disallows_is_passed_over(tmp_path: Path) -> None:
+    """Round 2 M6: a disallowed path is that employer's answer, not the host's."""
+    answers = {"acme": _jobs("A"), "beta": _jobs("B")}
+    run, asked = _three_employer_run(
+        tmp_path, answers, "User-agent: *\nDisallow: /v1/boards/gone/\n"
+    )
+    assert asked == ["acme", "beta"]
+    (outcome,) = run.outcomes
+    assert outcome.added == 2
+    assert outcome.employers_failed == ("Gone Co (robots.txt disallows it)",)
+
+
+def test_an_unreadable_robots_txt_is_asked_once_per_host(tmp_path: Path) -> None:
+    """Round 2 B2: RFC 9309 §2.3.1.4 — an unreachable robots.txt is complete
+    disallow for the origin. It cost one fetch and one browser retry per
+    employer; it is one answer for the host."""
+    import urllib.error
+
+    asked_robots: list[str] = []
+
+    def refuse(url: str) -> str:
+        asked_robots.append(url)
+        raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)  # type: ignore[arg-type]
+
+    robots = Robots(fetch=refuse, browser_fetch=refuse)
+    run, asked = _three_employer_run(tmp_path, {}, robots)
+    assert asked == []
+    assert len(asked_robots) == 2  # the fetch, and T71's one browser retry
+    (outcome,) = run.outcomes
+    assert outcome.skipped and "could not be read" in outcome.skipped
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        Response(429, "", error="HTTP 429"),
+        Response(503, "", error="HTTP 503"),
+        Response(403, "", error="HTTP 403"),
+        Response(429, "Too Many Requests"),
+    ],
+)
+def test_a_host_that_refuses_the_read_is_not_asked_again(tmp_path: Path, refusal: Response) -> None:
+    """Round 2 B2 and N3: a 429 on one employer is not leave to ask for the
+    next — and what was read before it is still counted."""
+    answers = {"acme": _jobs("A"), "gone": refusal, "beta": _jobs("B")}
+    run, asked = _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
+    assert asked == ["acme", "gone"]
+    (outcome,) = run.outcomes
+    assert outcome.refused
+    assert outcome.added == 1
+    assert run.summary().startswith("1 offer(s) added")
+
+
+def _detail_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, adverts_robots: str | None
+) -> tuple[Any, list[str], list[float]]:
+    """Two employers, two rows each, every body on an advert host of its own."""
+    import urllib.error
+
+    import integral.sourcing as sourcing
+
+    directory = _package(tmp_path)
+    (directory / "atshost_en" / "connector.yaml").write_text(
+        _yaml(GOOD, "  employers:\n    acme: Acme Corp\n    beta: Beta Inc\n").replace(
+            "fields: {title: title, company: company, text: body}",
+            "fields: {title: title, detail_url: url}",
+        )
+        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n",
+        encoding="utf-8",
+    )
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    pauses: list[float] = []
+    monkeypatch.setattr(sourcing, "_pause", pauses.append)
+    robots_asked: list[str] = []
+
+    def robots_fetch(url: str) -> str:
+        robots_asked.append(url)
+        if "adverts" not in url:
+            return "User-agent: *\nAllow: /\n"
+        if adverts_robots is None:
+            raise urllib.error.HTTPError(url, 500, "Server Error", {}, None)  # type: ignore[arg-type]
+        return adverts_robots
+
+    def fetch(request: ListRequest) -> Response:
+        if "adverts" in request.url:
+            return Response(200, "<div class='content'>the whole advert</div>")
+        slug = request.url.split("/")[-2]
+        rows = [
+            {"title": f"{slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"} for n in (1, 2)
+        ]
+        return Response(200, json.dumps({"jobs": rows}))
+
+    run = source(
+        ProfileStore(tmp_path / "p", "test"),
+        CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+        ),
+        Aim(state="stated", terms=("python",)),
+        fetch=fetch,
+        at=AT,
+        directory=directory,
+        robots=Robots(fetch=robots_fetch, browser_fetch=robots_fetch),
+    )
+    return run, robots_asked, pauses
+
+
+def test_an_unreadable_advert_host_robots_txt_is_asked_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round 2 B2(b): Lever's bodies are on jobs.lever.co. Its robots.txt
+    failing was re-fetched for every row; it is one answer for the origin."""
+    run, robots_asked, _ = _detail_run(tmp_path, monkeypatch, adverts_robots=None)
+    assert [u for u in robots_asked if "adverts" in u] == ["https://adverts.ats.test/robots.txt"]
+    (outcome,) = run.outcomes
+    assert (outcome.detail_needed, outcome.detail_fetched) == (4, 0)
+
+
+def test_the_advert_host_crawl_delay_is_kept_and_a_budget_stop_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round 2 M8 and N5: the pause before each advert page, and a row the
+    detail budget did not reach reported as that, not as a connector fault."""
+    import integral.sourcing as sourcing
+
+    monkeypatch.setattr(sourcing, "DETAIL_FETCH_CEILING", 3)
+    run, _, pauses = _detail_run(
+        tmp_path, monkeypatch, adverts_robots="User-agent: *\nAllow: /\nCrawl-delay: 5\n"
+    )
+    (outcome,) = run.outcomes
+    assert (outcome.added, outcome.detail_fetched) == (3, 3)
+    assert pauses.count(5.0) == 3
+    assert outcome.drop_reason and "budget ran out" in outcome.drop_reason
 
 
 def test_every_employer_failing_is_an_error(tmp_path: Path) -> None:

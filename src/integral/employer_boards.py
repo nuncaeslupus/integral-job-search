@@ -14,7 +14,7 @@ What counts, per package whose `url_pattern` carries that slot:
 - it has a row in `connectors/robots-adjudications.yaml` for **its own host**,
   whose `problems()` are empty, and whose recorded answer — the committed
   `robots_txt`, or the `robots_status` a server gave instead of a file — when
-  **replayed through `integral.robots`**, admits the URL the package fetches.
+  **replayed through `integral.robots`**, admits every URL the package fetches.
   A row's shape is not a verdict: a well-formed row can refuse its own path.
 
 The count is of **distinct hosts**, so a second package pointed at the same API
@@ -78,7 +78,7 @@ def measure(
         if row is None:
             why.append("no row in connectors/robots-adjudications.yaml")
         else:
-            why += row.problems() + _replay(row, build_list_urls(connector, query="python")[0])
+            why += row.problems() + _replay(row, build_list_urls(connector, query="python"))
         if why:
             not_conforming[package.name] = why
             continue
@@ -92,11 +92,17 @@ def measure(
     }
 
 
-def _replay(row: RobotsAdjudication, url: str) -> list[str]:
-    """Why `row` does not admit `url` when its recorded answer is re-asked."""
-    host = urlsplit(url).hostname or ""
-    if row.site != host:
-        return [f"the robots row is for {row.site!r}, and the package fetches {host!r}"]
+def _replay(row: RobotsAdjudication, urls: list[str]) -> list[str]:
+    """Why `row` does not admit every one of `urls` when its answer is re-asked.
+
+    Every URL, not the first: one verdict covers every employer on the host
+    only once it has been asked about every employer's path. A row disallowing
+    `/v0/postings/` but allowing one slug admitted that slug and counted (#445
+    round 2, B1).
+    """
+    hosts = sorted({urlsplit(url).hostname or "" for url in urls})
+    if hosts != [row.site]:
+        return [f"the robots row is for {row.site!r}, and the package fetches {hosts!r}"]
     if row.robots_txt.strip():
         answer = row.robots_txt
 
@@ -111,11 +117,13 @@ def _replay(row: RobotsAdjudication, url: str) -> list[str]:
 
     else:
         return ["the robots row records neither robots_txt nor robots_status — nothing to replay"]
+    robots = Robots(fetch=fetch, browser_fetch=fetch)
     try:
-        allowed = Robots(fetch=fetch, browser_fetch=fetch).allows(url)
+        return [
+            f"the recorded robots.txt disallows {url}" for url in urls if not robots.allows(url)
+        ]
     except RobotsError as exc:
-        return [f"the recorded robots answer refuses {url}: {exc}"]
-    return [] if allowed else [f"the recorded robots.txt disallows {url}"]
+        return [f"the recorded robots answer refuses the host: {exc}"]
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:

@@ -794,52 +794,69 @@ class Robots:
         self._fetch = fetch
         self._browser_fetch = browser_fetch
         self._groups: dict[str, list[_Group]] = {}
+        #: An origin whose robots.txt could not be read, and why. RFC 9309
+        #: §2.3.1.4 makes that complete disallow for the whole origin, so it is
+        #: one answer, remembered like a success. Unremembered, an ATS host of
+        #: 57 employers re-fetched it — and re-ran T71's browser retry — once
+        #: per employer (#445 round 2, B2).
+        self._unreadable: dict[str, str] = {}
 
     def _groups_for(self, url: str) -> list[_Group]:
         parts = urlsplit(url)
         origin = f"{parts.scheme}://{parts.netloc}"
+        if origin in self._unreadable:
+            raise RobotsError(self._unreadable[origin])
         if origin not in self._groups:
             robots_url = urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
             try:
-                text = self._fetch(robots_url)
-            except urllib.error.HTTPError as exc:
-                if exc.code == 404:
-                    # The site saying "no rules", which permits everything.
-                    text = ""
-                elif exc.code == 401:
-                    # RFC 9309 §2.3.1.3: a 4xx is "unavailable", and a crawler
-                    # MAY access any resource. Read that way for 401 alone, by
-                    # the owner's decision of 2026-09-10 (T144): api.ashbyhq.com
-                    # answers 401 to /robots.txt while serving its public
-                    # posting API openly. Every other 4xx keeps the posture
-                    # below, and 403 its own route (T71).
-                    text = ""
-                elif exc.code == 403:
-                    # T71: a WAF refusing the honest agent on the policy
-                    # resource itself is not an answer about what the policy
-                    # says, so it is not treated as one. Exactly one URL is
-                    # eligible for this retry — the one already being fetched
-                    # here, `/robots.txt` — and content is never refetched
-                    # this way; a 403 on an advert stays unverified (T74's
-                    # concern). What comes back is then obeyed like any other
-                    # fetched policy, through the same `_parse_groups` and
-                    # `_select_rules` this method already uses for `text` —
-                    # recovering it is not license to read it more loosely.
-                    try:
-                        text = self._browser_fetch(robots_url)
-                    except (urllib.error.HTTPError, OSError) as retry_exc:
-                        raise RobotsError(
-                            f"{origin}/robots.txt returned 403, and the browser-agent "
-                            f"retry could not read it either: {retry_exc}"
-                        ) from retry_exc
-                else:
-                    # 500, a redirect loop, anything else — an unanswered
-                    # question, and an unanswered question is not a yes.
-                    raise RobotsError(f"{origin}/robots.txt returned {exc.code}") from exc
-            except OSError as exc:
-                raise RobotsError(f"{origin}/robots.txt could not be read: {exc}") from exc
+                text = self._policy_text(origin, robots_url)
+            except RobotsError as exc:
+                self._unreadable[origin] = str(exc)
+                raise
             self._groups[origin] = _parse_groups(text)
         return self._groups[origin]
+
+    def _policy_text(self, origin: str, robots_url: str) -> str:
+        """The body of `robots_url`, or `RobotsError` when it is no answer."""
+        try:
+            text = self._fetch(robots_url)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                # The site saying "no rules", which permits everything.
+                text = ""
+            elif exc.code == 401:
+                # RFC 9309 §2.3.1.3: a 4xx is "unavailable", and a crawler
+                # MAY access any resource. Read that way for 401 alone, by
+                # the owner's decision of 2026-09-10 (T144): api.ashbyhq.com
+                # answers 401 to /robots.txt while serving its public
+                # posting API openly. Every other 4xx keeps the posture
+                # below, and 403 its own route (T71).
+                text = ""
+            elif exc.code == 403:
+                # T71: a WAF refusing the honest agent on the policy
+                # resource itself is not an answer about what the policy
+                # says, so it is not treated as one. Exactly one URL is
+                # eligible for this retry — the one already being fetched
+                # here, `/robots.txt` — and content is never refetched
+                # this way; a 403 on an advert stays unverified (T74's
+                # concern). What comes back is then obeyed like any other
+                # fetched policy, through the same `_parse_groups` and
+                # `_select_rules` this method already uses for `text` —
+                # recovering it is not license to read it more loosely.
+                try:
+                    text = self._browser_fetch(robots_url)
+                except (urllib.error.HTTPError, OSError) as retry_exc:
+                    raise RobotsError(
+                        f"{origin}/robots.txt returned 403, and the browser-agent "
+                        f"retry could not read it either: {retry_exc}"
+                    ) from retry_exc
+            else:
+                # 500, a redirect loop, anything else — an unanswered
+                # question, and an unanswered question is not a yes.
+                raise RobotsError(f"{origin}/robots.txt returned {exc.code}") from exc
+        except OSError as exc:
+            raise RobotsError(f"{origin}/robots.txt could not be read: {exc}") from exc
+        return text
 
     def allows(self, url: str) -> bool:
         rules, _ = _select_rules(self._groups_for(url), self.user_agent)

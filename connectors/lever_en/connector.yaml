@@ -11,8 +11,13 @@
 # across several fields and this grammar reads one path per field; mapping
 # `descriptionPlain` alone dropped the requirements, so a language requirement
 # stated only there read as "none stated" (second-reader F2 on #445).
-# ponytail: one page per advert, capped by the engine's detail ceiling. Upgrade
-# path is an engine change that joins several JSON paths into one field.
+# ponytail: one page per advert, capped by the engine's `DETAIL_FETCH_CEILING`
+# (40) per board per run. The employers below list hundreds of rows between
+# them, so a run completes the first 40 — the same ones, from the
+# alphabetically first employers, every run — and reports the rest as a
+# budget stop. Upgrade path is
+# an engine change that joins several JSON paths into one field, or a detail
+# budget that rotates across runs.
 #
 # Salary is mapped because Lever publishes it structured, per posting, in
 # `salaryRange` — `interval` is Lever's own period label ("per-year-salary").

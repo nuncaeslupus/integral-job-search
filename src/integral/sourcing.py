@@ -91,7 +91,7 @@ MINIMUM_OFFERS_COLLECTED = 3
 #: offer sends us to the advert's own page, and a 40-row listing would otherwise
 #: turn one listing request into 41. The cap is per board so one badly-shaped
 #: connector cannot spend the whole run, and what it stopped is reported rather
-#: than dropped silently — `BoardOutcome.detail_budget_spent` against
+#: than dropped silently — `BoardOutcome.detail_fetched` against
 #: `detail_needed`.
 DETAIL_FETCH_CEILING = 40
 
@@ -429,33 +429,57 @@ def _one_board(
     stale = False
     failed: list[str] = []
     last: Response | None = None
+
+    def ended(
+        url: str | None,
+        status: int | None = None,
+        *,
+        skipped: str | None = None,
+        error: str | None = None,
+        refused: str | None = None,
+    ) -> BoardOutcome:
+        # A round that stops part-way still says what it read before stopping
+        # (#445 round 2, N3): a 429 on employer 3 used to report "0 added"
+        # over the offers employers 1 and 2 had already put in the store.
+        return BoardOutcome(
+            package.name,
+            url,
+            steerable,
+            query,
+            status,
+            items=items_seen,
+            added=added,
+            dropped=dropped,
+            drop_reason=drop_reason,
+            stale=stale,
+            detail_needed=detail_needed,
+            detail_fetched=detail_fetched,
+            employers_failed=tuple(failed),
+            skipped=skipped,
+            error=error,
+            refused=refused,
+        )
+
     for index, request in enumerate(requests):
         # Adjudicated per URL, before the request is made. A board that
         # disallows one path may allow another, so this cannot be hoisted to
         # the board — and a robots.txt that cannot be read is a refusal, not a
         # permission: failing open here would fetch exactly the paths nobody
         # could confirm we may.
+        #
+        # A disallowed path is that path's answer, so on an ATS host it is one
+        # employer's, and the next is still asked. An **unreadable** robots.txt
+        # is the whole origin's (RFC 9309 §2.3.1.4), and every employer shares
+        # the origin — the slot is confined to the path — so it ends the board.
         try:
             if not robots.allows(request.url):
                 if request.employer:
                     failed.append(f"{request.employer} (robots.txt disallows it)")
                     continue
-                return BoardOutcome(
-                    package.name,
-                    request.url,
-                    steerable,
-                    query,
-                    skipped=f"robots.txt disallows {request.url}",
-                )
+                return ended(request.url, skipped=f"robots.txt disallows {request.url}")
         except (RobotsError, OSError) as exc:
-            if request.employer:
-                failed.append(f"{request.employer} (robots.txt unreadable)")
-                continue
-            return BoardOutcome(
-                package.name,
+            return ended(
                 request.url,
-                steerable,
-                query,
                 skipped=f"robots.txt could not be read, so the path is not permitted: {exc}",
             )
         if index:
@@ -464,6 +488,12 @@ def _one_board(
             _pause(robots.delay(request.url, 0.0))
         response = fetch(request)
         last = response
+        blocked = rate_limited(None, response.status) if response.error is not None else None
+        if blocked is not None:
+            # The host refused the read — a 429 on one employer is not leave
+            # to ask for the next (#445 round 2, B2). Checked before the
+            # per-employer `continue` below, which it used to follow.
+            return ended(request.url, response.status, refused=blocked)
         if response.error is not None and request.employer:
             failed.append(f"{request.employer} ({response.error})")
             _record_fetch(
@@ -479,16 +509,12 @@ def _one_board(
             )
             continue
         if response.error is not None:
-            return BoardOutcome(
-                package.name, request.url, steerable, query, response.status, error=response.error
-            )
+            return ended(request.url, response.status, error=response.error)
         result = collect_listing(connector, response.body)
         stale = stale or result.stale
         refusal = rate_limited(response.body, response.status, parsed_items=len(result.items))
         if refusal is not None:
-            return BoardOutcome(
-                package.name, request.url, steerable, query, response.status, refused=refusal
-            )
+            return ended(request.url, response.status, refused=refusal)
         items_seen += len(result.items)
         collected: list[str] = []
         for item in result.items:
@@ -505,7 +531,13 @@ def _one_board(
                 # since their list rows carry no teaser — and every one of them
                 # produced zero offers for as long as nothing fetched it.
                 detail_needed += 1
-                if detail_fetched < DETAIL_FETCH_CEILING and _may_fetch(robots, detail_url):
+                if detail_fetched >= DETAIL_FETCH_CEILING:
+                    # Said as what it is: a budget stop, not a connector that
+                    # produced no text (#445 round 2, N5).
+                    why = (
+                        f"not read this run — the {DETAIL_FETCH_CEILING}-advert-page budget ran out"
+                    )
+                elif _may_fetch(robots, detail_url):
                     _pause(robots.delay(detail_url, 0.0))
                     detail_fetched += 1
                     fields = _detail_record(connector, detail_url, fetch=fetch)
@@ -530,20 +562,9 @@ def _one_board(
             at=at,
             offer_ids=collected,
         )
-    return BoardOutcome(
-        package.name,
+    return ended(
         requests[-1].url if requests else None,
-        steerable,
-        query,
         last.status if last else None,
-        items=items_seen,
-        added=added,
-        dropped=dropped,
-        drop_reason=drop_reason,
-        stale=stale,
-        detail_needed=detail_needed,
-        detail_fetched=detail_fetched,
-        employers_failed=tuple(failed),
         error=(
             f"every employer board failed: {', '.join(failed)}"
             if failed and len(failed) == len(requests)
