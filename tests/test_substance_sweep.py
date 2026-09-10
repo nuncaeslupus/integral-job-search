@@ -1148,6 +1148,86 @@ def test_a_deleted_manifest_row_for_an_approved_line_does_not_conflate_a_twin(
     assert any(TWIN in item for item in measured["undecidable_episodes"])
 
 
+@pytest.mark.parametrize(
+    ("edit", "near_copy"),
+    [
+        ("trailing period dropped", WIN.rstrip(".")),
+        ("uppercased", WIN.upper()),
+        ("comma inserted", WIN.replace("forty minutes by", "forty minutes, by")),
+        ("clause appended", WIN.rstrip(".") + ", ahead of schedule."),
+        ("double space", WIN.replace("nightly billing", "nightly  billing")),
+    ],
+)
+def test_a_near_copy_of_an_approved_line_does_not_conflate_a_twin(
+    store: ProfileStore, edit: str, near_copy: str
+) -> None:
+    """R6-1 (#435 round 6, the blocker): round five's fix is `if line not in
+    approved`, an **exact-text** test standing in front of `_carries`, a
+    **normalised-shingle** predicate. Every edit here is one `_carries`'s own
+    docstring says it beats — punctuation, spacing, case, truncation and
+    extension — so the near-copy is never byte-equal to WIN's approved text,
+    gets searched again by the old filter, and (before round six) cleared
+    TWIN from every channel exactly as an exact duplicate did before round
+    five.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+    )
+    write_master(store, master)
+    version = _prepare(store, master, approved=(0,))
+    where = _where(store, version)
+    (where / "letter.md").write_text(
+        (where / "letter.md").read_text(encoding="utf-8") + near_copy + "\n", encoding="utf-8"
+    )
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    # The near-copy is unbacked in its own right and earns its own finding.
+    assert measured["unapproved_episode_disclosures"] == 1, edit
+    # TWIN must not be silently cleared by the near-copy's wording.
+    assert not any(TWIN in item for item in measured["unapproved_episodes"]), edit
+    assert any(TWIN in item for item in measured["undecidable_episodes"]), edit
+
+
+def test_a_retraction_with_no_document_edit_does_not_conflate_a_twin(
+    store: ProfileStore,
+) -> None:
+    """R6-2 (#435 round 6, the blocker): `measure_prepared` computes
+    `approved -= withdrawn` for a D-24 retraction, so WIN's text leaves
+    `approved` the instant its evidence is retracted — with **no document
+    edit at all**. Round five's fix keys off `approved`, so this route needs
+    no near-copy trickery: the moment WIN's text is no longer `in approved`,
+    the old filter searches WIN's own still-rendered line again and clears
+    TWIN, a different, unapproved episode, from every channel.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+    )
+    write_master(store, master)
+    row = EvidenceLog(store).append(
+        recorded_at="2026-01-01T09:00:00+00:00",
+        step="history",
+        kind="episode",
+        text=WIN,
+        source="conversation",
+    )
+    version = _prepare(store, master, approved=(0,))
+    retract(EvidenceLog(store), row.id, at="2026-01-02T09:00:00+00:00")
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    # WIN's own line, now unbacked by the retraction, earns its own finding.
+    assert measured["unapproved_episode_disclosures"] == 1
+    assert any(WIN in item for item in measured["unapproved_episodes"])
+    # TWIN must not be silently cleared by WIN's now-unbacked, retracted line.
+    assert not any(TWIN in item for item in measured["unapproved_episodes"])
+    assert any(TWIN in item for item in measured["undecidable_episodes"])
+
+
 def test_an_approved_disclosed_episode_is_never_flagged_undecidable(
     store: ProfileStore,
 ) -> None:

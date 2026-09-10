@@ -91,12 +91,21 @@ measured exactly why that failed:
    measured it end to end. It caught **0 of 8** constructed genuine paraphrases
    — overlap was exactly 0 on all eight, because a paraphrase is *by
    definition* a substitution of the content words, so the overlap it leaves
-   behind is empty — and flagged **21 of 30** innocent same-domain documents
-   that retold no substance at all, because two documents about the same kind
-   of work *by definition* share their content words. Both failures come from
-   the same fact, so no choice of thresholds fixes one without the other: a
-   word-overlap proxy is not weakly correlated with paraphrase, it is
-   anti-correlated with it. **The recorded risk of not taking this path**: the
+   behind is empty — and flagged a large share of innocent same-domain
+   documents that retold no substance at all, because two documents about the
+   same kind of work *by definition* share their content words: a second
+   reader's own thirty constructed innocents (round 5, #435) scored **0 of 30**
+   built as single sentences and **30 of 30** built as full paragraphs, with no
+   committed corpus fixing which shape is representative — the number this
+   paragraph asserted before that round (21 of 30) did not reproduce against
+   either construction and is not repeated here for that reason (F-4, round
+   6). What *does* reproduce in both constructions, and is what this paragraph
+   actually rests on: the overlap a same-domain innocent leaves behind is
+   never small enough to distinguish from a paraphrase's own overlap, in
+   either direction. Both failures come from the same fact, so no choice of
+   thresholds fixes one without the other: a word-overlap proxy is not weakly
+   correlated with paraphrase, it is anti-correlated with it. **The recorded
+   risk of not taking this path**: the
    docstring's named upgrade (an embedding comparison, at a model call per
    episode per document) is the only thing that could ever tell a paraphrase
    from a shared subject, and it is still not built; nothing here claims
@@ -183,6 +192,53 @@ still carries that seam — in the *opposite*, fail-closed direction (a
 manufactured match there adds an unearned finding and blocks an otherwise
 clean draft), which is the docstring's named upgrade path to close, not a risk
 this branch's fix owed on its own.
+
+**Round five's own fix was one layer short, and it is the same layer every
+time (R6, round six, #435).** `if line not in approved` is an **exact-text**
+test standing guard in front of `_carries`, which is a **normalised-shingle**
+predicate — the same "proxy for the property, rather than the property" shape
+CLAUDE.md's fixtures section names, one level further in. Two routes reach the
+identical outcome round five closed the first two of: **(R6-1)** a line one
+edit away from an approved sentence — the trailing punctuation, casing,
+inserted punctuation, an appended clause, or doubled whitespace that
+`_carries`'s own docstring already says beat a plain comparison — is not
+`in approved` by byte equality, so it is searched again and clears an
+unapproved twin sharing its shingle exactly as before round five; **(R6-2)** a
+D-24 retraction removes the text from `approved` with **no document edit at
+all** (`approved -= withdrawn`, above), so the still-rendered line stops being
+excluded and clears the twin the moment the candidate withdraws the very
+episode it was standing in for. Both are measured, not argued: five near-copies
+and one retraction, each independently confirmed to clear
+`_FIXTURE_TWIN` from both `unapproved_episode_disclosures` and
+`episodes_undecidable` before this fix, and each pinned as its own state in
+`probe_paraphrase_undecidability` (states 16-21) after it.
+
+Round six's fix asks the question the exact-text guard was standing in for,
+instead of a sixth way to spell "this text, near enough": *whose* evidence is
+this line? `unbacked` is searched for `episode.text` only when **no other
+episode's text** also shingle-matches the same line —
+
+```python
+elif any(
+    _carries(line, episode.text) for line in unbacked
+    if not any(
+        other.text != episode.text and _carries(line, other.text)
+        for other in master.episodes
+    )
+):
+```
+
+— a relation over `master.episodes`, not a membership test against `approved`.
+It needs no set to stay synchronised with, so nothing that later shrinks
+`approved` (a retraction) or fails to widen it (a near-copy that was never
+approved-by-equality in the first place) can reopen the seam: a line ambiguous
+between two episodes is undecidable for both, which is `_carries`'s own limit
+— it can confirm presence, never rule out a rival claim to the same presence —
+applied to the ambiguity directly rather than laundered through a text
+comparison of what has been approved. This is CLAUDE.md's *"a closed rule
+rather than a twin"* answer, the same shape as the encode set derived from
+RFC 3986 rather than listed: nothing here enumerates edits, so there is no
+seventh one to lose to.
 
 **The three sites that must all name an undecidable episode in a refusal are
 pinned by a rule, not by three separate tests.** `prepare`'s raise, `record_sent`'s
@@ -848,8 +904,11 @@ def measure_prepared(
     # first version of this rule tried a normalised-word-overlap proxy instead
     # of an unconditional third state, and a second reader measured it to be
     # anti-correlated with the property it was meant to proxy — 0 of 8
-    # constructed genuine paraphrases caught, 21 of 30 innocent same-domain
-    # documents wrongly flagged — because a paraphrase substitutes content
+    # constructed genuine paraphrases caught, and a large share of innocent
+    # same-domain documents wrongly flagged (0 of 30 or 30 of 30 depending on
+    # whether the innocents are built as sentences or paragraphs — see the
+    # module docstring's F-4, round 6, for why no single count is quoted here)
+    # — because a paraphrase substitutes content
     # words *by definition*, so its overlap is empty, while two documents
     # about the same job share content words *by definition*, so theirs is
     # not. No threshold separates those populations; only "confirmed or not"
@@ -867,52 +926,65 @@ def measure_prepared(
                 f"{offer_id}/v{version}: {episode.text} — the substance of a story-bank "
                 "episode, carried by an entry no per-use approval names"
             )
-        elif any(_carries(line, episode.text) for line in unbacked if line not in approved):
+        elif any(
+            _carries(line, episode.text)
+            for line in unbacked
+            if not any(
+                other.text != episode.text and _carries(line, other.text)
+                for other in master.episodes
+            )
+        ):
             # Confirmed present verbatim in a line this sweep has *already*
             # reported above — one of `findings`' unbackable rows — so this
             # episode's substance reached the page and is not re-attributed to
             # it a second time. It is not `undecidable` either: this branch is
-            # reached only when there **is** positive evidence.
+            # reached only when there **is** positive evidence, and evidence
+            # for *this* episode specifically.
             #
             # Checked one `unbacked` line at a time — never joined into one
-            # string — for two separate reasons, both fail-open if missed:
+            # string — for the reason given at `intact`, two names up: joining
+            # a *subset* of lines can put two that were never adjacent on the
+            # page next to each other, and a shingle can straddle that
+            # manufactured boundary (round three's original defect, `_words`
+            # treats a newline as ordinary whitespace). `any(...)` over single,
+            # whole lines can only ever match text a real line on the page
+            # actually carries.
             #
-            # 1. `unbacked` must never be searched while it still carries a
-            #    **backed, approved** line — and round four's claim that it
-            #    "must never include" one was wrong (R5-1, #435 round 5).
-            #    `unbacked` is populated by a *Counter* test (`backed[key] ==
-            #    0`), never by a text test: an approved episode's own rendered
-            #    sentence lands there the moment the page carries it a second
-            #    time with nothing left to back that occurrence (a duplicated
-            #    line), or the manifest row that would have backed it is gone
-            #    while the line itself stays on disk (a deleted claim, T114's
-            #    class of edit) — either way `line in approved` is still true
-            #    of that text. Before this filter, a *different, unapproved*
-            #    episode sharing an eight-word window with that approved
-            #    wording read as "confirmed present" here and was cleared from
-            #    both channels — not a finding, and not `undecidable` either,
-            #    which is the same fail-open round three's own fix
-            #    (`test_two_unrelated_episodes_sharing_a_window_are_not_conflated`)
-            #    was written to close, reopened one layer down: the twin's
-            #    fix filtered which *lines* the elif could ever see, and
-            #    missed that `unbacked` could still hand it an approved
-            #    *text*. Excluding `approved` texts from this scan is what
-            #    closes it: `unbacked` may contain one, but this branch never
-            #    again treats one as evidence for somebody else's episode.
-            # 2. Checking each line **on its own**, rather than joining
-            #    `unbacked` with `"\n"` and searching the joined text, is what
-            #    stops two lines that were never adjacent on the page from
-            #    manufacturing a shingle across the seam where they meet in
-            #    the join. `intact` two lines up still joins `surviving` that
-            #    way, and carries that same risk in the opposite, fail-closed
-            #    direction (a manufactured match there adds an unearned
-            #    `finding` and blocks a draft that was actually clean) —
-            #    narrower than this branch's fail-open risk, and out of this
-            #    fix's scope, but the two are not the same risk and neither
-            #    excuses leaving the other unchecked. This branch's own seam
-            #    is closed, not merely bounded: `any(...)` over single lines
-            #    can only ever match text that a real, whole line on the page
-            #    actually carries.
+            # The inner filter is round six's fix (R6, #435 round 6), and it
+            # replaces what round five tried to do with `if line not in
+            # approved`. That guard asked "is this line's *exact text*
+            # something an approval names" — a byte-equality test standing in
+            # front of `_carries`, which is a *normalised-shingle* predicate —
+            # and round five's own fixes to it (a near-copy that beats
+            # normalisation exactly the way `_carries`'s docstring says it
+            # will, or a D-24 retraction that removes the text from `approved`
+            # with no document edit at all) each walked past the exact-text
+            # test while leaving `_carries` itself still matching. Both are
+            # the same shape as every finding this family has produced: a
+            # check pinned against a proxy for the property, rather than
+            # against the property.
+            #
+            # The property is not "does `approved` still name this text" —
+            # `approved` is a set the candidate and a retraction both edit,
+            # and nothing about it is stable across the one loop that reads
+            # it. The property is "whose evidence is this line": a line this
+            # episode's text shingle-matches is evidence for it only when no
+            # *other* episode's text also shingle-matches the same line —
+            # ambiguous between two episodes is undecidable for both, which
+            # is `_carries`'s own limit (it can confirm presence, never rule
+            # out a rival claim to the same presence) applied directly to the
+            # ambiguity instead of laundered through a comparison against
+            # whatever happens to be in `approved` right now. Nothing here
+            # needs `approved`, `disclosed`, or a retraction at all — a line
+            # near-copied from an approved sentence and a line whose approval
+            # was retracted both still shingle-match that sentence's *text*,
+            # which is what this filter actually asks about, so a set edited
+            # by either path can no longer reopen the seam. Six constructed
+            # routes are pinned in `probe_paraphrase_undecidability` (states
+            # 16-21): five near-copies of an approved line (trailing
+            # punctuation dropped, case changed, punctuation inserted, a
+            # clause appended, whitespace doubled) and one D-24 retraction of
+            # the approved episode with the document left untouched.
             pass
         else:
             undecidable.append(
@@ -2075,8 +2147,11 @@ def probe_unbacked_disclosures(root: Path) -> dict[str, Any]:
 # verdicts were computed from the proxy's own constants — arithmetic run
 # backwards from the thing being checked, per CLAUDE.md's fixtures section.
 # A second reader measured that proxy end to end and found it anti-correlated
-# with paraphrase (0 of 8 genuine paraphrases caught, 21 of 30 innocent
-# same-domain documents wrongly flagged). The fixtures below are the
+# with paraphrase (0 of 8 genuine paraphrases caught; a large share of
+# innocent same-domain documents wrongly flagged either way a paraphrase's
+# length is constructed — see the module docstring's F-4, round 6, for the
+# two-construction measurement in place of the single count this comment used
+# to quote). The fixtures below are the
 # replacement: no thresholds, no synthetic "boundary" pair, and the innocent
 # controls are same-domain documents that share an episode's vocabulary
 # without retelling its event — the shape the second reader's own report used.
@@ -2148,16 +2223,17 @@ def _named_as_finding(measured: dict[str, Any], episode_text: str) -> bool:
     return any(episode_text in item for item in measured["unapproved_episodes"])
 
 
-# Fifteen constructed profiles (`fresh()` calls), one per numbered state
+# Twenty-one constructed profiles (`fresh()` calls), one per numbered state
 # below — a floor over the population the second reader's F3 finding named
 # (states, not `check()` calls), set to the actual count rather than to a
 # margin nobody argued: deleting one state now breaches this floor
 # immediately. States 12-13 are round 3's (N2) and round 4's (F1) accepted
-# findings; 14-15 are round 5's (R5-1), committed here per CLAUDE.md's
-# fixtures section: an accepted case pinned only in pytest is a report that
-# was read and waved through, and the measured denominator has to rise or the
-# acceptance did not happen. 11 -> 13 -> 15.
-MINIMUM_PARAPHRASE_STATES = 15
+# findings; 14-15 are round 5's (R5-1); 16-21 are round 6's (R6-1's five
+# near-copies and R6-2's retraction), committed here per CLAUDE.md's fixtures
+# section: an accepted case pinned only in pytest is a report that was read
+# and waved through, and the measured denominator has to rise or the
+# acceptance did not happen. 11 -> 13 -> 15 -> 21.
+MINIMUM_PARAPHRASE_STATES = 21
 # Both denominators asserted, per the same reasoning T150 gives for
 # `MINIMUM_EVIDENCE_KEYS_COMPARED`/`MINIMUM_EVIDENCE_SOURCES_COMPARED`: a floor
 # on `states` alone is satisfiable by an empty `fresh()` call that asserts
@@ -2165,8 +2241,9 @@ MINIMUM_PARAPHRASE_STATES = 15
 # F3 named. Also set to the actual count, so thinning a state's own checks
 # without deleting the state trips this one instead. 21 -> 25 (states 12-13)
 # -> 29 (states 14-15, two checks each) -> 30 (one more check added to state
-# 9 itself, isolating the `approved` disjunct of its skip guard).
-MINIMUM_PARAPHRASE_CHECKS = 30
+# 9 itself, isolating the `approved` disjunct of its skip guard) -> 42 (states
+# 16-21, six new states, two checks each).
+MINIMUM_PARAPHRASE_CHECKS = 42
 
 
 def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
@@ -2201,13 +2278,32 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
 
     win, failure = (episode.text for episode in _FIXTURE_EPISODES)
 
-    def check_genuine_paraphrase(measured: dict[str, Any], text: str, label: str) -> None:
-        """The three assertions every genuine-paraphrase state makes, named once."""
+    def note_if_silently_cleared(measured: dict[str, Any], text: str) -> None:
+        """The task's own gate numerator, factored out so every route that
+        exercises the third state feeds it — not only the three genuine-
+        paraphrase states below.
+
+        F-3 (#435 round 6): states 14 and 15 asserted `_named_undecidable`
+        directly and never called this, so a regression that silently cleared
+        their twin from both channels moved `paraphrase_probe_failures` and
+        the module's exit code but left `paraphrased_substance_reported_as_
+        withheld` — the exact key the task's own gate block names — sitting at
+        its clean 0. The denominators (`paraphrase_states_evaluated`,
+        `paraphrase_checks_evaluated`) rose across rounds 5 and 6; this
+        numerator's population had not. Called from every twin- and
+        paraphrase-shaped state now (12-21 as well as 1-3), so a case named by
+        neither channel is counted here regardless of which check happens to
+        also fail.
+        """
         nonlocal reported_as_withheld
         if not _named_undecidable(measured, text) and not _named_as_finding(measured, text):
             # Named by neither channel: the shape `episodes_withheld` used to
             # have, silently claiming confirmed absence. This is the numerator.
             reported_as_withheld += 1
+
+    def check_genuine_paraphrase(measured: dict[str, Any], text: str, label: str) -> None:
+        """The three assertions every genuine-paraphrase state makes, named once."""
+        note_if_silently_cleared(measured, text)
         check(_named_undecidable(measured, text), f"{label}: not reported as undecidable")
         check(
             measured["unapproved_episode_disclosures"] == 0,
@@ -2466,6 +2562,7 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         measured["unapproved_episode_disclosures"] == 0,
         "an approved episode's own line falsely confirmed a different, unapproved twin",
     )
+    note_if_silently_cleared(measured, _FIXTURE_TWIN.text)
     check(
         _named_undecidable(measured, _FIXTURE_TWIN.text),
         "an unapproved twin sharing an approved line's window was not reported as undecidable",
@@ -2497,6 +2594,7 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         not any(seam_episode.text in item for item in measured["unapproved_episodes"]),
         "a seam between two unbacked lines manufactured a confirmed disclosure",
     )
+    note_if_silently_cleared(measured, seam_episode.text)
     check(
         _named_undecidable(measured, seam_episode.text),
         "a seam between two unbacked lines silently cleared an unrelated episode",
@@ -2523,6 +2621,7 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         measured["unapproved_episode_disclosures"] == 1,
         "a duplicated approved line was not reported as its own unbacked disclosure",
     )
+    note_if_silently_cleared(measured, _FIXTURE_TWIN.text)
     check(
         _named_undecidable(measured, _FIXTURE_TWIN.text),
         "a duplicated approved line falsely confirmed a different, unapproved twin (R5-1A)",
@@ -2552,10 +2651,94 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         "a manifest row deleted out from under an approved line was not reported as its "
         "own unbacked disclosure",
     )
+    note_if_silently_cleared(measured, _FIXTURE_TWIN.text)
     check(
         _named_undecidable(measured, _FIXTURE_TWIN.text),
         "a manifest row deleted out from under an approved line falsely confirmed a "
         "different, unapproved twin (R5-1B)",
+    )
+
+    # 16-20 — R6-1 (#435 round 6, the blocker): a line one edit away from win's
+    # own approved sentence, not win itself. Round five's `if line not in
+    # approved` is an exact-text test, so any of the five edits `_carries`'s
+    # own docstring names as beaten by normalisation — dropped trailing
+    # punctuation, case, inserted punctuation, an appended clause, doubled
+    # whitespace — is not `in approved` by byte equality, gets searched again,
+    # and (before round six's fix) cleared the twin from both channels exactly
+    # as an exact duplicate did before round five.
+    def check_near_copy_route(handle: str, near_copy: str, edit: str) -> None:
+        twinned_near = _probe_master(
+            headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN)
+        )
+        store = fresh(handle, twinned_near)
+        _probe_prepare(store, twinned_near, approved=(0,))
+        letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+        letter.write_text(letter.read_text(encoding="utf-8") + near_copy + "\n", encoding="utf-8")
+        measured = measure_prepared(store, twinned_near, _PROBE_OFFER, 1)
+        check(
+            measured["unapproved_episode_disclosures"] == 1,
+            f"a near-copy of win's line ({edit}) was not reported as its own unbacked disclosure",
+        )
+        note_if_silently_cleared(measured, _FIXTURE_TWIN.text)
+        check(
+            _named_undecidable(measured, _FIXTURE_TWIN.text),
+            f"a near-copy of win's line ({edit}) falsely confirmed a different, "
+            "unapproved twin (R6-1)",
+        )
+
+    check_near_copy_route("near-copy-no-period", win.rstrip("."), "trailing period dropped")
+    check_near_copy_route("near-copy-uppercased", win.upper(), "uppercased")
+    check_near_copy_route(
+        "near-copy-comma",
+        win.replace("forty minutes by", "forty minutes, by"),
+        "comma inserted",
+    )
+    check_near_copy_route(
+        "near-copy-clause",
+        win.rstrip(".") + ", ahead of schedule.",
+        "clause appended",
+    )
+    check_near_copy_route(
+        "near-copy-double-space",
+        win.replace("nightly billing", "nightly  billing"),
+        "double space",
+    )
+
+    # 21 — R6-2 (#435 round 6, the blocker): a D-24 retraction of win's own
+    # evidence, with **no document edit at all**. `approved -= withdrawn`
+    # (above) removes win's text from `approved` the moment the log carries a
+    # retraction, so a filter keyed on `approved` stops applying to the
+    # twin's line the instant the candidate withdraws the *other* episode —
+    # nothing about the page itself changes.
+    from integral.retraction import retract as _retract
+
+    retracted_twin_state = _probe_master(
+        headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN)
+    )
+    store = fresh("retracted-approved-twin", retracted_twin_state)
+    row = (
+        EvidenceLog(store)
+        .append(
+            recorded_at="2026-01-01T09:00:00+00:00",
+            step="history",
+            kind="episode",
+            text=win,
+            source="conversation",
+        )
+        .id
+    )
+    _probe_prepare(store, retracted_twin_state, approved=(0,))
+    _retract(EvidenceLog(store), row, at="2026-01-02T09:00:00+00:00")
+    measured = measure_prepared(store, retracted_twin_state, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 1,
+        "win's own line was not reported once its approval's evidence was retracted",
+    )
+    note_if_silently_cleared(measured, _FIXTURE_TWIN.text)
+    check(
+        _named_undecidable(measured, _FIXTURE_TWIN.text),
+        "retracting win's evidence, with no document edit, falsely confirmed a different, "
+        "unapproved twin (R6-2)",
     )
 
     return {
