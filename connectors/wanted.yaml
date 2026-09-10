@@ -96,6 +96,27 @@ blocked_on_engine:
       PT has zero connectors, and the gap is not specific to this board —
       legacy encodings survive longest on the non-English European boards,
       which is exactly where every remaining coverage gap is
+  # The next three were surveyed on 2026-09-10 (T166) for a pharmacy technician
+  # the ES shelf could not serve. Written up under `engine_gap_selector` and
+  # `engine_gap_offer_url` in `ruled-out.yaml`. All three changes touch
+  # `connectors.py` or `sourcing.py`, so they wait for T144 (#445).
+  - site: infoempleo.com
+    country: ES
+    needs: "a no-results marker a listing can declare, emptying the page when it is present"
+    why_it_matters: >
+      A general, steerable board across every sector — the only one of the
+      three that serves every non-tech candidate rather than one sector
+  - site: farmatalent.com
+    country: ES
+    needs: "a list field that may read the item's own attribute"
+    why_it_matters: >
+      Pharmacy-office jobs only, with a province filter. It has no keyword
+      search, so decide first whether an unsteered sector board belongs on
+      every ES candidate's shelf
+  - site: pmfarma.com
+    country: ES
+    needs: "a mapped `url` field that outranks the detail fetch URL in `build_offer`"
+    why_it_matters: "pharma-industry and dermoconsejera roles from a public JSON API; also unsteered"
 
 wanted:
   - site: stepstone.de

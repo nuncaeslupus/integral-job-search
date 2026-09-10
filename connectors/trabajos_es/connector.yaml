@@ -23,7 +23,7 @@
 site: trabajos
 locale: es
 version: "1.0.0"
-last_verified: "2026-08-23"
+last_verified: "2026-09-10"
 # Listings are public; reading them needs no account.
 auth: none
 
@@ -36,7 +36,23 @@ list:
   # acceptance gate measures parse fidelity over a recorded page, which
   # pagination does not affect. A `step:` field on `Pagination` is the
   # upgrade path if crawling depth ever matters.
-  url_pattern: "https://www.trabajos.com/ofertas-empleo/atencion_al_cliente"
+  #
+  # `CADENA` is the board's own keyword search. Until 2026-09-10 this pointed
+  # at the `atencion_al_cliente` category, so every candidate got the same
+  # forty customer-service adverts whatever they had asked for — a pharmacy
+  # technician's four phrases found nothing relevant on this board. Both halves
+  # of the search are committed: `probe/` is the board's answer to `técnico
+  # farmacia` (40 rows, 19 of them titled farm-/dermo-/cosm-), and
+  # `tests/fixtures/connectors/trabajos_es_no_hits.html` is its answer to a
+  # nonsense word — zero rows, not a fallback list, so an empty answer here
+  # means empty. `tests/test_connect_portal.py` pins both. This pattern must
+  # rebuild the probe's URL exactly. And each page echoes the term it searched
+  # for in its own `CADENA` box, which this pattern must send back unchanged: a
+  # key or a path the board ignores still carries `{query}`, but echoes nothing
+  # (the category page `fixture/` came from echoes ""). The search page serves the
+  # same `.listado2014.card.oferta` markup as the category page `fixture/` was
+  # recorded from.
+  url_pattern: "https://www.trabajos.com/ofertas-empleo/?CADENA={query}"
   pagination:
     mode: none
     max_pages: 1

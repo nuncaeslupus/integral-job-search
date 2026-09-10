@@ -134,7 +134,7 @@ def test_searched_and_handed_everything_are_reported_apart(store: ProfileStore) 
         directory=_CONNECTORS,
         robots=_robots(),
     )
-    assert set(run.steered) == {"tecnoempleo_es", "jobfluent_es"}
+    assert set(run.steered) == {"tecnoempleo_es", "jobfluent_es", "trabajos_es"}
     assert "getmanfred_es" in run.unsteered
     assert not set(run.steered) & set(run.unsteered)
 
