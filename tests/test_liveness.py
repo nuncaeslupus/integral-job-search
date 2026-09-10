@@ -215,31 +215,41 @@ def test_a_match_may_not_span_two_identity_fields() -> None:
     assert liveness.title_in_body("Acme CISO", "<title>Acme</title><h1>CISO</h1>") is False
 
 
-def test_a_block_page_is_known_by_what_it_calls_itself_not_by_its_markup() -> None:
-    """T173, and the second reader's F5 on #455. With no title to compare, a
-    page naming itself a block page is `unverified`; a real advert carrying
-    `h-captcha` in its markup or "rate limiting" in its text is not one."""
-    blocked = (
-        "<html><head><title>InfoJobs</title></head><body>"
-        "<h1>No podemos identificar tu navegador</h1></body></html>"
-    )
+def test_with_no_title_a_marker_anywhere_withholds_and_a_title_restores() -> None:
+    """T173's accepted fail-closed cost (#455 rounds 1-3). With no title, a real
+    advert whose markup carries `h-captcha` is withheld as `unverified`;
+    given its title, the identity check decides and it is `live`."""
     advert = (
         "<html><head><title>Research Fellow - jobs.ac.uk</title></head><body>"
         '<h1>Research Fellow</h1><div class="h-captcha" data-sitekey="x"></div>'
         "<p>You will design our API rate limiting.</p></body></html>"
     )
-    assert liveness.read_response("a", 200, blocked).liveness == "unverified"
-    assert liveness.read_response("b", 200, advert).liveness == "live"
+    assert liveness.read_response("b", 200, advert).liveness == "unverified"
+    assert liveness.read_response("b", 200, advert, title="Research Fellow").liveness == "live"
 
 
+def _named_innocuously(body: str) -> str:
+    """A block page given a site-name `<title>` and no `<h1>` — what a restyle
+    of any challenge page can look like (#455 round 3, N3)."""
+    demoted = body.replace("<h1", "<h2").replace("</h1>", "</h2>")
+    if "<head>" in demoted:
+        return demoted.replace("<head>", "<head><title>Acme Empleo</title>", 1)
+    return demoted.replace("<html>", "<html><head><title>Acme Empleo</title></head>", 1)
+
+
+@pytest.mark.parametrize("shape", ["as recorded", "named innocuously"])
 @pytest.mark.parametrize(
     ("case", "status", "body"),
     RATE_LIMIT_SAMPLES,
 )
-def test_no_known_refusal_reads_as_a_live_advert(case: str, status: int | None, body: str) -> None:
-    """#455 round 2, N1. Every entry in `RATE_LIMIT_SAMPLES` *is* a refusal, so
-    served as recorded — a 200 where no status was recorded — none of them may
-    be presented as an open vacancy, title or no title. Derived from the
-    sample list, so a refusal added there later is covered here too."""
-    check = liveness.read_response("r", status if status is not None else 200, body)
-    assert check.liveness != "live", (case, check.reason)
+def test_no_known_refusal_reads_as_a_live_advert(
+    case: str, status: int | None, body: str, shape: str
+) -> None:
+    """#455 rounds 2 and 3 (N1, N3). Every entry in `RATE_LIMIT_SAMPLES` *is* a
+    refusal, so served as recorded — a 200 where no status was recorded — and
+    again restyled with an innocuous site-name title and its `<h1>` demoted,
+    none of them may be presented as an open vacancy when no title is given.
+    Derived from the sample list, so a refusal added there later is covered."""
+    page = body if shape == "as recorded" else _named_innocuously(body)
+    check = liveness.read_response("r", status if status is not None else 200, page)
+    assert check.liveness != "live", (case, shape, check.reason)
