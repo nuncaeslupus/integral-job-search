@@ -624,10 +624,14 @@ def collect_offer(store: ProfileStore, offer: Offer, *, at: str) -> CollectionOu
     resighting instead of adding it; neither ever creates
     `offers/<id>.json` for a tombstoned ad.
 
-    An offer already stored under this id is a re-sighting too, and is left
+    An offer already tracked under this id is a re-sighting too, and is left
     exactly as it is (T168): writing it again would reset a shortlisted or
     applied offer's status and history to a fresh `new`, and restart §7.3's
-    purge clock, every time a board lists the same ad.
+    purge clock, every time a board lists the same ad. "Tracked" is the
+    lifecycle record, not the body — the record is what holds the history, and
+    a body with no record is `save_lifecycle_offer` interrupted between its two
+    writes on a first save, which re-collection repairs. The tombstone check
+    runs first so a revived offer's re-sighting still counts (§7.4).
     """
     tombstones = current_tombstones(store)
     matched = tombstones.get(offer.id)
@@ -640,7 +644,7 @@ def collect_offer(store: ProfileStore, offer: Offer, *, at: str) -> CollectionOu
     if matched is not None:
         _record_resighting(store, matched, at=at)
         return CollectionOutcome(offer.id, added_as_new=False, matched_tombstone=matched.offer_id)
-    if store.path("offers", f"{offer.id}.json").exists():
+    if store.path(*_lifecycle_parts(offer.id)).exists():
         return CollectionOutcome(offer.id, added_as_new=False, matched_tombstone=None)
     record = track_new_offer(offer, at=at)
     save_lifecycle_offer(store, offer, record)
@@ -950,14 +954,17 @@ def probe_lifecycle() -> dict[str, Any]:
 
         # 6) T168: every live offer sighted again, as a connector would hand
         #    it over (`status: new`). Its two files must not move, and it must
-        #    not count as added — read off disk, not off the outcome alone.
+        #    not count as added — read off disk, not off the outcome alone. A
+        #    day later than every earlier stamp, so a rewrite of an offer
+        #    collected at `now` still moves its bytes.
+        later = _iso(now + timedelta(days=1))
         reset_ids: list[str] = []
         for path in sorted(store.path("offers").glob("*.json")):
             companion = store.path(*_lifecycle_parts(path.stem))
             before = (path.read_bytes(), companion.read_bytes())
             stored = load_offer(store, path.stem)
             again = connect_manual(stored.text, url=stored.url)
-            outcome = collect_offer(store, again, at=_iso(now))
+            outcome = collect_offer(store, again, at=later)
             moved = (path.read_bytes(), companion.read_bytes()) != before
             if again.id != path.stem or outcome.added_as_new or moved:
                 reset_ids.append(path.stem)
