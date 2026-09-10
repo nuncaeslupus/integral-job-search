@@ -5,7 +5,7 @@ site: trabajos.com
 country: ES
 language: es
 maintainer: "@nuncaeslupus"
-last_verified: "2026-08-23"
+last_verified: "2026-09-10"
 
 # Checked, not assumed, on the day above. https://www.trabajos.com/robots.txt
 # carries `User-Agent: *` with four specific disallowed paths — a company page,

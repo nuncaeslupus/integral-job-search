@@ -23,7 +23,7 @@
 site: trabajos
 locale: es
 version: "1.0.0"
-last_verified: "2026-08-23"
+last_verified: "2026-09-10"
 # Listings are public; reading them needs no account.
 auth: none
 
@@ -36,7 +36,17 @@ list:
   # acceptance gate measures parse fidelity over a recorded page, which
   # pagination does not affect. A `step:` field on `Pagination` is the
   # upgrade path if crawling depth ever matters.
-  url_pattern: "https://www.trabajos.com/ofertas-empleo/atencion_al_cliente"
+  #
+  # `CADENA` is the board's own keyword search. Until 2026-09-10 this pointed
+  # at the `atencion_al_cliente` category, so every candidate got the same
+  # forty customer-service adverts whatever they had asked for — a pharmacy
+  # technician's four phrases found nothing relevant on this board. Measured that
+  # day: `técnico farmacia` returns 40 rows led by pharmacy roles, `python`
+  # returns developer roles, and a nonsense word returns zero rows rather than
+  # a fallback list, so an empty answer here means empty. The search page
+  # serves the same `.listado2014.card.oferta` markup as the category page the
+  # fixture was recorded from.
+  url_pattern: "https://www.trabajos.com/ofertas-empleo/?CADENA={query}"
   pagination:
     mode: none
     max_pages: 1
