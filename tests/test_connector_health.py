@@ -688,3 +688,26 @@ def test_a_library_with_no_clean_ground_reports_unmeasured_rather_than_broken(
     assert measured["runs_evaluated"] == 0
     assert measured["gate_status"] == "unmeasured"
     assert measured["ground_package"] is None
+
+
+@pytest.mark.parametrize(
+    ("kept", "cut"),
+    [
+        ("No podemos identificar tu navegador", "To regain access"),
+        ("To regain access", "No podemos identificar tu navegador"),
+    ],
+)
+def test_the_infojobs_edge_page_is_a_refusal_by_its_text_alone(kept: str, cut: str) -> None:
+    """T173. infojobs.net's edge page was caught only because `captcha` sits in
+    its canonical link — markup, one rename from reading as an empty board.
+    With that line gone and either of its two sentences gone too, the other
+    must still say "refused", never "no jobs"."""
+    body = connector_health._INFOJOBS_EDGE_BODY
+    assert "captcha" not in body.lower()
+    start = body.index(cut)
+    body = body[:start] + body[body.index("<", start) :]
+    assert kept in body and cut not in body
+    assert connector_health.rate_limited(body, 200) is not None
+    # And the page as served, markup included, which is what arrives today.
+    served = connector_health._INFOJOBS_EDGE_HEAD + connector_health._INFOJOBS_EDGE_BODY
+    assert connector_health.rate_limited(served, 200) is not None

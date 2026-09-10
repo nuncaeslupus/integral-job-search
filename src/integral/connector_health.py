@@ -131,6 +131,12 @@ BLOCK_PAGE_MARKERS: tuple[str, ...] = (
     "rate limit",
     "captcha",
     "_incapsula_resource",
+    # T173, infojobs.net's edge page, 2026-09-10 — its heading and the vendor's
+    # own sentence. Until these, that page was caught only because `captcha`
+    # sits in its canonical link and an element id: markup, not text, one
+    # rename from reading as an empty board.
+    "no podemos identificar tu navegador",
+    "to regain access",
 )
 
 #: What "undecoded" means: an entity reference that survived HTML parsing
@@ -659,6 +665,22 @@ def measure(
 #: kept answering, and a gate that never runs is exactly the silent success
 #: this increment exists to catch. A live refusal, when one happens, is
 #: counted beside them.
+_INFOJOBS_EDGE_HEAD = (
+    "<html><head><title>InfoJobs</title>"
+    '<link rel="canonical" href="https://www.infojobs.net/distil/distil/captcha.xhtml" />'
+    "</head>"
+)
+_INFOJOBS_EDGE_BODY = (
+    '<body class="es"><div class="heading-addons inner-expanded">'
+    '<h1 class="contrast xlarge">No podemos identificar tu navegador</h1>'
+    "<p>¿Cómo lo solucionamos? ¡Elemental, querido Watson!</p>"
+    "<p>Comprueba que JavaScript esté habilitado en tu navegador y que no tengas ningún "
+    "plugin que pueda impedir su carga o redirija tu tráfico a través de un proxy.</p>"
+    "</div>"
+    '<p style="display: none;">To regain access, please make sure that cookies and '
+    "JavaScript are enabled before reloading the page.</p></body></html>"
+)
+
 RATE_LIMIT_SAMPLES: tuple[tuple[str, int | None, str], ...] = (
     ("bare 429", 429, "<html><body>Too Many Requests</body></html>"),
     ("429 with a retry hint", 429, "<html><body>Slow down. Retry after 60s.</body></html>"),
@@ -686,6 +708,26 @@ RATE_LIMIT_SAMPLES: tuple[tuple[str, int | None, str], ...] = (
         200,
         "<html><body><iframe src='/_Incapsula_Resource?SWCGHOEL'></iframe></body></html>",
     ),
+    # #455 round 2: a challenge whose page carries an *empty* title. A reader
+    # that trusts "the page has a title" over what the title says reads it live.
+    (
+        "incapsula challenge with an empty title, served 200",
+        200,
+        "<html><head><title></title></head>"
+        "<body><iframe src='/_Incapsula_Resource?SWUDNSAI=9'></iframe></body></html>",
+    ),
+    # T173. The page infojobs.net's CDN edge serves this tool, excerpted from a
+    # live 29,762-byte response on 2026-09-10 (canonical link, heading, the
+    # hidden vendor sentence — byte-identical, the rest cut). A 200 with no
+    # listing in it, and never "no jobs": a real browser is served the board.
+    (
+        "infojobs edge check, served 200",
+        200,
+        _INFOJOBS_EDGE_HEAD + _INFOJOBS_EDGE_BODY,
+    ),
+    # The same page with its one `captcha`-bearing line gone, which is all a
+    # restyle would take. Caught by its text or not at all.
+    ("infojobs edge check, markup renamed, served 200", 200, _INFOJOBS_EDGE_BODY),
     (
         "rate-limit notice with no status recorded",
         None,

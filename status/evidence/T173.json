@@ -1,0 +1,8 @@
+{
+  "browser_boards_fetched_over_plain_http": 0,
+  "browser_boards": 1,
+  "offers_collected_through_the_browser": 3,
+  "offers_collected_from_a_capture_of_another_search": 0,
+  "plain_requests_made": 15,
+  "gate_status": "measured"
+}

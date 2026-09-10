@@ -11,7 +11,10 @@ site: infojobs.net
 country: ES
 language: es
 maintainer: "@nuncaeslupus"
-last_verified: "2026-08-30"
+# 2026-09-10 (T173): the board now serves its listing only to a real browser,
+# and is read from a page the candidate's own browser saved — see
+# `connector.yaml`. No login is involved, so `authentication: none` still holds.
+last_verified: "2026-09-10"
 
 # Checked with the repo's own audited matcher (`integral.robots`, T70) on the
 # date above, never by grepping the file. https://www.infojobs.net/robots.txt
