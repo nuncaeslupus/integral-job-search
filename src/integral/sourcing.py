@@ -452,6 +452,10 @@ def _one_board(
         items_seen += len(result.items)
         collected: list[str] = []
         for item in result.items:
+            if request.employer and not item.get("company"):
+                # T144: an ATS posting rarely names its employer — the board is
+                # the employer's — so the name comes from the list that chose it.
+                item = {**item, "company": request.employer}
             detail_url = _absolute(item.get("detail_url"), request.url)
             offer, why = _offer_from(connector, item, url=detail_url)
             if offer is None and connector.detail is not None and detail_url:

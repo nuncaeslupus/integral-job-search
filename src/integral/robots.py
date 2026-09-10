@@ -806,6 +806,14 @@ class Robots:
                 if exc.code == 404:
                     # The site saying "no rules", which permits everything.
                     text = ""
+                elif exc.code == 401:
+                    # RFC 9309 §2.3.1.3: a 4xx is "unavailable", and a crawler
+                    # MAY access any resource. Read that way for 401 alone, by
+                    # the owner's decision of 2026-09-10 (T144): api.ashbyhq.com
+                    # answers 401 to /robots.txt while serving its public
+                    # posting API openly. Every other 4xx keeps the posture
+                    # below, and 403 its own route (T71).
+                    text = ""
                 elif exc.code == 403:
                     # T71: a WAF refusing the honest agent on the policy
                     # resource itself is not an answer about what the policy

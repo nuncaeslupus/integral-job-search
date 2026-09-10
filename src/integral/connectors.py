@@ -196,6 +196,19 @@ QUERY_PLACEHOLDER = "{query}"
 # be steered yet — widen `_body_uses_only_the_page_placeholder` when a second
 # one lands.
 
+# T144. One employer on an ATS host — Greenhouse, Lever, Ashby — whose boards
+# all share one URL shape, so one connector reaches every employer it lists.
+# Same substitution posture as the two above. Allowed in the URL **path** only,
+# never the host: a slot in the host would make every employer its own origin,
+# and the one robots verdict a package records would stop covering them.
+EMPLOYER_PLACEHOLDER = "{employer}"
+#: What an employer's slug may be before it is percent-encoded into the path.
+#: Leading alphanumeric, so neither `.` nor `..` can be a whole segment.
+EMPLOYER_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+#: One request per employer per page, so the list is also a request count.
+# ponytail: a fixed cap; per-run budgeting across packages if lists grow.
+MAX_EMPLOYERS = 200
+
 #: The `Content-Type` a JSON request body implies. Derived from the body's
 #: declared form (`ListPage.body_json`) rather than being a header a connector
 #: may set: a connector that could name headers could name `Authorization`,
@@ -1682,6 +1695,63 @@ class ListPage(Strict):
     #: Named `from_json` rather than `json` because `json` is an attribute
     #: pydantic's `BaseModel` already defines.
     from_json: JsonSource | None = None
+    #: T144. Slug → display name, one per employer an ATS host serves; the
+    #: slug fills `{employer}`. The name is the offer's `company` when the
+    #: record names none — Lever's and Ashby's postings never do. Data, not
+    #: code: adding an employer is one line here.
+    employers: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("employers")
+    @classmethod
+    def _employers_are_slugs_with_names(cls, employers: dict[str, str]) -> dict[str, str]:
+        if len(employers) > MAX_EMPLOYERS:
+            raise ValueError(
+                f"list.employers names {len(employers)} employers; at most {MAX_EMPLOYERS} — "
+                "each one is a request on every run"
+            )
+        folded: set[str] = set()
+        for slug, name in employers.items():
+            if not EMPLOYER_SLUG.match(slug):
+                raise ValueError(
+                    f"list.employers slug {slug!r} must start with a letter or digit and hold "
+                    "only letters, digits, . _ or - (at most 100)"
+                )
+            if slug.casefold() in folded:
+                raise ValueError(
+                    f"list.employers names {slug!r} twice, differing only in case — one "
+                    "board fetched twice"
+                )
+            folded.add(slug.casefold())
+            if not isinstance(name, str) or not name.strip() or len(name) > 120:
+                raise ValueError(
+                    f"list.employers[{slug!r}] needs a display name of 1-120 characters"
+                )
+        return employers
+
+    @model_validator(mode="after")
+    def _an_employer_slot_and_employers_imply_each_other(self) -> ListPage:
+        # Both directions, as with `{page}`: a slot with no employers cannot be
+        # filled, and employers with no slot are one URL fetched N times.
+        slots = self.url_pattern.count(EMPLOYER_PLACEHOLDER)
+        if bool(slots) != bool(self.employers):
+            raise ValueError(
+                f"list.url_pattern {'carries' if slots else 'lacks'} {EMPLOYER_PLACEHOLDER} "
+                f"but list.employers is {'empty' if slots else 'not'} — each implies the other"
+            )
+        if not slots:
+            return self
+        if slots > 1:
+            raise ValueError(f"list.url_pattern may carry {EMPLOYER_PLACEHOLDER} once")
+        if EMPLOYER_PLACEHOLDER not in urlsplit(self.url_pattern).path:
+            raise ValueError(
+                f"{EMPLOYER_PLACEHOLDER} must sit in the URL path — in the host each "
+                "employer is its own origin, and one robots verdict no longer covers them"
+            )
+        if self.method != "GET":
+            # `build_list_requests` numbers a POST's pages by request position,
+            # which several employers would shift.
+            raise ValueError(f"{EMPLOYER_PLACEHOLDER} is supported on a GET listing only")
+        return self
 
     @field_validator("item")
     @classmethod
@@ -1777,10 +1847,14 @@ class ListPage(Strict):
         # though it stops short of code execution — refusing any brace other
         # than the literal `{page}` closes that off structurally, rather than
         # trusting every future caller to keep using `str.replace`.
-        bare = pattern.replace(PAGE_PLACEHOLDER, "").replace(QUERY_PLACEHOLDER, "")
+        bare = (
+            pattern.replace(PAGE_PLACEHOLDER, "")
+            .replace(QUERY_PLACEHOLDER, "")
+            .replace(EMPLOYER_PLACEHOLDER, "")
+        )
         if bare.count("{") or bare.count("}"):
             raise ValueError(
-                "url_pattern may only use the literal {page} and {query} "
+                "url_pattern may only use the literal {page}, {query} and {employer} "
                 f"placeholders: {pattern!r}"
             )
         return pattern
@@ -2806,6 +2880,17 @@ def build_list_urls(
     Substitution is `str.replace`, not `str.format` — see `PAGE_PLACEHOLDER`'s
     comment. This never issues a request; T12 does that.
     """
+    return [url for url, _ in _list_targets(connector, page_count=page_count, query=query)]
+
+
+def _list_targets(
+    connector: Connector, *, page_count: int | None, query: str | None
+) -> list[tuple[str, str | None]]:
+    """`build_list_urls`, each URL paired with the employer name it reads.
+
+    Employer-major, so one employer's pages stay together (T144). With no
+    employers the name is `None` and this is the page loop it always was.
+    """
     if page_count is not None:
         pages = page_count
     else:
@@ -2822,7 +2907,19 @@ def build_list_urls(
                 "for must not be searched for nothing"
             )
         pattern = pattern.replace(QUERY_PLACEHOLDER, quote(query, safe=""))
-    return [pattern.replace(PAGE_PLACEHOLDER, str(start + offset)) for offset in range(pages)]
+    per_employer: list[tuple[str, str | None]] = (
+        [
+            (pattern.replace(EMPLOYER_PLACEHOLDER, quote(slug, safe="")), name)
+            for slug, name in connector.list.employers.items()
+        ]
+        if EMPLOYER_PLACEHOLDER in pattern
+        else [(pattern, None)]
+    )
+    return [
+        (url.replace(PAGE_PLACEHOLDER, str(start + offset)), name)
+        for url, name in per_employer
+        for offset in range(pages)
+    ]
 
 
 @dataclass(frozen=True)
@@ -2841,6 +2938,10 @@ class ListRequest:
     headers: dict[str, str]
     #: `None` for a GET. Serialised UTF-8 JSON for a declared `body_json`.
     body: bytes | None
+    #: T144. The display name of the employer this request reads, from
+    #: `list.employers` — never sent; the offer's `company` when the record
+    #: names none. `None` for every board that is not an ATS host.
+    employer: str | None = None
 
 
 def _page_substituted(body: Any, page: int, param: str | None) -> Any:
@@ -2897,7 +2998,8 @@ def build_list_requests(
     request is actually made and not only where the file is read.
     """
     page = connector.list
-    urls = build_list_urls(connector, page_count=page_count, query=query)
+    targets = _list_targets(connector, page_count=page_count, query=query)
+    urls = [url for url, _ in targets]
     if page.body_json is None:
         if page.method != "GET":
             raise ConnectorError(
@@ -2907,7 +3009,8 @@ def build_list_requests(
             )
         derived = client_headers(page.client, page.client_target)
         return [
-            ListRequest(url=url, method=page.method, headers=derived, body=None) for url in urls
+            ListRequest(url=url, method=page.method, headers=derived, body=None, employer=name)
+            for url, name in targets
         ]
     if page.method != "POST":
         # The other half of the same clamp (T110). `_a_post_and_a_body_imply_each_other`

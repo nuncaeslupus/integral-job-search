@@ -1,0 +1,54 @@
+# Lever — an ATS host, not a job board (T144). One package, every employer
+# named in `employers`.
+#
+# Host: api.lever.co, the public Postings API. Its robots.txt (checked
+# 2026-09-10) is `User-agent: *`, `Allow: /`, `Crawl-delay: 1` — nothing to
+# refuse, so no negative control exists (`robots-adjudications.yaml`).
+#
+# `text` is `descriptionPlain`, which is the posting's opening prose only.
+# Lever keeps responsibilities and requirements in a separate `lists` array,
+# and this grammar reads one path per field.
+# ponytail: partial body. Upgrade path is an engine change that joins several
+# JSON paths into one field — its own task, not a wider selector here.
+#
+# Salary is mapped because Lever publishes it structured, per posting, in
+# `salaryRange` — `interval` is Lever's own period label ("per-year-salary").
+site: lever
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-10"
+auth: none
+
+list:
+  url_pattern: "https://api.lever.co/v0/postings/{employer}?mode=json"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    items: "$"
+    fields:
+      detail_url: hostedUrl
+      source_ref: id
+      title: text
+      location_raw: categories.location
+      location_remote: workplaceType
+      text: descriptionPlain
+      salary_min: salaryRange.min
+      salary_max: salaryRange.max
+      salary_currency: salaryRange.currency
+      salary_period: salaryRange.interval
+  # Postings carry no employer name, so this is where `company` comes from.
+  employers:
+    spotify: Spotify
+    pigment: Pigment
+    swile: Swile
+    contentsquare: Contentsquare
+    aircall: Aircall
+    scaleway: Scaleway
+    outreach: Outreach
+    blablacar: BlaBlaCar
+    qonto: Qonto
+    malt: Malt
+    jobandtalent: Jobandtalent
+    lodgify: Lodgify
+    ro: Ro

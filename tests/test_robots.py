@@ -116,7 +116,24 @@ def test_a_missing_robots_txt_permits_everything() -> None:
     assert _robots({}).allows("https://nowhere.example/ofertas")
 
 
-@pytest.mark.parametrize("failure", [500, 503])
+def test_a_401_on_robots_txt_is_unavailable_and_permits_everything() -> None:
+    """RFC 9309 §2.3.1.3: a 4xx on /robots.txt is "unavailable", and a crawler
+    MAY access any resource. Read that way for 401 by the owner's decision of
+    2026-09-10 (T144) — api.ashbyhq.com answers 401 to /robots.txt while serving
+    its public posting API openly. The 401 must not be retried as a browser, and
+    the browser fetcher here would fail the test if it were."""
+
+    def fetch(url: str) -> str:
+        raise urllib.error.HTTPError(url, 401, "Unauthorized", {}, None)  # type: ignore[arg-type]
+
+    def browser(url: str) -> str:
+        raise AssertionError("a 401 is an answer, not a WAF refusal to retry around")
+
+    robots = Robots(fetch=fetch, browser_fetch=browser)
+    assert robots.allows("https://api.ashbyhq.com/posting-api/job-board/example")
+
+
+@pytest.mark.parametrize("failure", [400, 410, 429, 500, 503])
 def test_an_unreadable_robots_txt_refuses_rather_than_assumes(failure: int) -> None:
     """An unanswered question is not a yes. Absent rules are not permissive rules.
 

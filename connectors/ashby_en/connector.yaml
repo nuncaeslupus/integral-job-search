@@ -1,0 +1,92 @@
+# Ashby — an ATS host, not a job board (T144). One package, every employer
+# named in `employers`.
+#
+# Host: api.ashbyhq.com, Ashby's public Job Postings API — the one it
+# documents for employers to publish their own boards. Its /robots.txt answers
+# 401, which RFC 9309 §2.3.1.3 calls "unavailable": a crawler MAY access any
+# resource. `integral.robots` reads a 401 that way by the owner's decision of
+# 2026-09-10. The board pages at jobs.ashbyhq.com disallow `/api/`, which is why
+# this reads the posting API and not the page's own GraphQL.
+#
+# Salary is left unmapped: `compensation.summaryComponents` lists salary,
+# equity and bonus in no fixed order, and this grammar cannot pick the salary
+# one by type. A wrong figure ranks an offer wrongly; a missing one is visible.
+site: ashby
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-10"
+auth: none
+
+list:
+  url_pattern: "https://api.ashbyhq.com/posting-api/job-board/{employer}"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    items: jobs
+    fields:
+      detail_url: jobUrl
+      source_ref: id
+      title: title
+      location_raw: location
+      location_remote: workplaceType
+      text: descriptionPlain
+  # Postings carry no employer name, so this is where `company` comes from.
+  employers:
+    posthog: PostHog
+    openai: OpenAI
+    cursor: Cursor
+    notion: Notion
+    linear: Linear
+    supabase: Supabase
+    replit: Replit
+    langchain: LangChain
+    llamaindex: LlamaIndex
+    elevenlabs: ElevenLabs
+    deepl: DeepL
+    sentry: Sentry
+    clickhouse: ClickHouse
+    modal: Modal
+    baseten: Baseten
+    cohere: Cohere
+    perplexity: Perplexity
+    sierra: Sierra
+    decagon: Decagon
+    writer: Writer
+    zapier: Zapier
+    neon: Neon
+    render: Render
+    railway: Railway
+    n8n: n8n
+    dust: Dust
+    photoroom: Photoroom
+    anyscale: Anyscale
+    pinecone: Pinecone
+    weaviate: Weaviate
+    temporal: Temporal
+    prefect: Prefect
+    astronomer: Astronomer
+    airbyte: Airbyte
+    hightouch: Hightouch
+    docker: Docker
+    coder: Coder
+    1password: 1Password
+    oyster: Oyster
+    buffer: Buffer
+    gitbook: GitBook
+    mintlify: Mintlify
+    vapi: Vapi
+    livekit: LiveKit
+    runway: Runway
+    synthesia: Synthesia
+    poolside: Poolside
+    cognition: Cognition
+    zed: Zed
+    graphite: Graphite
+    greptile: Greptile
+    hex: Hex
+    deepnote: Deepnote
+    rerun: Rerun
+    lovable: Lovable
+    incident: incident.io
+    vanta: Vanta
