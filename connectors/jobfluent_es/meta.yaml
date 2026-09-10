@@ -69,9 +69,12 @@ fixture:
   # the site chrome, the filter sidebar, the "related offers" strip — and, on
   # the detail page, the whole application form. That form carries a Rails
   # `authenticity_token`, i.e. a live session credential of whoever recorded the
-  # capture, and it is excluded rather than redacted. The build asserts the
-  # string `authenticity_token` is absent from the committed file, alongside the
-  # repo-wide fixture check that refuses any IPv4 literal.
+  # capture, and it is excluded rather than redacted. This used to say the build
+  # asserted that. Nothing did until T171:
+  # `tests/test_query_capture.py::test_jobfluents_committed_bytes_carry_no_session_token_or_client_ip`
+  # now checks every committed `fixture/` and `probe/` HTML file. Any token
+  # value must read `REDACTED` (the live probe's are), and no IPv4 literal may
+  # appear.
   bodies: excerpted
   # JobFluent writes no client address into its responses (trabajos.com does).
   # Nothing needed replacing; the assertion above is what makes that a checked

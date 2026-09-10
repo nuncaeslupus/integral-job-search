@@ -20,11 +20,29 @@ makes no difference, because the whole URL is matched rather than a key looked
 up. So a renamed key, a moved segment, a changed path and a fixed duplicate of
 the key all fail, and nobody has to list them.
 
-*Filled* means at least one character, none of them a URL delimiter
-(`& # / ?`) or a brace. An empty `q=` asks the board for nothing, which is the
-unfiltered list rather than evidence that it reads `q`. A brace rules out the
-cheapest forgery, a capture that copies `url_pattern` with `{query}` still in
-it. Only the page number is left free, since it is T113's to certify.
+*Filled* is a closed rule about what the connector itself sends, not a list of
+delimiters to refuse. Round one of the second read on #461 showed why a list
+fails: `& # ?` were listed and untested, and `q=+` or `q=%20` counted as
+filled. Two conditions now apply:
+
+* The raw value must be spelled in the alphabet `build_list_urls` spells a
+  query in. That is `quote(query, safe="")`: RFC 3986 §2.3 unreserved
+  characters and `%XX` escapes, and nothing else. Every delimiter falls
+  outside it by construction, including `& # / ? ; =`, a space and a brace.
+  `+` is also accepted in the query component, because a browser capture
+  writes a space that way there (`landingjobs_en`'s
+  `q=artificial+intelligence`). In a path, `+` is a literal character that
+  the encoder never emits, so it is refused there.
+* The decoded value must be a query `build_list_urls` would accept and a
+  request would still carry. It must not be blank by the connector's own test
+  (`not query.strip()`), because an empty `q=` asks for nothing and the
+  answer is the board's whole list. It must not contain `{query}`, which rules
+  out a capture copied from the pattern whether or not the placeholder was
+  escaped. In a path slot it must not be `.` or `..`: RFC 3986 §3.3 names
+  those two dot-segments, and §5.2.4 removes them, so no query segment
+  survives.
+
+Only the page number is left free, since it is T113's to certify.
 
 **What this does not establish.** A capture carrying the key shows the board
 was asked with it, not that the answer depended on it. That second fact is
@@ -32,6 +50,10 @@ measured by hand when a probe is recorded: a nonsense term must change the
 rows. It is written beside the package's `url_pattern` (see `jobfluent_es`).
 Nothing reads it back. Nothing here reads a response body either, for the
 reason T113 gives.
+
+This rule also does not require the capture to declare how it was made. An
+`unrecorded` capture passes if its URL fits. That is T113's posture:
+provenance is `integral.capture_provenance`'s question, not this one.
 
 **The denominator is the steerable packages checked**, committed as a literal
 floor rather than the count of the day (T100, T122). Otherwise a library that
@@ -47,6 +69,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, unquote_plus
 
 from integral.connector_coverage import is_example_site, read_package
 from integral.connectors import (
@@ -70,24 +93,43 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T171.json"
 #: board would turn retiring one into a gate failure, which T100 ruled out.
 MINIMUM_STEERABLE_PACKAGES_CHECKED = 4
 
-#: What a filled `{query}` may be: one or more characters, none a delimiter
-#: that would end the URL position it sits in, and no brace.
-_FILLED = r"[^&#/?{}]+"
+#: The alphabet `quote(query, safe="")` writes (RFC 3986 §2.3 unreserved, and
+#: pct-encoded), and the same alphabet plus `+` for the query component.
+_PATH_VALUE = r"((?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)"
+_QUERY_VALUE = r"((?:[A-Za-z0-9._~+-]|%[0-9A-Fa-f]{2})+)"
+
+#: RFC 3986 §3.3's dot-segments, which §5.2.4 removes from a path.
+_DOT_SEGMENTS = frozenset({".", ".."})
+
+
+def _filled(raw: str, in_query_component: bool) -> bool:
+    """Would a request still carry `raw` as a query `build_list_urls` accepts?"""
+    value = unquote_plus(raw) if in_query_component else unquote(raw)
+    if not value.strip() or QUERY_PLACEHOLDER in value:
+        return False
+    return in_query_component or value not in _DOT_SEGMENTS
 
 
 def query_measured(url_pattern: str, captured: str | None) -> bool:
     """Is `captured` a URL `url_pattern` issues, with every `{query}` filled?"""
     if captured is None:
         return False
-    pattern = "".join(
-        r"\d+"
-        if part == PAGE_PLACEHOLDER
-        else _FILLED
-        if part == QUERY_PLACEHOLDER
-        else re.escape(part)
-        for part in re.split(r"(\{page\}|\{query\})", url_pattern)
+    regex: list[str] = []
+    positions: list[bool] = []
+    in_query_component = False
+    for part in re.split(r"(\{page\}|\{query\})", url_pattern):
+        if part == PAGE_PLACEHOLDER:
+            regex.append(r"\d+")
+        elif part == QUERY_PLACEHOLDER:
+            regex.append(_QUERY_VALUE if in_query_component else _PATH_VALUE)
+            positions.append(in_query_component)
+        else:
+            regex.append(re.escape(part))
+            in_query_component = in_query_component or "?" in part
+    match = re.fullmatch("".join(regex), captured)
+    return match is not None and all(
+        _filled(raw, position) for raw, position in zip(match.groups(), positions, strict=True)
     )
-    return re.fullmatch(pattern, captured) is not None
 
 
 @dataclass(frozen=True)

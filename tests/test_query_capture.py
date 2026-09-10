@@ -7,11 +7,17 @@ import json
 import re
 import shutil
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
 from integral import query_capture as qc
-from integral.connectors import DEFAULT_CONNECTORS_DIR, accepts_query, load_connector
+from integral.connectors import (
+    DEFAULT_CONNECTORS_DIR,
+    accepts_query,
+    build_list_urls,
+    load_connector,
+)
 
 _STEERABLE = tuple(
     package.name
@@ -104,10 +110,84 @@ def test_an_unreadable_package_is_named_not_skipped(library: Path) -> None:
         ("https://b.test/jobs/{query}/", "https://b.test/jobs/python/extra/", False),
         ("https://b.test/jobs/{query}/", "https://b.test/other/python/", False),
         ("https://b.test/jobs?q={query}", None, False),
+        # Second read on #461, F1: blank once decoded, so `build_list_urls`
+        # would have refused to send it.
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=+&page=2", False),
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=%20&page=2", False),
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=%09&page=2", False),
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q= &page=2", False),
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=\t&page=2", False),
+        ("https://b.test/trabajo-de-{query}", "https://b.test/trabajo-de-+", False),
+        ("https://b.test/trabajo-de-{query}", "https://b.test/trabajo-de-%20", False),
+        # F2: each delimiter ends the position, leaving the query empty.
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=&x=1&page=2", False),
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=#x&page=2", False),
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=;x&page=2", False),
+        ("https://b.test/jobs/{query}/", "https://b.test/jobs/?x/", False),
+        ("https://b.test/jobs/{query}/", "https://b.test/jobs/#x/", False),
+        (
+            "https://b.test/jobs?q={query}&page={page}",
+            "https://b.test/jobs?q=python&page=two",
+            False,
+        ),
+        # F3: a dot-segment is removed from the path, and the query with it.
+        ("https://b.test/jobs/{query}/", "https://b.test/jobs/../", False),
+        ("https://b.test/jobs/{query}/", "https://b.test/jobs/./", False),
+        ("https://b.test/jobs/{query}/", "https://b.test/jobs/%2E%2E/", False),
+        # ...but in the query component `..` is a literal search.
+        ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=..", True),
+        # F4: the placeholder, escaped as a browser would copy it.
+        ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=%7Bquery%7D", False),
+        ("https://b.test/jobs/{query}/", "https://b.test/jobs/%7Bquery%7D/", False),
+        # Filled, in the spellings the connector and a browser really send.
+        ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=t%C3%A9cnico%20farmacia", True),
+        ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=t%C3%A9cnico+farmacia", True),
+        ("https://b.test/jobs/{query}/", "https://b.test/jobs/data-scientist/", True),
     ],
 )
 def test_query_measured(pattern: str, captured: str | None, measured: bool) -> None:
     assert qc.query_measured(pattern, captured) is measured
+
+
+@pytest.mark.parametrize("in_query_component", [True, False])
+@pytest.mark.parametrize("char", [chr(code) for code in range(0x20, 0x7F)])
+def test_the_raw_alphabet_is_the_one_the_connector_encodes_in(
+    char: str, in_query_component: bool
+) -> None:
+    """Derived from `quote`, not listed: a raw character is accepted exactly when
+    `build_list_urls`' encoder would leave it as it is, plus `+` in the query
+    component. An enumeration of delimiters has no last element (F2)."""
+    pattern = "https://b.test/jobs?q={query}" if in_query_component else "https://b.test/j/{query}/"
+    captured = pattern.replace("{query}", f"x{char}x")
+    expected = quote(char, safe="") == char or (char == "+" and in_query_component)
+    assert qc.query_measured(pattern, captured) is expected
+
+
+@pytest.mark.parametrize("name", _STEERABLE)
+@pytest.mark.parametrize(
+    "query", ["python", "técnico farmacia", "c++", "a/b", "x&y=z", "50%", ".."]
+)
+def test_every_url_the_connector_sends_is_accepted(name: str, query: str) -> None:
+    """The fail-closed mirror: nothing `build_list_urls` sends reads as unmeasured."""
+    connector = load_connector(DEFAULT_CONNECTORS_DIR / name)
+    for url in build_list_urls(connector, query=query):
+        assert qc.query_measured(connector.list.url_pattern, url), url
+
+
+def test_jobfluents_committed_bytes_carry_no_session_token_or_client_ip() -> None:
+    """What `jobfluent_es/meta.yaml` says the build asserts, and the live probe
+    relies on. Until the second read on #461 nothing asserted either."""
+    package = DEFAULT_CONNECTORS_DIR / "jobfluent_es"
+    files = [*package.glob("fixture/*.html"), *package.glob("probe/*.html")]
+    assert len(files) >= 3
+    token = re.compile(
+        r'(?:name="authenticity_token"[^>]*?value|name="csrf-token" content)="([^"]*)"'
+    )
+    ipv4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        assert set(token.findall(text)) <= {"REDACTED"}, path
+        assert not ipv4.search(text), path
 
 
 def test_below_the_floor_reads_unmeasured_writes_nothing_and_exits_1(
