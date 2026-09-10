@@ -1,0 +1,21 @@
+{
+  "flood_violations": 0,
+  "offers_written_off_aim": 0,
+  "offers_written_past_the_ceiling": 0,
+  "offers_on_disk_differ_from_run_added": 0,
+  "requests_after_the_ceiling": 0,
+  "boards_reported_asked_without_a_request": 0,
+  "rows_served_not_reported": 0,
+  "rows_not_accounted_for": 0,
+  "off_aim_rows_misreported": 0,
+  "worldwide_boards_selected_without_remote_reach": 0,
+  "offer_ceiling": 50,
+  "boards_installed": 3,
+  "pages_per_board": 2,
+  "requests_made": 3,
+  "rows_served": 120,
+  "offers_written": 50,
+  "rows_reported_off_aim": 60,
+  "rows_reported_over_the_ceiling": 10,
+  "gate_status": "measured"
+}

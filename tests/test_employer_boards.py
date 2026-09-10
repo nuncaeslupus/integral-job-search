@@ -210,8 +210,8 @@ def test_the_employer_name_fills_a_missing_company_and_never_overrides_one(
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
     store = ProfileStore(tmp_path / "p", "test")
     bodies = {
-        "acme": {"jobs": [{"title": "Role A", "body": "about A"}]},
-        "beta": {"jobs": [{"title": "Role B", "body": "about B", "company": "Beta (own)"}]},
+        "acme": {"jobs": [{"title": "Python Role A", "body": "about A"}]},
+        "beta": {"jobs": [{"title": "Python Role B", "body": "about B", "company": "Beta (own)"}]},
     }
 
     def fetch(request: ListRequest) -> Response:
@@ -475,7 +475,11 @@ def _three_employer_run(
 
 
 def _jobs(title: str) -> Response:
-    return Response(200, json.dumps({"jobs": [{"title": title, "body": f"about {title}"}]}))
+    # "Python" because the runs search for it, and an unsteered board keeps only
+    # rows matching the candidate's phrase (T167).
+    return Response(
+        200, json.dumps({"jobs": [{"title": f"Python {title}", "body": f"about {title}"}]})
+    )
 
 
 def test_one_failing_employer_does_not_end_the_host(tmp_path: Path) -> None:
@@ -627,7 +631,8 @@ def _detail_run(
             return Response(200, f"<div class='content'>the advert at {request.url}</div>")
         slug = request.url.split("/")[-2]
         rows = [
-            {"title": f"{slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"} for n in (1, 2)
+            {"title": f"Python {slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"}
+            for n in (1, 2)
         ]
         return Response(200, json.dumps({"jobs": rows}))
 
@@ -670,7 +675,10 @@ def test_the_advert_host_crawl_delay_is_kept_and_a_budget_stop_is_named(
     (outcome,) = run.outcomes
     assert (outcome.added, outcome.detail_fetched) == (3, 3)
     assert pauses.count(5.0) == 3
-    assert outcome.drop_reason and "budget ran out" in outcome.drop_reason
+    # T167 counts a budget stop apart from `dropped`, so it cannot read as a
+    # connector fault at all; the summary names the budget.
+    assert (outcome.unopened, outcome.dropped) == (1, 0), outcome
+    assert "budget was spent" in run.summary()
 
 
 def test_every_employer_failing_is_an_error(tmp_path: Path) -> None:
