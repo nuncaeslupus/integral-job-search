@@ -103,6 +103,11 @@
       "line": 1144
     },
     {
+      "module": "query_capture",
+      "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
+      "line": 71
+    },
+    {
       "module": "question_bank",
       "name": "MINIMUM_PROBES",
       "line": 486
@@ -242,14 +247,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2777,
+      "line": 2779,
       "population": 39
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2710,
-      "population": 74
+      "line": 2712,
+      "population": 75
     },
     {
       "module": "freshness",
@@ -449,6 +454,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 74,
+  "floors_swept_at_least": 75,
   "floors_arithmetically_checked_at_least": 36
 }

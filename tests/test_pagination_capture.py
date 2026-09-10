@@ -2738,14 +2738,15 @@ def test_deleting_the_capture_is_not_the_cheapest_way_to_pass(
 
 
 def test_the_committed_library_has_no_unenforced_provenance() -> None:
-    """The gate itself, over the twenty shipped captures — nineteen truthfully
+    """The gate itself, over the twenty shipped captures — eighteen truthfully
     `unrecorded`, one `transcribed` naming a ledger line that carries its URL
-    and its body."""
+    and its body, and one `live` (`jobfluent_es`, re-recorded by T171) whose
+    response bytes are committed beside it."""
     measured = cp.measure(_LIBRARY)
 
     assert measured["gate_status"] == "measured"
     assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
-    assert measured["claims"] == {"live": 0, "transcribed": 1, "unrecorded": 19}
+    assert measured["claims"] == {"live": 1, "transcribed": 1, "unrecorded": 18}
     assert measured["example_packages_excluded"] == ["examplejobs_es"]
 
 
@@ -2936,9 +2937,10 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
         record = json.loads(path.read_text(encoding="utf-8"))
         # T113 shipped `transcribed` on usajobs_en and nothing anywhere else;
         # `transcribed_from` is this task's, and so is every `unrecorded`.
+        # A later `live` (T171's jobfluent_es) did not exist then either.
         record.pop("transcribed_from", None)
-        if record.get("provenance") == pc.UNRECORDED:
-            record.pop("provenance")
+        if record.get("provenance") != pc.TRANSCRIBED:
+            record.pop("provenance", None)
         path.write_text(json.dumps(record, indent=2), encoding="utf-8")
 
     before = cp.measure(library)
