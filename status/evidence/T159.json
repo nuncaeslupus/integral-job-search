@@ -3,6 +3,11 @@
   "findings": [],
   "dynamic_population_floors": [
     {
+      "module": "approval",
+      "name": "_SHINGLE",
+      "line": 162
+    },
+    {
       "module": "arsenal_source",
       "name": "MINIMUM_BUNDLE_FILES",
       "line": 107
@@ -11,21 +16,6 @@
       "module": "arsenal_source",
       "name": "MINIMUM_VENDORED_SKILLS",
       "line": 112
-    },
-    {
-      "module": "audit_followup",
-      "name": "CASES_AT_LEAST",
-      "line": 72
-    },
-    {
-      "module": "bulk_filter",
-      "name": "MUST_KEEP_ROWS",
-      "line": 369
-    },
-    {
-      "module": "candidate",
-      "name": "MINIMUM_CASES",
-      "line": 1035
     },
     {
       "module": "capture_provenance",
@@ -48,24 +38,9 @@
       "line": 68
     },
     {
-      "module": "constraints_step",
-      "name": "MINIMUM_CHECKS",
-      "line": 606
-    },
-    {
       "module": "cv_store",
       "name": "MINIMUM_CHECKS",
       "line": 279
-    },
-    {
-      "module": "cv_store",
-      "name": "MINIMUM_READ_CHECKS",
-      "line": 1907
-    },
-    {
-      "module": "decline",
-      "name": "MINIMUM_ASKS",
-      "line": 277
     },
     {
       "module": "elicit_extract",
@@ -78,14 +53,9 @@
       "line": 96
     },
     {
-      "module": "floor_sweep",
-      "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 1495
-    },
-    {
-      "module": "freshness",
-      "name": "MINIMUM_OFFERS",
-      "line": 406
+      "module": "extraction",
+      "name": "_CONFIRMING_MATCHES_FOR_BIPOLAR",
+      "line": 154
     },
     {
       "module": "gate_reader_agreement",
@@ -118,19 +88,9 @@
       "line": 118
     },
     {
-      "module": "lifecycle",
-      "name": "MINIMUM_SCENARIOS",
-      "line": 963
-    },
-    {
       "module": "naming",
       "name": "MINIMUM_SCANNED",
       "line": 228
-    },
-    {
-      "module": "offers",
-      "name": "MINIMUM_CHECKS",
-      "line": 402
     },
     {
       "module": "pagination_capture",
@@ -138,9 +98,9 @@
       "line": 120
     },
     {
-      "module": "pay",
-      "name": "MINIMUM_CHECKS",
-      "line": 709
+      "module": "plan_v2",
+      "name": "_MIN_TASK_CELLS",
+      "line": 138
     },
     {
       "module": "profile_capture",
@@ -163,11 +123,6 @@
       "line": 522
     },
     {
-      "module": "retraction",
-      "name": "MINIMUM_SCANNED",
-      "line": 342
-    },
-    {
       "module": "review_reader",
       "name": "MINIMUM_DISTINCT_SCOPE_STATES",
       "line": 329
@@ -188,16 +143,6 @@
       "line": 311
     },
     {
-      "module": "revision",
-      "name": "MINIMUM_AGED",
-      "line": 426
-    },
-    {
-      "module": "scoring",
-      "name": "MINIMUM_TURNS",
-      "line": 293
-    },
-    {
       "module": "second_reader",
       "name": "FAIL_OPEN_CASES_AT_LEAST",
       "line": 830
@@ -213,6 +158,11 @@
       "line": 859
     },
     {
+      "module": "second_reader",
+      "name": "STDLIB_DISAGREEMENTS_AT_LEAST",
+      "line": 846
+    },
+    {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
       "line": 95
@@ -223,14 +173,135 @@
       "line": 87
     },
     {
-      "module": "sourcing_cycles",
-      "name": "MINIMUM_NON_IMPROVING",
-      "line": 67
+      "module": "spec_consistency",
+      "name": "MINIMUM_DECLARATIONS_FOUND",
+      "line": 108
+    },
+    {
+      "module": "step_gates",
+      "name": "MINIMUM_STEPS_CHECKED",
+      "line": 424
     },
     {
       "module": "trait_sufficiency",
       "name": "MINIMUM_CHECKS",
       "line": 589
+    }
+  ],
+  "evidence_pinned_floors": [
+    {
+      "module": "audit_followup",
+      "name": "CASES_AT_LEAST",
+      "line": 72,
+      "population": 35
+    },
+    {
+      "module": "bulk_filter",
+      "name": "MINIMUM_BATCH",
+      "line": 376,
+      "population": 325
+    },
+    {
+      "module": "bulk_filter",
+      "name": "MUST_KEEP_ROWS",
+      "line": 369,
+      "population": 3
+    },
+    {
+      "module": "candidate",
+      "name": "MINIMUM_CASES",
+      "line": 1035,
+      "population": 19
+    },
+    {
+      "module": "constraints_step",
+      "name": "MINIMUM_CHECKS",
+      "line": 606,
+      "population": 19
+    },
+    {
+      "module": "cv_store",
+      "name": "MINIMUM_READ_CHECKS",
+      "line": 1909,
+      "population": 16
+    },
+    {
+      "module": "decline",
+      "name": "MINIMUM_ASKS",
+      "line": 277,
+      "population": 9
+    },
+    {
+      "module": "floor_sweep",
+      "name": "MINIMUM_FLOORS_SWEPT",
+      "line": 2067,
+      "population": 67
+    },
+    {
+      "module": "freshness",
+      "name": "MINIMUM_OFFERS",
+      "line": 406,
+      "population": 5
+    },
+    {
+      "module": "lifecycle",
+      "name": "MINIMUM_SCENARIOS",
+      "line": 965,
+      "population": 72
+    },
+    {
+      "module": "offers",
+      "name": "MINIMUM_CHECKS",
+      "line": 402,
+      "population": 10
+    },
+    {
+      "module": "pay",
+      "name": "MINIMUM_CHECKS",
+      "line": 709,
+      "population": 36
+    },
+    {
+      "module": "retraction",
+      "name": "MINIMUM_SCANNED",
+      "line": 342,
+      "population": 5
+    },
+    {
+      "module": "revision",
+      "name": "MINIMUM_AGED",
+      "line": 426,
+      "population": 6
+    },
+    {
+      "module": "scoring",
+      "name": "MINIMUM_TURNS",
+      "line": 293,
+      "population": 7
+    },
+    {
+      "module": "sourcing_cycles",
+      "name": "MINIMUM_NON_IMPROVING",
+      "line": 67,
+      "population": 2
+    },
+    {
+      "module": "sourcing_market",
+      "name": "MINIMUM_EMPTY_MARKETS",
+      "line": 77,
+      "population": 2
+    },
+    {
+      "module": "sourcing_reentry",
+      "name": "MINIMUM_TRIGGERS",
+      "line": 35,
+      "population": 2
+    },
+    {
+      "module": "sourcing_strategy",
+      "name": "MINIMUM_SCOPE_CHANGES",
+      "line": 114,
+      "population": 2
     }
   ],
   "bounds_read_and_out_of_scope": [
@@ -242,8 +313,8 @@
     "approval.MINIMUM_RETRACTED_APPROVALS_EVALUATED",
     "approval.MINIMUM_RETRACTION_PROBES",
     "approval.SCHEMA_VERSION",
+    "approval._RECORDED_SENDS",
     "bodyless_post.MINIMUM_PACKAGES",
-    "bulk_filter.MINIMUM_BATCH",
     "bulk_filter.PROBE_BATCH",
     "calibration.TWENTY",
     "connector_contract.MINIMUM_PACKAGES",
@@ -266,6 +337,8 @@
     "cue_audit.MINIMUM_MECHANISM_PINNED_CASES",
     "cv_store.MINIMUM_FIELDS_MEASURED",
     "cv_store.SCHEMA_VERSION",
+    "cv_store._DOC_ID_WIDTH",
+    "cv_store._MAX_DOC_ID_RESERVE_ATTEMPTS",
     "decline.DECLINES_BEFORE_STEP_SILENCE",
     "decline.DECLINES_BEFORE_TOTAL_SILENCE",
     "dedup.MINIMUM_CLUSTER_PAIRS",
@@ -274,6 +347,8 @@
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
+    "extraction._NEGATION_WINDOW",
+    "floor_sweep._MAX_DELEGATION_DEPTH",
     "freshness.DEFAULT_ELAPSED_DAYS",
     "gate_reader_agreement.MINIMUM_GATES_COMPARED",
     "generate.SCHEMA_VERSION",
@@ -281,6 +356,7 @@
     "interview_direction.MINIMUM_NON_SOFTWARE_ARTEFACT_FIELDS",
     "interview_direction.MINIMUM_OPEN_TALK_STEPS",
     "interview_log.SCHEMA_VERSION",
+    "interview_log._ID_WIDTH",
     "language_set.MINIMUM_LANGUAGE_DECLARATIONS",
     "lifecycle.PURGE_HORIZON_DAYS",
     "lifecycle.TOMBSTONE_HASH_VERSION",
@@ -288,6 +364,7 @@
     "metric_naming.MINIMUM_METRICS_CLASSIFIED",
     "mock_interview.MAX_QUESTIONS",
     "mock_interview.SCHEMA_VERSION",
+    "mock_interview._ID_WIDTH",
     "pagination_capture.MINIMUM_URL_SIDE_PROBES",
     "pay.STALE_AFTER_DAYS",
     "plan_v2.MINIMUM_BOARD_SIZE",
@@ -295,6 +372,7 @@
     "presentation.DEFAULT_LIMIT",
     "presentation_log.PASS_OVER_THRESHOLD",
     "process_spec.MIN_ITEM_WORDS",
+    "profile._ID_WIDTH",
     "repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED",
     "repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED",
     "repo_gate.MINIMUM_FILES_FORMATTED",
@@ -303,7 +381,6 @@
     "salary_recovery.HOUSE_ESTIMATE_MINIMUM",
     "salary_recovery.MINIMUM_CORPUS_ADS",
     "scoring.BATCH_THRESHOLD",
-    "second_reader.STDLIB_DISAGREEMENTS_AT_LEAST",
     "session.MINIMUM_PROBES",
     "skill_budget.BUDGET_GRANULARITY",
     "skill_budget.FALLBACK_BUDGET_CHARS",
@@ -312,13 +389,8 @@
     "sourcing.MINIMUM_BOARDS",
     "sourcing.PHRASE_CEILING",
     "sourcing_exclusions.MINIMUM_PRESENTATIONS",
-    "sourcing_market.MINIMUM_EMPTY_MARKETS",
-    "sourcing_reentry.MINIMUM_TRIGGERS",
     "sourcing_scope_review.MINIMUM_STANDING",
-    "sourcing_strategy.MINIMUM_SCOPE_CHANGES",
     "sourcing_strategy.MINIMUM_TRIGGERS",
-    "spec_consistency.MINIMUM_DECLARATIONS_FOUND",
-    "step_gates.MINIMUM_STEPS_CHECKED",
     "step_gates.UNCERTIFIABLE",
     "step_gates.VOCABULARY_SILENT",
     "step_runtime.MINIMUM_PROBES",
@@ -335,5 +407,5 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 54
+  "floors_swept_at_least": 64
 }

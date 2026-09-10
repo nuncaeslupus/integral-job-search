@@ -122,6 +122,19 @@ _GATE_BLOCK_RE = re.compile(r"^```gate\s*$", re.MULTILINE)
 # is no longer waiting. `blocked` and `escalated` are failure states, not
 # completions, and a dependent of one is still genuinely blocked.
 _TERMINAL = frozenset({"done", "merged"})
+
+# A structural minimum, not a scan floor (T159): the task table's own header
+# ("T# | Description | Step | Size | Depends | Gate | Tests | St") has eight
+# columns, and this is not that count — it is the fewest pipe-delimited cells
+# a line can carry and still plausibly *be* a task row (T#, description, and
+# enough besides to matter) rather than a markdown separator (`|---|---|`) or
+# an unrelated pipe-containing line the surrounding prose happens to produce.
+# Below this, `_cells(line)` genuinely varies per row rather than measuring one
+# population this repository could count once — a header separator alone can
+# carry as few as two cells — so there is no single "the scan measured N" this
+# module could state a margin against; the number is a schema minimum, argued
+# here rather than left silent (T159 found it swept, in scope, and undocumented
+# for the first time once the sweep stopped filtering names starting with `_`).
 _MIN_TASK_CELLS = 4
 
 

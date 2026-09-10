@@ -12,6 +12,7 @@ is the separate, complementary check that today's actual tree is clean.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -1197,3 +1198,695 @@ def measure(items=ITEMS):
     monkeypatch.setattr(floor_sweep, "_SRC_DIR", src_dir)
     evidence_path = tmp_path / "evidence.json"
     assert floor_sweep._main([str(evidence_path)]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Round 3 — the second reader's nine findings on PR #436, round 2, reproduced
+# as fixtures. Findings 1-3 are one root cause (dynamic was an exemption, not
+# a classification); the rest are separate blind spots in the sweep itself.
+# ---------------------------------------------------------------------------
+
+
+def test_dropping_a_zero_slack_dynamic_floor_to_zero_is_caught(tmp_path: Path) -> None:
+    """The reader's headline finding: `_zero_slack_claim_contradicts` used to
+    scan a window that *included* the matched phrase, and "zero slack" always
+    contains the word "zero" — so `literal_value == 0` could never contradict
+    the claim, for any floor using this repository's own idiom. Every one of
+    round 1's fourteen fixed floors could be set to `0` with the metric still
+    reading `0`."""
+    _write(
+        tmp_path,
+        """
+# Raised to what the probe carries — 19, zero slack — because 10 had drifted
+# nine checks under with no margin argued for the gap.
+MINIMUM_CASES = 0
+
+
+def probe():
+    checks = 0
+    for _ in range(19):
+        checks += 1
+    return {"cases_checked": checks}
+
+
+def check():
+    measured = probe()
+    if measured["cases_checked"] < MINIMUM_CASES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["reason"] == "stale_margin_claim"
+
+
+def test_dropping_a_zero_slack_arithmetic_floor_to_zero_is_caught(tmp_path: Path) -> None:
+    """The same attack in the arithmetic branch, where the margin itself already
+    settles it (`margin <= 0` never even reaches the claim-parsing code) — kept
+    as a fixture because F1's fix touches the shared parser both branches read."""
+    _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+# Raised to what PROBES carries — 9, zero slack — because 8 tolerated the first
+# deleted probe silently.
+MINIMUM_PROBES = 0
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["reason"] == "stale_margin_claim"
+
+
+def test_a_digit_inside_a_backtick_identifier_is_not_read_as_the_claim(tmp_path: Path) -> None:
+    """`profile.MINIMUM_FIELDS_CHECKED`'s real comment: "Ten today, matching
+    `_D6_FIXTURE` exactly: zero slack." The `6` inside the identifier must not
+    enter the claimed set — dropping the floor to `6` must still be caught."""
+    _write(
+        tmp_path,
+        """
+# Ten today, matching `_D6_FIXTURE` exactly: zero slack, so deleting the
+# first row breaches this immediately.
+MINIMUM_FIELDS_CHECKED = 6
+
+
+def probe():
+    checked = 0
+    for _ in range(10):
+        checked += 1
+    return {"fields_checked": checked}
+
+
+def check():
+    measured = probe()
+    if measured["fields_checked"] < MINIMUM_FIELDS_CHECKED:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["reason"] == "stale_margin_claim"
+
+
+def test_an_issue_reference_after_the_phrase_is_not_read_as_the_claim(tmp_path: Path) -> None:
+    """A trailing `(T159)` issue reference must not be read as the claimed
+    number — dropping the floor to `159` must still be caught, and the claim
+    window must not extend past the matched phrase at all."""
+    _write(
+        tmp_path,
+        """
+# Raised — 36, zero slack (T159).
+MINIMUM_CHECKS = 159
+
+
+def probe():
+    checks = 0
+    for _ in range(36):
+        checks += 1
+    return {"checks_run": checks}
+
+
+def check():
+    measured = probe()
+    if measured["checks_run"] < MINIMUM_CHECKS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["reason"] == "stale_margin_claim"
+
+
+def test_a_leading_underscore_floor_is_swept(tmp_path: Path) -> None:
+    """`approval._SHINGLE`, `plan_v2._MIN_TASK_CELLS`,
+    `extraction._CONFIRMING_MATCHES_FOR_BIPOLAR`: real, `len(...)`-compared
+    floors on `main`, invisible to round 2's `_CONSTANT_NAME_RE` for no reason
+    but the leading underscore — the same "the name filter is still a filter"
+    defect one character narrower."""
+    _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+_MINIMUM_PROBES = 1
+
+
+def probe_one(probes=PROBES):
+    if len(probes) < _MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    finding = measured["findings"][0]
+    assert finding["name"] == "_MINIMUM_PROBES"
+    assert finding["reason"] == "silent_margin"
+
+
+def test_a_leading_underscore_non_floor_constant_stays_off_the_candidate_list(
+    tmp_path: Path,
+) -> None:
+    """Widening the name pattern must not sweep every module-private constant —
+    only the value shape (`_is_len_derived`) decides, exactly as it already does
+    for the public spelling."""
+    _write(
+        tmp_path,
+        """
+_REPO_ROOT = "/not/a/floor"
+_ID_WIDTH = 6
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert measured["floors_swept"] == 0
+
+
+def test_split_on_a_string_is_recognised_as_a_real_population(tmp_path: Path) -> None:
+    """`approval._SHINGLE`'s actual shape: `len(_words(episode))` where `_words`
+    returns `...split()`. Before this, `.split()` fell through to `unknown` (not
+    a count-preserving wrapper, not a scalar method), and the floor was
+    invisible for a reason that had nothing to do with its name."""
+    _write(
+        tmp_path,
+        """
+MINIMUM_WORDS = 1
+
+
+def _words(text):
+    return text.split()
+
+
+def carries(text):
+    words = _words(text)
+    if len(words) <= MINIMUM_WORDS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["name"] == "MINIMUM_WORDS"
+
+
+def test_an_annotated_initial_assignment_is_traced_the_same_as_a_plain_one(
+    tmp_path: Path,
+) -> None:
+    """`second_reader.STDLIB_DISAGREEMENTS_AT_LEAST`'s real shape:
+    `stdlib_disagreements: list[dict[str, str]] = []`, appended to in a loop.
+    An `AnnAssign` initial binding is a distinct AST node from `Assign`, and
+    was invisible to `_assignments_to_name` until this round taught it to read
+    both."""
+    _write(
+        tmp_path,
+        """
+MINIMUM_DISAGREEMENTS = 1
+
+
+def probe():
+    disagreements: list[str] = []
+    for i in range(5):
+        disagreements.append(str(i))
+    if len(disagreements) < MINIMUM_DISAGREEMENTS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["name"] == "MINIMUM_DISAGREEMENTS"
+
+
+def test_a_floors_own_value_as_a_binop_of_two_literals_is_resolved(tmp_path: Path) -> None:
+    """`MINIMUM_PROBES = 1 + 0` — a `BinOp` of two literals: neither
+    `_literal_int` (not a bare `Constant`) nor `_is_len_derived` (no `len(...)`
+    operand) recognised this as a hand-written number, so it was invisible."""
+    _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+MINIMUM_PROBES = 1 + 0
+
+
+def probe_one(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["name"] == "MINIMUM_PROBES"
+
+
+def test_a_floor_aliased_through_a_sibling_constant_is_resolved(tmp_path: Path) -> None:
+    """`_FLOOR = 1` then `MINIMUM_PROBES = _FLOOR` — a hand-written number one
+    hop away through another module-level constant, not a derived one."""
+    _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+_FLOOR = 1
+MINIMUM_PROBES = _FLOOR
+
+
+def probe_one(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    names = {f["name"] for f in measured["findings"]}
+    # Both the alias and the constant it resolves through are real, swept
+    # floors — `_FLOOR` is itself a legal, capitalised module constant whose
+    # value happens to be read as a floor too, which is desirable rather than
+    # a duplicate: a session that "fixes" `MINIMUM_PROBES` alone and leaves
+    # `_FLOOR` at 1 has not actually fixed anything downstream of `_FLOOR`.
+    assert {"MINIMUM_PROBES", "_FLOOR"} <= names
+
+
+def test_a_three_hop_delegated_comparison_is_found(tmp_path: Path) -> None:
+    """Round 2 answered the reader's two-hop finding by writing exactly two
+    hops in by hand. A third hop still defeated it — the closed form is
+    recursion, not a fourth remedy naming a fourth hop."""
+    _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+MINIMUM_PROBES = 1
+
+
+def _innermost(floor, other):
+    if other < floor:
+        raise SystemExit(1)
+
+
+def _mid2(floor, other):
+    _innermost(floor, other)
+
+
+def _mid1(floor, other):
+    _mid2(floor, other)
+
+
+def outer(probes=PROBES):
+    _mid1(MINIMUM_PROBES, len(probes))
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["name"] == "MINIMUM_PROBES"
+
+
+def test_a_four_hop_delegated_comparison_is_also_found(tmp_path: Path) -> None:
+    """One hop further than the reader's own constructed attack — pinned as a
+    rule (bounded recursion) rather than as a count, so this is not the fixture
+    that ends the enumeration, only evidence that the rule has no hard-coded
+    stopping point at three."""
+    _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
+MINIMUM_PROBES = 1
+
+
+def _innermost(floor, other):
+    if other < floor:
+        raise SystemExit(1)
+
+
+def _mid3(floor, other):
+    _innermost(floor, other)
+
+
+def _mid2(floor, other):
+    _mid3(floor, other)
+
+
+def _mid1(floor, other):
+    _mid2(floor, other)
+
+
+def outer(probes=PROBES):
+    _mid1(MINIMUM_PROBES, len(probes))
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert measured["findings"][0]["name"] == "MINIMUM_PROBES"
+
+
+# ---------------------------------------------------------------------------
+# Round 3's structural fix: a dynamic floor's population read from this
+# repository's own committed `status/evidence/*.json`, checked by the exact
+# arithmetic every counted-collection floor already gets. This is what closes
+# the round-2 reader's diagnosis — "dynamic is not a classification, it is an
+# exemption" — for every floor shaped like this repository's own scripted
+# probes, rather than only patching the comment parser those floors used to be
+# checked by instead.
+# ---------------------------------------------------------------------------
+
+
+def _write_evidence(tmp_path: Path, relative: str, data: dict[str, Any]) -> None:
+    path = tmp_path / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_a_dynamic_floor_backed_by_committed_evidence_is_checked_arithmetically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No comment at all — the floor is still caught, because its real
+    population is read from the committed evidence file rather than argued in
+    prose. This is the fixture a keyword- or digit-parser could never pass:
+    there is no comment here for any parser to misread."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    _write_evidence(tmp_path, "status/evidence/T900.json", {"checks_run": 19})
+    _write(
+        tmp_path,
+        """
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
+
+MINIMUM_CHECKS = 1
+
+
+def probe():
+    checks = 0
+    for _ in range(19):
+        checks += 1
+    return {"checks_run": checks}
+
+
+def write_evidence(evidence=DEFAULT_EVIDENCE_PATH):
+    measured = probe()
+    return measured
+
+
+def _main():
+    measured = write_evidence()
+    if measured["checks_run"] < MINIMUM_CHECKS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    pinned = [p for p in measured["evidence_pinned_floors"] if p["name"] == "MINIMUM_CHECKS"]
+    assert pinned == []  # not pinned *compliant* — it is a real breach
+    finding = measured["findings"][0]
+    assert finding["name"] == "MINIMUM_CHECKS"
+    assert finding["reason"] == "silent_margin"
+    assert "population is 19" in finding["detail"]
+
+
+def test_a_correctly_pinned_floor_is_reported_compliant_with_its_population(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    _write_evidence(tmp_path, "status/evidence/T900.json", {"checks_run": 19})
+    _write(
+        tmp_path,
+        """
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
+
+MINIMUM_CHECKS = 19
+
+
+def probe():
+    checks = 0
+    for _ in range(19):
+        checks += 1
+    return {"checks_run": checks}
+
+
+def write_evidence(evidence=DEFAULT_EVIDENCE_PATH):
+    measured = probe()
+    return measured
+
+
+def _main():
+    measured = write_evidence()
+    if measured["checks_run"] < MINIMUM_CHECKS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    pinned = [p for p in measured["evidence_pinned_floors"] if p["name"] == "MINIMUM_CHECKS"]
+    assert len(pinned) == 1
+    assert pinned[0]["population"] == 19
+    assert measured["dynamic_population_floors"] == []
+
+
+def test_a_pinnable_population_read_through_a_dispatchers_own_parameter_is_pinned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`lifecycle.MINIMUM_SCENARIOS`'s real shape: the comparison lives in a
+    `_s5_report(measured)`-style helper, where `measured` is that function's own
+    *parameter*, bound by its one caller — not a local assignment at all."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    _write_evidence(tmp_path, "status/evidence/T900.json", {"scenarios_checked": 72})
+    _write(
+        tmp_path,
+        """
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
+
+MINIMUM_SCENARIOS = 20
+
+
+def probe():
+    scenarios = 0
+    for _ in range(72):
+        scenarios += 1
+    return {"scenarios_checked": scenarios}
+
+
+def write_evidence(evidence=DEFAULT_EVIDENCE_PATH):
+    return probe()
+
+
+def _report(measured):
+    if measured["scenarios_checked"] < MINIMUM_SCENARIOS:
+        raise SystemExit(1)
+
+
+def _main():
+    measured = write_evidence()
+    _report(measured)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = measured["findings"][0]
+    assert finding["name"] == "MINIMUM_SCENARIOS"
+    assert "population is 72" in finding["detail"]
+
+
+def test_a_parameter_with_two_call_sites_is_not_pinned_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The single-caller hop is followed only when there genuinely is a single
+    caller — with two, which one's evidence file is the right one to read is
+    not this sweep's to guess, so this stays an unpinned dynamic floor rather
+    than a wrong number silently believed."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    _write_evidence(tmp_path, "status/evidence/T900.json", {"checks_run": 3})
+    _write(
+        tmp_path,
+        """
+# Argued so this stays a compliant, merely-unpinned floor rather than an
+# undocumented one — the property under test is the refusal to pin through
+# two callers, not the separate "no comment at all" check.
+MINIMUM_CHECKS = 1
+
+
+def probe_a():
+    checks = 0
+    for _ in range(3):
+        checks += 1
+    return {"checks_run": checks}
+
+
+def probe_b():
+    checks = 0
+    for _ in range(5):
+        checks += 1
+    return {"checks_run": checks}
+
+
+def _report(measured):
+    if measured["checks_run"] < MINIMUM_CHECKS:
+        raise SystemExit(1)
+
+
+def _main_a():
+    measured = probe_a()
+    _report(measured)
+
+
+def _main_b():
+    measured = probe_b()
+    _report(measured)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    names = {d["name"] for d in measured["dynamic_population_floors"]}
+    pinned_names = {p["name"] for p in measured["evidence_pinned_floors"]}
+    assert "MINIMUM_CHECKS" in names
+    assert "MINIMUM_CHECKS" not in pinned_names
+
+
+def test_an_evidence_path_chosen_by_an_untraceable_condition_is_not_guessed_at(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`profile_capture`'s real shape: `default_path = DEFAULT_D8_EVIDENCE_PATH
+    if args.subject_gate else DEFAULT_EVIDENCE_PATH` — *both* branches resolve,
+    to two different real files, and which one is live depends on a condition
+    this sweep does not evaluate. Refusing to guess is the point: picking
+    either would be a coin flip on which probe's number gets read."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    _write_evidence(tmp_path, "status/evidence/T900.json", {"checks_run": 5})
+    _write_evidence(tmp_path, "status/evidence/D900.json", {"checks_run": 9})
+    _write(
+        tmp_path,
+        """
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
+DEFAULT_D900_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D900.json"
+
+# Argued so this stays a compliant, merely-unpinned floor — the property
+# under test is the refusal to guess between two live evidence files, not
+# the separate "no comment at all" check.
+MINIMUM_CHECKS = 1
+
+
+def probe():
+    checks = 0
+    for _ in range(5):
+        checks += 1
+    return {"checks_run": checks}
+
+
+def write_evidence(evidence=DEFAULT_EVIDENCE_PATH):
+    return probe()
+
+
+def _main(subject_gate):
+    default_path = DEFAULT_D900_EVIDENCE_PATH if subject_gate else DEFAULT_EVIDENCE_PATH
+    measured = write_evidence(default_path)
+    if measured["checks_run"] < MINIMUM_CHECKS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    names = {d["name"] for d in measured["dynamic_population_floors"]}
+    pinned_names = {p["name"] for p in measured["evidence_pinned_floors"]}
+    assert "MINIMUM_CHECKS" in names
+    assert "MINIMUM_CHECKS" not in pinned_names
+
+
+# ---------------------------------------------------------------------------
+# The sweep's own denominator, checked arithmetically against this run's own
+# true `swept` — not classified `dynamic` (self-exemption by classification,
+# the reader's third/fourth finding) and not skipped by module identity
+# (round 1's original defect).
+# ---------------------------------------------------------------------------
+
+
+def test_the_sweeps_own_floor_is_a_real_arithmetic_check_not_an_exemption(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round 2 classified `MINIMUM_FLOORS_SWEPT` `dynamic`, which put it in the
+    one branch that never computes a margin — self-exemption by classification
+    rather than by identity (the reader's third/fourth finding). Matched by
+    *identity* (`_THIS_FILE`) against a tiny synthetic tree standing in for the
+    real one, so this run's own `swept` and the floor's own (missing) comment
+    can be controlled without touching the real `floor_sweep.py`: a floor left
+    with no argued margin, sitting below this tiny tree's own true count, is a
+    real, computed breach — not a name-shaped candidate nodded through."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5)
+MINIMUM_PROBES = 1
+MINIMUM_FLOORS_SWEPT = 1
+
+
+def probe_one(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+        name="floor_sweep",
+    )
+    monkeypatch.setattr(floor_sweep, "_THIS_FILE", fixture.resolve())
+    # In reality `_THIS_FILE` and `MINIMUM_FLOORS_SWEPT` always name the same
+    # file's own constant; kept in sync here too, or the self-check would be
+    # comparing the fixture's declared value against the *real* module's own
+    # (unrelated) floor rather than against itself.
+    monkeypatch.setattr(floor_sweep, "MINIMUM_FLOORS_SWEPT", 1)
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_swept"] == 2  # MINIMUM_PROBES, and the deferred self-floor
+    finding = next(
+        f
+        for f in measured["findings"]
+        if f["module"] == "floor_sweep" and f["name"] == "MINIMUM_FLOORS_SWEPT"
+    )
+    assert finding["reason"] == "silent_margin"
+
+
+def test_the_sweeps_own_floor_argued_in_writing_is_compliant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same shape, with the same margin argued in the same words this
+    module's own comment already uses — checked the same way any other
+    floor's argued margin is."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1, 2, 3, 4, 5)
+MINIMUM_PROBES = 5
+
+# One point of slack: this tiny tree sweeps two floors, and one is enough to
+# leave a module edit unnoticed.
+MINIMUM_FLOORS_SWEPT = 1
+
+
+def probe_one(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+        name="floor_sweep",
+    )
+    monkeypatch.setattr(floor_sweep, "_THIS_FILE", fixture.resolve())
+    monkeypatch.setattr(floor_sweep, "MINIMUM_FLOORS_SWEPT", 1)
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    pinned = next(
+        p
+        for p in measured["evidence_pinned_floors"]
+        if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_SWEPT"
+    )
+    assert pinned["population"] == 2
+
+
+def test_the_sweeps_own_floor_is_pinned_compliant_on_the_live_tree() -> None:
+    measured = floor_sweep.measure()
+    pinned = next(
+        p
+        for p in measured["evidence_pinned_floors"]
+        if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_SWEPT"
+    )
+    assert pinned["population"] == measured["floors_swept"]
+    assert not any(
+        d["module"] == "floor_sweep" and d["name"] == "MINIMUM_FLOORS_SWEPT"
+        for d in measured["dynamic_population_floors"]
+    )

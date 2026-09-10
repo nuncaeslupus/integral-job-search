@@ -952,15 +952,17 @@ def probe_lifecycle() -> dict[str, Any]:
     }
 
 
-# Comfortably below what the fixture above actually runs (every §7.1 table
-# cell checked both ways, plus the retention/purge/tombstone/collection/
-# revival scenarios) and comfortably above what any trivial fixture could
-# produce — "zero over nothing is not a measurement" (payload, and every
-# other T*/S* gate module's floor). Moved above the assignment it explains
-# (T159): a comment placed below is invisible to a sweep reading "the comment
-# above a declaration", and this floor was exactly that until round 2's
-# parameter-via-callers tracing made it visible for the first time.
-MINIMUM_SCENARIOS = 20
+# Moved above the assignment it explains (T159): a comment placed below is
+# invisible to a sweep reading "the comment above a declaration", and this
+# floor was exactly that until round 2's parameter-via-callers tracing made it
+# visible for the first time. Round 3 then pinned its population to the exact
+# number `status/evidence/S5.json`'s own `scenarios_checked` already carried —
+# raised to what the probe carries — 72, zero slack — because the previous,
+# hand-picked "comfortably below" margin of 52 was real and undocumented: a
+# margin argued in prose ("comfortably below") that matches no phrase this
+# module's own keyword check recognises is, in the arithmetic branch,
+# indistinguishable from one argued not at all.
+MINIMUM_SCENARIOS = 72
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

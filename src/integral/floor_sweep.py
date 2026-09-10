@@ -25,8 +25,9 @@ independently capable of re-opening the class this module exists to close:
    spellings — `*_AT_LEAST` and `*_MINIMUM` — which between them name real floors
    (`audit_followup.CASES_AT_LEAST`, `robots.FIXTURES_AT_LEAST`, `second_reader`'s
    four, `connector_policy`'s two, `connector_exchange.LEAK_NEEDLE_MINIMUM`,
-   `salary_recovery.HOUSE_ESTIMATE_MINIMUM`). `_FLOOR_NAME_RE` below matches all four
-   spellings, not the two the previous sweep used.
+   `salary_recovery.HOUSE_ESTIMATE_MINIMUM`). Round 1's `_FLOOR_NAME_RE` matched
+   all four spellings; round 2 replaced it with `_CONSTANT_NAME_RE` below, which
+   does not enumerate spellings at all (see "Round 2" further down).
 2. **An equality fingerprint.** A candidate set built by checking whether the floor
    equals its population *by construction* cannot find a floor that is *below* its
    population with no argument for the gap — the entire class in question, and the
@@ -167,6 +168,76 @@ reasoning — "the list this is read against is `len(ARRANGEMENTS) + 1`") is now
 arithmetically rather than falling out of scope the moment a `BinOp` sits where a bare
 `len(...)` used to.
 
+## Round 3 — dynamic was an exemption, not a classification
+
+A second reader BLOCKED round 2 with nine findings, eight fail-open, all behind a
+green gate — and one root cause: round 2 broadened the sweep from 46 floors to 57,
+and every one of the eleven newly-swept floors landed in `dynamic`, where no margin
+was ever computed. Round 1's diagnosis — most of the sweep sits in a branch that
+cannot fail — was round 2's own result too, just with a bigger denominator.
+
+1. **The headline finding, reproduced by a second method before it was believed:**
+   `_zero_slack_claim_contradicts` scanned a window that *included* the matched
+   phrase, and `"zero slack"` contains the word "zero" — so `literal_value == 0`
+   could never contradict the claim, for every floor this check could ever fire
+   on. The accept-set was seeded by the checker's own trigger word. Fixed by
+   scanning only the text *before* the phrase (never the phrase itself, never
+   anything after it — closing a second misread, a trailing issue reference
+   inside the old look-ahead), and stripping backtick-quoted code first (closing
+   a third — a digit inside an identifier like `` `_D6_FIXTURE` ``).
+2. **The closed form, not another patch to the parser.** A "dynamic" population
+   was never actually uncountable for most of these floors — it was a scripted
+   probe's own running tally, and this repository's own `make evidence` already
+   writes that exact number to `status/evidence/*.json` a few lines from where
+   the floor is read. `_committed_evidence_population` reads it — following this
+   repository's own `write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH)`
+   idiom structurally, including through a dispatcher function's own parameter
+   when it has exactly one caller (`lifecycle.MINIMUM_SCENARIOS`'s real shape) —
+   and once resolved, the floor is checked by the *identical* `_margin_finding`
+   arithmetic a literal population already gets. No comment, "zero slack" or
+   otherwise, can clear a real margin any longer. Refuses rather than guesses
+   when an evidence path is chosen by a condition this sweep cannot evaluate
+   (`profile_capture`'s own D-8-vs-T28 CLI switch resolves two *different* real
+   files from the two branches of one `IfExp`) or when a parameter has more than
+   one call site — both fall back to the older, weaker, but now-correct
+   comment-only check rather than silently reading the wrong probe's number.
+3. **The sweep's own denominator, matched by identity, checked by arithmetic.**
+   Round 2 removed the module-identity exemption but still classified
+   `MINIMUM_FLOORS_SWEPT` `dynamic` — no committed evidence file could ever back
+   it (T100 deliberately keeps this exact census uncommitted), so it sat in the
+   one branch that cannot fail. Self-exemption had moved from identity to
+   classification. `measure()` no longer classifies it at all: matched against
+   `_THIS_FILE` (this exact file, never a module merely *named* `floor_sweep.py`
+   — this module's own test suite writes one, to prove the fix holds regardless
+   of filename), deferred until this run's own `swept` is known, then checked by
+   the same `_margin_finding` arithmetic as everything else.
+4. **The remaining blind spots, closed as rules rather than as counts.** A
+   leading underscore is now admitted into `_CONSTANT_NAME_RE`
+   (`plan_v2._MIN_TASK_CELLS`, `approval._SHINGLE`,
+   `extraction._CONFIRMING_MATCHES_FOR_BIPOLAR` were real, invisible floors for
+   no reason but the character). `.split()`/`.splitlines()` are recognised as
+   producing a real (if uncountable) population, not `unknown`. `AnnAssign`
+   targets (`stdlib_disagreements: list[...] = []`) are read everywhere
+   `_assignments_to_name` already read plain `Assign`. A floor's own *value* is
+   resolved through a `BinOp` of two literals (`1 + 0`) or an alias to a sibling
+   constant (`_FLOOR = 1` then `MINIMUM_PROBES = _FLOOR`), never only a bare
+   `Constant`. And `_delegated_other_operand` is now genuinely recursive
+   (`_trace_delegation`, bounded by `_MAX_DELEGATION_DEPTH`) rather than two
+   hand-written hops — round 2 answered a two-hop finding with exactly two
+   hops, which a three-hop chain still defeated; a fourth remedy naming a fourth
+   hop would only have invited a fifth.
+
+What this did *not* attempt: a handful of floors compared through a `len(...)`
+whose own argument this sweep still cannot classify (`strings.MINIMUM_STRINGS`
+against `len(keys(catalogue))`, `salary_recovery.MINIMUM_CORPUS_ADS` against
+`len(load_ads())`) stay `bounds_read_and_out_of_scope` rather than being forced
+into `dynamic` by relaxing what counts as a traced population — that relaxation
+was tried and reverted (see PR #436's round-3 self-scan): it could not be
+distinguished from a per-item scalar check (`len(value)` inside a generic
+recursive walker) without risking exactly the kind of misclassification this
+task exists to prevent. Named here so the next reader does not have to
+re-discover it as a finding.
+
 ## The denominator
 
 `floors_swept` is every floor this module classified, one way or the other. Per
@@ -189,6 +260,7 @@ from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR = Path(__file__).resolve().parent
+_THIS_FILE = Path(__file__).resolve()
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T159.json"
 
 #: Round 2's fix for the reader's first finding: this repository's module-constant
@@ -199,7 +271,17 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T159.json"
 #: added to it — an enumeration of spellings has no last element. What makes a name
 #: worth sweeping is what its *value* is (see `_is_len_derived` below and
 #: `_module_constant_candidates`), never how it is spelled.
-_CONSTANT_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+#:
+#: Round 3: a leading underscore is still this repository's own convention — a
+#: module-private constant — and round 2's pattern excluded it anyway, which is
+#: the same "the name filter is still a filter" defect one character narrower.
+#: `plan_v2._MIN_TASK_CELLS`, `approval._SHINGLE`,
+#: `extraction._CONFIRMING_MATCHES_FOR_BIPOLAR` are real `len(...)`-compared
+#: floors on `main`, invisible to round 2's pattern for no reason but the
+#: underscore. The optional `_?` is the whole fix; the value-shape gate below is
+#: what still keeps every non-floor private constant (a compiled regex, a path,
+#: a fixture string) off the candidate list.
+_CONSTANT_NAME_RE = re.compile(r"^_?[A-Z][A-Z0-9_]*$")
 
 #: Phrasing this repository actually uses, in the floors already read while building
 #: this module, to argue that a floor's margin below its population is deliberate
@@ -326,6 +408,15 @@ def _normalize_comment_text(comment: str) -> str:
     return " ".join(words)
 
 
+#: A backtick-quoted code span (`` `_D6_FIXTURE` ``, `` `PROBES` ``) — stripped out
+#: of the look-behind window before digit/word extraction. Round 2's reader found
+#: that a digit *inside an identifier* (`_D6_FIXTURE`'s `6`) enters `claimed` and
+#: falsely clears a floor set to that digit; every real "N, zero slack" comment in
+#: this repository states N as plain prose outside any backtick span, so nothing
+#: this check needs to see is ever lost by removing backtick spans first.
+_BACKTICK_CODE_RE = re.compile(r"`[^`]*`")
+
+
 def _zero_slack_claim_contradicts(comment: str, literal_value: int) -> bool:
     """True when `comment` states a "zero slack" (or "zero margin" / "no slack")
     claim beside a specific number, and that number is not the floor's own current
@@ -340,16 +431,37 @@ def _zero_slack_claim_contradicts(comment: str, literal_value: int) -> bool:
     number the comment actually claims and compares it against what the code
     currently declares, so a floor dropped out from under a comment that still
     reads "9, zero slack" is caught even though every trigger word is still
-    sitting right there. Silent (returns `False`, deferring to the keyword check
-    above) when a "zero slack" phrase carries no number at all — the older,
-    spelled-out style (`connector_transport.MINIMUM_RECORD_KEYS_COMPARED`'s "The
-    record carries twelve keys and this is twelve — no slack") already survives
+    sitting right there.
+
+    **Round 3 fix, the round-2 reader's headline finding.** The window round 2
+    scanned included the *matched phrase itself* (`"zero slack"` contains the word
+    "zero"), and `_spelled_out_numbers("zero slack") == {0}` — so `claimed` always
+    contained `0`, for every comment this check can ever fire on, and a floor
+    silently dropped to `0` was therefore *never* a contradiction: the accept-set
+    was seeded by the checker's own trigger word. Every real instance of this
+    idiom in this repository states its number **before** the phrase ("N, zero
+    slack" — verified against all fourteen), never after and never inside it, so
+    the window is now the text strictly *before* the match only — the trigger
+    phrase itself never contributes a digit or a word again, and neither does
+    anything after it (closing the sibling misread where a trailing `(T159)`
+    issue reference inside the old +10 look-ahead was accepted as the claimed
+    number). Backtick-quoted code is stripped before extraction, closing the
+    `` `_D6_FIXTURE` `` misread the same way. The window is widened to 80
+    characters to still reach a number spelled well before the phrase (`profile`'s
+    "Ten today, matching `_D6_FIXTURE` exactly: zero slack" needs the full clause,
+    not only the last 40 characters of it).
+
+    Silent (returns `False`, deferring to the keyword check above) when a "zero
+    slack" phrase carries no number at all — the older, spelled-out style
+    (`connector_transport.MINIMUM_RECORD_KEYS_COMPARED`'s "The record carries
+    twelve keys and this is twelve — no slack") already survives
     `_spelled_out_numbers`, but a claim with literally no adjacent number is not
     one this check can falsify, so it is not one it accuses either.
     """
     normalized = _normalize_comment_text(comment)
     for match in _ZERO_SLACK_CLAIM_RE.finditer(normalized):
-        window = normalized[max(0, match.start() - 40) : match.end() + 10]
+        window = normalized[max(0, match.start() - 80) : match.start()]
+        window = _BACKTICK_CODE_RE.sub(" ", window)
         claimed = {int(digits) for digits in _DIGITS_RE.findall(window)}
         claimed |= _spelled_out_numbers(window)
         if claimed and literal_value not in claimed:
@@ -403,7 +515,11 @@ class FloorFinding:
 
 @dataclass(frozen=True)
 class DynamicFloor:
-    """An in-scope floor whose population this repository does not itself enumerate."""
+    """An in-scope floor whose population this repository does not itself
+    enumerate, and for which no committed evidence file could be resolved either
+    — genuinely unpinnable, checked only for "carries some explanation" plus the
+    one falsifiable claim this repository's own idiom makes (`_zero_slack_claim_
+    contradicts`)."""
 
     module: str
     name: str
@@ -411,6 +527,31 @@ class DynamicFloor:
 
     def as_dict(self) -> dict[str, Any]:
         return {"module": self.module, "name": self.name, "line": self.lineno}
+
+
+@dataclass(frozen=True)
+class EvidencePinnedFloor:
+    """Round 3: a floor whose population this repository does not itself
+    enumerate as a fixed collection, but whose *measured* value is committed to
+    `status/evidence/*.json` by the same scripted probe the floor guards — so it
+    is not an exemption after all, only a population read from a file instead of
+    counted from a collection literal. Checked by the exact same margin rule as
+    a literal population (`_margin_finding`): this is what closes the round-2
+    reader's headline finding, rather than only patching the comment parser that
+    finding was really about."""
+
+    module: str
+    name: str
+    lineno: int
+    population: int
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "module": self.module,
+            "name": self.name,
+            "line": self.lineno,
+            "population": self.population,
+        }
 
 
 @dataclass
@@ -443,6 +584,44 @@ def _literal_int(expr: ast.expr) -> int | None:
         and not isinstance(expr.value, bool)
     ):
         return expr.value
+    return None
+
+
+def _resolved_floor_literal(expr: ast.expr, tree: ast.Module, depth: int = 0) -> int | None:
+    """The floor's own value, resolved past two shapes a bare `_literal_int` cannot
+    see (round 3, F5): a `BinOp` combining two int literals (`MINIMUM_PROBES = 1 +
+    0` — neither side is `len(...)`-derived, but both are literals, so the whole
+    expression is still a compile-time constant), and a name that aliases another
+    module-level int constant (`_FLOOR = 1` then `MINIMUM_PROBES = _FLOOR` — a
+    hand-written number one hop away, not a derived one). Both are legal,
+    ordinary Python, and this repository already has the alias shape
+    (`_module_level_value`'s own docstring cites `CONTROLS = _control_prs()` as
+    the pattern it exists to follow).
+
+    Never confused with `_is_len_derived`'s `len(X) + N` shape: that `BinOp` has
+    one `len(...)` operand, this one has two literal-resolving operands, and a
+    floor cannot be both at once (`_module_constant_candidates` tries this first,
+    `_is_len_derived` second).
+    """
+    if depth > 5:
+        return None
+    literal = _literal_int(expr)
+    if literal is not None:
+        return literal
+    if isinstance(expr, ast.BinOp) and isinstance(expr.op, (ast.Add, ast.Sub, ast.Mult)):
+        left = _resolved_floor_literal(expr.left, tree, depth + 1)
+        right = _resolved_floor_literal(expr.right, tree, depth + 1)
+        if left is not None and right is not None:
+            if isinstance(expr.op, ast.Add):
+                return left + right
+            if isinstance(expr.op, ast.Sub):
+                return left - right
+            return left * right
+        return None
+    if isinstance(expr, ast.Name):
+        module_value = _module_level_value(tree, expr.id)
+        if module_value is not None:
+            return _resolved_floor_literal(module_value, tree, depth + 1)
     return None
 
 
@@ -498,7 +677,7 @@ def _module_constant_candidates(tree: ast.Module) -> list[tuple[str, int, ast.ex
         for target in targets:
             if not (isinstance(target, ast.Name) and _CONSTANT_NAME_RE.match(target.id)):
                 continue
-            if _literal_int(value) is not None or _is_len_derived(value):
+            if _resolved_floor_literal(value, tree) is not None or _is_len_derived(value):
                 found.append((target.id, node.lineno, value))
     return found
 
@@ -614,11 +793,23 @@ def _assignments_to_name(
 ) -> list[ast.expr]:
     found: list[tuple[int, ast.expr]] = []
     for node in ast.walk(func):
-        if not isinstance(node, ast.Assign):
+        # Round 3: an *annotated* assignment (`stdlib_disagreements: list[dict[str,
+        # str]] = []`) is a distinct AST node from `ast.Assign` — a plain `isinstance
+        # (node, ast.Assign)` gate never sees it, which is why
+        # `second_reader.STDLIB_DISAGREEMENTS_AT_LEAST`'s population (built by
+        # `.append()` on exactly this annotated initial binding) stayed unresolved
+        # despite the append-in-a-loop shape below already knowing how to read it.
+        if isinstance(node, ast.Assign):
+            targets: list[ast.expr] = list(node.targets)
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+            value = node.value
+        else:
             continue
-        for target in node.targets:
+        for target in targets:
             if isinstance(target, ast.Name) and target.id == name:
-                found.append((node.lineno, node.value))
+                found.append((node.lineno, value))
     if before_lineno is not None:
         found = [pair for pair in found if pair[0] < before_lineno] or found
     found.sort(key=lambda pair: pair[0])
@@ -630,13 +821,19 @@ def _assignments_to_subscript(
 ) -> list[ast.expr]:
     found: list[tuple[int, ast.expr]] = []
     for node in ast.walk(func):
-        if not isinstance(node, ast.Assign):
+        if isinstance(node, ast.Assign):
+            targets: list[ast.expr] = list(node.targets)
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+            value = node.value
+        else:
             continue
-        for target in node.targets:
+        for target in targets:
             if isinstance(target, ast.Subscript):
                 found_key = _subscript_string_key(target)
                 if found_key == key:
-                    found.append((node.lineno, node.value))
+                    found.append((node.lineno, value))
     if before_lineno is not None:
         found = [pair for pair in found if pair[0] < before_lineno] or found
     found.sort(key=lambda pair: pair[0])
@@ -835,6 +1032,17 @@ def _collection_kind(
             return _UNKNOWN, None
         if isinstance(expr.func, ast.Attribute) and expr.func.attr in _SCALAR_STRING_METHODS:
             return _SCALAR, None
+        if isinstance(expr.func, ast.Attribute) and expr.func.attr in {"split", "splitlines"}:
+            # `.split()`/`.splitlines()` on one piece of text produces a genuine
+            # *collection* — a list of words or lines — never a scalar, and its
+            # count depends on the text's content, so it can never be counted
+            # from source (`_DYNAMIC`, never `_LITERAL`). Distinct from
+            # `_SCALAR_STRING_METHODS`: `approval._SHINGLE`'s population is
+            # `len(_words(episode))` where `_words` returns `...split()` — before
+            # this, `.split()` fell through to `_UNKNOWN` (not a wrapper, not a
+            # scalar method) and the floor was invisible for a reason that had
+            # nothing to do with its name.
+            return _DYNAMIC, None
         if (
             isinstance(expr.func, ast.Name)
             and expr.func.id in {"set", "list", "dict", "frozenset"}
@@ -1258,17 +1466,72 @@ def _calls_passing(
     return found
 
 
+#: Bound on delegation depth — same shape and same number as every other
+#: recursive traversal in this module (`_collection_kind`, `_resolve_to_dict_
+#: literal`, `_resolves_to_name`): deep enough for anything this repository's
+#: own call graphs actually do, shallow enough that this stays a sweep rather
+#: than a full interprocedural analysis.
+_MAX_DELEGATION_DEPTH = 5
+
+
+def _trace_delegation(
+    callee: ast.FunctionDef | ast.AsyncFunctionDef,
+    floor_param: str,
+    mapping: dict[str, ast.expr],
+    tree: ast.Module,
+    top_level_functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+    depth: int,
+) -> ast.expr | None:
+    """What `floor_param` (one of `callee`'s own parameters, bound by `mapping` —
+    the arguments *this* call site passed) is compared against inside `callee`,
+    tracing through arbitrarily many further levels of same-module delegation
+    (bounded by `_MAX_DELEGATION_DEPTH`), expressed back in terms of `mapping` —
+    i.e., in the original caller's own scope — however many levels deep the
+    comparison actually lives.
+
+    Round 3, F6: round 2 answered the reader's two-hop finding by writing exactly
+    two hops in by hand — one `for` loop, then one more nested inside it — which
+    a three-hop chain still defeats, and a fourth remedy naming a fourth hop would
+    only invite a fifth. This is the closed form instead: the same one-hop lookup
+    (`_direct_compare_in_callee`), called recursively, each level substituting its
+    own `mapping` on the way back out. `review_reader._floor`'s real one-hop shape
+    still resolves at `depth == 0` on the very first call, unchanged.
+    """
+    if depth > _MAX_DELEGATION_DEPTH:
+        return None
+    direct = _direct_compare_in_callee(callee, floor_param, mapping)
+    if direct is not None:
+        return direct
+    for _inner_node, inner_callee, inner_mapping, inner_floor_param in _calls_passing(
+        callee, floor_param, top_level_functions
+    ):
+        if inner_callee is callee:
+            continue
+        inner_other = _trace_delegation(
+            inner_callee, inner_floor_param, inner_mapping, tree, top_level_functions, depth + 1
+        )
+        if inner_other is None:
+            continue
+        # `inner_other` is expressed in terms of `callee`'s own parameter names
+        # whenever it names one of them directly (it was built from `mapping`s
+        # belonging to calls made *inside* `callee`); substitute this level's own
+        # `mapping` — the arguments the call reaching `callee` was actually
+        # given — so each return from the recursion climbs back out one level,
+        # however many levels the recursion went in.
+        if isinstance(inner_other, ast.Name) and inner_other.id in mapping:
+            inner_other = mapping[inner_other.id]
+        return inner_other
+    return None
+
+
 def _delegated_other_operand(
     tree: ast.Module, name: str
 ) -> tuple[ast.expr, ast.FunctionDef | ast.AsyncFunctionDef | None, int] | None:
     """The third named blind spot: a floor passed as an argument to a same-module
-    helper that does the comparison inside its own body — or, round 2, passed on
-    unchanged to a *second* same-module helper that does. `review_reader._floor`
-    is the one-hop shape every delegated floor in this repository actually uses
-    today; a hypothetical `outer(floor)` calling `inner(floor)` which does the
-    actual `Compare` is the two-hop shape the reader named as silently dropped, so
-    this follows one call of indirection past the first before giving up — never
-    a general recursive walk, which would stop being a sweep."""
+    helper that does the comparison inside its own body, or delegated on through
+    arbitrarily many further same-module calls before one of them does
+    (`_trace_delegation`). `review_reader._floor` is the one-hop shape every
+    delegated floor in this repository actually uses today."""
     top_level_functions = {
         node.name: node
         for node in tree.body
@@ -1280,35 +1543,311 @@ def _delegated_other_operand(
         return _innermost_enclosing(node, all_functions)
 
     for node, callee, mapping, floor_param in _calls_passing(tree, name, top_level_functions):
-        direct = _direct_compare_in_callee(callee, floor_param, mapping)
-        if direct is not None:
-            return direct, enclosing(node), node.lineno
-
-        # No comparison in `callee` itself — does `callee` pass `floor_param` on,
-        # unchanged, to a second same-module function that does the comparison?
-        for _inner_node, inner_callee, inner_mapping, inner_floor_param in _calls_passing(
-            callee, floor_param, top_level_functions
-        ):
-            if inner_callee is callee:
-                continue
-            inner_other = _direct_compare_in_callee(inner_callee, inner_floor_param, inner_mapping)
-            if inner_other is None:
-                continue
-            # `inner_other` is an expression in `callee`'s own parameter names (it
-            # came from `inner_mapping`, built from a call *inside* `callee`); if it
-            # names one of them, substitute the *outer* call's own argument for it
-            # so the result is an expression in the original caller's scope.
-            if isinstance(inner_other, ast.Name) and inner_other.id in mapping:
-                inner_other = mapping[inner_other.id]
-            return inner_other, enclosing(node), node.lineno
+        other = _trace_delegation(callee, floor_param, mapping, tree, top_level_functions, 0)
+        if other is not None:
+            return other, enclosing(node), node.lineno
     return None
+
+
+#: This repository's own evidence-path convention, read structurally rather than
+#: by name: `DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" /
+#: "T24.json"` (and every `DEFAULT_..._EVIDENCE_PATH` sibling — `D8`, `S12`, …).
+#: `_extract_evidence_path_literal` walks the `/`-chain of `BinOp`s a `Path`
+#: built this way parses into and reads off its string segments; it never
+#: imports `pathlib` semantics or evaluates anything, so a module that builds
+#: its evidence path some other way is simply not recognised, not misread.
+def _extract_evidence_path_literal(expr: ast.expr) -> Path | None:
+    parts: list[str] = []
+    node = expr
+    while isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        right = node.right
+        if not (isinstance(right, ast.Constant) and isinstance(right.value, str)):
+            return None
+        parts.append(right.value)
+        node = node.left
+    if (
+        isinstance(node, ast.Name)
+        and node.id == "_REPO_ROOT"
+        and parts
+        and parts[0].endswith(".json")
+    ):
+        parts.reverse()
+        return _REPO_ROOT.joinpath(*parts)
+    return None
+
+
+def _resolve_evidence_path_expr(
+    expr: ast.expr,
+    tree: ast.Module,
+    func: ast.FunctionDef | ast.AsyncFunctionDef | None,
+    before_lineno: int | None,
+    depth: int = 0,
+) -> Path | None:
+    """`expr` resolved to a literal evidence path (`_extract_evidence_path_literal`)
+    through a bare Name (a module-level `DEFAULT_..._PATH` constant, or a local
+    variable's own last assignment) or one branch of an `IfExp` — this
+    repository's own `target = Path(argv[0]) if argv else DEFAULT_EVIDENCE_PATH`
+    idiom for "the default path, unless a caller overrode it", which every
+    `_main` in this repository uses before calling its own `write_evidence`."""
+    if depth > 5:
+        return None
+    direct = _extract_evidence_path_literal(expr)
+    if direct is not None:
+        return direct
+    if isinstance(expr, ast.Name):
+        module_value = _module_level_value(tree, expr.id)
+        if module_value is not None:
+            resolved = _resolve_evidence_path_expr(module_value, tree, None, None, depth + 1)
+            if resolved is not None:
+                return resolved
+        if func is not None:
+            assignments = _assignments_to_name(func, expr.id, before_lineno)
+            if assignments:
+                return _resolve_evidence_path_expr(
+                    assignments[-1], tree, func, before_lineno, depth + 1
+                )
+        return None
+    if isinstance(expr, ast.IfExp):
+        # `target = Path(argv[0]) if argv else DEFAULT_EVIDENCE_PATH` is the common
+        # case: one branch is an override whose value cannot be known statically,
+        # the other is the real default, and taking whichever side resolves is
+        # correct. `profile_capture`'s own `default_path = DEFAULT_D8_EVIDENCE_PATH
+        # if args.subject_gate else DEFAULT_EVIDENCE_PATH` is not that case: *both*
+        # branches resolve, to two *different* real files, and which one is live
+        # depends on a condition this sweep does not evaluate — picking either
+        # would be a guess with a 50% chance of reading the wrong probe's number.
+        # Refuse rather than guess when both sides resolve and disagree, the same
+        # "accept only on agreement" rule `_resolve_parameter_via_callers` already
+        # applies to cross-caller tracing.
+        body_path = _resolve_evidence_path_expr(expr.body, tree, func, before_lineno, depth + 1)
+        orelse_path = _resolve_evidence_path_expr(expr.orelse, tree, func, before_lineno, depth + 1)
+        if body_path is not None and orelse_path is not None:
+            return body_path if body_path == orelse_path else None
+        return body_path if body_path is not None else orelse_path
+    return None
+
+
+def _resolve_write_evidence_path(
+    call: ast.Call,
+    tree: ast.Module,
+    caller_func: ast.FunctionDef | ast.AsyncFunctionDef | None,
+    before_lineno: int | None,
+) -> Path | None:
+    """When `call` invokes a same-module function, the literal evidence path this
+    *particular call* writes to — this repository's `write_evidence(evidence:
+    Path = DEFAULT_EVIDENCE_PATH)` shape, identified by the *default value's*
+    structure (`_extract_evidence_path_literal`), never by the function's own
+    name, so `write_subject_evidence`, `write_owner_evidence` and every other
+    spelling this repository uses are all found the same way.
+
+    The evidence-path parameter is resolved for *this* call site, not only from
+    the callee's own default: `write_evidence(target)` — this repository's
+    `--write-evidence [PATH]` idiom — passes an explicit argument for it, and
+    `target` is itself `Path(argv[0]) if argv else DEFAULT_EVIDENCE_PATH` in the
+    caller's own scope (`_resolve_evidence_path_expr` follows exactly that).
+    Only the *unoverridden* case resolves to a literal, which is correct: a run
+    given a custom path is not describing where the committed evidence lives.
+    """
+    if not isinstance(call.func, ast.Name):
+        return None
+    callee = _top_level_function(tree, call.func.id)
+    if callee is None:
+        return None
+    args = callee.args
+    positional = list(args.posonlyargs) + list(args.args)
+    defaults = list(args.defaults)
+    offset = len(positional) - len(defaults)
+    default_by_param: dict[str, ast.expr] = {
+        positional[index].arg: defaults[index - offset] for index in range(offset, len(positional))
+    }
+    for kwarg, kwdefault in zip(args.kwonlyargs, args.kw_defaults, strict=True):
+        if kwdefault is not None:
+            default_by_param[kwarg.arg] = kwdefault
+    evidence_param = next(
+        (
+            param
+            for param, default in default_by_param.items()
+            if _resolve_evidence_path_expr(default, tree, None, None) is not None
+        ),
+        None,
+    )
+    if evidence_param is None:
+        return None
+    mapping = _bind_call_arguments(call, callee)
+    if evidence_param in mapping:
+        return _resolve_evidence_path_expr(
+            mapping[evidence_param], tree, caller_func, before_lineno
+        )
+    return _resolve_evidence_path_expr(default_by_param[evidence_param], tree, None, None)
+
+
+def _evidence_calls_for(
+    name: str,
+    tree: ast.Module,
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+    before_lineno: int | None,
+    depth: int = 0,
+) -> list[tuple[ast.Call, ast.FunctionDef | ast.AsyncFunctionDef, int | None]]:
+    """Every call this repository's own evidence-writing idiom could resolve
+    `name` (a `measured`-shaped local) back to, each paired with the function
+    scope and line cutoff it should be resolved in.
+
+    Two shapes, both real: a direct local assignment (`measured = write_evidence
+    (path)`, or the `measure() if args.check else write_evidence(path)`
+    ternary), and `lifecycle.MINIMUM_SCENARIOS`'s own shape — `measured` is not
+    assigned in this function at all, it is `_s5_report`'s own *parameter*,
+    bound by whoever calls it (`_s5_report(s5_measured)`, with `s5_measured`
+    itself assigned in `_main`'s scope a few lines above). Followed only when
+    `func` has exactly **one** call site in the module: with more than one, which
+    caller's evidence file is the right one to read is not this sweep's to
+    guess, the same "decline rather than pick" rule `_resolve_parameter_via_
+    callers` already applies to cross-caller tracing.
+    """
+    if depth > 5:
+        return []
+    assignments = _assignments_to_name(func, name, before_lineno)
+    if assignments:
+        rhs = assignments[-1]
+        if isinstance(rhs, ast.Call):
+            return [(rhs, func, before_lineno)]
+        if isinstance(rhs, ast.IfExp):
+            # `measured = measure() if args.check else write_evidence(path)` —
+            # this repository's own `--check`-vs-write idiom. Both branches name
+            # the same eventual evidence file; try whichever one resolves.
+            return [
+                (n, func, before_lineno) for n in (rhs.body, rhs.orelse) if isinstance(n, ast.Call)
+            ]
+        return []
+    param_names = (
+        {a.arg for a in func.args.posonlyargs}
+        | {a.arg for a in func.args.args}
+        | {a.arg for a in func.args.kwonlyargs}
+    )
+    if name not in param_names:
+        return []
+    calls_to_func = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == func.name
+    ]
+    if len(calls_to_func) != 1:
+        return []
+    call = calls_to_func[0]
+    mapping = _bind_call_arguments(call, func)
+    arg_expr = mapping.get(name)
+    if arg_expr is None:
+        return []
+    all_functions = _all_function_defs(tree)
+    caller_func = _innermost_enclosing(call, all_functions)
+    if caller_func is None:
+        return []
+    if isinstance(arg_expr, ast.Call):
+        return [(arg_expr, caller_func, call.lineno)]
+    if isinstance(arg_expr, ast.Name):
+        return _evidence_calls_for(arg_expr.id, tree, caller_func, call.lineno, depth + 1)
+    return []
+
+
+def _committed_evidence_population(
+    other_operand: ast.expr,
+    tree: ast.Module,
+    func: ast.FunctionDef | ast.AsyncFunctionDef | None,
+    before_lineno: int | None,
+) -> int | None:
+    """The real, already-measured population a *dynamic* floor guards — not
+    computed by running anything, read from this repository's own committed
+    `status/evidence/*.json`, which `make evidence` regenerates from the exact
+    same scripted probe the floor's comparison site reads.
+
+    This is the closed form of the round-2 reader's own suggestion: "dynamic"
+    was never a population that cannot be counted, only one this repository does
+    not enumerate as an in-source collection — a scripted probe's own `checks`/
+    `asks`/`turns` tally is a real number, and every one of this task's touched
+    floors already has it committed a few lines away from where the floor is
+    read (`measured["checks_run"] < MINIMUM_CHECKS` beside `write_evidence`
+    writing exactly that dict, unmodified, to `DEFAULT_EVIDENCE_PATH`). Reading
+    it turns "carries a comment that is not obviously false" into "the same
+    arithmetic every literal-population floor already gets" — no comment, zero
+    slack or otherwise, can clear a real margin any longer.
+
+    Requires `other_operand` to be a direct `name["key"]` subscript (this
+    repository's own `measured["..."]` idiom); a floor read some other way is
+    simply not resolved here, not misread — the caller falls back to the
+    weaker, comment-only check for anything this cannot pin down.
+    """
+    if not isinstance(other_operand, ast.Subscript) or func is None:
+        return None
+    key = _subscript_string_key(other_operand)
+    if key is None:
+        return None
+    base_name, key_string = key
+    calls = _evidence_calls_for(base_name, tree, func, before_lineno)
+    for call, call_func, call_before_lineno in calls:
+        path = _resolve_write_evidence_path(call, tree, call_func, call_before_lineno)
+        if path is None or not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        value = data.get(key_string)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
+
+
+def _margin_finding(
+    module_stem: str, name: str, lineno: int, literal_value: int, population: int, comment: str
+) -> FloorFinding | None:
+    """The one arithmetic rule this whole module enforces, extracted so a
+    committed-evidence-backed dynamic population (round 3) is checked by
+    *exactly* the same logic as a counted, in-repo collection — never a second,
+    looser rule for floors that merely arrived at a real number by a different
+    route."""
+    margin = population - literal_value
+    if margin <= 0:
+        return None
+
+    # Past this point margin is strictly positive, so a comment claiming "zero
+    # slack" is already false regardless of what number sits beside it — the
+    # margin computed a moment ago already refutes it.
+    if _ZERO_SLACK_CLAIM_RE.search(_normalize_comment_text(comment)):
+        return FloorFinding(
+            module=module_stem,
+            name=name,
+            lineno=lineno,
+            reason="stale_margin_claim",
+            detail=(
+                f"{name} is {literal_value}, population is {population} (margin {margin}), "
+                "but its comment claims 'zero slack' — the keyword match alone "
+                "(`raised`, `slack`) would still clear this"
+            ),
+        )
+
+    if _MARGIN_ARGUED_RE.search(_normalize_comment_text(comment)):
+        return None
+
+    return FloorFinding(
+        module=module_stem,
+        name=name,
+        lineno=lineno,
+        reason="silent_margin",
+        detail=(
+            f"{name} is {literal_value}, population is {population} "
+            f"(margin {margin}) — the first {margin} deletion(s) breach nothing, "
+            "and no comment above the declaration argues the gap"
+        ),
+    )
 
 
 def _classify_floor(
     module: _ModuleInfo, name: str, lineno: int, value_expr: ast.expr
-) -> tuple[FloorFinding | None, DynamicFloor | None, bool]:
-    """Returns `(finding_if_any, dynamic_record_if_any, was_in_scope)`."""
-    literal_value = _literal_int(value_expr)
+) -> tuple[FloorFinding | None, DynamicFloor | None, EvidencePinnedFloor | None, bool]:
+    """Returns `(finding_if_any, dynamic_record_if_any, pinned_record_if_any,
+    was_in_scope)`."""
+    literal_value = _resolved_floor_literal(value_expr, module.tree)
 
     if literal_value is None:
         # Rule (a): not even a literal. Always in scope, always a violation — a bound
@@ -1326,6 +1865,7 @@ def _classify_floor(
                 ),
             ),
             None,
+            None,
             True,
         )
 
@@ -1341,22 +1881,44 @@ def _classify_floor(
             other, func, site_lineno = delegated
 
     if other is None:
-        return None, None, False
+        return None, None, None, False
 
     in_scope, population = _population_for(other, module.tree, func, site_lineno)
     if not in_scope:
-        return None, None, False
+        return None, None, None, False
 
     comment = _comment_block_above(module.lines, lineno)
 
     if population is None:
-        # Dynamic population: no single "first deletion" this repository could make.
-        # Round 1 required only that the floor's value be explained *at all* — the
-        # reader's finding: any nonempty comment cleared it, forever, even after a
-        # later edit made the comment's own numbers false. Round 2 still cannot
-        # compute a margin for a population nothing here enumerates, but it can
-        # still catch the one falsifiable claim this repository's own idiom makes
-        # about one ("N, zero slack") going stale.
+        # Round 3, the headline fix: "dynamic" is not a classification, it is an
+        # exemption, unless the population is actually pinned to something —
+        # and for a scripted probe's own tally, it usually is: the exact number
+        # this repository's own `make evidence` already wrote to
+        # `status/evidence/*.json`. Try that *first*, and if it resolves, this
+        # floor is checked by the identical arithmetic rule as any counted
+        # collection — no comment, "zero slack" or otherwise, can clear a real
+        # margin.
+        pinned_population = _committed_evidence_population(other, module.tree, func, site_lineno)
+        if pinned_population is not None:
+            finding = _margin_finding(
+                module.stem, name, lineno, literal_value, pinned_population, comment
+            )
+            pinned = (
+                None
+                if finding is not None
+                else EvidencePinnedFloor(
+                    module=module.stem, name=name, lineno=lineno, population=pinned_population
+                )
+            )
+            return finding, None, pinned, True
+
+        # No committed evidence resolves this one — a genuinely unpinnable
+        # population (a third party's own behaviour, a corpus scan, two dynamic
+        # quantities combined) or simply a shape this sweep does not yet trace to
+        # a file. No single "first deletion" this repository could make, so this
+        # is checked only for "carries some explanation", plus the one
+        # falsifiable claim this repository's own idiom makes about one ("N,
+        # zero slack") going stale (`_zero_slack_claim_contradicts`).
         if not comment.strip():
             return (
                 FloorFinding(
@@ -1367,6 +1929,7 @@ def _classify_floor(
                     detail=f"{name} guards a population this repository does not itself "
                     "enumerate, and carries no comment explaining the chosen value",
                 ),
+                None,
                 None,
                 True,
             )
@@ -1384,73 +1947,51 @@ def _classify_floor(
                     ),
                 ),
                 None,
+                None,
                 True,
             )
-        return None, DynamicFloor(module=module.stem, name=name, lineno=lineno), True
+        return None, DynamicFloor(module=module.stem, name=name, lineno=lineno), None, True
 
-    margin = population - literal_value
-    if margin <= 0:
-        return None, None, True
-
-    # Past this point margin is strictly positive, so a comment claiming "zero
-    # slack" is already false regardless of what number sits beside it — the
-    # margin computed a moment ago already refutes it. `_zero_slack_claim_contradicts`'s
-    # number-matching is for the *dynamic* branch below, where no margin can be
-    # computed at all and a stale number is the only thing left to check; here the
-    # arithmetic already settles it.
-    if _ZERO_SLACK_CLAIM_RE.search(_normalize_comment_text(comment)):
-        return (
-            FloorFinding(
-                module=module.stem,
-                name=name,
-                lineno=lineno,
-                reason="stale_margin_claim",
-                detail=(
-                    f"{name} is {literal_value}, population is {population} (margin {margin}), "
-                    "but its comment claims 'zero slack' — the keyword match alone "
-                    "(`raised`, `slack`) would still clear this"
-                ),
-            ),
-            None,
-            True,
-        )
-
-    if _MARGIN_ARGUED_RE.search(_normalize_comment_text(comment)):
-        return None, None, True
-
-    return (
-        FloorFinding(
-            module=module.stem,
-            name=name,
-            lineno=lineno,
-            reason="silent_margin",
-            detail=(
-                f"{name} is {literal_value}, population is {population} "
-                f"(margin {margin}) — the first {margin} deletion(s) breach nothing, "
-                "and no comment above the declaration argues the gap"
-            ),
-        ),
-        None,
-        True,
-    )
+    finding = _margin_finding(module.stem, name, lineno, literal_value, population, comment)
+    return finding, None, None, True
 
 
 def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
     """T159's gate: floors that do not refuse the first deletion of their population."""
     findings: list[FloorFinding] = []
     dynamic: list[DynamicFloor] = []
+    pinned: list[EvidencePinnedFloor] = []
     swept = 0
     excluded: list[str] = []
+    self_floor: tuple[_ModuleInfo, str, int] | None = None
 
     for module in _module_infos(src_dir):
         # Round 1 excluded this module from its own sweep by identity — the reader's
         # fourth finding: "the gate exempts itself", the one committed floor this
-        # rule structurally could not classify. Round 2 does not special-case it: its
-        # only int-shaped, all-caps candidate is `MINIMUM_FLOORS_SWEPT` itself, and
-        # `_module_constant_candidates`'s value-shape filter (not name-based) already
-        # keeps every other diagnostics constant here off the list without help.
+        # rule structurally could not classify. Round 2 answered it by removing the
+        # identity exemption, but `MINIMUM_FLOORS_SWEPT`'s own population
+        # (`floors_swept`) only exists once this whole loop has finished — it is a
+        # census T100 deliberately does *not* commit to evidence (a census key
+        # committed raw would drift on every task PR, T100/T150's own finding), so
+        # no evidence file could ever back it and round 2's own classification put
+        # it in `dynamic`, unpinned — the reader's third/fourth finding: exemption
+        # by classification rather than by identity. Round 3 does not classify it
+        # at all: deferred here, checked directly below against this run's own
+        # true `swept`, which is the one number that could ever answer it honestly.
+        # Matched by *identity* (this exact file), never by the name "floor_sweep"
+        # — a fixture module that merely happens to be *named* `floor_sweep.py`
+        # (this module's own test suite writes one, to prove round 2's fix holds
+        # regardless of filename) is not this module, and must be swept exactly
+        # like any other, `MINIMUM_FLOORS_SWEPT`-shaped constant included.
+        is_this_module = module.path.resolve() == _THIS_FILE
         for name, lineno, value_expr in _module_constant_candidates(module.tree):
-            finding, dynamic_record, in_scope = _classify_floor(module, name, lineno, value_expr)
+            if is_this_module and name == "MINIMUM_FLOORS_SWEPT":
+                self_floor = (module, name, lineno)
+                swept += 1
+                continue
+            finding, dynamic_record, pinned_record, in_scope = _classify_floor(
+                module, name, lineno, value_expr
+            )
             if not in_scope:
                 excluded.append(f"{module.stem}.{name}")
                 continue
@@ -1459,6 +2000,23 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
                 findings.append(finding)
             if dynamic_record is not None:
                 dynamic.append(dynamic_record)
+            if pinned_record is not None:
+                pinned.append(pinned_record)
+
+    if self_floor is not None:
+        self_module, self_name, self_lineno = self_floor
+        self_comment = _comment_block_above(self_module.lines, self_lineno)
+        self_finding = _margin_finding(
+            self_module.stem, self_name, self_lineno, MINIMUM_FLOORS_SWEPT, swept, self_comment
+        )
+        if self_finding is not None:
+            findings.append(self_finding)
+        else:
+            pinned.append(
+                EvidencePinnedFloor(
+                    module=self_module.stem, name=self_name, lineno=self_lineno, population=swept
+                )
+            )
 
     return {
         "floors_that_do_not_refuse_the_first_deletion": len(findings),
@@ -1466,6 +2024,9 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
         "floors_swept": swept,
         "dynamic_population_floors": [
             d.as_dict() for d in sorted(dynamic, key=lambda d: (d.module, d.name))
+        ],
+        "evidence_pinned_floors": [
+            p.as_dict() for p in sorted(pinned, key=lambda p: (p.module, p.name))
         ],
         "bounds_read_and_out_of_scope": sorted(excluded),
         "gate_status": "measured",
@@ -1476,23 +2037,34 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: from the sweep's own result it would shrink with any floor the sweep stops
 #: finding, which is this task's own defect committed inside this task's gate.
 #:
-#: Measured at 57 floors in scope after round 2's broadened, value-shaped discovery
-#: (`_module_constant_candidates`, `_resolves_to_name`, the two-hop delegation and
-#: caller-parameter tracing) — round 1's own count was 46, and 30-against-46 was
-#: exactly wide enough to hide all fourteen of round 1's fixed floors, which is the
-#: reader's third finding on PR #436. Committed at 54, three points of slack:
-#: raised alongside every measured broadening this round made, and narrow enough
-#: that hiding more than a couple of floors — renaming them out of the candidate
-#: set, or reclassifying several as dynamic — breaches it, where 30-against-46
-#: tolerated sixteen. Per-module detail is deliberately not repeated here: a
-#: hand-typed roll call of "already compliant" modules is exactly the prose this
-#: task's own second finding showed cannot be trusted (`gate_reader_agreement` was
-#: named compliant in round 1's version of this same comment and was, at the time,
-#: genuinely out of scope). `status/evidence/T159.json`'s own
-#: `dynamic_population_floors` and `bounds_read_and_out_of_scope` are regenerated
-#: every run and are the only account of *which* floors are which that this module
-#: stands behind.
-MINIMUM_FLOORS_SWEPT = 54
+#: **Round 3 changed how this floor is *checked*, not only what it is checked
+#: against.** Round 2 classified this floor `dynamic` like any other name-shaped
+#: candidate, which put it in the one branch that never computes a margin — the
+#: reader's third/fourth finding, restated: self-exemption had moved from
+#: identity to classification. It is no longer classified at all: `measure()`
+#: defers it, and once this run's own `swept` is known, checks it directly
+#: against `MINIMUM_FLOORS_SWEPT` by the same `_margin_finding` arithmetic every
+#: other floor gets — the one number that could ever answer "is this margin
+#: real" honestly, since no committed evidence file backs a census T100
+#: deliberately keeps uncommitted.
+#:
+#: Measured at 67 floors in scope after round 3's further-broadened discovery
+#: (a leading underscore admitted into `_CONSTANT_NAME_RE`, `.split()`/
+#: `.splitlines()` recognised as a real population, `AnnAssign` targets read
+#: everywhere `Assign` already was, a floor's own value resolved through a
+#: `BinOp` of two literals or an alias to a sibling constant, and delegation
+#: traced to arbitrary depth rather than exactly two hops) — round 2's own count
+#: was 57. Committed at 64, three points of slack, the same margin round 2 used
+#: for the same reason: narrow enough that hiding more than a couple of floors
+#: breaches it, wide enough that an unrelated, honest change elsewhere in this
+#: file does not turn this floor red by accident. Per-module detail is
+#: deliberately not repeated here: a hand-typed roll call of "already compliant"
+#: modules is exactly the prose a second reader has twice now shown cannot be
+#: trusted. `status/evidence/T159.json`'s own `dynamic_population_floors`,
+#: `evidence_pinned_floors` and `bounds_read_and_out_of_scope` are regenerated
+#: every run and are the only account of *which* floors are which that this
+#: module stands behind.
+MINIMUM_FLOORS_SWEPT = 64
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:

@@ -1903,8 +1903,10 @@ DEFAULT_T97_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T97.json"
 # Five ways a read can go wrong, one clean read, and the acknowledgement path.
 # The floor exists for the reason every floor in this repository exists: zero
 # unreported failures over zero attempted reads is a clean number measured on
-# nothing, and it is the exact shape of the defect being fixed.
-MINIMUM_READ_CHECKS = 14
+# nothing, and it is the exact shape of the defect being fixed. Raised to what
+# the probe carries — 16, zero slack — because 14 tolerated the first two
+# deleted checks silently, with no margin argued for the gap (T159).
+MINIMUM_READ_CHECKS = 16
 
 # A distinctive line standing in for something the candidate wrote, so
 # `import_log_carries_document_text` is answered by looking for it rather than
