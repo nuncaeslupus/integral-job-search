@@ -213,32 +213,59 @@ and one retraction, each independently confirmed to clear
 `episodes_undecidable` before this fix, and each pinned as its own state in
 `probe_paraphrase_undecidability` (states 16-21) after it.
 
-Round six's fix asks the question the exact-text guard was standing in for,
+Round six's fix asked the question the exact-text guard was standing in for
 instead of a sixth way to spell "this text, near enough": *whose* evidence is
-this line? `unbacked` is searched for `episode.text` only when **no other
-episode's text** also shingle-matches the same line —
+this line? `unbacked` was searched for `episode.text` only when **no other
+episode's text** also shingle-matched the same line — a relation over
+`master.episodes`, not a membership test against `approved`. The docstring
+argued this needed no set to stay synchronised with, "so nothing that later
+shrinks `approved` (a retraction) or fails to widen it (a near-copy) can
+reopen the seam" — true of `approved`, and `approved` was the wrong set to
+worry about. `master.episodes` is the list the candidate edits directly, and
+tidying a story out of the bank after the draft was written — the very edit
+`measure_prepared`'s own docstring names as the hole T114 exists to close —
+removes the rival the relation needed, which is a check pinned against
+*whichever episodes happen to still be in the bank*, not against whose
+evidence the line actually is.
 
-```python
-elif any(
-    _carries(line, episode.text) for line in unbacked
-    if not any(
-        other.text != episode.text and _carries(line, other.text)
-        for other in master.episodes
-    )
-):
-```
+**Round six's own fix was one layer short, in the same shape as round five's
+(R7-1, round seven, #435).** Two of the six states it committed regress the
+moment the authoring episode is edited out of `master.episodes` after
+drafting — the duplicated-line and manifest-row-deleted states (14, 15)
+replayed with `win` additionally removed from the bank — because `approved`
+still names `win`'s text after a bank edit and `master.episodes` no longer
+does; the numerator these two states feed goes from correct to cleared. A
+third state was never closed by either round: a single-episode bank has no
+rival by construction, so a hand-added line sharing an eight-word window with
+the one episode in the bank clears it with zero approvals and zero edits at
+all — not a regression, since round five clears it too, but the same root.
 
-— a relation over `master.episodes`, not a membership test against `approved`.
-It needs no set to stay synchronised with, so nothing that later shrinks
-`approved` (a retraction) or fails to widen it (a near-copy that was never
-approved-by-equality in the first place) can reopen the seam: a line ambiguous
-between two episodes is undecidable for both, which is `_carries`'s own limit
-— it can confirm presence, never rule out a rival claim to the same presence —
-applied to the ambiguity directly rather than laundered through a text
-comparison of what has been approved. This is CLAUDE.md's *"a closed rule
-rather than a twin"* answer, the same shape as the encode set derived from
-RFC 3986 rather than listed: nothing here enumerates edits, so there is no
-seventh one to lose to.
+**What closes it is removing the rival check, not repairing it.** The reason
+every round from three through six needed one is that `_carries` is a
+*shingle* predicate — satisfied by any overlapping eight-word window — and a
+shingle window is exactly the thing two *different* sentences can share
+(win's own near-copies; win and the twin that overlaps it by construction).
+Confirming a *specific* episode from a test built to detect mere presence was
+always going to need a second test to rule out the sentence actually
+belonging to somebody else, and every rival set tried so far — `approved`,
+`master.episodes` — was a live, editable proxy for "who wrote this," rather
+than the thing itself. `_normalised_equal(line, episode.text)` asks a
+stronger question that a *different* sentence cannot answer by coincidence
+the way an overlapping window can: is this the *same whole run of words*,
+end to end, once normalised the way `_carries` already normalises one? Win's
+near-copies pass this against win (case, punctuation and whitespace are the
+only differences, and `_words` already normalises past all three); win and
+the twin never do, however much of their opening words they share, because
+their final words differ. A match here is therefore trustworthy on its own —
+it needs no rival, no `approved`, no `master.episodes`, and no retraction,
+because none of those can make two distinct sentences equal and none of them
+is needed to keep two distinct sentences apart. This is CLAUDE.md's *"a
+closed rule rather than a twin"* answer applied one level further in than
+round six's: not a better-sourced rival set, but no rival set. Nine states
+already pinned in `probe_paraphrase_undecidability` (12, 14-15, 16-21) must
+still resolve correctly under it, and three more (R7-1's) are added: the two
+regressions replayed with the bank additionally edited, and the
+single-episode state neither round five nor round six closed.
 
 **The three sites that must all name an undecidable episode in a refusal are
 pinned by a rule, not by three separate tests.** `prepare`'s raise, `record_sent`'s
@@ -475,6 +502,28 @@ def _carries(document: str, episode: str) -> bool:
         f" {' '.join(words[start : start + _SHINGLE])} " in body
         for start in range(len(words) - _SHINGLE + 1)
     )
+
+
+def _normalised_equal(line: str, episode: str) -> bool:
+    """Is `line` this episode's own wording — the same whole run of words?
+
+    T156's R7 fix (#435 round 7). `_carries` asks whether *any* eight-word
+    window of `episode` is present in `line`; that is deliberately loose (it
+    is what lets it beat punctuation, spacing, case, truncation and
+    extension), and the looseness is exactly what let a *different*
+    sentence — an approved episode's own near-copy, or an episode that
+    overlaps another by a shared window — also satisfy it against the same
+    line. This asks a stricter question that a different sentence cannot
+    answer by coincidence: are the two, once normalised the same way,
+    identical runs of words end to end? Two sentences whose final words
+    differ (a `win`/`twin`-shaped overlap) never pass this together, however
+    much of their opening words they share — so a match here can be trusted
+    as this episode's own, with no need to rule out a rival by consulting
+    `approved`, `master.episodes`, or a retraction: none of them can make
+    two distinct sentences equal, and none of them is needed to keep two
+    distinct sentences apart.
+    """
+    return _words(line) == _words(episode)
 
 
 def _squash(text: str) -> str:
@@ -926,66 +975,88 @@ def measure_prepared(
                 f"{offer_id}/v{version}: {episode.text} — the substance of a story-bank "
                 "episode, carried by an entry no per-use approval names"
             )
-        elif any(
-            _carries(line, episode.text)
-            for line in unbacked
-            if not any(
-                other.text != episode.text and _carries(line, other.text)
-                for other in master.episodes
+            continue
+        # R7-1 (#435 round 7): rounds three through six each tried to answer
+        # "whose evidence is this line?" by *excluding* some rival explanation
+        # from a shingle match — a text-exact `approved` membership test
+        # (round five), then a normalised-shingle rival check against
+        # `master.episodes` (round six). Both are a check pinned against a
+        # proxy for the property: `approved` is a set a retraction edits,
+        # `master.episodes` is the list the candidate edits directly by
+        # tidying a story out of their bank, and removing or rewriting the
+        # episode that authored a line makes that line's rival vanish with
+        # it — the unapproved twin it was protecting is silently cleared
+        # again the moment the *other* episode stops existing to compare
+        # against. Two committed states (14, 15) regress exactly this way
+        # under round six's rule; a third (a single-episode bank, so no
+        # rival is even possible by construction) was never closed by either
+        # round — round five clears it too.
+        #
+        # The fix removes the need for a rival check rather than finding a
+        # sixth way to compute one. `_carries` is a *shingle* predicate: it
+        # is satisfied by any overlapping eight-word window, which is exactly
+        # what let two *different* sentences (win's approved text and its
+        # near-copies; win's text and the twin that overlaps it) both satisfy
+        # it against the same line — the ambiguity was never a property of
+        # the line, it was a property of window-based matching applied to
+        # confirm a *specific* episode rather than merely to detect presence.
+        # `_normalised_equal`, below, asks a different, stronger question:
+        # is this *whole* run of words the same as the episode's whole run of
+        # words? Two distinct sentences that share an eight-word window do
+        # not have to share every word — win and its own near-copies do
+        # (case, punctuation and whitespace are the only differences, and
+        # `_words` already normalises past all three), but win and the twin
+        # never do (their final two words differ), so equality of the whole
+        # word run can never also hold for the rival that a shingle window
+        # let through. Nothing here consults `approved`, `master.episodes`
+        # or a retraction: an episode's own wording, unedited, is evidence
+        # for it regardless of what else exists in the story bank or on
+        # disk, and no *other* sentence's wording can pass this specific
+        # test by coincidence the way a shared window could.
+        #
+        # Checked one `unbacked` line at a time — never joined into one
+        # string — for the reason given at `intact`, several names up:
+        # joining a *subset* of lines can put two that were never adjacent on
+        # the page next to each other, and a shingle (or a word-run
+        # equality, which is exactly as vulnerable) can straddle that
+        # manufactured boundary (round three's original defect; `_words`
+        # treats a newline as ordinary whitespace).
+        #
+        # Nine states are pinned in `probe_paraphrase_undecidability` for
+        # this rule specifically: N2 (12), R5-1A/B (14-15), R6-1's five
+        # near-copies and R6-2's retraction (16-21) — every one of which
+        # must still resolve the rival's line as *not* this episode's own
+        # wording — plus R7-1's three (22-24): the same duplicated-line and
+        # manifest-row states (14, 15) replayed with the authoring episode
+        # additionally removed from `master.episodes`, and a single-episode
+        # bank with a hand-added line sharing an eight-word window and zero
+        # approvals. States 22 and 23 must flip from cleared to undecidable
+        # relative to round six; state 24 is not a regression (it was never
+        # closed) and this rule closes it anyway, because it needs no rival
+        # at all to do so.
+        if any(_normalised_equal(line, episode.text) for line in unbacked):
+            # This episode's own wording, unedited, in a line this sweep has
+            # *already* reported above as one of `findings`' unbackable rows
+            # — so its substance reached the page and is not re-attributed to
+            # it a second time. Not `undecidable` either: this is positive
+            # evidence for *this* episode specifically, and nothing else can
+            # satisfy whole-word-run equality against the same text (see
+            # above).
+            continue
+        # R7-3 (#435 round 7, advisory): a shingle match can still exist here
+        # — some other line on the page overlaps this episode's text by an
+        # eight-word window without being its own wording verbatim (a
+        # near-copy of a *different* episode, most often) — and when it does,
+        # saying "no shingle match confirms it present anywhere on the page"
+        # is false: a match exists, it is just not confirmably this
+        # episode's. The message names which claim is actually true.
+        if any(_carries(line, episode.text) for line in unbacked):
+            undecidable.append(
+                f"{offer_id}/v{version}: {episode.text} — no per-use approval names it, "
+                "no manifest row claims it, and the only shingle match on the page is not "
+                "this episode's own wording — this sweep has no evidence either way, so it "
+                "is reported as undecided rather than withheld"
             )
-        ):
-            # Confirmed present verbatim in a line this sweep has *already*
-            # reported above — one of `findings`' unbackable rows — so this
-            # episode's substance reached the page and is not re-attributed to
-            # it a second time. It is not `undecidable` either: this branch is
-            # reached only when there **is** positive evidence, and evidence
-            # for *this* episode specifically.
-            #
-            # Checked one `unbacked` line at a time — never joined into one
-            # string — for the reason given at `intact`, two names up: joining
-            # a *subset* of lines can put two that were never adjacent on the
-            # page next to each other, and a shingle can straddle that
-            # manufactured boundary (round three's original defect, `_words`
-            # treats a newline as ordinary whitespace). `any(...)` over single,
-            # whole lines can only ever match text a real line on the page
-            # actually carries.
-            #
-            # The inner filter is round six's fix (R6, #435 round 6), and it
-            # replaces what round five tried to do with `if line not in
-            # approved`. That guard asked "is this line's *exact text*
-            # something an approval names" — a byte-equality test standing in
-            # front of `_carries`, which is a *normalised-shingle* predicate —
-            # and round five's own fixes to it (a near-copy that beats
-            # normalisation exactly the way `_carries`'s docstring says it
-            # will, or a D-24 retraction that removes the text from `approved`
-            # with no document edit at all) each walked past the exact-text
-            # test while leaving `_carries` itself still matching. Both are
-            # the same shape as every finding this family has produced: a
-            # check pinned against a proxy for the property, rather than
-            # against the property.
-            #
-            # The property is not "does `approved` still name this text" —
-            # `approved` is a set the candidate and a retraction both edit,
-            # and nothing about it is stable across the one loop that reads
-            # it. The property is "whose evidence is this line": a line this
-            # episode's text shingle-matches is evidence for it only when no
-            # *other* episode's text also shingle-matches the same line —
-            # ambiguous between two episodes is undecidable for both, which
-            # is `_carries`'s own limit (it can confirm presence, never rule
-            # out a rival claim to the same presence) applied directly to the
-            # ambiguity instead of laundered through a comparison against
-            # whatever happens to be in `approved` right now. Nothing here
-            # needs `approved`, `disclosed`, or a retraction at all — a line
-            # near-copied from an approved sentence and a line whose approval
-            # was retracted both still shingle-match that sentence's *text*,
-            # which is what this filter actually asks about, so a set edited
-            # by either path can no longer reopen the seam. Six constructed
-            # routes are pinned in `probe_paraphrase_undecidability` (states
-            # 16-21): five near-copies of an approved line (trailing
-            # punctuation dropped, case changed, punctuation inserted, a
-            # clause appended, whitespace doubled) and one D-24 retraction of
-            # the approved episode with the document left untouched.
-            pass
         else:
             undecidable.append(
                 f"{offer_id}/v{version}: {episode.text} — no per-use approval names it, "
@@ -2223,17 +2294,19 @@ def _named_as_finding(measured: dict[str, Any], episode_text: str) -> bool:
     return any(episode_text in item for item in measured["unapproved_episodes"])
 
 
-# Twenty-one constructed profiles (`fresh()` calls), one per numbered state
+# Twenty-four constructed profiles (`fresh()` calls), one per numbered state
 # below — a floor over the population the second reader's F3 finding named
 # (states, not `check()` calls), set to the actual count rather than to a
 # margin nobody argued: deleting one state now breaches this floor
 # immediately. States 12-13 are round 3's (N2) and round 4's (F1) accepted
 # findings; 14-15 are round 5's (R5-1); 16-21 are round 6's (R6-1's five
-# near-copies and R6-2's retraction), committed here per CLAUDE.md's fixtures
-# section: an accepted case pinned only in pytest is a report that was read
-# and waved through, and the measured denominator has to rise or the
-# acceptance did not happen. 11 -> 13 -> 15 -> 21.
-MINIMUM_PARAPHRASE_STATES = 21
+# near-copies and R6-2's retraction); 22-24 are round 7's (R7-1's two
+# bank-edited regressions and the single-episode-bank state neither prior
+# round closed), committed here per CLAUDE.md's fixtures section: an accepted
+# case pinned only in pytest is a report that was read and waved through, and
+# the measured denominator has to rise or the acceptance did not happen.
+# 11 -> 13 -> 15 -> 21 -> 24.
+MINIMUM_PARAPHRASE_STATES = 24
 # Both denominators asserted, per the same reasoning T150 gives for
 # `MINIMUM_EVIDENCE_KEYS_COMPARED`/`MINIMUM_EVIDENCE_SOURCES_COMPARED`: a floor
 # on `states` alone is satisfiable by an empty `fresh()` call that asserts
@@ -2242,8 +2315,9 @@ MINIMUM_PARAPHRASE_STATES = 21
 # without deleting the state trips this one instead. 21 -> 25 (states 12-13)
 # -> 29 (states 14-15, two checks each) -> 30 (one more check added to state
 # 9 itself, isolating the `approved` disjunct of its skip guard) -> 42 (states
-# 16-21, six new states, two checks each).
-MINIMUM_PARAPHRASE_CHECKS = 42
+# 16-21, six new states, two checks each) -> 48 (states 22-24, two checks
+# each).
+MINIMUM_PARAPHRASE_CHECKS = 48
 
 
 def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
@@ -2487,17 +2561,37 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     )
     # The skip guard two loops below reads `disclosed or approved`, and the
     # case above exercises both disjuncts at once — it cannot tell which one
-    # is doing the work. `disclosed` alone is not independently pinnable
-    # through this gate: whenever an episode is disclosed its literal,
-    # unedited text is on the page, and the `elif` branch's self-match
-    # protects it regardless of whether `disclosed` is even in the guard —
-    # measured directly by reverting the guard to `approved` alone and
-    # confirming every other check in this module still passes. `approved`
-    # alone *is* independently pinnable: strip win's line from `letter.md`
-    # after drafting (T114's own class of edit) while its approval and
-    # manifest claim both stand. Its literal text is gone, so the `elif`
-    # below has nothing left to self-match against, and only the `approved`
-    # half of the guard stops it landing in `undecidable`.
+    # is doing the work.
+    #
+    # R7-2 (#435 round 7, advisory). A previous round of this comment argued
+    # `disclosed` was not independently pinnable "because whenever an episode
+    # is disclosed its literal, unedited text is on the page, and the `elif`
+    # branch's self-match protects it regardless of whether `disclosed` is
+    # even in the guard" — and then treated that as a fact about the *gate*
+    # rather than checking it against a state the module's own mechanics
+    # already construct. It is reachable: D-24 is exactly `disclosed and not
+    # approved` by construction (`approved -= withdrawn` removes the text
+    # from `approved` while the manifest row and the rendered line both stay
+    # on disk), and state 21 already builds it. What was true under round
+    # six's rival-against-`master.episodes` rule is not true here. Measured:
+    # under R7's `_normalised_equal` self-match, dropping `disclosed` from
+    # the guard (leaving `approved` alone) still leaves a disclosed-but-
+    # unapproved episode's own exact wording sitting in `unbacked`, so the
+    # `continue` two names below still fires on it regardless of the guard —
+    # `disclosed` and the self-match test the property twice, not once. That
+    # makes `disclosed` genuinely redundant in *this* rule (it was not, under
+    # round six's), which is worth stating plainly rather than repeating a
+    # claim measured against code this file no longer runs. It stays in the
+    # guard anyway: removing it buys nothing (the self-match already covers
+    # every case it would have), and a disjunct that costs nothing to keep is
+    # not a defect merely for being provably unreachable — unlike a check
+    # that reads green while measuring nothing, this one reads green because
+    # a *different* line already measures the same thing. `approved` alone
+    # *is* independently pinnable, unchanged from before: strip win's line
+    # from `letter.md` after drafting (T114's own class of edit) while its
+    # approval and manifest claim both stand. Its literal text is gone, so
+    # nothing is left in `unbacked` to self-match against, and only the
+    # `approved` half of the guard stops it landing in `undecidable`.
     letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
     letter.write_text(
         "\n".join(line for line in letter.read_text(encoding="utf-8").splitlines() if line != win)
@@ -2739,6 +2833,105 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         _named_undecidable(measured, _FIXTURE_TWIN.text),
         "retracting win's evidence, with no document edit, falsely confirmed a different, "
         "unapproved twin (R6-2)",
+    )
+
+    # 22 — R7-1a (#435 round 7, the blocker): state 14's own construction —
+    # win's exact line duplicated on the page, the second copy unbacked —
+    # replayed with **win additionally removed from `master.episodes`** at
+    # measurement time: the candidate tidying that story out of their bank
+    # after the draft was written, letter untouched. Round six's rival check
+    # quantified over `master.episodes`; with `win` no longer in it, there is
+    # no "other" episode left to make the duplicate line ambiguous, and the
+    # twin it was protecting is silently cleared again — the second reader's
+    # own measurement: round five's `line not in approved` gets this right
+    # (a bank edit does not touch `approvals.json`), round six's relation
+    # gets it wrong. `approved` and the manifest's own claim texts are
+    # unaffected by editing `master.json`, which is what this state pins.
+    duplicated_edited = _probe_master(
+        headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN)
+    )
+    store = fresh("dup-line-bank-edited", duplicated_edited)
+    _probe_prepare(store, duplicated_edited, approved=(0,))
+    letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+    letter.write_text(letter.read_text(encoding="utf-8") + win + "\n", encoding="utf-8")
+    bank_edited = duplicated_edited.model_copy(update={"episodes": (_FIXTURE_TWIN,)})
+    measured = measure_prepared(store, bank_edited, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 1,
+        "a duplicated approved line was not reported as its own unbacked disclosure "
+        "once the authoring episode was removed from the bank (R7-1a)",
+    )
+    note_if_silently_cleared(measured, _FIXTURE_TWIN.text)
+    check(
+        _named_undecidable(measured, _FIXTURE_TWIN.text),
+        "removing win from the bank after drafting reopened the duplicated-line seam and "
+        "falsely confirmed a different, unapproved twin (R7-1a)",
+    )
+
+    # 23 — R7-1b (#435 round 7, the blocker): state 15's construction — win's
+    # manifest row deleted post-draft, its one rendered line left unbacked —
+    # replayed with the same bank edit as state 22. `approved` still names
+    # win's text (it is read from `approvals.json`, untouched by either the
+    # manifest edit or the bank edit), so the rival is still findable through
+    # it even though the manifest claim that used to carry win's text is now
+    # gone too.
+    manifest_edited_and_bank_edited = _probe_master(
+        headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN)
+    )
+    store = fresh("manifest-row-bank-edited", manifest_edited_and_bank_edited)
+    _probe_prepare(store, manifest_edited_and_bank_edited, approved=(0,))
+    manifest_path = store.path(*_version_parts(_PROBE_OFFER, 1), "manifest.json")
+    manifest = Manifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    manifest = manifest.model_copy(
+        update={"claims": tuple(claim for claim in manifest.claims if claim.text != win)}
+    )
+    manifest_path.write_text(json.dumps(manifest.model_dump(mode="json")), encoding="utf-8")
+    bank_edited = manifest_edited_and_bank_edited.model_copy(update={"episodes": (_FIXTURE_TWIN,)})
+    measured = measure_prepared(store, bank_edited, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 1,
+        "a manifest row deleted out from under an approved line was not reported as its own "
+        "unbacked disclosure once the authoring episode was removed from the bank (R7-1b)",
+    )
+    note_if_silently_cleared(measured, _FIXTURE_TWIN.text)
+    check(
+        _named_undecidable(measured, _FIXTURE_TWIN.text),
+        "removing win from the bank after drafting reopened the manifest-row-deleted seam "
+        "and falsely confirmed a different, unapproved twin (R7-1b)",
+    )
+
+    # 24 — R7-1c (#435 round 7, not a regression — round five clears it too,
+    # and neither round ever closed it): a single-episode bank has no rival
+    # by construction, so a hand-added line sharing an eight-word window with
+    # the one episode clears it with **zero approvals and zero post-draft
+    # edits** — the cheapest state in this family to build, and not an edge
+    # case: any candidate with one story in their bank so far is this state.
+    # `win` here is never approved, never manifested, and never removed from
+    # anything; `_FIXTURE_TWIN.text` is hand-added directly, the way state 8
+    # plants a raw line, and was never itself an episode in this bank. Round
+    # six's rival check had nothing to compare `win` against (`master.episodes`
+    # holds only `win`), so it passed the line as confirmed; `_normalised_equal`
+    # closes it with no rival at all — `_FIXTURE_TWIN.text` is not the same
+    # whole run of words as `win.text` (their final words differ), so it
+    # cannot self-match, and `win` is correctly left undecidable.
+    single = _probe_master(headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0],))
+    store = fresh("single-episode-bank", single)
+    _probe_prepare(store, single, approved=())
+    letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+    letter.write_text(
+        letter.read_text(encoding="utf-8") + _FIXTURE_TWIN.text + "\n", encoding="utf-8"
+    )
+    measured = measure_prepared(store, single, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 1,
+        "a hand-added line sharing an eight-word window was not reported as its own "
+        "unbacked disclosure on a single-episode bank (R7-1c)",
+    )
+    note_if_silently_cleared(measured, win)
+    check(
+        _named_undecidable(measured, win),
+        "a single-episode bank left no rival to detect, and a hand-added line sharing an "
+        "eight-word window falsely confirmed the one episode in the bank (R7-1c)",
     )
 
     return {
