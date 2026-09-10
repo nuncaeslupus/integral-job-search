@@ -280,8 +280,8 @@ class Run:
             # fills exactly at a page's end stops the next page and leaves no
             # row over it, and that run must not read as a complete pass.
             lines.append(
-                f"  STOPPED at the {OFFER_CEILING}-offer ceiling — rows, pages and boards "
-                "after it were not read"
+                f"  STOPPED at the {OFFER_CEILING}-offer ceiling — any rows, pages or "
+                "boards after it were not read"
             )
         ceilinged = [
             f"{o.connector} ({o.query})" if o.query else o.connector
@@ -373,7 +373,7 @@ def _why_not_worldwide(constraints: CandidateConstraints) -> str:
     """
     state = constraints.reach.state
     if state == "unknown":
-        return "since you have not said whether you would work remotely — worth asking"
+        return "since you have not said whether you would work remotely"
     if state == "declined":
         return "since you preferred not to say whether you would work remotely"
     return "since your reach does not include remote work"
@@ -383,13 +383,13 @@ def _words(text: str) -> set[str]:
     """Casefolded, NFKD-folded words (NFKD, not NFD: it is what turns Catalan
     `ŀ` into `l·` and fullwidth letters into ASCII).
 
-    A `+`/`#` run stays on its word only where the token ends — `c++` and `c#`
-    are words of their own — so `I+D+i` is `i, d, i` and `Python+Django` is two
-    words, exactly as `R&D&I` already was.
+    A `+`/`#` run stays on its word unless a **letter** follows — `c++`, `c#`,
+    and `C++17` is `c++, 17` — so `I+D+i` is `i, d, i` and `Python+Django` is
+    two words, exactly as `R&D&I` already was. Edge: `Python+3` is `python+`.
     """
     decomposed = unicodedata.normalize("NFKD", text.casefold())
     bare = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return set(re.findall(r"\w+(?:[+#]++(?!\w))?", bare))
+    return set(re.findall(r"\w+(?:[+#]++(?![^\W\d_]))?", bare))
 
 
 def matches_aim(item: dict[str, str], phrases: Sequence[str]) -> bool:
@@ -1013,13 +1013,10 @@ def measure_fixture() -> dict[str, Any]:
 
 FLOOD_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T167.json"
 
-#: The constructed flood (T167): two worldwide boards of two pages each, so
-#: the per-run ceiling, the page stop and the board stop all sit inside it.
-#: Each page has 120 rows in a cycle of four: two match `_FLOOD_TERMS[0]` and
-#: two are near misses carrying exactly one of its words — off-aim by "every
-#: word", and invisible to a filter that only ever met rows sharing none. A
-#: page carries 60 matches, so the ceiling fills part-way through the first.
-_FLOOD_BOARDS = ("flood", "deluge")
+#: The constructed flood (T167): worldwide boards of two pages. A page's rows
+#: run in a cycle of four: two match `_FLOOD_TERMS[0]` and two are near misses
+#: carrying exactly one of its words — off-aim by "every word", and invisible to
+#: a filter that only ever met rows sharing none.
 _FLOOD_PAGES = 2
 _FLOOD_PAGE_ROWS = 120
 _FLOOD_KINDS = (
@@ -1031,6 +1028,16 @@ _FLOOD_KINDS = (
 #: The second is a phrase with no words, as a candidate may type one. It must
 #: match nothing; a matcher for which it matches everything floods the tree.
 _FLOOD_TERMS = ("python engineer", "—")
+
+#: The gate's layout, in the order the boards are selected. 60-row pages carry
+#: 30 matches each, so: deluge's page one writes 30; its page two **fails**
+#: after offers are already on disk (round 2's N1 — a lost count hands the
+#: next board the whole ceiling again); flood's page one fills the ceiling
+#: part-way; flood's page two and all of torrent come after it. The per-run
+#: count, the failed page, the page stop and the board stop are all inside.
+_FLOOD_BOARDS = ("deluge", "flood", "torrent")
+_FLOOD_GATE_ROWS = 60
+_FLOOD_FAILING = "https://deluge.integral.local/jobs?page=2"
 
 _FLOOD_CONNECTOR = """\
 site: SITE
@@ -1068,7 +1075,9 @@ class FloodPage:
     off_aim: frozenset[str]
 
 
-def flood_board(directory: Path, site: str = "flood") -> dict[str, FloodPage]:
+def flood_board(
+    directory: Path, site: str = "flood", rows: int = _FLOOD_PAGE_ROWS
+) -> dict[str, FloodPage]:
     """Install one worldwide board under `directory`; return its pages by URL.
 
     The labels come from construction, never from `matches_aim` — a gate that
@@ -1088,7 +1097,7 @@ def flood_board(directory: Path, site: str = "flood") -> dict[str, FloodPage]:
         matching: set[str] = set()
         off_aim: set[str] = set()
         cards = []
-        for i in range(_FLOOD_PAGE_ROWS):
+        for i in range(rows):
             kind, hit = _FLOOD_KINDS[i % len(_FLOOD_KINDS)]
             title = f"{kind} {site}-{number}-{i}"
             text = f"Advert {site}-{number}-{i}: {title}, fully remote."
@@ -1110,20 +1119,26 @@ def flood_board(directory: Path, site: str = "flood") -> dict[str, FloodPage]:
 def measure_flood() -> dict[str, Any]:
     """T167's gate: worldwide boards that return far more than was asked for.
 
-    A remote-reaching candidate searches; two boards of two pages hand over 480
-    rows, half of which match. Every component below is something the ceiling
-    or the filter was built to refuse, and each is read off the run's effects —
-    what reached disk, which requests went out — rather than off its report:
+    A remote-reaching candidate searches three two-page boards laid out as
+    `_FLOOD_BOARDS` describes. Every component is something the ceiling or the
+    filter was built to refuse, read off the run's **effects** — what reached
+    disk, which requests went out, which rows were served — never off its
+    report alone:
 
     * an off-aim row written as an offer;
     * an offer written past `OFFER_CEILING` (whose value is also recorded, so
-      raising it moves committed evidence rather than passing quietly);
+      raising it moves committed evidence rather than passing quietly), or a
+      reported `added` that disagrees with what is on disk;
     * a request made once the ceiling's offers were on disk — the next page,
       the next board, an advert page;
     * a board reported as asked that was sent no request;
-    * a served row the outcome does not account for, or an off-aim count that
-      disagrees with the off-aim rows actually served;
+    * served rows the outcomes do not report, an outcome whose parts do not sum
+      to its rows, or an off-aim count that disagrees with the off-aim rows
+      actually served;
     * a worldwide board selected for the same candidate with an unknown reach.
+
+    `unmeasured` unless the run itself reached the ceiling, cut rows at it and
+    met the failing page — a zero over a run that never got there says nothing.
     """
     import tempfile
     from urllib.parse import urlsplit
@@ -1142,7 +1157,7 @@ def measure_flood() -> dict[str, Any]:
         directory = root / "connectors"
         pages: dict[str, FloodPage] = {}
         for site in _FLOOD_BOARDS:
-            pages |= flood_board(directory, site)
+            pages |= flood_board(directory, site, _FLOOD_GATE_ROWS)
         create_profile(root, "Fixture", handle="fixture", language="en", fiction=True)
         store = ProfileStore(root, "fixture")
         offers_dir = Path(store.path("offers"))
@@ -1158,7 +1173,9 @@ def measure_flood() -> dict[str, Any]:
                 late.append(request.url)
             served.append(request.url)
             page = pages.get(request.url)
-            return Response(200, page.html) if page else Response(404, "", error="no page")
+            if request.url == _FLOOD_FAILING or page is None:
+                return Response(None, "", error="timed out")
+            return Response(200, page.html)
 
         run = source(
             store,
@@ -1175,22 +1192,28 @@ def measure_flood() -> dict[str, Any]:
 
     off_aim = frozenset().union(*(page.off_aim for page in pages.values()))
     asked = {f"{(urlsplit(url).hostname or '').split('.')[0]}_en" for url in served}
-    served_off_aim = sum(len(pages[url].off_aim) for url in served if url in pages)
+    answered = [pages[url] for url in served if url in pages and url != _FLOOD_FAILING]
     components = {
         "offers_written_off_aim": sum(1 for text in written if text in off_aim),
         "offers_written_past_the_ceiling": max(0, len(written) - OFFER_CEILING),
+        "offers_on_disk_differ_from_run_added": abs(len(written) - run.added),
         "requests_after_the_ceiling": len(late),
         "boards_reported_asked_without_a_request": len(
             {o.connector for o in run.outcomes if o.reached_the_board} - asked
+        ),
+        "rows_served_not_reported": abs(
+            sum(o.items for o in run.outcomes)
+            - sum(len(page.matching) + len(page.off_aim) for page in answered)
         ),
         "rows_not_accounted_for": sum(
             abs(o.items - (o.off_aim + o.over_ceiling + o.unopened + o.dropped + o.added))
             for o in run.outcomes
         ),
-        "off_aim_rows_misreported": abs(sum(o.off_aim for o in run.outcomes) - served_off_aim),
+        "off_aim_rows_misreported": abs(
+            sum(o.off_aim for o in run.outcomes) - sum(len(page.off_aim) for page in answered)
+        ),
         "worldwide_boards_selected_without_remote_reach": len(selected_without_reach),
     }
-    first = pages[next(iter(pages))]
     measured: dict[str, Any] = {
         "flood_violations": sum(components.values()),
         **components,
@@ -1204,11 +1227,17 @@ def measure_flood() -> dict[str, Any]:
         "rows_reported_over_the_ceiling": sum(o.over_ceiling for o in run.outcomes),
         "gate_status": "measured",
     }
-    if len(first.matching) <= OFFER_CEILING or len(pages) < 4 or not served:
+    # Only a clean zero can be vacuous. A violation is a finding whatever else
+    # the run failed to reach, and must never be downgraded to "unmeasured".
+    if not measured["flood_violations"] and (
+        len(written) != OFFER_CEILING
+        or not measured["rows_reported_over_the_ceiling"]
+        or _FLOOD_FAILING not in served
+    ):
         measured["gate_status"] = "unmeasured"
         measured["reasons"] = [
-            "the ceiling does not fall inside the first page of a two-board, two-page flood, "
-            "so a zero says nothing about the page stop, the board stop or the per-run count"
+            "the run did not fill the ceiling, cut rows at it and meet the failing page — "
+            "a zero over it says nothing about the per-run count, the page or board stop"
         ]
     return measured
 

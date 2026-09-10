@@ -435,6 +435,7 @@
     "sourcing.MINIMUM_BOARDS",
     "sourcing.OFFER_CEILING",
     "sourcing.PHRASE_CEILING",
+    "sourcing._FLOOD_GATE_ROWS",
     "sourcing._FLOOD_PAGES",
     "sourcing._FLOOD_PAGE_ROWS",
     "sourcing_exclusions.MINIMUM_PRESENTATIONS",

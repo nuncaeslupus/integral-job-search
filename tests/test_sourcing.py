@@ -461,6 +461,42 @@ def test_why_worldwide_boards_were_left_out_follows_the_reach_state(
     assert says in run.summary(), run.summary()
 
 
+@pytest.mark.parametrize("failure", ["error", "refused", "robots"])
+def test_a_board_whose_later_page_fails_still_spends_the_ceiling(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Second reader round 2, N1: page one's offers are on disk, page two
+    fails — the board must still report them, or the next board is handed the
+    whole ceiling again and more than the ceiling lands."""
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 100)
+    d = tmp_path / "connectors"
+    pages = flood_board(d, "deluge") | flood_board(d, "flood")  # deluge is selected first
+    bad = "https://deluge.integral.local/jobs?page=2"
+
+    def fetch(request: ListRequest) -> Response:
+        if request.url == bad and failure == "error":
+            return Response(None, "", error="timed out")
+        if request.url == bad and failure == "refused":
+            return Response(429, "Too Many Requests")
+        return Response(200, pages[request.url].html)
+
+    robots = (
+        _robots("User-agent: *\nDisallow: /jobs?page=2\n") if failure == "robots" else _robots()
+    )
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=d,
+        page_count=2,
+        robots=robots,
+    )
+    assert len(_written(store)) <= 100, run.summary()
+    assert run.added == len(_written(store)), run.summary()
+
+
 def test_off_aim_rows_are_never_fetched(store: ProfileStore) -> None:
     """The filter runs before the advert page is opened — otherwise it saves
     storage and spends every request it was meant to save."""
@@ -511,6 +547,10 @@ def test_rows_past_the_detail_budget_are_unopened_not_dropped(
         ({"title": "React+TypeScript Developer"}, ("react developer",), True),
         ({"title": "C++ Developer"}, ("c++",), True),
         ({"title": "C Developer"}, ("c++",), False),
+        # Round 2, N2: a version after `c++`/`c#` is a digit, not a letter.
+        ({"title": "Desarrollador C++17"}, ("c++",), True),
+        ({"title": "C++20 Developer"}, ("c++ developer",), True),
+        ({"title": "C#10 developer"}, ("c# developer",), True),
         # F6 — NFKD, not NFD: Catalan `ŀ` (U+0140) and fullwidth letters fold.
         ({"title": "Coŀlaborador comercial"}, ("col·laborador",), True),
         ({"title": "\uff30\uff39\uff34\uff28\uff2f\uff2e Engineer"}, ("python engineer",), True),
