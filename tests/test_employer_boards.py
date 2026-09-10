@@ -422,6 +422,24 @@ def test_a_row_admitting_only_the_first_employer_does_not_count(tmp_path: Path) 
     assert len(why) == 12 and all("disallows" in w for w in why), why
 
 
+def test_a_row_refusing_only_the_first_employer_does_not_count(tmp_path: Path) -> None:
+    """Round 3, R3-1: the mirror of B1 — a replay that skipped the first URL
+    survived every other fixture."""
+    directory = _library(tmp_path, "lever_en")
+    ledger = _ledger_with(
+        tmp_path,
+        "lever_en",
+        robots_txt="User-agent: *\nDisallow: /v0/postings/aircall\n",
+        standing="two_parsers_agreed",
+        allowed=["/v0/postings/blablacar?mode=json"],
+        second_reader_refused=["/v0/postings/aircall?mode=json"],
+    )
+    measured = measure(directory, ledger)
+    assert measured["ats_host_connectors_conforming"] == 0
+    why = measured["not_conforming"]["lever_en"]
+    assert len(why) == 1 and "/v0/postings/aircall" in why[0], why
+
+
 def _three_employer_run(
     tmp_path: Path, answers: dict[str, Response], robots_txt: str | Robots
 ) -> Any:
@@ -524,6 +542,51 @@ def test_a_host_that_refuses_the_read_is_not_asked_again(tmp_path: Path, refusal
     assert asked == ["acme", "gone"]
     (outcome,) = run.outcomes
     assert outcome.refused
+    assert outcome.added == 1
+    assert run.summary().startswith("1 offer(s) added")
+
+
+@pytest.mark.parametrize(
+    ("page_two", "robots_txt", "ended_by"),
+    [
+        (Response(None, "", error="timed out"), "User-agent: *\nAllow: /\n", "error"),
+        (None, "User-agent: *\nDisallow: /jobs?page=2\n", "skipped"),
+    ],
+)
+def test_a_paged_board_stopped_on_page_two_keeps_page_one(
+    tmp_path: Path, page_two: Response | None, robots_txt: str, ended_by: str
+) -> None:
+    """Round 3, R3-2: N3's other two exits — a plain board's error, and a
+    robots refusal part-way — reported "0 added" over page one's offer."""
+    directory = _package(tmp_path)
+    (directory / "atshost_en" / "connector.yaml").write_text(
+        _yaml("https://api.ats.test/jobs?page={page}", "").replace(
+            "{mode: none, max_pages: 1}", "{mode: query_param, param: page, max_pages: 2}"
+        ),
+        encoding="utf-8",
+    )
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+
+    def fetch(request: ListRequest) -> Response:
+        if request.url.endswith("page=1"):
+            return _jobs("Page one")
+        assert page_two is not None, "a disallowed page was fetched"
+        return page_two
+
+    run = source(
+        ProfileStore(tmp_path / "p", "test"),
+        CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+        ),
+        Aim(state="stated", terms=("python",)),
+        fetch=fetch,
+        at=AT,
+        directory=directory,
+        page_count=2,
+        robots=Robots(fetch=lambda url: robots_txt),
+    )
+    (outcome,) = run.outcomes
+    assert getattr(outcome, ended_by)
     assert outcome.added == 1
     assert run.summary().startswith("1 offer(s) added")
 

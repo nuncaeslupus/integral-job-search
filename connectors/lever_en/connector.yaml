@@ -14,8 +14,9 @@
 # ponytail: one page per advert, capped by the engine's `DETAIL_FETCH_CEILING`
 # (40) per board per run. The employers below list hundreds of rows between
 # them, so a run completes the first 40 — the same ones, from the
-# alphabetically first employers, every run — and reports the rest as a
-# budget stop. Upgrade path is
+# alphabetically first employers, every run — and drops the rest. The summary
+# names only the first drop reason, so it reads as a budget stop only when
+# the first dropped row was one (#445 round 3, R3-5). Upgrade path is
 # an engine change that joins several JSON paths into one field, or a detail
 # budget that rotates across runs.
 #
