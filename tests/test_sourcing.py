@@ -703,14 +703,25 @@ def test_a_board_whose_adverts_need_a_browser_is_a_browser_board(
     assert outcome.skipped and "real browser" in outcome.skipped, outcome
 
 
-@pytest.mark.parametrize(
-    "named",
-    [
-        "https://www.infojobs.net/ofertas-trabajo/enfermera/barcelona",
-        # F3: the same path, another query — matching on the path alone answers it.
-        _INFOJOBS_SEARCH + "?keyword=enfermera",
-    ],
-)
+def _twins(url: str) -> list[str]:
+    """`url` altered in exactly one component, for every component that names a
+    different resource — derived from `SplitResult`, not listed, so no
+    component is forgotten (#455 round 2, N2). The fragment is left out: it is
+    never sent to a server, so it cannot name another search."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    altered = {
+        "scheme": "http",
+        "netloc": "jobs.example.org",
+        "path": "/ofertas-trabajo/enfermera/barcelona",
+        "query": "keyword=enfermera",
+    }
+    assert set(altered) == set(parts._fields) - {"fragment"}
+    return [urlunsplit(parts._replace(**{field: value})) for field, value in altered.items()]
+
+
+@pytest.mark.parametrize("named", _twins(_INFOJOBS_SEARCH))
 def test_a_saved_page_answers_no_search_but_its_own(
     store: ProfileStore, tmp_path: Path, named: str
 ) -> None:

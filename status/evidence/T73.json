@@ -1,7 +1,7 @@
 {
   "rate_limited_runs_reported_as_broken": 0,
-  "rate_limited_runs_reported_as_broken_evaluated": 12,
-  "runs_evaluated": 12,
+  "rate_limited_runs_reported_as_broken_evaluated": 13,
+  "runs_evaluated": 13,
   "gate_status": "measured",
   "ground_package": "arbeitnow_en",
   "reported_as_broken": [],
@@ -64,6 +64,14 @@
     },
     {
       "case": "incapsula challenge, served 200",
+      "health": "inconclusive",
+      "rate_limited": "the capture is a challenge page, not a listing ('_incapsula_resource')",
+      "baseline_items": 3,
+      "probe_items": 0,
+      "reasons": []
+    },
+    {
+      "case": "incapsula challenge with an empty title, served 200",
       "health": "inconclusive",
       "rate_limited": "the capture is a challenge page, not a listing ('_incapsula_resource')",
       "baseline_items": 3,

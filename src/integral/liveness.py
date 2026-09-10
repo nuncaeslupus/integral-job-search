@@ -263,22 +263,23 @@ def read_response(
         return SourceCheck(offer_id, "dead", f"the advert's own page says {phrase!r}")
     # T173. With no title to compare, a bot-check page served 200 used to read
     # `live` — infojobs.net serves exactly that to this tool for every advert
-    # (measured 2026-09-10). Only the page's own `<title>`/`<h1>` is read, and
-    # only when there is no title: the whole body is not evidence, because a
-    # real page carries `h-captcha` in its markup and an advert can say "rate
-    # limit" (second reader on #455, F5), while a challenge page names itself.
-    if title is None and (
-        marker := next(
-            (m for f in identity_fields(body) for m in BLOCK_PAGE_MARKERS if m in f.casefold()),
-            None,
-        )
-    ):
-        return SourceCheck(
-            offer_id,
-            "unverified",
-            f"the page names itself a block page ({marker!r}) — being blocked is not the "
-            "advert being open",
-        )
+    # (measured 2026-09-10). Where the page names itself, in its `<title>` or
+    # `<h1>`, only that is read: a real advert carries `h-captcha` in its markup
+    # or says "rate limit" in its text (#455 round 1, F5). Where it names
+    # nothing — a bare challenge body, an Incapsula iframe — the whole body is
+    # read, because a page with no name is not evidence of an advert either
+    # (#455 round 2, N1).
+    if title is None:
+        named = [f for f in identity_fields(body) if f.strip()]  # `<title></title>` names nothing
+        scanned = [f.casefold() for f in named] if named else [body.casefold()]
+        marker = next((m for text in scanned for m in BLOCK_PAGE_MARKERS if m in text), None)
+        if marker is not None:
+            return SourceCheck(
+                offer_id,
+                "unverified",
+                f"the page reads as a block page ({marker!r}) — being blocked is not the "
+                "advert being open",
+            )
     if title is not None and not title_in_body(title, body):
         return SourceCheck(
             offer_id,

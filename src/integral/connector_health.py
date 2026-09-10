@@ -708,6 +708,14 @@ RATE_LIMIT_SAMPLES: tuple[tuple[str, int | None, str], ...] = (
         200,
         "<html><body><iframe src='/_Incapsula_Resource?SWCGHOEL'></iframe></body></html>",
     ),
+    # #455 round 2: a challenge whose page carries an *empty* title. A reader
+    # that trusts "the page has a title" over what the title says reads it live.
+    (
+        "incapsula challenge with an empty title, served 200",
+        200,
+        "<html><head><title></title></head>"
+        "<body><iframe src='/_Incapsula_Resource?SWUDNSAI=9'></iframe></body></html>",
+    ),
     # T173. The page infojobs.net's CDN edge serves this tool, excerpted from a
     # live 29,762-byte response on 2026-09-10 (canonical link, heading, the
     # hidden vendor sentence — byte-identical, the rest cut). A 200 with no

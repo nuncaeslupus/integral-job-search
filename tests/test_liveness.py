@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from integral import liveness
+from integral.connector_health import RATE_LIMIT_SAMPLES
 from integral.offers import Offer
 
 _LISTINGS_PAGE = "<h1>Ofertas de empleo</h1><p>Explora nuestras vacantes en el sector servicios</p>"
@@ -229,3 +230,16 @@ def test_a_block_page_is_known_by_what_it_calls_itself_not_by_its_markup() -> No
     )
     assert liveness.read_response("a", 200, blocked).liveness == "unverified"
     assert liveness.read_response("b", 200, advert).liveness == "live"
+
+
+@pytest.mark.parametrize(
+    ("case", "status", "body"),
+    RATE_LIMIT_SAMPLES,
+)
+def test_no_known_refusal_reads_as_a_live_advert(case: str, status: int | None, body: str) -> None:
+    """#455 round 2, N1. Every entry in `RATE_LIMIT_SAMPLES` *is* a refusal, so
+    served as recorded — a 200 where no status was recorded — none of them may
+    be presented as an open vacancy, title or no title. Derived from the
+    sample list, so a refusal added there later is covered here too."""
+    check = liveness.read_response("r", status if status is not None else 200, body)
+    assert check.liveness != "live", (case, check.reason)

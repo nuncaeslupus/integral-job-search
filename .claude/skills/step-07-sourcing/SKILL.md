@@ -162,6 +162,7 @@ check = read_response(                 # pass where the fetch LANDED, not only w
     offer.id, status_code, body,       # a retired advert often 301s to a generic listings page,
     advert_url=offer.url,              # which answers 200 and is not the advert. A landing page
     final_url=where_it_landed,         # that is a different page reads `unverified`.
+    title=offer.title,                 # and a page that never names the advert is not the advert
 )
 offer = expire(offer, check)                    # dead -> status "expired"
 shown, withheld = presentable(offers, checks)   # only checked-and-live reach the candidate
