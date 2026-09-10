@@ -81,7 +81,7 @@
       "compared": true,
       "reason": null,
       "fixture_offers": 3,
-      "probe_offers": 3,
+      "probe_offers": 25,
       "shared_offers": 0,
       "overlap": 0.0,
       "repeats_the_fixture": false,
