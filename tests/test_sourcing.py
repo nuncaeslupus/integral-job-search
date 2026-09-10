@@ -14,13 +14,18 @@ from typing import Any
 
 import pytest
 
-from integral.candidate import Aim, CandidateConstraints, Location
+from integral.candidate import Aim, CandidateConstraints, Location, Reach, ReachMode
 from integral.connectors import ListRequest
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.sourcing import (
+    OFFER_CEILING,
+    Fetch,
     Response,
+    flood_board,
+    matches_aim,
     measure_fixture,
+    measure_flood,
     offers_without_a_recorded_fetch,
     packages_for,
     source,
@@ -31,6 +36,11 @@ _CONNECTORS = _REPO_ROOT / "connectors"
 
 ALLOW_ALL = "User-agent: *\nAllow: /\n"
 AT = "2026-01-01T00:00:00+00:00"
+
+#: An unsteered board keeps only rows matching a phrase (T167), and no
+#: unsteered Spanish capture carries a Python row — so the advert-page tests
+#: need a phrase those rows do carry.
+_TERMS = ("python", "developer", "engineer")
 
 
 def _robots(text: str = ALLOW_ALL) -> Robots:
@@ -209,22 +219,212 @@ def test_an_unreadable_robots_refuses_rather_than_permits(store: ProfileStore) -
     assert all(o.skipped for o in run.outcomes), run.summary()
 
 
-def test_a_board_that_searches_is_skipped_rather_than_searched_for_nothing(
-    store: ProfileStore,
-) -> None:
-    """And the other boards still run — one un-aimed board must not end a run."""
+def test_an_unsteered_board_without_terms_is_skipped(store: ProfileStore) -> None:
+    """T167, the owner's decision: a board that searches is not searched for
+    nothing, and one that does not search does not hand over its whole list for
+    a search nobody stated. Both say what is missing, and nothing is fetched."""
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return Response(200, "")
+
     run = source(
         store,
         _spain(),
         Aim(state="unknown"),
-        fetch=_answer_with_captures(),
+        fetch=fetch,
         at=AT,
         directory=_CONNECTORS,
         robots=_robots(),
     )
-    steerable = [o for o in run.outcomes if o.steered]
-    assert steerable and all(o.skipped for o in steerable), run.summary()
-    assert any(o.added for o in run.outcomes if not o.steered), run.summary()
+    assert {o.steered for o in run.outcomes} == {True, False}, run.summary()
+    assert all(o.skipped and "say what you are looking for" in o.skipped for o in run.outcomes)
+    assert asked == [] and run.added == 0
+
+
+# ---------------------------------------------------------------------------
+# T167 — worldwide boards, the aim filter, and the per-run ceiling
+
+
+def _remote_spain() -> CandidateConstraints:
+    return _spain().model_copy(update={"reach": Reach(state="stated", modes=("remote",))})
+
+
+@pytest.mark.parametrize(
+    ("modes", "selected"),
+    [
+        (("remote",), True),
+        (("cross_border_remote_employer",), True),
+        (("commute", "relocate"), False),
+    ],
+)
+def test_a_global_package_is_selected_by_reach(
+    tmp_path: Path, modes: tuple[ReachMode, ...], selected: bool
+) -> None:
+    flood_board(tmp_path)
+    constraints = _spain().model_copy(update={"reach": Reach(state="stated", modes=modes)})
+    assert ("flood_en" in {p.name for p in packages_for(constraints, tmp_path)}) is selected
+
+
+def test_a_global_package_is_not_selected_when_reach_is_unknown(
+    tmp_path: Path, store: ProfileStore
+) -> None:
+    """And the summary names what was left out, so a quiet run is not read as a
+    quiet world."""
+    flood_board(tmp_path / "connectors")
+    assert packages_for(_spain(), tmp_path / "connectors") == []
+    run = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.unreached == ("flood_en",)
+    assert "flood_en" in run.summary()
+
+
+def test_the_installed_global_boards_are_selected_after_the_country_s_own() -> None:
+    names = [p.name for p in packages_for(_remote_spain(), _CONNECTORS)]
+    spanish = [p.name for p in packages_for(_spain(), _CONNECTORS)]
+    assert names[: len(spanish)] == spanish
+    assert "foorilla_en" in names[len(spanish) :], names
+
+
+def _flood_run(store: ProfileStore, tmp_path: Path, phrase: str = "python engineer") -> Any:
+    page, matching, off_aim = flood_board(tmp_path / "connectors")
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return Response(200, page)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=(phrase,)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    return run, matching, off_aim, asked
+
+
+def _written(store: ProfileStore) -> list[str]:
+    from integral.offers import load_offer
+
+    return [
+        load_offer(store, path.stem).text
+        for path in Path(store.path("offers")).glob("*.json")
+        if not path.name.startswith("_")
+    ]
+
+
+def test_an_unsteered_board_keeps_only_rows_matching_a_phrase(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    run, matching, off_aim, _ = _flood_run(store, tmp_path)
+    written = _written(store)
+    assert written and set(written) <= matching, run.summary()
+    assert not set(written) & off_aim
+    (outcome,) = run.outcomes
+    assert outcome.off_aim == len(off_aim)
+    assert f"FILTERED flood_en: {len(off_aim)} of {outcome.items}" in run.summary()
+
+
+def test_the_run_stops_at_the_offer_ceiling_and_says_so(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Step 7's stop rule. The owner set 50 on 2026-09-10; pinned as a literal
+    so raising it is a visible decision, not a drift."""
+    assert OFFER_CEILING == 50
+    run, matching, _, _ = _flood_run(store, tmp_path)
+    assert len(matching) > OFFER_CEILING, "the ceiling was never reached, so this proves nothing"
+    assert len(_written(store)) == OFFER_CEILING == run.added
+    (outcome,) = run.outcomes
+    assert outcome.over_ceiling == len(matching) - OFFER_CEILING
+    assert "CEILING  flood_en" in run.summary()
+
+
+def test_boards_after_the_ceiling_are_not_asked(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A phrase after the ceiling is another request to every steerable board;
+    none may go out, and the summary names the boards left unasked."""
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 1)
+    answer: Fetch = _answer_with_detail()
+    late: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        if _written(store):
+            late.append(request.url)
+        return answer(request)
+
+    run = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=_TERMS),
+        fetch=fetch,
+        at=AT,
+        directory=_CONNECTORS,
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.added == 1, run.summary()
+    assert late == [], "a request went out after the ceiling's offer was written"
+    assert [o for o in run.outcomes if o.skipped and "ceiling" in o.skipped], run.summary()
+    assert "NOT asked" in run.summary()
+
+
+def test_off_aim_rows_are_never_fetched(store: ProfileStore) -> None:
+    """The filter runs before the advert page is opened — otherwise it saves
+    storage and spends every request it was meant to save."""
+    seen: list[str] = []
+    source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("scala developer",)),
+        fetch=_answer_with_detail(seen=seen),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert len([url for url in seen if "getmanfred" in url]) == 1, seen
+
+
+def test_rows_past_the_detail_budget_are_unopened_not_dropped(
+    store: ProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is wrong with an advert nobody opened; calling it "no text" sends
+    the next reader to debug a connector that works."""
+    monkeypatch.setattr("integral.sourcing.DETAIL_FETCH_CEILING", 0)
+    run = _run(store, _answer_with_detail())
+    unopened = [o for o in run.outcomes if o.unopened]
+    assert unopened, run.summary()
+    assert all(o.dropped == 0 for o in unopened), run.summary()
+    assert "UNOPENED" in run.summary()
+
+
+@pytest.mark.parametrize(
+    ("row", "phrases", "matches"),
+    [
+        ({"title": "Senior Python Engineer"}, ("python engineer",), True),
+        ({"title": "Engineer, Python"}, ("python engineer",), True),
+        ({"title": "Python Developer"}, ("python engineer",), False),
+        ({"title": "Ingeniería de datos"}, ("ingenieria de datos",), True),
+        ({"title": "Account Manager", "text": "Python tooling"}, ("python",), True),
+        ({"title": "JavaScript Developer"}, ("java",), False),
+        ({"title": "C# Developer"}, ("c++",), False),
+        ({"title": "Anything at all"}, ("  ", "--"), False),
+        ({"title": "Anything at all"}, (), False),
+    ],
+)
+def test_the_aim_match(row: dict[str, str], phrases: tuple[str, ...], matches: bool) -> None:
+    assert matches_aim(row, phrases) is matches
 
 
 def test_an_unstated_location_sources_nothing(store: ProfileStore) -> None:
@@ -263,6 +463,14 @@ def test_the_gate_measures_a_real_run_and_its_control() -> None:
     assert measured["unrecorded_offers_detected_by_the_control"] == 1
 
 
+def test_the_flood_gate_measures_and_reads_clean() -> None:
+    measured = measure_flood()
+    assert measured["gate_status"] == "measured", measured
+    assert measured["flood_violations"] == 0, measured
+    assert measured["rows_reported_off_aim"] > 0
+    assert measured["rows_reported_over_the_ceiling"] > 0
+
+
 # ---------------------------------------------------------------------------
 # T130 — the advert's own page
 
@@ -283,8 +491,9 @@ def _answer_with_detail(*, detail_status: int = 200, seen: list[str] | None = No
         if capture.is_file() and package.site:
             details[package.site.removeprefix("www.")] = capture.read_text(encoding="utf-8")
         connector = load_connector(_CONNECTORS / package.name)
-        for url in build_list_urls(connector, query="python"):
-            list_paths.add(urlsplit(url).path)
+        for phrase in _TERMS:
+            for url in build_list_urls(connector, query=phrase):
+                list_paths.add(urlsplit(url).path)
 
     def answer(request: ListRequest) -> Response:
         host = (urlsplit(request.url).hostname or "").removeprefix("www.")
@@ -308,7 +517,7 @@ def _run(store: ProfileStore, fetch: Any, robots: Robots | None = None) -> Any:
     return source(
         store,
         _spain(),
-        Aim(state="stated", terms=("python",)),
+        Aim(state="stated", terms=_TERMS),
         fetch=fetch,
         at=AT,
         directory=_CONNECTORS,
@@ -367,6 +576,7 @@ def test_robots_is_consulted_for_the_detail_page_too(store: ProfileStore) -> Non
             directory=_CONNECTORS,
             page_count=1,
             robots=Robots(fetch=lambda url: robots_text),
+            phrases=_TERMS,
         )
 
     permitted: list[str] = []

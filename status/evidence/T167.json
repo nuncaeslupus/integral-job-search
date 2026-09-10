@@ -1,0 +1,14 @@
+{
+  "flood_violations": 0,
+  "offers_written_off_aim": 0,
+  "offers_written_past_the_ceiling": 0,
+  "rows_not_accounted_for": 0,
+  "worldwide_boards_selected_without_remote_reach": 0,
+  "offer_ceiling": 50,
+  "rows_served": 300,
+  "rows_matching_by_construction": 100,
+  "offers_written": 50,
+  "rows_reported_off_aim": 200,
+  "rows_reported_over_the_ceiling": 50,
+  "gate_status": "measured"
+}
