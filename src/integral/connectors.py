@@ -1385,6 +1385,16 @@ _STRICT_QUERY_PAIR_SEPARATOR = re.compile(r"&")
 #: the identical connector moved from 1 (refused) to 0 (certified). So
 #: `_query_pairs` takes the separator pattern as a parameter, defaulting to
 #: `_STRICT_QUERY_PAIR_SEPARATOR`; only `query_pair_names` passes this one.
+#:
+#: **Taking the larger of the two counts of `param`'s own spelling is still
+#: not the same claim as "the duplicate is always caught" (round 6, R3).**
+#: `_query_key_occurrences`'s own docstring now says why in full:
+#: `?a;b=1;a;b={page}` — no `&` at all — has the permissive reading fragment
+#: `param: "a;b"` into `a` and `b`, and the placeholder lands on `b`, which
+#: repeats; counting occurrences of the literal string `a;b` under either
+#: reading reads **zero**, because that count was never asking about the key
+#: the placeholder actually lands on.
+#: `_placeholder_carrying_query_key_occurrences` counts that instead.
 _QUERY_PAIR_SEPARATORS = re.compile(r"[&;]")
 
 
@@ -1479,10 +1489,10 @@ def _url_page_positions(pattern: str) -> list[str]:
 
 
 def _query_key_occurrences(pattern: str, folded_name: str) -> int:
-    """How many times `folded_name` (already lower-cased) names a query key
-    in `pattern`, measured **twice** and reported as the larger reading —
-    round 5's fix for F3, and the reason `_QUERY_PAIR_SEPARATORS`'s docstring
-    was wrong.
+    """How many times `folded_name` (already case-folded) names a query key
+    **by its literal spelling** in `pattern`, measured under both readings of
+    the pair separator and reported as the larger — round 5's fix for F3, and
+    the reason `_QUERY_PAIR_SEPARATORS`'s docstring was wrong.
 
     A single split of the query string on the permissive `[&;]` union
     **fragments** any key name that itself contains `;` — `a;b` splits into
@@ -1490,25 +1500,91 @@ def _query_key_occurrences(pattern: str, folded_name: str) -> int:
     could occur twice in the real, `&`-only request and count as zero under
     that one split. Running the strict `&`-only reading separately, over the
     same `query_pair_names`, never fragments that name (there is nothing to
-    split it on), so the true count survives there even when the permissive
-    split loses it. The maximum of the two is what "count under either
-    reading" actually requires — a single blended split is not the same
-    operation, and the fixed docstring for `_QUERY_PAIR_SEPARATORS` says why.
+    split it on), so a literal occurrence of `folded_name` there is not lost
+    the way it can be under the permissive split alone. Taking the larger of
+    the two is *monotonic* relative to a single blended split — it can only
+    ever find a literal occurrence a blended split missed, never lose one a
+    blended split found — but monotonic is not the same claim as *complete*.
 
-    Compared case-insensitively (`folded_name` is expected pre-lowered) for
+    **What this still cannot see (round 6, R3): which key a given reading
+    actually hands the placeholder to.** This function only ever asks "does
+    the literal string `folded_name` occur," under each reading, in
+    isolation from where `{page}` lands. When a reading fragments
+    `folded_name` itself, the placeholder does not vanish — it lands on
+    whatever fragment holds it, and that fragment can repeat under the exact
+    same reading without ever being spelled `folded_name`
+    (`?a;b=1;a;b={page}` with `folded_name` = `"a;b"`: the permissive
+    reading's four pairs are `a`, `b`, `a`, `b` — `folded_name` occurs zero
+    times, and the placeholder lands on `b`, which occurs **twice**). So a
+    caller checking "is the key that will actually carry `{page}` under some
+    reading duplicated under that reading" needs
+    `_placeholder_carrying_query_key_occurrences` as well as this function;
+    this one still answers a real, different question — "does `param`'s own
+    declared spelling occur as a literal query key more than once" — which is
+    exactly the question the modes with no legitimate query occurrence at all
+    (`none`, `body_field`, `path_segment`) are asking.
+
+    Compared case-insensitively (`folded_name` is expected pre-folded) for
     the reason `_a_page_placeholder_and_a_query_key_imply_each_other`'s own
     docstring gives: this library's POST-paginated boards are ASP.NET-shaped,
     and ASP.NET's `NameValueCollection` compares keys with an ordinal,
     case-insensitive comparer.
     """
     return max(
-        sum(1 for name in query_pair_names(pattern) if name.lower() == folded_name),
+        sum(1 for name in query_pair_names(pattern) if name.casefold() == folded_name),
         sum(
             1
             for name in query_pair_names(pattern, separators=_STRICT_QUERY_PAIR_SEPARATOR)
-            if name.lower() == folded_name
+            if name.casefold() == folded_name
         ),
     )
+
+
+def _placeholder_carrying_query_key_occurrences(pattern: str) -> int:
+    """How many times the query-string key that actually **carries
+    `{page}`** repeats, measured once per reading of the pair separator and
+    reported as the larger — round 6's fix for R3.
+
+    `_query_key_occurrences` counts occurrences of `pagination.param`'s own
+    *declared* spelling. That is the wrong measurement whenever a reading
+    fragments that spelling: `?a;b=1;a;b={page}` with `pagination.param`
+    `"a;b"` splits, under the permissive `[&;]` reading, into four pairs
+    named `a`, `b`, `a`, `b` — none of them spelled `a;b`, so
+    `_query_key_occurrences` reads **zero** under that reading. But the
+    placeholder itself, under that identical reading, lands on the key `b` —
+    and `b` occurs **twice**, once fixed (`b=1`), once varying (`b={page}`).
+    That is the exact defect route 4 exists to refuse, invisible to a count
+    of the wrong string: the measurement was of `param`'s name, but which key
+    actually carries the placeholder is itself reading-dependent, and the two
+    only coincide when a reading happens not to fragment `param`'s spelling.
+
+    So this counts a different thing, independently for each reading: find
+    whichever pair holds `{page}` under *that* reading (there is at most one
+    such key per reading — the placeholder text itself contains none of the
+    separator characters a reading could split on, so it is never itself torn
+    across pairs), take that pair's decoded key name, and count how many
+    pairs in that *same* reading share it, case-insensitively (`.casefold()`,
+    for the comparator reason
+    `_a_page_placeholder_and_a_query_key_imply_each_other`'s own docstring
+    gives). A reading whose query does not carry the placeholder at all
+    contributes nothing. The maximum across readings is what "the key that
+    actually delivers the placeholder repeats, under some plausible reading
+    of the request" requires — and unlike `_query_key_occurrences`, it never
+    depends on `param`'s literal spelling surviving the split, because it
+    never looks at `param` at all.
+    """
+    best = 0
+    for separators in (_STRICT_QUERY_PAIR_SEPARATOR, _QUERY_PAIR_SEPARATORS):
+        pairs = _query_pairs(pattern, separators)
+        names = [unquote(raw_name.replace("+", " ")).casefold() for raw_name, _ in pairs]
+        placeholder_keys = {
+            names[index]
+            for index, (raw_name, raw_value) in enumerate(pairs)
+            if PAGE_PLACEHOLDER in raw_name or PAGE_PLACEHOLDER in raw_value
+        }
+        for key in placeholder_keys:
+            best = max(best, names.count(key))
+    return best
 
 
 #: T133 — the closed client vocabulary.
@@ -1947,20 +2023,51 @@ class ListPage(Strict):
            rule. `query_pair_names` and `body_json` keys are both compared
            this way; a case difference is not a different key here.
 
-           **The comparator is `.lower()`, not `.casefold()` (round 5).**
-           `.casefold()` is documented to fold strictly more than an ordinal,
-           case-insensitive comparer does — it merges multi-character
-           equivalents an ordinal comparer never does (`"straße".casefold()
-           == "strasse"`, an equality `StringComparer.OrdinalIgnoreCase`
-           does not hold; `"straße".lower() != "strasse"`) — so citing
-           `NameValueCollection`'s ordinal comparer while comparing with
-           `.casefold()` claimed more equivalence than that citation
-           supports, and every extra equivalence it grants is a fail-open
-           one: two keys `.casefold()` treats as identical but the cited
-           server does not would be certified as "the same key" here while
-           actually reaching the server as two different ones. `.lower()`
-           does not special-case multi-character folds and is the closer
-           match to what is actually being cited.
+           **The comparator is `.casefold()`, not `.lower()` (round 6,
+           R1/R2, reverting round 5's own swap).** Round 5 argued `.lower()`
+           was "the closer match" to `NameValueCollection`'s ordinal,
+           case-insensitive comparer because `.casefold()` merges
+           `"straße"`/`"strasse"`, an equality `StringComparer
+           .OrdinalIgnoreCase` does not hold. That argument was
+           one-directional and the direction it skipped is the one that
+           bit: `.lower()` does not merge `"ς"` (U+03C2, GREEK SMALL LETTER
+           FINAL SIGMA) with `"\u03c3"` (U+03C3, GREEK SMALL LETTER SIGMA), while
+           the cited comparer *does* — .NET's `ToUpperInvariant` sends both
+           to `"Σ"`, and Unicode's own `CaseFolding.txt` lists `03C2; C;
+           03C3;` (a *common* fold, not a `.casefold()`-only "full" one) —
+           so `?ς=1&\u03c3={page}` with `pagination.param: "\u03c3"` loaded under
+           `.lower()`, certified by a capture of either page's request,
+           while the server this rule is modelled on reads `ς` and `\u03c3` as
+           one key. `.lower()` is therefore not "the closer match" in
+           general; it is narrower than the citation at `ς`/`\u03c3` (fail-open,
+           the defect above) and *wider* than it at `İ`/`i`+U+0307 (both
+           `.lower()` and `.casefold()` expand `"İ"` the identical way,
+           fail-closed, and neither comparator escapes that one) — it
+           differs from `NameValueCollection` in both directions, not one.
+
+           **No Python builtin equals `OrdinalIgnoreCase`.** `.upper()`
+           fares no better than `.casefold()` on the same axis it was meant
+           to fix: `"straße".upper() == "STRASSE"`, the identical
+           `ß`→`ss`-shaped merge `ToUpperInvariant` does not perform, so
+           reaching for `.upper()` instead would not have been the honest
+           fix either. Given that no built-in comparator is exactly
+           `OrdinalIgnoreCase`, this file picks `.casefold()` and says so
+           plainly: **the fold is deliberately wider than the cited
+           comparer**, not a claimed match to it — and "wider," here, is
+           checked against the cases this file has actually measured
+           (`ς`/`\u03c3`, `ß`/`ss`, `İ`/`i`+U+0307), never asserted as a proven
+           property of every Unicode codepoint. In each of those, `.casefold()`
+           grants every equivalence `.lower()` does and at least one more —
+           it has not been found to *miss* one `.lower()` catches, which is
+           `.lower()`'s own failure mode at `ς`/`\u03c3`. That is a record of
+           what has been checked, not a claim that no codepoint anywhere
+           could invert it; a future finding that it does would be the next
+           round, the same way this one was. The wider
+           equivalences it grants beyond the citation cost one contributor
+           correction on a connector that never needed the extra casing at
+           all — a smaller, already-accepted fail-closed cost, not a new
+           category of one, and pinned below (round 6) rather than argued
+           over unpinned prose the way round 5's choice was (R2).
 
            **The named key sent twice inside `body_field`'s own body is now
            refused too (round 5, F1).** The check above used to ask only
@@ -2005,6 +2112,33 @@ class ListPage(Strict):
            permissive readings independently and takes the larger, so a name
            the permissive split fragments is still caught by the strict one.
 
+           **Counting occurrences of `param`'s own spelling is still the
+           wrong measurement for `mode: query_param` (round 6, R3) —
+           `_query_key_occurrences`'s own docstring now says why, and it is
+           not another reading added to the two above.** Which key a given
+           reading hands the placeholder to is itself reading-dependent, and
+           only coincides with `param`'s literal spelling when the reading
+           does not fragment it: `?a;b=1;a;b={page}` — joined by `;` alone,
+           no `&` anywhere — has the *permissive* reading fragment `a;b`
+           into `a` and `b`, land the placeholder on `b`, and repeat `b`
+           **twice**, while counting occurrences of the literal string
+           `a;b` there reads zero (nothing is spelled `a;b`) and the
+           *strict* reading, having no `&` to split on, treats the entire
+           string as a single pair named `a;b` — matching `param` exactly
+           once, which is legitimate on its own. Neither single count
+           catches this: `param`'s occurrence count is 1 under the reading
+           that has a duplicate and 0 under the one that does not, when the
+           duplicate is actually there, under the permissive reading, on a
+           *different* spelling of the key. `query_param`'s check is
+           therefore the **max of two different measurements**, not one:
+           `_query_key_occurrences` (does `param`'s own spelling repeat) and
+           `_placeholder_carrying_query_key_occurrences` (does *whichever*
+           key a reading actually attaches `{page}` to repeat, under that
+           same reading) — the second needs no agreement with `param` at
+           all, because the harm it catches (a fixed occurrence beside the
+           varying one) does not depend on the varying key being spelled the
+           way the connector's author wrote it.
+
            **Route 1, three routes up, did not follow NF7's widening, and
            now does (round 5).** It bound `pagination.param` to a query key
            by building the literal label `_query_key_position(param)` and
@@ -2038,9 +2172,9 @@ class ListPage(Strict):
         # and it is not just "more than one" uniformly (round 3, R1 — see the
         # docstring's item 4).
         if param is not None:
-            # Compared case-insensitively (round 4, NF7; round 5 changed the
-            # comparator itself — see the docstring's paragraph on why
-            # `.lower()` replaced `.casefold()`): this library's POST boards
+            # Compared case-insensitively (round 4, NF7; round 6 reverted
+            # round 5's `.casefold()` -> `.lower()` swap — see the
+            # docstring's paragraph on why): this library's POST boards
             # are ASP.NET-shaped, and ASP.NET's `NameValueCollection` compares
             # both its query and its form collections ordinally,
             # case-insensitively — so `?Page=1&page={page}` is the identical
@@ -2048,7 +2182,7 @@ class ListPage(Strict):
             # case-sensitive count would miss it for the one server family
             # this rule is modelled on. See the docstring's own paragraph on
             # this decision for the reasoning weighed against fail-closed.
-            folded_param = param.lower()
+            folded_param = param.casefold()
             # Two independent readings, maxed (round 5, F3) — see
             # `_query_key_occurrences`'s own docstring and
             # `_QUERY_PAIR_SEPARATORS`'s corrected one for why a single
@@ -2069,7 +2203,7 @@ class ListPage(Strict):
             body_occurrences = sum(
                 1
                 for key in (self.body_json if isinstance(self.body_json, dict) else {})
-                if isinstance(key, str) and key.lower() == folded_param
+                if isinstance(key, str) and key.casefold() == folded_param
             )
             if mode == "none":
                 # `none` never varies at all, so there is no "legitimate
@@ -2110,14 +2244,34 @@ class ListPage(Strict):
                 # position, which has no key), so the query has zero
                 # legitimate occurrences under either.
                 allowed_in_query = 1 if mode == "query_param" else 0
-                if query_occurrences > allowed_in_query:
+                # `query_param`'s own occurrence count is the max of two
+                # different measurements, not one (round 6, R3 — see the
+                # docstring's paragraph on why `_query_key_occurrences` alone
+                # is not enough): `query_occurrences` asks whether `param`'s
+                # own declared spelling repeats; `placeholder_key_occurrences`
+                # asks, independently of `param`'s spelling, whether whichever
+                # key some reading actually hands `{page}` to repeats under
+                # that same reading. Only `query_param` has a legitimate
+                # query occurrence to protect at all, so only it needs the
+                # second measurement — `body_field` and `path_segment` are
+                # covered by `query_occurrences` alone, exactly as before.
+                placeholder_key_occurrences = (
+                    _placeholder_carrying_query_key_occurrences(self.url_pattern)
+                    if mode == "query_param"
+                    else 0
+                )
+                effective_query_occurrences = max(query_occurrences, placeholder_key_occurrences)
+                if effective_query_occurrences > allowed_in_query:
                     raise ValueError(
                         f"list.url_pattern's query string names {param!r} "
-                        f"{query_occurrences} time{'s' if query_occurrences != 1 else ''}, "
+                        f"{effective_query_occurrences} time"
+                        f"{'s' if effective_query_occurrences != 1 else ''}, "
                         f"but pagination.mode {mode!r} accounts for {allowed_in_query} "
                         "there (counting '&'- and ';'-separated pairs, under both "
-                        "readings) — a fixed occurrence no capture ever measures decides "
-                        "the request instead of, or alongside, the one that actually varies"
+                        "readings, and — for query_param — under whichever key a reading "
+                        "actually hands the placeholder to) — a fixed occurrence no "
+                        "capture ever measures decides the request instead of, or "
+                        "alongside, the one that actually varies"
                     )
                 # The body-side mirror, symmetric with the query check above
                 # (round 5, F1) — `body_field`'s own certified occurrence
@@ -2188,13 +2342,14 @@ class ListPage(Strict):
             # duplicate under either casing is caught — this route must agree
             # rather than treat them as different keys, or the rule-set would
             # assert both at once (round 5's finding: it did, until now). The
-            # comparison is `.lower()`, not `.casefold()`, for the same reason
-            # the docstring gives below.
-            folded_wanted = wanted.lower() if wanted is not None else None
+            # comparison is `.casefold()`, not `.lower()` (round 6 reverted
+            # round 5's swap) — the docstring's paragraph on the comparator
+            # says why.
+            folded_wanted = wanted.casefold() if wanted is not None else None
             matches = [
                 position
                 for position in positions
-                if folded_wanted is not None and position.lower() == folded_wanted
+                if folded_wanted is not None and position.casefold() == folded_wanted
             ]
             if not matches:
                 # Route 1.

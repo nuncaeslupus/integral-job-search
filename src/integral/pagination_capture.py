@@ -865,6 +865,38 @@ def write_evidence(evidence: Path | None = None, directory: Path | None = None) 
 #   a genuine duplicate to zero. `connectors._query_key_occurrences` runs
 #   the strict and the permissive readings independently and takes the
 #   larger, rather than trusting one blended split to be monotonic.
+#
+# **Round 6 found three more, all fail-open, all in the comparator and the
+# occurrence count round 5 itself introduced:**
+#
+# * **R1** — round 5's own `.casefold()` -> `.lower()` swap (argued for the
+#   `straße`/`strasse` direction) lost an equivalence the cited
+#   `NameValueCollection` comparer actually grants: `.lower()` does not
+#   merge U+03C2 (GREEK SMALL LETTER FINAL SIGMA) with U+03C3 (GREEK SMALL
+#   LETTER SIGMA), while `ToUpperInvariant` (and `CaseFolding.txt`'s own
+#   "common" fold) sends both to U+03A3 (GREEK CAPITAL LETTER SIGMA). The
+#   final-sigma/sigma query-key duplicate loaded — refused before round 5,
+#   at commit `7807824`.
+# * **R2** — the comparator this changed was pinned by nothing: reverting
+#   all six `.lower()` call sites in `connectors.py` back to `.casefold()`
+#   survived the entire suite. Reverted to `.casefold()` (R1's fix) and now
+#   pinned by probes below, including one that documents the "wider" merge
+#   (`straße`/`strasse`) as a deliberate, accepted cost rather than an
+#   unpinned argument.
+# * **R3** — counting occurrences of `pagination.param`'s own declared
+#   spelling (`connectors._query_key_occurrences`) is the wrong measurement
+#   for `mode: query_param`, because which key a reading actually hands the
+#   placeholder to is itself reading-dependent: `?a;b=1;a;b={page}` (joined
+#   by `;` alone, no `&`) with `pagination.param: "a;b"` has the permissive
+#   `[&;]` reading fragment `a;b` into `a` and `b`, land the placeholder on
+#   `b`, and repeat `b` twice — while counting occurrences of the literal
+#   string `a;b` there reads zero, and the strict `&`-only reading (which
+#   does not split the string at all) reads exactly one, matching `param`
+#   and raising no error. `connectors._placeholder_carrying_query_key_
+#   occurrences` counts a different thing instead: for each reading,
+#   whichever key that reading actually attaches `{page}` to, and how many
+#   times that same key repeats under that same reading — never `param`'s
+#   own spelling. `query_param`'s check is now the max of both measurements.
 DEFAULT_T154_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T154.json"
 
 DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
@@ -1146,17 +1178,107 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
         "larger of the two, which still catches this; fail-open under a single blended "
         "split",
     ),
+    # ---- round 6, R1: round 5's `.casefold()` -> `.lower()` swap lost an
+    # equivalence the cited `NameValueCollection` comparer actually grants.
+    UrlProbe(
+        name="a Greek final sigma and a plain sigma are the same key",
+        url_pattern="https://boards.test/jobs?ς=1&\u03c3={page}",
+        pagination={"mode": "query_param", "param": "\u03c3", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 round 6 (R1) — `.lower()` does not merge U+03C2 (GREEK SMALL "
+        "LETTER FINAL SIGMA) with U+03C3 (GREEK SMALL LETTER SIGMA), but the cited "
+        "comparer does: .NET's ToUpperInvariant sends both to Σ, and Unicode's "
+        "CaseFolding.txt lists 03C2 as a 'common' (not merely 'full') fold to 03C3. "
+        "Refused at 7807824, loaded once round 5 swapped the comparator to `.lower()`; "
+        "fail-open",
+    ),
+    UrlProbe(
+        name="the same sigma duplicate, spelled in its percent-encoded wire form",
+        url_pattern="https://boards.test/jobs?%CF%82=1&%CF%83={page}",
+        pagination={"mode": "query_param", "param": "\u03c3", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 round 6 (R1), NF4's own reading applied to it — `%CF%82` and "
+        "`%CF%83` percent-decode to the identical final-sigma/sigma pair the probe "
+        "above spells literally, so the duplicate must be caught the same way "
+        "regardless of which wire spelling a connector's author used; fail-open",
+    ),
+    UrlProbe(
+        name="the sigma duplicate, inside mode: body_field's own body",
+        url_pattern="https://boards.test/Search/ExecuteSearch",
+        pagination={"mode": "body_field", "param": "\u03c3", "start": 1, "max_pages": 2},
+        body_json={"ς": "1", "\u03c3": PAGE_PLACEHOLDER},
+        loads=False,
+        issues=(),
+        route="T154 round 6 (R1), the body_field mirror (F1's own shape, this "
+        "comparator) — the body's two keys are the identical final-sigma/sigma pair "
+        "as the query-side probes above, read by the same comparator route 4 already "
+        "uses for the body half; fail-open",
+    ),
+    # ---- round 6, R2: the comparator itself was pinned by nothing (reverting
+    # all six `.lower()` sites to `.casefold()` survived the whole suite). The
+    # probes above pin the fix's *correctness*; this one pins the fix's own
+    # deliberately wider reach, so a future narrowing back to an ASCII-only
+    # fold (which would also fail the R1 probes above) cannot silently pass by
+    # coincidence on this shape specifically.
+    UrlProbe(
+        name="a German sharp s and its 'ss' expansion are the same key under the "
+        "deliberately wider fold",
+        url_pattern="https://boards.test/jobs?straße=1&strasse={page}",
+        pagination={"mode": "query_param", "param": "strasse", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 round 6 (R2) — `.casefold()` merges 'straße' and 'strasse' "
+        "(an equality StringComparer.OrdinalIgnoreCase does not hold), and this file "
+        "now states that extra reach as a deliberate, accepted cost rather than an "
+        "unpinned argument in prose: `_a_page_placeholder_and_a_query_key_imply_each_"
+        "other`'s own docstring says why. Reverting the comparator narrower than "
+        "`.casefold()` (to `.lower()`, or to `==`) must fail this",
+    ),
+    # ---- round 6, R3: which key a reading hands the placeholder to is itself
+    # reading-dependent, so counting occurrences of `param`'s own spelling
+    # (the fix every earlier round in this table rests on) is not enough.
+    UrlProbe(
+        name="a param name containing the permissive separator, joined only by that "
+        "separator, still defeats a spelling-based count",
+        url_pattern="https://boards.test/jobs?a;b=1;a;b={page}",
+        pagination={"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 round 6 (R3) — with no `&` anywhere, the strict reading treats "
+        "the whole string as one pair named 'a;b' (matching `param` exactly once, "
+        "legitimate on its own), while the permissive `[&;]` reading fragments 'a;b' "
+        "into 'a' and 'b', lands the placeholder on 'b', and repeats 'b' twice — the "
+        "literal-spelling count (round 5's F3 fix) reads 1 under the strict reading "
+        "and 0 under the permissive one, missing the duplicate that is actually there "
+        "under a different spelling of the key; fail-open",
+    ),
+    UrlProbe(
+        name="a param name containing the permissive separator, at a single "
+        "occurrence, still loads",
+        url_pattern="https://boards.test/jobs?a;b={page}",
+        pagination={"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
+        loads=True,
+        issues=("https://boards.test/jobs?a;b=1", "https://boards.test/jobs?a;b=2"),
+        route="control — the R3 fix must not refuse a genuinely single occurrence "
+        "merely because `param` contains the permissive separator: both readings "
+        "find exactly one key holding the placeholder ('a;b' under the strict "
+        "reading, 'b' under the permissive one) and neither repeats",
+    ),
 )
 
 #: The floor `DUPLICATE_KEY_PROBES` is checked against, committed in place of
 #: the count of the day for T100's reason — but set **equal** to today's count
-#: (20, after round 4's NF2/NF3/NF4/NF5/NF7 probes and round 5's F1/F2/F3)
+#: (26, after round 4's NF2/NF3/NF4/NF5/NF7 probes, round 5's F1/F2/F3, and
+#: round 6's R1 (three probes: query, its percent-encoded wire spelling, and
+#: the body_field mirror), R2 (one probe) and R3 (finding plus control))
 #: rather than below it: the by-name pin in `tests/test_pagination_capture.py`
 #: already protects every individual shape, so a lower floor's only effect
 #: would be slack that absorbs a bulk deletion the pin does not happen to
 #: name — the second reader's point on F5. Equal to the population, the first
 #: deletion of any kind breaches it.
-MINIMUM_DUPLICATE_KEY_PROBES = 20
+MINIMUM_DUPLICATE_KEY_PROBES = 26
 
 #: The floor the real-library half of this gate is checked against.
 #:

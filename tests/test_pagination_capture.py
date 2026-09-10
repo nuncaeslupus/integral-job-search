@@ -1118,6 +1118,126 @@ def test_a_case_only_difference_between_param_and_the_url_key_now_loads(library:
     ]
 
 
+# ---------------------------------------------------------------------------
+# T154, round 6 — R1 (fail-open, round 5 introduced it), R2 (the comparator
+# itself pinned by nothing) and R3 (which key a reading hands the placeholder
+# to is itself reading-dependent, so counting occurrences of `param`'s own
+# spelling is the wrong measurement for `mode: query_param`)
+
+
+def test_a_final_sigma_and_a_plain_sigma_are_refused_as_the_same_key(library: Path) -> None:
+    """R1. Round 5 swapped the comparator from `.casefold()` to `.lower()`,
+    arguing `.lower()` was the closer match to `NameValueCollection`'s
+    ordinal comparer because `.casefold()` merges `"straße"`/`"strasse"`,
+    which `StringComparer.OrdinalIgnoreCase` does not. That argument only
+    ever looked at one direction: `.lower()` does not merge `"ς"` (GREEK
+    SMALL LETTER FINAL SIGMA, U+03C2) with `"\u03c3"` (GREEK SMALL LETTER SIGMA,
+    U+03C3), while the cited comparer does — .NET's `ToUpperInvariant` sends
+    both to `"Σ"`, and Unicode's own `CaseFolding.txt` lists `03C2; C;
+    03C3;`, a *common* fold, not a `.casefold()`-only *full* one. Refused
+    before round 5 (commit `7807824`); loaded at round 5's head."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?ς=1&\u03c3={page}",
+        {"mode": "query_param", "param": "\u03c3", "start": 1, "max_pages": 2},
+    )
+    assert "names '\u03c3' 2 times" in message
+
+
+def test_the_same_sigma_duplicate_survives_its_percent_encoded_wire_spelling(
+    library: Path,
+) -> None:
+    """R1, NF4's own reading applied to it: `%CF%82` and `%CF%83`
+    percent-decode to the identical final-sigma/sigma pair the test above
+    spells literally, so the duplicate must be caught the same way regardless
+    of which wire spelling a connector's author used."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?%CF%82=1&%CF%83={page}",
+        {"mode": "query_param", "param": "\u03c3", "start": 1, "max_pages": 2},
+    )
+    assert "names '\u03c3' 2 times" in message
+
+
+def test_a_final_sigma_duplicate_inside_mode_body_fields_own_body_is_refused(
+    library: Path,
+) -> None:
+    """R1's `body_field` mirror, F1's own shape read by this comparator: the
+    body's `"ς"` and `"\u03c3"` are the identical final-sigma/sigma pair as the
+    query-side tests above, and the body-side comparator (F2's own fix) must
+    treat them the same way."""
+    message = _refused(
+        library,
+        f"https://{_REAL_SITE}/Search/ExecuteSearch",
+        {"mode": "body_field", "param": "\u03c3", "start": 1, "max_pages": 2},
+        method="POST",
+        body_json={"ς": "1", "\u03c3": PAGE_PLACEHOLDER},
+        item=None,
+        fields=None,
+        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
+    )
+    assert "name '\u03c3' 2 times" in message
+
+
+def test_a_sharp_s_and_its_ss_expansion_are_refused_as_the_same_key(library: Path) -> None:
+    """R2. The comparator itself was pinned by nothing: reverting all six
+    `.lower()` call sites in `connectors.py` back to `.casefold()` survived
+    the entire suite before this test existed. `.casefold()`'s merge of
+    `"straße"` and `"strasse"` — an equality `StringComparer.OrdinalIgnoreCase`
+    does not hold — is now stated as a deliberate, accepted cost rather than
+    an unpinned argument in prose (`_a_page_placeholder_and_a_query_key_imply_
+    each_other`'s own docstring says why), and this pins that choice: a
+    narrowing back to `.lower()`, or to `==`, must fail this."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?straße=1&strasse={page}",
+        {"mode": "query_param", "param": "strasse", "start": 1, "max_pages": 2},
+    )
+    assert "names 'strasse' 2 times" in message
+
+
+def test_a_semicolon_only_fragmentation_of_param_still_defeats_a_spelling_based_count(
+    library: Path,
+) -> None:
+    """R3. `?a;b=1;a;b={page}` is joined by `;` alone, with no `&` anywhere,
+    so the *strict* `&`-only reading treats the whole query as a single pair
+    named `"a;b"` — matching `pagination.param` exactly once, which on its
+    own is legitimate. The *permissive* `[&;]` reading fragments `"a;b"` into
+    `"a"` and `"b"`, and the placeholder lands on `"b"` — which repeats
+    **twice** under that same reading. Counting occurrences of `param`'s own
+    literal spelling (round 5's F3 fix) reads 1 under the reading that has no
+    duplicate and 0 under the one that does, because the duplicate is
+    actually on a *different* spelling of the key — invisible to a count
+    that never looks at which key a reading actually hands the placeholder
+    to. `connectors._placeholder_carrying_query_key_occurrences` is the fix:
+    it counts occurrences of that key instead, independently for each
+    reading."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?a;b=1;a;b={page}",
+        {"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
+    )
+    assert "names 'a;b'" in message
+
+
+def test_a_semicolon_only_param_at_a_single_occurrence_still_loads(library: Path) -> None:
+    """The R3 control: a genuinely single occurrence must still load even
+    though `param` contains the permissive separator — both readings find
+    exactly one key holding the placeholder (`"a;b"` under the strict
+    reading, `"b"` under the permissive one) and neither repeats, so the fix
+    above must not refuse this."""
+    _edit_connector(
+        library,
+        url_pattern="https://realboard.io/jobs?a;b={page}",
+        pagination={"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
+    )
+    connector = load_connector(_package(library))
+    assert build_list_urls(connector) == [
+        "https://realboard.io/jobs?a;b=1",
+        "https://realboard.io/jobs?a;b=2",
+    ]
+
+
 def test_every_duplicate_key_probe_agrees_with_the_rule() -> None:
     """The measurement itself, same shape as `test_every_url_side_probe_agrees_with_the_rule`:
     behavioural, so a validator deleted, weakened or replaced by a comment
@@ -1179,6 +1299,15 @@ def test_the_duplicate_key_probe_table_meets_its_floor_and_keeps_its_names() -> 
         "the named key sent twice, both inside mode: body_field's own body",
         "a fixed body field repeating the query's own name, differing only in case",
         "a param name containing the permissive separator defeats a single blended split",
+        # round 6 (R1, R2, R3).
+        "a Greek final sigma and a plain sigma are the same key",
+        "the same sigma duplicate, spelled in its percent-encoded wire form",
+        "the sigma duplicate, inside mode: body_field's own body",
+        "a German sharp s and its 'ss' expansion are the same key under the "
+        "deliberately wider fold",
+        "a param name containing the permissive separator, joined only by that "
+        "separator, still defeats a spelling-based count",
+        "a param name containing the permissive separator, at a single occurrence, still loads",
     } <= names, sorted(names)
     # Both verdicts represented, for the same reason the URL-side table needs
     # both: a table of refusals alone passes over a validator that refuses
