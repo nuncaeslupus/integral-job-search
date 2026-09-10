@@ -1335,7 +1335,7 @@ _STRICT_QUERY_PAIR_SEPARATOR = re.compile(r"&")
 #: *usage*, never a grammar — `;` is simply a `sub-delim` the production
 #: admits as ordinary query data. The pair grammar this file actually
 #: depends on is `application/x-www-form-urlencoded`, which recognises only
-#: `&` — `;` was RFC 1866 §8.2.1's documented historical alternate, and the
+#: `&` — `;` was HTML 4.01 Appendix B.2.2's documented historical alternate, and the
 #: asymmetry is not merely historical: `urllib.parse.parse_qsl` itself grew a
 #: `separator` parameter over exactly this ambiguity (CVE-2021-23336, a
 #: parameter-injection weakness reachable precisely because callers disagreed
@@ -1847,19 +1847,50 @@ class ListPage(Strict):
            than the declared mode accounts for**, checked once, ahead of the
            per-mode dispatch.
 
-           **The body-side mirror is scoped to `query_param` alone, not
-           `path_segment` too, and that scoping is deliberate rather than an
-           oversight this file's own probes would otherwise repeat.**
-           `path_segment` binds `param` to a URL *position* — there is no key
-           at all to name (see below) — and a framework's merged
-           `request.values` / `$_REQUEST` / `params` never sees a positional
-           path segment in the first place (a router consumes it before any
-           such merge happens), so the query/body-merge harm this mirror
-           guards against cannot occur there. A `body_json` field spelling
-           `param`'s name under `path_segment` is instead exactly
-           `page_placeholder`'s own R7 shape — a declared literal the
-           *builder* must leave alone — which `#338` already covers and this
-           rule must not re-refuse.
+           **The body-side mirror covers `path_segment` too now, and round
+           3's own scoping of it to `query_param` alone was unsound (round 4,
+           NF2/NF3) — not a design choice this file can still defend.** Round
+           3's premise was "`path_segment` binds `param` to a URL *position*
+           a merged namespace never sees." That premise fails twice.
+           First, nothing about `mode: path_segment` requires the sole
+           `{page}` occurrence to actually sit outside the query string —
+           the validator below only counts positions, so
+           `url_pattern: .../jobs?o={page}` with `mode: path_segment` loads
+           exactly as readily as one where `{page}` sits in the path, and the
+           varying element there **is** a query-string value a merged
+           namespace plainly does see. Second, even a *genuine* path segment
+           is not the isolated position the premise claimed: Rails' `params`
+           — named two paragraphs up as one of the merging namespaces this
+           rule already guards against — merges `path_parameters` into the
+           same hash as the query and body, so a router consuming a path
+           segment "before any such merge happens" is not how Rails actually
+           works. `page_placeholder`'s own R7 already treats `query_param`
+           and `path_segment` as one case ("under any other mode —
+           `query_param`, `path_segment` — it names a URL key"), and this
+           rule must not draw a distinction R7 itself does not draw. A
+           `body_json` field fixed at `param`'s name is therefore refused
+           under `path_segment` exactly as it is under `query_param`; R7's
+           own point — that the *builder* leaves such a field untouched —
+           stays true and simply never gets exercised for a shape route 4
+           refuses first, the same way it already doesn't for `query_param`.
+
+           **The occurrence count on both halves is case-insensitive**
+           (round 4, NF7), a second deliberate decision rather than an
+           oversight. This library's POST-paginated boards are
+           ASP.NET-shaped (`list.py`'s own scaffold document pages a field
+           named `Page` against a `.../Search/ExecuteSearch`-style
+           endpoint), and ASP.NET's own query and form collections
+           (`NameValueCollection`) compare keys with an ordinal,
+           case-**insensitive** comparer — so `?Page=1&page={page}` is the
+           identical duplicate-key harm route 4 exists to catch, read by the
+           one server family this rule is shaped for. Deciding otherwise —
+           comparing `param` case-sensitively — would leave that exact shape
+           loading, for a saving of nothing: the fail-closed cost of
+           comparing case-insensitively is one contributor correction on a
+           connector that never needed the second casing at all, which this
+           file weighs below the fail-open cost everywhere else in this
+           rule. `query_pair_names` and `body_json` keys are both compared
+           this way; a case difference is not a different key here.
 
            Query occurrences are counted by **occurrences of the name**
            (`query_pair_names`, over `&`- and `;`-separated pairs — see
@@ -1888,8 +1919,21 @@ class ListPage(Strict):
         # and it is not just "more than one" uniformly (round 3, R1 — see the
         # docstring's item 4).
         if param is not None:
-            query_occurrences = query_pair_names(self.url_pattern).count(param)
-            body_has_param = isinstance(self.body_json, dict) and param in self.body_json
+            # Case-**insensitive** (round 4, NF7): this library's POST boards
+            # are ASP.NET-shaped, and ASP.NET's `NameValueCollection` compares
+            # both its query and its form collections ordinally,
+            # case-insensitively — so `?Page=1&page={page}` is the identical
+            # duplicate-key harm this route exists to catch, and a
+            # case-sensitive count would miss it for the one server family
+            # this rule is modelled on. See the docstring's own paragraph on
+            # this decision for the reasoning weighed against fail-closed.
+            folded_param = param.casefold()
+            query_occurrences = sum(
+                1 for name in query_pair_names(self.url_pattern) if name.casefold() == folded_param
+            )
+            body_has_param = isinstance(self.body_json, dict) and any(
+                isinstance(key, str) and key.casefold() == folded_param for key in self.body_json
+            )
             if mode == "none":
                 # `none` never varies at all, so there is no "legitimate
                 # occurrence" to protect and no fixed value anywhere could be
@@ -1897,12 +1941,20 @@ class ListPage(Strict):
                 # *repeated* name in the query is still refused, simply
                 # because two literal pairs sharing a name is never a
                 # sensible connector, not for the merged-namespace reason the
-                # other modes guard against.
+                # other modes guard against. This branch is only ever reached
+                # when `pagination.param` is set at all, which `mode: none`
+                # never requires (round 4, NF5) — a `mode: none` connector
+                # naming no `param` is untouched by this check, however many
+                # times any query key repeats, so the claim below is scoped
+                # to "the key `pagination.param` names," never to query keys
+                # in general.
                 if query_occurrences > 1:
                     raise ValueError(
                         f"list.url_pattern's query string names {param!r} "
-                        f"{query_occurrences} times — a repeated query key is never a "
-                        "well-formed request, whatever pagination.mode is"
+                        f"{query_occurrences} times while pagination.mode is 'none' — "
+                        "pagination.param names a key nothing under this mode ever varies, "
+                        "so a repeated occurrence of it is a malformed request on its own, "
+                        "independent of the merged-namespace reasoning below"
                     )
             else:
                 # The one legitimate query occurrence: `query_param` binds
@@ -1922,26 +1974,25 @@ class ListPage(Strict):
                         "occurrence no capture ever measures decides the request instead "
                         "of, or alongside, the one that actually varies"
                     )
-                # The mirror, on the body half: a `query_param` board whose
-                # POST body also carries a *fixed* (non-placeholder) field of
-                # the exact same name puts a value in the merged namespace
-                # that no capture ever measured, on the other half of the
-                # request — the harm F1 fixed for `body_field`'s own query
-                # occurrence, reached from the opposite direction. Scoped to
-                # `query_param` alone, not `path_segment` too: `path_segment`
-                # binds `param` to a URL *position*, never a key a framework's
-                # merged `request.values`/`$_REQUEST`/`params` could ever read
-                # in the first place (a router consumes a path segment before
-                # any such merge happens), so a body field of that name there
-                # is `page_placeholder`'s own R7 shape — a declared literal
-                # the *builder* must leave alone — and not this rule's harm.
-                if mode == "query_param" and body_has_param:
+                # The mirror, on the body half: a board whose POST body also
+                # carries a *fixed* (non-placeholder) field of the exact same
+                # name puts a value in the merged namespace that no capture
+                # ever measured, on the other half of the request — the harm
+                # F1 fixed for `body_field`'s own query occurrence, reached
+                # from the opposite direction. Covers `path_segment` beside
+                # `query_param` (round 4, NF2/NF3 — round 3 scoped this to
+                # `query_param` alone on a premise this file no longer
+                # defends; see the docstring's own paragraph on why). Not
+                # `body_field`: there, the same-named body key is the
+                # *declared* varying position, not a stray fixed one.
+                if mode in {"query_param", "path_segment"} and body_has_param:
                     raise ValueError(
                         f"list.body_json also declares {param!r}, fixed, alongside the "
                         f"occurrence pagination.mode {mode!r} already accounts for — a "
                         "framework that merges query and body namespaces ($_REQUEST, "
-                        "Flask's request.values, Rails' params) may honour the body's "
-                        "fixed value over the one that actually varies"
+                        "Flask's request.values, Rails' params, which also merges "
+                        "path parameters) may honour the body's fixed value over the "
+                        "one that actually varies"
                     )
 
         if mode in {"none", "body_field"}:

@@ -321,18 +321,23 @@ PROBES: tuple[Probe, ...] = (
         clause="R7 — `page` names a URL key here, so no body position varies",
     ),
     # T154 round 3 (R1's mirror), on `connectors.py`'s own separate rule
-    # (`_a_page_placeholder_and_a_query_key_imply_each_other`, route 4): this
-    # probe used to load, on R7's own reasoning below — the *builder* never
-    # touches a body key `param` does not name, so nothing here is R7's
-    # concern. But `query_param`'s URL genuinely varies `page` while this
+    # (`_a_page_placeholder_and_a_query_key_imply_each_other`, route 4). R7's
+    # own point about this shape is still true and stated in the clause below
+    # — the *builder* never touches a body key `param` does not name, so
+    # nothing about this shape is R7's own concern — but the `loads=False`
+    # verdict is not derived from R7's text at all; it is route 4's, cited
+    # honestly rather than folded into "R7" the way round 3 first wrote it
+    # (round 4, NF3). `query_param`'s URL genuinely varies `page` while this
     # body fixes it, and a framework whose merged `request.values` /
     # `$_REQUEST` / `params` honours the body's fixed value over the query's
     # varying one is pinned to page 25 regardless — the same merged-namespace
     # harm route 4 refuses on the `body_field` side, reached from the other
-    # direction. Refused at load now, before R7's builder question is ever
-    # reached; R7's own point stays true and simply never gets exercised for
+    # direction. Refused at load, before R7's builder question is ever
+    # reached — R7's own point stays true and simply never gets exercised for
     # this shape, the way every route-4-refused shape leaves every later
-    # check moot.
+    # check moot. The `path_segment` sibling below carries the identical
+    # verdict for the identical reason: round 3 had left it loading, which
+    # was round 4's NF2/NF3, not a second, independent finding.
     Probe(
         name="literal POST body under query_param pagination, with a key of that name",
         body_json={"Keyword": "python", "page": 25},
@@ -340,12 +345,13 @@ PROBES: tuple[Probe, ...] = (
         param="page",
         loads=False,
         varies=(),
-        clause="R7 — `page` names a URL key here; the body's own `page` is a "
-        "declared literal and must not be overwritten. Refused before R7 is even "
-        "reached: `connectors._a_page_placeholder_and_a_query_key_imply_each_other`'s "
-        "route 4 (T154, round 3) refuses a query_param board whose body repeats the "
-        "URL key's own name, fixed — a merged query/body namespace may honour the "
-        "body's stale value over the query's varying one",
+        clause="R7 — `page` names a URL key here, so R7 alone would leave the body's "
+        "own `page` untouched by the builder; the connector is refused before that "
+        "question is reached, by `connectors._a_page_placeholder_and_a_query_key_"
+        "imply_each_other`'s route 4 (T154), not by R7 itself — a query_param board "
+        "whose body repeats the URL key's own name, fixed, is refused because a merged "
+        "query/body namespace may honour the body's stale value over the query's "
+        "varying one",
     ),
     # R7 says "any other mode", and there are two of them. Probing only
     # `query_param` left `path_segment` covered by nothing: widening the
@@ -361,15 +367,32 @@ PROBES: tuple[Probe, ...] = (
         varies=(),
         clause="R7 — `page` names a URL key here, so no body position varies",
     ),
+    # T154 round 4 (NF2/NF3): round 3 left this sibling loading, on the
+    # premise that `path_segment` binds `param` to a URL position a merged
+    # namespace never sees. That premise does not survive: nothing about
+    # `mode: path_segment` requires the sole `{page}` occurrence to sit
+    # outside the query string at all (a `path_segment` connector whose
+    # `{page}` sits in a query-string value, e.g. `?o={page}`, loads exactly
+    # as readily), and even a genuine path segment is not the isolated
+    # position claimed — Rails' `params`, named in route 4's own error
+    # string, merges `path_parameters` into the same hash as the query and
+    # body. R7 itself never distinguished `query_param` from `path_segment`
+    # ("under any other mode — `query_param`, `path_segment` — it names a URL
+    # key"), so this probe now carries the identical verdict, for the
+    # identical route-4 reason, as its `query_param` sibling above — the fix
+    # is route 4's scope, not this fixture agreeing with what round 3 shipped.
     Probe(
         name="literal POST body under path_segment pagination, with a key of that name",
         body_json={"Keyword": "python", "page": 25},
         mode="path_segment",
         param="page",
-        loads=True,
+        loads=False,
         varies=(),
-        clause="R7 — `page` names a URL key here; the body's own `page` is a "
-        "declared literal and must not be overwritten",
+        clause="R7 — `page` names a URL key here, so R7 alone would leave the body's "
+        "own `page` untouched by the builder; the connector is refused before that "
+        "question is reached, by `connectors._a_page_placeholder_and_a_query_key_"
+        "imply_each_other`'s route 4 (T154, round 4), which now covers `path_segment` "
+        "alongside `query_param` for the same merged-namespace reason",
     ),
     Probe(
         name="builder handed a placeholder at the URL param's name under path_segment",

@@ -808,7 +808,7 @@ def write_evidence(evidence: Path | None = None, directory: Path | None = None) 
 #   grammar at all (its `query` ABNF is `*( pchar / "/" / "?" )`, and calls
 #   pairs only a frequent *usage*); the grammar this actually rests on is
 #   `application/x-www-form-urlencoded`, which `;` is not part of — but is
-#   RFC 1866 §8.2.1's documented historical alternate, and not merely a
+#   HTML 4.01 Appendix B.2.2's documented historical alternate, and not merely a
 #   historical curiosity: `urllib.parse.parse_qsl` itself grew a `separator`
 #   parameter over this exact ambiguity (CVE-2021-23336), so it counts as a
 #   pair boundary here beside `&` — for **counting** only, never for deciding
@@ -924,7 +924,7 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
         pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
         loads=False,
         issues=(),
-        route="T154 route 4, the separator axis (F2) — ';' is RFC 1866 §8.2.1's "
+        route="T154 route 4, the separator axis (F2) — ';' is HTML 4.01 Appendix B.2.2's "
         "documented historical alternate pair separator, and the asymmetry it exploits "
         "is the one `urllib.parse.parse_qsl` itself grew a `separator` parameter over "
         "(CVE-2021-23336); a server that still splits on it sees `page` twice, and one "
@@ -955,16 +955,104 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
         route="control — a body field that does not spell pagination.param at all is "
         "not this rule's business, the namespace-axis mirror of the other controls above",
     ),
+    # ---- round 4, NF2/NF3: the namespace-axis mirror now covers `path_segment`
+    # too. Round 3 scoped it to `query_param` alone on the premise that
+    # `path_segment` binds `param` to a URL position a merged namespace never
+    # sees — false twice over (see `connectors.py`'s own docstring paragraph on
+    # this): nothing about `mode: path_segment` requires the sole `{page}` to
+    # sit outside the query string, so this exact config — a query-string
+    # *value* under an unrelated key name, `o` — loaded under `path_segment`
+    # while the identical body under `query_param` was already refused.
+    UrlProbe(
+        name="the named key fixed in the body, across mode: path_segment's own query value",
+        url_pattern="https://boards.test/jobs?o={page}",
+        pagination={"mode": "path_segment", "param": "page", "start": 1, "max_pages": 2},
+        body_json={"page": "1"},
+        loads=False,
+        issues=(),
+        route="T154 round 4 (NF2/NF3) — `path_segment`'s sole occurrence sits in a "
+        "query-string value here, not a path position, and even a genuine path "
+        "position is not safe (Rails' `params` merges `path_parameters`); the body's "
+        "fixed 'page' is the identical merged-namespace harm as the query_param mirror "
+        "above; fail-open",
+    ),
+    UrlProbe(
+        name="a path_segment board with an unrelated body field still loads",
+        url_pattern="https://boards.test/jobs/{page}",
+        pagination={"mode": "path_segment", "param": "page", "start": 1, "max_pages": 2},
+        body_json={"other": "1"},
+        loads=True,
+        issues=("https://boards.test/jobs/1", "https://boards.test/jobs/2"),
+        route="control — the path_segment mirror of the query_param and body_field "
+        "unrelated-body-field controls above",
+    ),
+    # ---- round 4, NF4: `query_pair_names` must percent-*decode* a key name
+    # before comparing it to `pagination.param` — dropping that `unquote` call
+    # undercounts a duplicate spelled with an escaped octet to one occurrence,
+    # which is not `> allowed_in_query` and loads.
+    UrlProbe(
+        name="the named key sent twice, one occurrence percent-encoded",
+        url_pattern="https://boards.test/jobs?%70age=1&page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 round 4 (NF4) — `%70` percent-decodes to `p`, so `%70age` names the "
+        "same query key `page` that `pagination.param` and `query_pair_names`'s own "
+        "`unquote` both spell it as; without that decode step this undercounts to one "
+        "occurrence and loads a genuine duplicate; fail-open",
+    ),
+    # ---- round 4, NF5: the `mode: none` branch, reached only when `param` is
+    # set at all — which `mode: none` never requires — was exercised by no
+    # probe and no test.
+    UrlProbe(
+        name="mode: none naming param anyway, with a duplicate of it",
+        url_pattern="https://boards.test/jobs?page=1&page=2",
+        pagination={"mode": "none", "param": "page", "max_pages": 1},
+        loads=False,
+        issues=(),
+        route="T154 round 4 (NF5) — `pagination.param` is set even though `mode: none` "
+        "never requires it, so the named key's own repetition is refused as a malformed "
+        "request, independent of the merged-namespace reasoning the other modes rest on; "
+        "fail-open",
+    ),
+    UrlProbe(
+        name="mode: none naming no param at all still loads a duplicate key",
+        url_pattern="https://boards.test/jobs?tag=a&tag=a",
+        pagination={"mode": "none", "max_pages": 1},
+        loads=True,
+        issues=("https://boards.test/jobs?tag=a&tag=a",),
+        route="control — the NF5 boundary itself: with no `pagination.param` declared "
+        "this rule never runs at all, so a repeated query key of any name, `param`'s "
+        "spelling included, loads — the 'whatever pagination.mode is' framing round 3 "
+        "used for the probe above was true only about the named key, never about "
+        "repeated query keys in general",
+    ),
+    # ---- round 4, NF7: this library's POST-paginated boards are ASP.NET-shaped
+    # (see `connectors.py`'s own docstring paragraph on this), and ASP.NET's
+    # query and form collections compare keys case-insensitively — so a
+    # case-only difference must not be read as two different keys.
+    UrlProbe(
+        name="the named key sent twice, differing only in case",
+        url_pattern="https://boards.test/jobs?Page=1&page={page}",
+        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+        loads=False,
+        issues=(),
+        route="T154 round 4 (NF7) — ASP.NET's NameValueCollection compares query and "
+        "form keys with an ordinal, case-insensitive comparer; `Page` and `page` are "
+        "the same key to the one server family this rule is modelled on, so a "
+        "case-sensitive count would miss the identical duplicate-key harm; fail-open",
+    ),
 )
 
 #: The floor `DUPLICATE_KEY_PROBES` is checked against, committed in place of
 #: the count of the day for T100's reason — but set **equal** to today's count
-#: (11) rather than below it: the by-name pin in
-#: `tests/test_pagination_capture.py` already protects every individual shape,
-#: so a lower floor's only effect would be slack that absorbs a bulk deletion
-#: the pin does not happen to name — the second reader's point on F5. Equal to
-#: the population, the first deletion of any kind breaches it.
-MINIMUM_DUPLICATE_KEY_PROBES = 11
+#: (17, after round 4's NF2/NF3/NF4/NF5/NF7 probes) rather than below it: the
+#: by-name pin in `tests/test_pagination_capture.py` already protects every
+#: individual shape, so a lower floor's only effect would be slack that
+#: absorbs a bulk deletion the pin does not happen to name — the second
+#: reader's point on F5. Equal to the population, the first deletion of any
+#: kind breaches it.
+MINIMUM_DUPLICATE_KEY_PROBES = 17
 
 #: The floor the real-library half of this gate is checked against.
 #:
@@ -989,13 +1077,26 @@ MINIMUM_DUPLICATE_KEY_PROBES = 11
 MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED = 5
 
 
-def probe_duplicate_page_keys() -> tuple[list[str], int]:
-    """Run `DUPLICATE_KEY_PROBES`; return what disagreed with the rule, and how
-    many ran. The same shape as `probe_url_side`, for the same reason:
-    behavioural, so a validator deleted, weakened, or replaced by a comment
-    fails here rather than reading as fixed."""
+def probe_duplicate_page_keys(
+    probes: tuple[UrlProbe, ...] = DUPLICATE_KEY_PROBES,
+) -> tuple[list[str], int]:
+    """Run `probes` (`DUPLICATE_KEY_PROBES` by default); return what disagreed
+    with the rule, and how many ran. The same shape as `probe_url_side`, for
+    the same reason: behavioural, so a validator deleted, weakened, or
+    replaced by a comment fails here rather than reading as fixed.
+
+    Takes `probes` as a parameter — `page_placeholder.measure`'s own shape —
+    so a caller can hand it a **deliberately wrong** table and observe that
+    the comparison below actually reports the disagreement, rather than
+    trusting `defects == []` on the real table alone. That trust was
+    misplaced (round 4, NF1): the real table passing is equally consistent
+    with a correct comparison and with a `return [], len(probes)` that never
+    looks at a single probe — `defects == []` cannot tell those apart, and
+    `test_a_deliberately_wrong_duplicate_key_probe_table_is_reported` is what
+    can.
+    """
     defects: list[str] = []
-    for probe in DUPLICATE_KEY_PROBES:
+    for probe in probes:
         try:
             connector = parse_connector(_probe_document(probe))
         except ConnectorError as exc:
@@ -1010,7 +1111,7 @@ def probe_duplicate_page_keys() -> tuple[list[str], int]:
             defects.append(
                 f"{probe.name}: issues {list(issued)}, not {list(probe.issues)} — {probe.route}"
             )
-    return defects, len(DUPLICATE_KEY_PROBES)
+    return defects, len(probes)
 
 
 def measure_duplicate_page_keys(directory: Path | None = None) -> dict[str, Any]:

@@ -477,7 +477,7 @@ def test_a_query_key_repeated_with_a_fixed_value_is_refused_at_load() -> None:
     `query` ABNF (`*( pchar / "/" / "?" )`) states no `name=value` pair
     grammar at all and calls pairs only a frequent *usage*, but
     `application/x-www-form-urlencoded` (plus its historical `;` alternate,
-    RFC 1866 §8.2.1 — the same ambiguity `urllib.parse.parse_qsl` itself grew
+    HTML 4.01 Appendix B.2.2 — the same ambiguity `urllib.parse.parse_qsl` itself grew
     a `separator` parameter over, CVE-2021-23336; see
     `connectors._QUERY_PAIR_SEPARATORS`) — so it is checked by **counting
     occurrences of the name** `pagination.param` holds, not by asking whether

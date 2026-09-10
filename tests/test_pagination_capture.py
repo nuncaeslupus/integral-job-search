@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -846,9 +847,124 @@ def test_a_query_param_board_with_an_unrelated_body_field_still_loads(library: P
     ]
 
 
+def test_a_path_segment_board_with_a_fixed_body_field_of_the_same_name_is_refused(
+    library: Path,
+) -> None:
+    """T154 round 4 (NF2/NF3). Round 3 scoped the mirror above to `query_param`
+    alone, on the premise that `path_segment` binds `param` to a URL *position*
+    a merged namespace never sees. That premise is false twice over — this
+    config has no path segment in it at all: `pagination.mode` says
+    `path_segment`, but the sole `{page}` occurrence sits in a query-string
+    *value* under the unrelated key `o`, which a merged `request.values` /
+    `$_REQUEST` / `params` plainly does see — and even a genuine path segment
+    is not the isolated position claimed, since Rails' `params` (named in this
+    very error message) merges `path_parameters` into the same hash as the
+    query and body. `page_placeholder`'s own R7 never distinguished
+    `query_param` from `path_segment` in the first place."""
+    _edit_connector(
+        library,
+        url_pattern="https://realboard.io/jobs?o={page}",
+        method="POST",
+        body_json={"page": "1"},
+        pagination={"mode": "path_segment", "param": "page", "start": 1, "max_pages": 2},
+        item=None,
+        fields=None,
+        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
+    )
+    with pytest.raises(ConnectorError, match=r"list\.body_json also declares 'page'"):
+        load_connector(_package(library))
+
+
+def test_a_path_segment_board_with_an_unrelated_body_field_still_loads(library: Path) -> None:
+    """The `path_segment` mirror of
+    `test_a_query_param_board_with_an_unrelated_body_field_still_loads`: a
+    genuine path position, and a body field that does not spell
+    `pagination.param` at all — not this rule's business under either mode."""
+    _edit_connector(
+        library,
+        url_pattern="https://realboard.io/jobs/{page}",
+        method="POST",
+        body_json={"other": "1"},
+        pagination={"mode": "path_segment", "param": "page", "start": 1, "max_pages": 2},
+        item=None,
+        fields=None,
+        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
+    )
+    connector = load_connector(_package(library))
+    assert build_list_urls(connector) == [
+        "https://realboard.io/jobs/1",
+        "https://realboard.io/jobs/2",
+    ]
+
+
+def test_a_percent_encoded_key_name_counts_toward_the_duplicate(library: Path) -> None:
+    """T154 round 4 (NF4). `query_pair_names` must percent-*decode* a raw key
+    name before comparing it to `pagination.param` — `%70age` decodes to
+    `page`, the same key `pagination.param` and `query_pair_names` itself both
+    spell it as. Dropping that `unquote` call undercounts this to a single
+    occurrence, which is not `> allowed_in_query` and loads a genuine
+    duplicate — the identical harm as the plain-ASCII case, spelled to defeat
+    a naive string comparison rather than the decoded one."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?%70age=1&page={page}",
+        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+    )
+    assert "names 'page' 2 times" in message
+
+
+def test_a_case_only_difference_still_counts_as_the_same_key(library: Path) -> None:
+    """T154 round 4 (NF7), decided deliberately rather than left as an
+    oversight: this library's POST-paginated boards are ASP.NET-shaped, and
+    ASP.NET's `NameValueCollection` compares both its query and its form
+    collections with an ordinal, case-**insensitive** comparer. `?Page=1`
+    beside `?page={page}` is therefore the identical duplicate-key harm as
+    `test_a_query_key_sent_twice_is_refused_at_load`, read by the one server
+    family this rule is modelled on — a case-sensitive count would miss it."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?Page=1&page={page}",
+        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
+    )
+    assert "names 'page' 2 times" in message
+
+
+def test_mode_none_naming_param_anyway_refuses_a_duplicate_of_it(library: Path) -> None:
+    """T154 round 4 (NF5). `pagination.param` may be set even though
+    `mode: none` never requires it, and route 4's check for that mode is
+    reached only then — untested by anything before round 4, so a mutation
+    deleting or weakening it left every test green. A repeated occurrence of
+    the named key is refused independent of the merged-namespace reasoning
+    the other modes rest on: two literal pairs sharing a name is never a
+    well-formed request on its own."""
+    message = _refused(
+        library,
+        "https://realboard.io/jobs?page=1&page=2",
+        {"mode": "none", "param": "page", "max_pages": 1},
+    )
+    assert "names 'page' 2 times" in message
+    assert "mode is 'none'" in message
+
+
+def test_mode_none_naming_no_param_still_loads_a_duplicate_key(library: Path) -> None:
+    """The NF5 boundary itself, stated as a passing case: with no
+    `pagination.param` declared at all, route 4 never runs — so a repeated
+    query key, `param`'s own eventual spelling included, loads. This is what
+    makes the removed docstring phrasing ('a repeated query key is never a
+    well-formed request, whatever pagination.mode is') false as a general
+    claim: it was only ever true about the key `pagination.param` names."""
+    _edit_connector(
+        library,
+        url_pattern="https://realboard.io/jobs?tag=a&tag=a",
+        pagination={"mode": "none", "max_pages": 1},
+    )
+    connector = load_connector(_package(library))
+    assert build_list_urls(connector) == ["https://realboard.io/jobs?tag=a&tag=a"]
+
+
 def test_a_semicolon_separated_duplicate_is_refused_at_load(library: Path) -> None:
     """F2. `;` is not `application/x-www-form-urlencoded`'s pair separator —
-    that grammar recognises only `&` — but it is RFC 1866 §8.2.1's documented
+    that grammar recognises only `&` — but it is HTML 4.01 Appendix B.2.2's documented
     historical alternate, and the asymmetry is not merely historical:
     `urllib.parse.parse_qsl` itself grew a `separator` parameter over this
     exact ambiguity (CVE-2021-23336). RFC 3986 §3.4 itself states no pair
@@ -919,6 +1035,27 @@ def test_every_duplicate_key_probe_agrees_with_the_rule() -> None:
     assert checked >= pc.MINIMUM_DUPLICATE_KEY_PROBES
 
 
+def test_a_deliberately_wrong_duplicate_key_probe_table_is_reported() -> None:
+    """The negative control T154 shipped without (round 4, NF1), in
+    `page_placeholder.test_a_deliberately_wrong_probe_table_is_reported`'s own
+    idiom.
+
+    `defects == []` on the real table (the test above) is exactly as
+    consistent with a correct comparison as with `probe_duplicate_page_keys`
+    gutted to `return [], len(probes)` without looking at a single probe —
+    both read `duplicated_page_keys_certified: 0`, `gate_status: measured`,
+    over the same green real table. Only handing the function a table it
+    cannot have been *right about by construction* tells the two apart:
+    inverting every probe's `loads` makes every one of them wrong, so a
+    comparison that actually runs must report all of them, and a severed one
+    reports none.
+    """
+    wrong = tuple(replace(probe, loads=not probe.loads) for probe in pc.DUPLICATE_KEY_PROBES)
+    defects, checked = pc.probe_duplicate_page_keys(wrong)
+    assert checked == len(wrong)
+    assert len(defects) == len(wrong), defects
+
+
 def test_the_duplicate_key_probe_table_meets_its_floor_and_keeps_its_names() -> None:
     """Pinned **by name**, for the same reason
     `test_the_url_side_probe_table_carries_the_three_routes_and_meets_its_floor`
@@ -938,6 +1075,13 @@ def test_the_duplicate_key_probe_table_meets_its_floor_and_keeps_its_names() -> 
         "the named key sent twice via a ';'-separated pair",
         "the named key sent twice, across mode: query_param's own body",
         "a query_param board with an unrelated body field still loads",
+        # round 4 (NF2/NF3, NF4, NF5, NF7).
+        "the named key fixed in the body, across mode: path_segment's own query value",
+        "a path_segment board with an unrelated body field still loads",
+        "the named key sent twice, one occurrence percent-encoded",
+        "mode: none naming param anyway, with a duplicate of it",
+        "mode: none naming no param at all still loads a duplicate key",
+        "the named key sent twice, differing only in case",
     } <= names, sorted(names)
     # Both verdicts represented, for the same reason the URL-side table needs
     # both: a table of refusals alone passes over a validator that refuses
