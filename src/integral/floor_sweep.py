@@ -2696,7 +2696,18 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: `evidence_pinned_floors` and `bounds_read_and_out_of_scope` are regenerated
 #: every run and are the only account of *which* floors are which that this
 #: module stands behind.
-MINIMUM_FLOORS_SWEPT = 73
+#:
+#: **74 on `main`, and the extra one is why this floor is worth having.**
+#: This module and `pagination_capture` were developed on branches that were
+#: each green in isolation; the merge added
+#: `pagination_capture.MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED` to a population
+#: this floor was committed against at 73, and the sweep refused the merged
+#: tree with `stale_margin_claim` — the zero-slack claim above had become
+#: false without either side editing it. That is the census collision
+#: `CLAUDE.md` describes, caught by the check rather than by a reviewer, and
+#: the remedy is the one it prescribes: regenerate against the merged tree
+#: rather than pick a side. Zero slack is restored at the new true count.
+MINIMUM_FLOORS_SWEPT = 74
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
