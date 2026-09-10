@@ -1,5 +1,28 @@
 # Session handover
 
+## 0. A concurrent session, same evening: T168 merged (#452)
+
+**`origin/main` is now at `fff210d` (#452), not the #444 repair the next
+section describes.** `make host-gate` was re-run against `main` after the merge:
+PASS, 3549 passed, no drift.
+
+- **T168** ([#450](https://github.com/nuncaeslupus/integral-job-search/issues/450)):
+  `lifecycle.collect_offer` only consulted tombstones, so re-collecting a stored
+  offer rewrote its lifecycle as a fresh `new` and counted as added. A
+  shortlist was lost on every sourcing run, and `BoardOutcome.added` counted
+  re-sightings. Fixed in `collect_offer`: an offer whose **lifecycle record**
+  exists is left alone. S5 records `live_offers_reset_by_recollection`.
+  Two second-reader rounds, both CLEAR; round one's three findings were
+  accepted and pinned before merge.
+- **The T-number collided three ways.** Three sessions each minted **T166**
+  within half an hour: #446/#447 (first, kept it), #450 (renumbered to T168),
+  and **#451 (InfoJobs), still titled T166 — its session must renumber it**.
+  `plan_v2` catches a duplicate row only once both land on `main`, so the
+  collision is invisible from inside any one branch. Check open PRs' plan rows,
+  not only `main`, before minting a label.
+- **The auto-mode classifier blocks a bare merge.** Merging needed the owner's
+  explicit "merge when green and no comments" in chat.
+
 **2026-09-10, evening.** One task seeded, solved and opened: **T166**
 ([#446](https://github.com/nuncaeslupus/integral-job-search/issues/446), PR
 [#447](https://github.com/nuncaeslupus/integral-job-search/pull/447)). Nothing
