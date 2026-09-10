@@ -39,6 +39,7 @@ from integral.approval import (
     ApprovalError,
     PersonalDetails,
     _disclosure_report,
+    _normalised_equal,
     _paraphrase_report,
     _refuse_unbacked_disclosures,
     _undecidable_suffix,
@@ -1226,6 +1227,86 @@ def test_a_retraction_with_no_document_edit_does_not_conflate_a_twin(
     # TWIN must not be silently cleared by WIN's now-unbacked, retracted line.
     assert not any(TWIN in item for item in measured["unapproved_episodes"])
     assert any(TWIN in item for item in measured["undecidable_episodes"])
+
+
+def test_normalised_equal_is_pinned_in_both_directions() -> None:
+    """R8 (#435 round 8, F-1 and F-2). `_normalised_equal` is the primitive
+    the sweep's confirm branch trusts absolutely — a match rules out every
+    rival with no further check (see the module docstring's R7/R8 sections)
+    — so it is pinned directly here, in both directions F-2 named:
+
+    * a pair that must compare **equal** and would not without folding
+      (case and whitespace only) — the reason `unicodedata.normalize` and
+      `.casefold()` are called at all, refuting a bare `line == episode`
+      mutant;
+    * seven pairs, the round-7 second-reader's own constructed cases (#435
+      F-1's report), that must compare **unequal** and would not under the
+      old `_words`-based rule (`\\W`-stripping deletes exactly the character
+      that distinguishes each pair) — refuting both that mutant and an
+      order-insensitive bag-of-words variant of it (F-2's second surviving
+      mutant), since every pair below differs in more than word order.
+    """
+    # Needs normalisation: only case and a doubled internal space differ.
+    assert _normalised_equal(
+        "CUT THE NIGHTLY  BILLING run from six hours to forty minutes.",
+        "cut the nightly billing run from six hours to forty minutes.",
+    )
+
+    # Must never compare equal — `Episode.kind` names `"number"` as a
+    # first-class kind, so a numeric claim is squarely in scope, not an edge
+    # case this primitive may decline.
+    distinct_pairs = (
+        ("Margin moved +12% after the rewrite", "Margin moved -12% after the rewrite"),
+        ("won 3:1 on renewals", "won 3 1 on renewals"),
+        ("cut costs 40%", "cut costs 40"),
+        ("grew 10-20 percent", "grew 10 20 percent"),
+        ("We shipped it", "We shipped it?"),
+        (
+            "The manager said the client was wrong",
+            "The manager, said the client, was wrong",
+        ),
+        ("Cut the run 6h -> 40m", "Cut the run 6h 40m"),
+    )
+    for a, b in distinct_pairs:
+        assert not _normalised_equal(a, b), (a, b)
+        assert not _normalised_equal(b, a), (b, a)  # symmetry — neither direction folds
+
+
+def test_a_sign_flip_does_not_conflate_a_different_episode(store: ProfileStore) -> None:
+    """F-1 (#435 round 7 second-reader report), fixed at R8 (#435 round 8,
+    the blocker). `_words` deletes `+`/`-`, so an approved achievement's own
+    duplicated line and an unapproved failure episode about the *opposite*
+    reading of the same metric reduced to the identical word run and the
+    failure was silently cleared from every channel — a whole-run collision,
+    not a shingle-window one, so R7-1's rival-check removal did not touch it:
+    there was no rival to fail to find, the equality test itself was wrong.
+    """
+    achievement = "Gross margin moved +12% in the quarter after the rewrite shipped."
+    failure = "Gross margin moved -12% in the quarter after the rewrite shipped."
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(
+            Episode(kind="achievement", text=achievement),
+            Episode(kind="failure", text=failure),
+        ),
+    )
+    write_master(store, master)
+    version = _prepare(store, master, approved=(0,))
+    where = _where(store, version)
+    (where / "letter.md").write_text(
+        (where / "letter.md").read_text(encoding="utf-8") + achievement + "\n", encoding="utf-8"
+    )
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    # The duplicated approved line is unbacked in its own right and earns its
+    # own finding, exactly as an exact duplicate does for a shingle-overlap
+    # twin (R5-1's route).
+    assert measured["unapproved_episode_disclosures"] == 1
+    # The failure episode must not be silently cleared by the sign flip.
+    assert not any(failure in item for item in measured["unapproved_episodes"])
+    assert any(failure in item for item in measured["undecidable_episodes"])
 
 
 def test_an_approved_disclosed_episode_is_never_flagged_undecidable(
