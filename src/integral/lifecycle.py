@@ -623,6 +623,15 @@ def collect_offer(store: ProfileStore, offer: Offer, *, at: str) -> CollectionOu
     normalises to the same ad). Either match drops the offer and records a
     resighting instead of adding it; neither ever creates
     `offers/<id>.json` for a tombstoned ad.
+
+    An offer already tracked under this id is a re-sighting too, and is left
+    exactly as it is (T168): writing it again would reset a shortlisted or
+    applied offer's status and history to a fresh `new`, and restart §7.3's
+    purge clock, every time a board lists the same ad. "Tracked" is the
+    lifecycle record, not the body — the record is what holds the history, and
+    a body with no record is `save_lifecycle_offer` interrupted between its two
+    writes on a first save, which re-collection repairs. The tombstone check
+    runs first so a revived offer's re-sighting still counts (§7.4).
     """
     tombstones = current_tombstones(store)
     matched = tombstones.get(offer.id)
@@ -635,6 +644,8 @@ def collect_offer(store: ProfileStore, offer: Offer, *, at: str) -> CollectionOu
     if matched is not None:
         _record_resighting(store, matched, at=at)
         return CollectionOutcome(offer.id, added_as_new=False, matched_tombstone=matched.offer_id)
+    if store.path(*_lifecycle_parts(offer.id)).exists():
+        return CollectionOutcome(offer.id, added_as_new=False, matched_tombstone=None)
     record = track_new_offer(offer, at=at)
     save_lifecycle_offer(store, offer, record)
     return CollectionOutcome(offer.id, added_as_new=True, matched_tombstone=None)
@@ -941,12 +952,34 @@ def probe_lifecycle() -> dict[str, Any]:
             "an explicit revival deleted the tombstone it revived — §7.4 requires it to survive",
         )
 
+        # 6) T168: every live offer sighted again, as a connector would hand
+        #    it over (`status: new`). Its two files must not move, and it must
+        #    not count as added — read off disk, not off the outcome alone. A
+        #    day later than every earlier stamp, so a rewrite of an offer
+        #    collected at `now` still moves its bytes.
+        later = _iso(now + timedelta(days=1))
+        reset_ids: list[str] = []
+        for path in sorted(store.path("offers").glob("*.json")):
+            companion = store.path(*_lifecycle_parts(path.stem))
+            before = (path.read_bytes(), companion.read_bytes())
+            stored = load_offer(store, path.stem)
+            again = connect_manual(stored.text, url=stored.url)
+            outcome = collect_offer(store, again, at=later)
+            moved = (path.read_bytes(), companion.read_bytes()) != before
+            if again.id != path.stem or outcome.added_as_new or moved:
+                reset_ids.append(path.stem)
+            check(
+                path.stem not in reset_ids,
+                f"re-sighting the live offer {path.stem} rewrote its lifecycle as new",
+            )
+
         # --- the measurement itself: read off disk, nothing repaired first ---
         resurrected_ids = _resurrected_offer_ids(store)
 
     return {
         "resurrected_purged_offers": len(resurrected_ids),
         "resurrected_offer_ids": resurrected_ids,
+        "live_offers_reset_by_recollection": len(reset_ids),
         "scenarios_checked": scenarios,
         "violations": violations,
     }
@@ -957,12 +990,13 @@ def probe_lifecycle() -> dict[str, Any]:
 # floor was exactly that until round 2's parameter-via-callers tracing made it
 # visible for the first time. Round 3 then pinned its population to the exact
 # number `status/evidence/S5.json`'s own `scenarios_checked` already carried —
-# raised to what the probe carries — 72, zero slack — because the previous,
+# raised to what the probe carries — 72, zero slack; 78 since T168's six
+# live-offer re-sightings — because the previous,
 # hand-picked "comfortably below" margin of 52 was real and undocumented: a
 # margin argued in prose ("comfortably below") that matches no phrase this
 # module's own keyword check recognises is, in the arithmetic branch,
 # indistinguishable from one argued not at all.
-MINIMUM_SCENARIOS = 72
+MINIMUM_SCENARIOS = 78
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
@@ -991,7 +1025,8 @@ def _s5_report(measured: dict[str, Any]) -> int:
             f"explicit revival: {measured['resurrected_offer_ids']}",
             file=sys.stderr,
         )
-    return 1 if (measured["violations"] or measured["resurrected_purged_offers"]) else 0
+    failed = measured["resurrected_purged_offers"] or measured["live_offers_reset_by_recollection"]
+    return 1 if (measured["violations"] or failed) else 0
 
 
 # ---------------------------------------------------------------------------

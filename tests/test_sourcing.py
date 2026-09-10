@@ -95,6 +95,17 @@ def test_a_run_collects_offers_and_records_how_each_arrived(store: ProfileStore)
     assert offers_without_a_recorded_fetch(store) == []
 
 
+def test_a_second_pass_over_the_same_boards_adds_nothing(store: ProfileStore) -> None:
+    """T168: `added` is what survived dedup. The same adverts sighted again are
+    a real result that adds no offer — counting them re-reports yesterday's run."""
+    first = _run(store, _answer_with_captures())
+    assert first.added > 0, first.summary()
+
+    second = _run(store, _answer_with_captures())
+    assert sum(o.items for o in second.outcomes) > 0, second.summary()
+    assert second.added == 0, second.summary()
+
+
 def test_an_offer_placed_by_hand_is_found(store: ProfileStore) -> None:
     """Every offer in the tree before this task arrived this way. The metric
     must see them, or its zero over a driven run means nothing."""

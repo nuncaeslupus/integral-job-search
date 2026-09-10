@@ -1,0 +1,91 @@
+# Ashby — an ATS host, not a job board (T144). One package, every employer
+# named in `employers`.
+#
+# Host: api.ashbyhq.com, Ashby's public Job Postings API — the one it
+# documents for employers to publish their own boards. Its /robots.txt answers
+# 401, which RFC 9309 §2.3.1.3 calls "unavailable": a crawler MAY access any
+# resource. `integral.robots` reads a 401 that way by the owner's decision of
+# 2026-09-10. The board pages at jobs.ashbyhq.com disallow `/api/`, which is why
+# this reads the posting API and not the page's own GraphQL.
+#
+# Salary is left unmapped: `compensation.summaryComponents` lists salary,
+# equity and bonus in no fixed order, and this grammar cannot pick the salary
+# one by type. A wrong figure ranks an offer wrongly; a missing one is visible.
+site: ashby
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-10"
+auth: none
+
+list:
+  url_pattern: "https://api.ashbyhq.com/posting-api/job-board/{employer}"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    items: jobs
+    fields:
+      detail_url: jobUrl
+      source_ref: id
+      title: title
+      location_raw: location
+      text: descriptionPlain
+  # Postings carry no employer name, so this is where `company` comes from.
+  employers:
+    1password: 1Password
+    airbyte: Airbyte
+    anyscale: Anyscale
+    astronomer: Astronomer
+    baseten: Baseten
+    buffer: Buffer
+    clickhouse: ClickHouse
+    coder: Coder
+    cognition: Cognition
+    cohere: Cohere
+    cursor: Cursor
+    decagon: Decagon
+    deepl: DeepL
+    deepnote: Deepnote
+    docker: Docker
+    dust: Dust
+    elevenlabs: ElevenLabs
+    gitbook: GitBook
+    graphite: Graphite
+    greptile: Greptile
+    hex: Hex
+    hightouch: Hightouch
+    incident: incident.io
+    langchain: LangChain
+    linear: Linear
+    livekit: LiveKit
+    llamaindex: LlamaIndex
+    lovable: Lovable
+    mintlify: Mintlify
+    modal: Modal
+    n8n: n8n
+    neon: Neon
+    notion: Notion
+    openai: OpenAI
+    oyster: Oyster
+    perplexity: Perplexity
+    photoroom: Photoroom
+    pinecone: Pinecone
+    poolside: Poolside
+    posthog: PostHog
+    prefect: Prefect
+    railway: Railway
+    render: Render
+    replit: Replit
+    rerun: Rerun
+    runway: Runway
+    sentry: Sentry
+    sierra: Sierra
+    supabase: Supabase
+    synthesia: Synthesia
+    temporal: Temporal
+    vanta: Vanta
+    vapi: Vapi
+    weaviate: Weaviate
+    writer: Writer
+    zapier: Zapier
+    zed: Zed

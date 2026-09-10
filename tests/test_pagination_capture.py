@@ -2745,9 +2745,10 @@ def test_the_committed_library_has_no_unenforced_provenance() -> None:
 
     assert measured["gate_status"] == "measured"
     assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
-    # T166 recorded `trabajos_es`'s probe live, with its response committed —
-    # the first capture in the library to substantiate that claim.
-    assert measured["claims"] == {"live": 1, "transcribed": 1, "unrecorded": 18}
+    # 19, plus T144's five ATS-host probes, which say `unrecorded` too — less
+    # T166's `trabajos_es`, recorded live with its response committed, the
+    # first capture in the library to substantiate that claim.
+    assert measured["claims"] == {"live": 1, "transcribed": 1, "unrecorded": 23}
     assert measured["example_packages_excluded"] == ["examplejobs_es"]
 
 

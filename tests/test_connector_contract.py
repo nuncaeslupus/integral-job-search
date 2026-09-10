@@ -609,7 +609,6 @@ _NOT_ADDRESSES = {
     ("src/integral/robots.py", ".".join(map(str, (124, 0, 0, 0)))): (
         "Chrome's version in a browser User-Agent"
     ),
-    ("src/integral/robots.py", ".".join(map(str, (6, 2, 2, 1)))): "an RFC 3986 section number",
 }
 
 
@@ -635,7 +634,10 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
             text = (repo / name).read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        for literal in quad.findall(text):
+        for match in quad.finditer(text):
+            literal = match.group()
+            if text[max(0, match.start() - 2) : match.start()].rstrip().endswith("§"):
+                continue  # `§2.3.1.3`: an RFC section number, however many are cited
             try:
                 address = ipaddress.IPv4Address(literal)
             except ValueError:
@@ -667,8 +669,10 @@ def test_no_committed_file_carries_an_ip_address() -> None:
     enumeration with no last element. So the population is now what git
     lists, whatever the path or extension. Only a globally routable address
     counts, so documentation, private and loopback ranges pass, and so does a
-    quad with an octet above 255. The two literals that are not addresses are
-    named in `_NOT_ADDRESSES` with the reason.
+    quad with an octet above 255, and so does one written after `§`, which is an
+    RFC section number: T144 cited five of them the day this landed. The one
+    remaining literal that is not an address is named in `_NOT_ADDRESSES` with
+    the reason.
     """
     found = _quads_in_every_file()
     offenders = sorted(key for key in found if key not in _NOT_ADDRESSES)

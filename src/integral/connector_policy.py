@@ -975,6 +975,16 @@ Disallow:
 )
 
 
+#: The `/robots.txt` statuses `integral.robots` reads as "no rules": 404, and
+#: 401 by the owner's decision of 2026-09-10 (RFC 9309 §2.3.1.3).
+NO_RULES_STATUSES = frozenset({401, 404})
+
+
+def _as_status(value: Any) -> int | None:
+    """A recorded HTTP status, or `None` — a non-integer is not one."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 @dataclass(frozen=True)
 class RobotsAdjudication:
     """One recorded adjudication, read for the standing it claims."""
@@ -994,6 +1004,11 @@ class RobotsAdjudication:
     #: is blocked here — but where it IS present, every claim the row makes
     #: becomes checkable against the text instead of taken from its prose.
     robots_txt: str
+    #: T144. The status `/robots.txt` answered when there was no file to commit
+    #: — 404, or the 401 the owner ruled "unavailable" on 2026-09-10. With
+    #: `robots_txt` it is what lets a verdict be *replayed* through
+    #: `integral.robots` instead of read out of `reason`.
+    robots_status: int | None = None
 
     @classmethod
     def from_mapping(cls, payload: Any) -> RobotsAdjudication:
@@ -1019,6 +1034,7 @@ class RobotsAdjudication:
             second_reader_refused=_paths("second_reader_refused"),
             reason=str(payload.get("reason") or "").strip(),
             robots_txt=str(payload.get("robots_txt") or ""),
+            robots_status=_as_status(payload.get("robots_status")),
         )
 
     def problems(self, repo_root: Path = _REPO_ROOT) -> list[str]:
@@ -1109,6 +1125,19 @@ class RobotsAdjudication:
                 found.append(
                     f"{where}: standing {self.standing!r} while naming paths the second "
                     "reader refused — a row that contradicts its own standing"
+                )
+        if self.robots_status is not None:
+            if self.robots_txt.strip():
+                found.append(
+                    f"{where}: records both a robots.txt and a status "
+                    f"{self.robots_status} — a server that answered with a file did not "
+                    "answer with an error"
+                )
+            if self.robots_status not in NO_RULES_STATUSES:
+                found.append(
+                    f"{where}: `robots_status` {self.robots_status} is not one "
+                    f"`integral.robots` reads as no rules ({sorted(NO_RULES_STATUSES)}) — "
+                    "any other status refuses, and a row cannot admit on it"
                 )
         found += self._snapshot_problems(where)
         return found
