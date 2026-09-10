@@ -1608,7 +1608,7 @@ def _placeholder_carrying_query_key_occurrences(pattern: str) -> int:
 #: colon, no whitespace and no newline, so it cannot become a header of its own
 #: even by concatenation. There is still nowhere to write a credential.
 #:
-#: T166 — `browser`. Some boards serve their listing only to a client that runs
+#: T173 — `browser`. Some boards serve their listing only to a client that runs
 #: their JavaScript check. Measured 2026-09-10 on infojobs.net: every search and
 #: advert GET from this tool answers a 200 "No podemos identificar tu navegador"
 #: page from the CDN edge, whatever the headers, while a real browser on the
@@ -1663,7 +1663,7 @@ class ListPage(Strict):
                     "with a letter and hold only letters, digits, _ . : or -"
                 )
         if self.client == "browser" and self.method != "GET":
-            # T166. A browser capture is one page per URL, and a POST search's
+            # T173. A browser capture is one page per URL, and a POST search's
             # pages share one URL — one capture would answer all of them.
             raise ValueError("client: browser reads saved pages, one per URL — only a GET")
         return self

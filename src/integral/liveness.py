@@ -261,7 +261,7 @@ def read_response(
     phrase = dead_phrase_in(body)
     if phrase is not None:
         return SourceCheck(offer_id, "dead", f"the advert's own page says {phrase!r}")
-    # T166. With no title to compare, a bot-check page served 200 used to read
+    # T173. With no title to compare, a bot-check page served 200 used to read
     # `live` — infojobs.net serves exactly that to this tool for every advert
     # (measured 2026-09-10). Only the page's own `<title>`/`<h1>` is read, and
     # only when there is no title: the whole body is not evidence, because a
@@ -398,7 +398,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         "dead",
     ),
     Scenario(
-        "infojobs, its edge bot-check page served 200 (T166)",
+        "infojobs, its edge bot-check page served 200 (T173)",
         "infojobs_es",
         200,
         "<html><head><title>InfoJobs</title></head><body>"

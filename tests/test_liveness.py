@@ -215,7 +215,7 @@ def test_a_match_may_not_span_two_identity_fields() -> None:
 
 
 def test_a_block_page_is_known_by_what_it_calls_itself_not_by_its_markup() -> None:
-    """T166, and the second reader's F5 on #455. With no title to compare, a
+    """T173, and the second reader's F5 on #455. With no title to compare, a
     page naming itself a block page is `unverified`; a real advert carrying
     `h-captcha` in its markup or "rate limiting" in its text is not one."""
     blocked = (

@@ -33,7 +33,7 @@
 # Measured 2026-08-30 with the repo's own audited matcher (`integral.robots`,
 # T70) — never a grep of the file:
 #
-#   ALLOW  /ofertas-trabajo/barcelona/informatica-telecomunicaciones  (the list URL until T166)
+#   ALLOW  /ofertas-trabajo/barcelona/informatica-telecomunicaciones  (the list URL until T173)
 #   ALLOW  /ofertas-trabajo/farmaceutico/barcelona  (today's pattern, re-measured 2026-09-10)
 #   ALLOW  /ofertas-trabajo/barcelona
 #   ALLOW  /barcelona/<slug>/of-i<id>                     (a real detail URL)
@@ -69,7 +69,7 @@
 # strip the query string first.** The declarative schema has no facility to do
 # that, which is why it is written here rather than expressed.
 # ---------------------------------------------------------------------------
-# T166 — this board is served only to a real browser
+# T173 — this board is served only to a real browser
 # ---------------------------------------------------------------------------
 # Measured 2026-09-10 with the tool's own user agent: every listing and advert
 # GET answers **HTTP 200, 29,762 bytes**, `server: bon`, `x-cache:
@@ -105,11 +105,11 @@ last_verified: "2026-09-10"
 auth: none
 
 list:
-  # T166. See the section above: a plain request is refused, a real browser is
+  # T173. See the section above: a plain request is refused, a real browser is
   # served. Sends no header of its own — the browser sends its own.
   client: browser
 
-  # The candidate's terms, in the path, scoped to Barcelona. Until T166 this was
+  # The candidate's terms, in the path, scoped to Barcelona. Until T173 this was
   # fixed to `/ofertas-trabajo/barcelona/informatica-telecomunicaciones`, so a
   # pharmacy candidate was handed IT adverts. Measured 2026-09-10 in a browser:
   #

@@ -11,7 +11,7 @@ site: infojobs.net
 country: ES
 language: es
 maintainer: "@nuncaeslupus"
-# 2026-09-10 (T166): the board now serves its listing only to a real browser,
+# 2026-09-10 (T173): the board now serves its listing only to a real browser,
 # and is read from a page the candidate's own browser saved — see
 # `connector.yaml`. No login is involved, so `authentication: none` still holds.
 last_verified: "2026-09-10"

@@ -698,7 +698,7 @@ def test_a_library_with_no_clean_ground_reports_unmeasured_rather_than_broken(
     ],
 )
 def test_the_infojobs_edge_page_is_a_refusal_by_its_text_alone(kept: str, cut: str) -> None:
-    """T166. infojobs.net's edge page was caught only because `captcha` sits in
+    """T173. infojobs.net's edge page was caught only because `captcha` sits in
     its canonical link — markup, one rename from reading as an empty board.
     With that line gone and either of its two sentences gone too, the other
     must still say "refused", never "no jobs"."""

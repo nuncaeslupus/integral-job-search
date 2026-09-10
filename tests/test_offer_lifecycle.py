@@ -27,6 +27,7 @@ from integral.lifecycle import (
     canonicalize_url,
     collect_offer,
     compute_text_sha256,
+    current_tombstones,
     has_case_record,
     is_purge_eligible,
     is_retained_indefinitely,
@@ -336,6 +337,81 @@ def test_a_genuinely_new_ad_is_not_swallowed_by_the_tombstone_gate(store: Profil
     assert outcome.added_as_new is True
     assert outcome.matched_tombstone is None
     assert store.path("offers", f"{brand_new.id}.json").exists()
+
+
+def test_a_resighted_live_offer_keeps_its_lifecycle(store: ProfileStore) -> None:
+    """T168: a board lists the same ad every day. Re-collecting an offer that
+    is stored and not tombstoned must leave its status, history and purge
+    clock alone — the next sourcing run used to reset a shortlist to `new`."""
+    first = connect_manual(WAREHOUSE_AD, url="https://portal-a.example.com/j/1")
+    collect_offer(store, first, at=_old(NOW))
+    offer, record = load_lifecycle_offer(store, first.id)
+    offer, record = transition(offer, record, "shortlisted", at=_old(NOW))
+    save_lifecycle_offer(store, offer, record)
+    body = store.path("offers", f"{offer.id}.json").read_bytes()
+
+    again = connect_manual(WAREHOUSE_AD, url="https://portal-a.example.com/j/1?utm_source=x")
+    outcome = collect_offer(store, again, at=_iso(NOW))
+
+    assert outcome.added_as_new is False
+    assert outcome.matched_tombstone is None
+    assert load_lifecycle_offer(store, offer.id) == (offer, record)
+    assert store.path("offers", f"{offer.id}.json").read_bytes() == body
+
+
+def test_a_record_whose_body_is_missing_keeps_its_history(store: ProfileStore) -> None:
+    """T168, second reader F1: the history lives in the lifecycle record, so
+    that is what marks an offer as tracked. Guarding on the body instead reset
+    this shortlist to `new`."""
+    first = connect_manual(WAREHOUSE_AD)
+    collect_offer(store, first, at=_old(NOW))
+    offer, record = load_lifecycle_offer(store, first.id)
+    offer, record = transition(offer, record, "shortlisted", at=_old(NOW))
+    save_lifecycle_offer(store, offer, record)
+    store.path("offers", f"{offer.id}.json").unlink()
+    companion = store.path("offers", "lifecycle", f"{offer.id}.json")
+    kept = companion.read_bytes()
+
+    outcome = collect_offer(store, connect_manual(WAREHOUSE_AD), at=_iso(NOW))
+
+    assert outcome.added_as_new is False
+    assert companion.read_bytes() == kept
+
+
+def test_a_body_without_its_record_is_repaired_by_recollection(store: ProfileStore) -> None:
+    """The other half-written pair: `save_lifecycle_offer` interrupted between
+    its two writes on a first save. There is no history to lose, and leaving it
+    would make the offer unloadable for good."""
+    offer = connect_manual(WAREHOUSE_AD)
+    collect_offer(store, offer, at=_old(NOW))
+    store.path("offers", "lifecycle", f"{offer.id}.json").unlink()
+
+    outcome = collect_offer(store, connect_manual(WAREHOUSE_AD), at=_iso(NOW))
+
+    assert outcome.added_as_new is True
+    assert load_lifecycle_offer(store, offer.id)[1].current_status == "new"
+
+
+def test_a_revived_offer_sighted_again_still_counts_on_its_tombstone(store: ProfileStore) -> None:
+    """T168, second reader F2: the tombstone check runs before the stored-offer
+    check, so §7.4's `resightings` still increments for a revived offer — and
+    its lifecycle is left alone either way."""
+    url = "https://portal-a.example.com/j/1"
+    offer = connect_manual(WAREHOUSE_AD, url=url)
+    record = track_new_offer(offer, at=_old(NOW))
+    offer, record = transition(offer, record, "screened_out", at=_old(NOW))
+    save_lifecycle_offer(store, offer, record)
+    purge_offer(store, offer.id, at=_iso(NOW), now=NOW)
+    revive(store, offer.id, connect_manual(WAREHOUSE_AD, url=url), at=_iso(NOW))
+    companion = store.path("offers", "lifecycle", f"{offer.id}.json")
+    kept = companion.read_bytes()
+
+    outcome = collect_offer(store, connect_manual(WAREHOUSE_AD, url=url), at=_iso(NOW))
+
+    assert outcome.added_as_new is False
+    assert outcome.matched_tombstone == offer.id
+    assert current_tombstones(store)[offer.id].resightings == 1
+    assert companion.read_bytes() == kept
 
 
 def test_explicit_revival_restores_and_keeps_the_tombstone(store: ProfileStore) -> None:

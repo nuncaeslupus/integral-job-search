@@ -29,7 +29,7 @@ Three things it refuses to blur, each of which a naive loop would:
 * **Untrusted, versus empty.** `collect_listing` reports a stale connector, and
   a stale connector's empty page is not evidence about the market.
 
-And one thing it refuses to do (T166): send a `client: browser` board to the
+And one thing it refuses to do (T173): send a `client: browser` board to the
 plain fetch. Such a board serves its listing only to a client that runs its
 JavaScript check, so a plain request is certain to be refused, and the only
 ways to make one pass are evasion. It is read from a page the candidate's own
@@ -80,7 +80,7 @@ from integral.robots import Robots, RobotsError
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T126.json"
-DEFAULT_BROWSER_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T166.json"
+DEFAULT_BROWSER_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T173.json"
 
 #: The first line of a page the candidate's browser saved: the URL it was
 #: rendered from. Written by the capture snippet in the step-7 skill, and the
@@ -169,7 +169,7 @@ def from_captures(paths: Iterable[Path]) -> Fetch:
 
 
 def needs_browser(connector: Connector) -> bool:
-    """Whether this board is served only to a real browser (T166)."""
+    """Whether this board is served only to a real browser (T173)."""
     detail = connector.detail
     return connector.list.client == "browser" or (detail is not None and detail.client == "browser")
 
@@ -344,7 +344,7 @@ def source(
     `browser` answers the boards `needs_browser` names — normally
     `from_captures` over the pages `browser_urls` asked the candidate's browser
     to save. Without it those boards are reported skipped; they are never sent
-    to `fetch` (T166).
+    to `fetch` (T173).
     """
     from integral.search_terms import save_aim  # circular at module scope
 
@@ -510,7 +510,7 @@ def _one_board(
     except ConnectorError as exc:
         return BoardOutcome(package.name, None, steerable, query, error=str(exc))
 
-    # T166. A plain request to this board is certain to be refused, and the only
+    # T173. A plain request to this board is certain to be refused, and the only
     # ways to make it pass are evasion — so it is never made. Decided after
     # robots, below: a path nobody may read is not one to send a browser to.
     via: str | None = None
@@ -681,7 +681,7 @@ def _record_fetch(
             "query": query,
             "at": at,
             "offer_ids": list(offer_ids),
-            # Present only when the page did not come from `fetch` (T166).
+            # Present only when the page did not come from `fetch` (T173).
             **({"via": via} if via else {}),
         },
         "offers",
@@ -884,7 +884,7 @@ def measure_fixture() -> dict[str, Any]:
 
 
 def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
-    """T166's gate reading: `browser_boards_fetched_over_plain_http`.
+    """T173's gate reading: `browser_boards_fetched_over_plain_http`.
 
     Three constructed runs over the installed Spanish boards — no browser, a
     browser holding the right page, a browser holding a page of another search
@@ -986,7 +986,7 @@ def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
 
 
 def _main(argv: list[str] | None = None) -> int:
-    """`python -m integral.sourcing` — T126's and T166's evidence.
+    """`python -m integral.sourcing` — T126's and T173's evidence.
 
     The two gates' exits are combined by `gate_exit.worst`, never by hand: a
     hand-rolled "unmeasured wins" let one gate's failure hide behind the

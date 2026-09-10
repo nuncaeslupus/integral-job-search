@@ -131,7 +131,7 @@ BLOCK_PAGE_MARKERS: tuple[str, ...] = (
     "rate limit",
     "captcha",
     "_incapsula_resource",
-    # T166, infojobs.net's edge page, 2026-09-10 — its heading and the vendor's
+    # T173, infojobs.net's edge page, 2026-09-10 — its heading and the vendor's
     # own sentence. Until these, that page was caught only because `captcha`
     # sits in its canonical link and an element id: markup, not text, one
     # rename from reading as an empty board.
@@ -708,7 +708,7 @@ RATE_LIMIT_SAMPLES: tuple[tuple[str, int | None, str], ...] = (
         200,
         "<html><body><iframe src='/_Incapsula_Resource?SWCGHOEL'></iframe></body></html>",
     ),
-    # T166. The page infojobs.net's CDN edge serves this tool, excerpted from a
+    # T173. The page infojobs.net's CDN edge serves this tool, excerpted from a
     # live 29,762-byte response on 2026-09-10 (canonical link, heading, the
     # hidden vendor sentence — byte-identical, the rest cut). A 200 with no
     # listing in it, and never "no jobs": a real browser is served the board.
