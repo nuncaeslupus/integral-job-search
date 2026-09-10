@@ -592,7 +592,10 @@ def test_a_paged_board_stopped_on_page_two_keeps_page_one(
 
 
 def _detail_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, adverts_robots: str | None
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    adverts_robots: str | None,
+    advert_status: int = 200,
 ) -> tuple[Any, list[str], list[float]]:
     """Two employers, two rows each, every body on an advert host of its own."""
     import urllib.error
@@ -624,7 +627,9 @@ def _detail_run(
     def fetch(request: ListRequest) -> Response:
         if "adverts" in request.url:
             # One body per advert: identical bodies are one offer to dedup.
-            return Response(200, f"<div class='content'>the advert at {request.url}</div>")
+            return Response(
+                advert_status, f"<div class='content'>the advert at {request.url}</div>"
+            )
         slug = request.url.split("/")[-2]
         rows = [
             {"title": f"{slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"} for n in (1, 2)
@@ -671,6 +676,22 @@ def test_the_advert_host_crawl_delay_is_kept_and_a_budget_stop_is_named(
     assert (outcome.added, outcome.detail_fetched) == (3, 3)
     assert pauses.count(5.0) == 3
     assert outcome.drop_reason and "budget ran out" in outcome.drop_reason
+
+
+def test_a_refused_advert_host_is_asked_once_across_employers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T174 (#445 R3-3): Lever routes every row through jobs.lever.co. A 429
+    there on the first advert used to be followed by the rest of the budget,
+    each row reported as "no text". The list host is another origin, so the
+    second employer's list is still read; its adverts are not."""
+    run, _, _ = _detail_run(
+        tmp_path, monkeypatch, adverts_robots="User-agent: *\nAllow: /\n", advert_status=429
+    )
+    (outcome,) = run.outcomes
+    assert (outcome.items, outcome.detail_needed, outcome.detail_fetched) == (4, 4, 1), outcome
+    assert outcome.refused and "429" in outcome.refused, outcome
+    assert outcome.dropped == 0 and not outcome.reached_the_board, outcome
 
 
 def test_every_employer_failing_is_an_error(tmp_path: Path) -> None:

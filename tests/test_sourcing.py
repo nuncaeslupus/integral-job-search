@@ -9,6 +9,7 @@ a failed run into a run that looks empty.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -272,6 +273,9 @@ def test_the_gate_measures_a_real_run_and_its_control() -> None:
     assert measured["sourced_offers_without_a_recorded_fetch"] == 0
     assert measured["sourced_offers_evaluated"] > 0
     assert measured["unrecorded_offers_detected_by_the_control"] == 1
+    assert measured["advert_requests_after_a_refusal"] == 0
+    assert measured["refused_boards_listed_as_reached"] == 0
+    assert measured["boards_with_a_second_advert_to_refuse"] > 0
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +472,126 @@ def test_an_advert_page_that_answered_with_an_error_is_not_read_as_an_advert(
     assert starved, "no board needed a detail page, so this proves nothing"
     for outcome in starved:
         assert outcome.detail_needed == outcome.dropped, outcome
+
+
+# ---------------------------------------------------------------------------
+# T174 — a refusal on the advert page stops the host, and is reported as one
+
+
+def _hosts(urls: list[str]) -> dict[str, int]:
+    from collections import Counter
+    from urllib.parse import urlsplit
+
+    return dict(Counter(urlsplit(url).netloc for url in urls))
+
+
+@pytest.mark.parametrize("status", [403, 429, 503])
+def test_a_refused_advert_page_is_the_last_one_asked_of_that_host(
+    store: ProfileStore, status: int
+) -> None:
+    """#445 R3-3. The list rule stopped on a 429; the advert page's did not, so
+    one refusal was followed by 39 more requests to the host that refused, and
+    the rows were reported as "no text" — a connector defect — rather than as
+    the board saying stop."""
+    seen: list[str] = []
+    run = _run(store, _answer_with_detail(detail_status=status, seen=seen))
+    needing = [o for o in run.outcomes if o.detail_needed]
+    assert needing, "no board needed an advert page, so this proves nothing"
+    assert any(o.detail_needed > 1 for o in needing), "one row cannot show a second fetch"
+    assert all(n == 1 for n in _hosts(seen).values()), _hosts(seen)
+    for outcome in needing:
+        assert outcome.refused and str(status) in outcome.refused, outcome
+        assert outcome.dropped == 0, outcome
+        assert outcome.connector in run.refused, run.summary()
+    assert "no 'text'" not in run.summary(), run.summary()
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [Response(429, "Too Many Requests"), Response(429, "", error="HTTP 429")],
+    ids=["body", "transport-error"],
+)
+def test_a_host_that_refused_is_not_asked_again_by_the_next_phrase(
+    store: ProfileStore, refusal: Response
+) -> None:
+    """A run asks a steerable board once per phrase. "Stop" from the host on the
+    first is the answer for the rest of the run, list page or advert page —
+    whichever way the fetcher shaped the 429."""
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return refusal
+
+    run = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python", "java", "go")),
+        fetch=fetch,
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert len(run.outcomes) > len(_hosts(asked)), "no host had a second phrase to refuse"
+    assert all(n == 1 for n in _hosts(asked).values()), _hosts(asked)
+    assert all(o.refused and "429" in o.refused for o in run.outcomes), run.summary()
+
+
+def test_a_refused_advert_page_stops_the_next_phrases_list_too(store: ProfileStore) -> None:
+    """The advert page and the list share a host on every ES board, and the
+    next phrase's list request is still a request to the host that said stop."""
+    from integral.connector_coverage import installed_packages
+    from integral.sourcing import _one_board
+
+    package = next(p for p in installed_packages(_CONNECTORS) if p.name == "getmanfred_es")
+    refused: dict[str, str] = {}
+    seen: list[str] = []
+    answer: Callable[[ListRequest], Response] = _answer_with_detail(detail_status=429)
+
+    def fetch(request: ListRequest) -> Response:
+        seen.append(request.url)
+        return answer(request)
+
+    def board() -> Any:
+        return _one_board(
+            store,
+            package,
+            "python",
+            fetch=fetch,
+            at=AT,
+            directory=_CONNECTORS,
+            page_count=1,
+            robots=_robots(),
+            refused_origins=refused,
+        )
+
+    first = board()
+    assert first.refused and len(seen) == 2, (first, seen)  # the list, then one advert
+    second = board()
+    assert len(seen) == 2, seen
+    assert second.refused and "429" in second.refused, second
+
+
+def test_a_refused_board_is_not_listed_as_reached(store: ProfileStore) -> None:
+    """#445 R3-4. "Searched for your terms" and "returned their whole list" say
+    the board answered. One that refused did not, list page or advert page."""
+    listed = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(429, "Too Many Requests"),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert listed.refused, listed.summary()
+    assert listed.steered == [] and listed.unsteered == [], listed.summary()
+    assert "searched for your terms" not in listed.summary(), listed.summary()
+    assert "returned their whole list" not in listed.summary(), listed.summary()
+
+    advert = _run(store, _answer_with_detail(detail_status=429))
+    assert advert.refused, advert.summary()
+    assert not set(advert.refused) & set(advert.steered + advert.unsteered), advert.summary()
 
 
 def test_the_advert_page_gets_its_own_clients_headers(store: ProfileStore) -> None:
