@@ -186,10 +186,49 @@ def test_the_probe_was_recorded_from_the_request_the_connector_sends() -> None:
     assert build_list_urls(CONNECTOR, page_count=1, query=query) == [captured["url"]]
 
 
+def _echoed_query(html: str) -> str:
+    """What the board says it searched for: the value it writes back into its
+    own `CADENA` box. A page that ignored the key echoes nothing — the category
+    page `fixture/` was recorded from echoes `""`."""
+    from integral.connectors import compile_selector, parse_html, select_all
+
+    boxes = select_all(parse_html(html), compile_selector('input[name="CADENA"]'))
+    assert len(boxes) == 1, f"{len(boxes)} CADENA boxes on the page"
+    return boxes[0].attrs.get("value", "")
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        pytest.param((DEFAULT_PACKAGE / "probe" / "list.html").read_text("utf-8"), id="probe"),
+        pytest.param(NO_HITS_HTML, id="no-hits"),
+    ],
+)
+def test_the_board_searched_for_the_term_the_connector_sends(html: str) -> None:
+    """The test above binds the pattern to the probe's URL, not to the board
+    having read it. The second reader on #447 (round 2) moved the pattern to
+    `atencion_al_cliente?CADENA={query}`, a path where the board ignores the key,
+    re-recorded the probe honestly from it, and everything passed.
+
+    So the board's own answer is read instead. Each committed page echoes the
+    term it searched for, and the connector must send exactly that term, and
+    nothing else, in `CADENA`. Two pages carrying two different terms mean a
+    pattern hard-coding one term cannot satisfy both."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from integral.connectors import build_list_urls
+
+    echoed = _echoed_query(html)
+    (url,) = build_list_urls(CONNECTOR, page_count=1, query=echoed)
+
+    assert echoed, "the page echoes no search term — the board did not read one"
+    assert parse_qs(urlsplit(url).query) == {"CADENA": [echoed]}
+
+
 def test_a_search_with_no_hits_parses_to_no_rows() -> None:
     """A miss must be empty, not a fallback list — infoempleo.com's page is
     ruled out in `connectors/ruled-out.yaml` for exactly that. The capture is
     the board's answer to a nonsense word, and it echoes the word back in its
     own search box, so this is a results page and not an empty file."""
-    assert 'name="CADENA" class="liviano" value="zzqxvw"' in NO_HITS_HTML
+    assert _echoed_query(NO_HITS_HTML) == "zzqxvw"
     assert parse_list_page(CONNECTOR, NO_HITS_HTML) == []

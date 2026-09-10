@@ -45,9 +45,11 @@ list:
   # farmacia` (40 rows, 19 of them titled farm-/dermo-/cosm-), and
   # `tests/fixtures/connectors/trabajos_es_no_hits.html` is its answer to a
   # nonsense word — zero rows, not a fallback list, so an empty answer here
-  # means empty. `tests/test_connect_portal.py` pins both, including that this
-  # pattern rebuilds the probe's URL exactly: a key the board ignores would
-  # still carry `{query}` and pass every other test. The search page serves the
+  # means empty. `tests/test_connect_portal.py` pins both. This pattern must
+  # rebuild the probe's URL exactly. And each page echoes the term it searched
+  # for in its own `CADENA` box, which this pattern must send back unchanged: a
+  # key or a path the board ignores still carries `{query}`, but echoes nothing
+  # (the category page `fixture/` came from echoes ""). The search page serves the
   # same `.listado2014.card.oferta` markup as the category page `fixture/` was
   # recorded from.
   url_pattern: "https://www.trabajos.com/ofertas-empleo/?CADENA={query}"
