@@ -613,9 +613,17 @@ _NOT_ADDRESSES = {
 
 
 def _quads_in_every_file() -> dict[tuple[str, str], None]:
-    """Every globally routable IPv4 literal in every file the repository ships
+    """Every globally routable IP literal in every file the repository ships
     or is about to — tracked, plus untracked and not ignored, so a capture that
-    is written but not yet staged is read as well."""
+    is written but not yet staged is read as well.
+
+    Read as bytes decoded latin-1, which cannot fail. A UTF-8-only read skipped
+    an ISO-8859-1 page whole, and those are the encodings the non-English
+    boards on the wanted list still serve. Three spellings are read: a dotted
+    quad (octets normalised, so `037.018.…` is the address it names), the
+    dashed form a reverse-DNS hostname carries, and IPv6. On the tree this
+    landed on, the dashed and IPv6 readings found nothing that is not an
+    address, so reading them costs no exceptions."""
     import ipaddress
     import subprocess
 
@@ -627,23 +635,26 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
     ).stdout.decode("utf-8")
     names = [name for name in listed.split("\0") if name and (repo / name).is_file()]
     assert len(names) > 1000, f"git listed {len(names)} files — the scan did not run"
-    quad = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    v4 = re.compile(r"(?<![\w.])(\d{1,3})([.-])(\d{1,3})\2(\d{1,3})\2(\d{1,3})(?![\w-])")
+    v6 = re.compile(r"(?<![\w:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])")
     found: dict[tuple[str, str], None] = {}
     for name in names:
-        try:
-            text = (repo / name).read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        for match in quad.finditer(text):
-            literal = match.group()
+        text = (repo / name).read_bytes().decode("latin-1")
+        for match in v4.finditer(text):
             if text[max(0, match.start() - 2) : match.start()].rstrip().endswith("§"):
                 continue  # `§2.3.1.3`: an RFC section number, however many are cited
+            octets = [int(match.group(i)) for i in (1, 3, 4, 5)]
+            if max(octets) > 255:
+                continue  # SVG coordinates, not an address
+            if ipaddress.IPv4Address(".".join(map(str, octets))).is_global:
+                found[(name, ".".join(map(str, octets)))] = None
+        for match in v6.finditer(text):
             try:
-                address = ipaddress.IPv4Address(literal)
+                address = ipaddress.IPv6Address(match.group())
             except ValueError:
-                continue  # an octet above 255: SVG coordinates, not an address
+                continue
             if address.is_global:
-                found[(name, literal)] = None
+                found[(name, str(address))] = None
     return found
 
 

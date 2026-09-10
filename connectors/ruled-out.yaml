@@ -522,17 +522,23 @@ edge_blocked:
   - site: es.jooble.org
     checked: "2026-09-10"
     detail: "robots allows /trabajo-tecnico-farmacia/Barcelona; the GET answers 403 to the tool's UA."
-    retest: "GET the path and read the status."
+    retest: >
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)" -o /dev/null -w '%{http_code}\n'
+      'https://es.jooble.org/trabajo-tecnico-farmacia/Barcelona'  # prints 403 today
   - site: es.indeed.com
     checked: "2026-09-10"
     detail: "robots allows /q-tecnico-farmacia-empleos.html; 403, as indeed.com below."
-    retest: "GET the path and read the status."
+    retest: >
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)" -o /dev/null -w '%{http_code}\n'
+      'https://es.indeed.com/q-tecnico-farmacia-empleos.html'  # prints 403 today
   - site: opcionempleo.com
     checked: "2026-09-10"
     detail: >
       robots allows /empleo-tecnico-farmacia-barcelona.html; the GET answers
       200 with 12 KB of challenge page and no adverts. Never bypassed.
-    retest: "GET the path; a body carrying adverts rather than a challenge means this changed."
+    retest: >
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)" -o /dev/null -w '%{http_code}\n'
+      'https://www.opcionempleo.com/empleo-tecnico-farmacia-barcelona.html'  # prints 200 and a body with no adverts today; adverts in the body mean this changed
   - site: nationalevacaturebank.nl
     checked: "2026-09-06"
     detail: "robots allows /vacature/zoeken; the GET answers 403 to the tool's UA on the first request."
@@ -888,7 +894,7 @@ authentication_required:
     retest: >
       uv run python -c "from integral.robots import Robots;
       print(Robots().allows('https://farmaceutics.cofb.net/group/guest/borsa-de-treball'))"
-      — prints False today.
+      # prints False today
 
 engine_gap_selector:
   # Boards that pass robots AND serve their adverts to an anonymous GET, and

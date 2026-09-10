@@ -51,7 +51,8 @@ fixture:
   # 2026-09-10 from the keyword search — the one other edit to those bytes, and
   # the sha256 in `probe/captured.json` is of the redacted file), and
   # `tests/fixtures/connectors/trabajos_es_no_hits.html`.
-  # `tests/test_connector_contract.py` refuses any recorded page carrying an
-  # IPv4 literal, in the library and under `tests/fixtures/`, for every board
-  # rather than this one, because the next board will write it somewhere else.
+  # `tests/test_connector_contract.py` refuses a globally routable IP address
+  # in any file git lists (dotted, dashed or IPv6, whatever the path, extension
+  # or encoding), for every board rather than this one, because the next board
+  # will write it somewhere else.
   client_ip: redacted

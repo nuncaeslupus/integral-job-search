@@ -186,15 +186,24 @@ def test_the_probe_was_recorded_from_the_request_the_connector_sends() -> None:
     assert build_list_urls(CONNECTOR, page_count=1, query=query) == [captured["url"]]
 
 
-def _echoed_query(html: str) -> str:
-    """What the board says it searched for: the value it writes back into its
-    own `CADENA` box. A page that ignored the key echoes nothing — the category
-    page `fixture/` was recorded from echoes `""`."""
+def _search_form(html: str) -> tuple[str, str]:
+    """The board's own search form: where it sends a search, and the term it
+    says it searched for, written back into the `CADENA` box inside that form.
+    A page that ignored the key echoes nothing — the category page `fixture/`
+    was recorded from echoes `""`."""
     from integral.connectors import compile_selector, parse_html, select_all
 
-    boxes = select_all(parse_html(html), compile_selector('input[name="CADENA"]'))
-    assert len(boxes) == 1, f"{len(boxes)} CADENA boxes on the page"
-    return boxes[0].attrs.get("value", "")
+    forms = select_all(parse_html(html), compile_selector("form#BUSCADOR"))
+    assert len(forms) == 1, f"{len(forms)} search forms on the page"
+    (form,) = forms
+    assert form.attrs.get("method", "").upper() == "GET"
+    boxes = select_all(form, compile_selector('input[name="CADENA"]'))
+    assert len(boxes) == 1, f"{len(boxes)} CADENA boxes in the search form"
+    return form.attrs.get("action", ""), boxes[0].attrs.get("value", "")
+
+
+def _echoed_query(html: str) -> str:
+    return _search_form(html)[1]
 
 
 @pytest.mark.parametrize(
@@ -212,17 +221,24 @@ def test_the_board_searched_for_the_term_the_connector_sends(html: str) -> None:
 
     So the board's own answer is read instead. Each committed page echoes the
     term it searched for, and the connector must send exactly that term, and
-    nothing else, in `CADENA`. Two pages carrying two different terms mean a
-    pattern hard-coding one term cannot satisfy both."""
+    nothing else, in `CADENA`, to the place the page's own search form sends
+    it. Two pages carrying two different terms mean a pattern hard-coding one
+    term cannot satisfy both."""
     from urllib.parse import parse_qs, urlsplit
 
     from integral.connectors import build_list_urls
 
-    echoed = _echoed_query(html)
+    action, echoed = _search_form(html)
     (url,) = build_list_urls(CONNECTOR, page_count=1, query=echoed)
+    sent, form = urlsplit(url), urlsplit(action)
 
     assert echoed, "the page echoes no search term — the board did not read one"
-    assert parse_qs(urlsplit(url).query) == {"CADENA": [echoed]}
+    # Round 3: the query string alone left the path free. A pattern losing one
+    # trailing slash is redirected to a page that echoes "ofertas empleo" and
+    # lists forty unrelated rows. The board's own form says where a search goes.
+    assert (sent.scheme, sent.netloc, sent.path) == (form.scheme, form.netloc, form.path)
+    # `keep_blank_values`: a trailing `&CADENA=` is the key the board reads last.
+    assert parse_qs(sent.query, keep_blank_values=True) == {"CADENA": [echoed]}
 
 
 def test_a_search_with_no_hits_parses_to_no_rows() -> None:
