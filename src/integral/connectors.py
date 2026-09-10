@@ -1607,7 +1607,17 @@ def _placeholder_carrying_query_key_occurrences(pattern: str) -> int:
 #: is `client_target`, which is a DOM element id — validated to a shape with no
 #: colon, no whitespace and no newline, so it cannot become a header of its own
 #: even by concatenation. There is still nowhere to write a credential.
-Client = Literal["htmx"]
+#:
+#: T166 — `browser`. Some boards serve their listing only to a client that runs
+#: their JavaScript check. Measured 2026-09-10 on infojobs.net: every search and
+#: advert GET from this tool answers a 200 "No podemos identificar tu navegador"
+#: page from the CDN edge, whatever the headers, while a real browser on the
+#: same network passes the same check silently and renders the listing. No
+#: header set can express that, and replaying the browser's token from a plain
+#: client would be evading the check. So `browser` sends nothing from here:
+#: `integral.sourcing` never hands such a board to the plain fetch at all, and
+#: reads it only from a page the candidate's own browser rendered.
+Client = Literal["htmx", "browser"]
 
 #: The id `client_target` may hold: what an HTML `id` attribute looks like, and
 #: nothing that could terminate a header or start a second one.
@@ -1620,7 +1630,7 @@ def client_headers(client: Client | None, target: str | None) -> dict[str, str]:
     Every name here is a literal in this module. A caller cannot reach this
     with a name of its own, which is the whole property being preserved.
     """
-    if client is None:
+    if client is None or client == "browser":
         return {}
     if client == "htmx":
         headers = {"HX-Request": "true"}

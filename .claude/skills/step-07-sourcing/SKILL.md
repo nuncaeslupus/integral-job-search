@@ -96,6 +96,49 @@ connector for a board you name, or work through your own browser session on a si
 logged into. Either of interest?"
 ```
 
+## Boards served only to a real browser — read them through the candidate's own
+
+Some boards show their listings only to a browser that runs their JavaScript check; the tool's
+own request gets a page saying the browser could not be identified. InfoJobs does this, and its
+connector says `client: browser`. `source()` never sends such a board to the plain fetch: without
+pages from the candidate's browser it reports the board **skipped**, and says so.
+
+**Never** get past the check any other way: no copying the browser's cookies or tokens into
+another client, no headless browser, no browser user agent on the tool's own requests, no CAPTCHA
+solving. If the candidate's browser shows a puzzle, stop and ask them to solve it themselves.
+
+1. **What to open.** `browser_urls(constraints, aim)` lists the searches, robots already checked.
+2. **Ask once, naming what will happen.** Saving a page is a download, and it needs a yes:
+
+   ```text
+   "InfoJobs only shows its listings to a real browser. I'll open these N searches in your Chrome
+   and save each page to your Downloads folder, about 1.3 MB each. OK?"
+   ```
+
+3. **Open each URL in the candidate's Chrome** and wait until the listing is on screen. The first
+   page stays blank for about ten seconds while the check runs. Then run this in the tab. It saves
+   the rendered page with the URL on its first line, so the page can answer only that search:
+
+   ```js
+   const html = `<!-- integral-capture: ${location.href} -->\n` + document.documentElement.outerHTML;
+   const a = document.createElement('a');
+   a.href = URL.createObjectURL(new Blob([html], {type: 'text/html'}));
+   a.download = 'integral-capture-' + Date.now() + '.html';
+   document.body.appendChild(a); a.click(); a.remove();
+   a.download
+   ```
+
+4. **Pass the pages in.** The files are in `$(xdg-user-dir DOWNLOAD)` (`~/Descargas` on a Spanish
+   desktop), named by the value the snippet returns:
+   `source(..., browser=from_captures([paths]))`. The fetch log records `via: candidate_browser`.
+5. **Liveness goes through the browser too.** Open each advert with its query string removed:
+   robots forbids InfoJobs' `applicationOrigin=`, so check `Robots().allows(url)` first. Capture it
+   the same way, then pass `url, html = read_capture(path)` into
+   `read_response(offer.id, 200, html, advert_url=<the URL opened>, final_url=url,
+   title=offer.title)`.
+
+Tell the candidate the saved pages stay in their Downloads folder and that they can delete them.
+
 ## Liveness — a search index is not a vacancy
 
 **Real searches are run inside the portals.** A general web search is for *discovering which portals

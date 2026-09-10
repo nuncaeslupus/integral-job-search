@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from integral.connector_health import rate_limited
 from integral.connectors import SEARCH_SOURCE
 from integral.gate_exit import worst
 from integral.offers import Offer
@@ -260,6 +261,15 @@ def read_response(
     phrase = dead_phrase_in(body)
     if phrase is not None:
         return SourceCheck(offer_id, "dead", f"the advert's own page says {phrase!r}")
+    # T166. With no title to compare, a bot-check page served 200 used to read
+    # `live` — infojobs.net serves exactly that to this tool for every advert
+    # (measured 2026-09-10). Consulted only when there is no title, because
+    # the identity check below is the stronger signal and every marker can
+    # occur in a real advert's text.
+    if title is None and (refusal := rate_limited(body, status)) is not None:
+        return SourceCheck(
+            offer_id, "unverified", f"{refusal} — being blocked is not the advert being open"
+        )
     if title is not None and not title_in_body(title, body):
         return SourceCheck(
             offer_id,
@@ -377,6 +387,15 @@ SCENARIOS: tuple[Scenario, ...] = (
         200,
         "<h1>Albañil</h1><p>PUESTO OCUPADO</p>",
         "dead",
+    ),
+    Scenario(
+        "infojobs, its edge bot-check page served 200 (T166)",
+        "infojobs_es",
+        200,
+        "<html><head><title>InfoJobs</title></head><body>"
+        "<h1>No podemos identificar tu navegador</h1>"
+        "<p>Comprueba que JavaScript esté habilitado en tu navegador.</p></body></html>",
+        "unverified",
     ),
     Scenario(
         "a board listing retired at source",

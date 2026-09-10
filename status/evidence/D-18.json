@@ -1,6 +1,6 @@
 {
   "offers_presented_without_a_liveness_check": 0,
-  "scenarios_probed": 12,
+  "scenarios_probed": 13,
   "dead_phrases_known": 9,
   "violations": [],
   "readings": [
@@ -38,6 +38,18 @@
       "presented": false,
       "expired": true,
       "reason": "the advert's own page says 'puesto ocupado'",
+      "reasons": []
+    },
+    {
+      "scenario": "infojobs, its edge bot-check page served 200 (T166)",
+      "source": "infojobs_es",
+      "index_sourced": false,
+      "title": null,
+      "liveness": "unverified",
+      "expected": "unverified",
+      "presented": false,
+      "expired": false,
+      "reason": "the capture is a challenge page, not a listing ('no podemos identificar tu navegador') — being blocked is not the advert being open",
       "reasons": []
     },
     {

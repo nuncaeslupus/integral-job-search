@@ -9,6 +9,7 @@ a failed run into a run that looks empty.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -19,10 +20,15 @@ from integral.connectors import ListRequest
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.sourcing import (
+    FETCH_LOG,
     Response,
+    browser_urls,
+    from_captures,
+    measure_browser_route,
     measure_fixture,
     offers_without_a_recorded_fetch,
     packages_for,
+    read_capture,
     source,
 )
 
@@ -495,3 +501,134 @@ def test_the_advert_page_gets_its_own_clients_headers(store: ProfileStore) -> No
     assert outcome.added, outcome
     assert seen[0] == {"HX-Request": "true", "HX-Target": "mc_1"}, seen[0]
     assert seen[1] == {"HX-Request": "true", "HX-Target": "mc_2"}, seen[1]
+
+
+# ---------------------------------------------------------------------------
+# T166 — a board served only to a real browser
+
+
+_INFOJOBS_SEARCH = "https://www.infojobs.net/ofertas-trabajo/farmaceutico/barcelona"
+
+
+def _pharmacy() -> Aim:
+    return Aim(state="stated", terms=("farmaceutico",))
+
+
+def _saved_page(tmp_path: Path, url: str) -> Path:
+    """What the step-7 snippet writes: the URL line, then the rendered page."""
+    html = (_CONNECTORS / "infojobs_es" / "fixture" / "list.html").read_text(encoding="utf-8")
+    path = tmp_path / "integral-capture-1.html"
+    path.write_text(f"<!-- integral-capture: {url} -->\n{html}", encoding="utf-8")
+    return path
+
+
+def _plain_recording(asked: list[str]) -> Any:
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return Response(None, "", error="offline")
+
+    return fetch
+
+
+def _infojobs(run: Any) -> Any:
+    return next(o for o in run.outcomes if o.connector == "infojobs_es")
+
+
+def test_a_browser_board_is_never_sent_to_the_plain_fetch(store: ProfileStore) -> None:
+    """InfoJobs answers every plain request with its edge check page (measured
+    2026-09-10). Sending it anyway is a certain refusal, and the only ways to
+    make one pass are evasion — so with no browser page it is skipped, and
+    says what would answer it."""
+    asked: list[str] = []
+    run = source(
+        store,
+        _spain(),
+        _pharmacy(),
+        fetch=_plain_recording(asked),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert not [u for u in asked if "infojobs" in u], asked
+    assert asked, "the plain boards must still be fetched, or this proves nothing"
+    outcome = _infojobs(run)
+    assert outcome.skipped and "real browser" in outcome.skipped, run.summary()
+    assert outcome.url == _INFOJOBS_SEARCH
+
+
+def test_a_page_the_candidates_browser_saved_becomes_offers(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    asked: list[str] = []
+    run = source(
+        store,
+        _spain(),
+        _pharmacy(),
+        fetch=_plain_recording(asked),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+        browser=from_captures([_saved_page(tmp_path, _INFOJOBS_SEARCH)]),
+    )
+    assert not [u for u in asked if "infojobs" in u], asked
+    assert _infojobs(run).added == 3, run.summary()
+    rows = [
+        json.loads(line)
+        for line in Path(store.path("offers", FETCH_LOG)).read_text(encoding="utf-8").splitlines()
+    ]
+    [row] = [r for r in rows if r["connector"] == "infojobs_es"]
+    assert row["via"] == "candidate_browser"
+    assert row["url"] == _INFOJOBS_SEARCH
+    assert all("via" not in r for r in rows if r["connector"] != "infojobs_es")
+    assert offers_without_a_recorded_fetch(store) == []
+
+
+def test_a_saved_page_answers_only_the_search_it_names(store: ProfileStore, tmp_path: Path) -> None:
+    """A page saved for one search standing in for another hands the candidate
+    the wrong adverts as if they were the answer."""
+    other = "https://www.infojobs.net/ofertas-trabajo/enfermera/barcelona"
+    run = source(
+        store,
+        _spain(),
+        _pharmacy(),
+        fetch=_plain_recording([]),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+        browser=from_captures([_saved_page(tmp_path, other)]),
+    )
+    outcome = _infojobs(run)
+    assert outcome.added == 0 and outcome.error and _INFOJOBS_SEARCH in outcome.error, outcome
+
+
+def test_a_saved_page_that_does_not_name_its_url_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "page.html"
+    path.write_text("<html><body>a listing</body></html>", encoding="utf-8")
+    with pytest.raises(ValueError, match="integral-capture"):
+        from_captures([path])
+    assert read_capture(_saved_page(tmp_path, _INFOJOBS_SEARCH))[0] == _INFOJOBS_SEARCH
+
+
+def test_the_browser_is_sent_only_where_robots_allows() -> None:
+    assert browser_urls(_spain(), _pharmacy(), directory=_CONNECTORS, robots=_robots()) == [
+        _INFOJOBS_SEARCH
+    ]
+    refused = _robots("User-agent: *\nDisallow: /\n")
+    assert browser_urls(_spain(), _pharmacy(), directory=_CONNECTORS, robots=refused) == []
+    # The engine's own spelling of a phrase — what the browser must be sent to,
+    # and what it measured as keeping the Barcelona scope.
+    [url] = browser_urls(
+        _spain(),
+        Aim(state="stated", terms=("auxiliar de farmacia",)),
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert url == "https://www.infojobs.net/ofertas-trabajo/auxiliar%20de%20farmacia/barcelona"
+
+
+def test_the_browser_route_gate_measures_a_real_run() -> None:
+    measured = measure_browser_route()
+    assert measured["gate_status"] == "measured", measured
+    assert measured["browser_boards_fetched_over_plain_http"] == 0
+    assert measured["offers_collected_from_a_capture_of_another_search"] == 0
+    assert measured["offers_collected_through_the_browser"] > 0

@@ -25,7 +25,7 @@
     {
       "module": "connector_health",
       "name": "MINIMUM_PROBES_COMPARED",
-      "line": 943
+      "line": 977
     },
     {
       "module": "connector_policy",
@@ -155,12 +155,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 95
+      "line": 109
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 87
+      "line": 101
     },
     {
       "module": "spec_consistency",
@@ -206,7 +206,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3836,
+      "line": 3846,
       "population": 15
     },
     {
