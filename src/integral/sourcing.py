@@ -121,7 +121,7 @@ GLOBAL = "GLOBAL"
 #: without moving.
 _WORLDWIDE_REACH = frozenset({"remote", "cross_border_remote_employer"})
 
-_CEILING_SKIP = f"the run reached its {OFFER_CEILING}-offer ceiling"
+_CEILING_SKIP = "the run reached its offer ceiling"
 
 
 @dataclass(frozen=True)
@@ -193,15 +193,21 @@ class Run:
     #: partial pass as a whole one.
     unsearched: tuple[str, ...] = ()
     #: Worldwide boards left out because the candidate's reach does not include
-    #: remote work. Said, so a quiet run is not read as a quiet world.
+    #: remote work, and why in the candidate's terms. Said, so a quiet run is
+    #: not read as a quiet world.
     unreached: tuple[str, ...] = ()
+    unreached_because: str = ""
 
     @property
     def searched(self) -> list[str]:
-        """The phrases this run actually asked for, in order, without repeats."""
+        """The phrases this run actually asked for, in order, without repeats.
+
+        Only outcomes that reached a board count: one stopped by the ceiling or
+        by robots carries its phrase and never sent it.
+        """
         seen: list[str] = []
         for outcome in self.outcomes:
-            if outcome.query and outcome.query not in seen:
+            if outcome.reached_the_board and outcome.query and outcome.query not in seen:
                 seen.append(outcome.query)
         return seen
 
@@ -260,12 +266,24 @@ class Run:
             lines.append(f"  returned their whole list: {', '.join(self.unsteered)}")
         if self.unreached:
             lines.append(
-                "  NOT asked — worldwide boards, and your reach does not include remote "
-                f"work: {', '.join(self.unreached)}"
+                f"  NOT asked — worldwide boards, {self.unreached_because}: "
+                f"{', '.join(self.unreached)}"
             )
-        ceilinged = self._boards(lambda o: o.skipped == _CEILING_SKIP)
+        if self.added >= OFFER_CEILING:
+            # Printed on the total, not only on the rows it cut: a ceiling that
+            # fills exactly at a page's end stops the next page and leaves no
+            # row over it, and that run must not read as a complete pass.
+            lines.append(
+                f"  STOPPED at the {OFFER_CEILING}-offer ceiling — rows, pages and boards "
+                "after it were not read"
+            )
+        ceilinged = [
+            f"{o.connector} ({o.query})" if o.query else o.connector
+            for o in self.outcomes
+            if o.skipped == _CEILING_SKIP
+        ]
         if ceilinged:
-            lines.append(f"  NOT asked — {_CEILING_SKIP}: {', '.join(ceilinged)}")
+            lines.append(f"  NOT asked, after the ceiling: {', '.join(ceilinged)}")
         for outcome in self.outcomes:
             if outcome.off_aim:
                 lines.append(
@@ -335,12 +353,32 @@ def reaches_worldwide(constraints: CandidateConstraints) -> bool:
     return reach.state == "stated" and not _WORLDWIDE_REACH.isdisjoint(reach.modes)
 
 
+def _why_not_worldwide(constraints: CandidateConstraints) -> str:
+    """Why worldwide boards were left out, without claiming an answer nobody gave.
+
+    "Does not include remote work" is true only of a stated reach. An unknown
+    one is step 7's own conversational duty — establish how far the search can
+    travel — so it says the question is open.
+    """
+    state = constraints.reach.state
+    if state == "unknown":
+        return "since you have not said whether you would work remotely — worth asking"
+    if state == "declined":
+        return "since you preferred not to say whether you would work remotely"
+    return "since your reach does not include remote work"
+
+
 def _words(text: str) -> set[str]:
-    """Casefolded, accent-folded words. A trailing `+`/`#` stays on its word,
-    so `c++` and `c#` are words of their own rather than two spellings of `c`."""
+    """Casefolded, NFKD-folded words (NFKD, not NFD: it is what turns Catalan
+    `ŀ` into `l·` and fullwidth letters into ASCII).
+
+    A `+`/`#` run stays on its word only where the token ends — `c++` and `c#`
+    are words of their own — so `I+D+i` is `i, d, i` and `Python+Django` is two
+    words, exactly as `R&D&I` already was.
+    """
     decomposed = unicodedata.normalize("NFKD", text.casefold())
     bare = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return set(re.findall(r"\w+[+#]*", bare))
+    return set(re.findall(r"\w+(?:[+#]++(?!\w))?", bare))
 
 
 def matches_aim(item: dict[str, str], phrases: Sequence[str]) -> bool:
@@ -355,6 +393,11 @@ def matches_aim(item: dict[str, str], phrases: Sequence[str]) -> bool:
     ponytail: whole words only, so "developers" does not match "developer" and
     "ingeniera" does not match "ingeniero"; stemming per language if that loses
     real adverts. A phrase with no words matches nothing, never everything.
+
+    ponytail: a leading `.` is not part of a word, so ".net developer" also
+    matches "net salary ... developer tools". Kept deliberately: boards write
+    `.NET` as `NET` too (infojobs_es's capture: "Arquitecto NET"), and the
+    stricter rule would lose those adverts to save a row the ceiling bounds.
     """
     have = _words(" ".join(item.get(key) or "" for key in ("title", "text")))
     return any((need := _words(phrase)) and need <= have for phrase in phrases)
@@ -399,6 +442,7 @@ def source(
         run.unreached = tuple(
             p.name for p in installed_packages(directory) if p.usable and p.country == GLOBAL
         )
+        run.unreached_because = _why_not_worldwide(constraints)
     phrases = aim.terms[:PHRASE_CEILING]
     for package in packages_for(constraints, directory):
         # A board that does not search returns the same list whatever was
@@ -901,24 +945,38 @@ def measure_fixture() -> dict[str, Any]:
 
 FLOOD_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T167.json"
 
-#: The constructed worldwide board: one row in `_FLOOD_EVERY` is a match for
-#: `_FLOOD_PHRASE`, the rest are not. Enough matches to overrun `OFFER_CEILING`
-#: twice, so the ceiling is exercised rather than merely present.
-_FLOOD_ROWS = 300
-_FLOOD_EVERY = 3
-_FLOOD_PHRASE = "python engineer"
+#: The constructed flood (T167): two worldwide boards of two pages each, so
+#: the per-run ceiling, the page stop and the board stop all sit inside it.
+#: Each page has 120 rows in a cycle of four: two match `_FLOOD_TERMS[0]` and
+#: two are near misses carrying exactly one of its words — off-aim by "every
+#: word", and invisible to a filter that only ever met rows sharing none. A
+#: page carries 60 matches, so the ceiling fills part-way through the first.
+_FLOOD_BOARDS = ("flood", "deluge")
+_FLOOD_PAGES = 2
+_FLOOD_PAGE_ROWS = 120
+_FLOOD_KINDS = (
+    ("Senior Python Engineer", True),
+    ("Python Developer", False),
+    ("Engineer, Python platform", True),
+    ("Sales Engineer", False),
+)
+#: The second is a phrase with no words, as a candidate may type one. It must
+#: match nothing; a matcher for which it matches everything floods the tree.
+_FLOOD_TERMS = ("python engineer", "—")
 
 _FLOOD_CONNECTOR = """\
-site: flood
+site: SITE
 locale: en
 version: "1.0.0"
 last_verified: "2026-09-10"
 auth: none
 list:
-  url_pattern: "https://flood.integral.local/jobs"
+  url_pattern: "https://SITE.integral.local/jobs?page={page}"
   pagination:
-    mode: none
-    max_pages: 1
+    mode: query_param
+    param: page
+    start: 1
+    max_pages: 2
   item: ".job"
   fields:
     detail_url:
@@ -933,46 +991,74 @@ list:
 """
 
 
-def flood_board(directory: Path) -> tuple[str, set[str], set[str]]:
-    """Install a worldwide board under `directory`; return its list page and the
-    advert texts that match `_FLOOD_PHRASE` and that do not.
+@dataclass(frozen=True)
+class FloodPage:
+    """One served page, and which of its advert texts match by construction."""
+
+    html: str
+    matching: frozenset[str]
+    off_aim: frozenset[str]
+
+
+def flood_board(directory: Path, site: str = "flood") -> dict[str, FloodPage]:
+    """Install one worldwide board under `directory`; return its pages by URL.
 
     The labels come from construction, never from `matches_aim` — a gate that
     asked the matcher which rows were off-aim would certify the matcher by its
     own answer.
     """
-    package = directory / "flood_en"
+    package = directory / f"{site}_en"
     package.mkdir(parents=True)
-    (package / "connector.yaml").write_text(_FLOOD_CONNECTOR, encoding="utf-8")
-    (package / "meta.yaml").write_text(
-        f"site: flood.integral.local\ncountry: {GLOBAL}\nlanguage: en\n",
-        encoding="utf-8",
+    (package / "connector.yaml").write_text(
+        _FLOOD_CONNECTOR.replace("SITE", site), encoding="utf-8"
     )
-    matching: set[str] = set()
-    off_aim: set[str] = set()
-    cards = []
-    for i in range(_FLOOD_ROWS):
-        hit = i % _FLOOD_EVERY == 0
-        title = f"Senior Python Engineer {i}" if hit else f"Account Manager {i}"
-        text = f"Advert {i}: {title}, fully remote."
-        (matching if hit else off_aim).add(text)
-        cards.append(
-            f'<div class="job"><a href="/jobs/{i}">{title}</a><span class="title">{title}</span>'
-            f'<span class="company">Employer {i}</span><span class="text">{text}</span></div>'
+    (package / "meta.yaml").write_text(
+        f"site: {site}.integral.local\ncountry: {GLOBAL}\nlanguage: en\n", encoding="utf-8"
+    )
+    pages: dict[str, FloodPage] = {}
+    for number in range(1, _FLOOD_PAGES + 1):
+        matching: set[str] = set()
+        off_aim: set[str] = set()
+        cards = []
+        for i in range(_FLOOD_PAGE_ROWS):
+            kind, hit = _FLOOD_KINDS[i % len(_FLOOD_KINDS)]
+            title = f"{kind} {site}-{number}-{i}"
+            text = f"Advert {site}-{number}-{i}: {title}, fully remote."
+            (matching if hit else off_aim).add(text)
+            cards.append(
+                f'<div class="job"><a href="/jobs/{number}-{i}">{title}</a>'
+                f'<span class="title">{title}</span><span class="company">Employer {i}</span>'
+                f'<span class="text">{text}</span></div>'
+            )
+        url = f"https://{site}.integral.local/jobs?page={number}"
+        pages[url] = FloodPage(
+            "<html><body>" + "".join(cards) + "</body></html>",
+            frozenset(matching),
+            frozenset(off_aim),
         )
-    return "<html><body>" + "".join(cards) + "</body></html>", matching, off_aim
+    return pages
 
 
 def measure_flood() -> dict[str, Any]:
-    """T167's gate: a worldwide board that returns far more than was asked for.
+    """T167's gate: worldwide boards that return far more than was asked for.
 
-    A remote-reaching candidate searches one phrase; the board hands over 300
-    rows, 100 of which match. The run must write no off-aim row, no more than
-    `OFFER_CEILING` offers, and account for every row it did not write as
-    filtered or over the ceiling — never as nothing. And the same candidate
-    with an unknown reach must not be sent to the board at all.
+    A remote-reaching candidate searches; two boards of two pages hand over 480
+    rows, half of which match. Every component below is something the ceiling
+    or the filter was built to refuse, and each is read off the run's effects —
+    what reached disk, which requests went out — rather than off its report:
+
+    * an off-aim row written as an offer;
+    * an offer written past `OFFER_CEILING` (whose value is also recorded, so
+      raising it moves committed evidence rather than passing quietly);
+    * a request made once the ceiling's offers were on disk — the next page,
+      the next board, an advert page;
+    * a board reported as asked that was sent no request;
+    * a served row the outcome does not account for, or an off-aim count that
+      disagrees with the off-aim rows actually served;
+    * a worldwide board selected for the same candidate with an unknown reach.
     """
     import tempfile
+    from urllib.parse import urlsplit
 
     from integral.candidate import Reach
     from integral.identity import create_profile
@@ -981,54 +1067,80 @@ def measure_flood() -> dict[str, Any]:
     location = ConstraintLocation(state="stated", country="ES", accepts_onsite_in_country=True)
     remote = CandidateConstraints(location=location, reach=Reach(state="stated", modes=("remote",)))
     unknown = CandidateConstraints(location=location)
-    aim = Aim(state="stated", terms=(_FLOOD_PHRASE,))
+    aim = Aim(state="stated", terms=_FLOOD_TERMS)
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         directory = root / "connectors"
-        page, matching, off_aim = flood_board(directory)
+        pages: dict[str, FloodPage] = {}
+        for site in _FLOOD_BOARDS:
+            pages |= flood_board(directory, site)
         create_profile(root, "Fixture", handle="fixture", language="en", fiction=True)
         store = ProfileStore(root, "fixture")
+        offers_dir = Path(store.path("offers"))
+
+        def on_disk() -> list[Path]:
+            return [p for p in offers_dir.glob("*.json") if not p.name.startswith("_")]
+
+        served: list[str] = []
+        late: list[str] = []
+
+        def fetch(request: ListRequest) -> Response:
+            if len(on_disk()) >= OFFER_CEILING:
+                late.append(request.url)
+            served.append(request.url)
+            page = pages.get(request.url)
+            return Response(200, page.html) if page else Response(404, "", error="no page")
+
         run = source(
             store,
             remote,
             aim,
-            fetch=lambda request: Response(200, page),
+            fetch=fetch,
             at="2026-01-01T00:00:00+00:00",
             directory=directory,
+            page_count=_FLOOD_PAGES,
             robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
         )
-        written = [
-            load_offer(store, path.stem).text
-            for path in Path(store.path("offers")).glob("*.json")
-            if not path.name.startswith("_")
-        ]
+        written = [load_offer(store, path.stem).text for path in on_disk()]
         selected_without_reach = [p.name for p in packages_for(unknown, directory)]
 
-    served = sum(o.items for o in run.outcomes)
-    accounted = len(written) + sum(o.off_aim + o.over_ceiling for o in run.outcomes)
+    off_aim = frozenset().union(*(page.off_aim for page in pages.values()))
+    asked = {f"{(urlsplit(url).hostname or '').split('.')[0]}_en" for url in served}
+    served_off_aim = sum(len(pages[url].off_aim) for url in served if url in pages)
     components = {
         "offers_written_off_aim": sum(1 for text in written if text in off_aim),
         "offers_written_past_the_ceiling": max(0, len(written) - OFFER_CEILING),
-        "rows_not_accounted_for": served - accounted,
+        "requests_after_the_ceiling": len(late),
+        "boards_reported_asked_without_a_request": len(
+            {o.connector for o in run.outcomes if o.reached_the_board} - asked
+        ),
+        "rows_not_accounted_for": sum(
+            abs(o.items - (o.off_aim + o.over_ceiling + o.unopened + o.dropped + o.added))
+            for o in run.outcomes
+        ),
+        "off_aim_rows_misreported": abs(sum(o.off_aim for o in run.outcomes) - served_off_aim),
         "worldwide_boards_selected_without_remote_reach": len(selected_without_reach),
     }
+    first = pages[next(iter(pages))]
     measured: dict[str, Any] = {
-        "flood_violations": sum(abs(v) for v in components.values()),
+        "flood_violations": sum(components.values()),
         **components,
         "offer_ceiling": OFFER_CEILING,
-        "rows_served": served,
-        "rows_matching_by_construction": len(matching),
+        "boards_installed": len(_FLOOD_BOARDS),
+        "pages_per_board": _FLOOD_PAGES,
+        "requests_made": len(served),
+        "rows_served": sum(o.items for o in run.outcomes),
         "offers_written": len(written),
         "rows_reported_off_aim": sum(o.off_aim for o in run.outcomes),
         "rows_reported_over_the_ceiling": sum(o.over_ceiling for o in run.outcomes),
         "gate_status": "measured",
     }
-    if len(matching) <= OFFER_CEILING or not off_aim or served != _FLOOD_ROWS:
+    if len(first.matching) <= OFFER_CEILING or len(pages) < 4 or not served:
         measured["gate_status"] = "unmeasured"
         measured["reasons"] = [
-            "the flood did not overrun the ceiling with matching rows, carry off-aim rows, "
-            "and reach the run whole — a zero over it says nothing about either"
+            "the ceiling does not fall inside the first page of a two-board, two-page flood, "
+            "so a zero says nothing about the page stop, the board stop or the per-run count"
         ]
     return measured
 

@@ -294,23 +294,28 @@ def test_the_installed_global_boards_are_selected_after_the_country_s_own() -> N
     assert "foorilla_en" in names[len(spanish) :], names
 
 
-def _flood_run(store: ProfileStore, tmp_path: Path, phrase: str = "python engineer") -> Any:
-    page, matching, off_aim = flood_board(tmp_path / "connectors")
+def _flood_run(store: ProfileStore, tmp_path: Path, page_count: int = 1) -> Any:
+    """One constructed worldwide board. Returns the run, the matching and
+    off-aim advert texts of the pages actually served, and the URLs asked."""
+    pages = flood_board(tmp_path / "connectors")
     asked: list[str] = []
 
     def fetch(request: ListRequest) -> Response:
         asked.append(request.url)
-        return Response(200, page)
+        return Response(200, pages[request.url].html)
 
     run = source(
         store,
         _remote_spain(),
-        Aim(state="stated", terms=(phrase,)),
+        Aim(state="stated", terms=("python engineer",)),
         fetch=fetch,
         at=AT,
         directory=tmp_path / "connectors",
+        page_count=page_count,
         robots=_robots(),
     )
+    matching = set().union(*(pages[url].matching for url in asked))
+    off_aim = set().union(*(pages[url].off_aim for url in asked))
     return run, matching, off_aim, asked
 
 
@@ -377,7 +382,72 @@ def test_boards_after_the_ceiling_are_not_asked(
     assert run.added == 1, run.summary()
     assert late == [], "a request went out after the ceiling's offer was written"
     assert [o for o in run.outcomes if o.skipped and "ceiling" in o.skipped], run.summary()
-    assert "NOT asked" in run.summary()
+    # Second reader, F3: `_spain()`'s unknown reach prints its own "NOT asked"
+    # line about worldwide boards, so the bare substring never reached this one.
+    assert "NOT asked, after the ceiling: " in run.summary()
+
+
+def test_a_phrase_stopped_by_the_ceiling_is_not_reported_as_searched(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second reader, F1: the ceiling filled on the first phrase of a steerable
+    board; the second was never sent, so it is not "searched", and the summary
+    names the board **and** the phrase left unasked."""
+    import shutil
+
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 1)
+    shutil.copytree(_CONNECTORS / "tecnoempleo_es", tmp_path / "tecnoempleo_es")
+    run = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python", "rust")),
+        fetch=_answer_with_detail(),
+        at=AT,
+        directory=tmp_path,
+        robots=_robots(),
+    )
+    assert run.added == 1, run.summary()
+    assert run.searched == ["python"], run.summary()
+    assert "NOT asked, after the ceiling: tecnoempleo_es (rust)" in run.summary()
+
+
+def test_a_ceiling_that_fills_at_a_page_end_is_still_reported(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second reader, F2: page one fills the ceiling exactly, so no row is over
+    it and page two is rightly never asked — and the run must still not read as
+    a complete pass."""
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 60)
+    run, matching, _, asked = _flood_run(store, tmp_path, page_count=2)
+    assert len(matching) == 60 and len(asked) == 1, (len(matching), asked)
+    assert run.added == 60 and not any(o.over_ceiling for o in run.outcomes)
+    assert "STOPPED at the 60-offer ceiling" in run.summary()
+
+
+@pytest.mark.parametrize(
+    ("reach", "says"),
+    [
+        (Reach(state="unknown"), "have not said whether you would work remotely"),
+        (Reach(state="declined"), "preferred not to say"),
+        (Reach(state="stated", modes=("commute",)), "your reach does not include remote work"),
+    ],
+)
+def test_why_worldwide_boards_were_left_out_follows_the_reach_state(
+    store: ProfileStore, tmp_path: Path, reach: Reach, says: str
+) -> None:
+    """Second reader, F8: "does not include remote work" is an answer, and an
+    unknown reach is a question step 7 still owes the candidate."""
+    flood_board(tmp_path / "connectors")
+    run = source(
+        store,
+        _spain().model_copy(update={"reach": reach}),
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert says in run.summary(), run.summary()
 
 
 def test_off_aim_rows_are_never_fetched(store: ProfileStore) -> None:
@@ -421,6 +491,24 @@ def test_rows_past_the_detail_budget_are_unopened_not_dropped(
         ({"title": "C# Developer"}, ("c++",), False),
         ({"title": "Anything at all"}, ("  ", "--"), False),
         ({"title": "Anything at all"}, (), False),
+        # Second reader, F5 — ES/CA parity: `I+D+i` is three words, as `R&D&I` is.
+        ({"title": "Técnico de I+D+i"}, ("técnico i+d",), True),
+        ({"title": "Tècnic R+D+I"}, ("tecnic r+d",), True),
+        ({"title": "R&D&I Technician"}, ("r&d technician",), True),
+        ({"title": "Técnico I+D"}, ("tecnico i + d",), True),
+        ({"title": "Python+Django Developer"}, ("python developer",), True),
+        ({"title": "React+TypeScript Developer"}, ("react developer",), True),
+        ({"title": "C++ Developer"}, ("c++",), True),
+        ({"title": "C Developer"}, ("c++",), False),
+        # F6 — NFKD, not NFD: Catalan `ŀ` (U+0140) and fullwidth letters fold.
+        ({"title": "Coŀlaborador comercial"}, ("col·laborador",), True),
+        ({"title": "\uff30\uff39\uff34\uff28\uff2f\uff2e Engineer"}, ("python engineer",), True),
+        # casefold, not lower.
+        ({"title": "STRASSE Engineer"}, ("straße engineer",), True),
+        # F7, accepted: a leading `.` is not part of a word, because boards
+        # write `.NET` as `NET` (infojobs_es's capture: "Arquitecto NET").
+        ({"title": "Arquitecto NET"}, (".net",), True),
+        ({"title": "Sales rep, net salary 40k, developer tools"}, (".net developer",), True),
     ],
 )
 def test_the_aim_match(row: dict[str, str], phrases: tuple[str, ...], matches: bool) -> None:
