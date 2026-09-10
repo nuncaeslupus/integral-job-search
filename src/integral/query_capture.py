@@ -14,35 +14,44 @@ asked, and only that certifies the key a fetcher relies on.
 
 **The rule.** For every package where `accepts_query` is true,
 `probe/captured.json`'s `url` must be a URL the connector could issue. That is
-`url_pattern` with every `{query}` bound to a **filled** value and `{page}` to
-a number. Whether the query sits in a query-string key or in a path segment
-makes no difference, because the whole URL is matched rather than a key looked
-up. So a renamed key, a moved segment, a changed path and a fixed duplicate of
-the key all fail, and nobody has to list them.
+`url_pattern` with one **filled** query `q` in every `{query}` slot and an
+ASCII page number in `{page}`. The whole URL is matched rather than a key
+looked up, so a renamed key, a moved segment, a changed path and a fixed
+duplicate of the key all fail without anyone listing them.
 
-*Filled* is a closed rule about what the connector itself sends, not a list of
-delimiters to refuse. Round one of the second read on #461 showed why a list
-fails: `& # ?` were listed and untested, and `q=+` or `q=%20` counted as
-filled. Two conditions now apply:
+**Filled, as a round trip rather than a grammar.** Two rounds of the second
+read on #461 each found holes in a *description* of a good value. The first
+listed delimiters and left `& # ?` untested. The second listed an alphabet
+and left the shape of a `%` escape, `all()` over the slots, and the component
+test unpinned. Neither description had a last element, so the rule no longer
+describes. Each slot's raw text is decoded to `q`, and `q` must re-encode to
+exactly that text:
 
-* The raw value must be spelled in the alphabet `build_list_urls` spells a
-  query in. That is `quote(query, safe="")`: RFC 3986 §2.3 unreserved
-  characters and `%XX` escapes, and nothing else. Every delimiter falls
-  outside it by construction, including `& # / ? ; =`, a space and a brace.
-  `+` is also accepted in the query component, because a browser capture
-  writes a space that way there (`landingjobs_en`'s
-  `q=artificial+intelligence`). In a path, `+` is a literal character that
-  the encoder never emits, so it is refused there.
-* The decoded value must be a query `build_list_urls` would accept and a
-  request would still carry. It must not be blank by the connector's own test
-  (`not query.strip()`), because an empty `q=` asks for nothing and the
-  answer is the board's whole list. It must not contain `{query}`, which rules
-  out a capture copied from the pattern whether or not the placeholder was
-  escaped. In a path slot it must not be `.` or `..`: RFC 3986 §3.3 names
-  those two dot-segments, and §5.2.4 removes them, so no query segment
-  survives.
+* as `quote(q, safe="")`, which is how `build_list_urls` writes it;
+* or, in the query component only, as `quote_plus(q, safe="")`, the form
+  encoding a browser capture writes (`landingjobs_en`'s
+  `q=artificial+intelligence`).
 
-Only the page number is left free, since it is T113's to certify.
+A raw delimiter, a malformed `%`, an escaped unreserved character or `%FF`
+therefore fails, because none of them is a spelling the encoder produces. Then
+three conditions on `q` itself:
+
+* It is the **same** `q` in every slot. The connector substitutes one query,
+  so two slots holding two different values is a request it never sends.
+* It is not blank by the connector's own test (`not query.strip()`). An empty
+  `q=` asks for nothing, and the answer is the board's whole list.
+* It does not contain `{query}`, however that was escaped, which rules out a
+  capture copied from the pattern.
+
+**Where a slot is.** `urlsplit` decides which component each slot is in,
+following RFC 3986's grammar. A slot in the path must not decode to `.` or
+`..`: §3.3 names those dot-segments, and §5.2.4 removes them, taking the query
+with them. A slot in the fragment, the host or the scheme is never measured.
+§3.5 keeps the fragment with the client, so a board is never asked it.
+
+Only the page's value is left free, since it is T113's to certify. It must
+still be ASCII digits: `\\d` would accept `٢`, which the connector never
+writes.
 
 **What this does not establish.** A capture carrying the key shows the board
 was asked with it, not that the answer depended on it. That second fact is
@@ -69,7 +78,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, unquote_plus
+from urllib.parse import quote, quote_plus, unquote, unquote_plus, urlsplit
 
 from integral.connector_coverage import is_example_site, read_package
 from integral.connectors import (
@@ -93,43 +102,63 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T171.json"
 #: board would turn retiring one into a gate failure, which T100 ruled out.
 MINIMUM_STEERABLE_PACKAGES_CHECKED = 4
 
-#: The alphabet `quote(query, safe="")` writes (RFC 3986 §2.3 unreserved, and
-#: pct-encoded), and the same alphabet plus `+` for the query component.
-_PATH_VALUE = r"((?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)"
-_QUERY_VALUE = r"((?:[A-Za-z0-9._~+-]|%[0-9A-Fa-f]{2})+)"
+#: What a slot's raw text may run to before the canonical check reads it: up to
+#: the characters that end a path segment (RFC 3986 §3.3) or a query pair.
+#: This only splits the URL. It is not the rule. A value that swallows a
+#: delimiter fails the round trip anyway.
+_PATH_SLOT = r"([^/?#]*)"
+_QUERY_SLOT = r"([^&#]*)"
 
 #: RFC 3986 §3.3's dot-segments, which §5.2.4 removes from a path.
 _DOT_SEGMENTS = frozenset({".", ".."})
 
 
-def _filled(raw: str, in_query_component: bool) -> bool:
-    """Would a request still carry `raw` as a query `build_list_urls` accepts?"""
+def _slot_components(url_pattern: str) -> list[bool] | None:
+    """For each `{query}` slot in order, whether it is in the query component.
+
+    `None` when a slot is anywhere else (scheme, host, fragment), which is a
+    place no request carries a search.
+    """
+    parts = urlsplit(url_pattern)
+    in_path = parts.path.count(QUERY_PLACEHOLDER)
+    in_query = parts.query.count(QUERY_PLACEHOLDER)
+    if in_path + in_query != url_pattern.count(QUERY_PLACEHOLDER):
+        return None
+    return [False] * in_path + [True] * in_query
+
+
+def _decoded(raw: str, in_query_component: bool) -> str | None:
+    """The query `raw` spells, when it is filled and spelled as an encoder would."""
+    # Only the decoding differs by component. In a path `unquote` leaves `+`
+    # alone, so `quote_plus` of the result spells nothing `quote` does not.
     value = unquote_plus(raw) if in_query_component else unquote(raw)
-    if not value.strip() or QUERY_PLACEHOLDER in value:
-        return False
-    return in_query_component or value not in _DOT_SEGMENTS
+    spellings = {quote(value, safe=""), quote_plus(value, safe="")}
+    if raw not in spellings or not value.strip() or QUERY_PLACEHOLDER in value:
+        return None
+    if not in_query_component and value in _DOT_SEGMENTS:
+        return None
+    return value
 
 
 def query_measured(url_pattern: str, captured: str | None) -> bool:
-    """Is `captured` a URL `url_pattern` issues, with every `{query}` filled?"""
-    if captured is None:
+    """Is `captured` a URL `url_pattern` issues for one filled query?"""
+    components = _slot_components(url_pattern)
+    if captured is None or components is None:
         return False
-    regex: list[str] = []
-    positions: list[bool] = []
-    in_query_component = False
-    for part in re.split(r"(\{page\}|\{query\})", url_pattern):
-        if part == PAGE_PLACEHOLDER:
-            regex.append(r"\d+")
-        elif part == QUERY_PLACEHOLDER:
-            regex.append(_QUERY_VALUE if in_query_component else _PATH_VALUE)
-            positions.append(in_query_component)
-        else:
-            regex.append(re.escape(part))
-            in_query_component = in_query_component or "?" in part
-    match = re.fullmatch("".join(regex), captured)
-    return match is not None and all(
-        _filled(raw, position) for raw, position in zip(match.groups(), positions, strict=True)
+    slots = iter(components)
+    regex = "".join(
+        "[0-9]+"
+        if part == PAGE_PLACEHOLDER
+        else (_QUERY_SLOT if next(slots) else _PATH_SLOT)
+        if part == QUERY_PLACEHOLDER
+        else re.escape(part)
+        for part in re.split(r"(\{page\}|\{query\})", url_pattern)
     )
+    match = re.fullmatch(regex, captured)
+    if match is None:
+        return False
+    queries = {_decoded(raw, slot) for raw, slot in zip(match.groups(), components, strict=True)}
+    return len(queries) == 1 and None not in queries
 
 
 @dataclass(frozen=True)

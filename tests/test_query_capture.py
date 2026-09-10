@@ -7,7 +7,7 @@ import json
 import re
 import shutil
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import pytest
 
@@ -143,6 +143,29 @@ def test_an_unreadable_package_is_named_not_skipped(library: Path) -> None:
         ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=t%C3%A9cnico%20farmacia", True),
         ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=t%C3%A9cnico+farmacia", True),
         ("https://b.test/jobs/{query}/", "https://b.test/jobs/data-scientist/", True),
+        # Round 2, R2-1 / O1: every slot, and the same query in each.
+        ("https://b.test/{query}/x?q={query}", "https://b.test/python/x?q=python", True),
+        ("https://b.test/{query}/x?q={query}", "https://b.test/python/x?q=+", False),
+        ("https://b.test/{query}/x?q={query}", "https://b.test/+/x?q=python", False),
+        ("https://b.test/{query}/x?q={query}", "https://b.test/python/x?q=java", False),
+        # R2-2: a `%` must be an escape the encoder writes.
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=%#x&page=2", False),
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=%&x&page=2", False),
+        ("https://b.test/jobs/{query}/", "https://b.test/jobs/%/./", False),
+        ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=%2", False),
+        ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=%FF", False),
+        # Lower-case hex is not how `quote` spells it (fail-closed, and visible).
+        ("https://b.test/jobs?q={query}", "https://b.test/jobs?q=t%c3%a9cnico", False),
+        # R2-3: the page is ASCII digits and at least one of them.
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=python&page=", False),
+        ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=python&page=٢", False),
+        # R2-4: a fragment is never sent (RFC 3986 §3.5), so it measures nothing.
+        ("https://b.test/jobs?page={page}#q={query}", "https://b.test/jobs?page=2#q=python", False),
+        ("https://{query}.b.test/jobs", "https://python.b.test/jobs", False),
+        # R2-5: the component is RFC 3986's, not "after a `?` or a `=`".
+        ("https://b.test/s=1/{query}/", "https://b.test/s=1/../", False),
+        ("https://b.test/s=1/{query}/", "https://b.test/s=1/a+b/", False),
+        ("https://b.test/s=1/{query}/", "https://b.test/s=1/a%20b/", True),
     ],
 )
 def test_query_measured(pattern: str, captured: str | None, measured: bool) -> None:
@@ -163,10 +186,33 @@ def test_the_raw_alphabet_is_the_one_the_connector_encodes_in(
     assert qc.query_measured(pattern, captured) is expected
 
 
+#: RFC 3986 §2.3, written out from the RFC rather than read off `quote`.
+_UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
+
+@pytest.mark.parametrize("in_query_component", [True, False])
+@pytest.mark.parametrize("octet", range(256))
+def test_an_escape_is_accepted_only_where_an_encoder_writes_one(
+    octet: int, in_query_component: bool
+) -> None:
+    """Round 2, R2-2: the shape of a `%` escape was a regex nobody tested.
+
+    The expectation comes from the RFC, not from the code. An encoder escapes
+    exactly the octets that are not unreserved, in upper case (§2.1). A lone
+    octet at or above 0x80 is not UTF-8, so no query string encodes to it.
+    """
+    pattern = "https://b.test/jobs?q={query}" if in_query_component else "https://b.test/j/{query}/"
+    for escape in {f"%{octet:02X}", f"%{octet:02x}"}:
+        captured = pattern.replace("{query}", f"x{escape}x")
+        expected = octet < 0x80 and chr(octet) not in _UNRESERVED and escape == escape.upper()
+        assert qc.query_measured(pattern, captured) is expected, escape
+
+
+_AWKWARD_QUERIES = ("python", "técnico farmacia", "c++", "a/b", "x&y=z", "50%", "{x}", " a ")
+
+
 @pytest.mark.parametrize("name", _STEERABLE)
-@pytest.mark.parametrize(
-    "query", ["python", "técnico farmacia", "c++", "a/b", "x&y=z", "50%", ".."]
-)
+@pytest.mark.parametrize("query", _AWKWARD_QUERIES)
 def test_every_url_the_connector_sends_is_accepted(name: str, query: str) -> None:
     """The fail-closed mirror: nothing `build_list_urls` sends reads as unmeasured."""
     connector = load_connector(DEFAULT_CONNECTORS_DIR / name)
@@ -174,20 +220,56 @@ def test_every_url_the_connector_sends_is_accepted(name: str, query: str) -> Non
         assert qc.query_measured(connector.list.url_pattern, url), url
 
 
+@pytest.mark.parametrize("query", _AWKWARD_QUERIES)
+def test_every_url_a_path_slot_connector_sends_is_accepted(library: Path, query: str) -> None:
+    """The mirror for a path slot, which no package on `main` has yet (O2).
+
+    `..` is left out on purpose. `build_list_urls` sending it into a path is a
+    defect of its own, filed separately, and this rule is right to refuse it.
+    """
+    package = next(
+        library / name
+        for name in _STEERABLE
+        if load_connector(library / name).list.pagination.mode == "none"
+    )
+    parts = urlsplit(load_connector(package).list.url_pattern)
+    moved = f"{parts.scheme}://{parts.netloc}/search/{{query}}/"
+    yaml_path = package / "connector.yaml"
+    old = load_connector(package).list.url_pattern
+    yaml_path.write_text(yaml_path.read_text(encoding="utf-8").replace(old, moved), "utf-8")
+    connector = load_connector(package)
+    assert connector.list.url_pattern == moved
+    for url in build_list_urls(connector, query=query):
+        assert qc.query_measured(moved, url), url
+
+
 def test_jobfluents_committed_bytes_carry_no_session_token_or_client_ip() -> None:
     """What `jobfluent_es/meta.yaml` says the build asserts, and the live probe
-    relies on. Until the second read on #461 nothing asserted either."""
+    relies on. Until the second read on #461 nothing asserted either. Every
+    `value`/`content` on a tag naming either token, in any attribute order and
+    any quoting, must read `REDACTED` (O4)."""
     package = DEFAULT_CONNECTORS_DIR / "jobfluent_es"
     files = [*package.glob("fixture/*.html"), *package.glob("probe/*.html")]
     assert len(files) >= 3
-    token = re.compile(
-        r'(?:name="authenticity_token"[^>]*?value|name="csrf-token" content)="([^"]*)"'
+    # A tag whose `name` is a token field. `<meta name="csrf-param"
+    # content="authenticity_token">` names the parameter and holds no token.
+    tag = re.compile(
+        r"""<[^>]*\bname\s*=\s*["']?(?:authenticity_token|csrf-token)\b[^>]*>""", re.IGNORECASE
+    )
+    attribute = re.compile(
+        r"""\b(?:value|content)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.IGNORECASE
     )
     ipv4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    tags_read = 0
     for path in files:
         text = path.read_text(encoding="utf-8")
-        assert set(token.findall(text)) <= {"REDACTED"}, path
+        for found in tag.findall(text):
+            tags_read += 1
+            values = {"".join(groups) for groups in attribute.findall(found)}
+            assert values <= {"REDACTED"}, (path, found)
         assert not ipv4.search(text), path
+    # The live probe carries both fields, so a pattern that reads nothing fails.
+    assert tags_read >= 2
 
 
 def test_below_the_floor_reads_unmeasured_writes_nothing_and_exits_1(
