@@ -560,7 +560,8 @@ def _detail_run(
 
     def fetch(request: ListRequest) -> Response:
         if "adverts" in request.url:
-            return Response(200, "<div class='content'>the whole advert</div>")
+            # One body per advert: identical bodies are one offer to dedup.
+            return Response(200, f"<div class='content'>the advert at {request.url}</div>")
         slug = request.url.split("/")[-2]
         rows = [
             {"title": f"{slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"} for n in (1, 2)
