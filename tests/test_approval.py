@@ -539,9 +539,10 @@ def test_a_planted_episode_is_not_counted_as_undecidable(
 
     `intact` deliberately excludes lines nothing backs, so measuring the third
     state over it alone could not see the very line just reported as a finding.
-    T156's `measure_prepared` guards this with a second check over the raw
-    `written` text specifically so a confirmed-present episode is never also
-    reported as one this sweep "has no evidence about".
+    T156's `measure_prepared` guards this with a second check over the
+    `unbacked` lines specifically (round 4: one line at a time, never joined)
+    so a confirmed-present episode is never also reported as one this sweep
+    "has no evidence about".
     """
     offer_id, version = _prepare(store, master, approved=(0,))
     letter = _letter(store, offer_id, version)

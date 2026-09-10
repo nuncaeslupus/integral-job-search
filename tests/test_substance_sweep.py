@@ -463,6 +463,21 @@ def test_undecidable_suffix_appends_only_when_something_is_undecidable() -> None
     assert "mystery episode" in suffix
 
 
+def test_undecidable_suffix_does_not_key_error_on_measures_aggregate_shape() -> None:
+    """F5 (#435 round 4, latent fail-closed): the guard and the read must agree.
+
+    `measure()`'s aggregate dict carries a nonzero `episodes_undecidable`
+    total (a running sum across every advert) but no `undecidable_episodes`
+    list at all — that key only ever exists on `measure_prepared`'s per-call
+    output. Guarding on the count and then indexing the list would `KeyError`
+    the moment anything ever hands this function that aggregate; guarding on
+    the list itself cannot desync from what it then reads.
+    """
+    aggregate_shaped = {"episodes_undecidable": 208, "unapproved_episode_disclosures": 0}
+    assert "undecidable_episodes" not in aggregate_shaped
+    assert _undecidable_suffix(aggregate_shaped) == ""
+
+
 def test_the_refusal_helper_names_an_undecidable_episode_too() -> None:
     """N1 (#435 round 3): `_refuse_unbacked_disclosures`'s own raise, pinned directly.
 
@@ -1011,6 +1026,60 @@ def test_two_unrelated_episodes_sharing_a_window_are_not_conflated(store: Profil
 
     assert measured["unapproved_episode_disclosures"] == 0
     assert any(TWIN in item for item in measured["undecidable_episodes"])
+
+
+def test_a_seam_between_two_unbacked_lines_does_not_manufacture_a_match(
+    store: ProfileStore,
+) -> None:
+    """F1 (#435 round 4, fail-open blocker): `unbacked` lines are checked one
+    at a time, never joined, because two lines that are never adjacent on any
+    real page a candidate could look at can still land next to each other in
+    a `"\\n".join(unbacked)` string.
+
+    `seam_head` is planted into `cv.md`, `seam_tail` into `letter.md` —
+    different *documents*, so there is no real page on which these two lines
+    are adjacent, or even in the same file. Round 3's fix still joined every
+    `unbacked` line with `"\\n"` before searching (`_words` treats a newline as
+    ordinary whitespace, so the join is invisible to the shingle test), and
+    `e3_text`'s eight words are split exactly 4/4 across that seam: no single
+    planted line carries more than four of them, but the tail of `seam_head`
+    directly against the head of `seam_tail` carries all eight contiguously.
+    Under the join that read as "confirmed present" and cleared `e3_text` from
+    every channel — not a finding (its own text was never written anywhere),
+    and not `episodes_undecidable` either. Round 4 checks each `unbacked` line
+    on its own, so this can no longer happen: closing the seam, not merely
+    bounding it.
+    """
+    seam_head = "Zulu yankee xray whiskey alpha bravo charlie delta"
+    seam_tail = "echo foxtrot golf hotel india juliet kilo lima"
+    e3_text = "Alpha bravo charlie delta echo foxtrot golf hotel"
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=e3_text)),
+    )
+    write_master(store, master)
+    version = _prepare(store, master, approved=(0,))
+    where = _where(store, version)
+    (where / "cv.md").write_text(
+        (where / "cv.md").read_text(encoding="utf-8") + seam_head + "\n", encoding="utf-8"
+    )
+    (where / "letter.md").write_text(
+        (where / "letter.md").read_text(encoding="utf-8") + seam_tail + "\n", encoding="utf-8"
+    )
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    # Each planted line is its own, correctly-reported unbacked finding —
+    # the seam must not swallow either of those or manufacture a third.
+    assert measured["unapproved_episode_disclosures"] == 2
+    assert any(seam_head in item for item in measured["unapproved_episodes"])
+    assert any(seam_tail in item for item in measured["unapproved_episodes"])
+    # `e3_text` itself was never written anywhere, whole, on any page — it
+    # must read as undecided, never as a confirmed disclosure conjured by the
+    # join.
+    assert not any(e3_text in item for item in measured["unapproved_episodes"])
+    assert any(e3_text in item for item in measured["undecidable_episodes"])
 
 
 def test_an_approved_disclosed_episode_is_never_flagged_undecidable(

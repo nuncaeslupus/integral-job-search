@@ -144,22 +144,31 @@ measured exactly why that failed:
    none, and a module that says so plainly is worth more than one asserting a
    number it cannot support.
 
-**A third-round finding, fixed rather than left open**: the "confirmed present"
-check above (`elif _carries(..., episode.text)`) was matching against *every*
-written line, including lines backed by a **different, approved** episode's
-own rendered text. An unapproved episode sharing an eight-word window with
-somebody else's approved sentence therefore read as "confirmed present" and
-was cleared from every channel — not a finding, and not `episodes_undecidable`
-either, which is a worse fail-open than an honest "undecided" would have been:
-the reported comment above the branch said this could only happen for a line
-already named by `findings`, and that was false whenever the matched line was
-approved rather than unbacked. The fix narrows that check's target to the
-*unbacked* lines only — the ones that actually produced a finding. For an
-episode whose own text does not straddle a line boundary this can only remove
-a match, never manufacture one; the residual risk that narrowing a `\n`-joined
-text can put two lines together that were not adjacent on the page is one this
-function already accepts for `intact` (see the `elif`'s own comment), not one
-this fix introduces.
+**A third-round finding, fixed rather than left open, and fixed again in round
+four.** The "confirmed present" check above (`elif _carries(..., episode.text)`)
+was matching against *every* written line, including lines backed by a
+**different, approved** episode's own rendered text. An unapproved episode
+sharing an eight-word window with somebody else's approved sentence therefore
+read as "confirmed present" and was cleared from every channel — not a
+finding, and not `episodes_undecidable` either, a worse fail-open than an
+honest "undecided" would have been. Round three narrowed the check's target
+from every written line to the *unbacked* ones — the ones that actually
+produced a finding — but still joined them with `"\n"` before searching, which
+carries its own seam: joining a *subset* of lines can put two that were never
+adjacent on the page next to each other in the joined text, and a shingle can
+straddle that manufactured boundary. `_words` treats a newline as ordinary
+whitespace, so nothing about the join stops this. That is fail-open in exactly
+the same direction as the original defect — a shingle formed only by the join,
+naming no real episode substance on the page, still clears the check — and it
+was round three's own claim that this could only *remove* a match, never
+manufacture one, which was not true. Round four closes it rather than bounds
+it: the check is now `any(_carries(line, episode.text) for line in unbacked)`,
+one real, whole line at a time, with no join and no seam to straddle at all.
+`intact` (`surviving`, above) still joins the way round three's fix did, and
+still carries that seam — in the *opposite*, fail-closed direction (a
+manufactured match there adds an unearned finding and blocks an otherwise
+clean draft), which is the docstring's named upgrade path to close, not a risk
+this branch's fix owed on its own.
 
 **The three sites that must all name an undecidable episode in a refusal are
 pinned by a rule, not by three separate tests.** `prepare`'s raise, `record_sent`'s
@@ -414,14 +423,19 @@ def _undecidable_suffix(measured: dict[str, Any]) -> str:
     rather than raising on its own: an undecidable case is not itself a refusal
     (§6.2 only requires stopping over a *known* unapproved disclosure), so this
     never fires unless something else already has.
+
+    Reads only `undecidable_episodes`, never `episodes_undecidable` — the two
+    always agree in `measure_prepared`'s own output (one is `len()` of the
+    other), but `measure()`'s aggregate dict carries a nonzero
+    `episodes_undecidable` total with no `undecidable_episodes` list at all
+    (F5, round 4: guarding on the count and then indexing the list `KeyError`s
+    the moment anything hands this function that dict instead). Guarding on
+    the list itself cannot desync from what it then reads.
     """
-    if not measured.get("episodes_undecidable"):
+    episodes = measured.get("undecidable_episodes")
+    if not episodes:
         return ""
-    return (
-        " (also undecidable, not itself a refusal: "
-        + "; ".join(measured["undecidable_episodes"])
-        + ")"
-    )
+    return " (also undecidable, not itself a refusal: " + "; ".join(episodes) + ")"
 
 
 def _refuse_unbacked_disclosures(measured: dict[str, Any], consequence: str) -> None:
@@ -829,9 +843,7 @@ def measure_prepared(
     # names text: a position in `master.episodes` is not a stable handle
     # across the one loop that reads it.
     undecidable: list[str] = []
-    undecidable_texts: set[str] = set()
     intact = "\n".join(surviving)
-    unbacked_text = "\n".join(unbacked)
     for episode in master.episodes:
         if episode.text in disclosed or episode.text in approved:
             continue
@@ -841,39 +853,42 @@ def measure_prepared(
                 f"{offer_id}/v{version}: {episode.text} — the substance of a story-bank "
                 "episode, carried by an entry no per-use approval names"
             )
-        elif _carries(unbacked_text, episode.text):
+        elif any(_carries(line, episode.text) for line in unbacked):
             # Confirmed present verbatim in a line this sweep has *already*
             # reported above — one of `findings`' unbackable rows — so this
             # episode's substance reached the page and is not re-attributed to
             # it a second time. It is not `undecidable` either: this branch is
             # reached only when there **is** positive evidence.
             #
-            # Checked against `unbacked` — the lines that produced a finding —
-            # and never against every written line. A written-but-*backed*
-            # line can be a **different, approved** episode's own rendered
-            # sentence, and this episode's shingle landing inside somebody
-            # else's approved wording is not evidence that *this* episode's
-            # own substance is on the page. Checking the wider set used to let
-            # that coincidence silently clear this episode from every
-            # channel — not a finding, and not `undecidable` either, which is
-            # a worse fail-open than reporting it undecidable would have been
-            # (`test_two_unrelated_episodes_sharing_a_window_are_not_conflated`
-            # in `test_substance_sweep.py` pins the corrected behaviour).
-            # `unbacked` cannot itself contain an approved line — an approved
-            # episode claim is exactly what makes a line backed — so, for any
-            # episode whose *own* text does not straddle a line boundary, this
-            # narrowing can only remove a match, never manufacture one. It
-            # inherits, rather than introduces, the one imprecision `_carries`
-            # already accepts throughout this function: joining a subset of
-            # lines with `\n` can put two lines that were not adjacent on the
-            # page next to each other in the joined text, and a shingle could
-            # in principle straddle that seam. `intact` (`surviving`, above)
-            # already takes the same risk for the same reason, and closing it
-            # for both is the docstring's named upgrade path (an embedding
-            # comparison), not a fix this narrowing owes on its own.
+            # Checked one `unbacked` line at a time — never joined into one
+            # string — for two separate reasons, both fail-open if missed:
+            #
+            # 1. `unbacked` must never include a *backed* line. A written-but-
+            #    backed line can be a **different, approved** episode's own
+            #    rendered sentence, and this episode's shingle landing inside
+            #    somebody else's approved wording is not evidence that *this*
+            #    episode's own substance is on the page. An earlier version of
+            #    this check searched every written line for exactly that
+            #    reason and silently cleared an unapproved twin episode from
+            #    every channel — not a finding, and not `undecidable` either
+            #    (`test_two_unrelated_episodes_sharing_a_window_are_not_conflated`
+            #    pins the fix).
+            # 2. Checking each line **on its own**, rather than joining
+            #    `unbacked` with `"\n"` and searching the joined text, is what
+            #    stops two lines that were never adjacent on the page from
+            #    manufacturing a shingle across the seam where they meet in
+            #    the join. `intact` two lines up still joins `surviving` that
+            #    way, and carries that same risk in the opposite, fail-closed
+            #    direction (a manufactured match there adds an unearned
+            #    `finding` and blocks a draft that was actually clean) —
+            #    narrower than this branch's fail-open risk, and out of this
+            #    fix's scope, but the two are not the same risk and neither
+            #    excuses leaving the other unchecked. This branch's own seam
+            #    is closed, not merely bounded: `any(...)` over single lines
+            #    can only ever match text that a real, whole line on the page
+            #    actually carries.
             pass
         else:
-            undecidable_texts.add(episode.text)
             undecidable.append(
                 f"{offer_id}/v{version}: {episode.text} — no per-use approval names it, "
                 "no manifest row claims it, and no shingle match confirms it present "
@@ -2107,18 +2122,23 @@ def _named_as_finding(measured: dict[str, Any], episode_text: str) -> bool:
     return any(episode_text in item for item in measured["unapproved_episodes"])
 
 
-# Eleven constructed profiles (`fresh()` calls), one per numbered state below —
-# a floor over the population the second reader's F3 finding named (states,
-# not `check()` calls), set to the actual count rather than to a margin nobody
-# argued: deleting one state now breaches this floor immediately.
-MINIMUM_PARAPHRASE_STATES = 11
+# Thirteen constructed profiles (`fresh()` calls), one per numbered state
+# below — a floor over the population the second reader's F3 finding named
+# (states, not `check()` calls), set to the actual count rather than to a
+# margin nobody argued: deleting one state now breaches this floor
+# immediately. States 12-13 are round 3's (N2) and round 4's (F1) accepted
+# findings, committed here per CLAUDE.md's fixtures section: an accepted case
+# pinned only in pytest is a report that was read and waved through, and the
+# measured denominator has to rise or the acceptance did not happen. 11 -> 13.
+MINIMUM_PARAPHRASE_STATES = 13
 # Both denominators asserted, per the same reasoning T150 gives for
 # `MINIMUM_EVIDENCE_KEYS_COMPARED`/`MINIMUM_EVIDENCE_SOURCES_COMPARED`: a floor
 # on `states` alone is satisfiable by an empty `fresh()` call that asserts
 # nothing, which is exactly the "floor counting the wrong population" shape
 # F3 named. Also set to the actual count, so thinning a state's own checks
-# without deleting the state trips this one instead.
-MINIMUM_PARAPHRASE_CHECKS = 21
+# without deleting the state trips this one instead. 21 -> 25 (states 12-13,
+# two checks each).
+MINIMUM_PARAPHRASE_CHECKS = 25
 
 
 def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
@@ -2340,6 +2360,61 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         message = str(exc)
     check(_FIXTURE_SMUGGLED_EPISODE.text in message, "the confirmed finding was not named")
     check("undecid" in message and failure in message, "the undecidable episode was not named")
+
+    # 12 — N2 (#435 round 3): a shingle match against a *different, approved*
+    # episode's own rendered line is not evidence for this one. `_FIXTURE_TWIN`
+    # overlaps `win` by a whole eight-word window (see its own definition); win
+    # is approved and rendered, the twin is not approved and never rendered.
+    # Before round 3's fix the twin's shingle matched win's approved sentence
+    # and the twin was silently cleared from every channel: not a finding, and
+    # not undecidable either. This state moved zero times across two review
+    # rounds while pinned only in pytest — accepted into this probe now so the
+    # denominator that certifies T156 actually covers it.
+    twinned = _probe_master(
+        headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN)
+    )
+    store = fresh("twin-unapproved", twinned)
+    _probe_prepare(store, twinned, approved=(0,))
+    measured = measure_prepared(store, twinned, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 0,
+        "an approved episode's own line falsely confirmed a different, unapproved twin",
+    )
+    check(
+        _named_undecidable(measured, _FIXTURE_TWIN.text),
+        "an unapproved twin sharing an approved line's window was not reported as undecidable",
+    )
+
+    # 13 — F1 (#435 round 4, the blocker): two lines that are never adjacent on
+    # any real page — one planted in `cv.md`, one in `letter.md` — must not
+    # manufacture a shingle across the seam where a naive `"\n".join(...)`
+    # would put them together. `seam_episode`'s eight words are split 4/4
+    # across exactly that seam: neither planted line alone carries more than
+    # four of them, but the tail of one directly against the head of the
+    # other carries all eight contiguously. Round 3's fix still joined every
+    # `unbacked` line before searching and read this as "confirmed present";
+    # round 4 checks each line on its own.
+    seam_head = "Zulu yankee xray whiskey alpha bravo charlie delta"
+    seam_tail = "echo foxtrot golf hotel india juliet kilo lima"
+    seam_episode = Episode(
+        kind="achievement", text="Alpha bravo charlie delta echo foxtrot golf hotel"
+    )
+    seamed = _probe_master(episodes=(_FIXTURE_EPISODES[0], seam_episode))
+    store = fresh("seam", seamed)
+    _probe_prepare(store, seamed, approved=(0,))
+    cv = store.path(*_version_parts(_PROBE_OFFER, 1), "cv.md")
+    cv.write_text(cv.read_text(encoding="utf-8") + seam_head + "\n", encoding="utf-8")
+    letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+    letter.write_text(letter.read_text(encoding="utf-8") + seam_tail + "\n", encoding="utf-8")
+    measured = measure_prepared(store, seamed, _PROBE_OFFER, 1)
+    check(
+        not any(seam_episode.text in item for item in measured["unapproved_episodes"]),
+        "a seam between two unbacked lines manufactured a confirmed disclosure",
+    )
+    check(
+        _named_undecidable(measured, seam_episode.text),
+        "a seam between two unbacked lines silently cleared an unrelated episode",
+    )
 
     return {
         "paraphrase_states_evaluated": states,
