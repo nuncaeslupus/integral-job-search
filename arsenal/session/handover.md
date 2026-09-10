@@ -1,148 +1,90 @@
 # Session handover
 
-**2026-09-09 → 10, overnight.** Three tasks taken, three PRs open, **none merged**.
-Eleven second-reader rounds run; **not one came back empty.** The session ended on
-the account's 5-hour limit at 01:14 UTC (resets 02:40), which killed three agents
-mid-flight.
+**2026-09-10.** Continuation of the overnight run. **Four PRs merged**, `main`
+broken by the merges and repaired. `origin/main` is at the #436 merge plus the
+repair in #444.
 
-`origin/main` is unchanged at the #433 merge. Everything below is on branches.
+## 1. What merged
 
-## 1. State of the three PRs — all green, all reviewed, all still blocked
+| PR | what it actually was |
+|---|---|
+| #438 | previous handover + the task file for the `verified_gate.sh` false-CI line |
+| #442 | the T159 split — three follow-up tasks (#439, #440, #441), docs-only |
+| #434 | **T154**: `?page=1&page={page}` loaded and was certified, so a duplicated query key defeated the pagination capture rule. The placeholder-carrying key is now counted per reading rather than by `param`'s declared spelling. |
+| #435 | **T156**: approved-CV-line matching compared `_words()` output, which deletes every non-word character, so a paraphrase differing only in punctuation passed. Replaced with NFC casefold + whitespace collapse on both sides. |
+| #436 | **T159**: the floor sweep, landed deliberately bounded — see §3. |
 
-| PR | task | issue | head | rounds | where it stands |
-|---|---|---|---|---|---|
-| #434 | T154 `t-e6f2d418` | #414 | `7807824b` | 4 fix / 3 review | **awaiting round-4 review** (reader killed at start) |
-| #435 | T156 `t-3ca8f7b1` | #419 | `fd633ac5` | 5 fix / 4 review | **round-5 push is UNVERIFIED — see §4** |
-| #436 | T159 `t-6f2b9c14` | #429 | `639371b6` | 3 fix / 2 review | **awaiting round-3 review** (reader killed at start) |
+Each carries a `verified_gate.sh` PASS block on its own head, quoted in its merge
+commit, with CI green on the same SHA.
 
-CI is green on all three heads and `mergeable_state` is `clean` on all three. Green
-is not the question — every finding this session sat behind a green gate.
+## 2. The merges broke `main`, and that is the finding of the day
 
-## 2. Eleven rounds, zero empty ones, and the family held
+`make host-gate` was **red on `main` at 18372e3**, and neither branch was wrong.
 
-Round counts by PR: #434 → 6, 5, 7 findings. #435 → 5, 2, 1, 1. #436 → 6, 9.
-**Thirty-two findings; the large majority fail-open.**
+- #436 committed `MINIMUM_FLOORS_SWEPT = 73` against a population of 73, zero slack.
+- #434 added a floor of its own, `pagination_capture.MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED`.
 
-Last session named the family and this session did not dent it:
+Both green in isolation, both green on their own merge refs. The merged tree
+sweeps **74**, so #436's zero-slack claim became false **without either side
+editing it**. `stale_margin_claim`. Fixed in #444 by regenerating against the
+merged tree, per CLAUDE.md's rule.
 
-> **A check pinned against a proxy for the property, rather than against the
-> property.**
+**The part worth carrying forward:** no reviewer could have caught this, because
+the collision is in neither diff. It surfaced only because the gate was re-run
+against `main` *after* merging. Nothing in the protocol asks for that run.
+CLAUDE.md's census-collision section describes two branches writing the *same*
+value; this is the sibling case — two branches writing *different* things that
+only collide once combined — and it is the one CI cannot see, since CI tests each
+PR's merge ref against a `main` that does not yet have the other.
 
-Two new faces worth adding to the list, both of which cost a full round:
+## 3. #436 landed bounded, and the honest number is 73 of 73
 
-- **A checker whose accept-set is seeded by its own trigger word.**
-  `floor_sweep._zero_slack_claim_contradicts` scanned a window *including* the
-  matched phrase, and `_spelled_out_numbers("zero slack") == {0}` — so `claimed`
-  always contained `0` and `literal_value == 0` was never a contradiction. **16 of
-  19 floors could be set to 0 with the metric still reading 0.** Written as the
-  remedy for floors that cannot fail.
-- **An exemption whose scope is set by what keeps a fixture green.** #434's
-  `path_segment` carve-out was defended on a premise contradicted twice — a
-  loadable config with *no path segment in it*, and Rails' `params`, which the
-  diff's own error string names as a merging namespace. The reader's diagnosis is
-  the sentence to carry forward: *extending the mirror to `path_segment` breaks
-  only `page_placeholder`'s probe.* In the same round a **fixture's expected
-  verdict was changed to accommodate the new rule** while still citing R7 — inside
-  a module whose stated standard is "derived from the rule's text, never from
-  running the code", and whose metric is named `…_resolved_inconsistently`.
+Round 5's reader showed the sweep's metric mutates a floor's **value** while
+holding its **comment** fixed. Nobody lowers a floor that way — a real regression
+edits both. Under the realistic mutation the settable count is **73 of 73 in
+every round**, not the 26 of 73 the series 33/67 → 30/76 → 26/73 suggested. The
+apparent convergence was an artefact of the mutation being weaker than the
+threat. So the module states 73 of 73 and the rest is #439/#440/#441.
 
-**A category is not a classification if nothing in it is ever checked.** #436's
-round 1 said the arithmetic branch had 11 of 46 members; round 2 broadened the
-sweep to 57 and the branch still had **exactly 11**. Every newly-swept floor landed
-in `dynamic`, where no margin was computed. Round 3 finally attacked that.
+## 4. Review debt merged knowingly
 
-**What worked, again, was the pre-push self-scan.** It caught, by the implementer
-rather than a reviewer: a drafted `"fail_open": len(defects)` field (a numerator
-restated as a second measurement); an `episodes_withheld` that would have become a
-metric independent of its own inputs, deleted rather than patched; three of a
-worker's own new tests asserting "no finding" without asserting the sweep saw
-anything; and — the best of the night — a first-draft comment claiming a narrowing
-"can only ever move an episode out of this branch, never the reverse", traced,
-found false via `_words()`'s treatment of `\n`, and **softened rather than shipped,
-in a PR whose whole subject was false justification comments.**
+Merged on the owner's explicit instruction with these open, recorded on each PR
+and in each merge commit:
 
-**What worked for reviewers: demanding the reviewer's own populations.** #435's
-readers each built their own paraphrases and innocents rather than reusing the
-implementer's, and the numbers moved 0/8 and 21/30 → 8/8 and 12/12 → 9/9 and 30/30.
+- **#434 round 7, unfixed**: the per-reading key count is applied to the query
+  axis but not the body axis; the seven `.casefold()` sites are pinned in
+  aggregate rather than per site (so reverting one can be answered by another —
+  a known face of the family); two comment claims unpinned.
+- **#435 round 8, incomplete**: the reader was killed mid-read, so that head has
+  neither a BLOCK nor a clearance. The round-8 *fix* it was reading did complete
+  and was mutation-verified.
+- All three: `review_reader check` reads **exit 2** and always will here. Every
+  session authenticates as `nuncaeslupus`, the PRs' own author, so the identity
+  comparison cannot distinguish an independent reader. The owner chose option (c)
+  — merge on the reader's verdict, record the check as unsatisfiable on this
+  surface rather than imply it passed. **That is now the standing answer**; do
+  not re-ask it.
 
-## 3. `tools/verified_gate.sh:143` prints a false line in every verdict block
+## 5. Round totals
 
-`echo "commit ... CI is unavailable; this is the substitute CLAUDE.md names"` is
-**hardcoded**, not a live check. It is a leftover from the 2026-09-04 outage and has
-been false since the 7th, so every verdict block pasted on a PR since then carries
-a false claim about CI. Found independently by two workers and confirmed at source.
+~19 second-reader rounds across the three code PRs; **not one empty**. Every
+finding sat behind a green `make host-gate`, a PASS verdict block and green CI.
 
-**Not yet filed as a task — do that first thing.** CLAUDE.md's § *Known environment
-state* is the section with a perfect record of going stale, and this is that
-staleness leaking into the evidence artefact itself.
+**The avoidable cost was dispatch, not review.** Workers repeatedly ended their
+turn parked on a `Monitor` instead of polling — at least five agents, several
+times each. `make host-gate` is ~3.5 minutes, longer than any poll interval. Put
+in every brief: *poll the output file inside a single shell command with an
+until-loop; never end your turn on a monitor.*
 
-## 4. The killed round left an unverified push — treat it as unsourced
+## 6. Pick up here
 
-**#435's head `fd633ac5` was pushed by an agent that died before running
-`verified_gate.sh` and before reporting.** CI is green on it, but no verdict block
-exists, no mutation results were reported, and no self-scan was run. Per CLAUDE.md's
-rule after a mid-round kill: **treat every number it left as unsourced until
-regenerated**, and grep its diff for figures stated as measured that no committed
-artefact supports. The intended round-5 content was: filter `unbacked` by
-`if line not in approved`, add both routes as probe states, and add a
-`status/plan.md` row naming `intact`'s seam. Verify what actually landed.
-
-The other two killed agents (readers for #434 and #436) died in their first tool
-call and left nothing.
-
-## 5. Merging is blocked by an identity fact, not by the reviews
-
-**Every session on this surface posts as `nuncaeslupus`, which is also the PR
-author.** So `review_reader check` reads exit 2 for every one of these heads: a
-marker written by the PR's own author never counts. The reviews are genuinely
-independent — separate sessions, spec read before implementation, own mutations,
-own populations — but the mechanism compares logins and cannot see that.
-
-Both readers that reached the end flagged this unprompted. It is D-28's remaining
-gap, and it now blocks three mergeable PRs.
-
-**Open question for the owner, asked and not yet answered:** (a) a separate
-identity for reader sessions, (b) `review_reader` extended to attest something
-other than a login, or (c) merges proceed on the reader's verdict with the identity
-check recorded honestly as unsatisfiable on this surface. The owner's instruction
-this session ("merge when CI green") reads as (c), and the intent was to say so in
-the merge commit rather than imply the check passed.
-
-## 6. Pacing — the 2–3 worker rule held, the per-agent cost did not
-
-Concurrency stayed at 3 and never exceeded it. The limit was still hit at 01:14.
-Per-agent totals ran **270k–530k tokens**, well above the 135k–280k the last session
-recorded, because every PR went to four or five rounds and each round re-ran
-mutations. The orchestrator's own context was again barely touched.
-
-Two concrete costs worth removing next time:
-
-- **Workers repeatedly ended their turn parked on a `Monitor` instead of polling.**
-  Four separate agents did this, several times each; every one needed a nudge to
-  read the output file it was already waiting on. `make host-gate` is ~3 minutes
-  (pytest alone ~170s), which is longer than a poll interval — say so in the brief
-  and tell them to poll the file, never to stop on a monitor.
-- **Handing a fix round to the original implementer past ~450k tokens is a false
-  economy.** Fresh workers took over #434, #435 and #436 mid-stream and were
-  cheaper than resuming, because the brief carried the findings anyway.
-
-## 7. Pick up here
-
-1. **File the `verified_gate.sh:143` task** (§3). Nothing else depends on it, and it
-   is corrupting every verdict block in the meantime.
-2. **Resolve the identity question** (§5) — three PRs wait on it.
-3. **Regenerate #435's unverified round-5 numbers** (§4) before reviewing it.
-4. **Dispatch the three outstanding reader rounds**: #434 round 4 on `7807824b`,
-   #436 round 3 on `639371b6`, #435 round 5 on whatever its head is once §4 is done.
-   Briefs for all three are in this session's transcript; the standing questions are
-   #434's case-insensitivity widening (a fail-closed cost to weigh, not assume) and
-   #436's new dependency on committed evidence files (a floor checked against a
-   recorded number is only as good as that record).
-5. Untouched and unclaimed: **T157** (#420), **T158** (#427), **D-30** (#426),
-   **D-29** (#314). **T152** (#412) still needs egress this environment does not have.
-
-**One thing not to re-derive:** on the real corpus T156's undecidable state fires
-for **100% of unapproved episodes (208/208)**. It is disclosed in the docstring as
-an accepted risk and a reader declined to raise it. A state that always fires
-carries no discriminating information, so it is worth a task — but it is a known,
-argued position, not an oversight.
+1. **Merge #444** if it is still open — it is what makes `main` green.
+2. **Re-run `make host-gate` against `main` after any batch of merges.** §2 is
+   the reason. Consider making it a step rather than a habit.
+3. Open, unclaimed: **#437** (the hardcoded false "CI is unavailable" line in
+   every verdict block), **#439/#440/#441** (the floor-audit split), **#420**,
+   **#427**, **#426**, **#314**. **#412** still needs egress this environment
+   does not have.
+4. Not an oversight, already argued: T156's undecidable state fires for **208 of
+   208** unapproved episodes on the real corpus. Disclosed in the docstring as an
+   accepted risk; worth a task, not a bug.

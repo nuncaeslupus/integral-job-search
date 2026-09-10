@@ -5,7 +5,7 @@
     {
       "module": "approval",
       "name": "_SHINGLE",
-      "line": 162
+      "line": 427
     },
     {
       "module": "arsenal_source",
@@ -79,8 +79,13 @@
     },
     {
       "module": "pagination_capture",
+      "name": "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED",
+      "line": 1303
+    },
+    {
+      "module": "pagination_capture",
       "name": "MINIMUM_REQUEST_KEYS",
-      "line": 120
+      "line": 121
     },
     {
       "module": "plan_v2",
@@ -201,7 +206,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3213,
+      "line": 3836,
       "population": 15
     },
     {
@@ -237,14 +242,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2766,
+      "line": 2777,
       "population": 39
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2699,
-      "population": 73
+      "line": 2710,
+      "population": 74
     },
     {
       "module": "freshness",
@@ -348,6 +353,8 @@
     "annotation.MIN_IDENTIFYING_LENGTH",
     "approval.MINIMUM_DISCLOSURE_PROBES",
     "approval.MINIMUM_MANIFEST_DISCLOSURES_COMPARED",
+    "approval.MINIMUM_PARAPHRASE_CHECKS",
+    "approval.MINIMUM_PARAPHRASE_STATES",
     "approval.MINIMUM_PROBES",
     "approval.MINIMUM_RETRACTED_APPROVALS_EVALUATED",
     "approval.MINIMUM_RETRACTION_PROBES",
@@ -403,6 +410,7 @@
     "mock_interview.MAX_QUESTIONS",
     "mock_interview.SCHEMA_VERSION",
     "mock_interview._ID_WIDTH",
+    "pagination_capture.MINIMUM_DUPLICATE_KEY_PROBES",
     "pagination_capture.MINIMUM_URL_SIDE_PROBES",
     "pay.STALE_AFTER_DAYS",
     "plan_v2.MINIMUM_BOARD_SIZE",
@@ -441,6 +449,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 73,
+  "floors_swept_at_least": 74,
   "floors_arithmetically_checked_at_least": 36
 }
