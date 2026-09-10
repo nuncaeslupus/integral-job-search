@@ -161,9 +161,23 @@ whitespace, so nothing about the join stops this. That is fail-open in exactly
 the same direction as the original defect — a shingle formed only by the join,
 naming no real episode substance on the page, still clears the check — and it
 was round three's own claim that this could only *remove* a match, never
-manufacture one, which was not true. Round four closes it rather than bounds
-it: the check is now `any(_carries(line, episode.text) for line in unbacked)`,
-one real, whole line at a time, with no join and no seam to straddle at all.
+manufacture one, which was not true. Round four narrowed the check to
+`any(_carries(line, episode.text) for line in unbacked)`, one real, whole
+line at a time, with no join and no seam to straddle there — but round four's
+own claim that this "closes it rather than bounds it" was itself one layer
+short (R5-1, round five). `unbacked` is populated by a **Counter** test
+(`backed[key] == 0`), never a text test, so it can hold a line whose *text* is
+an **approved** episode's own rendered sentence — duplicated on the page with
+nothing left to back the second copy, or left behind after the manifest claim
+that would have backed it is deleted while the approval and the rendered line
+both stay on disk (T114's class of post-draft edit, applied to this seam
+instead of to the disclosure sweep). Either way the round-four check still
+read that approved wording as "confirmed present" for a *different*,
+unapproved episode sharing its shingle window, and cleared it from both
+channels exactly as the original, round-three defect did. Round five closes
+it with `... for line in unbacked if line not in approved`: the same
+per-line, no-join discipline round four established, with `unbacked` itself
+never again searched while it still carries a text `approved` already backs.
 `intact` (`surviving`, above) still joins the way round three's fix did, and
 still carries that seam — in the *opposite*, fail-closed direction (a
 manufactured match there adds an unearned finding and blocks an otherwise
@@ -853,7 +867,7 @@ def measure_prepared(
                 f"{offer_id}/v{version}: {episode.text} — the substance of a story-bank "
                 "episode, carried by an entry no per-use approval names"
             )
-        elif any(_carries(line, episode.text) for line in unbacked):
+        elif any(_carries(line, episode.text) for line in unbacked if line not in approved):
             # Confirmed present verbatim in a line this sweep has *already*
             # reported above — one of `findings`' unbackable rows — so this
             # episode's substance reached the page and is not re-attributed to
@@ -863,16 +877,28 @@ def measure_prepared(
             # Checked one `unbacked` line at a time — never joined into one
             # string — for two separate reasons, both fail-open if missed:
             #
-            # 1. `unbacked` must never include a *backed* line. A written-but-
-            #    backed line can be a **different, approved** episode's own
-            #    rendered sentence, and this episode's shingle landing inside
-            #    somebody else's approved wording is not evidence that *this*
-            #    episode's own substance is on the page. An earlier version of
-            #    this check searched every written line for exactly that
-            #    reason and silently cleared an unapproved twin episode from
-            #    every channel — not a finding, and not `undecidable` either
-            #    (`test_two_unrelated_episodes_sharing_a_window_are_not_conflated`
-            #    pins the fix).
+            # 1. `unbacked` must never be searched while it still carries a
+            #    **backed, approved** line — and round four's claim that it
+            #    "must never include" one was wrong (R5-1, #435 round 5).
+            #    `unbacked` is populated by a *Counter* test (`backed[key] ==
+            #    0`), never by a text test: an approved episode's own rendered
+            #    sentence lands there the moment the page carries it a second
+            #    time with nothing left to back that occurrence (a duplicated
+            #    line), or the manifest row that would have backed it is gone
+            #    while the line itself stays on disk (a deleted claim, T114's
+            #    class of edit) — either way `line in approved` is still true
+            #    of that text. Before this filter, a *different, unapproved*
+            #    episode sharing an eight-word window with that approved
+            #    wording read as "confirmed present" here and was cleared from
+            #    both channels — not a finding, and not `undecidable` either,
+            #    which is the same fail-open round three's own fix
+            #    (`test_two_unrelated_episodes_sharing_a_window_are_not_conflated`)
+            #    was written to close, reopened one layer down: the twin's
+            #    fix filtered which *lines* the elif could ever see, and
+            #    missed that `unbacked` could still hand it an approved
+            #    *text*. Excluding `approved` texts from this scan is what
+            #    closes it: `unbacked` may contain one, but this branch never
+            #    again treats one as evidence for somebody else's episode.
             # 2. Checking each line **on its own**, rather than joining
             #    `unbacked` with `"\n"` and searching the joined text, is what
             #    stops two lines that were never adjacent on the page from
@@ -2122,23 +2148,25 @@ def _named_as_finding(measured: dict[str, Any], episode_text: str) -> bool:
     return any(episode_text in item for item in measured["unapproved_episodes"])
 
 
-# Thirteen constructed profiles (`fresh()` calls), one per numbered state
+# Fifteen constructed profiles (`fresh()` calls), one per numbered state
 # below — a floor over the population the second reader's F3 finding named
 # (states, not `check()` calls), set to the actual count rather than to a
 # margin nobody argued: deleting one state now breaches this floor
 # immediately. States 12-13 are round 3's (N2) and round 4's (F1) accepted
-# findings, committed here per CLAUDE.md's fixtures section: an accepted case
-# pinned only in pytest is a report that was read and waved through, and the
-# measured denominator has to rise or the acceptance did not happen. 11 -> 13.
-MINIMUM_PARAPHRASE_STATES = 13
+# findings; 14-15 are round 5's (R5-1), committed here per CLAUDE.md's
+# fixtures section: an accepted case pinned only in pytest is a report that
+# was read and waved through, and the measured denominator has to rise or the
+# acceptance did not happen. 11 -> 13 -> 15.
+MINIMUM_PARAPHRASE_STATES = 15
 # Both denominators asserted, per the same reasoning T150 gives for
 # `MINIMUM_EVIDENCE_KEYS_COMPARED`/`MINIMUM_EVIDENCE_SOURCES_COMPARED`: a floor
 # on `states` alone is satisfiable by an empty `fresh()` call that asserts
 # nothing, which is exactly the "floor counting the wrong population" shape
 # F3 named. Also set to the actual count, so thinning a state's own checks
-# without deleting the state trips this one instead. 21 -> 25 (states 12-13,
-# two checks each).
-MINIMUM_PARAPHRASE_CHECKS = 25
+# without deleting the state trips this one instead. 21 -> 25 (states 12-13)
+# -> 29 (states 14-15, two checks each) -> 30 (one more check added to state
+# 9 itself, isolating the `approved` disjunct of its skip guard).
+MINIMUM_PARAPHRASE_CHECKS = 30
 
 
 def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
@@ -2185,6 +2213,38 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
             measured["unapproved_episode_disclosures"] == 0,
             f"{label}: an undecided paraphrase was treated as a confirmed disclosure",
         )
+
+    def expect_clean_prepare(label: str, target: ProfileStore, master: CVMaster) -> Payload | None:
+        """`_probe_prepare`, but a refusal this state does not expect is a
+        recorded failure, not an uncaught crash.
+
+        States 4 and 5 below assert that an innocent, same-domain draft
+        prepares cleanly — `prepare` must not raise. Before this helper that
+        assertion was only as strong as an unwrapped `_probe_prepare` call:
+        if a regression made `prepare` wrongly refuse one of them,
+        `ApprovalError` propagated straight out of this function, out of
+        `write_paraphrase_evidence`, and out of `_main` uncaught. `make
+        evidence`'s per-module loop still turns that into `GATE FAILED` on
+        the nonzero exit, so it is not silent — but `evidence.write_text`
+        two lines above never runs, so `status/evidence/T156.json` is left
+        exactly as it was, and anything that reads *that file* rather than
+        re-running the measurement — a stale dashboard, a cached `gate-check`
+        pass — would go on reporting the committed, unrelated 0. It is also
+        reported through a different channel than every other case in this
+        probe: a bare traceback instead of a named entry in
+        `paraphrase_probe_failures`, so the one place this module's own
+        failures are supposed to collect stays silent about this one. Catching
+        it here folds an unexpected refusal back into that same list.
+        """
+        try:
+            return _probe_prepare(target, master)
+        except ApprovalError as exc:
+            check(
+                False,
+                f"{label}: an innocent same-domain draft was wrongly refused as an "
+                f"unapproved disclosure ({exc})",
+            )
+            return None
 
     # 1 — the defect itself: a paraphrase in the headline, never approved and
     # never named in any manifest row. Before this task this measured a
@@ -2242,13 +2302,14 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         headline=_FIXTURE_INNOCENT_WIN_ADJACENT, episodes=(_FIXTURE_EPISODES[0],)
     )
     store = fresh("innocent-win-adjacent", innocent_win)
-    payload = _probe_prepare(store, innocent_win)
-    measured = measure_prepared(store, innocent_win, _PROBE_OFFER, 1)
-    check(
-        measured["unapproved_episode_disclosures"] == 0,
-        "an innocent same-domain document was treated as a confirmed disclosure",
-    )
-    check(payload.version == 1, "an innocent same-domain document blocked the draft")
+    maybe_payload = expect_clean_prepare("innocent-win-adjacent", store, innocent_win)
+    if maybe_payload is not None:
+        measured = measure_prepared(store, innocent_win, _PROBE_OFFER, 1)
+        check(
+            measured["unapproved_episode_disclosures"] == 0,
+            "an innocent same-domain document was treated as a confirmed disclosure",
+        )
+        check(maybe_payload.version == 1, "an innocent same-domain document blocked the draft")
 
     innocent_failure = _probe_master(
         headline="Data engineer — billing systems",
@@ -2262,13 +2323,14 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         episodes=(_FIXTURE_EPISODES[1],),
     )
     store = fresh("innocent-failure-adjacent", innocent_failure)
-    payload = _probe_prepare(store, innocent_failure)
-    measured = measure_prepared(store, innocent_failure, _PROBE_OFFER, 1)
-    check(
-        measured["unapproved_episode_disclosures"] == 0,
-        "an innocent same-domain bullet was treated as a confirmed disclosure",
-    )
-    check(payload.version == 1, "an innocent same-domain bullet blocked the draft")
+    maybe_payload = expect_clean_prepare("innocent-failure-adjacent", store, innocent_failure)
+    if maybe_payload is not None:
+        measured = measure_prepared(store, innocent_failure, _PROBE_OFFER, 1)
+        check(
+            measured["unapproved_episode_disclosures"] == 0,
+            "an innocent same-domain bullet was treated as a confirmed disclosure",
+        )
+        check(maybe_payload.version == 1, "an innocent same-domain bullet blocked the draft")
 
     # 6 — a genuinely unrelated episode, sharing no vocabulary at all, is
     # treated identically to states 1-5: undecidable, because the rule is
@@ -2326,6 +2388,30 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     check(
         measured["episodes_undecidable"] == 0,
         "an approved, disclosed episode was flagged undecidable against its own text",
+    )
+    # The skip guard two loops below reads `disclosed or approved`, and the
+    # case above exercises both disjuncts at once — it cannot tell which one
+    # is doing the work. `disclosed` alone is not independently pinnable
+    # through this gate: whenever an episode is disclosed its literal,
+    # unedited text is on the page, and the `elif` branch's self-match
+    # protects it regardless of whether `disclosed` is even in the guard —
+    # measured directly by reverting the guard to `approved` alone and
+    # confirming every other check in this module still passes. `approved`
+    # alone *is* independently pinnable: strip win's line from `letter.md`
+    # after drafting (T114's own class of edit) while its approval and
+    # manifest claim both stand. Its literal text is gone, so the `elif`
+    # below has nothing left to self-match against, and only the `approved`
+    # half of the guard stops it landing in `undecidable`.
+    letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+    letter.write_text(
+        "\n".join(line for line in letter.read_text(encoding="utf-8").splitlines() if line != win)
+        + "\n",
+        encoding="utf-8",
+    )
+    measured = measure_prepared(store, plain, _PROBE_OFFER, 1)
+    check(
+        not _named_undecidable(measured, win),
+        "the `approved` disjunct alone did not exempt a disclosed-but-deleted line",
     )
 
     # 10 — `payload.json` carries the third state rather than staying silent
@@ -2414,6 +2500,62 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     check(
         _named_undecidable(measured, seam_episode.text),
         "a seam between two unbacked lines silently cleared an unrelated episode",
+    )
+
+    # 14 — R5-1 (#435 round 5, the blocker), route (A): the approved line
+    # duplicated verbatim. `win` is approved and rendered once; `_FIXTURE_TWIN`
+    # is never approved and never rendered at all, and overlaps `win` by a
+    # whole eight-word window (see its own definition). `unbacked` is
+    # populated by a Counter test (`backed[key] == 0`), not a text test, so
+    # the *second*, unbacked copy of win's own line lands in `unbacked` even
+    # though its text is in `approved` — and before this round's fix that let
+    # the elif read it as "confirmed present" for the twin, clearing the twin
+    # from both channels exactly as the round-three defect did.
+    duplicated = _probe_master(
+        headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN)
+    )
+    store = fresh("duplicated-approved-line", duplicated)
+    _probe_prepare(store, duplicated, approved=(0,))
+    letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
+    letter.write_text(letter.read_text(encoding="utf-8") + win + "\n", encoding="utf-8")
+    measured = measure_prepared(store, duplicated, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 1,
+        "a duplicated approved line was not reported as its own unbacked disclosure",
+    )
+    check(
+        _named_undecidable(measured, _FIXTURE_TWIN.text),
+        "a duplicated approved line falsely confirmed a different, unapproved twin (R5-1A)",
+    )
+
+    # 15 — R5-1, route (B): the manifest row for an approved, rendered episode
+    # deleted after drafting — T114's class of post-draft edit, applied to
+    # this seam rather than to the disclosure sweep — while the approval and
+    # the rendered line both stay on disk. With the claim gone, `backed` is
+    # never incremented for that key, so win's own untouched line lands in
+    # `unbacked` by the same Counter-vs-text gap as route (A), and must not
+    # clear the twin from both channels either.
+    manifest_edited = _probe_master(
+        headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN)
+    )
+    store = fresh("manifest-row-deleted", manifest_edited)
+    _probe_prepare(store, manifest_edited, approved=(0,))
+    manifest_path = store.path(*_version_parts(_PROBE_OFFER, 1), "manifest.json")
+    manifest = Manifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    manifest = manifest.model_copy(
+        update={"claims": tuple(claim for claim in manifest.claims if claim.text != win)}
+    )
+    manifest_path.write_text(json.dumps(manifest.model_dump(mode="json")), encoding="utf-8")
+    measured = measure_prepared(store, manifest_edited, _PROBE_OFFER, 1)
+    check(
+        measured["unapproved_episode_disclosures"] == 1,
+        "a manifest row deleted out from under an approved line was not reported as its "
+        "own unbacked disclosure",
+    )
+    check(
+        _named_undecidable(measured, _FIXTURE_TWIN.text),
+        "a manifest row deleted out from under an approved line falsely confirmed a "
+        "different, unapproved twin (R5-1B)",
     )
 
     return {

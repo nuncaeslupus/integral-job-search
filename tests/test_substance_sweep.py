@@ -62,7 +62,7 @@ from integral.cv_store import (
     SourcedText,
     write_master,
 )
-from integral.generate import read_manifest
+from integral.generate import Manifest, read_manifest
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog
 from integral.retraction import retract
@@ -1080,6 +1080,72 @@ def test_a_seam_between_two_unbacked_lines_does_not_manufacture_a_match(
     # join.
     assert not any(e3_text in item for item in measured["unapproved_episodes"])
     assert any(e3_text in item for item in measured["undecidable_episodes"])
+
+
+def test_a_duplicated_approved_line_does_not_conflate_a_twin(store: ProfileStore) -> None:
+    """R5-1 (#435 round 5, the blocker), route (A): `unbacked` is populated by
+    a Counter test (`backed[key] == 0`), never by a text test, so an
+    *approved* line duplicated on the page lands there too — and round four's
+    `elif` read that duplicate's text as "confirmed present" for TWIN, a
+    different, unapproved episode sharing WIN's eight-word window, clearing
+    TWIN from every channel exactly as the round-three defect did.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+    )
+    write_master(store, master)
+    version = _prepare(store, master, approved=(0,))
+    where = _where(store, version)
+    (where / "letter.md").write_text(
+        (where / "letter.md").read_text(encoding="utf-8") + WIN + "\n", encoding="utf-8"
+    )
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    # The duplicate is unbacked in its own right and earns its own finding.
+    assert measured["unapproved_episode_disclosures"] == 1
+    assert any(WIN in item for item in measured["unapproved_episodes"])
+    # TWIN must not be silently cleared by the duplicate's approved wording.
+    assert not any(TWIN in item for item in measured["unapproved_episodes"])
+    assert any(TWIN in item for item in measured["undecidable_episodes"])
+
+
+def test_a_deleted_manifest_row_for_an_approved_line_does_not_conflate_a_twin(
+    store: ProfileStore,
+) -> None:
+    """R5-1, route (B): the manifest row for WIN removed after drafting —
+    T114's class of post-draft edit, applied to this seam rather than to the
+    disclosure sweep — while WIN's approval and its rendered line both stay on
+    disk. With the claim gone, `backed` is never incremented for WIN's key, so
+    WIN's own untouched line lands in `unbacked` by the same Counter-vs-text
+    gap as the duplicate above, and must not clear TWIN from both channels
+    either.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+    )
+    write_master(store, master)
+    version = _prepare(store, master, approved=(0,))
+    where = _where(store, version)
+    manifest_path = where / "manifest.json"
+    manifest = Manifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    manifest = manifest.model_copy(
+        update={"claims": tuple(claim for claim in manifest.claims if claim.text != WIN)}
+    )
+    manifest_path.write_text(json.dumps(manifest.model_dump(mode="json")), encoding="utf-8")
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    # WIN's own line, now unbacked, earns its own finding.
+    assert measured["unapproved_episode_disclosures"] == 1
+    assert any(WIN in item for item in measured["unapproved_episodes"])
+    # TWIN must not be silently cleared by WIN's now-unbacked approved wording.
+    assert not any(TWIN in item for item in measured["unapproved_episodes"])
+    assert any(TWIN in item for item in measured["undecidable_episodes"])
 
 
 def test_an_approved_disclosed_episode_is_never_flagged_undecidable(
