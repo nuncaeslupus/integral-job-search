@@ -273,9 +273,9 @@ def read_response(
     # (round 3, N3). A block page can put its words anywhere, so no rule about
     # *where* is closed. The losing branch's risk is fail-closed and is kept on
     # purpose: a real advert fetched with no title whose text says "captcha" or
-    # "rate limit" is withheld as `unverified` (1 of 58 committed real pages,
-    # jobs.ac.uk's `h-captcha`; round 1, F5). Passing the offer's title — which
-    # the step-7 skill does — takes that page to `live`.
+    # "rate limit" is withheld as `unverified` — jobs.ac.uk's committed listing,
+    # which carries `h-captcha`, is the known example (round 1, F5). Passing the
+    # offer's title, which every caller here does, takes that page to `live`.
     if title is None:
         lowered = body.casefold()
         marker = next((m for m in BLOCK_PAGE_MARKERS if m in lowered), None)

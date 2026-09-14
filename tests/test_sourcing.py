@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from integral.candidate import Aim, CandidateConstraints, Location
-from integral.connectors import ListRequest, build_list_urls, load_connector
+from integral.connectors import ListRequest, build_list_requests, build_list_urls, load_connector
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.sourcing import (
@@ -798,3 +798,106 @@ def test_one_gate_failing_is_never_hidden_by_the_other_being_unmeasured(
     monkeypatch.setattr(sourcing, "DEFAULT_EVIDENCE_PATH", tmp_path / "a.json")
     monkeypatch.setattr(sourcing, "DEFAULT_BROWSER_EVIDENCE_PATH", tmp_path / "b.json")
     assert sourcing._main([]) == expected
+
+
+# #455 round 4, N4 — the rule over every installed board, not over InfoJobs alone.
+
+
+def _installed_get_packages() -> list[str]:
+    from integral.connector_coverage import installed_packages
+
+    return [
+        p.name
+        for p in installed_packages(_CONNECTORS)
+        if p.usable and load_connector(_CONNECTORS / p.name).list.method == "GET"
+    ]
+
+
+def _browser_twin(tmp_path: Path, name: str) -> Any:
+    """An installed package with `client: browser` switched on, whatever else
+    it is — steerable, paginated, an ATS host with employers, a detail page."""
+    import shutil
+
+    import yaml
+
+    from integral.connector_coverage import installed_packages
+
+    root = tmp_path / "connectors"
+    shutil.copytree(_CONNECTORS / name, root / name)
+    path = root / name / "connector.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    document["list"]["client"] = "browser"
+    document["list"].pop("client_target", None)
+    path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+    [package] = [p for p in installed_packages(root) if p.name == name]
+    return package, root, load_connector(root / name)
+
+
+@pytest.mark.parametrize("name", _installed_get_packages())
+def test_no_installed_board_as_a_browser_board_reaches_the_plain_fetch(
+    store: ProfileStore, tmp_path: Path, name: str
+) -> None:
+    """Every request of every board, once it declares `client: browser` —
+    per employer, per phrase, per page, for adverts — goes to the browser or
+    nowhere, and every fetch-log row it writes says it came through the
+    browser. Derived from the installed packages, so a board added later is
+    twinned without anyone remembering to."""
+    from integral.connectors import accepts_query
+    from integral.sourcing import _one_board
+
+    package, root, connector = _browser_twin(tmp_path, name)
+    query = "python" if accepts_query(connector) else None
+    asked: list[str] = []
+    for browser in (None, from_captures([])):
+        outcome = _one_board(
+            store,
+            package,
+            query,
+            fetch=_plain_recording(asked),
+            at=AT,
+            directory=root,
+            page_count=2,
+            robots=_robots(),
+            browser=browser,
+        )
+        assert asked == [], (name, asked)
+        if browser is None:
+            assert outcome.skipped and "real browser" in outcome.skipped, outcome
+    log = Path(store.path("offers", FETCH_LOG))
+    rows = (
+        [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        if log.exists()
+        else []
+    )
+    assert all(row.get("via") == "candidate_browser" for row in rows), rows
+    if connector.list.employers:
+        # Each employer's unanswered page is its own row, so `via` is exercised.
+        assert rows, "an ATS host's per-employer rows were never written"
+
+
+def test_a_browser_board_skipped_mid_host_keeps_the_employers_it_already_lost(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """The skip on an ATS host reports the employers robots had already
+    refused, as T144's `ended()` does for every other exit."""
+    from urllib.parse import urlsplit
+
+    from integral.sourcing import _one_board
+
+    package, root, connector = _browser_twin(tmp_path, "lever_en")
+    [first, *_] = build_list_requests(connector, page_count=1)
+    parts = urlsplit(first.url)
+    refused_path = f"{parts.path}?{parts.query}" if parts.query else parts.path
+    outcome = _one_board(
+        store,
+        package,
+        None,
+        fetch=_plain_recording([]),
+        at=AT,
+        directory=root,
+        page_count=1,
+        robots=_robots(f"User-agent: *\nDisallow: {refused_path}$\n"),
+    )
+    assert outcome.skipped and "real browser" in outcome.skipped, outcome
+    assert first.employer is not None, first
+    assert any(first.employer in e for e in outcome.employers_failed), outcome
