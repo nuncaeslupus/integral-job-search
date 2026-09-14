@@ -40,39 +40,60 @@ elicitation:
           Explica'm una feina que t'enorgullia explicar en un sopar familiar — i alguna
           que no tornaries a acceptar.
 extraction:
-  # Two cues per language, both at the 0.7 rung, and both need the
-  # organisation's own statement of its mission (T176). A sector noun on its
-  # own is not a purpose — the definition says so ("rather than a sector left
-  # to infer") — and a regex cannot tell "healthcare" the purpose from
-  # "Healthcare" the benefit, "Educació Infantil" the degree, "Administración
-  # Pública" the client, "L'Hospitalet" the town or "sanitaris" the bathroom
-  # fittings. Measured on the corpus when this landed, the bare-noun cues
-  # settled 0.7 on over thirty adverts that way. So the sector counts where the
-  # mission statement names it, never addressed to "you" (a benefit is for the
-  # employee; a purpose is for someone else), and every other mention goes to
-  # the model, which is what an unsettled dimension is for.
+  # One cue per language, at the 0.7 rung (T176, second round). The sector-noun
+  # frame this replaced ("our mission … {0,80 chars} … health/education/…")
+  # was an attempt to let a sector count only where the mission statement
+  # names it — but "the words 'our mission' within 80 characters of a sector
+  # noun, in the same sentence" is not "the organisation's own mission
+  # statement names the sector": "Our mission and culture are clear: 25 days
+  # holiday, a pension and a private medical plan." still matched, because the
+  # frame never required the sector noun to sit inside the mission's own
+  # predicate. Closing that gap with a fourth attempt at the same frame is an
+  # enumeration of counterexamples with no last element (CLAUDE.md); the
+  # definition itself says a sector noun must never settle this on its own
+  # ("a named purpose, rather than a sector left to infer"), so an advert that
+  # only names a sector now goes unsettled and reaches the model, which is
+  # what an unsettled dimension is for. What remains is the unframed cue,
+  # widened to close the one asymmetry a second reader found: "Our mission is
+  # to …" and "Our purpose is to …" now agree.
+  #
+  # All three languages carry the same shape, because they have to: the first
+  # round of this fix tightened English alone, and "Nuestra misión y cultura
+  # son claras: 25 días de vacaciones…" went on settling 0.7 in the two
+  # languages nobody had looked at. A predicate is what the 0.7 rung's tell
+  # asks for ("a mission named and meant"), so each language requires its own
+  # form of one — "is to" plus an infinitive in English, "es"/"és" plus an
+  # infinitive in Spanish and Catalan — and each excludes the second person
+  # over the rest of the sentence.
   cues:
     en:
-      - pattern: "our\\s+mission\\s+is|mission-?driven|social\\s+impact"
+      # "is to" or "is that" — a predicate, not a bare "is": "Our purpose is clear, and we
+      # back it with private health insurance." would otherwise match on the
+      # phrase alone with nothing named after it — the rung's own tell asks
+      # for "a mission named and meant", and naming one needs a predicate.
+      # An infinitive is not the only way to write one — "La nostra missió és
+      # que l'educació sigui gratuïta per a tothom." names a purpose through a
+      # subordinate clause — so each language admits both forms: "is to" /
+      # "is that", "es"/"és" plus an infinitive or "que".
+      # Every committed mission/purpose statement, English or corpus, already
+      # takes this form ("is to increase…", "is to look after…"). And never
+      # addressed to "you" anywhere in the same sentence — not only in the gap
+      # up to a sector noun, which is where the sector-frame this replaced
+      # looked and how "Our mission is to look after the health of your
+      # family." (T176 round 2) got past it: "your" sat after the sector word,
+      # outside the window the old guard scanned. A benefit is what the
+      # employer does for you; a purpose is for somebody else.
+      - pattern: "our\\s+(?:mission|purpose)\\s+is\\s+(?:to|that)\\b(?![^.;!?\\n]*\\byour?\\b)|mission-?driven|social\\s+impact"
         value: 0.7
         negatable: true
-      - pattern: "(?:our\\s+(?:mission|purpose)|we\\s+exist\\s+to)(?:(?!\\byour?\\b)[^.;!?\\n]){0,80}?\\b(?:health\\s*care|health|patients?|hospitals?|medic\\w*|education\\w*|schools?|students?|teachers?|climate|public\\s+services?|public\\s+sector|non-?profits?)"
-        value: 0.7
-        negatable: false
     es:
-      - pattern: "nuestra\\s+misi[óo]n|impacto\\s+social"
+      - pattern: "nuestra\\s+(?:misi[óo]n|prop[óo]sito)\\s+es\\s+(?:que|\\w+(?:ar|er|ir))\\b(?![^.;!?\\n]*\\b(?:tu|tus|vuestr\\w*)\\b)|impacto\\s+social"
         value: 0.7
         negatable: true
-      - pattern: "(?:nuestra\\s+misi[óo]n|nuestro\\s+prop[óo]sito|existimos\\s+para)(?:(?!\\b(?:tu|tus|vuestr\\w*)\\b)[^.;!?\\n]){0,80}?\\b(?:sanidad|salud|sanitari\\w*|pacientes?|hospital(?:es)?|m[ée]dic\\w*|medicina|educaci[óo]n|educativ\\w*|escuelas?|estudiantes?|alumn\\w*|clima|clim[áa]tic\\w*|servicios?\\s+p[úu]blicos?|sector\\s+p[úu]blico|administraci[óo]n\\s+p[úu]blica|sin\\s+[áa]nimo\\s+de\\s+lucro)"
-        value: 0.7
-        negatable: false
     ca:
-      - pattern: "la\\s+nostra\\s+missi[óo]|impacte\\s+social"
+      - pattern: "(?:la\\s+nostra\\s+missi[óo]|el\\s+nostre\\s+prop[òo]sit)\\s+[ée]s\\s+(?:que|\\w+(?:ar|er|ir|re))\\b(?![^.;!?\\n]*\\b(?:teu|teus|teva|teves|vostr\\w*)\\b)|impacte\\s+social"
         value: 0.7
         negatable: true
-      - pattern: "(?:la\\s+nostra\\s+missi[óo]|el\\s+nostre\\s+prop[òo]sit|existim\\s+per)(?:(?!\\b(?:teu|teus|teva|teves|vostr\\w*)\\b)[^.;!?\\n]){0,80}?\\b(?:salut|sanitat|sanitari\\w*|pacients?|hospitals?|m[èe]dic\\w*|medicina|educaci[óo]|educatiu\\w*|educativ\\w*|escoles?|estudiants?|alumn\\w*|clima|clim[àa]tic\\w*|serveis?\\s+p[úu]blics?|sector\\s+p[úu]blic|administraci[óo]\\s+p[úu]blica|sense\\s+[àa]nim\\s+de\\s+lucre)"
-        value: 0.7
-        negatable: false
   gold:
     - ad_id: wwr-stripe-backend-engineer-core-technology
       language: en

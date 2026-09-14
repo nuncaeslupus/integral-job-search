@@ -1,10 +1,12 @@
 {
-  "cue_audit_cases": 142,
-  "cue_audit_cases_at_least": 142,
-  "cue_audit_fail_open_cases": 85,
-  "cue_audit_fail_open_cases_at_least": 85,
-  "cue_audit_cases_pinning_mechanism": 51,
-  "cue_audit_cases_pinning_mechanism_at_least": 51,
+  "cue_audit_cases": 159,
+  "cue_audit_cases_at_least": 159,
+  "cue_audit_fail_open_cases": 98,
+  "cue_audit_fail_open_cases_at_least": 98,
+  "cue_audit_cases_pinning_mechanism": 65,
+  "cue_audit_cases_pinning_mechanism_at_least": 65,
+  "cue_audit_citations_checked": 167,
+  "cue_audit_citations_checked_at_least": 167,
   "cue_audit_failures": 0,
   "cue_audit_failing_cases": [],
   "cue_audit_dimensions": [

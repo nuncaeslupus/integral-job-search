@@ -61,6 +61,7 @@ rule rather than to a vocabulary pass:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -117,22 +118,36 @@ class Resolution:
 # an audit that accepted a finding and then lost its fixture is an audit that
 # reports success over work no longer being done. Raise this when cases are added;
 # never lower it to make a deletion pass.
-MINIMUM_CASES = 142
+MINIMUM_CASES = 159
 
 # The floor on cases whose regression direction is fail-open. Recorded separately
 # because it is the half that matters: a fail-closed bug costs a fetch, a
 # fail-open bug means a `hard` dealbreaker said yes to wording that never said it.
-MINIMUM_FAIL_OPEN_CASES = 85
+MINIMUM_FAIL_OPEN_CASES = 98
 
 # The floor on cases that pin `negated` or the raw match count as well as the
 # value. See `AuditCase` — a `None` and a `0.0` each have two distinct causes,
 # and only these cases say which one the table means.
-MINIMUM_MECHANISM_PINNED_CASES = 51
+MINIMUM_MECHANISM_PINNED_CASES = 65
+
+# The floor on individual citations verified against the YAML they name
+# (T176, round 2). One case's `cites` can name more than one field
+# ("learning_support.definition: '…'; career_progression 0.8 tell: '…'"), so
+# this counts citations, not cases. A schedule_flexibility fixture: `cites` a
+# rung's `tell:`, that rung's prose is corrupted into a regex fragment, and
+# nothing compared the two — a green `make host-gate` and a PASS verdict block
+# both saw nothing, which is exactly what this floor exists to stop happening
+# again silently.
+MINIMUM_CITATIONS_CHECKED = 167
 
 
 MISSION_DEFINITION = (
     "definition: 'what the work is ultimately for — a named purpose, rather than a "
     "sector left to infer'"
+)
+
+MISSION_TELL = (
+    "0.7 tell: 'health, education, climate, public service, or a mission named and meant'"
 )
 
 CASES: tuple[AuditCase, ...] = (
@@ -465,8 +480,8 @@ CASES: tuple[AuditCase, ...] = (
         "es",
         "Se ofrecen 12 o 14 pagas.",
         None,
-        "definition: 'a stated band, a figure, or nothing but competitive. A property of "
-        "the ad's wording, not of the amount'; 0.9 tell: 'an actual amount or range'",
+        "definition: \"a stated band, a figure, or nothing but 'competitive'. A property "
+        "of the ad's wording, not of the amount\"; 0.9 tell: 'an actual amount or range'",
         "fail-open",
     ),
     AuditCase(
@@ -598,7 +613,7 @@ CASES: tuple[AuditCase, ...] = (
         "Plan de carrera dentro de la compañía.",
         None,
         "learning_support.definition: 'What the employer puts behind learning'; "
-        "career_progression.definition: 'a named path upward — levels, a career plan'",
+        "career_progression.definition: 'a named path upward exists — levels, a career plan'",
         "fail-open",
     ),
     AuditCase(
@@ -1239,6 +1254,42 @@ CASES: tuple[AuditCase, ...] = (
         "0.7 tell: 'asynchronous work, compressed weeks, or hours the person genuinely sets'",
         "correct",
     ),
+    # -------------------------------------------------------- T176, round 2
+    # A second-reader BLOCK on #473: `async\w*` reads a Python library and a
+    # TypeScript keyword as a working-hours arrangement. `async(?:hronous)?`
+    # refuses `asyncio` on the whole-word guard alone (the letters glued after
+    # "async" are never a word split in two), and a trailing `(?!/)` refuses
+    # `async/await` the same way `stack_modernity`'s delimited-list frame
+    # refuses a bare verb — neither shape is in the committed corpus, which
+    # only ever says "asynchronous" in full, so the guard costs nothing there.
+    AuditCase(
+        "schedule_flexibility",
+        "en",
+        "Strong Python skills including asyncio and FastAPI.",
+        None,
+        "0.7 tell: 'asynchronous work, compressed weeks, or hours the person genuinely sets'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "schedule_flexibility",
+        "en",
+        "Experience with async/await patterns in TypeScript.",
+        None,
+        "0.7 tell: 'asynchronous work, compressed weeks, or hours the person genuinely sets'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # The intended form still reads: neither guard costs the real word.
+        "schedule_flexibility",
+        "en",
+        "We support an asynchronous company culture.",
+        0.6,
+        "0.7 tell: 'asynchronous work, compressed weeks, or hours the person genuinely sets'",
+        "fail-closed",
+        matches=1,
+    ),
     # ------------------------------------------------------------------- F10
     # `talking_clients` was the tenth dimension this PR widened and the only one
     # the first independent read passed as clean. That was true of its ES and CA
@@ -1424,6 +1475,130 @@ CASES: tuple[AuditCase, ...] = (
         "and meant'; 0.0 and 0.7 are the only rungs this dimension has",
         "fail-closed",
     ),
+    # -------------------------------------------------------- T176, round 2
+    # A second-reader BLOCK on #473: the sector-proximity frame above was
+    # itself the bug it replaced, one level up. "our mission … {0,80 chars} …
+    # health/education/…" requires only that the words occur near each other
+    # in the same sentence — not that the sector sit inside the mission's own
+    # predicate — so "Our mission and culture are clear: 25 days holiday, a
+    # pension and a private medical plan." still settled 0.7. Enumerating a
+    # fourth frame is a list with no last element (CLAUDE.md); the frame is
+    # deleted rather than patched, and every sector-proximity cue with it. What
+    # remains is the plain "our mission/purpose is to …" cue, which the
+    # definition's own tell — "a mission named and meant" — already covers,
+    # and which needs no sector at all to settle (see the "increase the speed
+    # of the internet" case above).
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "Our mission and values matter to us: we offer private health insurance and a gym.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "Our mission and culture are clear: 25 days holiday, a pension and a private medical plan.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # "is clear" is not "is to …" — the tell asks for a mission *named*,
+        # and this names nothing before pivoting to the benefits list.
+        "mission_alignment",
+        "en",
+        "Our purpose is clear, and we back it with private health insurance.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # The control the second reader asked for, beside the existing
+        # "Our purpose is to look after your health…" case just above:
+        # word order cannot be what tempers this — "your" sits *after* the
+        # sector word here, which is exactly the gap the deleted frame's
+        # `(?!\byour?\b)` never scanned. Both clauses now go through the same
+        # plain "is to" cue and the same second-person exclusion, so both
+        # read as the same benefit and both go unsettled — no more asymmetry
+        # between where "your" happens to sit in the sentence.
+        "mission_alignment",
+        "en",
+        "Our mission is to look after the health of your family.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # The es twin of the same word-order point, protecting the
+        # pre-existing "Nuestro propósito es cuidar de tu salud…" case above
+        # from the same widening: "tu" sits after the caring clause here too.
+        "mission_alignment",
+        "es",
+        "Nuestro propósito es cuidar de la salud de tu familia.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "El nostre propòsit és tenir cura de la salut de la teva família.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # The es and ca twins of the "Our mission and culture are clear: …"
+        # case above. They are here because the first round of this fix
+        # tightened English only: these two sentences went on settling 0.7
+        # while their English twin was asserted at 0, which is a hole in
+        # exactly the language nobody reads the corpus in.
+        "mission_alignment",
+        "es",
+        "Nuestra misión y cultura son claras: 25 días de vacaciones y seguro médico.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "La nostra missió i cultura són clares: 25 dies de vacances i assegurança mèdica.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # And the controls: a real mission statement in each language still
+        # settles, so the tightening is not a quiet deletion of the rung.
+        # The ca sentence is written in the shape of the one advert in the
+        # committed corpus that settles this dimension (feinaactiva-FA92318673,
+        # a mission about people enjoying their holidays), never copied from it.
+        "mission_alignment",
+        "es",
+        "Nuestra misión es mejorar la salud de las personas mayores.",
+        0.7,
+        MISSION_TELL,
+        "fail-closed",
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "La nostra missió és fer que milions de persones gaudeixin de les seves vacances.",
+        0.7,
+        MISSION_TELL,
+        "fail-closed",
+    ),
     AuditCase(
         # The verb, lower case, beside one real cue: one match cannot settle a
         # bipolar scale, and the verb must not be the second.
@@ -1444,6 +1619,26 @@ CASES: tuple[AuditCase, ...] = (
         "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
         "fail-open",
         matches=1,
+    ),
+    AuditCase(
+        # An accepted fail-closed loss, pinned so nobody restores it by
+        # accident. The second reader on #473 found the unframed alternative
+        # `Go(?=\s*[,/|)])` settling on "Go/No-Go review" and "Go, grow and
+        # lead", so it was deleted rather than framed a third time. The price
+        # is measured and is this sentence: "Go" introduced by a preposition
+        # rather than by a delimiter is no longer read as the language, so
+        # `rust` is the only match left and one match cannot settle a bipolar
+        # scale. The advert it was met in (wwr-clickhouse-ai-product-engineer)
+        # still settles 0.6 from Kubernetes and Rust — what it loses is Go in
+        # the evidence span, not the rung. Restoring the alternative to win
+        # this case back re-opens both fail-open readings above, which is the
+        # trade this case exists to record.
+        "stack_modernity",
+        "en",
+        "Familiarity with Go, Rust, or other systems languages.",
+        None,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-closed",
     ),
     AuditCase(
         "stack_modernity",
@@ -1471,6 +1666,51 @@ CASES: tuple[AuditCase, ...] = (
         "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
         "fail-closed",
         matches=3,
+    ),
+    # -------------------------------------------------------- T176, round 2
+    # A second-reader BLOCK on #473: alternative 2, `Go(?=\s*[,/|)])`, carried
+    # no left frame at all — only alternative 1 enforces "an item of a
+    # delimited list" (a left delimiter, optionally with a space). Deleted
+    # rather than framed a third way; `wwr-clickhouse-ai-product-engineer-
+    # clickstack`'s "Familiarity with Go, Rust, or other systems languages"
+    # loses the "Go" sub-match this way (no left delimiter precedes it either)
+    # but the ad's own Kubernetes mention still settles it at 0.6 — measured
+    # over the full corpus, unchanged. Two adverts do lose their settled
+    # reading outright, for the same reason: `wwr-stripe-backend-engineer-
+    # core-technology` ("...in programming languages like Go, Java, C/C++
+    # etc.") and `wwr-superplane-product-engineer-1` ("While we use Go, we
+    # don't expect you to be an expert...") — both had exactly one corroborating
+    # cue elsewhere (microservices / cloud-native) and needed the "Go" match to
+    # reach two. No frame this table's author could find recovers those two
+    # without also recovering `Go(?=\s*[,/|)])`'s false positives below: both
+    # the true and the false readings are "Go" then a comma then a lower-case
+    # continuation, and nothing local to that shape tells them apart.
+    AuditCase(
+        "stack_modernity",
+        "en",
+        "We hold a Go/No-Go review before each Kubernetes release.",
+        None,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-open",
+        matches=1,
+    ),
+    AuditCase(
+        "stack_modernity",
+        "en",
+        "Go, grow and lead our Kubernetes platform.",
+        None,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-open",
+        matches=1,
+    ),
+    AuditCase(
+        "stack_modernity",
+        "en",
+        "Kubernetes rollouts need a formal Go/No-Go.",
+        None,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-open",
+        matches=1,
     ),
     AuditCase(
         "stack_modernity",
@@ -1582,6 +1822,83 @@ def _raw_match_count(case: AuditCase, dimension: Dimension) -> int:
     )
 
 
+# One citation inside `AuditCase.cites`: an optional dimension id (defaults
+# to the case's own dimension), an optional rung value, the field it names,
+# and the quoted text — single- or double-quoted, whichever the citation's own
+# punctuation needed (a `tell:` that itself contains an apostrophe is written
+# `"…"`, e.g. compensation_transparency's "'competitive salary'" — see the
+# citations below that use it).
+_CITATION_RE = re.compile(
+    r"(?:(?P<dim>[a-zA-Z_]+)[.\s]+)?(?:(?P<value>-?\d+\.\d+)\s+)?"
+    r"(?P<field>definition|tell|label):\s*(?:'(?P<text1>[^']*)'|\"(?P<text2>[^\"]*)\")"
+)
+
+
+def _citations(
+    cites: str, default_dimension: str, known_dimensions: frozenset[str]
+) -> list[tuple[str, str, float | None, str]]:
+    """Every `(dimension_id, field, rung_value, text)` a case's `cites` names.
+
+    A leading token only counts as a dimension id if it actually is one —
+    "the 0.5 tell asks for…", which some `cites` strings carry as unstructured
+    prose beside a real citation, would otherwise read "the" as a dimension.
+    Anything that is not a known id falls back to the case's own dimension.
+    """
+    found = []
+    for m in _CITATION_RE.finditer(cites):
+        dim_token = m.group("dim")
+        dim = dim_token.rstrip(". ") if dim_token else None
+        if dim not in known_dimensions:
+            dim = default_dimension
+        value = float(m.group("value")) if m.group("value") is not None else None
+        text = m.group("text1") if m.group("text1") is not None else m.group("text2")
+        assert text is not None
+        found.append((dim, m.group("field"), value, text))
+    return found
+
+
+def citation_check(case: AuditCase, by_id: dict[str, Dimension]) -> tuple[int, list[str]]:
+    """How many citations `case.cites` names, and which ones are not verbatim.
+
+    The circularity `cue_audit`'s own module docstring exists to break — "never
+    what the extractor returns" — has a second half nothing checked until now:
+    a citation that no longer quotes the `definition:` or rung `tell:` it
+    names is a citation of nothing, and a case can still pass with one, since
+    `expected` is asserted against the *code*, not against the YAML the
+    citation claims. This is what would have caught the
+    `schedule_flexibility` spec corruption (`async\\w*hronous work…` written
+    into the 0.7 rung's own `tell:`) at review time instead of by a second
+    reader: the two cases citing that rung stopped quoting it the moment the
+    prose did, and nothing compared the two.
+    """
+    citations = _citations(case.cites, case.dimension, frozenset(by_id))
+    if not citations:
+        return 0, [f"{case.cites!r} names no definition/tell/label to verify"]
+    mismatches: list[str] = []
+    for dim_id, field, value, text in citations:
+        dimension = by_id[dim_id]
+        if field == "definition":
+            ok = text in dimension.definition
+        elif value is None:
+            # A `tell:`/`label:` citation with no rung value cannot be checked
+            # against the *right* rung — scanning every level instead would
+            # pass a quote that matches some other rung's text, a citation of
+            # the wrong thing rather than of nothing. No committed case hits
+            # this today; refusing it keeps that true rather than leaving an
+            # unexercised path free to go wrong later.
+            ok = False
+        else:
+            levels = [level for level in dimension.levels if level.value == value]
+            if field == "tell":
+                ok = any(text in level.tell for level in levels)
+            else:  # label
+                ok = any(text in level.label.get(case.language) for level in levels)
+        if not ok:
+            where = f"{dim_id}.{field}" + (f"[{value}]" if value is not None else "")
+            mismatches.append(f"{where} does not contain {text!r} verbatim")
+    return len(citations), mismatches
+
+
 def resolve(case: AuditCase, dimensions: list[Dimension]) -> Resolution:
     """What the rules stage actually does with `case`."""
     dimension = _dimension(dimensions, case.dimension)
@@ -1606,7 +1923,9 @@ def audit(
     is only the symptom.
     """
     dimensions = load_dimensions(dimensions_dir)
+    by_id = {dimension.id: dimension for dimension in dimensions}
     failures: list[str] = []
+    citations_checked = 0
     for case in cases:
         got = resolve(case, dimensions)
         wrong: list[str] = []
@@ -1622,6 +1941,10 @@ def audit(
                 f"{case.cites} requires {case.expected!r}, cue set returns "
                 f"{', '.join(wrong)} ({case.direction})"
             )
+        checked, mismatches = citation_check(case, by_id)
+        citations_checked += checked
+        for mismatch in mismatches:
+            failures.append(f"{case.dimension}[{case.language}] {case.text!r}: citation {mismatch}")
     fail_open = [case for case in cases if case.direction == "fail-open"]
     pinned = [case for case in cases if case.negated is not None or case.matches is not None]
     return {
@@ -1636,6 +1959,10 @@ def audit(
         # what it says.
         "cue_audit_cases_pinning_mechanism": len(pinned),
         "cue_audit_cases_pinning_mechanism_at_least": MINIMUM_MECHANISM_PINNED_CASES,
+        # Every citation verified against the YAML field it names, verbatim —
+        # T176 round 2's own second reader found nothing compared the two.
+        "cue_audit_citations_checked": citations_checked,
+        "cue_audit_citations_checked_at_least": MINIMUM_CITATIONS_CHECKED,
         "cue_audit_failures": len(failures),
         "cue_audit_failing_cases": failures,
         "cue_audit_dimensions": sorted({case.dimension for case in cases}),

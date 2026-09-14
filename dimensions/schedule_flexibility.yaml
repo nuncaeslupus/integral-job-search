@@ -8,7 +8,7 @@ label:
   ca: Flexibilitat horària
 definition: >
   How far the working day can be shaped around the person — flexible start and finish,
-  compressed Fridays and summers, async\\w*hronous collaboration — rather than fixed to a
+  compressed Fridays and summers, asynchronous collaboration — rather than fixed to a
   common timetable.
 levels:
   - value: 0.0
@@ -28,7 +28,7 @@ levels:
       en: "Shaped around the person"
       es: "Se adapta a la persona"
       ca: "S'adapta a la persona"
-    tell: "async\\w*hronous work, compressed weeks, or hours the person genuinely sets"
+    tell: "asynchronous work, compressed weeks, or hours the person genuinely sets"
 elicitation:
   questions:
     - id: sf_q1
@@ -53,7 +53,7 @@ extraction:
       - pattern: "flexible\\s+(working\\s+)?(hours|schedule|start)|flexitime|flexible\\s+start\\s+and\\s+finish"
         value: 0.7
         negatable: true
-      - pattern: "async\\w*hronous|async\\w*|summer\\s+hours|compressed\\s+(work\\s+)?week"
+      - pattern: "async(?:hronous)?(?!/)|summer\\s+hours|compressed\\s+(work\\s+)?week"
         value: 0.6
         negatable: false
       - pattern: "fixed\\s+(hours|schedule)"

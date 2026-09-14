@@ -52,7 +52,7 @@ extraction:
       # verb reached a candidate's offer card from "helps customers go from
       # uncertainty to answer" (T176). Ceiling: "Ready, set, Go!" still reads
       # as a list, and needs a second agreeing cue to settle this bipolar scale.
-      - pattern: "kubernetes|terraform|rust|golang|(?-i:(?:(?<=[,/(|])|(?<=[,/(|]\\s))Go(?![-\\w])|Go(?=\\s*[,/|)]))"
+      - pattern: "kubernetes|terraform|rust|golang|(?-i:(?:(?<=[,/(|])|(?<=[,/(|]\\s))Go(?![-\\w]))"
         value: 0.6
         negatable: false
       - pattern: "cloud\\s*-?\\s*native|microservices"

@@ -379,6 +379,7 @@
     "corpus_scope.MINIMUM_SERVING_MODULES",
     "corpus_scope.MINIMUM_STIMULUS_POOL",
     "cue_audit.MINIMUM_CASES",
+    "cue_audit.MINIMUM_CITATIONS_CHECKED",
     "cue_audit.MINIMUM_FAIL_OPEN_CASES",
     "cue_audit.MINIMUM_MECHANISM_PINNED_CASES",
     "cv_store.MINIMUM_FIELDS_MEASURED",

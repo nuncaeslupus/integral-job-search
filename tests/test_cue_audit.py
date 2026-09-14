@@ -21,10 +21,12 @@ import pytest
 from integral.cue_audit import (
     CASES,
     MINIMUM_CASES,
+    MINIMUM_CITATIONS_CHECKED,
     MINIMUM_FAIL_OPEN_CASES,
     MINIMUM_MECHANISM_PINNED_CASES,
     AuditCase,
     audit,
+    citation_check,
     resolve,
 )
 from integral.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, load_dimensions
@@ -33,6 +35,11 @@ from integral.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, load_dimensio
 @pytest.fixture(scope="module")
 def dimensions() -> list[Dimension]:
     return load_dimensions(DEFAULT_DIMENSIONS_DIR)
+
+
+@pytest.fixture(scope="module")
+def dimensions_by_id(dimensions: list[Dimension]) -> dict[str, Dimension]:
+    return {dimension.id: dimension for dimension in dimensions}
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: f"{c.dimension}-{c.language}-{c.text[:40]}")
@@ -84,18 +91,30 @@ def test_the_audit_denominator_is_a_floor_and_never_falls() -> None:
     assert audited["cue_audit_fail_open_cases_at_least"] == MINIMUM_FAIL_OPEN_CASES
     assert audited["cue_audit_cases_pinning_mechanism"] >= MINIMUM_MECHANISM_PINNED_CASES
     assert audited["cue_audit_cases_pinning_mechanism_at_least"] == MINIMUM_MECHANISM_PINNED_CASES
+    assert audited["cue_audit_citations_checked"] >= MINIMUM_CITATIONS_CHECKED
+    assert audited["cue_audit_citations_checked_at_least"] == MINIMUM_CITATIONS_CHECKED
 
 
-def test_every_case_cites_the_text_it_was_decided_from() -> None:
+@pytest.mark.parametrize("case", CASES, ids=lambda c: f"{c.dimension}-{c.language}-{c.text[:40]}")
+def test_every_case_cites_the_text_it_was_decided_from(
+    case: AuditCase, dimensions_by_id: dict[str, Dimension]
+) -> None:
     """A verdict argued from what the code does is the circularity this breaks.
 
     Not a style check: the citation is the only thing separating this table from
     a transcript of the extractor's current behaviour, which would pass forever
-    and protect nothing. Each `cites` names a `definition:` or a rung's `tell:`.
+    and protect nothing. Each `cites` names a `definition:` or a rung's `tell:`,
+    and — the part nothing checked until T176 round 2's second reader — that
+    quote must still occur, verbatim, in the field of the YAML it claims. A
+    citation that stopped quoting its source (the `schedule_flexibility` spec
+    corruption: `async\\w*hronous work…` written into the 0.7 rung's own
+    `tell:`) is a citation of nothing, and `expected` alone never catches it —
+    `expected` is asserted against the code, this is asserted against the YAML.
     """
-    for case in CASES:
-        assert case.cites.strip(), case
-        assert "tell" in case.cites or "definition" in case.cites or "label" in case.cites, case
+    assert case.cites.strip(), case
+    checked, mismatches = citation_check(case, dimensions_by_id)
+    assert checked >= 1, f"{case.cites!r} names no definition/tell/label to verify"
+    assert not mismatches, "\n".join(mismatches)
 
 
 def test_the_audit_reaches_every_dimension_the_pr_widened() -> None:
