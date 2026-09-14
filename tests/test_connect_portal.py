@@ -159,3 +159,92 @@ def test_the_committed_fixture_carries_excerpts_not_whole_adverts() -> None:
     assert len(body) <= BODY_CEILING, (
         f"the detail body is {len(body)} chars — that is an advert, not an excerpt"
     )
+
+
+# ---------------------------------------------------------------------------
+# T166 — the board searches the candidate's terms, and a miss is empty
+
+NO_HITS_HTML = (
+    DEFAULT_PACKAGE.parents[1] / "tests" / "fixtures" / "connectors" / "trabajos_es_no_hits.html"
+).read_text(encoding="utf-8")
+
+
+def test_the_probe_was_recorded_from_the_request_the_connector_sends() -> None:
+    """`{query}` being in `url_pattern` proves the connector sends *a* query,
+    not that the board reads it. The second reader on #447 swapped `CADENA`
+    for `q` — a key trabajos.com ignores, answering with forty unrelated
+    adverts — and every test and `make evidence` stayed green. The probe is a
+    live capture of the board's own search, so the connector must rebuild its
+    URL exactly from the query that capture carries."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from integral.connectors import build_list_urls
+
+    captured = json.loads((DEFAULT_PACKAGE / "probe" / "captured.json").read_text("utf-8"))
+    (query,) = parse_qs(urlsplit(captured["url"]).query)["CADENA"]
+
+    assert build_list_urls(CONNECTOR, page_count=1, query=query) == [captured["url"]]
+
+
+def _search_form(html: str) -> tuple[str, str]:
+    """The board's own search form: where it sends a search, and the term it
+    says it searched for, written back into the `CADENA` box inside that form.
+    A page that ignored the key echoes nothing — the category page `fixture/`
+    was recorded from echoes `""`."""
+    from integral.connectors import compile_selector, parse_html, select_all
+
+    forms = select_all(parse_html(html), compile_selector("form#BUSCADOR"))
+    assert len(forms) == 1, f"{len(forms)} search forms on the page"
+    (form,) = forms
+    assert form.attrs.get("method", "").upper() == "GET"
+    boxes = select_all(form, compile_selector('input[name="CADENA"]'))
+    assert len(boxes) == 1, f"{len(boxes)} CADENA boxes in the search form"
+    return form.attrs.get("action", ""), boxes[0].attrs.get("value", "")
+
+
+def _echoed_query(html: str) -> str:
+    return _search_form(html)[1]
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        pytest.param((DEFAULT_PACKAGE / "probe" / "list.html").read_text("utf-8"), id="probe"),
+        pytest.param(NO_HITS_HTML, id="no-hits"),
+    ],
+)
+def test_the_board_searched_for_the_term_the_connector_sends(html: str) -> None:
+    """The test above binds the pattern to the probe's URL, not to the board
+    having read it. The second reader on #447 (round 2) moved the pattern to
+    `atencion_al_cliente?CADENA={query}`, a path where the board ignores the key,
+    re-recorded the probe honestly from it, and everything passed.
+
+    So the board's own answer is read instead. Each committed page echoes the
+    term it searched for, and the connector must send exactly that term, and
+    nothing else, in `CADENA`, to the place the page's own search form sends
+    it. Two pages carrying two different terms mean a pattern hard-coding one
+    term cannot satisfy both."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from integral.connectors import build_list_urls
+
+    action, echoed = _search_form(html)
+    (url,) = build_list_urls(CONNECTOR, page_count=1, query=echoed)
+    sent, form = urlsplit(url), urlsplit(action)
+
+    assert echoed, "the page echoes no search term — the board did not read one"
+    # Round 3: the query string alone left the path free. A pattern losing one
+    # trailing slash is redirected to a page that echoes "ofertas empleo" and
+    # lists forty unrelated rows. The board's own form says where a search goes.
+    assert (sent.scheme, sent.netloc, sent.path) == (form.scheme, form.netloc, form.path)
+    # `keep_blank_values`: a trailing `&CADENA=` is the key the board reads last.
+    assert parse_qs(sent.query, keep_blank_values=True) == {"CADENA": [echoed]}
+
+
+def test_a_search_with_no_hits_parses_to_no_rows() -> None:
+    """A miss must be empty, not a fallback list — infoempleo.com's page is
+    ruled out in `connectors/ruled-out.yaml` for exactly that. The capture is
+    the board's answer to a nonsense word, and it echoes the word back in its
+    own search box, so this is a results page and not an empty file."""
+    assert _echoed_query(NO_HITS_HTML) == "zzqxvw"
+    assert parse_list_page(CONNECTOR, NO_HITS_HTML) == []
