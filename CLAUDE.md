@@ -201,12 +201,23 @@ On 2026-09-08/09 roughly twenty agents ran on Opus against a configuration whose
 windows. Nothing was misconfigured. Three separate things have to be true for the
 configured value to arrive, and on this surface none of them is:
 
-- **The export cannot survive.** `worker-loop.md` sets
-  `CLAUDE_CODE_SUBAGENT_MODEL` in a shell step. Cloud Bash calls do not share
-  shell state — measured here: `export ARSENAL_PROBE_XYZ=persisted` in one call,
-  `${ARSENAL_PROBE_XYZ:-<unset>}` in the next, prints `<unset>`. The variable is
-  gone before any dispatch reads it. On the laptop the same line works, which is
-  why this is worth writing down rather than assuming.
+- **The export cannot reach the dispatcher, on any surface.** `worker-loop.md`
+  sets `CLAUDE_CODE_SUBAGENT_MODEL` in a shell step. That shell is a **child** of
+  the Claude Code process, and a child cannot mutate its parent's environment — so
+  the variable never reaches the process that reads it at dispatch time, whether or
+  not shell state persists between Bash calls. This bullet said *"on the laptop the
+  same line works"* until 2026-09-14, on the strength of a probe that measured the
+  wrong thing: `export` in one Bash call and `${VAR}` in the next tests whether two
+  **sibling shells** share state, which is not the question. The question is whether
+  the parent sees it, and by process semantics it cannot. Measured after a full day
+  of dispatches on this laptop: `printenv | grep -c CLAUDE_CODE_SUBAGENT_MODEL`
+  → `0`. A closed rule, not a surface quirk — so no probe needs repeating.
+- **The bundle's agent files are not agent definitions.** `claude-arsenal/agents/
+  worker.md` opens with `# Worker Agent` and has no YAML frontmatter at all; its
+  `## Launch parameters` block naming `model:` and `env:` is prose in a fenced
+  block. `init.py:1282` vendors `agents/` into the bundle, never into
+  `.claude/agents/`, which does not exist here. So the second documented path
+  carries the value no further than the first.
 - **An explicit `model:` outranks it anyway.** The `Agent` tool's parameter takes
   precedence over the configured default subagent model, so a session that names
   a model wins over the config every time and is told nothing.
@@ -225,6 +236,44 @@ second reader `merge-policy` requires has no agent definition and no model key
 anywhere in the bundle. It exists only in this file's prose, which is why the
 model it runs on has to be named here too. Both gaps are upstream's
 (`claude-arsenal`), not fixable in this repo.
+
+## The context window is the larger lever, and raising it spends more
+
+Measured on 2026-09-14, from `message.usage` in `~/.claude/projects/*/*.jsonl`:
+nine concurrent sessions of this repo, **every one `claude-opus-5`**, 1,588 turns,
+**438M cache-read tokens against 1.3M of output**, and 193M in the 10:00 UTC hour
+alone. A five-hour window went in under an hour, twice.
+
+**Cost is `turns × context`, because every turn re-reads the whole conversation.**
+A 145-turn session averaging 412k of context re-read itself 60M tokens' worth while
+producing 129k of text. So a long session is the expensive shape, and the remedy is
+to end a session at its PR rather than to prune inside it.
+
+**Raising the auto-compact window therefore spends more, not less** — it is the
+threshold at which compaction *triggers*, so a higher value is a higher floor under
+every turn. The host had raised it to 500k to "stop the context filling up"; 1,167
+of 1,592 turns then sat above 200k, with maxima at 466k. Replaying the same turns
+against lower caps: 500k → 453M (what happened), 300k → 387M, 200k → 287M (63%),
+120k → 186M (41%). An upper bound on the saving, since compacting costs something
+too, but the order is the point.
+
+The knob is real and has two spellings, both read by the Claude Code process
+itself rather than by a subagent dispatch: `autoCompactWindow` in
+`~/.claude/settings.json` (min 100,000, max 1,000,000) and
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW` in the launching environment. **200,000 is the
+setting here** as of 2026-09-14. Arsenal has no key for it — that is
+`claude-arsenal#383`, along with `models.reviewers` and the two dead model paths
+above.
+
+**And the concurrency ceiling is per-session, so nothing enforced it.**
+`ARSENAL_MAX_WORKERS` (default 2) bounds workers inside one orchestrator;
+`ARSENAL_QUOTA_STOP_PCT` and `ARSENAL_MAX_ITERATIONS` count per session, keyed by
+session id. Nine orchestrators each saw a compliant budget and shared one window.
+Until that is fixed upstream, the two-to-three ceiling the section above states is
+enforced by whoever opens the sessions and by nothing else.
+
+`tmp/evals/usage.py` re-measures all of this in one command, and is gitignored
+scratch rather than a repo tool — the request to ship it is part of #383.
 
 **And this cannot be pinned.** No gate can observe which model a subagent ran on;
 the token report arrives after the spend. By the standard the section below sets
