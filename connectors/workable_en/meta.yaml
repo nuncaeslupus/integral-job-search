@@ -1,0 +1,24 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. An ATS host: `site` is the provider's domain — its API and the
+# advert pages every employer in `employers` links to sit under it (T144).
+site: workable.com
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-09-10"
+
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose on the date below, from employers and roles chosen
+# to be unrelated to any search a candidate was running — never an advert a
+# candidate was reading. Excerpted: two postings per response, each long body
+# field cut to its first 600 characters with the cut marked in the text.
+# `probe/list.html` is a second read naming postings the fixture does not.
+fixture:
+  provenance: sampled
+  recorded: "2026-09-10"
+  bodies: excerpted
+  client_ip: redacted

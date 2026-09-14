@@ -1,5 +1,23 @@
 # Session handover
 
+## 00. T171 opened (#461): a steerable connector's query must be in its capture
+
+- **T171** ([#456](https://github.com/nuncaeslupus/integral-job-search/issues/456),
+  PR [#461](https://github.com/nuncaeslupus/integral-job-search/pull/461)) adds
+  `integral.query_capture`. For every package with `{query}` in `url_pattern`,
+  the probe URL must be a URL the pattern issues, with `{query}` filled.
+  `jobfluent_es`'s probe was re-recorded `live` from `?q=python&page=2`, and a
+  nonsense `q` gives 0 rows, not a fallback list. Merged with `main` at
+  `69aae26`. Waiting for a second reader and CI.
+- **It will name two open PRs' packages as they are pushed today.** `trabajos_es`
+  on #447 (probe still `atencion_al_cliente`, no `CADENA=`) and `infojobs_es`
+  on #455 (`…/{query}/barcelona` over a probe with no query segment). Each needs
+  a probe recorded from a real search before it merges after #461.
+- **Census collision to watch:** #461 and #445 both change
+  `floor_sweep.MINIMUM_FLOORS_SWEPT` from 74 to 75, in byte-identical text. Git
+  will merge them silently, and the merged tree counts 76. Whichever merges
+  second regenerates it and raises the floor; don't pick a side.
+
 ## 0. A concurrent session, same evening: T168 merged (#452)
 
 **`origin/main` is now at `fff210d` (#452), not the #444 repair the next

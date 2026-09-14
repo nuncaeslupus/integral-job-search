@@ -1,8 +1,8 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 20,
-  "silent_connector_failures_evaluated": 20,
-  "connector_runs_probed": 20,
+  "connector_runs_evaluated": 25,
+  "silent_connector_failures_evaluated": 25,
+  "connector_runs_probed": 25,
   "disabled": [],
   "gate_status": "measured",
   "readings": [
@@ -15,6 +15,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30",
+      "rate_limited": null
+    },
+    {
+      "connector": "ashby",
+      "site": "ashbyhq.com",
+      "health": "healthy",
+      "baseline_items": 2,
+      "probe_items": 2,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-10",
       "rate_limited": null
     },
     {
@@ -48,6 +59,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-09-06",
+      "rate_limited": null
+    },
+    {
+      "connector": "greenhouse",
+      "site": "greenhouse.io",
+      "health": "healthy",
+      "baseline_items": 2,
+      "probe_items": 2,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-10",
       "rate_limited": null
     },
     {
@@ -117,6 +139,17 @@
       "rate_limited": null
     },
     {
+      "connector": "lever",
+      "site": "lever.co",
+      "health": "healthy",
+      "baseline_items": 2,
+      "probe_items": 2,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-10",
+      "rate_limited": null
+    },
+    {
       "connector": "nofluffjobs",
       "site": "nofluffjobs.com",
       "health": "healthy",
@@ -147,6 +180,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30",
+      "rate_limited": null
+    },
+    {
+      "connector": "rippling",
+      "site": "rippling.com",
+      "health": "healthy",
+      "baseline_items": 2,
+      "probe_items": 2,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-10",
       "rate_limited": null
     },
     {
@@ -213,6 +257,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30",
+      "rate_limited": null
+    },
+    {
+      "connector": "workable",
+      "site": "workable.com",
+      "health": "healthy",
+      "baseline_items": 1,
+      "probe_items": 2,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-10",
       "rate_limited": null
     },
     {

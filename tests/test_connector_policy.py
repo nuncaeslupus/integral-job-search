@@ -869,7 +869,8 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
     """
     measured = cp.measure_second_readers()
 
-    assert measured["robots_adjudications_without_a_competent_second_reader"] == 19
+    # 19, plus T144's four ATS hosts whose files leave nothing to refuse.
+    assert measured["robots_adjudications_without_a_competent_second_reader"] == 23
     assert measured["robots_adjudications_misrepresenting_their_standing"] == 0
     # The count is every row minus those standing on a demonstrated agreement —
     # asserted as that relationship and not only as a literal, because the
@@ -877,7 +878,7 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
     # edited to stay true rather than being re-derived.
     live = cp.adjudications()
     earned = [row for row in live if row.standing == cp.TWO_PARSERS_AGREED and not row.problems()]
-    assert len(live) - len(earned) == 19
+    assert len(live) - len(earned) == 23
     # **It was 20 until 2026-09-08, and what moved it is the point of T120.**
     # foorilla.com carried a committed robots.txt and stood as `single_parser`
     # because `urllib.robotparser` could not refuse anything on a file opening
@@ -891,7 +892,7 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
     # Both survive into the committed record: hiding the honest count behind
     # the gate's zero is the defect, so it is committed beside it.
     committed = cp.record_second_readers(measured)
-    assert committed["robots_adjudications_without_a_competent_second_reader"] == 19
+    assert committed["robots_adjudications_without_a_competent_second_reader"] == 23
 
 
 def test_single_parser_names_which_of_its_two_findings_each_row_is() -> None:
@@ -977,3 +978,31 @@ def test_the_default_second_reader_is_one_that_can_refuse() -> None:
     default = cp.READERS[cp.DEFAULT_SECOND_READER]
     assert robots.allows_text(document, agent, "/apply") is False
     assert default(document, agent, "/apply") is False
+
+
+@pytest.mark.parametrize(
+    ("changes", "complaint"),
+    [
+        ({"robots_status": 403}, "not one `integral.robots` reads as no rules"),
+        ({"robots_status": 401, "robots_txt": "User-agent: *\nAllow: /\n"}, "both a robots.txt"),
+    ],
+)
+def test_a_recorded_robots_status_must_be_one_that_admits(
+    changes: dict[str, object], complaint: str
+) -> None:
+    """T144: `robots_status` exists so a verdict with no file can be replayed.
+    A status the matcher refuses on, or one beside a file, is not that."""
+    row = cp.RobotsAdjudication.from_mapping(
+        {
+            "site": "api.example.test",
+            "package": "connectors/examplejobs_es",
+            "checked": "2026-09-10",
+            "agent": "integral-job-search/0.1",
+            "standing": cp.NO_NEGATIVE_CONTROL_POSSIBLE,
+            "second_reader": "urllib.robotparser",
+            "source": "connectors/robots-adjudications.yaml",
+            "reason": "no file",
+            **changes,
+        }
+    )
+    assert any(complaint in problem for problem in row.problems())

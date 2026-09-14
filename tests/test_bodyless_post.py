@@ -183,7 +183,8 @@ def test_adding_a_connector_package_does_not_change_any_committed_value(
         target = library / package.name
         target.mkdir()
         shutil.copy(package / "connector.yaml", target / "connector.yaml")
-    before = bodyless_post.record(bodyless_post.measure(directory=library))
+    before_measured = bodyless_post.measure(directory=library)
+    before = bodyless_post.record(before_measured)
 
     # One more package, built from an existing one so it really loads.
     donor = library / "examplejobs_es"
@@ -196,7 +197,9 @@ def test_adding_a_connector_package_does_not_change_any_committed_value(
         encoding="utf-8",
     )
     after_measured = bodyless_post.measure(directory=library)
-    assert after_measured["packages_checked"] == before["packages_checked_at_least"] + 2, (
+    # Against the live count, not the floor: pinning `floor + 2` made this
+    # test itself package-sensitive, and it went red when T144 added five.
+    assert after_measured["packages_checked"] == before_measured["packages_checked"] + 1, (
         "the live count must move, or this test is asserting nothing"
     )
     assert bodyless_post.record(after_measured) == before

@@ -1,0 +1,66 @@
+# Lever — an ATS host, not a job board (T144). One package, every employer
+# named in `employers`.
+#
+# Host: api.lever.co, the public Postings API. Its robots.txt (checked
+# 2026-09-10) is `User-agent: *`, `Allow: /`, `Crawl-delay: 1` — nothing to
+# refuse, so no negative control exists (`robots-adjudications.yaml`).
+#
+# The body is read from each advert's own page (`hostedUrl`, on jobs.lever.co):
+# `div.content` holds the whole posting — description, the `lists` of
+# responsibilities and requirements, and the closing text. The API splits those
+# across several fields and this grammar reads one path per field; mapping
+# `descriptionPlain` alone dropped the requirements, so a language requirement
+# stated only there read as "none stated" (second-reader F2 on #445).
+# ponytail: one page per advert, capped by the engine's `DETAIL_FETCH_CEILING`
+# (40) per board per run. The employers below list hundreds of rows between
+# them, so a run completes the first 40 — the same ones, from the
+# alphabetically first employers, every run — and drops the rest. The summary
+# names only the first drop reason, so it reads as a budget stop only when
+# the first dropped row was one (#445 round 3, R3-5). Upgrade path is
+# an engine change that joins several JSON paths into one field, or a detail
+# budget that rotates across runs.
+#
+# Salary is mapped because Lever publishes it structured, per posting, in
+# `salaryRange` — `interval` is Lever's own period label ("per-year-salary").
+site: lever
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-10"
+auth: none
+
+list:
+  url_pattern: "https://api.lever.co/v0/postings/{employer}?mode=json"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    items: "$"
+    fields:
+      detail_url: hostedUrl
+      source_ref: id
+      title: text
+      location_raw: categories.location
+      salary_min: salaryRange.min
+      salary_max: salaryRange.max
+      salary_currency: salaryRange.currency
+      salary_period: salaryRange.interval
+  # Postings carry no employer name, so this is where `company` comes from.
+  employers:
+    aircall: Aircall
+    blablacar: BlaBlaCar
+    contentsquare: Contentsquare
+    jobandtalent: Jobandtalent
+    lodgify: Lodgify
+    malt: Malt
+    outreach: Outreach
+    pigment: Pigment
+    qonto: Qonto
+    ro: Ro
+    scaleway: Scaleway
+    spotify: Spotify
+    swile: Swile
+
+detail:
+  fields:
+    text:
+      css: "div.content"

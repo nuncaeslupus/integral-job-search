@@ -1,0 +1,45 @@
+# Rippling — an ATS host, not a job board (T144). One package, every employer
+# named in `employers`.
+#
+# List: api.rippling.com's public board API. /robots.txt answers 404 — no
+# rules. Its rows carry no body, so each advert's own page is fetched:
+# ats.rippling.com, whose robots.txt disallows `/internal/` only. That page is
+# Next.js and writes the posting into `__NEXT_DATA__` server-side.
+#
+# `description.role` is the role section; the page's `description.company`
+# is the employer's boilerplate, left out of the body on purpose.
+#
+# ponytail: the engine fetches at most `DETAIL_FETCH_CEILING` (40) advert pages
+# per board per run. Rippling's own list is ~663 rows but ~347 postings — a row
+# per location — so those 40 fetches reach about 22 distinct postings, and the
+# rest are reported dropped for "no text" (measured 2026-09-10). Upgrade path is
+# the engine's, not this file's: collapse rows sharing a detail URL, rotate the
+# detail budget across runs, or filter the list before details are fetched.
+site: rippling
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-10"
+auth: none
+
+list:
+  url_pattern: "https://api.rippling.com/platform/api/ats/v1/board/{employer}/jobs"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    items: "$"
+    fields:
+      detail_url: url
+      source_ref: uuid
+      title: name
+      location_raw: workLocation.label
+  employers:
+    rippling: Rippling
+
+detail:
+  from_json:
+    embedded_in: "script[id=\"__NEXT_DATA__\"]"
+    fields:
+      title: props.pageProps.apiData.jobPost.name
+      company: props.pageProps.apiData.jobPost.companyName
+      text: props.pageProps.apiData.jobPost.description.role

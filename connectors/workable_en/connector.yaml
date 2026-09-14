@@ -1,0 +1,31 @@
+# Workable — an ATS host, not a job board (T144). One package, every employer
+# named in `employers`.
+#
+# Host: apply.workable.com, the account widget API. Its robots.txt (checked
+# 2026-09-10) is `User-agent: *` with a bare `Disallow:` — no restriction and
+# no negative control possible (`robots-adjudications.yaml`).
+#
+# `details=true` puts each advert's body in the listing. The account's name
+# sits beside `jobs`, not inside a job, so `company` comes from `employers`.
+site: workable
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-10"
+auth: none
+
+list:
+  url_pattern: "https://apply.workable.com/api/v1/widget/accounts/{employer}?details=true"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    items: jobs
+    fields:
+      detail_url: url
+      source_ref: shortcode
+      title: title
+      location_raw: city
+      text: description
+  employers:
+    codurance: Codurance
+    huggingface: Hugging Face

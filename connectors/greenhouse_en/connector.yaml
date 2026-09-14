@@ -1,0 +1,92 @@
+# Greenhouse — an ATS host, not a job board (T144). Every employer on it
+# publishes the same JSON at one URL shape, so this one package reads every
+# employer named in `employers` below; adding one is one line.
+#
+# Host: boards-api.greenhouse.io, the public Job Board API. Its robots.txt
+# (checked 2026-09-10) is one `*` group disallowing `/embed/` only; the
+# `/v1/boards/<slug>/jobs` path is allowed, and the second reader agreed
+# (`connectors/robots-adjudications.yaml`). `boards.greenhouse.io`, the
+# embedded board, is a different host and stays ruled out in ruled-out.yaml.
+#
+# `content=true` puts each advert's body in the listing, so no advert page is
+# fetched. The body arrives HTML-escaped (`&lt;p&gt;`) and is kept verbatim.
+# Salary is left unmapped: it appears only inside that prose, and
+# `pay_input_ranges` is in cents — a figure off by 100 is worse than none.
+site: greenhouse
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-10"
+auth: none
+
+list:
+  url_pattern: "https://boards-api.greenhouse.io/v1/boards/{employer}/jobs?content=true"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    items: jobs
+    fields:
+      detail_url: absolute_url
+      source_ref: id
+      title: title
+      company: company_name
+      location_raw: location.name
+      text: content
+  # Slug → the name the board itself answers with in `company_name`.
+  employers:
+    airtable: Airtable
+    algolia: Algolia
+    anthropic: Anthropic
+    axiom: Axiom
+    canonical: Canonical
+    chainguard: Chainguard
+    circleci: CircleCI
+    cloudflare: Cloudflare
+    cockroachlabs: Cockroach Labs
+    coursera: Coursera
+    databricks: Databricks
+    datadog: Datadog
+    discord: Discord
+    dropbox: Dropbox
+    duolingo: Duolingo
+    elastic: Elastic
+    fastly: Fastly
+    figma: Figma
+    ghost: Ghost
+    gitlab: GitLab
+    grafanalabs: Grafana Labs
+    honeycomb: Honeycomb.io
+    hubspotjobs: HubSpot
+    intercom: Intercom
+    jetbrains: JetBrains
+    jfrog: JFrog
+    khanacademy: Khan Academy
+    labelbox: Labelbox
+    launchdarkly: LaunchDarkly
+    mongodb: MongoDB
+    mozilla: Mozilla
+    neo4j: Neo4j
+    netlify: Netlify
+    newrelic: New Relic
+    pagerduty: PagerDuty
+    planetscale: PlanetScale
+    polyai: PolyAI
+    postman: Postman
+    reddit: Reddit
+    scaleai: Scale AI
+    sourcegraph91: Sourcegraph
+    speechmatics: Speechmatics
+    stackblitz: Bolt.new
+    starburst: Starburst
+    sumologic: Sumo Logic
+    tailscale: Tailscale
+    togetherai: Together AI
+    twilio: Twilio
+    typeform: Typeform
+    udemy: Udemy
+    vercel: Vercel
+    wallapop: Wallapop
+    warp: Warp
+    wayve: Wayve
+    wikimedia: Wikimedia Foundation
+    yugabyte: YugabyteDB

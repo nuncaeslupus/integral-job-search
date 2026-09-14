@@ -1,13 +1,13 @@
 {
   "robots_adjudications_misrepresenting_their_standing": 0,
-  "robots_adjudications_without_a_competent_second_reader": 19,
+  "robots_adjudications_without_a_competent_second_reader": 23,
   "controls_checked": 16,
   "competence_fixtures_checked": 16,
   "packages_without_an_adjudication_record": 0,
   "standings": {
-    "two_parsers_agreed": 3,
+    "two_parsers_agreed": 4,
     "single_parser": 18,
-    "no_negative_control_possible": 1
+    "no_negative_control_possible": 5
   },
   "single_parser_cases": {
     "second_reader_ran_and_could_not_refuse": 3,
@@ -15,7 +15,12 @@
   },
   "gate_status": "measured",
   "sites": [
+    "api.ashbyhq.com",
+    "api.lever.co",
+    "api.rippling.com",
+    "apply.workable.com",
     "arbeitnow.com",
+    "boards-api.greenhouse.io",
     "builtin.com",
     "examplejobs.test",
     "foorilla.com",

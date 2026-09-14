@@ -2707,9 +2707,12 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: `CLAUDE.md` describes, caught by the check rather than by a reviewer, and
 #: the remedy is the one it prescribes: regenerate against the merged tree
 #: rather than pick a side. Zero slack is restored at the new true count.
-#: T171 added `query_capture.MINIMUM_STEERABLE_PACKAGES_CHECKED`, so the
-#: count is now 75, still with zero slack.
-MINIMUM_FLOORS_SWEPT = 75
+#: 75 since T144, whose `employer_boards.MINIMUM_CONFORMING` joined the
+#: population — the same refusal, met on purpose this time. **76 since T171**,
+#: whose `query_capture.MINIMUM_STEERABLE_PACKAGES_CHECKED` joined it as well:
+#: both branches wrote 75 for different floors, and the merged tree holds both.
+#: Still zero slack, regenerated against the merge rather than picked.
+MINIMUM_FLOORS_SWEPT = 76
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach

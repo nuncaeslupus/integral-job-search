@@ -1,6 +1,6 @@
 {
   "connectors_whose_probe_repeats_its_fixture": 0,
-  "probes_compared": 20,
+  "probes_compared": 25,
   "probes_compared_floor": 12,
   "gate_status": "measured",
   "tautological_probes": [],
@@ -13,6 +13,17 @@
       "probe_offers": 6,
       "shared_offers": 3,
       "overlap": 0.5,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "ashby_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 2,
+      "probe_offers": 2,
+      "shared_offers": 0,
+      "overlap": 0.0,
       "repeats_the_fixture": false,
       "byte_identical": false
     },
@@ -49,6 +60,17 @@
       "reason": null,
       "fixture_offers": 3,
       "probe_offers": 3,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "greenhouse_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 2,
+      "probe_offers": 2,
       "shared_offers": 0,
       "overlap": 0.0,
       "repeats_the_fixture": false,
@@ -121,6 +143,17 @@
       "byte_identical": false
     },
     {
+      "package": "lever_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 2,
+      "probe_offers": 2,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
       "package": "nofluffjobs_en",
       "compared": true,
       "reason": null,
@@ -150,6 +183,17 @@
       "probe_offers": 18,
       "shared_offers": 2,
       "overlap": 0.1111,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "rippling_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 2,
+      "probe_offers": 1,
+      "shared_offers": 0,
+      "overlap": 0.0,
       "repeats_the_fixture": false,
       "byte_identical": false
     },
@@ -216,6 +260,17 @@
       "probe_offers": 25,
       "shared_offers": 3,
       "overlap": 0.12,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "workable_en",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 1,
+      "probe_offers": 2,
+      "shared_offers": 0,
+      "overlap": 0.0,
       "repeats_the_fixture": false,
       "byte_identical": false
     },
