@@ -590,6 +590,69 @@ Three rules, and the third is the one that is easy to skip:
 the point of the script is that "local run" stops meaning "whatever tree the
 session happened to have".
 
+## What "mutation" means here — one deliberate revert, not `mutmut`
+
+The word is borrowed and the practice is not the same one, which has cost real
+confusion. **Mutation testing** proper — `mutmut`, `cosmic-ray` — generates
+*thousands* of automatic mutants (flip a comparison, drop a statement, change a
+constant) and runs the whole suite against each, then reports which survived. That
+is not what happens here, and nothing in this repository runs it.
+
+What happens here is **one deliberate revert per claim**:
+
+```bash
+# a fixture claims it pins something. Prove it.
+<undo exactly that fix, by hand, in the source>
+rm -f src/**/__pycache__/*.pyc          # the section below says why
+uv run pytest tests/test_that_one.py    # must go RED, in a fresh subprocess
+<restore>
+uv run pytest tests/test_that_one.py    # must go GREEN again
+```
+
+One mutation, chosen because someone claimed a case covers it, aimed at that case.
+The question is never "what fraction of mutants die" — it is **"is this specific
+sentence pinned, or is it merely true?"**, which is the distinction the second-reader
+section above is built on. A green test that stays green when you delete the thing it
+tests is the defect this catches, and `mutmut`'s score would not name it.
+
+(The marketplace ships a `mutmut-report` skill for the automated kind. Nothing in the
+worker loop calls it, and adopting it would be a different decision with a different
+budget — do not reach for it thinking it is this.)
+
+**Where the rule lives is worth knowing, because it does not live where it looks.**
+`claude-arsenal` prescribes none of this: `references/evidence-gates.md` mentions
+mutation **zero** times, and every hit for `mutat` in the bundle is incidental
+("mutates a tree", "modes that can mutate"). The one sentence in this file that
+mandates it — *"This repository mandates mutation-verification on every fixture"* —
+entered in #329 as the **premise of a paragraph about something else** (the `.pyc`
+trap below). No pull request ever adopted it; it is cited as though already settled,
+and 17 of 220 task files mention it. It is a **house rule with a measured cause**
+(T70: ten defects across five review rounds, eight introduced by the session fixing
+the previous one, every one behind a green gate) — but it is this house's, not the
+framework's.
+
+**The mutation is cheap. What it is run against is not, and that is where the time
+and the heat and the tokens go.** Measured here:
+
+| | |
+|---|---|
+| one scoped mutation round | edit + `rm` + `pytest tests/test_x.py` — **seconds** |
+| the full suite | 3,968 tests, **~400–570 s** |
+| `verified_gate.sh` | clean checkout + `make host-gate` — **~9–10 min** per run |
+| the worst round on record | one reviewer ran **54** mutations, another 30, **each re-running the whole suite** → ~6 h of CPU for one review |
+| a review agent | 135k–280k tokens on completion |
+
+So three rules, and the second and third are the ones that get skipped:
+
+- **Scope the test run.** `uv run pytest tests/test_x.py` during the cycle. A full
+  suite per mutation is the single largest avoidable cost in this repository.
+- **`make host-gate` once**, at the end, before the push — not per mutation and not
+  per fix.
+- **`verified_gate.sh` on the head that will be merged, and on no other commit.** The
+  block is evidence about one SHA; a block produced for an intermediate commit is ~10
+  minutes spent on a commit nobody merges. #435 and #455 carried nine commits each,
+  which is where an hour and a half of gate goes if every push gets one.
+
 ## A reverted mutation can leave the mutated bytecode running
 
 This repository mandates mutation-verification on every fixture — revert the fix,
