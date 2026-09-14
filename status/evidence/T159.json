@@ -25,7 +25,7 @@
     {
       "module": "connector_health",
       "name": "MINIMUM_PROBES_COMPARED",
-      "line": 943
+      "line": 985
     },
     {
       "module": "connector_policy",
@@ -105,7 +105,7 @@
     {
       "module": "query_capture",
       "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
-      "line": 112
+      "line": 116
     },
     {
       "module": "question_bank",
@@ -160,12 +160,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 96
+      "line": 111
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 88
+      "line": 103
     },
     {
       "module": "spec_consistency",
@@ -211,7 +211,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3969,
+      "line": 3983,
       "population": 15
     },
     {

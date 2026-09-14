@@ -2,7 +2,7 @@
   "boards_readable_only_by_post": 0,
   "boards_readable_only_by_post_evaluated": 1,
   "boards_refused_on_policy": 0,
-  "ledger_entries_scanned": 34,
+  "ledger_entries_scanned": 44,
   "credential_key_misjudged": 0,
   "credential_key_cases_checked": 102,
   "unreadable": [],

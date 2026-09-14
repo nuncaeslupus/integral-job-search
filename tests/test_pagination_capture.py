@@ -2746,9 +2746,13 @@ def test_the_committed_library_has_no_unenforced_provenance() -> None:
 
     assert measured["gate_status"] == "measured"
     assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
-    # 18, plus T144's five ATS-host probes, which say `unrecorded` too, and
-    # `jobfluent_es`, which T171 re-recorded `live`.
-    assert measured["claims"] == {"live": 1, "transcribed": 1, "unrecorded": 23}
+    # 18, plus T144's five ATS-host probes, which say `unrecorded` too, less
+    # the two recorded `live` with their responses committed: T166's
+    # `trabajos_es` and T171's `jobfluent_es`. Both branches asserted one
+    # `live` for their own package, in the same words, so the merge kept a
+    # number neither side measured — `CLAUDE.md`'s census collision, in a test
+    # rather than in evidence.
+    assert measured["claims"] == {"live": 2, "transcribed": 1, "unrecorded": 22}
     assert measured["example_packages_excluded"] == ["examplejobs_es"]
 
 
@@ -2941,8 +2945,13 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
         # `transcribed_from` is this task's, and so is every `unrecorded`.
         # A later `live` (T171's jobfluent_es) did not exist then either.
         record.pop("transcribed_from", None)
+        # Anything but `transcribed` reverts to `absent`, and its `response`
+        # block goes with it: T113's library had neither. Stated as "not
+        # transcribed" rather than as a list of the values seen so far, so a
+        # fourth one later cannot quietly survive the reconstruction.
         if record.get("provenance") != pc.TRANSCRIBED:
             record.pop("provenance", None)
+            record.pop("response", None)
         path.write_text(json.dumps(record, indent=2), encoding="utf-8")
 
     before = cp.measure(library)

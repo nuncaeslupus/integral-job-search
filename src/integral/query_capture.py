@@ -103,12 +103,16 @@ from integral.pagination_capture import read_capture
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T171.json"
 
-#: Four steerable packages ship on `main` today: `foorilla_en`,
-#: `jobfluent_es`, `landingjobs_en` and `tecnoempleo_es`. The floor sits at
-#: that population, so losing any one of them reads `unmeasured` rather than a
-#: clean zero over fewer. The margin it keeps later is whatever the library has
-#: grown by, and that is deliberate: a floor raised with every new steerable
-#: board would turn retiring one into a gate failure, which T100 ruled out.
+#: Four steerable packages shipped when this floor was written; six do today
+#: (T166's `trabajos_es` and T173's `infojobs_es` joined at the merge). The
+#: floor stays at four, and the margin is deliberate rather than an accident
+#: (T159): raising it with every new steerable board would turn *retiring* one
+#: into a gate failure, which is what T100 ruled out, while four still refuses
+#: the case this exists for — a library that has lost most of its steerable
+#: boards, or one nobody could read, scoring a clean zero. The count of the
+#: day is deliberately not committed, and is not named here either: the second
+#: reader on #461 observed that a roll call of package names goes stale at the
+#: next merge, which is prose drifting where a number would have been caught.
 MINIMUM_STEERABLE_PACKAGES_CHECKED = 4
 
 #: What a slot's raw text may run to before the canonical check reads it: up to

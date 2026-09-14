@@ -601,32 +601,95 @@ def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status
     assert "could not be read" in measured["violations"][0]
 
 
-def test_no_committed_capture_carries_an_ip_address() -> None:
+#: The only globally routable dotted quads the repository may carry, each with
+#: why it is not an address. Checked in both directions: a pair that no longer
+#: occurs fails too, so this cannot outlive what it excuses. Written as octets
+#: so this file does not itself carry the literal it excuses.
+_NOT_ADDRESSES = {
+    ("src/integral/robots.py", ".".join(map(str, (124, 0, 0, 0)))): (
+        "Chrome's version in a browser User-Agent"
+    ),
+}
+
+
+def _quads_in_every_file() -> dict[tuple[str, str], None]:
+    """Every globally routable IP literal in every file the repository ships
+    or is about to — tracked, plus untracked and not ignored, so a capture that
+    is written but not yet staged is read as well.
+
+    Read as bytes decoded latin-1, which cannot fail. A UTF-8-only read skipped
+    an ISO-8859-1 page whole, and those are the encodings the non-English
+    boards on the wanted list still serve. Three spellings are read: a dotted
+    quad (octets normalised, so `037.018.…` is the address it names), the
+    dashed form a reverse-DNS hostname carries, and IPv6. On the tree this
+    landed on, the dashed and IPv6 readings found nothing that is not an
+    address, so reading them costs no exceptions."""
+    import ipaddress
+    import subprocess
+
+    repo = _LIBRARY.parent
+    listed = subprocess.run(
+        ["git", "-C", str(repo), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        capture_output=True,
+        check=True,
+    ).stdout.decode("utf-8")
+    names = [name for name in listed.split("\0") if name and (repo / name).is_file()]
+    assert len(names) > 1000, f"git listed {len(names)} files — the scan did not run"
+    v4 = re.compile(r"(?<![\w.])(\d{1,3})([.-])(\d{1,3})\2(\d{1,3})\2(\d{1,3})(?![\w-])")
+    v6 = re.compile(r"(?<![\w:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])")
+    found: dict[tuple[str, str], None] = {}
+    for name in names:
+        text = (repo / name).read_bytes().decode("latin-1")
+        for match in v4.finditer(text):
+            if text[max(0, match.start() - 2) : match.start()].rstrip().endswith("§"):
+                continue  # `§2.3.1.3`: an RFC section number, however many are cited
+            octets = [int(match.group(i)) for i in (1, 3, 4, 5)]
+            if max(octets) > 255:
+                continue  # SVG coordinates, not an address
+            if ipaddress.IPv4Address(".".join(map(str, octets))).is_global:
+                found[(name, ".".join(map(str, octets)))] = None
+        for match in v6.finditer(text):
+            try:
+                address = ipaddress.IPv6Address(match.group())
+            except ValueError:
+                continue
+            if address.is_global:
+                found[(name, str(address))] = None
+    return found
+
+
+def test_no_committed_file_carries_an_ip_address() -> None:
     """A recorded page can contain the recording machine's own address.
 
     `trabajos.com` writes one into every response as
-    `<!-- IP: 37.18.134.127 - CODPAIS:100 -->`, which is the *client's* address,
-    not the server's — so a page saved verbatim publishes the home IP of
-    whoever recorded it, to this repository and to the sources repository
-    `tools/publish_connectors.py` copies the whole package into. Nothing about
-    the connector needs it, and no later deletion reaches a clone, so the check
-    is here rather than in a reviewer's habits.
+    `<!-- IP: 203.0.113.7 - CODPAIS:100 -->` (an RFC 5737 documentation address
+    here), which is the *client's* address, not the server's. So a page saved
+    verbatim publishes the home IP of whoever recorded it, both to this
+    repository and to the sources repository `tools/publish_connectors.py`
+    copies the whole package into. Nothing about the connector needs it, and no
+    later deletion reaches a clone, so the check is here rather than in a
+    reviewer's habits.
 
-    **Every recorded page in the package, not every fixture.** This scanned
-    `fixture/*.html` alone until `probe/` was committed — and the first probe
-    ever captured carried a live client IP that the fixture's own redaction had
-    already established was not publishable. The guard missed it because it
-    named a directory. The docstring said the next board would write it
-    somewhere else; what actually happened is that the same board wrote it in
-    the next directory over, which is the same mistake one level up.
+    **Every file, not every directory.** This scanned `fixture/*.html` alone
+    until `probe/` was committed, and the first probe ever captured carried a
+    live client IP. Widening it to `connectors/**/*.html` then missed T166's
+    no-hit page under `tests/fixtures/`, the same board's page one directory
+    over again. And the second reader on #447 showed that naming
+    `tests/fixtures/` as well still missed a page under any third directory,
+    or a `.json` capture. Each widening named one more place, which is an
+    enumeration with no last element. So the population is now what git
+    lists, whatever the path or extension. Only a globally routable address
+    counts, so documentation, private and loopback ranges pass, and so does a
+    quad with an octet above 255, and so does one written after `§`, which is an
+    RFC section number: T144 cited five of them the day this landed. The one
+    remaining literal that is not an address is named in `_NOT_ADDRESSES` with
+    the reason.
     """
-    quad = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-    offenders = {
-        str(path.relative_to(_LIBRARY)): sorted(set(quad.findall(path.read_text(encoding="utf-8"))))
-        for path in sorted(_LIBRARY.rglob("*.html"))
-        if quad.search(path.read_text(encoding="utf-8"))
-    }
-    assert not offenders, f"recorded pages carry IP addresses: {offenders}"
+    found = _quads_in_every_file()
+    offenders = sorted(key for key in found if key not in _NOT_ADDRESSES)
+    stale = sorted(key for key in _NOT_ADDRESSES if key not in found)
+    assert not offenders, f"files carry IP addresses: {offenders}"
+    assert not stale, f"_NOT_ADDRESSES excuses literals that no longer occur: {stale}"
 
 
 def test_a_probe_that_is_a_regular_file_is_rejected(package: Path) -> None:

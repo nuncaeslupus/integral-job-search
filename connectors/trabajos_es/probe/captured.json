@@ -1,7 +1,12 @@
 {
-  "captured_at": "2026-08-28",
-  "url": "https://www.trabajos.com/ofertas-empleo/atencion_al_cliente",
+  "captured_at": "2026-09-10",
+  "url": "https://www.trabajos.com/ofertas-empleo/?CADENA=t%C3%A9cnico%20farmacia",
   "status": 200,
   "surface": "laptop",
-  "provenance": "unrecorded"
+  "provenance": "live",
+  "response": {
+    "file": "list.html",
+    "bytes": 114147,
+    "sha256": "320c56125a0f3e13f9c3c1619269bccc65d198ca51dd5567181431a6cd2da713"
+  }
 }
