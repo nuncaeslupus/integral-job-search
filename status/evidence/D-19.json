@@ -6,12 +6,12 @@
     "administrative": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 17
+      "applicable_dimensions": 16
     },
     "healthcare": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 16
+      "applicable_dimensions": 14
     },
     "hospitality": {
       "ads": 18,
@@ -26,17 +26,17 @@
     "retail": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 16
+      "applicable_dimensions": 15
     },
     "teaching": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 17
+      "applicable_dimensions": 16
     },
     "trades": {
       "ads": 18,
       "ads_reached": 18,
-      "applicable_dimensions": 11
+      "applicable_dimensions": 10
     }
   },
   "claims_checked": 6,

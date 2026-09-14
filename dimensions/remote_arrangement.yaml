@@ -89,7 +89,7 @@ extraction:
       - pattern: "presencial[^.\\n]{0,60}(teletrabajo|remoto)|(teletrabajo|remoto)[^.\\n]{0,60}presencial"
         value: 0.5
         negatable: false
-      - pattern: "presencial"
+      - pattern: "presencial\\w*"
         value: 0.0
         negatable: false
     ca:
@@ -102,7 +102,7 @@ extraction:
       - pattern: "presencial[^.\\n]{0,60}(teletreball|remot)|(teletreball|remot)[^.\\n]{0,60}presencial"
         value: 0.5
         negatable: false
-      - pattern: "presencial"
+      - pattern: "presencial\\w*"
         value: 0.0
         negatable: false
   gold:

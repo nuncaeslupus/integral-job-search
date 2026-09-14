@@ -44,7 +44,7 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "equal\\s+opportunit"
+      - pattern: "equal\\s+opportunit\\w*"
         value: 0.6
         negatable: false
       - pattern: "diversity\\s+and\\s+inclusion"

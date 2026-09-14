@@ -61,7 +61,6 @@ rule rather than to a vocabulary pass:
 from __future__ import annotations
 
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -118,18 +117,23 @@ class Resolution:
 # an audit that accepted a finding and then lost its fixture is an audit that
 # reports success over work no longer being done. Raise this when cases are added;
 # never lower it to make a deletion pass.
-MINIMUM_CASES = 113
+MINIMUM_CASES = 142
 
 # The floor on cases whose regression direction is fail-open. Recorded separately
 # because it is the half that matters: a fail-closed bug costs a fetch, a
 # fail-open bug means a `hard` dealbreaker said yes to wording that never said it.
-MINIMUM_FAIL_OPEN_CASES = 64
+MINIMUM_FAIL_OPEN_CASES = 85
 
 # The floor on cases that pin `negated` or the raw match count as well as the
 # value. See `AuditCase` — a `None` and a `0.0` each have two distinct causes,
 # and only these cases say which one the table means.
-MINIMUM_MECHANISM_PINNED_CASES = 28
+MINIMUM_MECHANISM_PINNED_CASES = 51
 
+
+MISSION_DEFINITION = (
+    "definition: 'what the work is ultimately for — a named purpose, rather than a "
+    "sector left to infer'"
+)
 
 CASES: tuple[AuditCase, ...] = (
     # ---------------------------------------------------------------- finding 1
@@ -1269,6 +1273,289 @@ CASES: tuple[AuditCase, ...] = (
         "engineering, support, training or pre-sales'",
         "correct",
     ),
+    # ------------------------------------------------------------------- T178
+    # Two faults, one shape: a cue read words the advert did not say. Every
+    # cue matched as a substring, so `go` fired inside "Django" and "Chicago",
+    # `ret[ée]n` inside "retención" and "entretenimiento", `our mission is`
+    # inside "Your mission is". And `mission_alignment` scored any sector noun
+    # as a purpose, so a healthcare benefit reached a candidate's offer card as
+    # the employer's mission. The sentences are written for this table in the
+    # shape of the adverts where each was met, never copied from one.
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "- Healthcare - Employer contributions towards your healthcare.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "Education & learning stipend for conferences, courses and books.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "Generous time off, parental and wellness leave, healthcare and a pension plan.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "es",
+        "Seguro de salud privado y ayuda para la educación de tus hijos.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "Assegurança de salut i pressupost anual per a educació.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # A degree the applicant must hold names the applicant's training, not
+        # what the employer's work is for.
+        "mission_alignment",
+        "ca",
+        "Imprescindible: Títol de Tècnic/a en Educació Infantil.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "es",
+        "Proyecto estable para la Administración Pública, con presencia en Madrid.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # A town, and a hospital only inside its name.
+        "mission_alignment",
+        "ca",
+        "Administratiu/va comptable per a una gestoria a L'Hospitalet.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # The role's brief, not the organisation's; "our mission is" sits inside it.
+        "mission_alignment",
+        "en",
+        "Your mission is to eliminate friction from our deploy pipeline.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # The purpose frame addressed to the employee. A benefit is something
+        # the employer does for *you*; a purpose is for somebody else — so the
+        # sector inside a second-person clause is not one. "our mission is" is
+        # absent here deliberately: with it, the first cue would settle this on
+        # its own and the exclusion would go unmeasured.
+        "mission_alignment",
+        "en",
+        "Our purpose is to look after your health and your family's.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "es",
+        "Nuestro propósito es cuidar de tu salud y la de los tuyos.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "Our mission is to make education free for every child.",
+        0.7,
+        "0.7 tell: 'health, education, climate, public service, or a mission named and meant'",
+        "fail-closed",
+    ),
+    AuditCase(
+        "mission_alignment",
+        "es",
+        "Nuestra misión es acercar la sanidad a las zonas rurales.",
+        0.7,
+        "0.7 tell: 'health, education, climate, public service, or a mission named and meant'",
+        "fail-closed",
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "La nostra missió és que l'educació sigui gratuïta per a tothom.",
+        0.7,
+        "0.7 tell: 'health, education, climate, public service, or a mission named and meant'",
+        "fail-closed",
+    ),
+    AuditCase(
+        # A mission statement with no sector is still a mission named: 0.7 is
+        # the rung, and the 0.6 the cue carried before was not one.
+        "mission_alignment",
+        "en",
+        "Our mission is to increase the speed of the internet.",
+        0.7,
+        "0.7 tell: 'health, education, climate, public service, or a mission named "
+        "and meant'; 0.0 and 0.7 are the only rungs this dimension has",
+        "fail-closed",
+    ),
+    AuditCase(
+        # The verb, lower case, beside one real cue: one match cannot settle a
+        # bipolar scale, and the verb must not be the second.
+        "stack_modernity",
+        "en",
+        "Our platform helps teams go from alert to answer on Kubernetes.",
+        None,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-open",
+        matches=1,
+    ),
+    AuditCase(
+        # The verb capitalised mid-sentence: case alone cannot rule it out.
+        "stack_modernity",
+        "en",
+        "Our platform helps teams Go from alert to answer on Kubernetes.",
+        None,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-open",
+        matches=1,
+    ),
+    AuditCase(
+        "stack_modernity",
+        "en",
+        "Partner with sales, Go-to-market and finance on a Kubernetes rollout.",
+        None,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-open",
+        matches=1,
+    ),
+    AuditCase(
+        "stack_modernity",
+        "en",
+        "A high-trust team building a Django back end in Chicago on Argo.",
+        None,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "stack_modernity",
+        "en",
+        "Backend services in Python, Go and Rust on Kubernetes.",
+        0.6,
+        "0.6 tell: 'cloud-native, containers, or a stack in active development today'",
+        "fail-closed",
+        matches=3,
+    ),
+    AuditCase(
+        "stack_modernity",
+        "es",
+        "Llegados a este punto, hablemos de tu próximo reto.",
+        None,
+        "-0.7 tell: 'COBOL, AS/400, Visual Basic, or the ad's own word for legacy'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "on_call_load",
+        "es",
+        "Analizarás curvas de retención y embudos de conversión para marcas de entretenimiento.",
+        None,
+        "0.8 tell: 'a named on-call rotation, incident duty, or 24/7 cover'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "contract_stability",
+        "en",
+        "Perks: profit sharing, maternity coverage, fully remote.",
+        None,
+        "0.3 tell: 'a contract with a stated end — a project, a cover, a season'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "contract_stability",
+        "es",
+        "Diseñarás despliegues autónomos y reproducibles.",
+        None,
+        "0.0 tell: 'you invoice the employer; there is no employment contract'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "work_intensity",
+        "es",
+        "Conciliaciones bancarias, cobros y pagos.",
+        None,
+        "-0.6 tell: 'work-life balance, conciliación, or a sustainable pace named as a value'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mentoring_culture",
+        "es",
+        "Si absorbes la energía del equipo cual dementor, este no es tu sitio.",
+        None,
+        "0.5 tell: 'mentoring or code review named, without saying what it amounts to'",
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # A stem still reaches its inflections once it says it is a stem.
+        "mentoring_culture",
+        "es",
+        "Mentorizarás a los perfiles junior del equipo.",
+        0.8,
+        "0.8 tell: 'named mentors, pairing with seniors, or review framed as teaching'",
+        "fail-closed",
+    ),
+    AuditCase(
+        "technical_depth",
+        "es",
+        # One cue twice, not two cues once: a bipolar dimension needs two
+        # matches, and averaging *different* cue values lands between the rungs
+        # — a defect of the resolution rule that this table already records
+        # above, and not this one's to answer.
+        "Validarás las arquitecturas del equipo y propondrás arquitecturas nuevas.",
+        0.7,
+        "0.7 tell: 'architecture, systems design, scale or performance work'",
+        "fail-closed",
+        matches=2,
+    ),
+    AuditCase(
+        "process_formality",
+        "en",
+        "We ship in two-week sprints with daily stand-ups and a kanban board.",
+        0.5,
+        "0.5 tell: 'scrum, sprints, stand-ups, kanban — named as how the work runs'",
+        "fail-closed",
+    ),
 )
 
 
@@ -1290,7 +1577,7 @@ def _raw_match_count(case: AuditCase, dimension: Dimension) -> int:
     return sum(
         1
         for cue in dimension.extraction.cues.get(case.language, [])
-        for match in re.finditer(cue.pattern, case.text, re.IGNORECASE)
+        for match in cue.finditer(case.text)
         if match.end() > match.start()
     )
 

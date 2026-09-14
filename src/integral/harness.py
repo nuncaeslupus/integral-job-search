@@ -330,7 +330,6 @@ def probe_labels(store: list[LabelledAd], dimensions: list[Dimension]) -> list[L
     which is where the accents and emoji are, so the measurement exercises the
     thing it claims to.
     """
-    import re
 
     probed: list[LabelledAd] = []
     for ad in store:
@@ -340,7 +339,7 @@ def probe_labels(store: list[LabelledAd], dimensions: list[Dimension]) -> list[L
                 (
                     found
                     for cue in dimension.extraction.cues.get(ad.language, [])
-                    if (found := re.search(cue.pattern, ad.text, re.IGNORECASE))
+                    if (found := cue.search(ad.text))
                 ),
                 None,
             )

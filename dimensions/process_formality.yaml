@@ -53,10 +53,10 @@ extraction:
       - pattern: "no\\s+bureaucracy|few\\s+meetings|ad-?hoc\\s+coordination|without\\s+ceremony"
         value: -0.6
         negatable: false
-      - pattern: "scrum|sprint|kanban"
+      - pattern: "scrum|sprints?|kanban"
         value: 0.5
         negatable: true
-      - pattern: "agile\\s+methodolog"
+      - pattern: "agile\\s+methodolog\\w*"
         value: 0.5
         negatable: true
       - pattern: "itil|cmmi|waterfall"
@@ -66,7 +66,7 @@ extraction:
       - pattern: "sin\\s+burocracia|pocas\\s+reuniones|coordinaci[óo]n\\s+ad-?hoc|sin\\s+ceremonias"
         value: -0.6
         negatable: false
-      - pattern: "scrum|sprint|kanban"
+      - pattern: "scrum|sprints?|kanban"
         value: 0.5
         negatable: true
       - pattern: "metodolog[ií]as?\\s+[áa]giles?"
@@ -79,7 +79,7 @@ extraction:
       - pattern: "sense\\s+burocr[àa]cia|poques\\s+reunions|coordinaci[óo]\\s+ad-?hoc"
         value: -0.6
         negatable: false
-      - pattern: "scrum|sprint|kanban"
+      - pattern: "scrum|sprints?|kanban"
         value: 0.5
         negatable: true
       - pattern: "metodologies?\\s+[àa]gils?"
