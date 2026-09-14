@@ -625,8 +625,10 @@ class _TreeBuilder(HTMLParser):
         try:
             return super().parse_marked_section(i, report)
         except AssertionError:
-            end = self.rawdata.find("]]>", i)
-            return len(self.rawdata) if end < 0 else end + 3
+            # WHATWG's bogus comment state ends at the next literal '>',
+            # wherever it falls - not at the marked section's own ']]>'.
+            end = self.rawdata.find(">", i)
+            return len(self.rawdata) if end < 0 else end + 1
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         node = Node(tag=tag, attrs=self._attrs_dict(attrs))

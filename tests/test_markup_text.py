@@ -134,6 +134,12 @@ def test_a_script_holding_json_is_still_readable() -> None:
     assert isinstance(script, Node)
     # What the embedded-JSON route reads is untouched...
     assert script.raw_text() == '{"a": 1}'
+    # ...and calling raw_text() on an ancestor must not filter the script out
+    # either - the skip is text_content()'s alone, so a mutation that widened
+    # it onto raw_text() would still pass the assertion above (raw_text()
+    # called directly on the script node never tests its own tag against
+    # skip) and only shows up here.
+    assert root.raw_text() == 'Remote{"a": 1}'
     # ...while the prose around it no longer carries the document.
     assert root.text_content() == "Remote"
 
@@ -144,3 +150,12 @@ def test_a_malformed_marked_section_does_not_raise() -> None:
     # with it. WHATWG calls it a bogus comment, which yields no text.
     assert _take("html_text", "<p>a</p><![data[b]]>") == "a"
     assert _take("html_text", "<![CDATA[Remote]]>") is None
+
+
+def test_a_malformed_marked_section_ends_at_the_next_gt() -> None:
+    # WHATWG's bogus comment state ends at the first literal '>' wherever it
+    # falls, not at the marked section's own ']]>' - so recovery must keep
+    # parsing past a bogus comment that swallows into the next real tag,
+    # rather than either raising or discarding everything to EOF.
+    assert _take("html_text", "<p>a</p><![foo]><p>b</p>") == "a b"
+    assert _take("html_text", "<p>a</p><![data[b]<p>c</p>") == "a c"

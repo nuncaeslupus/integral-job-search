@@ -63,7 +63,7 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T169.json"
 #: case is then a decision somebody makes, in a review, rather than a silent
 #: allowance.
 MARKUP = re.compile(
-    r"</?[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*)?/?>|&[A-Za-z][A-Za-z0-9]{1,30};|&#\d+;|&#[xX][0-9A-Fa-f]+;"
+    r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s[^<>]*)?/?>|&[A-Za-z][A-Za-z0-9]{1,30};|&#\d+;|&#[xX][0-9A-Fa-f]+;"
 )
 
 #: The two members that say "this value is markup".
@@ -396,18 +396,21 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
     (
         "html_text",
         "a <b 10 years",
-        "a < b 10 years",
-        "CEILING, pinned: WHATWG discards an unterminated tag at EOF; html.parser "
-        "emits the remainder as data. A bare '<' is not a tag and does not breach "
-        "MARKUP, and discarding it would diverge from every CSS connector's reading",
+        "a",
+        "WHATWG tag open state: EOF inside an incomplete tag is a parse error "
+        "that discards the tag and everything after it. html.parser matched "
+        "this only from 3.12.12's WHATWG-alignment backport - an earlier "
+        "pinning of this row to the pre-backport behaviour (emitting the "
+        "remainder as data) passed on an older 3.12.x and failed on CI's newer "
+        "patch, which is what this row now asserts instead",
     ),
     (
         "html_text",
         "<p>Remote</p><!-- unterminated",
-        "Remote < !-- unterminated",
-        "CEILING, pinned, same family: an unterminated comment's content reaches the "
-        "body. Rare, pre-existing on every HTML connector, and named here rather "
-        "than left for a reader to discover",
+        "Remote",
+        "same family: WHATWG's comment state discards an unterminated comment "
+        "at EOF entirely rather than emitting its content, and html.parser has "
+        "matched that since the same 3.12.12 backport",
     ),
 )
 
@@ -622,6 +625,7 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
         "markup_contracts_at_least": MINIMUM_MARKUP_CONTRACTS,
         "fixture_offers_checked_at_least": MINIMUM_FIXTURE_OFFERS,
         "markup_values_compared_at_least": MINIMUM_MARKUP_VALUES_COMPARED,
+        "offers_exempt": measured["offers_exempt"],
         "exempt_sites": measured["exempt_sites"],
         "gate_status": measured["gate_status"],
     }
