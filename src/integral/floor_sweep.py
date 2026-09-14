@@ -2711,7 +2711,17 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: population — the same refusal, met on purpose this time. 77 since T157,
 #: whose `approval.MINIMUM_CARRIED_DISCLOSURE_STATES` and
 #: `approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS` joined it together.
-MINIMUM_FLOORS_SWEPT = 77
+#: 78 since T158, whose `gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED`
+#: joined the population — met on purpose again.
+#: 79 since T158's own review round 2 (finding F2), whose
+#: `gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES` joined the population
+#: beside it — the floor over observed traces the name-only floor's own
+#: review round found missing. T157 and T158 were developed in parallel on
+#: separate branches, each green in isolation at 77; the merge is the census
+#: collision `CLAUDE.md` describes for the second time in this same
+#: constant's history, and the remedy is unchanged: regenerate against the
+#: merged tree rather than pick either branch's value.
+MINIMUM_FLOORS_SWEPT = 79
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
