@@ -11,6 +11,7 @@ classifier treats as declaring a readable gate.
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 from pathlib import Path
 
@@ -19,6 +20,7 @@ import pytest
 from integral import gate_detector_states, gate_reader_agreement
 from integral.gate_detector_states import (
     MINIMUM_DETECTOR_STATES_PROBED,
+    MINIMUM_DISTINCT_STATE_TRACES,
     STATES,
     DetectorState,
     floor_breaches,
@@ -100,6 +102,73 @@ def test_the_exact_hole_sd425_measured_is_one_of_the_crossed_states() -> None:
     assert result.reported_never_read == 0, "the report's own list was muted"
     assert not result.green, "the catch's failure-effect was kept; the run is still red"
     assert result.counted_but_never_read, "the shipped property needs neither input"
+
+
+# ---------------------------------------------------------------------------
+# F3: the catch anchors are asserted present exactly once, same as the other
+# two, and a stale or duplicated anchor fails loudly (`RuntimeError`), never
+# by silently mutating nothing.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "line_name", ["_CATCH_CONDITION_LINE", "_CATCH_END_LINE"], ids=["condition", "end"]
+)
+def test_a_missing_catch_anchor_raises_rather_than_mutating_nothing(
+    line_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The anchor that had no `.count(...) != 1` guard before F3.
+
+    Deleting either catch anchor from the text must raise `RuntimeError`
+    before `_mutate_catch` ever reaches its `.index()` calls — the same
+    contract `_repoint_repo_root` and `_mutate_classifier` already had, and
+    the one `_mutate_catch` was missing.
+    """
+    text = gate_reader_agreement.DEFAULT_VERIFIER.read_text(encoding="utf-8")
+    line = getattr(gate_detector_states, line_name)
+    assert text.count(line) == 1, "precondition: the real file carries the anchor once today"
+    stale = text.replace(line, "        pass  # F3 test: anchor deleted\n", 1)
+
+    with pytest.raises(RuntimeError, match="moved or is no longer unique"):
+        gate_detector_states._mutate_catch(stale, report_removed=True, failure_removed=False)
+
+
+@pytest.mark.parametrize(
+    "line_name", ["_CATCH_CONDITION_LINE", "_CATCH_END_LINE"], ids=["condition", "end"]
+)
+def test_a_duplicated_catch_anchor_raises_rather_than_silently_picking_one(
+    line_name: str,
+) -> None:
+    """The ambiguity `.index()` alone cannot see, which is F3's actual point.
+
+    Before F3, `_mutate_catch` read `_CATCH_CONDITION_LINE`/`_CATCH_END_LINE`
+    with a bare `.index()`, which only checks *presence*. If either line had
+    drifted to appear twice, `.index()` would silently return the first match
+    and mutate the wrong span — no exception, no signal. The two
+    `.count(...) != 1` guards this task adds must catch that duplication
+    directly, which a presence-only check never could.
+    """
+    text = gate_reader_agreement.DEFAULT_VERIFIER.read_text(encoding="utf-8")
+    line = getattr(gate_detector_states, line_name)
+    duplicated = text + line  # a harmless second copy, appended at end of file
+
+    with pytest.raises(RuntimeError, match="moved or is no longer unique"):
+        gate_detector_states._mutate_catch(duplicated, report_removed=True, failure_removed=False)
+
+
+def test_a_stale_anchor_is_fail_closed_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What the top-of-file comment now claims, driven rather than reasoned about.
+
+    Before F3 the comment above the four `_..._LINE` constants claimed a
+    stale anchor would silently read every state as `defect_can_occur=False`
+    — impossible, since that field is `DetectorState.classifier_reverted`, a
+    static fact fixed before any mutation runs, never derived from whether
+    one succeeded. `probe_state` must instead propagate the exception: the
+    run errors, not passes.
+    """
+    monkeypatch.setattr(gate_detector_states, "_CATCH_CONDITION_LINE", "this text is not present")
+    with pytest.raises(RuntimeError):
+        gate_detector_states.probe_state(STATES[0])
 
 
 # ---------------------------------------------------------------------------
@@ -198,23 +267,54 @@ def test_the_board_half_never_calls_the_redesigned_property(
     the real board to `divergent`; it must instead add exactly the unreadable
     arrangements the split routes through it — no more, no fewer, which is
     why the boundary below is an equality rather than a containment.
+
+    (T158 review round 2, finding F4: this test used to also assert
+    ``forced_board_entries == board_entries`` — both sides built by filtering
+    ``divergent`` for a ``"board:"`` prefix. On the real board `divergent` is
+    ``[]`` before *and* after forcing the property, because the board's
+    ``"board:"`` entries come straight from `tools/verify_gates.py`'s own
+    subprocess report and are never threaded through any `Probe` — so that
+    assertion was `[] == []`, true by construction regardless of what the
+    property does, and could not have caught the defect it was named for.
+    The equality below is the one assertion here that can actually fail, and
+    `test_the_board_half_source_never_references_the_redesigned_property`
+    below is the structural pin for what the runtime comparison cannot
+    exercise: a future edit that *does* couple the two.)
     """
     baseline = gate_reader_agreement.measure()
-    board_entries = sorted(d for d in baseline["divergent"] if d.startswith("board:"))
     unreadable = {a.name for a in ARRANGEMENTS if not a.carries_a_readable_gate}
     assert set(baseline["divergent"]) == set(), "the healthy board and fixtures agree today"
 
     monkeypatch.setattr(Probe, "counted_but_never_read", property(lambda self: True))
     forced = gate_reader_agreement.measure()
 
-    forced_board_entries = sorted(d for d in forced["divergent"] if d.startswith("board:"))
-    assert forced_board_entries == board_entries, (
-        "forcing the fixture-level property changed the board-level findings — "
-        "the board half must read only tools/verify_gates.py's own report"
-    )
     assert set(forced["divergent"]) - set(baseline["divergent"]) == unreadable, (
         "forcing the property to always divert must add exactly the arrangements the "
         "carries_a_readable_gate split routes through it, no more and no fewer"
+    )
+
+
+def test_the_board_half_source_never_references_the_redesigned_property() -> None:
+    """A structural pin for what no runtime comparison of `divergent` can exercise.
+
+    `measure`'s board line — ``divergent = [f"board:{task_id}" for task_id in
+    board["counted_as_asserted_but_never_read"]]`` — reads only the real
+    verifier's own JSON report, so any runtime test that forces
+    `Probe.counted_but_never_read` and re-reads `divergent`'s `"board:"`
+    entries compares two values built identically either way: true by
+    construction, whatever the property does (see the finding recorded on
+    the test above). The one thing that catches a future edit coupling the
+    two is reading the line itself.
+    """
+    source = inspect.getsource(gate_reader_agreement.measure)
+    board_line = next(
+        line
+        for line in source.splitlines()
+        if "counted_as_asserted_but_never_read" in line and 'f"board:' in line
+    )
+    assert "counted_but_never_read" not in board_line, (
+        "measure's board-half line must read the verifier's report directly, never "
+        "through the fixture-level Probe property"
     )
 
 
@@ -245,10 +345,28 @@ def test_the_floor_is_a_literal_sized_to_the_states_it_is_read_against() -> None
 
 
 def test_the_floor_fires_on_the_first_deleted_state() -> None:
-    full = {"detector_states_probed": [s.name for s in STATES]}
+    """One state deleted from `detector_states_probed` must breach the name floor.
+
+    `state_results` is carried alongside so this isolates the name floor from
+    the distinct-trace floor below: `silent_pass_catch_removed_alone` shares
+    its observed trace with the other two classifier-intact states, so
+    dropping it changes the name count without changing the trace count —
+    exactly the case that must trip `MINIMUM_DETECTOR_STATES_PROBED` and
+    nothing else.
+    """
+    committed = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+    state_results = committed["state_results"]
+    full = {
+        "detector_states_probed": [s.name for s in STATES],
+        "state_results": state_results,
+    }
     assert floor_breaches(full) == [], "the full committed set is what a healthy run probes"
 
-    one_short = {"detector_states_probed": [s.name for s in STATES][:-1]}
+    dropped = STATES[-1].name
+    one_short = {
+        "detector_states_probed": [s.name for s in STATES][:-1],
+        "state_results": {k: v for k, v in state_results.items() if k != dropped},
+    }
     assert any("detector state(s) probed" in breach for breach in floor_breaches(one_short)), (
         "a state deleted from the module must breach the floor, not merely leave a diff "
         "line for somebody to notice"
@@ -259,6 +377,120 @@ def test_the_committed_evidence_names_every_state_the_module_probes() -> None:
     committed = json.loads(EVIDENCE.read_text(encoding="utf-8"))
     assert set(committed["detector_states_probed"]) == {s.name for s in STATES}
     assert committed["detector_states_probed_at_least"] == MINIMUM_DETECTOR_STATES_PROBED
+
+
+# ---------------------------------------------------------------------------
+# The second floor (F2): distinct *observed behaviour*, not state names.
+# A state surviving in `detector_states_probed` is not the same as its
+# mutation having done anything — see `MINIMUM_DISTINCT_STATE_TRACES`'s own
+# comment in gate_detector_states.py.
+# ---------------------------------------------------------------------------
+
+
+def test_the_distinct_trace_floor_is_a_literal_sized_to_the_states_it_is_read_against() -> None:
+    source = Path(gate_detector_states.__file__).read_text(encoding="utf-8")
+    assigned = [
+        node.value
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "MINIMUM_DISTINCT_STATE_TRACES"
+    ]
+    assert len(assigned) == 1, "the floor is assigned once, at module level"
+    assert isinstance(assigned[0], ast.Constant) and isinstance(assigned[0].value, int), (
+        "the floor must be an integer literal; derived from the traces it counts it would "
+        "shrink with the very collapse it exists to catch, and the guard could never fire"
+    )
+    committed = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+    distinct = {
+        tuple(
+            result[field]
+            for field in (
+                "counted_as_asserted",
+                "exit_status",
+                "reported_never_read",
+                "green",
+                "counted_but_never_read",
+            )
+        )
+        for result in committed["state_results"].values()
+    }
+    assert len(distinct) == MINIMUM_DISTINCT_STATE_TRACES, (
+        "the literal must equal the population of distinct traces a healthy run produces: "
+        "four from the classifier-reverted states plus one shared by the three "
+        "classifier-intact states, whose catch mutation is unreachable by construction"
+    )
+
+
+def test_the_distinct_trace_floor_fires_when_two_states_stop_being_told_apart() -> None:
+    """The boundary case: the committed set clears it, one collapsed pair does not.
+
+    Simulates exactly what F2 measured happening for real — two states that
+    used to read differently now read identically — without needing a live
+    mutation for this half of the pin; the live mutation is
+    `test_an_inert_catch_mutation_is_caught_by_the_distinct_trace_floor_though_not_by_state_count`
+    below.
+    """
+    committed = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+    state_results = committed["state_results"]
+    full = {
+        "detector_states_probed": list(state_results),
+        "state_results": state_results,
+    }
+    assert floor_breaches(full) == [], "the committed set is what a healthy run probes"
+
+    donor = "classifier_reverted_detector_intact"
+    victim = "classifier_reverted_first_signal_removed"
+    collapsed = dict(state_results)
+    collapsed[victim] = dict(state_results[donor])  # two states, now one observed trace
+    one_trace_short = {
+        "detector_states_probed": list(collapsed),
+        "state_results": collapsed,
+    }
+    breaches = floor_breaches(one_trace_short)
+    assert any("distinct state trace(s)" in breach for breach in breaches), (
+        "two states reading identically must breach the trace floor even though every "
+        "name is still present and probed"
+    )
+
+
+def test_an_inert_catch_mutation_is_caught_by_the_distinct_trace_floor_though_not_by_state_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F2, re-run exactly: `_mutate_catch` made inert, driven through real probes.
+
+    This is the live mutation the finding measured, not an assertion about
+    it: `_mutate_catch` is replaced with a version that returns its input
+    unchanged regardless of `report_removed`/`failure_removed`, so the four
+    `classifier_reverted_*` states — which should read four different traces
+    — all read the same one. `detector_states_probed` still names all seven
+    states (the name floor stays clear, which is F2's own point: a label
+    surviving proves nothing), and the distinct-trace floor must be the one
+    that catches it.
+    """
+
+    def inert_mutate_catch(text: str, *, report_removed: bool, failure_removed: bool) -> str:
+        return text
+
+    monkeypatch.setattr(gate_detector_states, "_mutate_catch", inert_mutate_catch)
+
+    measured = measure()
+
+    assert len(measured["detector_states_probed"]) == MINIMUM_DETECTOR_STATES_PROBED, (
+        "the name floor reads clean here — every state is still probed and named; "
+        "that is exactly the hole F2 found"
+    )
+    assert measured["reverted_defects_the_metric_reads_as_clean"] == 0, (
+        "the metric itself also reads clean over the inert mutation — the defect is "
+        "invisible to both the metric and the name floor, which is why a floor over "
+        "the observed traces is the only thing left that can see it"
+    )
+    breaches = floor_breaches(measured)
+    assert any("distinct state trace(s)" in breach for breach in breaches), (
+        "an inert catch mutation collapses the four classifier-reverted traces onto one "
+        "(2 distinct overall, floor 5) and must breach here even though nothing else does"
+    )
 
 
 def test_the_record_commits_the_floor_and_names_the_states() -> None:

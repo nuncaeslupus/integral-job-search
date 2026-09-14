@@ -2711,7 +2711,11 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: population — the same refusal, met on purpose this time.
 #: 76 since T158, whose `gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED`
 #: joined the population — met on purpose again.
-MINIMUM_FLOORS_SWEPT = 76
+#: 77 since T158's own review round 2 (finding F2), whose
+#: `gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES` joined the population
+#: beside it — the floor over observed traces the name-only floor's own
+#: review round found missing.
+MINIMUM_FLOORS_SWEPT = 77
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach

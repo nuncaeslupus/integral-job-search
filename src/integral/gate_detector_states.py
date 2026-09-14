@@ -84,6 +84,20 @@ rather than as prose** (`tests/test_gate_detector_states.py`):
   `Probe.counted_but_never_read`. The simpler rule is a statement about
   fixtures whose evidence path is absent by construction; it was never wired
   to the board and this module does not wire it there either.
+
+**A state's *name* surviving is not the same as its mutation being exercised**
+(T158 review round 2, finding F2). `MINIMUM_DETECTOR_STATES_PROBED` counts
+labels in `detector_states_probed`, and every one of the seven survives even
+when `_mutate_catch` is made inert — returning its input unchanged regardless
+of `report_removed`/`failure_removed` — because the state list is built
+before any mutation runs. What actually vanishes is the *distinction* between
+states: the four `classifier_reverted_*` states, which an intact module
+drives to four different observed traces, all read identically once the catch
+stops doing anything, and the metric still reads 0 over that. So the module
+carries a second floor, `MINIMUM_DISTINCT_STATE_TRACES`, over the number of
+*distinct* `(counted_as_asserted, exit_status, reported_never_read, green,
+counted_but_never_read)` tuples `state_results` actually contains — a bound
+on the thing labelled, not the label.
 """
 
 from __future__ import annotations
@@ -117,7 +131,44 @@ PROBE_ARRANGEMENT: Arrangement = next(a for a in ARRANGEMENTS if a.name == "bold
 #: to catch, and the guard could never fire. `test_the_floor_is_a_literal...`
 #: and `test_the_floor_fires_on_a_deleted_state` hold it to that population
 #: from both directions.
+#:
+#: **This floor counts state *names*, and a name surviving a mutation is not
+#: the mutation being exercised.** T158 review round 2 (finding F2) measured
+#: the hole directly: make `_mutate_catch` inert — return the source
+#: unchanged regardless of `report_removed`/`failure_removed` — and every one
+#: of the seven states is still probed and still named, so this floor stays
+#: clear and the metric still reads 0. What actually broke is invisible to a
+#: count of labels: the four `classifier_reverted_*` states, which the intact
+#: module drives to four *different* observed traces, all collapse onto the
+#: same one once the catch stops doing anything. `MINIMUM_DISTINCT_STATE_TRACES`
+#: below is the floor that counts the thing this one cannot — the number of
+#: distinct behaviours actually observed, not the number of names attached to
+#: a probe that may or may not have done anything.
 MINIMUM_DETECTOR_STATES_PROBED = 7
+
+#: A floor over **observed behaviour**, not over the state list. Each state's
+#: `state_results` entry is a probe's actual trace —
+#: `(counted_as_asserted, exit_status, reported_never_read, green,
+#: counted_but_never_read)` — and `_distinct_state_traces` counts how many
+#: *distinct* such tuples the run produced. Today's seven states produce five:
+#: four from the classifier-reverted states (each of the catch's four
+#: arrangements — intact, report removed, failure removed, both removed —
+#: genuinely changes what `verify_gates.py` reports or exits) plus one shared
+#: by the three classifier-intact states, whose catch mutation is inert *by
+#: construction* (the classifier refuses the fixture before the catch is ever
+#: reached, so `defect_can_occur` is False for all three and one shared trace
+#: is correct, not a hole — see `DetectorState.defect_can_occur`).
+#:
+#: Sized to that observed population and committed as a literal for the same
+#: reason as the floor above: derived as `len({...})` over the very traces it
+#: exists to protect, it would shrink with the collapse it exists to catch.
+#: `test_the_distinct_trace_floor_is_a_literal_sized_to_the_states_it_is_read_against`
+#: and `test_the_distinct_trace_floor_fires_when_two_states_stop_being_told_apart`
+#: hold it to that population from both directions, and
+#: `test_an_inert_catch_mutation_is_caught_by_the_distinct_trace_floor_though_not_by_state_count`
+#: re-runs F2's own mutation and shows this floor catch what the name floor
+#: cannot.
+MINIMUM_DISTINCT_STATE_TRACES = 5
 
 
 @dataclass(frozen=True)
@@ -173,10 +224,21 @@ STATES: tuple[DetectorState, ...] = (
 )
 
 # The exact literal lines mutated in a *copy* of `tools/verify_gates.py`'s
-# text. Each is asserted present exactly once before use, so a refactor that
-# moves the mutation point fails loudly here rather than silently mutating
-# nothing (and reading every state as `defect_can_occur=False`, a clean
-# floor-clearing pass over a module that stopped measuring anything).
+# text. Each is asserted present exactly once before use — `.count(...) != 1`
+# on all four, including the two `_mutate_catch` reads (T158 review round 2,
+# finding F3: only the first two ever had the check, so an anchor that had
+# drifted to appear twice would have `.index()` silently pick the wrong one).
+#
+# What a stale or duplicated anchor actually does, measured rather than
+# guessed: `text.count(...) != 1` raises `RuntimeError`, and a bare
+# `.index()` miss (an anchor gone entirely) raises `ValueError` — either way
+# `_write_mutant_verifier` propagates it and the state's probe never
+# completes. That is fail-**closed**: the run errors loudly, not a silent
+# pass. It could not have been the silent "every state reads
+# `defect_can_occur=False`" the previous comment here claimed, because
+# `defect_can_occur` is `DetectorState.classifier_reverted` — a static fact
+# about which state is being probed, fixed before any mutation runs — and is
+# not derived from whether a mutation succeeded at all.
 _REPO_ROOT_LINE = "_REPO_ROOT = Path(__file__).resolve().parents[1]\n"
 _CLASSIFIER_LINE = '        if declaration == "unreadable":\n'
 _CATCH_CONDITION_LINE = "        if passed and not output.strip():\n"
@@ -221,7 +283,25 @@ def _mutate_catch(text: str, *, report_removed: bool, failure_removed: bool) -> 
     place — the original block's prose comments carry an em dash, and
     matching around it precisely is more fragile than replacing the span
     outright with a version that says the same thing in the mutation's terms.
+
+    Both anchor lines are checked for a unique occurrence before either
+    `.index()` call runs, the same guard `_repoint_repo_root` and
+    `_mutate_classifier` apply to their own anchors. Without it a
+    `_CATCH_CONDITION_LINE` or `_CATCH_END_LINE` that had drifted to appear
+    twice would have `.index()` silently pick the first match rather than
+    raising — the ambiguity `text.count(...) != 1` exists to catch, not the
+    presence `.index()` alone already checks.
     """
+    if text.count(_CATCH_CONDITION_LINE) != 1:
+        raise RuntimeError(
+            "tools/verify_gates.py's silent-pass catch condition moved or is no longer "
+            "unique; T158's mutations are stale"
+        )
+    if text.count(_CATCH_END_LINE) != 1:
+        raise RuntimeError(
+            "tools/verify_gates.py's silent-pass catch end line moved or is no longer "
+            "unique; T158's mutations are stale"
+        )
     start = text.index(_CATCH_CONDITION_LINE)
     end = text.index(_CATCH_END_LINE, start)
     if not report_removed and not failure_removed:
@@ -309,6 +389,29 @@ def measure(
     }
 
 
+#: The fields of one `state_results` entry that describe what the probe
+#: actually *did* — never `defect_can_occur`, which is a static fact about the
+#: state (whether the classifier was reverted), not an observation the probe
+#: made. Two states sharing a trace on these five fields produced the same
+#: evidence, whatever their names say.
+_TRACE_FIELDS = (
+    "counted_as_asserted",
+    "exit_status",
+    "reported_never_read",
+    "green",
+    "counted_but_never_read",
+)
+
+
+def _state_trace(result: dict[str, Any]) -> tuple[Any, ...]:
+    """The observed-behaviour signature of one probed state, for distinctness."""
+    return tuple(result[field] for field in _TRACE_FIELDS)
+
+
+def _distinct_state_traces(state_results: dict[str, Any]) -> set[tuple[Any, ...]]:
+    return {_state_trace(result) for result in state_results.values()}
+
+
 def floor_breaches(measured: dict[str, Any]) -> list[str]:
     """Which denominators came in under their floor. Empty is the pass."""
     breaches = []
@@ -318,6 +421,15 @@ def floor_breaches(measured: dict[str, Any]) -> list[str]:
             f"only {probed} detector state(s) probed (floor {MINIMUM_DETECTOR_STATES_PROBED}) "
             "— a clean zero reached by enumerating fewer states is the defect wearing the "
             "fix's clothes"
+        )
+
+    distinct = len(_distinct_state_traces(measured.get("state_results", {})))
+    if distinct < MINIMUM_DISTINCT_STATE_TRACES:
+        breaches.append(
+            f"only {distinct} distinct state trace(s) observed (floor "
+            f"{MINIMUM_DISTINCT_STATE_TRACES}) — every state can still be named and probed "
+            "while a mutation that should distinguish them (F2: an inert `_mutate_catch`) "
+            "leaves two or more reading identically, which a count of state names cannot see"
         )
     return breaches
 
