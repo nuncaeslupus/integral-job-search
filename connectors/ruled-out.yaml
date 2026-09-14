@@ -389,6 +389,23 @@ javascript_rendered:
       the same operator as infojobs.net, already ruled out here for the same
       reason. The ES sibling's entry said what to look for and it was right.
     retest: "As above."
+  - site: farmaceuticos.com
+    country: ES
+    checked: "2026-09-10"
+    detail: >
+      The Consejo General de Colegios Farmacéuticos' "Portal de empleo"
+      (/farmaceuticos/recursos-farmaceuticos/portal-de-empleo/). robots is
+      `Allow: /`. The page serves a filter form (profile Técnico/Auxiliar,
+      area Farmacia Comunitaria, province) and loads its offers through
+      WordPress `admin-ajax.php`, so no offers are in the served bytes. The
+      capture was not recorded. Also note that its province list has no
+      Barcelona: Catalan offers go through the COFB, under
+      `authentication_required`.
+    next_step: "capture the portal with a filter submitted and read the admin-ajax request (test 3), then re-run test 1 on it"
+    retest: >
+      curl -s --compressed -A integral-job-search
+      'https://www.farmaceuticos.com/farmaceuticos/recursos-farmaceuticos/portal-de-empleo/' |
+      grep -oE 'href="[^"]*(oferta|vacante)[^"]*"' | wc -l  # prints 0 today
   # getmanfred.com, remoteok.com and usajobs.gov were here until 2026-08-31.
   # Their served HTML is exactly as empty as this section said — the entries
   # were not sloppy — and all three fetch their adverts from an endpoint a plain
@@ -502,6 +519,26 @@ javascript_rendered:
 # retrying it costs one request.
 
 edge_blocked:
+  - site: es.jooble.org
+    checked: "2026-09-10"
+    detail: "robots allows /trabajo-tecnico-farmacia/Barcelona; the GET answers 403 to the tool's UA."
+    retest: >
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)" -o /dev/null -w '%{http_code}\n'
+      'https://es.jooble.org/trabajo-tecnico-farmacia/Barcelona'  # prints 403 today
+  - site: es.indeed.com
+    checked: "2026-09-10"
+    detail: "robots allows /q-tecnico-farmacia-empleos.html; 403, as indeed.com below."
+    retest: >
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)" -o /dev/null -w '%{http_code}\n'
+      'https://es.indeed.com/q-tecnico-farmacia-empleos.html'  # prints 403 today
+  - site: opcionempleo.com
+    checked: "2026-09-10"
+    detail: >
+      robots allows /empleo-tecnico-farmacia-barcelona.html; the GET answers
+      200 with 12 KB of challenge page and no adverts. Never bypassed.
+    retest: >
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)" -o /dev/null -w '%{http_code}\n'
+      'https://www.opcionempleo.com/empleo-tecnico-farmacia-barcelona.html'  # prints 200 and a body with no adverts today; adverts in the body mean this changed
   - site: nationalevacaturebank.nl
     checked: "2026-09-06"
     detail: "robots allows /vacature/zoeken; the GET answers 403 to the tool's UA on the first request."
@@ -797,6 +834,20 @@ policy_unreadable:
   - site: simplyhired.com
     checked: 2026-08-30
     detail: "/robots.txt returns 403, and the browser-agent retry (T71) could not read it either"
+  - site: jobatus.es
+    checked: "2026-09-10"
+    detail: "the repo matcher raises RobotsError: /robots.txt timed out, so the path is refused"
+    retest: >
+      uv run python -c "from integral.robots import Robots;
+      print(Robots().allows('https://www.jobatus.es/trabajo-tecnico-farmacia-en-barcelona'))"
+      # raises RobotsError today, a timeout, and that IS the refusal; True or False means this changed
+  - site: laboris.net
+    checked: "2026-09-10"
+    detail: "RobotsError: /robots.txt fails with SSL CERTIFICATE_VERIFY_FAILED, so the path is refused"
+    retest: >
+      uv run python -c "from integral.robots import Robots;
+      print(Robots().allows('https://www.laboris.net/ofertas?q=farmacia'))"
+      # raises RobotsError today, CERTIFICATE_VERIFY_FAILED, and that IS the refusal; True or False means this changed
 
   - site: snagajob.com
     checked: 2026-08-30
@@ -829,6 +880,21 @@ authentication_required:
     retest: >
       curl -sI -A integral-job-search https://www.werk.nl/werkzoekenden/vacatures/ | head -1
       — anything but a 3xx to login.werk.nl means this changed.
+  - site: farmaceutics.cofb.net
+    country: ES
+    checked: "2026-09-10"
+    detail: >
+      The Col·legi de Farmacèutics de Barcelona job board — the obvious board
+      for a Barcelona pharmacy candidate, and out twice over. The public page
+      (www.cofb.org/ca/que-oferim/farmaceutics/borsa-de-treball/) only links to
+      https://farmaceutics.cofb.net/group/guest/borsa-de-treball, which answers
+      with a Liferay login (username + SMS PIN) for collegiate members. And
+      that host's robots.txt is `User-agent: *` / `Disallow: /group/guest/`, so
+      the repo matcher refuses the path before the login is reached.
+    retest: >
+      uv run python -c "from integral.robots import Robots;
+      print(Robots().allows('https://farmaceutics.cofb.net/group/guest/borsa-de-treball'))"
+      # prints False today
 
 engine_gap_selector:
   # Boards that pass robots AND serve their adverts to an anonymous GET, and
@@ -859,6 +925,110 @@ engine_gap_selector:
     retest: >
       Fetch the list and grep for the title with no prefix. If a bare-title
       element appears, this is a connector waiting to be written — DE has none.
+  # The next two were surveyed on 2026-09-10 for a pharmacy technician in
+  # Barcelona, whose four phrases found nothing on the six ES boards then
+  # installed: those boards are tech-heavy, so the gap was SECTOR, not
+  # language. Both boards would close it; both need the engine first.
+  - site: farmatalent.com
+    country: ES
+    language: es
+    checked: "2026-09-10"
+    robots: >
+      allowed — /vacantes/1/todas/todas/todas/sin and /ver-vacante/2600 True;
+      /archivos-modificados/cv.pdf and /blog/feed/ False (negative controls),
+      and integral.second_reader agrees on all four. The file also carries
+      `Disallow /_seo/` with no colon, which both parsers ignore.
+    readable: >
+      Yes. A pharmacy-office recruiter: every advert is a pharmacist or
+      pharmacy technician post, ~12 per page, server-rendered, with province
+      (`/vacantes/{page}/barcelona/…`) and qualification
+      (`…/auxiliar/…`) filters in the path. The advert page carries the body in
+      `div.div-ver-vacante` and a JobPosting ld+json. No keyword search, so it
+      would be unsteered.
+    gap: >
+      Each card is `<a href='…/ver-vacante/N' title="…">` wrapping
+      `div.vacante-div-wrapper`, and the href is on the item ITSELF. Field
+      selectors read only an item's descendants (`_extract` → `select_first`),
+      so with the `a` as the item no field can reach its href, and with the
+      wrapper as the item the href is on an ancestor. No other element in the
+      card carries the advert's URL.
+    also: >
+      Unsteered AND sector-specific is a new combination: every ES candidate
+      would get ~12 pharmacy adverts per run. Worth deciding before writing it.
+    blocked_on: "an engine change — a field that may read the item's own attribute"
+    retest: >
+      curl -s -A integral-job-search https://www.farmatalent.com/vacantes |
+      grep -c "href='https://www.farmatalent.com/ver-vacante/"  # 12 today, each on a bare <a>
+  - site: infoempleo.com
+    country: ES
+    language: es
+    checked: "2026-09-10"
+    robots: >
+      allowed — /trabajo/?search=farmacia True. The file disallows
+      `/trabajo/palabra_` (the old keyword pages), but the board's own search
+      form and its schema.org SearchAction both publish
+      `/trabajo/?search={search_term_string}`, so this is the operator's own
+      search URL rather than a way round that line.
+    readable: >
+      Yes, and steerable — a general board across every sector.
+      `?search=python` returns developer roles and `?search=parafarmacia`
+      cosmetics and pharmacy-sales roles. Items are `li.offerblock`, title and
+      href in `h2.title a`, company in `div.logoplusname span.extra-data`,
+      teaser in `p.trunkat`. Note that the reCAPTCHA on the page belongs to the
+      job-alert form. It is not a challenge.
+    gap: >
+      A query with no hits does not return an empty page. It prints
+      `div.noresults` ("No encontramos ofertas para esta búsqueda") and then
+      ten unrelated adverts in `ul.positions.ShortResult`, while real results
+      sit in `ul.positions`. The rows are the same `li.offerblock` in both,
+      and a simple selector cannot say "not inside .ShortResult". So a miss
+      would be recorded as ten offers found by searching the candidate's
+      phrase. That is fail-open, and the fetch log would state it as fact.
+      Measured: `zzqxvw` and `farmacia online atención al cliente` both return
+      the same ten fallback adverts (a forklift driver, two mechanics, …).
+    blocked_on: "an engine change — a listing may declare a no-results marker that empties the page"
+    retest: >
+      curl -s -A integral-job-search 'https://www.infoempleo.com/trabajo/?search=zzqxvw' |
+      grep -c 'class="noresults"'  # 1 today; 0 with no fallback list would unblock it
+
+engine_gap_offer_url:
+  # A board whose advert body can only be read from an API, while the URL a
+  # candidate should open is a different, human page. `build_offer` takes
+  # `url=url or merged.get("url")`, and sourcing passes the DETAIL FETCH URL
+  # as `url`, so a mapped `url` field always loses to it.
+  - site: pmfarma.com
+    country: ES
+    language: es
+    checked: "2026-09-10"
+    robots: >
+      www.pmfarma.com allows /app/empleo. The listing is a Quasar app shell
+      (1,197 bytes), and a capture (test 3) shows the rows come from
+      https://api.pmfarma.com/api/ofertas?pais=28. That host's robots.txt is
+      `User-agent: *` / `Disallow:`, which refuses nothing, so no negative
+      control is possible on it. A plain GET under the tool's UA answers 200.
+      The request the app sends carries `authorization: null` and only Google
+      Analytics cookies, so there is no credential.
+    readable: >
+      Yes. JSON, 10 per page, 157 ES offers (47 in Barcelona), mostly pharma
+      industry roles — "Visita Médica / Farmacias" is 111 of them, and it
+      includes dermoconsejera posts. The list carries `nombre`,
+      `empresa.nombre`, `estados_text`, `pais.iso` and `link` (the human page).
+      The body (`descripcio`) is only in `/api/oferta/{id}`, a one-element
+      JSON list, and `/empleo/{id}-slug.html` redirects to the app shell. There
+      is no text-search parameter (pais, estados, cargos, modalidades only),
+      so it would be unsteered.
+    gap: >
+      The detail must be fetched from api.pmfarma.com/api/oferta/{id}, and
+      that fetch URL would become `Offer.url`. The candidate would be shown a
+      JSON endpoint instead of the advert, and step 11 would apply to it.
+    blocked_on: "an engine change — a mapped `url` field should outrank the detail fetch URL"
+    retest: >
+      curl -s -A integral-job-search 'https://api.pmfarma.com/api/ofertas?pais=28' |
+      python3 -c "import json,sys; d=json.load(sys.stdin); f=d['filtros'];
+      print(d['meta']['total'], [e['total'] for e in f['estados'] if e['slug']=='barcelona'],
+      [c['total'] for c in f['cargos'] if c['id']==30])";
+      curl -sL -A integral-job-search https://www.pmfarma.com/empleo/ | wc -c
+      # prints 157 [47] [111] and then 1197, the size of the app shell, on 2026-09-10
 
 engine_gap_charset:
   # The connector schema has nowhere to declare a board's character set, and
