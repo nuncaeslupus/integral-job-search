@@ -2709,7 +2709,7 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: rather than pick a side. Zero slack is restored at the new true count.
 #: 75 since T144, whose `employer_boards.MINIMUM_CONFORMING` joined the
 #: population — the same refusal, met on purpose this time.
-MINIMUM_FLOORS_SWEPT = 75
+MINIMUM_FLOORS_SWEPT = 78
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach

@@ -26,7 +26,11 @@ list:
       source_ref: shortcode
       title: title
       location_raw: city
-      text: description
+      # Raw HTML (`<p>…`), read as text the same way an HTML connector reads
+      # an element (T169).
+      text:
+        path: description
+        take: html_text
   employers:
     codurance: Codurance
     huggingface: Hugging Face

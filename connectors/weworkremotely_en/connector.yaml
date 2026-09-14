@@ -160,6 +160,12 @@ list:
     # serves.
     text:
       css: "description"
+      # The RSS `<description>` carries the advert body as escaped HTML, which
+      # the feed parser decodes once — so what arrives here is markup, and
+      # `html_text` reads it the way the detail page's own selector reads its
+      # `div` (T169). The detail text wins on overlap, so this is the body
+      # only when the detail fetch did not happen.
+      take: html_text
 
 # Every `detail_url` above points at `https://weworkremotely.com/remote-jobs/
 # <slug>`. Those pages answered 200 with ~88 kB of server-rendered markup on

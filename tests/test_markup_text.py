@@ -1,0 +1,146 @@
+"""T169 — a field can say its value is markup, and every connector's does.
+
+The census in `integral.markup_text` is the gate; these are the assertions a
+reader can run one at a time. The contract table they exercise was written by a
+session other than this task's implementer, from the HTML standard, which is
+what stops the cases being a description of what the code already does.
+"""
+
+from __future__ import annotations
+
+import html
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from integral import markup_text
+from integral.connectors import JsonSource, Node, _take, parse_connector, parse_html
+
+
+def test_no_fixture_offer_text_carries_markup() -> None:
+    measured = markup_text.measure()
+    assert measured["findings"] == []
+    assert measured["offers_whose_text_carries_markup"] == 0
+
+
+def test_the_scan_reaches_a_real_population() -> None:
+    # A clean zero over an empty scan is what a broken scan also reports.
+    measured = markup_text.measure()
+    assert measured["fixture_offers_checked"] >= markup_text.MINIMUM_FIXTURE_OFFERS
+    assert measured["markup_values_compared"] >= markup_text.MINIMUM_MARKUP_VALUES_COMPARED
+    assert len(markup_text.MARKUP_CONTRACTS) >= markup_text.MINIMUM_MARKUP_CONTRACTS
+    assert measured["gate_status"] == "measured"
+
+
+def test_the_floors_are_literals() -> None:
+    # T122: a floor derived from the population it guards can never fire.
+    text = Path(markup_text.__file__).read_text(encoding="utf-8")
+    for name in (
+        "MINIMUM_FIXTURE_OFFERS",
+        "MINIMUM_MARKUP_VALUES_COMPARED",
+        "MINIMUM_MARKUP_CONTRACTS",
+    ):
+        line = next(row for row in text.splitlines() if row.startswith(f"{name} = "))
+        assert line.split("=")[1].strip().isdigit(), line
+
+
+def test_markup_take_contracts() -> None:
+    assert markup_text.measure_contracts() == []
+
+
+def test_escaped_and_raw_markup_read_to_the_same_text() -> None:
+    # The property T75's dedup margin rests on: one advert, two encodings, one
+    # set of shingles.
+    measured = markup_text.measure()
+    assert measured["disagreements"] == []
+    assert measured["encodings_that_disagree"] == 0
+
+
+def test_an_escaped_literal_survives_on_both_routes() -> None:
+    # The case that ruled out a single "unescape, then strip" member: an advert
+    # writing `<canvas>` as text keeps the word either way.
+    raw = "<p>experience with &lt;canvas&gt;</p>"
+    assert _take("html_text", raw) == "experience with <canvas>"
+    assert _take("escaped_html_text", html.escape(raw)) == "experience with <canvas>"
+
+
+def test_a_markup_take_yields_nothing_when_no_text_survives() -> None:
+    # Fail-closed, like every other member: `build_offer` drops an offer with
+    # no text rather than showing the candidate a row of tags.
+    assert _take("html_text", "<p> </p><br/>") is None
+    assert _take("escaped_html_text", "&lt;p&gt;&lt;/p&gt;") is None
+
+
+def test_a_json_field_may_be_a_path_or_a_rule() -> None:
+    source = JsonSource.model_validate(
+        {"fields": {"title": "title", "text": {"path": "content", "take": "escaped_html_text"}}}
+    )
+    assert source.fields["title"].path == "title"
+    assert source.fields["title"].take is None
+    assert source.fields["text"].take == "escaped_html_text"
+
+
+def test_last_text_node_is_refused_on_a_json_field() -> None:
+    with pytest.raises(ValidationError, match="has no elements"):
+        JsonSource.model_validate(
+            {"fields": {"text": {"path": "content", "take": "last_text_node"}}}
+        )
+
+
+CONNECTOR = """
+site: example
+locale: en
+version: "1.0.0"
+last_verified: "2026-09-14"
+auth: none
+list:
+  url_pattern: "https://example.com/jobs.json"
+  pagination:
+    mode: none
+    max_pages: 1
+  from_json:
+    items: jobs
+    fields:
+      title: title
+      text:
+        path: content
+        take: escaped_html_text
+"""
+
+
+def test_a_connector_file_can_declare_a_markup_take() -> None:
+    connector = parse_connector(CONNECTOR)
+    assert connector.list.from_json is not None
+    assert connector.list.from_json.fields["text"].take == "escaped_html_text"
+
+
+def test_script_and_style_are_not_prose() -> None:
+    # Before T169 a script body was part of the advert, and — because CPython
+    # resolves no character reference inside script data — it was the one place
+    # a raw `&lt;` could reach `Offer.text` through the member added to remove
+    # markup. Found by the second reader.
+    assert _take("html_text", "<p>Remote</p><script>var id = 42;</script>") == "Remote"
+    assert _take("html_text", "<script>if (a &lt; b) {}</script><p>Remote</p>") == "Remote"
+    assert _take("html_text", "<style>.a{color:#fff}</style><p>Remote</p>") == "Remote"
+
+
+def test_a_script_holding_json_is_still_readable() -> None:
+    # The other half of that change: `raw_text` must keep script content, or
+    # every embedded-JSON connector (rippling's `__NEXT_DATA__`, justjoin's
+    # ld+json) silently reads an empty document.
+    root = parse_html('<p>Remote</p><script id="__NEXT_DATA__">{"a": 1}</script>')
+    script = next(node for node in root.iter_descendants() if node.tag == "script")
+    assert isinstance(script, Node)
+    # What the embedded-JSON route reads is untouched...
+    assert script.raw_text() == '{"a": 1}'
+    # ...while the prose around it no longer carries the document.
+    assert root.text_content() == "Remote"
+
+
+def test_a_malformed_marked_section_does_not_raise() -> None:
+    # `_markupbase` asserts on an unknown marked-section keyword, so a board
+    # serving this raised out of `parse_html` and took the whole sourcing run
+    # with it. WHATWG calls it a bogus comment, which yields no text.
+    assert _take("html_text", "<p>a</p><![data[b]]>") == "a"
+    assert _take("html_text", "<![CDATA[Remote]]>") is None

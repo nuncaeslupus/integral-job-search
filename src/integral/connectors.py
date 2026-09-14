@@ -93,6 +93,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date
 from functools import lru_cache
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Final, Literal
@@ -517,6 +518,18 @@ _VOID_TAGS = frozenset(
 )
 
 
+#: Elements whose content is code, not prose. `text_content` reads an advert
+#: body, and a `<script>` body is neither something a reader sees nor something
+#: `dedup` should tokenise — and, because CPython resolves no character
+#: reference inside script data, its text is the one place a raw `&lt;` can
+#: reach `Offer.text` through the very members T169 adds to remove markup.
+#:
+#: Skipped in `text_content` only. `raw_text` must keep them: it is what reads
+#: an embedded JSON document out of `script[type="application/ld+json"]` and
+#: `script#__NEXT_DATA__`, which is rippling's and justjoin's whole route.
+_NON_PROSE = frozenset({"script", "style"})
+
+
 @dataclass
 class Node:
     """One element in a parsed page. `<script>`/`<style>` content lands here
@@ -550,7 +563,7 @@ class Node:
                 yield from child.iter_descendants()
 
     def text_content(self) -> str:
-        pieces = [piece for piece in self._iter_text() if piece.strip()]
+        pieces = [piece for piece in self._iter_text(skip=_NON_PROSE) if piece.strip()]
         return " ".join(" ".join(piece.split()) for piece in pieces).strip()
 
     def raw_text(self) -> str:
@@ -572,12 +585,12 @@ class Node:
         """
         return "".join(self._iter_text())
 
-    def _iter_text(self) -> Iterator[str]:
+    def _iter_text(self, skip: frozenset[str] = frozenset()) -> Iterator[str]:
         for child in self.children:
             if isinstance(child, str):
                 yield child
-            else:
-                yield from child._iter_text()
+            elif child.tag not in skip:
+                yield from child._iter_text(skip)
 
 
 class _TreeBuilder(HTMLParser):
@@ -594,6 +607,26 @@ class _TreeBuilder(HTMLParser):
 
     def _attrs_dict(self, attrs: list[tuple[str, str | None]]) -> dict[str, str]:
         return {name: (value if value is not None else "") for name, value in attrs}
+
+    def parse_marked_section(self, i: int, report: bool = True) -> int:
+        """A marked section whose keyword is not one `_markupbase` knows.
+
+        The base implementation ends in `assert 0, "unknown status keyword"`,
+        so a board serving `<![data[…]]>` raises **out of `parse_html`** and
+        takes the whole sourcing run with it. WHATWG calls an unknown marked
+        section a bogus comment (`PE:cdata-in-html-content`), which yields no
+        text — so that is what it becomes here: consumed, and nothing emitted.
+
+        Found by the second reader on T169, which widened the surface: before
+        it, `parse_html` only ever saw a page a connector had fetched; now it
+        also sees the value of a JSON field, which is a remote string with no
+        markup contract at all.
+        """
+        try:
+            return super().parse_marked_section(i, report)
+        except AssertionError:
+            end = self.rawdata.find("]]>", i)
+            return len(self.rawdata) if end < 0 else end + 3
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         node = Node(tag=tag, attrs=self._attrs_dict(attrs))
@@ -665,7 +698,30 @@ AuthMode = Literal["none", "candidate_session"]
 #: asks for, and the direction that matters: a missing salary is a gap a
 #: candidate can see, while `50.000 - 65.000` landing in `salary_min` is a
 #: number that is simply wrong and looks fine.
-Take = Literal["range_low", "range_high", "currency", "last_text_node"]
+#: The two markup members (T169) are a different kind of partial extraction
+#: from the three above: they do not pick a *part* of a value, they read the
+#: value in the encoding the board published it in. `html_text` says the value
+#: IS markup — greenhouse, workable, rippling, himalayas, workingnomads and
+#: weworkremotely all publish an advert body as HTML inside a field — and
+#: yields its text through the same `parse_html`/`text_content` an HTML
+#: connector already reads an element with, so a JSON field and a CSS field
+#: over the same markup produce the same string. `escaped_html_text` says the
+#: value is HTML-*escaped* HTML (`&lt;p&gt;…&amp;nbsp;`), which is what
+#: boards-api.greenhouse.io serves, and unescapes exactly once first.
+#:
+#: They are two members rather than one "unescape, then strip" member because
+#: unescaping markup that was never escaped is lossy in a way no caller can
+#: see: an advert saying `experience with &lt;canvas&gt;` is raw HTML carrying
+#: an escaped literal, and unescaping it first turns that literal into a tag
+#: and deletes the word.
+Take = Literal[
+    "range_low",
+    "range_high",
+    "currency",
+    "last_text_node",
+    "html_text",
+    "escaped_html_text",
+]
 
 #: Currency tokens recognised by `take: currency`, symbol or ISO code. A closed
 #: table for the same reason the vocabulary is closed, and deliberately small:
@@ -737,6 +793,21 @@ def _take(take: Take, value: str) -> str | None:
             return None
         low, high = min(numbers), max(numbers)
         return _number_text(low if take == "range_low" else high)
+    if take in ("html_text", "escaped_html_text"):
+        # `unescape` exactly once, and only for the escaped member. Twice would
+        # decode an advert's own escaped literal (`&amp;lt;canvas&amp;gt;`
+        # arrives here meaning the text `&lt;canvas&gt;`), which is the same
+        # deletion the single-member design was rejected for.
+        markup = unescape(value) if take == "escaped_html_text" else value
+        # The module's own reader, not a second HTML implementation: whatever
+        # `text_content` does about whitespace, void tags and entities, a
+        # markup-carrying JSON field now does identically to a CSS field over
+        # the same markup. That identity is what the dedup margin rests on.
+        text = parse_html(markup).text_content()
+        # Fail-closed like every other member: markup that yields no text is
+        # not a body, and `build_offer` drops an offer with no `text` rather
+        # than showing the candidate a row of tags.
+        return text or None
     if take == "currency":
         seen = {code for token, code in _CURRENCIES.items() if token in value.upper()}
         # One currency, or none. A text naming two is a conversion or a
@@ -1047,6 +1118,43 @@ def _templated_url(document: Any, template: str) -> str | None:
     return "".join(parts)
 
 
+class JsonField(Strict):
+    """One JSON field's rule: which path, and what to do with what it finds.
+
+    The long form of a `fields` value. A plain string stays legal and means
+    this with no `take` — every connector written before T169 is unchanged,
+    and a file only grows a mapping where it has something more to say.
+    """
+
+    path: str = Field(min_length=1)
+    #: The same closed vocabulary `FieldSelector.take` names, minus the one
+    #: member that is about markup structure rather than about a value.
+    take: Take | None = None
+
+    @field_validator("path")
+    @classmethod
+    def _path_compiles(cls, path: str) -> str:
+        try:
+            compile_path(path)
+        except ConnectorError as exc:
+            raise ValueError(str(exc)) from exc
+        return path
+
+    @model_validator(mode="after")
+    def _take_is_one_a_json_value_can_answer(self) -> JsonField:
+        if self.take == "last_text_node":
+            # It reads the *final text piece of an element*, and a JSON scalar
+            # has no elements. Refused at load rather than silently returning
+            # the whole string at parse time, which would look exactly like a
+            # `take` nobody asked for.
+            raise ValueError(
+                "take: last_text_node reads a markup element's last text piece, and a "
+                "JSON value has no elements — use html_text or escaped_html_text if the "
+                "value carries markup"
+            )
+        return self
+
+
 class JsonSource(Strict):
     """Fields read out of a JSON document instead of out of markup.
 
@@ -1070,7 +1178,19 @@ class JsonSource(Strict):
     #: `detail_url` in `fields` from a path the response already carries,
     #: which is the simpler case and the one to prefer when it exists.
     detail_url_template: str | None = None
-    fields: dict[str, str] = Field(min_length=1)
+    #: name → path, or name → `{path, take}`. `_as_json_fields` widens the
+    #: short form before anything else sees it, so there is one shape below.
+    fields: dict[str, JsonField] = Field(min_length=1)
+
+    @field_validator("fields", mode="before")
+    @classmethod
+    def _as_json_fields(cls, fields: Any) -> Any:
+        if not isinstance(fields, dict):
+            return fields
+        return {
+            name: {"path": value} if isinstance(value, str) else value
+            for name, value in fields.items()
+        }
 
     @field_validator("embedded_in")
     @classmethod
@@ -1101,16 +1221,6 @@ class JsonSource(Strict):
             except ConnectorError as exc:
                 raise ValueError(str(exc)) from exc
         return template
-
-    @field_validator("fields")
-    @classmethod
-    def _field_paths_compile(cls, fields: dict[str, str]) -> dict[str, str]:
-        for name, path in fields.items():
-            try:
-                compile_path(path)
-            except ConnectorError as exc:
-                raise ValueError(f"{name}: {exc}") from exc
-        return fields
 
 
 def _json_documents(text: str, source: JsonSource) -> list[Any]:
@@ -1144,8 +1254,12 @@ def _json_documents(text: str, source: JsonSource) -> list[Any]:
 
 def _json_record(document: Any, source: JsonSource) -> dict[str, str]:
     record: dict[str, str] = {}
-    for name, path in source.fields.items():
-        value = dig(document, compile_path(path))
+    for name, field_ in source.fields.items():
+        value = dig(document, compile_path(field_.path))
+        if value is not None and field_.take is not None:
+            # After `dig` and before `_present`: a `take` that answers nothing
+            # leaves the field absent, the same as a path that found nothing.
+            value = _take(field_.take, value)
         if value is not None and _present(value):
             record[name] = value
     if source.detail_url_template is not None:
