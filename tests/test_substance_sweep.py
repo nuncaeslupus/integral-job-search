@@ -1632,6 +1632,11 @@ def test_a_version_agreeing_with_its_manifest_is_the_over_refusal_control(
 
     assert measured["episode_disclosures"] == 1
     assert measured["unapproved_episode_disclosures"] == 0
+    # F-3 self-scan: `disclosed_episode_texts` must discriminate, not merely
+    # grow — FAILURE here is never approved, never disclosed and never
+    # carried, in the same `measure_prepared` call that counts WIN.
+    assert WIN in measured["disclosed_episode_texts"]
+    assert FAILURE not in measured["disclosed_episode_texts"]
 
 
 def test_an_approved_episode_never_carried_anywhere_is_not_manufactured_as_one(

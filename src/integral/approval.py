@@ -3367,7 +3367,7 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
 # elsewhere, not a re-derivation of `measure_prepared`'s own bookkeeping.
 
 MINIMUM_CARRIED_DISCLOSURE_STATES = 9
-MINIMUM_CARRIED_DISCLOSURE_CHECKS = 22
+MINIMUM_CARRIED_DISCLOSURE_CHECKS = 23
 
 
 def probe_carried_disclosures_reported(root: Path) -> dict[str, Any]:
@@ -3512,6 +3512,19 @@ def probe_carried_disclosures_reported(root: Path) -> dict[str, Any]:
         measured["episode_disclosures"] == 1 and measured["unapproved_episode_disclosures"] == 0,
         "an untouched, approved, manifest-declared, document-carried episode was not "
         "reported as exactly one clean disclosure",
+    )
+    # F-3 self-scan (second reader, #475 round 2, on this diff's own addition):
+    # `disclosed_episode_texts` has to *discriminate*, not merely grow — a
+    # mutant returning every `master.episodes` text unconditionally would
+    # still pass every check above (both episodes here are approved; only one
+    # is ever disclosed). `plain`'s second episode (never approved, never
+    # disclosed, never carried) is the counter-example: present in the same
+    # `measured()` call, absent from the field.
+    check(
+        win in measured["disclosed_episode_texts"]
+        and _FIXTURE_EPISODES[1].text not in measured["disclosed_episode_texts"],
+        "F-3 self-scan: `disclosed_episode_texts` did not discriminate a genuinely "
+        "undisclosed episode from a genuinely disclosed one in the same version",
     )
     try:
         record_sent(store, plain, _PROBE_OFFER, 1, confirms=payload_digest(payload))
