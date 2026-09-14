@@ -782,56 +782,60 @@ def write_evidence(
 # about the other half.
 #
 # What is measured is therefore not "is the claim true" — there must be no
-# claim left to be true or false — but "does the emitted block make ANY
-# unearned assertion about CI's availability or result". Behavioural, in this
-# module's established idiom (see the module docstring): the check never
-# reads the script's source, only the TEXT the script prints when it is
-# actually run, because reading the source was defeated three times by
-# comments, an unused string literal and trailing comments — none of which
-# can hide inside the text a reviewer actually reads on the pull request.
+# claim left to be true or false — but "does the emitted block mention the
+# thing at all". Behavioural, in this module's established idiom (see the
+# module docstring): the check never reads the script's source, only the TEXT
+# the script prints when it is actually run, because reading the source was
+# defeated three times by comments, an unused string literal and trailing
+# comments — none of which can hide inside the text a reviewer actually reads
+# on the pull request.
 #
-# A CI-state assertion is "CI", a verb of being/having, and a state word, all
-# within one short span — "CI is unavailable", "CI has failed", "CI was
-# green". A sentence that only *names* CI to state this script's own scope
-# ("this makes no claim about CI, which measures the merge ref separately")
-# carries no such verb-plus-state-word triple and does not match. The
-# regex is intentionally loose on the state-word list — a script that starts
-# claiming CI is "flaky" or "stale" instead of "unavailable" should still
-# be caught, and a false negative here is fail-open, exactly the direction
-# CLAUDE.md weights against.
+# ROUND 1 of this exact check (subject "ci", a verb-of-being list, a 19-word
+# state-word list, a forward-only window) was an enumeration, and the
+# second-reader report on #472 (F1) re-shipped the removed defect four
+# different ways — including with only the subject noun swapped from "CI" to
+# "GitHub Actions", `CLAUDE.md`'s own other name for the same referent — and
+# every one scored a clean 0. F3 on the same report found the enumeration's
+# discriminator had been fitted to the exact sentence this diff was about to
+# ship ("a sentence that only *names* CI to state this script's own scope …
+# does not match" — written to describe, and evade, the very prose it sat
+# beside). That is this repository's named defect family in its own instance:
+# a check pinned against a proxy (today's grammar) rather than the property.
 #
-# Two alternatives, not one, for the same fail-open reason: a verb-carrying
-# form ("CI is unavailable", "CI has failed") over a wide window, AND a
-# verb-less adjacency form ("CI: unavailable", "CI — down") over a much
-# tighter one. The regression this task fixes used the first shape, but the
-# next rewrite of this line need not, and a check that only recognises today's
-# grammar is
-# the same "add a thirteenth pattern" mistake the module docstring already
-# names for the script's own source — repeated one layer up if this were
-# single-shaped too. The tight window on the second alternative is what keeps
-# it from flagging a scope sentence that merely names CI and a state word
-# nearby in a longer, unrelated clause.
-_CI_STATE_ASSERTION_RE = re.compile(
-    r"\bci\b(?:"
-    r"[^.\n]{0,60}?\b(?:is|was|are|were|has|have|had)\b[^.\n]{0,40}?"
-    r"\b(?:unavailable|available|down|up|broken|working|green|red|"
-    r"passing|passed|failing|failed|skipped|disabled|enabled|required|succeeded|ran)\b"
-    r"|"
-    r"[^.\n]{0,20}?\b(?:unavailable|available|down|up|broken|working|green|red|"
-    r"passing|passed|failing|failed|skipped|disabled|enabled|required|succeeded|ran)\b"
-    r")",
-    re.IGNORECASE,
-)
+# The remedy taken is the one the report itself closes with, and it is not
+# "add a fifth verb" — CLAUDE.md is explicit that an enumeration has no last
+# element and the rounds that ended a thread replaced one with a closed rule.
+# So: the block's prose was rewritten (see `tools/verified_gate.sh`) to say
+# nothing about CI AT ALL — not its state, not its scope relative to this
+# script, nothing — because the only sentence that can never misrepresent CI
+# is one that does not mention it. What is left to check is therefore not
+# "is this sentence shaped like a CI-state claim" (unbounded — any English
+# sentence can assert a state without the verb-plus-adjective shape the old
+# regex assumed) but a two-item, CLOSED membership test: does the block use
+# either of the exactly two names THIS repository already uses for the
+# referent — "CI" (used throughout `CLAUDE.md` and this script's own former
+# defect line) and "GitHub Actions" (the term `CLAUDE.md` § *Known
+# environment state* uses for the identical fact — "GitHub Actions has
+# runner minutes again"). Both are sourced from the repository's own existing
+# vocabulary for the one thing, not guessed or derived from the sentence being
+# shipped, and there is no verb, state-word, or direction left to enumerate:
+# the two names are the whole rule, and a future editor who reintroduces a
+# claim about CI by either of its two established names is caught regardless
+# of the verb or adjective they reach for.
+_CI_REFERENT_RE = re.compile(r"\bci\b|\bgithub\s+actions\b", re.IGNORECASE)
 
 
 def ci_state_assertions(text: str) -> tuple[str, ...]:
-    """Every span in `text` asserting CI's availability or result.
+    """Every mention in `text` of CI by either name this repository uses for it.
 
     Matched against emitted TEXT — a script's actual stdout for one real run —
     never against `tools/verified_gate.sh`'s source. See the section above for
-    why: source-matching is what three prior rounds defeated.
+    why: source-matching is what three prior rounds defeated. The function
+    name and return shape are unchanged from the enumeration this replaces —
+    every caller still asks "what did the block say about CI" — only what
+    counts as a hit changed, from a shaped sentence to a bare mention.
     """
-    return tuple(match.group(0) for match in _CI_STATE_ASSERTION_RE.finditer(text))
+    return tuple(match.group(0) for match in _CI_REFERENT_RE.finditer(text))
 
 
 @dataclass(frozen=True)

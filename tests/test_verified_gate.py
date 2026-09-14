@@ -24,6 +24,7 @@ So every case here is one of two shapes:
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import sys
@@ -567,6 +568,20 @@ def test_an_at_sign_measures_the_caller_not_origins_default_branch(tmp_path: Pat
 # reported `verdict_block_claims_about_ci_that_are_not_measured == 3` — one
 # per scenario, since the sentence is unconditional — confirming the check is
 # not vacuously zero before a single line of the fix was written.
+#
+# ROUND 2, after a second-reader BLOCK on #472: round 1's enumeration (a
+# verb-of-being list plus a 19-word state-word list) scored a clean 0 against
+# four re-shippings of the removed defect, one of them with only the subject
+# noun swapped from "CI" to "GitHub Actions" — `CLAUDE.md`'s own other name
+# for the identical referent — and the round-1 detector's own doc comment
+# turned out to have been fitted to the exact scope sentence this diff shipped
+# (F3). The fix taken here is the report's own remedy: the block's prose now
+# says nothing about CI at all, and the check is the closed two-name
+# membership test `ci_state_assertions` now performs — see its doc comment in
+# `integral.verified_gate` for why two names, not a shaped sentence. The
+# mutation table below is rewritten to the second reader's own four
+# re-shippings plus their control, so this file carries the adversarial cases
+# that found the round-1 defect rather than a table this session invented.
 # --------------------------------------------------------------------------
 
 
@@ -601,28 +616,47 @@ def test_every_ci_claim_scenario_has_a_reason_it_exists() -> None:
 # does not silently stop testing anything (the same discipline `_mutate`
 # documents above). Every row was measured against the committed script:
 # green without the mutation, red with it.
+#
+# These four are not this session's invention — they are the second reader's
+# own adversarial findings on #472 (F1), the exact re-shippings that scored a
+# clean 0 against round 1's enumeration. Row 1 is the one that matters most:
+# round 1 matched only the literal token "ci", and this row reintroduces the
+# identical defect with nothing changed but the subject noun, to `CLAUDE.md`'s
+# own other name for the same referent ("GitHub Actions has runner minutes
+# again"). A check that only forbade "ci" would repeat round 1's mistake on
+# this exact row, which is why `ci_state_assertions` now checks both names.
 _CI_CLAIM_MUTATIONS: tuple[tuple[str, str, str], ...] = (
     (
-        # The regression this task is about, restored almost verbatim.
-        "the_hardcoded_unavailable_sentence_returns",
-        'echo "own state here."',
-        'echo "own state here. CI is unavailable right now."',
+        # #472, F1, row 1 — the removed defect with only its subject noun
+        # swapped to `CLAUDE.md`'s other name for CI. This is the row that
+        # actually caught round 1's enumeration; keep it first.
+        "the_subject_noun_swapped_to_github_actions",
+        'echo "was measured. This block is scoped to that commit only."',
+        'echo "was measured. This block is scoped to that commit only. '
+        'GitHub Actions is unavailable; this is the substitute."',
     ),
     (
-        # A different state word and a different verb, so the case is not
-        # merely pinned to the one literal string this task happened to meet.
-        "a_different_wording_still_asserts_a_ci_state",
-        'echo "own state here."',
-        'echo "own state here. By the way, CI has failed on this commit."',
+        # #472, F1, row 2.
+        "reworded_as_a_block_substitute_for_ci",
+        'echo "was measured. This block is scoped to that commit only."',
+        'echo "was measured. This block is scoped to that commit only. '
+        'This block substitutes for the unavailable CI."',
     ),
     (
-        # Reworded as a PASSING claim rather than an unavailable one — the
-        # regression this task fixed was fail-open in the "CI didn't run, but
-        # trust this instead" direction; an ungrounded "CI is green" claim is
-        # fail-open the same way, the other side.
-        "an_ungrounded_pass_claim_is_equally_a_defect",
-        'echo "own state here."',
-        'echo "own state here. CI was green on the last run."',
+        # #472, F1, row 3 — negated past tense, no verb-of-being at all.
+        "reworded_as_ci_did_not_run",
+        'echo "was measured. This block is scoped to that commit only."',
+        'echo "was measured. This block is scoped to that commit only. '
+        'CI did not run for this commit."',
+    ),
+    (
+        # #472, F1, row 4 — the fail-open PASS direction: an ungrounded claim
+        # that CI already succeeded is exactly as unmeasured as an ungrounded
+        # claim that it failed or is unavailable.
+        "reworded_as_a_green_ci_check_already_covered",
+        'echo "was measured. This block is scoped to that commit only."',
+        'echo "was measured. This block is scoped to that commit only. '
+        'A green CI check already covered this head."',
     ),
 )
 
@@ -662,44 +696,129 @@ def test_the_committed_script_passes_every_ci_claim_mutations_baseline(
 @pytest.mark.parametrize(
     ("text", "expect_assertion"),
     [
-        # Positive: the exact regression, plus wordings it must generalise to.
+        # Positive: either of the two names this repository uses for CI,
+        # in any grammatical shape at all — there is no verb or state-word
+        # list left to satisfy, so an ungrounded claim cannot dodge this by
+        # choosing an unlisted adjective the way round 1 could be dodged.
         ("CI is unavailable; this is the substitute CLAUDE.md names.", True),
         ("CI has failed on this commit.", True),
         ("CI was green on the last run.", True),
         ("As of this run, CI is currently down for maintenance.", True),
-        # Positive, verb-less: a rewrite of the regression that drops "is"
-        # entirely must still be caught — the fail-open direction the module
-        # docstring calls out explicitly for this check.
         ("CI: unavailable.", True),
         ("CI — down for maintenance.", True),
         ("(CI unavailable)", True),
-        # Negative: naming CI to state this script's own SCOPE, with no verb
-        # of being/having attached to a state word, must not match — this is
-        # the fixed wording verbatim.
+        ("ci is green", True),  # case-insensitive
+        ("Everything is fine, CI.", True),  # bare mention, no verb at all
+        # Positive — the other name, #472 F1's own finding: round 1's
+        # enumeration matched only the literal token "ci" and missed every
+        # one of these because the subject noun was never "CI".
+        ("GitHub Actions is unavailable; this is the substitute.", True),
+        ("github   actions\nhas failed on this commit.", True),  # whitespace/case
+        # Negative: no mention of either name at all.
+        ("Merge only while the head is still the SHA the block names.", False),
+        ("on origin yes — reachable from origin/main.", False),
+        ("verdict   PASS", False),
+        # Negative: "ci" appears as a substring inside a longer word, which
+        # must not match — the word-boundary is what keeps this rule from
+        # flagging ordinary English.
+        ("Traci reviewed the science and found it reciprocal and explicit.", False),
+        # Negative: "actions" alone, with no "GitHub" attached, must not
+        # match — the phrase is two words together, not either word alone.
+        ("User actions are logged for audit.", False),
+        # Negative: this IS the exact scope sentence round 1's enumeration
+        # was built to exempt (F3's finding) — under the closed rule there is
+        # no exemption to encode, so a sentence like this is simply never
+        # written; it is included here as documentation of what changed, not
+        # because the rule special-cases it.
         (
             "it and CI are complementary (this over the committed head, CI over the "
             "pull request's separate merge ref), and it makes no claim about CI's "
             "own state here.",
-            False,
+            True,
         ),
-        ("See CLAUDE.md for how this relates to CI.", False),
-        # Negative control: CI mentioned, but the sentence is about something
-        # else this run DID observe (origin reachability), not CI's own state.
-        ("on origin yes — reachable from origin/main, independent of CI.", False),
     ],
 )
-def test_ci_state_assertions_distinguishes_a_claim_from_a_scope_statement(
-    text: str, expect_assertion: bool
-) -> None:
+def test_ci_state_assertions_is_the_closed_two_name_rule(text: str, expect_assertion: bool) -> None:
     found = vg.ci_state_assertions(text)
     assert bool(found) is expect_assertion, (text, found)
 
 
+def test_the_committed_scripts_own_preamble_mentions_neither_name() -> None:
+    """Behavioural mirror of the rule above, run against the REAL block: the
+    fix is not "the regex is closed" in the abstract, it is that the prose
+    this script actually emits has nothing left for the regex to find."""
+    measured = vg.measure_ci_claims()
+    assert measured["ci_claims_found"] == []
+
+
+_GOLDEN_PREAMBLE = (
+    "Run by `tools/verified_gate.sh` against a clean detached checkout of the\n"
+    "commit named below — not a working tree — and that SHA is the one that\n"
+    "was measured. This block is scoped to that commit only."
+)
+
+
+def test_the_emitted_preambles_prose_is_pinned_verbatim(tmp_path: Path) -> None:
+    """The token rule above is deliberately loose about everything except the
+    two names — it says nothing if a future edit adds some OTHER unmeasured
+    claim ("this commit was authored by a trustworthy contributor", say).
+    The second reader's report offered a golden-text pin as the complement,
+    "in addition to the token rule, not instead" — a golden text pins this
+    exact wording, the token rule pins the property. This is that pin: the
+    preamble is a fixed generated string with no inputs, so it can be
+    compared for byte-exact equality rather than merely scanned.
+
+    Any change to this paragraph — CI-related or not — now has to touch this
+    fixture deliberately, which is what makes it a pin rather than a filter.
+
+    Run through `Harness` against a throwaway repository, never the real
+    one — the class docstring is explicit that the real gate takes over two
+    minutes and proves only that this tree is green, which is not what a
+    fixed string needs.
+    """
+    h = vg.Harness(_SCRIPT, tmp_path)
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    stdout = h.run(root, "HEAD").stdout
+    # The preamble sits between the '## Verified gate' heading and the
+    # fenced ```-block `_read_block` already parses the fields out of, so it
+    # is extracted the same way: everything after the heading line, up to
+    # the first fence.
+    lines = stdout.splitlines()
+    assert lines[0] == "## Verified gate"
+    fence_index = next(i for i, line in enumerate(lines) if line == "```")
+    # lines[1] is the blank separator; the preamble is lines[2:fence_index],
+    # minus the trailing blank line before the fence.
+    preamble = "\n".join(lines[2:fence_index]).rstrip("\n")
+    assert preamble == _GOLDEN_PREAMBLE
+
+
 def test_the_ci_claim_scenario_floor_is_a_literal() -> None:
+    """AST fact, not a substring — the same idiom
+    `tests/test_gate_reader_agreement.py::test_the_floor_is_a_literal_the_population_cannot_drag`
+    uses for the identical shape, and the one this test used to be missing:
+    #472's F2 mutated `MINIMUM_CI_CLAIM_SCENARIOS = 3` to
+    `len(CI_CLAIM_SCENARIOS)` and the OLD substring-grep version of this test
+    still passed 72 green, because the decoy literal `3` still sat in a
+    trailing comment. A comment cannot satisfy an AST check."""
     source = Path(vg.__file__).read_text(encoding="utf-8")
-    assert "MINIMUM_CI_CLAIM_SCENARIOS = 3" in source, (
-        "the floor must be a literal; written as `len(CI_CLAIM_SCENARIOS)` it is "
-        "compared against a count derived from the table itself and can never fire"
+    assigned = [
+        node.value
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "MINIMUM_CI_CLAIM_SCENARIOS"
+    ]
+    assert len(assigned) == 1, "the floor is assigned once, at module level"
+    assert isinstance(assigned[0], ast.Constant) and isinstance(assigned[0].value, int), (
+        "the floor must be an integer literal; written as `len(CI_CLAIM_SCENARIOS)` "
+        "it is compared against a count derived from the table itself and can "
+        "never fire — and that construction is exactly what #472's F2 mutated it "
+        "to, surviving the old substring-grep form of this test at 72 passed"
+    )
+    assert len(vg.CI_CLAIM_SCENARIOS) == assigned[0].value, (
+        "the literal must equal the population it is sized to — an added "
+        "scenario should raise the floor rather than widen the slack"
     )
     assert len(vg.CI_CLAIM_SCENARIOS) >= vg.MINIMUM_CI_CLAIM_SCENARIOS
 
@@ -759,7 +878,10 @@ def test_a_live_ci_claim_regression_fails_the_bare_invocation(
     mention CI at all and would otherwise pass it clean."""
     script = tmp_path / "verified_gate.sh"
     script.write_text(
-        _mutate('echo "own state here."', 'echo "own state here. CI is unavailable."'),
+        _mutate(
+            'echo "was measured. This block is scoped to that commit only."',
+            'echo "was measured. This block is scoped to that commit only. CI is unavailable."',
+        ),
         encoding="utf-8",
     )
     script.chmod(0o755)
