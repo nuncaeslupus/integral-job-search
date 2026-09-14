@@ -1,5 +1,39 @@
 # Session handover
 
+## 000. T169 and T170 seeded (#457): the two engine gaps #445's second reader found
+
+Seeding only. Nothing is built. Both tasks depend on T144 (merged) and are
+unblocked. The owner approved the design on 2026-09-10, and it is written into
+each task file.
+
+- **T169** ([#453](https://github.com/nuncaeslupus/integral-job-search/issues/453),
+  F5): a field cannot say its value is markup. **13 of 75** fixture offers on
+  `main` carry HTML in `text`:
+  - greenhouse holds escaped HTML, two layers deep;
+  - workable, rippling, himalayas and workingnomads hold raw HTML;
+  - weworkremotely does too, on its list page;
+  - getmanfred holds Markdown with an inline `<u>`.
+
+  The fix is two closed `take:` members, `html_text` and `escaped_html_text`,
+  both reusing `Node.text_content`, plus an optional `{path, take}` form for
+  JSON fields. The owner chose to put every connector in scope, not only
+  greenhouse.
+- **T170** ([#454](https://github.com/nuncaeslupus/integral-job-search/issues/454),
+  F13): **the pay floor applies to no salary a connector states.** Lever sends
+  `per-year-salary`, himalayas `annual`, and justjoin and jobfluent `MONTH`/`YEAR`.
+  `bulk_filter` compares those against the floor's `year`/`month` by equality.
+  The fix:
+  - `Salary.period` becomes a closed `Literal`;
+  - one table in `build_offer` maps each board's words onto it;
+  - a period that cannot be represented (`one-time`) states no salary.
+
+  The last point was the owner's choice.
+- **Both contract tables are written by a second session**, from the WHATWG
+  spec for T169 and from each board's own docs for T170, before the
+  implementation is read.
+- **Still open: T166 is used twice**, for #446 and #451. One of them needs
+  renumbering.
+
 ## 00. T171 opened (#461): a steerable connector's query must be in its capture
 
 - **T171** ([#456](https://github.com/nuncaeslupus/integral-job-search/issues/456),
