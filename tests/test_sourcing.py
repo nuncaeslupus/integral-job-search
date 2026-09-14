@@ -10,6 +10,7 @@ a failed run into a run that looks empty.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -278,13 +279,31 @@ def test_the_gate_measures_a_real_run_and_its_control() -> None:
     assert measured["sourced_offers_without_a_recorded_fetch"] == 0
     assert measured["sourced_offers_evaluated"] > 0
     assert measured["unrecorded_offers_detected_by_the_control"] == 1
+    assert measured["advert_requests_after_a_refusal"] == 0
+    assert measured["refused_boards_listed_as_reached"] == 0
+    assert measured["boards_with_a_second_advert_to_refuse"] > 0
+
+
+def test_the_population_counts_adverts_the_budget_could_ask_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#466 N3: with a one-advert budget, no board can make a second advert
+    request, so `advert_requests_after_a_refusal` can observe nothing and its
+    zero means nothing. Counting rows the budget would never reach would leave
+    the population at 2 and the gate `measured` over a metric that is blind."""
+    monkeypatch.setattr("integral.sourcing.DETAIL_FETCH_CEILING", 1)
+    measured = measure_fixture()
+    assert measured["boards_with_a_second_advert_to_refuse"] == 0, measured
+    assert measured["gate_status"] == "unmeasured", measured
 
 
 # ---------------------------------------------------------------------------
 # T130 — the advert's own page
 
 
-def _answer_with_detail(*, detail_status: int = 200, seen: list[str] | None = None) -> Any:
+def _answer_with_detail(
+    *, detail_status: int = 200, seen: list[str] | None = None, detail_error: str | None = None
+) -> Any:
     """List pages from each package's `fixture/list.html`, everything else from
     its `fixture/detail.html`. A board's detail URLs are its own host, so the
     two are told apart by whether the path is one `build_list_urls` produced."""
@@ -316,7 +335,7 @@ def _answer_with_detail(*, detail_status: int = 200, seen: list[str] | None = No
         # The body is the real advert whatever the status: a helper that
         # blanked it on an error status would make "the status is read" and
         # "the body was empty" indistinguishable.
-        return Response(detail_status, details[host])
+        return Response(detail_status, details[host], error=detail_error)
 
     return answer
 
@@ -474,6 +493,158 @@ def test_an_advert_page_that_answered_with_an_error_is_not_read_as_an_advert(
     assert starved, "no board needed a detail page, so this proves nothing"
     for outcome in starved:
         assert outcome.detail_needed == outcome.dropped, outcome
+
+
+# ---------------------------------------------------------------------------
+# T174 — a refusal on the advert page stops the host, and is reported as one
+
+
+def _hosts(urls: list[str]) -> dict[str, int]:
+    from collections import Counter
+    from urllib.parse import urlsplit
+
+    return dict(Counter(urlsplit(url).netloc for url in urls))
+
+
+@pytest.mark.parametrize("error", [None, "HTTP error"], ids=["body", "transport-error"])
+@pytest.mark.parametrize("status", [403, 429, 503])
+def test_a_refused_advert_page_is_the_last_one_asked_of_that_host(
+    store: ProfileStore, status: int, error: str | None
+) -> None:
+    """#445 R3-3. The list rule stopped on a 429; the advert page's did not, so
+    one refusal was followed by 39 more requests to the host that refused, and
+    the rows were reported as "no text" — a connector defect — rather than as
+    the board saying stop."""
+    seen: list[str] = []
+    run = _run(store, _answer_with_detail(detail_status=status, seen=seen, detail_error=error))
+    needing = [o for o in run.outcomes if o.detail_needed]
+    assert needing, "no board needed an advert page, so this proves nothing"
+    assert any(o.detail_needed > 1 for o in needing), "one row cannot show a second fetch"
+    assert all(n == 1 for n in _hosts(seen).values()), _hosts(seen)
+    for outcome in needing:
+        assert outcome.refused and str(status) in outcome.refused, outcome
+        assert outcome.dropped == 0, outcome
+        assert outcome.connector in run.refused, run.summary()
+    assert "no 'text'" not in run.summary(), run.summary()
+
+
+def test_one_host_is_one_origin_however_its_links_spell_it() -> None:
+    """#466 F1: `usajobs_en` lists at `https://www.usajobs.gov/…` and links its
+    adverts as `https://www.usajobs.gov:443/…`. Two spellings of one origin
+    (RFC 6454) must not be two keys, or a refusal on one leaves the other free."""
+    from integral.sourcing import _origin
+
+    same = _origin("https://www.usajobs.gov/Search/ExecuteSearch")
+    assert _origin("https://www.usajobs.gov:443/job/856726500") == same
+    assert _origin("HTTPS://WWW.USAJOBS.GOV/job/1") == same
+    assert _origin("http://example.test/a") == _origin("http://example.test:80/b")
+    assert _origin("https://www.usajobs.gov:8443/") != same
+    assert _origin("http://www.usajobs.gov/") != same
+    assert _origin("https://usajobs.gov/") != same
+    # The malformed-port branch: a port that is not a number cannot be parsed,
+    # so it is kept as written — and folded, like every other part (#466 N2).
+    assert _origin("https://host.test:abc/a") == _origin("https://HOST.TEST:ABC/b")
+    assert _origin("https://host.test:abc/a").endswith(":abc")
+    assert _origin("https://host.test:abc/a") != _origin("https://host.test:def/b")
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [Response(429, "Too Many Requests"), Response(429, "", error="HTTP 429")],
+    ids=["body", "transport-error"],
+)
+def test_a_host_that_refused_is_not_asked_again_by_the_next_phrase(
+    store: ProfileStore, refusal: Response
+) -> None:
+    """A run asks a steerable board once per phrase. "Stop" from the host on the
+    first is the answer for the rest of the run, list page or advert page —
+    whichever way the fetcher shaped the 429."""
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return refusal
+
+    run = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python", "java", "go")),
+        fetch=fetch,
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert len(run.outcomes) > len(_hosts(asked)), "no host had a second phrase to refuse"
+    assert all(n == 1 for n in _hosts(asked).values()), _hosts(asked)
+    # A board served only to a real browser (#455) is skipped before any
+    # request, so it has nothing to be refused about.
+    asked_boards = [o for o in run.outcomes if o.skipped is None]
+    assert asked_boards, run.summary()
+    assert all(o.refused and "429" in o.refused for o in asked_boards), run.summary()
+
+
+def test_a_refused_advert_page_stops_the_next_phrases_list_too(store: ProfileStore) -> None:
+    """The advert page and the list share a host on every ES board, and the
+    next phrase's list request is still a request to the host that said stop."""
+    from integral.connector_coverage import installed_packages
+    from integral.sourcing import _one_board
+
+    package = next(p for p in installed_packages(_CONNECTORS) if p.name == "getmanfred_es")
+    refused: dict[str, str] = {}
+    seen: list[str] = []
+    answer: Callable[[ListRequest], Response] = _answer_with_detail(detail_status=429)
+
+    def fetch(request: ListRequest) -> Response:
+        seen.append(request.url)
+        return answer(request)
+
+    def board(page_count: int = 1) -> Any:
+        return _one_board(
+            store,
+            package,
+            "python",
+            fetch=fetch,
+            at=AT,
+            directory=_CONNECTORS,
+            page_count=page_count,
+            robots=_robots(),
+            refused_origins=refused,
+        )
+
+    # Two pages: `mode: none` clamps only when `page_count is None`, so a
+    # second list request IS made here (#466 N7) — and page one's advert
+    # refusal must stop it, with the board keeping its OWN reason rather than
+    # the carry-over wording written for a board that asked for nothing.
+    first = board(page_count=2)
+    assert first.refused and len(seen) == 2, (first, seen)  # the list, then one advert
+    assert "not asked again" not in first.refused, first.refused
+
+    second = board()
+    assert len(seen) == 2, seen
+    assert second.refused and "429" in second.refused, second
+    assert second.refused.startswith("not asked again"), second.refused
+
+
+def test_a_refused_board_is_not_listed_as_reached(store: ProfileStore) -> None:
+    """#445 R3-4. "Searched for your terms" and "returned their whole list" say
+    the board answered. One that refused did not, list page or advert page."""
+    listed = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(429, "Too Many Requests"),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert listed.refused, listed.summary()
+    assert listed.steered == [] and listed.unsteered == [], listed.summary()
+    assert "searched for your terms" not in listed.summary(), listed.summary()
+    assert "returned their whole list" not in listed.summary(), listed.summary()
+
+    advert = _run(store, _answer_with_detail(detail_status=429))
+    assert advert.refused, advert.summary()
+    assert not set(advert.refused) & set(advert.steered + advert.unsteered), advert.summary()
 
 
 def test_the_advert_page_gets_its_own_clients_headers(store: ProfileStore) -> None:
@@ -785,6 +956,11 @@ def test_one_gate_failing_is_never_hidden_by_the_other_being_unmeasured(
     def reading(key: str, state: str) -> dict[str, Any]:
         return {
             key: 1 if state == "failed" else 0,
+            # T174's two keys ride on the fixture gate's reading. `_main`
+            # indexes rather than `.get`s them, deliberately: a key that
+            # stopped being measured must raise, not read as a clean pass.
+            "advert_requests_after_a_refusal": 0,
+            "refused_boards_listed_as_reached": 0,
             "offers_collected_from_a_capture_of_another_search": 3 if state == "misfiled" else 0,
             "gate_status": "unmeasured" if state == "unmeasured" else "measured",
         }
