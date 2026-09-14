@@ -168,6 +168,20 @@ MINIMUM_DETECTOR_STATES_PROBED = 7
 #: `test_an_inert_catch_mutation_is_caught_by_the_distinct_trace_floor_though_not_by_state_count`
 #: re-runs F2's own mutation and shows this floor catch what the name floor
 #: cannot.
+#:
+#: **This floor pools every state's trace into one set, and a pool is a sum.**
+#: T158 review round 3 (F2's counterexample) measured a mutation that loses a
+#: distinction inside the classifier-reverted group while an unrelated split
+#: inside the classifier-*intact* group gains one, holding this floor at
+#: exactly 5 with `floor_breaches == []` over a run that lost real coverage.
+#: `_reverted_states_collapse`, in `floor_breaches` below, is the closed rule
+#: that answers it: distinctness checked *within* the `classifier_reverted`
+#: axis alone, so nothing outside that axis can compensate for a collapse
+#: inside it. This floor stays — it still catches a collapse the closed rule
+#: cannot see (one shared trace on the classifier-*intact* side splitting in
+#: two would move this number without touching the reverted axis at all) —
+#: it is just no longer the only thing standing between a compensated
+#: mutation and a clean floor_breaches().
 MINIMUM_DISTINCT_STATE_TRACES = 5
 
 
@@ -230,15 +244,21 @@ STATES: tuple[DetectorState, ...] = (
 # drifted to appear twice would have `.index()` silently pick the wrong one).
 #
 # What a stale or duplicated anchor actually does, measured rather than
-# guessed: `text.count(...) != 1` raises `RuntimeError`, and a bare
-# `.index()` miss (an anchor gone entirely) raises `ValueError` — either way
-# `_write_mutant_verifier` propagates it and the state's probe never
-# completes. That is fail-**closed**: the run errors loudly, not a silent
-# pass. It could not have been the silent "every state reads
-# `defect_can_occur=False`" the previous comment here claimed, because
-# `defect_can_occur` is `DetectorState.classifier_reverted` — a static fact
-# about which state is being probed, fixed before any mutation runs — and is
-# not derived from whether a mutation succeeded at all.
+# guessed (T158 review round 3, finding F3): an anchor gone entirely, or
+# duplicated, is caught by `.count(...) != 1` and raises `RuntimeError` for
+# *both* anchors — the guards run before either `.index()` call, so neither
+# anchor can reach `.index()` while missing or ambiguous. The bare `.index()`
+# miss that raises `ValueError` is a narrower case than "gone entirely": both
+# anchors present exactly once, but the condition anchor sits *after* the end
+# anchor — `.index(_CATCH_END_LINE, start)` only searches forward from the
+# condition anchor's position, so an end anchor that already passed is
+# invisible to it. Either way `_write_mutant_verifier` propagates the
+# exception and the state's probe never completes. That is fail-**closed**:
+# the run errors loudly, not a silent pass. It could not have been the silent
+# "every state reads `defect_can_occur=False`" an earlier comment here
+# claimed, because `defect_can_occur` is `DetectorState.classifier_reverted`
+# — a static fact about which state is being probed, fixed before any
+# mutation runs — and is not derived from whether a mutation succeeded at all.
 _REPO_ROOT_LINE = "_REPO_ROOT = Path(__file__).resolve().parents[1]\n"
 _CLASSIFIER_LINE = '        if declaration == "unreadable":\n'
 _CATCH_CONDITION_LINE = "        if passed and not output.strip():\n"
@@ -412,6 +432,61 @@ def _distinct_state_traces(state_results: dict[str, Any]) -> set[tuple[Any, ...]
     return {_state_trace(result) for result in state_results.values()}
 
 
+#: Name → `DetectorState`, so a probed state's `classifier_reverted` axis can
+#: be recovered from `measured["detector_states_probed"]` (a list of plain
+#: strings) without threading `DetectorState` objects through `measured`
+#: itself. Built once from `STATES`, so a state added there is covered here
+#: without anyone remembering to touch this function.
+_STATES_BY_NAME = {state.name: state for state in STATES}
+
+#: Stand-in for a probed name this module does not recognise (never
+#: `classifier_reverted`, so an unknown name cannot silently join the
+#: reverted axis and cannot silently leave it either).
+_UNKNOWN_STATE = DetectorState("unknown", False, False, False)
+
+
+def _reverted_states_collapse(measured: dict[str, Any]) -> str | None:
+    """A closed rule for F2's counterexample: distinctness *within* the reverted axis.
+
+    T158 review round 3 (F2): `MINIMUM_DISTINCT_STATE_TRACES` pools every
+    probed state's trace into one set, so a mutation that collapses two
+    classifier-reverted traces together can still clear the pooled floor if
+    something elsewhere in the run happens to split a different pair — the
+    pooled count is a sum, and a sum can hold constant while what it is
+    supposed to protect does not. Measured: `failure_removed` never applied to
+    the catch (so states 3 and 4 stop probing anything downstream of it) plus
+    one unrelated compensating split in the classifier-*intact* group holds
+    the pooled count at exactly `MINIMUM_DISTINCT_STATE_TRACES` while two of
+    the four reverted states read identically.
+
+    This rule never pools: it asks only whether the states on the
+    `classifier_reverted` axis — the only ones `defect_can_occur` is True for,
+    and so the only ones a collapse can hide a live defect behind — are still
+    pairwise distinct *among themselves*. Nothing outside that axis can move
+    this number, so nothing outside it can compensate for a collapse inside
+    it. Derived from `DetectorState.classifier_reverted` rather than a
+    hand-picked subset of names, so a state added to `STATES` later is
+    covered without anyone remembering to widen this function.
+    """
+    state_results = measured.get("state_results", {})
+    reverted_names = [
+        name
+        for name in measured.get("detector_states_probed", [])
+        if _STATES_BY_NAME.get(name, _UNKNOWN_STATE).classifier_reverted
+    ]
+    reverted_traces = {
+        _state_trace(state_results[name]) for name in reverted_names if name in state_results
+    }
+    if len(reverted_traces) == len(reverted_names):
+        return None
+    return (
+        f"the classifier-reverted states read only {len(reverted_traces)} distinct trace(s) "
+        f"among {len(reverted_names)} of them — a collapse on this axis (the only axis "
+        "defect_can_occur is ever True for) cannot be masked by a compensating split "
+        "elsewhere, because this check is never pooled across axes"
+    )
+
+
 def floor_breaches(measured: dict[str, Any]) -> list[str]:
     """Which denominators came in under their floor. Empty is the pass."""
     breaches = []
@@ -431,6 +506,10 @@ def floor_breaches(measured: dict[str, Any]) -> list[str]:
             "while a mutation that should distinguish them (F2: an inert `_mutate_catch`) "
             "leaves two or more reading identically, which a count of state names cannot see"
         )
+
+    collapse = _reverted_states_collapse(measured)
+    if collapse is not None:
+        breaches.append(collapse)
     return breaches
 
 

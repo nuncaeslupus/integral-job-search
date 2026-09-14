@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import inspect
 import json
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -154,6 +155,31 @@ def test_a_duplicated_catch_anchor_raises_rather_than_silently_picking_one(
 
     with pytest.raises(RuntimeError, match="moved or is no longer unique"):
         gate_detector_states._mutate_catch(duplicated, report_removed=True, failure_removed=False)
+
+
+def test_the_end_anchor_present_once_but_before_the_condition_raises_value_error() -> None:
+    """The one case `.count(...) != 1` cannot see, driven rather than merely commented.
+
+    T158 review round 3 (F3): the comment above the four `_..._LINE`
+    constants used to say a stale anchor "gone entirely" raises `ValueError`.
+    Measured: it does not — `.count(...) != 1` catches a missing anchor for
+    *either* line and raises `RuntimeError` before either `.index()` call
+    runs (see the two tests above). The `ValueError` path is narrower: both
+    anchors present exactly once, but the condition anchor sits *after* the
+    end anchor, so `.index(_CATCH_END_LINE, start)` — which only searches
+    forward from the condition anchor's own position — finds nothing.
+    """
+    reordered = (
+        gate_detector_states._CATCH_END_LINE
+        + "        pass  # F3 test: end anchor placed before the condition anchor\n"
+        + gate_detector_states._CATCH_CONDITION_LINE
+        + "            pass\n"
+    )
+    assert reordered.count(gate_detector_states._CATCH_CONDITION_LINE) == 1
+    assert reordered.count(gate_detector_states._CATCH_END_LINE) == 1
+
+    with pytest.raises(ValueError, match="substring not found"):
+        gate_detector_states._mutate_catch(reordered, report_removed=True, failure_removed=False)
 
 
 def test_a_stale_anchor_is_fail_closed_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -304,17 +330,52 @@ def test_the_board_half_source_never_references_the_redesigned_property() -> Non
     entries compares two values built identically either way: true by
     construction, whatever the property does (see the finding recorded on
     the test above). The one thing that catches a future edit coupling the
-    two is reading the line itself.
+    two is reading the assignment itself.
+
+    (T158 review round 3, finding G1): a previous version of this test
+    selected a line out of `inspect.getsource` with `next()` over two
+    substring checks, which reads *text* — docstring and comments included —
+    not code. One ordinary comment line placed above the assignment is
+    enough to make `next()` return the comment instead, and the whole
+    89-test suite stayed green over a `divergent` expression that actually
+    read `Probe.counted_but_never_read` for the board half, the exact
+    coupling the task file's second "must not lose" forbids. That is the
+    identical idiom `CLAUDE.md` records three review rounds defeating in
+    `tools/verified_gate.sh`, and no further substring closes it — asserting
+    the *absence* of a call has no runtime witness, so this reads the AST
+    instead: a docstring is an `ast.Constant` and a comment is not in the
+    AST at all, so neither can stand in for the assignment a future edit
+    would actually change.
+
+    Matches `ast.Assign` *and* `ast.AugAssign` (``divergent += [...]``) with
+    "divergent" among the targets, not `ast.Assign` alone: a rewrite of the
+    initial list comprehension into an augmented assignment changes the node
+    type without changing what is being checked, and a test pinned to one
+    node type only would be exactly the "one more substring" shape this
+    section exists to end. `divergent.append(...)`/`.extend(...)` — the
+    fixture half's own legitimate calls, further down in the same function —
+    are `ast.Call` nodes, never `ast.Assign` or `ast.AugAssign`, so they are
+    not swept in and do not need excluding by name.
     """
-    source = inspect.getsource(gate_reader_agreement.measure)
-    board_line = next(
-        line
-        for line in source.splitlines()
-        if "counted_as_asserted_but_never_read" in line and 'f"board:' in line
-    )
-    assert "counted_but_never_read" not in board_line, (
-        "measure's board-half line must read the verifier's report directly, never "
-        "through the fixture-level Probe property"
+    tree = ast.parse(textwrap.dedent(inspect.getsource(gate_reader_agreement.measure)))
+    assignments = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Assign, ast.AugAssign))
+        and any(
+            isinstance(target, ast.Name) and target.id == "divergent"
+            for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+        )
+    ]
+    assert assignments, "measure must still assign or augment `divergent` somewhere"
+    assert not any(
+        isinstance(inner, ast.Attribute) and inner.attr == "counted_but_never_read"
+        for node in assignments
+        for inner in ast.walk(node)
+    ), (
+        "no assignment or augmented assignment to `divergent` may reference the "
+        "fixture-level Probe property, structurally — not merely as a matter of what "
+        "today's line of text happens to say"
     )
 
 
@@ -490,6 +551,55 @@ def test_an_inert_catch_mutation_is_caught_by_the_distinct_trace_floor_though_no
     assert any("distinct state trace(s)" in breach for breach in breaches), (
         "an inert catch mutation collapses the four classifier-reverted traces onto one "
         "(2 distinct overall, floor 5) and must breach here even though nothing else does"
+    )
+
+
+def test_the_reverted_axis_rule_catches_a_pooled_count_compensated_by_the_intact_group() -> None:
+    """T158 review round 3's own counterexample (F2), committed as a fixture.
+
+    `MINIMUM_DISTINCT_STATE_TRACES` pools every probed state's trace into one
+    set, so a mutation that costs one distinction on the classifier-reverted
+    axis and gains one, unrelated, on the classifier-*intact* axis holds the
+    pooled count at exactly the floor: `floor_breaches` over the pooled check
+    alone reads clean. `_reverted_states_collapse` only ever looks within the
+    `classifier_reverted` axis — the only axis `defect_can_occur` is ever
+    True for — so the intact-side split cannot compensate for the
+    reverted-side collapse there, and it must breach even though the pooled
+    floor does not.
+    """
+    committed = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+    state_results = dict(committed["state_results"])
+
+    donor = "classifier_reverted_detector_intact"
+    victim = "classifier_reverted_first_signal_removed"
+    state_results[victim] = dict(state_results[donor])  # reverted axis: 4 -> 3 distinct traces
+
+    split = "second_signal_removed_alone"
+    state_results[split] = {
+        **state_results[split],
+        "counted_but_never_read": True,
+    }  # intact axis: 1 -> 2 distinct traces, compensating
+
+    compensated = {
+        "detector_states_probed": list(state_results),
+        "state_results": state_results,
+    }
+
+    pooled_distinct = len(gate_detector_states._distinct_state_traces(state_results))
+    assert pooled_distinct == MINIMUM_DISTINCT_STATE_TRACES, (
+        "precondition: the compensation must actually hold the pooled floor at exactly "
+        f"{MINIMUM_DISTINCT_STATE_TRACES} for this to be the counterexample it claims to be"
+    )
+
+    breaches = floor_breaches(compensated)
+    assert not any("distinct state trace(s)" in breach for breach in breaches), (
+        "precondition: the pooled floor alone must read clean here — that is what makes "
+        "the compensation a counterexample rather than an ordinary collapse"
+    )
+    assert any("classifier-reverted states" in breach for breach in breaches), (
+        "a collapse on the reverted axis, compensated by an unrelated split on the intact "
+        "axis, must still breach — the closed rule is never pooled across axes and nothing "
+        "outside the reverted axis can move its count"
     )
 
 

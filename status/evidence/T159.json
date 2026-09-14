@@ -60,7 +60,7 @@
     {
       "module": "gate_detector_states",
       "name": "MINIMUM_DISTINCT_STATE_TRACES",
-      "line": 171
+      "line": 185
     },
     {
       "module": "gate_reader_agreement",
