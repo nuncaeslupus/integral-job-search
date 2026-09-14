@@ -32,12 +32,15 @@ import pytest
 
 from integral import approval
 from integral.approval import (
+    MINIMUM_CARRIED_DISCLOSURE_CHECKS,
+    MINIMUM_CARRIED_DISCLOSURE_STATES,
     MINIMUM_DISCLOSURE_PROBES,
     MINIMUM_MANIFEST_DISCLOSURES_COMPARED,
     MINIMUM_PARAPHRASE_CHECKS,
     MINIMUM_PARAPHRASE_STATES,
     ApprovalError,
     PersonalDetails,
+    _carried_disclosure_report,
     _disclosure_report,
     _normalised_equal,
     _paraphrase_report,
@@ -48,10 +51,12 @@ from integral.approval import (
     measure_prepared,
     payload_digest,
     prepare,
+    probe_carried_disclosures_reported,
     probe_paraphrase_undecidability,
     probe_unbacked_disclosures,
     read_payload,
     record_sent,
+    write_carried_disclosure_evidence,
     write_disclosure_evidence,
     write_paraphrase_evidence,
 )
@@ -1488,3 +1493,237 @@ def test_the_paraphrase_report_fails_on_a_nonzero_metric(
     written = write_paraphrase_evidence(tmp_path / "T156.json")
     assert written["gate_status"] == "unmeasured"
     assert _paraphrase_report(written) == 1
+
+
+# ---------------------------------------------------------------------------
+# T157 — a carried, approved episode must not be reported as withheld
+#
+# C10 from the second-reader round on #409, left out of T114's diff as
+# pre-existing: the manifest's episode row is removed, the per-use approval is
+# kept, the episode's own line is deleted from the letter, and a headline or a
+# CV bullet still carries the substance. §6.2 is satisfied — nothing here may
+# refuse the send or raise a finding — but `episode_disclosures` used to
+# report zero over a document demonstrably carrying the story, because the
+# sweep's loop skipped the carried-check unconditionally on `episode.text in
+# approved` before this task, whether or not a manifest row (or anything else)
+# actually backed it.
+
+
+def _drop_episode_row(where: Path, text: str) -> None:
+    """Remove the manifest's row for one episode, leaving every other row."""
+    path = where / "manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["claims"] = [
+        claim
+        for claim in manifest["claims"]
+        if not (claim["section"] == "episodes" and claim["text"] == text)
+    ]
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_an_approved_headline_carried_episode_with_its_row_removed_is_counted(
+    store: ProfileStore,
+) -> None:
+    """The task's own defect, driven directly through `measure_prepared`.
+
+    The approval is untouched, the manifest's episode row is gone, and the
+    letter's own line is deleted — only the headline still carries the story.
+    Before the fix this measured `episode_disclosures == 0`: a payload the
+    candidate would read as "withheld" the moment before the headline carries
+    it to the employer.
+    """
+    master = _master(store, headline=WIN.rstrip("."))
+    version = _prepare(store, master)
+    where = _where(store, version)
+    _drop_episode_row(where, WIN)
+    _drop_line(where / "letter.md", WIN)
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["episode_disclosures"] >= 1
+    # §6.2 is satisfied: nothing here may turn into a finding or an
+    # undecidable entry over content the candidate already approved.
+    assert measured["unapproved_episode_disclosures"] == 0
+    assert not any(WIN in item for item in measured["undecidable_episodes"])
+
+
+def test_an_approved_cv_bullet_carried_episode_with_its_row_removed_is_counted(
+    store: ProfileStore,
+) -> None:
+    """The same shape, in the second document T114 also covered: a CV bullet.
+
+    §6.2 asks whether the substance reaches an employer, never which line
+    carries it — a bullet reaches the employer exactly as a headline does.
+    """
+    master = CVMaster(
+        headline=SourcedText(text="Data engineer — billing systems"),
+        experience=(
+            Experience(
+                title="Data engineer",
+                organisation="Vall S.A.",
+                description=WIN.rstrip("."),
+            ),
+        ),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=FAILURE)),
+    )
+    write_master(store, master)
+    version = _prepare(store, master)
+    where = _where(store, version)
+    _drop_episode_row(where, WIN)
+    _drop_line(where / "letter.md", WIN)
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["episode_disclosures"] >= 1
+    assert measured["unapproved_episode_disclosures"] == 0
+
+
+def test_the_defect_draft_remains_sendable_after_the_fix(store: ProfileStore) -> None:
+    """Must not: refuse a send whose disclosure §6.2's per-use approval covers.
+
+    Driven through the public boundary (`record_sent`), not only through
+    `measure_prepared`, because the whole point of the fix is that it changes
+    a count and nothing about whether the send is permitted.
+    """
+    master = _master(store, headline=WIN.rstrip("."))
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("PostgreSQL",),
+        approved_episodes=(0,),
+    )
+    where = _where(store, payload.version)
+    _drop_episode_row(where, WIN)
+    _drop_line(where / "letter.md", WIN)
+
+    record_sent(store, master, OFFER, payload.version, confirms=payload_digest(payload))
+
+
+def test_a_version_agreeing_with_its_manifest_is_the_over_refusal_control(
+    store: ProfileStore,
+) -> None:
+    """The control the task requires by name: untouched, it sends cleanly.
+
+    A fix for the withheld-report direction must not buy its metric by
+    refusing more — an ordinary, approved, manifest-declared, document-carried
+    episode has to keep measuring exactly one clean disclosure.
+    """
+    master = _master(store)
+    version = _prepare(store, master)
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["episode_disclosures"] == 1
+    assert measured["unapproved_episode_disclosures"] == 0
+
+
+def test_an_approved_episode_never_carried_anywhere_is_not_manufactured_as_one(
+    store: ProfileStore,
+) -> None:
+    """The fix must not invent a disclosure where the document has none.
+
+    Approved, its row removed, its own line deleted, and nothing else on the
+    page shares its substance: `episode_disclosures` must not count it, and it
+    must not appear as a new finding or as undecidable either.
+    """
+    master = _master(store)
+    version = _prepare(store, master)
+    where = _where(store, version)
+    _drop_episode_row(where, WIN)
+    _drop_line(where / "letter.md", WIN)
+
+    measured = measure_prepared(store, master, OFFER, version)
+
+    assert measured["episode_disclosures"] == 0
+    assert measured["unapproved_episode_disclosures"] == 0
+    assert not any(WIN in item for item in measured["undecidable_episodes"])
+
+
+def test_the_carried_disclosure_probes_catch_every_planted_case(tmp_path: Path) -> None:
+    measured = probe_carried_disclosures_reported(tmp_path / "profiles")
+
+    assert measured["carried_disclosure_probe_failures"] == []
+    assert measured["carried_disclosure_states_evaluated"] >= MINIMUM_CARRIED_DISCLOSURE_STATES
+    assert measured["carried_disclosure_checks_evaluated"] >= MINIMUM_CARRIED_DISCLOSURE_CHECKS
+    assert measured["gate_status"] == "measured"
+    assert measured["payloads_reporting_a_carried_story_as_withheld"] == 0
+
+
+def test_the_recorded_carried_disclosure_evidence_clears_its_own_floors(tmp_path: Path) -> None:
+    measured = write_carried_disclosure_evidence(tmp_path / "T157.json")
+
+    assert measured["carried_disclosure_states_evaluated"] >= MINIMUM_CARRIED_DISCLOSURE_STATES
+    assert measured["carried_disclosure_checks_evaluated"] >= MINIMUM_CARRIED_DISCLOSURE_CHECKS
+    # Both signals, not the metric alone — a metric severed from the per-state
+    # assertions that feed it would still read 0 over a real regression; this
+    # is the redundant, non-circular pairing `_carried_disclosure_report` also
+    # checks both halves of at the CLI boundary.
+    assert measured["carried_disclosure_probe_failures"] == []
+    assert measured["payloads_reporting_a_carried_story_as_withheld"] == 0
+    assert measured["gate_status"] == "measured"
+    assert json.loads((tmp_path / "T157.json").read_text(encoding="utf-8")) == measured
+
+
+def test_deleting_a_carried_disclosure_state_breaches_its_floor(tmp_path: Path) -> None:
+    """Both floors guard the population they name, not merely each other.
+
+    A states count that shrank by one, or a checks count that shrank by one,
+    each has to fall below its own floor on its own — pinned directly against
+    the actual measured counts rather than trusted to the constants' comments,
+    per CLAUDE.md's fixtures section on a floor counting the wrong population.
+    """
+    measured = probe_carried_disclosures_reported(tmp_path / "profiles")
+
+    assert measured["carried_disclosure_states_evaluated"] == MINIMUM_CARRIED_DISCLOSURE_STATES
+    assert measured["carried_disclosure_checks_evaluated"] == MINIMUM_CARRIED_DISCLOSURE_CHECKS
+    assert measured["carried_disclosure_states_evaluated"] - 1 < MINIMUM_CARRIED_DISCLOSURE_STATES
+    assert measured["carried_disclosure_checks_evaluated"] - 1 < MINIMUM_CARRIED_DISCLOSURE_CHECKS
+
+
+def test_the_carried_disclosure_report_fails_on_a_nonzero_metric(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_carried_disclosure_report` must fail the gate itself, not merely print it."""
+    passing = {
+        "carried_disclosure_states_evaluated": MINIMUM_CARRIED_DISCLOSURE_STATES,
+        "carried_disclosure_checks_evaluated": MINIMUM_CARRIED_DISCLOSURE_CHECKS,
+        "payloads_reporting_a_carried_story_as_withheld": 0,
+        "carried_disclosure_probe_failures": [],
+        "gate_status": "measured",
+    }
+    assert _carried_disclosure_report(dict(passing)) == 0
+    assert (
+        _carried_disclosure_report({**passing, "payloads_reporting_a_carried_story_as_withheld": 1})
+        == 1
+    )
+    assert (
+        _carried_disclosure_report(
+            {**passing, "carried_disclosure_states_evaluated": 0, "gate_status": "unmeasured"}
+        )
+        == 1
+    )
+    # The checks floor, on its own, guards against a states count padded with
+    # an empty state — the "floor counting the wrong population" shape — by
+    # catching a states count that clears its own floor while the checks
+    # beneath it thin out.
+    assert _carried_disclosure_report({**passing, "carried_disclosure_checks_evaluated": 0}) == 1
+
+    monkeypatch.setattr(
+        approval,
+        "probe_carried_disclosures_reported",
+        lambda root: {
+            "carried_disclosure_states_evaluated": 0,
+            "carried_disclosure_checks_evaluated": 0,
+            "payloads_reporting_a_carried_story_as_withheld": 0,
+            "carried_disclosure_probe_failures": [],
+            "gate_status": "unmeasured",
+        },
+    )
+    written = write_carried_disclosure_evidence(tmp_path / "T157.json")
+    assert written["gate_status"] == "unmeasured"
+    assert _carried_disclosure_report(written) == 1
