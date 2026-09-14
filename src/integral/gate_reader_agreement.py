@@ -335,57 +335,52 @@ class Probe:
 
     @property
     def counted_but_never_read(self) -> bool:
-        """Counted a gate the checker did not read, by either of two signals.
+        """Counted at all, or green — T158's redesign, replacing the two-signal form.
 
-        **What the run says.** `verify_gates.py` counts a gate it asserted
-        whose checker printed nothing at all, which is the only state in which
-        `gate_evidence.py` exits 0 without having read a block.
+        The two-signal form this replaces read `reported_never_read` (what the
+        run *said*) or `counted_as_asserted > 0 and green` (what it *did*).
+        Neither subsumed the other, and the second reader on #425 pinned each
+        with its own fixture — but #425 also measured the hole in the
+        combination: remove the first signal *and* revert
+        `task_gate.gate_declaration`'s `unreadable` branch (the pre-T122
+        substring rule, which is what "a reverted classifier" means), and
+        every arrangement came back False. The reverted verifier is genuinely
+        red about the divergence — its own silent-pass catch still fires and
+        the run exits 1 — so `green` was False and the second signal, which
+        needed it, never fired either. `gates_counted_as_asserted_but_never_read`
+        read **0** over a defect that was fully back.
 
-        **What the run did.** Counted a gate, and still returned green over an
-        evidence file that does not exist. A checker that read the block would
-        have failed on the absent file, so green-while-counting is the same
-        divergence with nothing else it can be.
+        **The rule now needs neither input.** A run that counted a gate over
+        an evidence file that cannot exist has diverged, whatever else it
+        reports and whatever its exit status: a checker that read the block
+        must have failed on the missing file. So `counted_as_asserted > 0` is
+        by itself the divergence for these fixtures, and it subsumes both of
+        the old signals — the honest-but-wrong verifier counts, and the silent
+        green verifier counts. There is no state left in which a reverted
+        classifier still counts the fence and this property returns False:
+        `verify_gates.main` increments `checked` (and so `counted_as_asserted`)
+        the moment `gate_declaration` calls a fence readable, *before* either
+        of the silent-pass catch's two effects — appending to the report, or
+        to `failures` — ever run. `integral.gate_detector_states` drives this
+        claim rather than asserting it: seven real, textually mutated copies
+        of `tools/verify_gates.py`, each run end to end through `probe`.
 
-        Neither signal subsumes the other, and **each is now pinned by a
-        fixture rather than by this paragraph**. That is the correction the
-        second reader on #425 asked for: the claim stood here untested, and
-        deleting either signal left all of the module's tests and the metric
-        green over a defect that was fully back.
-
-        * Only the **first** fires against a verifier that has drifted back to
-          a substring rule and *reports* the drift honestly — it names the
-          task and exits 1, so the run is red and `green` is False. That is
-          what a plain revert of this fix produces, and it is why the second
-          signal alone is not enough:
-          `test_the_reported_signal_alone_catches_a_verifier_that_is_red`.
-        * Only the **second** fires when the verifier's own report is empty —
-          the silent-pass catch removed, or the list hard-coded — so the
-          divergence is real, unreported and green. That is why the first
-          signal alone is not enough:
-          `test_the_exit_status_signal_alone_catches_a_verifier_that_reports_nothing`
-          drives exactly such a verifier end to end.
-
-        The measured caveat, recorded because the earlier wording obscured it:
-        under a *single* reverted defect only the first signal ever fires. The
-        second is reachable when the verifier's self-report has also stopped
-        being trustworthy, which is precisely the case a number reported about
-        itself cannot cover.
-
-        And one hole is named rather than closed here. Remove the first signal
-        *and* revert the classifier, and this property returns False for every
-        arrangement: the run is red about the divergence, so `green` is False,
-        and the metric reads **0** over a defect that is fully back. What fails
-        in that state is the fixture set — ten of its twenty-three cases go
-        red, measured — not the number. So the protection is real and it does not live in this
-        metric, which is worth knowing before quoting the metric as though it
-        were the whole check. Closing it means dropping to the simpler rule
-        (*counted at all, or green*), which subsumes both signals and is a
-        redesign of the detector rather than the second reader's remedy on
-        #425; it is left for a round that reviews it as one.
+        **What this rule must not be asked to decide alone.** It is a
+        statement about arrangements a checker's grammar does not reach —
+        `gate_reader_agreement.measure` evaluates it only for
+        `not arrangement.carries_a_readable_gate`, never for the two controls
+        (`second_fence_after_the_first`, `label_in_a_later_section`), which
+        also get `counted_as_asserted == 1` from an unmutated verifier and
+        would misread as divergences under this rule with the split removed.
+        `measure`'s `carries_a_readable_gate` branch is that split and is
+        untouched by this redesign; `test_gate_detector_states.py` exercises
+        it directly rather than trusting the branch by name. It is likewise
+        never applied to the board half, which reads
+        `board["counted_as_asserted_but_never_read"]` straight from a real
+        verifier's report over the real board, where an evidence file
+        legitimately exists and a counted gate is not by itself a divergence.
         """
-        if self.reported_never_read:
-            return True
-        return self.counted_as_asserted > 0 and self.green
+        return self.counted_as_asserted > 0
 
     @property
     def stopped_asserting(self) -> bool:

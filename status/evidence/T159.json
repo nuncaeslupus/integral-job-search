@@ -53,6 +53,11 @@
       "line": 154
     },
     {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DETECTOR_STATES_PROBED",
+      "line": 120
+    },
+    {
       "module": "gate_reader_agreement",
       "name": "MINIMUM_ARRANGEMENTS_PROBED",
       "line": 122
@@ -242,14 +247,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2779,
+      "line": 2781,
       "population": 40
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2712,
-      "population": 75
+      "line": 2714,
+      "population": 76
     },
     {
       "module": "freshness",
@@ -450,6 +455,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 75,
+  "floors_swept_at_least": 76,
   "floors_arithmetically_checked_at_least": 36
 }
