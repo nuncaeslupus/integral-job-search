@@ -8,5 +8,6 @@
     "ci_claims_on_a_failing_run",
     "ci_claims_on_a_pushed_commit"
   ],
-  "ci_claims_found": []
+  "ci_claims_found": [],
+  "ci_token_hits_found": []
 }
