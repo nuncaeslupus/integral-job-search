@@ -107,6 +107,13 @@ pages from the candidate's browser it reports the board **skipped**, and says so
 another client, no headless browser, no browser user agent on the tool's own requests, no CAPTCHA
 solving. If the candidate's browser shows a puzzle, stop and ask them to solve it themselves.
 
+**One browser user agent exists in this tool, and it is not a way around any check.** When a WAF
+answers the honest agent 403 on `/robots.txt` itself, `integral.robots` re-reads *that one URL* with
+a generic browser string (T71): a refusal of the policy document is not an answer about what the
+policy says. It fetches no listing and no advert, whatever comes back is obeyed like any other
+robots.txt, and a 403 on an advert still reads `unverified`. Nothing else may send one — a board
+that serves its listings only to a browser is read through the candidate's own, above.
+
 1. **What to open.** `browser_urls(constraints, aim)` lists the searches, robots already checked.
 2. **Ask once, naming what will happen.** Saving a page is a download, and it needs a yes:
 
