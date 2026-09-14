@@ -2708,8 +2708,11 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: the remedy is the one it prescribes: regenerate against the merged tree
 #: rather than pick a side. Zero slack is restored at the new true count.
 #: 75 since T144, whose `employer_boards.MINIMUM_CONFORMING` joined the
-#: population — the same refusal, met on purpose this time.
-MINIMUM_FLOORS_SWEPT = 75
+#: population — the same refusal, met on purpose this time. 76 since T161,
+#: whose `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` joined it the same way —
+#: regenerated against the tree with the new floor rather than picked a side,
+#: per this comment's own remedy above.
+MINIMUM_FLOORS_SWEPT = 76
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach

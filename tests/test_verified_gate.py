@@ -555,3 +555,232 @@ def test_an_at_sign_measures_the_caller_not_origins_default_branch(tmp_path: Pat
     assert ran.fields["commit"] != upstream
     assert ran.fields["verdict"] == "FAIL"
     assert ran.returncode == 1
+
+
+# --------------------------------------------------------------------------
+# T161 — the block must not assert what it did not measure about CI.
+#
+# `tools/verified_gate.sh:143` used to print, in every verdict block, the
+# hardcoded sentence "CI is unavailable; this is the substitute CLAUDE.md
+# names" — true during the 2026-09-04 outage, false from 2026-09-07. Measured
+# against the unfixed script (before this task's edit) `measure_ci_claims()`
+# reported `verdict_block_claims_about_ci_that_are_not_measured == 3` — one
+# per scenario, since the sentence is unconditional — confirming the check is
+# not vacuously zero before a single line of the fix was written.
+# --------------------------------------------------------------------------
+
+
+def _measure_ci_claims_text(tmp_path: Path, script_text: str) -> dict[str, Any]:
+    """`measure_ci_claims` against a script body as if it were the committed
+    one, the same shape `_measure_text` gives the contract table above."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(script_text, encoding="utf-8")
+    script.chmod(0o755)
+    return vg.measure_ci_claims(script_path=script)
+
+
+def test_the_committed_script_makes_no_ci_claim() -> None:
+    measured = vg.measure_ci_claims()
+    assert measured["ci_claims_found"] == []
+    assert measured["verdict_block_claims_about_ci_that_are_not_measured"] == 0
+    assert measured["gate_status"] == "measured"
+    assert measured["ci_claim_scenarios_checked"] == len(vg.CI_CLAIM_SCENARIOS)
+    assert measured["ci_claim_scenarios_checked_by_name"] == [s.name for s in vg.CI_CLAIM_SCENARIOS]
+
+
+def test_every_ci_claim_scenario_has_a_reason_it_exists() -> None:
+    for scenario in vg.CI_CLAIM_SCENARIOS:
+        assert len(scenario.why) > 30, f"{scenario.name} does not say what it is for"
+    assert len({s.name for s in vg.CI_CLAIM_SCENARIOS}) == len(vg.CI_CLAIM_SCENARIOS)
+
+
+# `(id, find, replace)` — each reintroduces a CI-state assertion into the
+# COMMITTED (fixed) script. `find` is a substring of the real, current file,
+# so a rewrite of the surrounding prose that leaves this substring behind
+# does not silently stop testing anything (the same discipline `_mutate`
+# documents above). Every row was measured against the committed script:
+# green without the mutation, red with it.
+_CI_CLAIM_MUTATIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        # The regression this task is about, restored almost verbatim.
+        "the_hardcoded_unavailable_sentence_returns",
+        'echo "own state here."',
+        'echo "own state here. CI is unavailable right now."',
+    ),
+    (
+        # A different state word and a different verb, so the case is not
+        # merely pinned to the one literal string this task happened to meet.
+        "a_different_wording_still_asserts_a_ci_state",
+        'echo "own state here."',
+        'echo "own state here. By the way, CI has failed on this commit."',
+    ),
+    (
+        # Reworded as a PASSING claim rather than an unavailable one — the
+        # regression this task fixed was fail-open in the "CI didn't run, but
+        # trust this instead" direction; an ungrounded "CI is green" claim is
+        # fail-open the same way, the other side.
+        "an_ungrounded_pass_claim_is_equally_a_defect",
+        'echo "own state here."',
+        'echo "own state here. CI was green on the last run."',
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("find", "replace"),
+    [(f, r) for _id, f, r in _CI_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _CI_CLAIM_MUTATIONS],
+)
+def test_each_ci_claim_mutation_is_detected(tmp_path: Path, find: str, replace: str) -> None:
+    """Revert the fix (in miniature) and watch the metric go red."""
+    broken = _measure_ci_claims_text(tmp_path / "broken", _mutate(find, replace))
+    assert broken["verdict_block_claims_about_ci_that_are_not_measured"] > 0, broken
+    # Found on every scenario, since the mutated line is unconditional — the
+    # metric must not undercount by de-duplicating identical assertions
+    # across runs, which would hide exactly the "prints it every time"
+    # property that made the original sentence a defect on every PR.
+    assert broken["verdict_block_claims_about_ci_that_are_not_measured"] == len(
+        vg.CI_CLAIM_SCENARIOS
+    )
+
+
+@pytest.mark.parametrize(
+    "find_replace_id",
+    [i for i, _f, _r in _CI_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _CI_CLAIM_MUTATIONS],
+)
+def test_the_committed_script_passes_every_ci_claim_mutations_baseline(
+    tmp_path: Path, find_replace_id: str
+) -> None:
+    """The other half of mutate-verify-restore: the UNMUTATED script must be
+    clean, or a mutation that "breaks" a perpetually-red check proves nothing."""
+    intact = _measure_ci_claims_text(tmp_path, _SCRIPT.read_text(encoding="utf-8"))
+    assert intact["verdict_block_claims_about_ci_that_are_not_measured"] == 0
+
+
+@pytest.mark.parametrize(
+    ("text", "expect_assertion"),
+    [
+        # Positive: the exact regression, plus wordings it must generalise to.
+        ("CI is unavailable; this is the substitute CLAUDE.md names.", True),
+        ("CI has failed on this commit.", True),
+        ("CI was green on the last run.", True),
+        ("As of this run, CI is currently down for maintenance.", True),
+        # Positive, verb-less: a rewrite of the regression that drops "is"
+        # entirely must still be caught — the fail-open direction the module
+        # docstring calls out explicitly for this check.
+        ("CI: unavailable.", True),
+        ("CI — down for maintenance.", True),
+        ("(CI unavailable)", True),
+        # Negative: naming CI to state this script's own SCOPE, with no verb
+        # of being/having attached to a state word, must not match — this is
+        # the fixed wording verbatim.
+        (
+            "it and CI are complementary (this over the committed head, CI over the "
+            "pull request's separate merge ref), and it makes no claim about CI's "
+            "own state here.",
+            False,
+        ),
+        ("See CLAUDE.md for how this relates to CI.", False),
+        # Negative control: CI mentioned, but the sentence is about something
+        # else this run DID observe (origin reachability), not CI's own state.
+        ("on origin yes — reachable from origin/main, independent of CI.", False),
+    ],
+)
+def test_ci_state_assertions_distinguishes_a_claim_from_a_scope_statement(
+    text: str, expect_assertion: bool
+) -> None:
+    found = vg.ci_state_assertions(text)
+    assert bool(found) is expect_assertion, (text, found)
+
+
+def test_the_ci_claim_scenario_floor_is_a_literal() -> None:
+    source = Path(vg.__file__).read_text(encoding="utf-8")
+    assert "MINIMUM_CI_CLAIM_SCENARIOS = 3" in source, (
+        "the floor must be a literal; written as `len(CI_CLAIM_SCENARIOS)` it is "
+        "compared against a count derived from the table itself and can never fire"
+    )
+    assert len(vg.CI_CLAIM_SCENARIOS) >= vg.MINIMUM_CI_CLAIM_SCENARIOS
+
+
+def test_a_shrunken_ci_claim_table_is_unmeasured_not_silently_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(vg, "CI_CLAIM_SCENARIOS", vg.CI_CLAIM_SCENARIOS[:1])
+    measured = vg.measure_ci_claims()
+    assert measured["ci_claim_scenarios_checked"] == 1
+    assert measured["ci_claim_scenarios_checked"] < vg.MINIMUM_CI_CLAIM_SCENARIOS
+
+
+def test_a_missing_script_is_the_maximal_ci_claim_defect() -> None:
+    measured = vg.measure_ci_claims(script_path=Path("/nonexistent/verified_gate.sh"))
+    assert measured["verdict_block_claims_about_ci_that_are_not_measured"] == -1
+    assert measured["gate_status"] == "measured"
+
+
+# --------------------------------------------------------------------------
+# `_main` writes both T121's and T161's evidence from the one bare
+# invocation `make evidence` actually makes, and a live CI-claim regression
+# fails it — end to end, not just `measure_ci_claims()` in isolation.
+# --------------------------------------------------------------------------
+
+
+def _patch_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, script: Path) -> None:
+    instructions = tmp_path / "CLAUDE.md"
+    instructions.write_text(f"Run `{script.name}`.\n", encoding="utf-8")
+    monkeypatch.setattr(vg, "DEFAULT_SCRIPT_PATH", script)
+    monkeypatch.setattr(vg, "DEFAULT_INSTRUCTIONS", instructions)
+    monkeypatch.setattr(vg, "DEFAULT_EVIDENCE_PATH", tmp_path / "T121.json")
+    monkeypatch.setattr(vg, "DEFAULT_T161_EVIDENCE_PATH", tmp_path / "T161.json")
+
+
+def test_a_bare_invocation_writes_both_evidence_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(_SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+    script.chmod(0o755)
+    _patch_defaults(monkeypatch, tmp_path, script)
+
+    assert vg._main(["prog"]) == 0
+    t121 = json.loads((tmp_path / "T121.json").read_text(encoding="utf-8"))
+    t161 = json.loads((tmp_path / "T161.json").read_text(encoding="utf-8"))
+    assert t121["verified_gate_defects"] == 0
+    assert t161["verdict_block_claims_about_ci_that_are_not_measured"] == 0
+
+
+def test_a_live_ci_claim_regression_fails_the_bare_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wiring, not just the metric: a script that reintroduces the
+    hardcoded sentence must fail `_main`'s bare invocation — the one
+    `make evidence` runs — even though T121's own ten contracts do not
+    mention CI at all and would otherwise pass it clean."""
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(
+        _mutate('echo "own state here."', 'echo "own state here. CI is unavailable."'),
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    _patch_defaults(monkeypatch, tmp_path, script)
+
+    assert vg._main(["prog"]) == 1
+    t161 = json.loads((tmp_path / "T161.json").read_text(encoding="utf-8"))
+    assert t161["verdict_block_claims_about_ci_that_are_not_measured"] > 0
+
+
+def test_an_explicit_target_does_not_trigger_the_ci_claim_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`options.target == DEFAULT_EVIDENCE_PATH` is the whole gate for writing
+    T161 alongside T121; an explicit, non-default target must not write it —
+    mirroring `test_measuring_another_tree_records_nothing_about_this_one`."""
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(_SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+    script.chmod(0o755)
+    _patch_defaults(monkeypatch, tmp_path, script)
+    decoy = tmp_path / "T161.json"
+
+    assert vg._main(["prog", str(tmp_path / "out.json")]) == 0
+    assert not decoy.exists()

@@ -141,8 +141,11 @@ status=$?
 echo '## Verified gate'
 echo
 echo "Run by \`tools/verified_gate.sh\` against a clean detached checkout of the"
-echo "commit named below — not a working tree. CI is unavailable; this is the"
-echo "substitute \`CLAUDE.md\` names, and that SHA is the one that was measured."
+echo "commit named below — not a working tree — and that SHA is the one that"
+echo "was measured. This block is scoped to that commit only: per CLAUDE.md,"
+echo "it and CI are complementary (this over the committed head, CI over the"
+echo "pull request's separate merge ref), and it makes no claim about CI's"
+echo "own state here."
 echo
 echo "\`\`\`"
 echo "commit    ${sha}"

@@ -168,6 +168,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCRIPT_PATH = _REPO_ROOT / "tools" / "verified_gate.sh"
 DEFAULT_INSTRUCTIONS = _REPO_ROOT / "CLAUDE.md"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T121.json"
+DEFAULT_T161_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T161.json"
 
 #: The verdict block's field names. `on origin` carries a space on purpose — it
 #: is read back exactly as the block prints it, so a renamed field is a failure
@@ -757,6 +758,208 @@ def write_evidence(
     return measured
 
 
+# ---------------------------------------------------------------------------
+# T161 — the block must not assert what it did not measure about CI
+#
+# `tools/verified_gate.sh` printed, in every verdict block, a hardcoded
+# sentence: "CI is unavailable; this is the substitute CLAUDE.md names". That
+# was true during the 2026-09-04 runner outage and false from 2026-09-07,
+# when the repository went public and Actions became unmetered — so every
+# block pasted on a pull request since carried a false claim about CI's
+# state, some of them beside a green `CI` check on the same head minutes
+# apart. The block exists so a reader can see the checking happened; a claim
+# in it that the run never grounded is this repository's own named defect
+# family (a check — here, an evidence artefact — asserting a property it did
+# not observe), inside the one file whose whole job is to be trustworthy
+# about what was measured.
+#
+# The fix is scoped, per the task: either measure what the block says about
+# CI, or say nothing about it. This repository has no live CI channel to
+# query from a sandboxed throwaway worktree (no `gh`, no network), so the
+# script now says nothing — CLAUDE.md already states the two are
+# complementary (this script over the committed head, CI over the PR's merge
+# ref), and the block can state its own scope without asserting anything
+# about the other half.
+#
+# What is measured is therefore not "is the claim true" — there must be no
+# claim left to be true or false — but "does the emitted block make ANY
+# unearned assertion about CI's availability or result". Behavioural, in this
+# module's established idiom (see the module docstring): the check never
+# reads the script's source, only the TEXT the script prints when it is
+# actually run, because reading the source was defeated three times by
+# comments, an unused string literal and trailing comments — none of which
+# can hide inside the text a reviewer actually reads on the pull request.
+#
+# A CI-state assertion is "CI", a verb of being/having, and a state word, all
+# within one short span — "CI is unavailable", "CI has failed", "CI was
+# green". A sentence that only *names* CI to state this script's own scope
+# ("this makes no claim about CI, which measures the merge ref separately")
+# carries no such verb-plus-state-word triple and does not match. The
+# regex is intentionally loose on the state-word list — a script that starts
+# claiming CI is "flaky" or "stale" instead of "unavailable" should still
+# be caught, and a false negative here is fail-open, exactly the direction
+# CLAUDE.md weights against.
+#
+# Two alternatives, not one, for the same fail-open reason: a verb-carrying
+# form ("CI is unavailable", "CI has failed") over a wide window, AND a
+# verb-less adjacency form ("CI: unavailable", "CI — down") over a much
+# tighter one. The regression this task fixes used the first shape, but the
+# next rewrite of this line need not, and a check that only recognises today's
+# grammar is
+# the same "add a thirteenth pattern" mistake the module docstring already
+# names for the script's own source — repeated one layer up if this were
+# single-shaped too. The tight window on the second alternative is what keeps
+# it from flagging a scope sentence that merely names CI and a state word
+# nearby in a longer, unrelated clause.
+_CI_STATE_ASSERTION_RE = re.compile(
+    r"\bci\b(?:"
+    r"[^.\n]{0,60}?\b(?:is|was|are|were|has|have|had)\b[^.\n]{0,40}?"
+    r"\b(?:unavailable|available|down|up|broken|working|green|red|"
+    r"passing|passed|failing|failed|skipped|disabled|enabled|required|succeeded|ran)\b"
+    r"|"
+    r"[^.\n]{0,20}?\b(?:unavailable|available|down|up|broken|working|green|red|"
+    r"passing|passed|failing|failed|skipped|disabled|enabled|required|succeeded|ran)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def ci_state_assertions(text: str) -> tuple[str, ...]:
+    """Every span in `text` asserting CI's availability or result.
+
+    Matched against emitted TEXT — a script's actual stdout for one real run —
+    never against `tools/verified_gate.sh`'s source. See the section above for
+    why: source-matching is what three prior rounds defeated.
+    """
+    return tuple(match.group(0) for match in _CI_STATE_ASSERTION_RE.finditer(text))
+
+
+@dataclass(frozen=True)
+class CiClaimScenario:
+    """One real run of the script, whose printed text is scanned for
+    ungrounded CI assertions. Each scenario is a distinct case a verdict
+    block is pasted from in practice, so a fix that happens to clear one
+    wording only for PASS, say, is still caught on the others."""
+
+    name: str
+    why: str
+    stdout: Callable[[Harness], str]
+
+
+def _ci_claims_on_a_passing_run(h: Harness) -> str:
+    """The ordinary case — most blocks pasted on a pull request are this one."""
+    root = h.repo("repo", _plain_makefile(_PASSING))
+    return h.run(root, "HEAD").stdout
+
+
+def _ci_claims_on_a_failing_run(h: Harness) -> str:
+    """A FAIL block still must not assert a CI state this run never checked."""
+    root = h.repo("repo", _plain_makefile(_FAILING))
+    return h.run(root, "HEAD").stdout
+
+
+def _ci_claims_on_a_pushed_commit(h: Harness) -> str:
+    """The exact case named in the task: a block pasted beside a green `CI`
+    check on the SAME head must not separately assert anything about CI —
+    reachable from origin is a fact this run *did* observe (`on origin`);
+    CI's own state is not."""
+    clone, _upstream, _local = h.clone_with_an_origin()
+    return h.run(clone, "main").stdout
+
+
+CI_CLAIM_SCENARIOS: tuple[CiClaimScenario, ...] = (
+    CiClaimScenario(
+        "ci_claims_on_a_passing_run",
+        "the ordinary case: a PASS block must not assert a CI state this run never checked",
+        _ci_claims_on_a_passing_run,
+    ),
+    CiClaimScenario(
+        "ci_claims_on_a_failing_run",
+        "a FAIL block still must not claim anything about CI, which this run never observed",
+        _ci_claims_on_a_failing_run,
+    ),
+    CiClaimScenario(
+        "ci_claims_on_a_pushed_commit",
+        "the case the task names: a block pasted beside a green CI check on the same head "
+        "must not separately assert CI is unavailable, or anything else about it",
+        _ci_claims_on_a_pushed_commit,
+    ),
+)
+
+#: A literal, on purpose — `MINIMUM_CONTRACTS`'s form and reason repeated:
+#: written as `len(CI_CLAIM_SCENARIOS)` the floor below would compare a count
+#: derived from the table against itself, `x < x`, unreachable, and deleting
+#: a scenario would move both sides together. #333, F3; T100/T122's convention.
+MINIMUM_CI_CLAIM_SCENARIOS = 3
+
+
+def measure_ci_claims(
+    script_path: Path = DEFAULT_SCRIPT_PATH,
+    scenarios: Sequence[CiClaimScenario] | None = None,
+) -> dict[str, Any]:
+    """T161's gate: `verdict_block_claims_about_ci_that_are_not_measured`.
+
+    Runs the script for real, once per scenario, against a throwaway
+    repository — never reads its source — and counts every span
+    `ci_state_assertions` finds across all of them. Before the fix this was
+    non-zero (the hardcoded sentence appears in every run's block); the fix
+    is that the block stops asserting anything about CI, so a fixed script
+    scores 0 here not because nothing was checked but because there is
+    nothing left to find.
+
+    A scenario that cannot even be run (git or make missing, the harness
+    itself broken) is not "no claims found" — recording zero over a check
+    that did not run is the vacuous pass this whole task is about — so it is
+    recorded as a claim of its own, keeping the metric non-zero rather than
+    silently dropping a third of the denominator.
+    """
+    if not script_path.exists():
+        return {
+            "verdict_block_claims_about_ci_that_are_not_measured": -1,
+            "ci_claim_scenarios_checked": 0,
+            "ci_claim_scenarios_at_least": MINIMUM_CI_CLAIM_SCENARIOS,
+            "gate_status": "measured",
+            "ci_claim_scenarios_checked_by_name": [],
+            "ci_claims_found": [],
+        }
+    if scenarios is None:
+        scenarios = CI_CLAIM_SCENARIOS
+    found: list[str] = []
+    checked: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="verified-gate-ci-claims-") as raw:
+        base = Path(raw)
+        for scenario in scenarios:
+            checked.append(scenario.name)
+            workdir = base / scenario.name
+            workdir.mkdir(parents=True)
+            try:
+                stdout = scenario.stdout(Harness(script_path, workdir))
+            except Exception as exc:
+                found.append(f"{scenario.name}: the scenario could not be run: {exc!r}")
+                continue
+            for assertion in ci_state_assertions(stdout):
+                found.append(f"{scenario.name}: {assertion!r}")
+    return {
+        "verdict_block_claims_about_ci_that_are_not_measured": len(found),
+        "ci_claim_scenarios_checked": len(checked),
+        "ci_claim_scenarios_at_least": MINIMUM_CI_CLAIM_SCENARIOS,
+        "gate_status": "measured" if checked else "unmeasured",
+        "ci_claim_scenarios_checked_by_name": checked,
+        "ci_claims_found": found,
+    }
+
+
+def write_t161_evidence(
+    evidence: Path = DEFAULT_T161_EVIDENCE_PATH,
+    script_path: Path = DEFAULT_SCRIPT_PATH,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T161.json`."""
+    measured = measure_ci_claims(script_path)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 @dataclass(frozen=True)
 class Options:
     """A parsed command line, or the reason it was refused."""
@@ -847,8 +1050,27 @@ def _main(argv: list[str]) -> int:
         for item in measured[key]:
             print(f"✗ {key}: {item}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
-    if measured["verified_gate_defects"] > 0:
-        return 1
+
+    # T161's evidence rides along with T121's, on the one invocation
+    # `make evidence` actually makes: no `--script`/`--instructions` override,
+    # and the evidence path left at its default. Naming a script or an
+    # instructions file other than this repository's already makes `options.target`
+    # `None` above (a measurement of some other tree is not evidence about this
+    # one), so `options.target == DEFAULT_EVIDENCE_PATH` alone is enough here — it
+    # is unreachable unless `own_tree` was also true when `parse_args` set it.
+    ci_measured: dict[str, Any] | None = None
+    if options.target == DEFAULT_EVIDENCE_PATH:
+        # `DEFAULT_T161_EVIDENCE_PATH` passed explicitly, not left to the
+        # function's own default: a default argument is bound once at def
+        # time, so a caller (a test, or a future host) that repoints the
+        # module-level constant would otherwise still write to the original
+        # path — the exact residue #333's F4 already found in this module
+        # once, for `DEFAULT_EVIDENCE_PATH` itself.
+        ci_measured = write_t161_evidence(DEFAULT_T161_EVIDENCE_PATH, script_path=script_path)
+        for item in ci_measured["ci_claims_found"]:
+            print(f"✗ ci_claims_found: {item}", file=sys.stderr)
+        print(json.dumps(ci_measured, ensure_ascii=False))
+
     # The floor last and below the finding, the precedence `naming` sets: a real
     # defect outranks a thin denominator. -1 is "the script is gone", which is
     # the maximal defect and not an honest "cannot measure yet" — so it fails
@@ -860,11 +1082,38 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 1
+    if measured["verified_gate_defects"] > 0:
+        return 1
+    if ci_measured is not None:
+        claims = ci_measured["verdict_block_claims_about_ci_that_are_not_measured"]
+        if claims != 0:
+            # Covers both directions: claims > 0 is a live regression (the
+            # hardcoded sentence, or one like it, is back); claims < 0 mirrors
+            # T121's missing-script case above and must fail the same way
+            # rather than read as an honest "unmeasured".
+            print(
+                f"verdict_block_claims_about_ci_that_are_not_measured: {claims} "
+                "— the emitted block asserts something about CI this run did not "
+                "observe",
+                file=sys.stderr,
+            )
+            return 1
     if measured["verified_gate_contracts_checked"] < MINIMUM_CONTRACTS:
         print(
             f"verified_gate_contracts_checked: {measured['verified_gate_contracts_checked']} "
             f"is below the floor of {MINIMUM_CONTRACTS} — zero defects over that few "
             "contracts is not a measurement",
+            file=sys.stderr,
+        )
+        return 3
+    if (
+        ci_measured is not None
+        and ci_measured["ci_claim_scenarios_checked"] < MINIMUM_CI_CLAIM_SCENARIOS
+    ):
+        print(
+            f"ci_claim_scenarios_checked: {ci_measured['ci_claim_scenarios_checked']} is "
+            f"below the floor of {MINIMUM_CI_CLAIM_SCENARIOS} — zero unmeasured CI claims "
+            "over that few scenarios is not a measurement",
             file=sys.stderr,
         )
         return 3
