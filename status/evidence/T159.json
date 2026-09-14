@@ -155,12 +155,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 111
+      "line": 112
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 103
+      "line": 104
     },
     {
       "module": "spec_consistency",
@@ -188,13 +188,13 @@
     {
       "module": "bulk_filter",
       "name": "MINIMUM_BATCH",
-      "line": 376,
+      "line": 375,
       "population": 325
     },
     {
       "module": "bulk_filter",
       "name": "MUST_KEEP_ROWS",
-      "line": 369,
+      "line": 368,
       "population": 3
     },
     {
@@ -206,7 +206,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3983,
+      "line": 3999,
       "population": 15
     },
     {
@@ -272,7 +272,7 @@
     {
       "module": "offers",
       "name": "MINIMUM_CHECKS",
-      "line": 402,
+      "line": 410,
       "population": 10
     },
     {
