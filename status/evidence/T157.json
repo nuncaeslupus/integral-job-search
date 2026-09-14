@@ -1,6 +1,6 @@
 {
   "carried_disclosure_states_evaluated": 9,
-  "carried_disclosure_checks_evaluated": 23,
+  "carried_disclosure_checks_evaluated": 24,
   "payloads_reporting_a_carried_story_as_withheld": 0,
   "carried_disclosure_probe_failures": [],
   "gate_status": "measured"

@@ -1669,6 +1669,14 @@ def test_an_approved_episode_never_carried_anywhere_is_not_manufactured_as_one(
     assert measured["episode_disclosures"] == 0
     assert measured["unapproved_episode_disclosures"] == 0
     assert any(WIN in item for item in measured["undecidable_episodes"])
+    # A (second reader, #475 round 3): the mirror of the F-3 self-scan above
+    # (`test_a_version_agreeing_with_its_manifest_is_the_over_refusal_control`,
+    # which pins the field *present* for a genuinely disclosed episode) —
+    # WIN is approved here and genuinely uncarried, so `disclosed_episode_texts`
+    # must not name it. A field seeded from `set(disclosed) | set(approved)`
+    # grows with the permission instead of with the count, which is exactly
+    # the coupling T157's "What the metric counts" section forbids by name.
+    assert WIN not in measured["disclosed_episode_texts"]
 
 
 def test_an_approved_episode_never_carried_anywhere_still_sends_cleanly(
