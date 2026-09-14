@@ -186,7 +186,15 @@ class BoardOutcome:
 
     @property
     def reached_the_board(self) -> bool:
-        return self.skipped is None and self.error is None
+        """Whether this board answered, not how the round ended (round 3, R3).
+
+        A board that served page one and failed on page two supplied real
+        offers; reading this off the terminal reason credited them to whichever
+        board happened to finish cleanly, and the three failure routes
+        disagreed — a 429 kept the board, a timeout dropped it, from the same
+        partial read.
+        """
+        return (self.skipped is None and self.error is None) or bool(self.items or self.added)
 
 
 @dataclass
@@ -202,6 +210,9 @@ class Run:
     #: remote work, and why in the candidate's terms. Said, so a quiet run is
     #: not read as a quiet world.
     unreached: tuple[str, ...] = ()
+    #: The whole clause, boards included: "worldwide boards, since …" or
+    #: "every installed board, since …". A run blocked by an unstated location
+    #: asks nobody at all, and said nothing until round 3's R2.
     unreached_because: str = ""
 
     @property
@@ -257,7 +268,9 @@ class Run:
         return self._boards(lambda o: o.stale)
 
     def summary(self) -> str:
-        boards = len({o.connector for o in self.outcomes})
+        # Boards that answered. Counting every outcome credited the run with
+        # boards the ceiling stopped it from ever asking (round 3, minor).
+        boards = len({o.connector for o in self.outcomes if o.reached_the_board})
         lines = [f"{self.added} offer(s) added from {boards} board(s)"]
         if self.searched:
             lines.append(f"  searched, one phrase at a time: {', '.join(self.searched)}")
@@ -271,10 +284,7 @@ class Run:
         if self.unsteered:
             lines.append(f"  returned their whole list: {', '.join(self.unsteered)}")
         if self.unreached:
-            lines.append(
-                f"  NOT asked — worldwide boards, {self.unreached_because}: "
-                f"{', '.join(self.unreached)}"
-            )
+            lines.append(f"  NOT asked — {self.unreached_because}: {', '.join(self.unreached)}")
         if self.added >= OFFER_CEILING:
             # Printed on the total, not only on the rows it cut: a ceiling that
             # fills exactly at a page's end stops the next page and leaves no
@@ -373,10 +383,21 @@ def _why_not_worldwide(constraints: CandidateConstraints) -> str:
     """
     state = constraints.reach.state
     if state == "unknown":
-        return "since you have not said whether you would work remotely"
+        return "worldwide boards, since you have not said whether you would work remotely"
     if state == "declined":
-        return "since you preferred not to say whether you would work remotely"
-    return "since your reach does not include remote work"
+        return "worldwide boards, since you preferred not to say whether you would work remotely"
+    return "worldwide boards, since your reach does not include remote work"
+
+
+def _why_no_location(constraints: CandidateConstraints) -> str:
+    """Why *nothing* was asked: `packages_for` selects no board at all without a
+    stated country, and a run that asked nobody read as a world with no jobs
+    until round 3's R2. The reason is the operative one — answering the reach
+    question alone still selects nothing.
+    """
+    if constraints.location.state == "declined":
+        return "every installed board, since you preferred not to say where you are"
+    return "every installed board, since you have not said where you are"
 
 
 def _words(text: str) -> set[str]:
@@ -453,7 +474,12 @@ def source(
     if aim.terms:
         save_aim(store, aim)
     run = Run(unsearched=aim.terms[PHRASE_CEILING:])
-    if not reaches_worldwide(constraints):
+    location = constraints.location
+    if location.state != "stated" or not location.country:
+        # Nothing is selected at all, so the whole shelf is what went unasked.
+        run.unreached = tuple(p.name for p in installed_packages(directory) if p.usable)
+        run.unreached_because = _why_no_location(constraints)
+    elif not reaches_worldwide(constraints):
         run.unreached = tuple(
             p.name for p in installed_packages(directory) if p.usable and p.country == GLOBAL
         )
@@ -1201,6 +1227,14 @@ def measure_flood() -> dict[str, Any]:
         "boards_reported_asked_without_a_request": len(
             {o.connector for o in run.outcomes if o.reached_the_board} - asked
         ),
+        # The mirror (round 3, R3): a board that read rows and is reported as
+        # neither searched nor handing over its list. One direction alone let
+        # `deluge_en` supply 30 offers and be named only as an ERROR.
+        "boards_that_read_rows_without_being_reported_asked": len(
+            {o.connector for o in run.outcomes if o.items or o.added}
+            - set(run.steered)
+            - set(run.unsteered)
+        ),
         "rows_served_not_reported": abs(
             sum(o.items for o in run.outcomes)
             - sum(len(page.matching) + len(page.off_aim) for page in answered)
@@ -1227,17 +1261,23 @@ def measure_flood() -> dict[str, Any]:
         "rows_reported_over_the_ceiling": sum(o.over_ceiling for o in run.outcomes),
         "gate_status": "measured",
     }
+    # What the RUN had to do for a zero to mean anything, each named so a
+    # weakened guard shows as a missing name rather than as a silent pass
+    # (round 3, R1 — the three used to be one boolean, and a construction that
+    # tripped two of them certified a guard that had kept only one).
+    exercised = {
+        "fill the ceiling": len(written) == OFFER_CEILING,
+        "cut rows at the ceiling": bool(measured["rows_reported_over_the_ceiling"]),
+        "meet the failing page": _FLOOD_FAILING in served,
+    }
+    unmet = [name for name, done in exercised.items() if not done]
     # Only a clean zero can be vacuous. A violation is a finding whatever else
     # the run failed to reach, and must never be downgraded to "unmeasured".
-    if not measured["flood_violations"] and (
-        len(written) != OFFER_CEILING
-        or not measured["rows_reported_over_the_ceiling"]
-        or _FLOOD_FAILING not in served
-    ):
+    if not measured["flood_violations"] and unmet:
         measured["gate_status"] = "unmeasured"
         measured["reasons"] = [
-            "the run did not fill the ceiling, cut rows at it and meet the failing page — "
-            "a zero over it says nothing about the per-run count, the page or board stop"
+            f"the run did not {', did not '.join(unmet)} — a zero over it says nothing "
+            "about the per-run count, the page stop or the board stop"
         ]
     return measured
 

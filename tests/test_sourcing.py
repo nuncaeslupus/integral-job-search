@@ -14,7 +14,14 @@ from typing import Any
 
 import pytest
 
-from integral.candidate import Aim, CandidateConstraints, Location, Reach, ReachMode
+from integral.candidate import (
+    Aim,
+    CandidateConstraints,
+    ConstraintState,
+    Location,
+    Reach,
+    ReachMode,
+)
 from integral.connectors import ListRequest
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
@@ -41,6 +48,10 @@ AT = "2026-01-01T00:00:00+00:00"
 #: unsteered Spanish capture carries a Python row — so the advert-page tests
 #: need a phrase those rows do carry.
 _TERMS = ("python", "developer", "engineer")
+
+#: Every precondition `measure_flood`'s guard names. Listed once so the test
+#: above can assert which are reported *and* which are not.
+_EXERCISED = ("fill the ceiling", "cut rows at the ceiling", "meet the failing page")
 
 
 def _robots(text: str = ALLOW_ALL) -> Robots:
@@ -495,6 +506,138 @@ def test_a_board_whose_later_page_fails_still_spends_the_ceiling(
     )
     assert len(_written(store)) <= 100, run.summary()
     assert run.added == len(_written(store)), run.summary()
+
+
+@pytest.mark.parametrize(
+    ("weaken", "unmet"),
+    [
+        # Pages too small to fill the ceiling: nothing to cut at it either.
+        (("_FLOOD_GATE_ROWS", 4), ("fill the ceiling", "cut rows at the ceiling")),
+        # The page that fails is one the run never asks for.
+        (
+            ("_FLOOD_FAILING", "https://nobody.integral.local/jobs?page=9"),
+            ("meet the failing page",),
+        ),
+    ],
+)
+def test_the_flood_gate_refuses_to_measure_a_run_that_did_not_exercise_it(
+    monkeypatch: pytest.MonkeyPatch, weaken: tuple[str, object], unmet: tuple[str, ...]
+) -> None:
+    """Round 3, R1: the guard is the whole of N3's remedy, and nothing pinned
+    it — deleting it left 124 tests green. Each precondition is named, so a
+    guard that drops one goes red on the name rather than passing quietly."""
+    monkeypatch.setattr(f"integral.sourcing.{weaken[0]}", weaken[1])
+    measured = measure_flood()
+    assert measured["gate_status"] == "unmeasured", measured
+    (reason,) = measured["reasons"]
+    assert [name for name in unmet if name in reason] == list(unmet), reason
+    assert [name for name in _EXERCISED if name in reason] == list(unmet), reason
+
+
+def test_the_flood_gate_reports_a_violation_even_when_the_run_fell_short(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 3, R1's other half: "unmeasured" must never swallow a finding. A
+    run that both misbehaves and falls short of the ceiling is a failure, not
+    an unmeasured one."""
+    monkeypatch.setattr("integral.sourcing._FLOOD_GATE_ROWS", 4)
+    monkeypatch.setattr("integral.sourcing.matches_aim", lambda item, phrases: True)
+    measured = measure_flood()
+    assert measured["offers_written_off_aim"] > 0, measured
+    assert measured["gate_status"] == "measured", measured
+
+
+def test_the_flood_gate_sees_a_board_that_read_rows_and_is_not_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 3, R3: the mirror component is the pin for the attribution half,
+    so it needs a run where it fires. A report naming no board that handed over
+    its list, over boards that plainly did, is the defect it watches for."""
+    monkeypatch.setattr("integral.sourcing.Run.unsteered", property(lambda self: []))
+    measured = measure_flood()
+    assert measured["boards_that_read_rows_without_being_reported_asked"] > 0, measured
+    assert measured["flood_violations"] > 0, measured
+
+
+def test_the_headline_counts_only_the_boards_that_answered(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 3, minor: deluge fills the ceiling on its own page one, so flood
+    is never asked. "from 2 board(s)" would credit the run with a board it did
+    not touch."""
+    pages = flood_board(tmp_path / "connectors", "deluge") | flood_board(
+        tmp_path / "connectors", "flood"
+    )
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=lambda request: Response(200, pages[request.url].html),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.summary().startswith(f"{OFFER_CEILING} offer(s) added from 1 board(s)"), (
+        run.summary()
+    )
+    assert "NOT asked, after the ceiling: flood_en" in run.summary()
+
+
+@pytest.mark.parametrize("state", ["unknown", "declined"])
+@pytest.mark.parametrize(
+    "reach", [Reach(state="unknown"), Reach(state="stated", modes=("remote",))]
+)
+def test_a_run_blocked_by_an_unstated_location_says_so(
+    store: ProfileStore, tmp_path: Path, state: ConstraintState, reach: Reach
+) -> None:
+    """Round 3, R2: without a stated country `packages_for` selects nothing at
+    all, so a silent run reads as a world with no jobs — and naming the reach
+    instead hands the candidate a question whose answer changes nothing."""
+    flood_board(tmp_path / "connectors")
+    constraints = CandidateConstraints(location=Location(state=state), reach=reach)
+    run = source(
+        store,
+        constraints,
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.unreached == ("flood_en",), run.summary()
+    assert "where you are" in run.summary(), run.summary()
+    assert "work remotely" not in run.summary(), run.summary()
+
+
+def test_a_board_that_answered_before_failing_is_reported_as_read(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 3, R3: deluge served page one and failed on page two. It supplied
+    offers, so the line naming which boards handed over their list must name
+    it — the terminal reason is not what decides whether a board was read."""
+    # 40-row pages carry 20 matches, so page one cannot fill the ceiling and
+    # page two is actually reached.
+    pages = flood_board(tmp_path / "connectors", "deluge", 40)
+    bad = "https://deluge.integral.local/jobs?page=2"
+
+    def fetch(request: ListRequest) -> Response:
+        if request.url == bad:
+            return Response(None, "", error="timed out")
+        return Response(200, pages[request.url].html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.added > 0, run.summary()
+    assert run.unsteered == ["deluge_en"], run.summary()
+    assert "ERROR   deluge_en" in run.summary()
 
 
 def test_off_aim_rows_are_never_fetched(store: ProfileStore) -> None:
