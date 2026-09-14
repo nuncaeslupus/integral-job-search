@@ -2708,11 +2708,20 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: the remedy is the one it prescribes: regenerate against the merged tree
 #: rather than pick a side. Zero slack is restored at the new true count.
 #: 75 since T144, whose `employer_boards.MINIMUM_CONFORMING` joined the
-#: population — the same refusal, met on purpose this time. 76 since T161,
-#: whose `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` joined it the same way —
-#: regenerated against the tree with the new floor rather than picked a side,
-#: per this comment's own remedy above.
-MINIMUM_FLOORS_SWEPT = 76
+#: population — the same refusal, met on purpose this time.
+#: 76 since T158, whose `gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED`
+#: joined the population — met on purpose again.
+#: 77 since T158's own review round 2 (finding F2), whose
+#: `gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES` joined the population
+#: beside it — the floor over observed traces the name-only floor's own
+#: review round found missing.
+#: 78 since T161, whose `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` joined it
+#: the same way — this branch's own floor (committed at 76 against a
+#: population of 75 base + this one) collided with main's two T158 additions
+#: at the merge, per this comment's own remedy: regenerated against the
+#: merged tree rather than picked a side (CLAUDE.md, "Two branches can write
+#: the same value for different reasons").
+MINIMUM_FLOORS_SWEPT = 78
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach

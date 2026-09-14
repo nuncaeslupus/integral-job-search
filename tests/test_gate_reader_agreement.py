@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import itertools
 import json
 import subprocess
 import sys
@@ -369,54 +370,84 @@ def test_a_counted_gate_whose_checker_printed_nothing_is_refused(
     assert payload["counted_as_asserted_but_never_read"] == ["t-mute"]
 
 
-def test_the_reported_signal_alone_catches_a_verifier_that_is_red() -> None:
-    """A verifier that drifted back to a substring rule and reports it honestly.
+@pytest.mark.parametrize(
+    ("reported_never_read", "exit_status"),
+    list(itertools.product((0, 1), (0, 1))),
+)
+def test_a_counted_gate_diverges_whatever_the_two_retired_signals_say(
+    reported_never_read: int, exit_status: int
+) -> None:
+    """T158 retired both pre-redesign signals; neither field is read any more.
 
-    It names the divergence and exits 1, so the run is **not** green and the
-    exit-status signal is silent. This is the shape a plain revert of the fix
-    produces — and it is the whole of why `counted_but_never_read` reads what
-    the run says as well as what it did.
+    Before T158, `reported_never_read` (what the run *said*) and
+    `counted_as_asserted > 0 and green` (what it *did*, via `exit_status`)
+    were each independently sufficient to trip `counted_but_never_read`, and
+    this file pinned each with its own hand-built `Probe` — one exercising
+    `reported_never_read` with `exit_status` red, the other exercising
+    `exit_status` green with `reported_never_read` clean. After the redesign
+    the property is `counted_as_asserted > 0`, full stop, so those two
+    fixtures now pass for a reason neither of their names gives: an
+    independent second reader mutated `reported_never_read` in one and
+    `exit_status` in the other and the suite stayed green both times — the
+    fixtures were the same assertion twice, pinned to nothing the property
+    actually reads (T158 review round 2, finding F1).
+
+    This closes it as a rule rather than one more literal: every one of the
+    four combinations `reported_never_read` and `exit_status` can take, with
+    `counted_as_asserted` held at 1, must still divert. That is the property's
+    entire remaining contract on the "counted" side — it cannot be satisfied
+    by a `Probe` that only ever varies one field, because the whole point is
+    that varying either (or both) must not matter.
     """
-    honest_but_wrong = Probe(
-        name="drifted_verifier",
+    counted = Probe(
+        name="counted-varying-retired-signals",
         counted_as_asserted=1,
-        exit_status=1,
+        exit_status=exit_status,
         reported_ungated=0,
-        reported_never_read=1,
+        reported_never_read=reported_never_read,
     )
-    assert not honest_but_wrong.green
-    assert honest_but_wrong.counted_but_never_read
+    assert counted.counted_but_never_read, (reported_never_read, exit_status)
 
 
-def test_the_exit_status_signal_alone_catches_a_verifier_that_reports_nothing() -> None:
-    """A verifier whose own report is empty, and which is green anyway.
+@pytest.mark.parametrize(
+    ("reported_never_read", "exit_status"),
+    list(itertools.product((0, 1), (0, 1))),
+)
+def test_nothing_counted_is_the_only_way_to_read_clean(
+    reported_never_read: int, exit_status: int
+) -> None:
+    """The complementary boundary: `counted_as_asserted == 0` is what actually decides False.
 
-    The fixture declares an evidence file that does not exist, so a checker
-    that read the block must fail. Green while counting a gate is therefore the
-    divergence with nothing else it can be — and it is all that is left when
-    the verifier's self-report has stopped being trustworthy, which is the case
-    a number reported about itself cannot cover.
+    The pair to the test above. With nothing counted, the property must read
+    False regardless of what the retired fields say — a run that never
+    reached the fence cannot have diverged over it, whatever else its report
+    or exit status claims. Together the two tests pin the property's entire
+    truth table over its one live input, rather than reasserting the two now-
+    inert fixtures the redesign left behind.
     """
-    silent_and_green = Probe(
-        name="mute_verifier",
-        counted_as_asserted=1,
-        exit_status=0,
+    uncounted = Probe(
+        name="uncounted-varying-retired-signals",
+        counted_as_asserted=0,
+        exit_status=exit_status,
         reported_ungated=0,
-        reported_never_read=0,
+        reported_never_read=reported_never_read,
     )
-    assert silent_and_green.counted_but_never_read
+    assert not uncounted.counted_but_never_read, (reported_never_read, exit_status)
 
 
 def test_a_substring_verifier_that_reports_nothing_is_caught_end_to_end(
     tmp_path: Path,
 ) -> None:
-    """The same signal, driven by a verifier rather than asserted about one.
+    """The redesigned rule, driven by a real verifier rather than asserted about one.
 
     This stub *is* the pre-fix reader: it counts the fence by substring, never
     runs a checker, writes an empty `counted_as_asserted_but_never_read`, and
-    exits 0. Its report is clean and its verdict is wrong, so the first signal
-    cannot see it. If the exit-status signal were dropped, this run would read
-    as agreement.
+    exits 0. Under the pre-T158 two-signal property neither signal could see
+    it — its own report is clean and it is green — which is exactly the hole
+    T158 closed. Under today's rule it is caught for the one reason that
+    still applies: it counted the fence at all (`counted_as_asserted == 1`),
+    which is now sufficient by itself and does not need its report or exit
+    status to be honest about anything.
     """
     substring_verifier = tmp_path / "substring_verifier.py"
     substring_verifier.write_text(

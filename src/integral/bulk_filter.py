@@ -58,13 +58,12 @@ from typing import Any, Literal
 
 from integral.dedup import (
     Liveness,
-    SourceKind,
     _group_duplicate_ids,
     find_duplicates,
     select_survivor,
 )
 from integral.eligibility import UNKNOWN_CANDIDATE, CandidateEligibility, evaluate_offer
-from integral.offers import Offer
+from integral.offers import Offer, SourceKind
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T94.json"

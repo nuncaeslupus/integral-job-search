@@ -102,7 +102,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from integral.dimensions import Language
-from integral.offers import Location, Offer, Salary, compute_offer_id
+from integral.offers import Location, Offer, Salary, SourceKind, compute_offer_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -1654,7 +1654,17 @@ def _placeholder_carrying_query_key_occurrences(pattern: str) -> int:
 #: is `client_target`, which is a DOM element id — validated to a shape with no
 #: colon, no whitespace and no newline, so it cannot become a header of its own
 #: even by concatenation. There is still nowhere to write a credential.
-Client = Literal["htmx"]
+#:
+#: T173 — `browser`. Some boards serve their listing only to a client that runs
+#: their JavaScript check. Measured 2026-09-10 on infojobs.net: every search and
+#: advert GET from this tool answers a 200 "No podemos identificar tu navegador"
+#: page from the CDN edge, whatever the headers, while a real browser on the
+#: same network passes the same check silently and renders the listing. No
+#: header set can express that, and replaying the browser's token from a plain
+#: client would be evading the check. So `browser` sends nothing from here:
+#: `integral.sourcing` never hands such a board to the plain fetch at all, and
+#: reads it only from a page the candidate's own browser rendered.
+Client = Literal["htmx", "browser"]
 
 #: The id `client_target` may hold: what an HTML `id` attribute looks like, and
 #: nothing that could terminate a header or start a second one.
@@ -1667,7 +1677,7 @@ def client_headers(client: Client | None, target: str | None) -> dict[str, str]:
     Every name here is a literal in this module. A caller cannot reach this
     with a name of its own, which is the whole property being preserved.
     """
-    if client is None:
+    if client is None or client == "browser":
         return {}
     if client == "htmx":
         headers = {"HX-Request": "true"}
@@ -1699,6 +1709,10 @@ class ListPage(Strict):
                     f"client_target {self.client_target!r} is not an element id: it must start "
                     "with a letter and hold only letters, digits, _ . : or -"
                 )
+        if self.client == "browser" and self.method != "GET":
+            # T173. A browser capture is one page per URL, and a POST search's
+            # pages share one URL — one capture would answer all of them.
+            raise ValueError("client: browser reads saved pages, one per URL — only a GET")
         return self
 
     url_pattern: str = Field(min_length=1)
@@ -2713,6 +2727,11 @@ class Connector(Strict):
     version: str = Field(pattern=VERSION.pattern)
     last_verified: date
     auth: AuthMode = "none"
+    #: T172. What this board is, relative to the employers whose adverts it
+    #: carries: `employer` for the employer's own board. Declared, never
+    #: inferred (T75). An `{employer}` slot alone does not say it, because a job
+    #: board's company page takes one too (#462 second reader, F1).
+    source_kind: SourceKind | None = None
     list: ListPage
     detail: DetailPage | None = None
 
@@ -3283,6 +3302,16 @@ def _as_wage(value: str | None) -> float | None:
     return parsed
 
 
+def source_kind_of(connector: Connector) -> SourceKind | None:
+    """What this connector's results are, relative to their employer (T172).
+
+    Only what `connector.yaml` declares in `source_kind`. Nothing is inferred
+    from the URL or its `{employer}` slot, and an undeclared board is `None`,
+    never a guessed `"aggregator"`.
+    """
+    return connector.source_kind
+
+
 def build_offer(
     connector: Connector,
     *,
@@ -3333,6 +3362,7 @@ def build_offer(
         return Offer(
             id=compute_offer_id(text),
             source=connector.site,
+            source_kind=source_kind_of(connector),
             source_ref=source_ref or merged.get("source_ref"),
             url=url or merged.get("url"),
             title=merged.get("title"),

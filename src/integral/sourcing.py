@@ -29,6 +29,12 @@ Three things it refuses to blur, each of which a naive loop would:
 * **Untrusted, versus empty.** `collect_listing` reports a stale connector, and
   a stale connector's empty page is not evidence about the market.
 
+And one thing it refuses to do (T173): send a `client: browser` board to the
+plain fetch. Such a board serves its listing only to a client that runs its
+JavaScript check, so a plain request is certain to be refused, and the only
+ways to make one pass are evasion. It is read from a page the candidate's own
+browser rendered and saved (`from_captures`), or reported skipped.
+
 The fetch itself is injected. Nothing here opens a socket, so the tests are real
 tests rather than a recording of one afternoon's internet.
 """
@@ -36,6 +42,7 @@ tests rather than a recording of one afternoon's internet.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import time
 from collections.abc import Callable, Iterable, Sequence
@@ -47,7 +54,7 @@ from urllib.parse import urljoin
 from integral.candidate import Aim, CandidateConstraints
 from integral.candidate import Location as ConstraintLocation
 from integral.connector_coverage import Package, installed_packages
-from integral.connector_health import rate_limited
+from integral.connector_health import on_portal_host, rate_limited
 from integral.connectors import (
     Connector,
     ConnectorError,
@@ -60,19 +67,28 @@ from integral.connectors import (
     collect_listing,
     load_connector,
     parse_detail_page,
+    source_kind_of,
 )
+from integral.gate_exit import worst
 from integral.identity import ProfileStore
 from integral.lifecycle import (
     collect_offer,
     save_lifecycle_offer,
     track_new_offer,
 )
-from integral.offers import Offer, compute_offer_id
+from integral.offers import Offer, SourceKind, compute_offer_id
 from integral.robots import Robots, RobotsError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T126.json"
+DEFAULT_BROWSER_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T173.json"
+
+#: The first line of a page the candidate's browser saved: the URL it was
+#: rendered from. Written by the capture snippet in the step-7 skill, and the
+#: only way a capture is matched to a request — a page that does not say where
+#: it came from cannot answer for any URL, so it is refused rather than guessed.
+CAPTURE_MARK = re.compile(r"\A<!-- integral-capture: (\S+) -->\n")
 
 #: Where a run records what it fetched. Inside the candidate's own tree, like
 #: everything else about them — this is provenance about their offers, not a
@@ -117,6 +133,49 @@ class Response:
 Fetch = Callable[[ListRequest], Response]
 
 
+def read_capture(path: Path) -> tuple[str, str]:
+    """A saved browser page as `(the URL it was rendered from, its HTML)`."""
+    text = Path(path).read_text(encoding="utf-8")
+    mark = CAPTURE_MARK.match(text)
+    if mark is None:
+        raise ValueError(
+            f"{path} does not start with `<!-- integral-capture: <url> -->`, so it cannot "
+            "say which request it answers — capture it again with the step-7 snippet"
+        )
+    return mark.group(1), text[mark.end() :]
+
+
+def from_captures(paths: Iterable[Path]) -> Fetch:
+    """A `Fetch` answering only from pages the candidate's own browser saved.
+
+    Each page answers **the one URL it names** and nothing else: a capture of
+    "farmaceutico" must not stand in for a search for "enfermera", which would
+    hand the candidate the wrong adverts as if they were the answer.
+    """
+    pages = dict(read_capture(Path(path)) for path in paths)
+
+    def fetch(request: ListRequest) -> Response:
+        # A saved page is what one GET rendered; it cannot stand for a POST's
+        # body-dependent pages, which all share one URL (#455, F4).
+        body = pages.get(request.url) if request.method == "GET" else None
+        if body is None:
+            return Response(
+                None, "", error=f"no page from the candidate's browser for {request.url}"
+            )
+        # ponytail: a capture observes no status. The browser rendering the page
+        # is taken as 200; `rate_limited`'s body markers still catch a challenge
+        # page it was shown, and the fetch log's `via` says how this arrived.
+        return Response(200, body)
+
+    return fetch
+
+
+def needs_browser(connector: Connector) -> bool:
+    """Whether this board is served only to a real browser (T173)."""
+    detail = connector.detail
+    return connector.list.client == "browser" or (detail is not None and detail.client == "browser")
+
+
 @dataclass(frozen=True)
 class BoardOutcome:
     """One board's contribution to a run, including the ways it contributed nothing.
@@ -154,6 +213,9 @@ class BoardOutcome:
     #: are still read, and the failures are named here rather than ending the
     #: round with every counter lost.
     employers_failed: tuple[str, ...] = ()
+    #: T172. `"employer"` when the board read was the employer's own — the
+    #: same `source_kind_of` every offer it stored carries.
+    source_kind: SourceKind | None = None
 
     @property
     def reached_the_board(self) -> bool:
@@ -209,6 +271,20 @@ class Run:
         return self._boards(lambda o: not o.steered and o.reached_the_board)
 
     @property
+    def employer_boards(self) -> list[str]:
+        """Declared employers' own boards a result of this round came from (T172).
+
+        `items > dropped` is "some row became an offer", which is what T144
+        asks for — *where each result came from*. Not `reached_the_board`: a
+        board refused on its first request is neither skipped nor an error, and
+        named here it would claim results it never gave. Not `items` either: a
+        row that builds no offer is not a result. And not `added`, which is 0
+        for a re-sighting that is still a result this board produced (#462
+        rounds 2 and 3, G3 and H1/H2).
+        """
+        return self._boards(lambda o: o.source_kind == "employer" and o.items > o.dropped)
+
+    @property
     def refused(self) -> list[str]:
         """Boards that refused the read. Never to be read as "no jobs there"."""
         return self._boards(lambda o: o.refused is not None)
@@ -232,6 +308,10 @@ class Run:
             lines.append(f"  searched for your terms: {', '.join(self.steered)}")
         if self.unsteered:
             lines.append(f"  returned their whole list: {', '.join(self.unsteered)}")
+        if self.employer_boards:
+            lines.append(
+                f"  the employers' own boards, not a job board: {', '.join(self.employer_boards)}"
+            )
         for outcome in self.outcomes:
             if outcome.refused:
                 lines.append(f"  REFUSED {outcome.connector}: {outcome.refused}")
@@ -288,6 +368,7 @@ def source(
     directory: Path | None = None,
     page_count: int = 1,
     robots: Robots | None = None,
+    browser: Fetch | None = None,
 ) -> Run:
     """Fetch this candidate's country's boards and collect what they return.
 
@@ -296,6 +377,11 @@ def source(
     wants no network passes one whose fetcher is a fixture — never `None` to
     mean "skip the check", which would make the safe path the one you have to
     opt into.
+
+    `browser` answers the boards `needs_browser` names — normally
+    `from_captures` over the pages `browser_urls` asked the candidate's browser
+    to save. Without it those boards are reported skipped; they are never sent
+    to `fetch` (T173).
     """
     from integral.search_terms import save_aim  # circular at module scope
 
@@ -332,9 +418,49 @@ def source(
                     directory=directory,
                     page_count=page_count,
                     robots=adjudicator,
+                    browser=browser,
                 )
             )
     return run
+
+
+def browser_urls(
+    constraints: CandidateConstraints,
+    aim: Aim,
+    *,
+    directory: Path | None = None,
+    page_count: int = 1,
+    robots: Robots | None = None,
+) -> list[str]:
+    """The listing URLs `source` will ask `browser` for — what to open, in order.
+
+    Exactly the requests `_one_board` would make for the `needs_browser`
+    boards, robots adjudicated the same way first: the candidate's browser is
+    never sent to a path the tool itself may not read.
+    """
+    directory = directory or DEFAULT_CONNECTORS_DIR
+    adjudicator = Robots() if robots is None else robots
+    phrases = aim.terms[:PHRASE_CEILING]
+    urls: list[str] = []
+    for package in packages_for(constraints, directory):
+        try:
+            connector = _connector_of(package, directory)
+        except (ConnectorError, OSError):
+            continue
+        if not needs_browser(connector):
+            continue
+        steerable = accepts_query(connector)
+        if steerable and not phrases:
+            continue
+        for query in phrases if steerable else (None,):
+            try:
+                requests = build_list_requests(connector, page_count=page_count, query=query)
+            except ConnectorError:
+                continue  # `source` reports the same phrase as an error; nothing to open
+            for request in requests:
+                if _may_fetch(adjudicator, request.url) and request.url not in urls:
+                    urls.append(request.url)
+    return urls
 
 
 def _absolute(url: str | None, against: str) -> str | None:
@@ -396,6 +522,7 @@ def _one_board(
     directory: Path,
     page_count: int,
     robots: Robots,
+    browser: Fetch | None = None,
 ) -> BoardOutcome:
     try:
         connector = _connector_of(package, directory)
@@ -419,6 +546,14 @@ def _one_board(
         requests = build_list_requests(connector, page_count=page_count, query=query)
     except ConnectorError as exc:
         return BoardOutcome(package.name, None, steerable, query, error=str(exc))
+
+    # T173. A plain request to this board is certain to be refused, and the only
+    # ways to make it pass are evasion — so it is never made. Decided after
+    # robots, below: a path nobody may read is not one to send a browser to.
+    via: str | None = None
+    unanswerable = needs_browser(connector) and browser is None
+    if needs_browser(connector) and browser is not None:
+        fetch, via = browser, "candidate_browser"
 
     items_seen = 0
     added = 0
@@ -455,6 +590,7 @@ def _one_board(
             detail_needed=detail_needed,
             detail_fetched=detail_fetched,
             employers_failed=tuple(failed),
+            source_kind=source_kind_of(connector),
             skipped=skipped,
             error=error,
             refused=refused,
@@ -482,6 +618,12 @@ def _one_board(
                 request.url,
                 skipped=f"robots.txt could not be read, so the path is not permitted: {exc}",
             )
+        if unanswerable:
+            return ended(
+                request.url,
+                skipped="served only to a real browser — open its search in the candidate's "
+                "own browser (`browser_urls`) and pass the saved pages as `browser=`",
+            )
         if index:
             # The site's own Crawl-delay between one board's requests. Moot
             # while a board was one page per run; an ATS host is dozens (T144).
@@ -506,6 +648,7 @@ def _one_board(
                 query=query,
                 at=at,
                 offer_ids=[],
+                via=via,
             )
             continue
         if response.error is not None:
@@ -561,6 +704,7 @@ def _one_board(
             query=query,
             at=at,
             offer_ids=collected,
+            via=via,
         )
     return ended(
         requests[-1].url if requests else None,
@@ -613,6 +757,7 @@ def _record_fetch(
     query: str | None,
     at: str,
     offer_ids: Sequence[str],
+    via: str | None = None,
 ) -> None:
     """Write one row of provenance: this request, and what it produced.
 
@@ -629,6 +774,8 @@ def _record_fetch(
             "query": query,
             "at": at,
             "offer_ids": list(offer_ids),
+            # Present only when the page did not come from `fetch` (T173).
+            **({"via": via} if via else {}),
         },
         "offers",
         FETCH_LOG,
@@ -829,19 +976,137 @@ def measure_fixture() -> dict[str, Any]:
         return measured
 
 
-def _main(argv: list[str] | None = None) -> int:
-    """`python -m integral.sourcing` — T126's evidence, over the fixture run."""
-    measured = measure_fixture()
-    DEFAULT_EVIDENCE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    DEFAULT_EVIDENCE_PATH.write_text(
-        json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
+    """T173's gate reading: `browser_boards_fetched_over_plain_http`.
+
+    Three constructed runs over the installed Spanish boards — no browser, a
+    browser holding the right page, a browser holding a page of another search
+    — with a plain fetch that records every host it is asked for and answers
+    nothing. The browser boards' pages are their own committed list captures,
+    saved the way the step-7 snippet saves them.
+
+    A zero is only a reading when the runs also show the two things it could be
+    hiding: offers really arrived through the browser, and a plain board really
+    reached the plain fetch. A sourcing pass that fetched nothing at all would
+    otherwise score a clean zero.
+    """
+    import tempfile
+
+    from integral.identity import create_profile
+
+    directory = directory or DEFAULT_CONNECTORS_DIR
+    constraints = CandidateConstraints(
+        location=ConstraintLocation(
+            state="stated",
+            country="ES",
+            accepts_onsite_in_country=True,
+            commutable_regions=("Barcelona",),
+        )
     )
-    print(json.dumps(measured, ensure_ascii=False))
-    if measured["gate_status"] == "unmeasured":
-        for reason in measured.get("reasons", ()):
-            print(reason, file=sys.stderr)
-        return 3
-    return 1 if measured["sourced_offers_without_a_recorded_fetch"] else 0
+    aim = Aim(state="stated", terms=("farmaceutico",))
+    robots = Robots(fetch=lambda url: "User-agent: *\nAllow: /\n")
+    browser_sites = [
+        p.site
+        for p in packages_for(constraints, directory)
+        if p.site and needs_browser(_connector_of(p, directory))
+    ]
+    asked: list[str] = []
+
+    def plain(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return Response(None, "", error="no network in a measurement")
+
+    def run_with(root: Path, captures: list[Path] | None) -> Run:
+        create_profile(root, "Fixture", handle="fixture", language="es", fiction=True)
+        return source(
+            ProfileStore(root, "fixture"),
+            constraints,
+            aim,
+            fetch=plain,
+            at="2026-01-01T00:00:00+00:00",
+            directory=directory,
+            robots=robots,
+            browser=None if captures is None else from_captures(captures),
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        saved: list[Path] = []
+        misfiled: list[Path] = []
+        for url in browser_urls(constraints, aim, directory=directory, robots=robots):
+            site = next(s for s in browser_sites if on_portal_host(url, s))
+            package = next(p for p in packages_for(constraints, directory) if p.site == site)
+            html = (directory / package.name / "fixture" / "list.html").read_text(encoding="utf-8")
+            for bucket, named in ((saved, url), (misfiled, url + "-another-search")):
+                path = root / f"capture-{len(saved) + len(misfiled)}.html"
+                path.write_text(f"<!-- integral-capture: {named} -->\n{html}", encoding="utf-8")
+                bucket.append(path)
+        runs = {
+            "none": run_with(root / "none", None),
+            "right": run_with(root / "right", saved),
+            "another": run_with(root / "another", misfiled),
+        }
+
+    def from_browser(run: Run) -> int:
+        return sum(
+            o.added
+            for o in run.outcomes
+            if any(on_portal_host(o.url or "", s) for s in browser_sites)
+        )
+
+    over_plain = [u for u in asked if any(on_portal_host(u, s) for s in browser_sites)]
+    measured: dict[str, Any] = {
+        "browser_boards_fetched_over_plain_http": len(over_plain),
+        "browser_boards": len(browser_sites),
+        "offers_collected_through_the_browser": from_browser(runs["right"]),
+        "offers_collected_from_a_capture_of_another_search": from_browser(runs["another"]),
+        "plain_requests_made": len(asked) - len(over_plain),
+        "gate_status": "measured",
+    }
+    reasons = []
+    if not browser_sites:
+        reasons.append("no installed board declares `client: browser`, so nothing was guarded")
+    if not measured["offers_collected_through_the_browser"]:
+        reasons.append("no offer arrived through the browser, so the route was never exercised")
+    if not measured["plain_requests_made"]:
+        reasons.append(
+            "no plain board reached the plain fetch, so a run that fetched nothing passes"
+        )
+    if reasons:
+        measured["gate_status"] = "unmeasured"
+        measured["reasons"] = reasons
+    return measured
+
+
+def _main(argv: list[str] | None = None) -> int:
+    """`python -m integral.sourcing` — T126's and T173's evidence.
+
+    The two gates' exits are combined by `gate_exit.worst`, never by hand: a
+    hand-rolled "unmeasured wins" let one gate's failure hide behind the
+    other's `unmeasured` (second reader on #455, F1).
+    """
+    codes: list[int] = []
+    for path, measured, key in (
+        (
+            DEFAULT_EVIDENCE_PATH,
+            measure_fixture(),
+            "sourced_offers_without_a_recorded_fetch",
+        ),
+        (
+            DEFAULT_BROWSER_EVIDENCE_PATH,
+            measure_browser_route(),
+            "browser_boards_fetched_over_plain_http",
+        ),
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(json.dumps(measured, ensure_ascii=False))
+        failed = measured[key] or measured.get("offers_collected_from_a_capture_of_another_search")
+        if measured["gate_status"] == "unmeasured":
+            for reason in measured.get("reasons", ()):
+                print(reason, file=sys.stderr)
+        codes.append(1 if failed else 3 if measured["gate_status"] == "unmeasured" else 0)
+    return worst(*codes)
 
 
 if __name__ == "__main__":
