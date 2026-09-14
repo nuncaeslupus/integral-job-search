@@ -2843,6 +2843,33 @@ def test_a_dot_segment_query_in_the_query_string_is_a_literal_search(dot_segment
     assert url.endswith(f"&q={dot_segment}")
 
 
+@pytest.mark.parametrize("dot_segment", [".", ".."])
+def test_a_slot_outside_the_path_is_read_by_urlsplit_not_by_the_first_question_mark(
+    dot_segment: str,
+) -> None:
+    """Second reader on #469, O2: the component is RFC 3986's.
+
+    A fragment slot is not in the path, so §5.2.4 never touches it and the
+    refusal must not fire. `pattern.split("?")[0]` cannot tell the two apart —
+    it reads the whole string when there is no `?` — and that is the only
+    shape where the two readings disagree.
+    """
+    connector = parse_connector(VALID)
+    # No `?` anywhere, which is the one shape where `split("?")[0]` reads the
+    # whole pattern and so calls a fragment slot a path slot.
+    moved = "https://www.examplejobs.test/jobs#{query}"
+    body = (
+        VALID.replace(connector.list.url_pattern, moved)
+        .replace("    mode: query_param\n    param: page\n", "    mode: none\n")
+        .replace("    max_pages: 5\n", "    max_pages: 1\n")
+    )
+    fragment = parse_connector(body)
+    assert fragment.list.url_pattern == moved
+    assert QUERY_PLACEHOLDER not in urlsplit(moved).path
+    assert QUERY_PLACEHOLDER in moved.split("?")[0]
+    assert build_list_urls(fragment, page_count=1, query=dot_segment)[0].endswith(f"#{dot_segment}")
+
+
 @pytest.mark.parametrize("query", ["...", ".x", "x..", "%2e%2e", " .. ", "python"])
 def test_a_path_slot_still_takes_every_query_that_is_not_a_dot_segment(query: str) -> None:
     """Only the two dot-segments are refused. `%2e%2e` is quoted to
