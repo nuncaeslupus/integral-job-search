@@ -9,6 +9,7 @@ a failed run into a run that looks empty.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ from integral.candidate import (
     Reach,
     ReachMode,
 )
+from integral.connector_coverage import installed_packages
 from integral.connectors import ListRequest
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
@@ -29,6 +31,7 @@ from integral.sourcing import (
     OFFER_CEILING,
     Fetch,
     Response,
+    Run,
     flood_board,
     matches_aim,
     measure_fixture,
@@ -518,6 +521,10 @@ def test_a_board_whose_later_page_fails_still_spends_the_ceiling(
             ("_FLOOD_FAILING", "https://nobody.integral.local/jobs?page=9"),
             ("meet the failing page",),
         ),
+        # Round 4, R4-1: a ceiling that fills exactly at a page's end cuts no
+        # row at it — the one construction that tells "fill" from "cut", and
+        # without it either limb could carry the other's predicate.
+        (("_FLOOD_GATE_ROWS", 50), ("cut rows at the ceiling",)),
     ],
 )
 def test_the_flood_gate_refuses_to_measure_a_run_that_did_not_exercise_it(
@@ -584,6 +591,43 @@ def test_a_board_that_answered_with_no_advert_is_not_a_board_with_no_jobs(
     assert "returned their whole list" not in run.summary()
 
 
+@pytest.mark.parametrize("terms", [("welder",), ("python engineer", "welder")])
+def test_a_searching_board_with_no_hits_answered_rather_than_failed_to_parse(
+    store: ProfileStore, tmp_path: Path, terms: tuple[str, ...]
+) -> None:
+    """Round 4, R4-4: a `{query}` board answering a query with no row has said
+    there are no jobs for that query. Calling that "no advert on the page"
+    spends the signal — a real parse failure would then arrive beside every
+    board that merely had nothing — and with two phrases it named one board in
+    both lines at once."""
+    pages = flood_board(tmp_path / "connectors", "steerable")
+    package = tmp_path / "connectors" / "steerable_en"
+    connector = (package / "connector.yaml").read_text()
+    (package / "connector.yaml").write_text(
+        connector.replace("/jobs?page={page}", "/jobs?q={query}&page={page}")
+    )
+
+    def fetch(request: ListRequest) -> Response:
+        if "welder" in request.url:
+            return Response(200, "<html><body></body></html>")
+        number = request.url.rsplit("page=", 1)[1]
+        page = pages[f"https://steerable.integral.local/jobs?page={number}"]
+        return Response(200, page.html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=terms),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.steered == ["steerable_en"], run.summary()
+    assert run.parsed_nothing == [], run.summary()
+    assert "NOTHING PARSED" not in run.summary(), run.summary()
+
+
 @pytest.mark.parametrize("status", [403, 429, 503])
 def test_a_board_that_refused_is_not_a_board_that_parsed_nothing(
     store: ProfileStore, tmp_path: Path, status: int
@@ -604,6 +648,37 @@ def test_a_board_that_refused_is_not_a_board_that_parsed_nothing(
     assert run.refused == ["flood_en"], run.summary()
     assert run.parsed_nothing == [], run.summary()
     assert "NOTHING PARSED" not in run.summary()
+    # Round 4, R4-5: and it must not read as a board that handed over its list
+    # either — the line the whole distinction was written to correct.
+    assert run.unsteered == [], run.summary()
+    assert "returned their whole list" not in run.summary(), run.summary()
+
+
+def test_a_stale_board_is_neither_empty_handed_nor_a_board_that_handed_its_list_over(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 4, R4-5: a stale connector's emptiness proves nothing, so it is
+    not "no advert on the page" and not "returned their whole list" either."""
+    from integral.sourcing import _one_board
+
+    flood_board(tmp_path / "connectors")
+    package = next(p for p in installed_packages(tmp_path / "connectors") if p.name == "flood_en")
+    outcome = _one_board(
+        store,
+        package,
+        None,
+        fetch=lambda request: Response(200, "<html><body></body></html>"),
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=1,
+        robots=_robots(),
+        phrases=("python engineer",),
+    )
+    run = Run(outcomes=[replace(outcome, stale=True)])
+    assert run.untrusted == ["flood_en"], run.summary()
+    assert run.parsed_nothing == [], run.summary()
+    assert run.unsteered == [], run.summary()
+    assert "returned their whole list" not in run.summary(), run.summary()
 
 
 def test_the_headline_counts_only_the_boards_that_answered(
@@ -630,12 +705,27 @@ def test_the_headline_counts_only_the_boards_that_answered(
     assert "NOT asked, after the ceiling: flood_en" in run.summary()
 
 
-@pytest.mark.parametrize("state", ["unknown", "declined"])
+@pytest.mark.parametrize(
+    ("state", "phrase", "not_said"),
+    [
+        # Round 4, R4-2: "where you are" is shared by both wordings, so
+        # asserting it pinned nothing about the branch this varies. Telling
+        # somebody who said "prefer not to say" that they have not said
+        # attributes a silence they did not choose (round 1, F8).
+        ("unknown", "you have not said where you are", "preferred not to say"),
+        ("declined", "you preferred not to say where you are", "have not said"),
+    ],
+)
 @pytest.mark.parametrize(
     "reach", [Reach(state="unknown"), Reach(state="stated", modes=("remote",))]
 )
 def test_a_run_blocked_by_an_unstated_location_says_so(
-    store: ProfileStore, tmp_path: Path, state: ConstraintState, reach: Reach
+    store: ProfileStore,
+    tmp_path: Path,
+    state: ConstraintState,
+    phrase: str,
+    not_said: str,
+    reach: Reach,
 ) -> None:
     """Round 3, R2: without a stated country `packages_for` selects nothing at
     all, so a silent run reads as a world with no jobs — and naming the reach
@@ -652,7 +742,8 @@ def test_a_run_blocked_by_an_unstated_location_says_so(
         robots=_robots(),
     )
     assert run.unreached == ("flood_en",), run.summary()
-    assert "where you are" in run.summary(), run.summary()
+    assert phrase in run.summary(), run.summary()
+    assert not_said not in run.summary(), run.summary()
     assert "work remotely" not in run.summary(), run.summary()
 
 

@@ -247,32 +247,47 @@ class Run:
                 seen.append(outcome.connector)
         return seen
 
+    @staticmethod
+    def _answered(outcome: BoardOutcome) -> bool:
+        """The board let us read it. A refusal and a stale connector are not
+        that, and naming either under "searched for your terms" or "returned
+        their whole list" contradicts the line printed two below (round 4,
+        R4-5) — the same conflation `parsed_nothing` exists to end.
+        """
+        return outcome.reached_the_board and not (outcome.refused or outcome.stale)
+
     @property
     def steered(self) -> list[str]:
         """Boards asked the candidate's question."""
-        return self._boards(
-            lambda o: o.steered and o.reached_the_board and not self._parsed_nothing(o)
-        )
+        return self._boards(lambda o: o.steered and self._answered(o))
 
     @property
     def unsteered(self) -> list[str]:
         """Boards that returned whatever they had. Not a failure — a different result."""
         return self._boards(
-            lambda o: not o.steered and o.reached_the_board and not self._parsed_nothing(o)
+            lambda o: not o.steered and self._answered(o) and not self._parsed_nothing(o)
         )
 
     @staticmethod
     def _parsed_nothing(outcome: BoardOutcome) -> bool:
-        """A board that answered and yielded no row at all.
+        """An **unsteered** board that answered and yielded no row at all.
 
         Not "no jobs": `landingjobs_en` serves a JavaScript shell that parses
         to zero anchors, and `connectors/ruled-out.yaml` has said so since
         August. A refusal (403/429/503) and a stale connector are already told
         apart; this is the third way a board can answer and mean nothing, and
         it read as "returned their whole list" until it was named.
+
+        **Unsteered only** (round 4, R4-4). The inference holds because such a
+        board's page *is* its whole list. A `{query}` board answering a query
+        with no row has said there are no jobs for that query — its answer, not
+        a parse failure — and saying otherwise spends the signal this exists
+        for: a real parse failure would arrive beside three boards that simply
+        had nothing.
         """
         return (
-            outcome.reached_the_board
+            not outcome.steered
+            and outcome.reached_the_board
             and not outcome.items
             and not (outcome.refused or outcome.stale or outcome.skipped or outcome.error)
         )
