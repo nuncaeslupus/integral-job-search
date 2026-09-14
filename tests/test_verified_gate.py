@@ -744,52 +744,275 @@ def test_ci_state_assertions_is_the_closed_two_name_rule(text: str, expect_asser
 
 
 def test_the_committed_scripts_own_preamble_mentions_neither_name() -> None:
-    """Behavioural mirror of the rule above, run against the REAL block: the
-    fix is not "the regex is closed" in the abstract, it is that the prose
-    this script actually emits has nothing left for the regex to find."""
+    """Behavioural mirror of the rule above, run against the REAL block.
+
+    This is `ci_state_assertions`'s own cheap check, and #472's round-3 report
+    (F4) showed it is exactly that and no more: eleven further re-shippings of
+    the same claim, none using either watched name, all scored `[]` here too.
+    That is why this function is no longer what the property depends on — see
+    `test_the_emitted_prose_is_pinned_verbatim_on_a_pass` below, which does not
+    care what words a re-shipped claim uses. This test stays as the documented
+    floor of the two-name rule: the committed script clears even the narrow
+    check, which is necessary and, per F4, not sufficient on its own.
+    """
     measured = vg.measure_ci_claims()
     assert measured["ci_claims_found"] == []
 
 
-_GOLDEN_PREAMBLE = (
+def _non_fenced_prose(stdout: str, *, sha: str) -> str:
+    """Every line the script printed OUTSIDE a fenced ``` region, masked and
+    rejoined — the property F5 found the old pin did not cover.
+
+    #472, round 3, F5: the pin this replaces looked only at
+    `lines[2:fence_index]` — the three preamble lines between the heading and
+    the FIRST fence — so a claim placed in the trailer (`tools/verified_gate.sh`
+    :171-172) or inside the FAIL `<details>` wrapper sat outside its reach,
+    guarded only by F4's two-name enumeration. Measured: the same sentence
+    ("Actions is free and unmetered on public repositories" — `CLAUDE.md`:641
+    verbatim, round 3's probe P1) scored `ci_claims_found == []` AND left the
+    old preamble-only pin matching (pytest green, 83 passed) when placed in
+    the trailer, while the identical sentence placed in the preamble was
+    already caught by the old pin (pytest red) — see
+    `test_a_claim_anywhere_in_non_fenced_prose_is_caught` for both, run for
+    real against the committed script rather than asserted from this
+    docstring.
+
+    So this walks the WHOLE block rather than only the span before the first
+    fence: it toggles on lines that are exactly a bare fence delimiter, and
+    keeps every line printed while NOT inside one of the two data fences (the
+    commit-info table, and the log excerpt) — the heading, the blank
+    separators, the three preamble lines, the `<details>`/`</details>`
+    wrapper on a FAIL block, and the two-line trailer. A pin over that whole
+    span is fail-closed against any new sentence dropped anywhere in the
+    non-fenced prose, independent of the word it uses for CI (or anything
+    else) — which is what lets `_CI_REFERENT_RE` stop being load-bearing.
+
+    The one value that legitimately varies run to run is `${sha}`, embedded
+    mid-sentence in the trailer — never keyed like `commit` inside the fence,
+    so `_read_block` cannot factor it out the way
+    `_c_verdict_names_the_commit` already does for THAT field. It is masked
+    the same way in spirit: not guessed by a pattern that could also eat a
+    sentence a future editor writes, but replaced by the caller's own known
+    SHA — the harness always knows which commit it asked the script to
+    measure — so a real 40-hex value can only ever be removed if it is
+    exactly the one this run produced. No timestamp appears outside a fence
+    today (`measured  $(date …)` sits inside the commit-info fence), so there
+    is nothing to mask for it here; if one ever migrated into prose this
+    function would need to mask that too, the same way.
+    """
+    out: list[str] = []
+    in_fence = False
+    for line in stdout.splitlines():
+        if line == "```":
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            out.append(line)
+    return "\n".join(out).strip("\n").replace(sha, "<SHA>")
+
+
+_GOLDEN_PROSE_PASS = (
+    "## Verified gate\n"
+    "\n"
     "Run by `tools/verified_gate.sh` against a clean detached checkout of the\n"
     "commit named below — not a working tree — and that SHA is the one that\n"
-    "was measured. This block is scoped to that commit only."
+    "was measured. This block is scoped to that commit only.\n"
+    "\n"
+    "\n"
+    "\n"
+    "Merge only while the pull request head is still `<SHA>`. A push after this\n"
+    "block was produced makes it evidence about a commit nobody is merging."
+)
+
+_GOLDEN_PROSE_FAIL = (
+    "## Verified gate\n"
+    "\n"
+    "Run by `tools/verified_gate.sh` against a clean detached checkout of the\n"
+    "commit named below — not a working tree — and that SHA is the one that\n"
+    "was measured. This block is scoped to that commit only.\n"
+    "\n"
+    "\n"
+    "\n"
+    "<details><summary>failing output</summary>\n"
+    "\n"
+    "\n"
+    "</details>\n"
+    "\n"
+    "Merge only while the pull request head is still `<SHA>`. A push after this\n"
+    "block was produced makes it evidence about a commit nobody is merging."
 )
 
 
-def test_the_emitted_preambles_prose_is_pinned_verbatim(tmp_path: Path) -> None:
+#: Literals, on purpose — `MINIMUM_CONTRACTS`'s form and reason repeated: the
+#: committed script always prints exactly two data fences on a PASS run (the
+#: commit-info table, the log excerpt) and three on a FAIL run (those two
+#: plus the `<details>` tail), so four and six bare ``` delimiter lines is a
+#: fact about the script today, not a count derived from `stdout` itself —
+#: see `test_a_claim_smuggled_inside_a_forged_fence_pair_is_caught_by_the_
+#: fence_count` for why a fourth constant here would be self-defeating.
+_EXPECTED_FENCE_DELIMITERS_PASS = 4
+_EXPECTED_FENCE_DELIMITERS_FAIL = 6
+
+
+def test_the_emitted_prose_is_pinned_verbatim_on_a_pass(tmp_path: Path) -> None:
     """The token rule above is deliberately loose about everything except the
     two names — it says nothing if a future edit adds some OTHER unmeasured
-    claim ("this commit was authored by a trustworthy contributor", say).
-    The second reader's report offered a golden-text pin as the complement,
-    "in addition to the token rule, not instead" — a golden text pins this
-    exact wording, the token rule pins the property. This is that pin: the
-    preamble is a fixed generated string with no inputs, so it can be
-    compared for byte-exact equality rather than merely scanned.
+    claim ("this commit was authored by a trustworthy contributor", say), and
+    F4 showed it is loose about the two names too. The second reader's report
+    offered a golden-text pin as the complement, "in addition to the token
+    rule, not instead" — a golden text pins the exact wording, the token rule
+    pins the property it names. This is that pin, widened past F5's gap: the
+    ENTIRE non-fenced prose of a PASS block is a fixed generated string with
+    one masked input (the SHA), so it can be compared for byte-exact equality
+    rather than merely scanned.
 
-    Any change to this paragraph — CI-related or not — now has to touch this
-    fixture deliberately, which is what makes it a pin rather than a filter.
-
-    Run through `Harness` against a throwaway repository, never the real
-    one — the class docstring is explicit that the real gate takes over two
-    minutes and proves only that this tree is green, which is not what a
-    fixed string needs.
+    Any change anywhere in this prose — CI-related or not, preamble or
+    trailer — now has to touch this fixture deliberately, which is what makes
+    it a pin rather than a filter.
     """
     h = vg.Harness(_SCRIPT, tmp_path)
     root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    sha = h.git("rev-parse", "HEAD", cwd=root)
     stdout = h.run(root, "HEAD").stdout
-    # The preamble sits between the '## Verified gate' heading and the
-    # fenced ```-block `_read_block` already parses the fields out of, so it
-    # is extracted the same way: everything after the heading line, up to
-    # the first fence.
-    lines = stdout.splitlines()
-    assert lines[0] == "## Verified gate"
-    fence_index = next(i for i, line in enumerate(lines) if line == "```")
-    # lines[1] is the blank separator; the preamble is lines[2:fence_index],
-    # minus the trailing blank line before the fence.
-    preamble = "\n".join(lines[2:fence_index]).rstrip("\n")
-    assert preamble == _GOLDEN_PREAMBLE
+    # Belt alongside the pin below, not a replacement for it — see
+    # `test_a_claim_smuggled_inside_a_forged_fence_pair_is_caught_by_the_
+    # fence_count` for the gap this closes on its own.
+    assert stdout.count("```") == _EXPECTED_FENCE_DELIMITERS_PASS
+    assert _non_fenced_prose(stdout, sha=sha) == _GOLDEN_PROSE_PASS
+
+
+def test_the_emitted_prose_is_pinned_verbatim_on_a_fail(tmp_path: Path) -> None:
+    """The FAIL shape's own `<details>` wrapper is prose too, and sat outside
+    even the property this pin describes until this row was added — a FAIL
+    block is what a genuinely broken gate pastes, so it is exactly the case a
+    fail-open claim would be most valuable stapled to."""
+    h = vg.Harness(_SCRIPT, tmp_path)
+    root = h.repo("repo", vg._plain_makefile(vg._FAILING))
+    sha = h.git("rev-parse", "HEAD", cwd=root)
+    stdout = h.run(root, "HEAD").stdout
+    assert stdout.count("```") == _EXPECTED_FENCE_DELIMITERS_FAIL
+    assert _non_fenced_prose(stdout, sha=sha) == _GOLDEN_PROSE_FAIL
+
+
+def test_a_claim_smuggled_inside_a_forged_fence_pair_is_caught_by_the_fence_count(
+    tmp_path: Path,
+) -> None:
+    """Self-scan finding on this round's OWN diff, not a re-shipping of #472's:
+    `_non_fenced_prose` toggles on any line that is exactly a bare ``` — that
+    is what lets it skip the two real data fences without reading their
+    contents, and it is exactly what lets a mutation that adds a THIRD,
+    forged fence pair smuggle a claim inside it. Measured, wrapping round 3's
+    own P1 sentence in a forged fence pair:
+
+    - `ci_state_assertions` still scores it `[]` (F4's gap, unchanged: P1
+      names neither watched word).
+    - `_non_fenced_prose(...) == _GOLDEN_PROSE_PASS` STILL HOLDS — the
+      smuggled line sits inside what the toggle treats as fence content, so
+      the pin above does not move either. The prose-equality pin alone does
+      not close this path.
+
+    What does move: the committed script always prints exactly two data
+    fences on a PASS run, so a forged third pair changes the number of bare
+    ``` lines from four to six even though it changes nothing the prose
+    extraction can see. `_EXPECTED_FENCE_DELIMITERS_PASS` is checked in the
+    happy-path test above for exactly this reason, not only here — this test
+    is the adversarial proof that the guard is load-bearing, not decorative.
+
+    This does not reopen F4/F5: every row in `_TRAILER_CLAIM_MUTATIONS`
+    forges no fence, and the prose pin alone catches all of them. This is a
+    narrower, second path that needed its own guard, found by going looking
+    rather than by another round.
+    """
+    mutated = _mutate(
+        'echo "block was produced makes it evidence about a commit nobody is merging."',
+        'echo "block was produced makes it evidence about a commit nobody is merging."\n'
+        "echo '```'\n"
+        'echo "Actions is free and unmetered on public repositories."\n'
+        "echo '```'\n",
+    )
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(mutated, encoding="utf-8")
+    script.chmod(0o755)
+    h = vg.Harness(script, tmp_path / "work")
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    sha = h.git("rev-parse", "HEAD", cwd=root)
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.ci_state_assertions(stdout) == ()
+    assert _non_fenced_prose(stdout, sha=sha) == _GOLDEN_PROSE_PASS
+    assert stdout.count("```") != _EXPECTED_FENCE_DELIMITERS_PASS
+
+
+# `(id, find, replace)` — F5's own reproduction: `find` sits in the TRAILER,
+# outside the span the pin covered before this round, so before the fix each
+# row here left `ci_state_assertions` at `[]` (F4: none uses either watched
+# name) AND the old preamble-only pin matching (F5: the trailer is outside
+# `lines[2:fence_index]`) — measured, not asserted, in this session's own
+# report. `find` is a substring of the real, current file, so a rewrite of
+# the surrounding prose that leaves this substring behind does not silently
+# stop testing anything (`_mutate`'s own discipline).
+_TRAILER_CLAIM_MUTATIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        # Round 3's own probe P1 — `CLAUDE.md`:641, verbatim, the sentence
+        # named as "the one a future editor is most likely to restore".
+        "p1_line_641_verbatim_in_the_trailer",
+        'echo "block was produced makes it evidence about a commit nobody is merging."',
+        'echo "block was produced makes it evidence about a commit nobody is merging. '
+        'Actions is free and unmetered on public repositories."',
+    ),
+    (
+        # F4's other two named gaps in the same sentence shape, together —
+        # "workflow" and "runner" are `CLAUDE.md`:647/649-650/671's words for
+        # the identical referent, and neither is "ci" or "github actions".
+        "workflow_and_runner_named_instead_of_ci",
+        'echo "block was produced makes it evidence about a commit nobody is merging."',
+        'echo "block was produced makes it evidence about a commit nobody is merging. '
+        'The workflow runner has minutes again."',
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("find", "replace"),
+    [(f, r) for _id, f, r in _TRAILER_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _TRAILER_CLAIM_MUTATIONS],
+)
+def test_a_claim_anywhere_in_non_fenced_prose_is_caught(
+    tmp_path: Path, find: str, replace: str
+) -> None:
+    """F4 and F5, closed together: neither row here uses "ci" or "github
+    actions", so `ci_state_assertions` still scores it `[]` — F4 is not
+    fixed by this pin, it is made non-load-bearing by it. What catches both
+    rows is that the trailer is no longer outside the pinned span."""
+    mutated = _mutate(find, replace)
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(mutated, encoding="utf-8")
+    script.chmod(0o755)
+    h = vg.Harness(script, tmp_path / "work")
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    sha = h.git("rev-parse", "HEAD", cwd=root)
+    stdout = h.run(root, "HEAD").stdout
+    # F4, reconfirmed on this exact row: the two-name rule alone is blind to it.
+    assert vg.ci_state_assertions(stdout) == ()
+    # F5, closed: the widened pin is not blind to it.
+    assert _non_fenced_prose(stdout, sha=sha) != _GOLDEN_PROSE_PASS
+
+
+@pytest.mark.parametrize(
+    "find_replace_id",
+    [i for i, _f, _r in _TRAILER_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _TRAILER_CLAIM_MUTATIONS],
+)
+def test_the_committed_script_passes_every_trailer_claim_mutations_baseline(
+    tmp_path: Path, find_replace_id: str
+) -> None:
+    """The other half of mutate-verify-restore: the UNMUTATED script's
+    trailer must still match the pin, or a mutation that "breaks" a
+    perpetually-red check proves nothing."""
+    h = vg.Harness(_SCRIPT, tmp_path)
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    sha = h.git("rev-parse", "HEAD", cwd=root)
+    stdout = h.run(root, "HEAD").stdout
+    assert _non_fenced_prose(stdout, sha=sha) == _GOLDEN_PROSE_PASS
 
 
 def test_the_ci_claim_scenario_floor_is_a_literal() -> None:

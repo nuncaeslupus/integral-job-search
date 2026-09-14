@@ -811,17 +811,37 @@ def write_evidence(
 # is one that does not mention it. What is left to check is therefore not
 # "is this sentence shaped like a CI-state claim" (unbounded — any English
 # sentence can assert a state without the verb-plus-adjective shape the old
-# regex assumed) but a two-item, CLOSED membership test: does the block use
-# either of the exactly two names THIS repository already uses for the
-# referent — "CI" (used throughout `CLAUDE.md` and this script's own former
-# defect line) and "GitHub Actions" (the term `CLAUDE.md` § *Known
-# environment state* uses for the identical fact — "GitHub Actions has
-# runner minutes again"). Both are sourced from the repository's own existing
-# vocabulary for the one thing, not guessed or derived from the sentence being
-# shipped, and there is no verb, state-word, or direction left to enumerate:
-# the two names are the whole rule, and a future editor who reintroduces a
-# claim about CI by either of its two established names is caught regardless
-# of the verb or adjective they reach for.
+# regex assumed) but a two-item membership test: does the block use one of
+# the two names THIS repository reaches for most often for the referent —
+# "CI" (used throughout `CLAUDE.md` and this script's own former defect
+# line) and "GitHub Actions" (the term `CLAUDE.md` § *Known environment
+# state* uses for the identical fact — "GitHub Actions has runner minutes
+# again"). Both are sourced from the repository's own existing vocabulary
+# for the one thing, not guessed or derived from the sentence being shipped.
+#
+# ROUND 3 (#472, F4) found this membership test is not, in fact, closed: the
+# SAME CLAUDE.md section that supplied the two names also uses "Actions"
+# alone (twice), "workflow", and "runner" for the identical referent, and a
+# sentence built from any of those — round 3's own probe P1 is
+# `CLAUDE.md`:641 verbatim, "Actions is free and unmetered on public
+# repositories" — scores `ci_claims_found == []` here. That is this
+# repository's named defect family with *subject* substituted for *verb*:
+# round 1 closed the verb: round 3 shows the subject was never closed either,
+# and CLAUDE.md's own words for the point are "an enumeration has no last
+# element" — a fifth name would only be round 4's finding.
+#
+# So this function is kept — a cheap, real check, and the committed script
+# does still clear it — but it is NOT what `verdict_block_claims_about_ci_
+# that_are_not_measured` depends on for the property this section is about.
+# What actually closes F4 (this function's blindness to the vocabulary it
+# does not enumerate) and F5 (the reason that blindness was exploitable: the
+# golden-text pin in `tests/test_verified_gate.py` used to cover only the
+# three preamble lines, so a claim placed in the trailer evaded both checks
+# at once) is that pin, widened to every line the script prints OUTSIDE a
+# fenced region — `_non_fenced_prose` there. A pin over the whole fixed
+# prose does not care what word a re-shipped claim reaches for, so nothing
+# is left to enumerate. See that test module for the fix and F4/F5's
+# reproduction; this function stays as documented-narrow, not closed.
 _CI_REFERENT_RE = re.compile(r"\bci\b|\bgithub\s+actions\b", re.IGNORECASE)
 
 
