@@ -250,12 +250,37 @@ class Run:
     @property
     def steered(self) -> list[str]:
         """Boards asked the candidate's question."""
-        return self._boards(lambda o: o.steered and o.reached_the_board)
+        return self._boards(
+            lambda o: o.steered and o.reached_the_board and not self._parsed_nothing(o)
+        )
 
     @property
     def unsteered(self) -> list[str]:
         """Boards that returned whatever they had. Not a failure — a different result."""
-        return self._boards(lambda o: not o.steered and o.reached_the_board)
+        return self._boards(
+            lambda o: not o.steered and o.reached_the_board and not self._parsed_nothing(o)
+        )
+
+    @staticmethod
+    def _parsed_nothing(outcome: BoardOutcome) -> bool:
+        """A board that answered and yielded no row at all.
+
+        Not "no jobs": `landingjobs_en` serves a JavaScript shell that parses
+        to zero anchors, and `connectors/ruled-out.yaml` has said so since
+        August. A refusal (403/429/503) and a stale connector are already told
+        apart; this is the third way a board can answer and mean nothing, and
+        it read as "returned their whole list" until it was named.
+        """
+        return (
+            outcome.reached_the_board
+            and not outcome.items
+            and not (outcome.refused or outcome.stale or outcome.skipped or outcome.error)
+        )
+
+    @property
+    def parsed_nothing(self) -> list[str]:
+        """Boards that answered with no advert on the page."""
+        return self._boards(self._parsed_nothing)
 
     @property
     def refused(self) -> list[str]:
@@ -292,6 +317,11 @@ class Run:
             lines.append(
                 f"  STOPPED at the {OFFER_CEILING}-offer ceiling — any rows, pages or "
                 "boards after it were not read"
+            )
+        if self.parsed_nothing:
+            lines.append(
+                "  NOTHING PARSED — answered with no advert on the page, which is not "
+                f"the same as no jobs: {', '.join(self.parsed_nothing)}"
             )
         ceilinged = [
             f"{o.connector} ({o.query})" if o.query else o.connector

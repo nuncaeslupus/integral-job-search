@@ -559,6 +559,53 @@ def test_the_flood_gate_sees_a_board_that_read_rows_and_is_not_reported(
     assert measured["flood_violations"] > 0, measured
 
 
+def test_a_board_that_answered_with_no_advert_is_not_a_board_with_no_jobs(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """`landingjobs_en` serves a JavaScript shell that parses to zero anchors —
+    `connectors/ruled-out.yaml` has said so since August — and it read as
+    "returned their whole list", which is what a board with nothing to offer
+    reads as. A refusal and a stale connector were already told apart; this is
+    the third way to answer and mean nothing."""
+    flood_board(tmp_path / "connectors")
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=lambda request: Response(200, "<html><body><div id='app'></div></body></html>"),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.added == 0
+    assert run.parsed_nothing == ["flood_en"], run.summary()
+    assert run.unsteered == [], run.summary()
+    assert "NOTHING PARSED" in run.summary()
+    assert "returned their whole list" not in run.summary()
+
+
+@pytest.mark.parametrize("status", [403, 429, 503])
+def test_a_board_that_refused_is_not_a_board_that_parsed_nothing(
+    store: ProfileStore, tmp_path: Path, status: int
+) -> None:
+    """A refusal already has its own line and its own meaning. Folding it into
+    "answered with no advert on the page" would say the board let us look and
+    had nothing, which is the opposite of what it did."""
+    flood_board(tmp_path / "connectors")
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=lambda request: Response(status, "<html><body>Forbidden</body></html>"),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.refused == ["flood_en"], run.summary()
+    assert run.parsed_nothing == [], run.summary()
+    assert "NOTHING PARSED" not in run.summary()
+
+
 def test_the_headline_counts_only_the_boards_that_answered(
     store: ProfileStore, tmp_path: Path
 ) -> None:
