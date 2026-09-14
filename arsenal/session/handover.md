@@ -1,5 +1,51 @@
 # Session handover
 
+## 0000. T173 merged (#455): InfoJobs is read through the candidate's own browser
+
+The board answers every listing and advert request from this tool with a **200**
+JavaScript-check page — `server: bon`, `x-cache: LambdaGeneratedResponse from
+cloudfront`, "No podemos identificar tu navegador", canonical
+`/distil/distil/captcha.xhtml`. Measured against the honest agent: headers,
+`Accept-Encoding: identity` and a 70-second pause change nothing, and the
+owner's own Chrome on the same network passed the check silently in ten seconds.
+So it is keyed to the client, not to the IP and not to the job category — which
+is what ruled out "tech is searchable and pharmacy is not" as an explanation.
+
+What merged:
+
+- `client: browser` is a new member of the connector client vocabulary. It
+  sends **nothing**: `source()` never hands such a board to the plain fetch, and
+  with no capture it reports the board **skipped** with a reason, never "no
+  jobs". `browser_urls()` lists what to open (robots adjudicated first);
+  `from_captures()` reads pages the candidate's Chrome saved, each carrying its
+  own URL on the first line so a capture can answer only its own search. The
+  fetch log records `via: candidate_browser`.
+- A **second, independent fail-open** closed on the way: `liveness.read_response`
+  with no `title` read the challenge page as `live`. An untitled body carrying a
+  block-page marker is now `unverified` — being blocked is not the advert being
+  open. The accepted cost is named in the code: a real advert whose markup
+  happens to carry one of those strings and whose title was not passed is
+  withheld rather than shown.
+- `BLOCK_PAGE_MARKERS` gained the two strings this page is recognisable by, with
+  three refusal samples committed.
+
+**The owner asked twice for the browser's cookies to be replayed in plain
+requests, and once for a user agent "that lets us get info".** Both were
+declined: the missing permission is the board's, not the candidate's, and the
+check is JavaScript, so a user-agent string would not pass it anyway. The owner
+accepted the browser route. Do not re-open either question — and if the capture
+route breaks, re-measure with one honest curl before concluding anything.
+
+The **one** browser user agent in the tool is `integral.robots`' retry of
+`/robots.txt` alone when a WAF answers the honest agent 403 (T71). The owner's
+answer on it was "keep it, document it", and the step-07 skill now says so
+beside the rule it is an exception to.
+
+**Review cost, worth knowing before the next engine change**: five rounds, eleven
+findings, every one a fail-open or an unpinned fixture, all behind a green gate.
+Twice a fix opened the opposite hole, and what ended the thread was a blunt
+closed rule with its cost documented rather than one more case.
+
 ## 000. T169 and T170 seeded (#457): the two engine gaps #445's second reader found
 
 Seeding only. Nothing is built. Both tasks depend on T144 (merged) and are
@@ -136,13 +182,16 @@ than any of the three engine changes.
 
 ## 4. Pick up here
 
-1. **#447**: a second reader (Opus) was dispatched on head `a0614487`. If its
-   report is CLEAR, merge. The `verified_gate.sh` PASS block and green CI are on
-   that same head. If it is BLOCK, fix and re-read.
-2. **#445** (T144) is open in another session. When it and #447 both merge,
-   whichever lands second regenerates evidence (`T89.ledger_entries_scanned`
-   and `T126` are the likely collisions) rather than picking a side.
-3. File the three engine gaps in §2 as tasks once #445 is in.
-4. Still open and unclaimed from the previous handover: **#437**,
-   **#439/#440/#441**, **#420**, **#427**, **#426**, **#314**. **#412** still
-   needs egress.
+1. **T177** (`arsenal/tasks/t-ff505274.md`, unclaimed): the two fixtures #455's
+   round-5 reader found and that PR deliberately did not carry — a `buried`
+   shape that relocates nothing for the two Cloudflare samples, and a derived
+   twin list with no floor. Verify the metric reads **2** against today's tree
+   before writing the fix.
+2. **Open PRs**: #469 (T175), #466 (T174), #462 (T172), #461 (T171), #458
+   (T167). Each needs a second reader's verdict on its current head before it
+   merges; a report about an earlier tree is not a report about this one.
+3. **T176 (#468) is filed and has no task file** — a cue matching inside a word.
+   Note the near-collision: T176 was taken while this session was numbering, so
+   check the **issue list**, not only `status/plan.md`, before claiming a number.
+4. Still open and unclaimed: **#437**, **#439/#440/#441**, **#420**, **#427**,
+   **#426**, **#314**. **#412** still needs egress.
