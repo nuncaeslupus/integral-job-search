@@ -150,9 +150,11 @@ def gate_declaration(text: str) -> Literal["readable", "unreadable", "absent"]:
       and this one declared one that nothing enforces. Reporting it as ungated
       is what let `t-2a30f58a` and `t-246f6dde` (#334) sit at terminal status
       with their evidence files never opened, so it is reported as a fault.
-    * ``absent`` — no fence at all. `t-62612ae0` (T124) is the board's one
-      honest case: an executable ``bash`` gate and no evidence block, which
-      this layer has nothing to say about.
+    * ``absent`` — no fence at all. `t-62612ae0` (T124) is one such honest
+      case: an executable ``bash`` gate and no evidence block, which this
+      layer has nothing to say about. How many there are is deliberately not
+      stated — a count here goes stale on the next such task, and nothing
+      tests a docstring.
 
     The readable case is decided by `parse_gate_block` — the module comment
     above says why that is a *mirror* of `gate_evidence.py`'s regexes rather

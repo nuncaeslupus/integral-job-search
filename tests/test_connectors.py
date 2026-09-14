@@ -2879,6 +2879,48 @@ def test_a_path_slot_still_takes_every_query_that_is_not_a_dot_segment(query: st
     assert f"/{quote(query, safe='')}/barcelona?" in url
 
 
+#: A library of 26 packages ships today. The floor is a literal with margin
+#: (T159): it refuses a scan that read nothing, and retiring a board is not a
+#: gate failure. It is not `len(connector_packages(...))`, which would be a
+#: bound derived from the thing it bounds.
+MINIMUM_PACKAGES_SCANNED_FOR_PATH_SLOTS = 20
+
+
+def test_no_path_slot_dot_segment_query_is_sent_by_any_package() -> None:
+    """T175's plan metric, `path_slot_dot_segment_queries_sent == 0`, over the
+    shipped library rather than the worked example alone.
+
+    Second reader on #469 (F1): the metric was declared in `status/plan.md`
+    and nothing carried that name, because the three tests above pin the rule
+    on a connector this file constructs. A package that grows a path slot
+    later — `infojobs_es` grew one in #455, after this rule was written — is
+    counted here without anyone remembering to add a case.
+
+    The constructed connector joins the population so the zero can never rest
+    on a library that happens to ship no path slot at all, and the scan's own
+    denominator is floored so it cannot rest on a scan that read nothing.
+    """
+    packages = connectors.connector_packages(connectors.DEFAULT_CONNECTORS_DIR)
+    assert len(packages) >= MINIMUM_PACKAGES_SCANNED_FOR_PATH_SLOTS
+
+    steerable = {"<the worked example, path slot>": parse_connector(_with_path_query_slot())}
+    for package in packages:
+        connector = load_connector(package)
+        if QUERY_PLACEHOLDER in urlsplit(connector.list.url_pattern).path:
+            steerable[package.name] = connector
+
+    sent = {}
+    for name, connector in steerable.items():
+        for dot_segment in sorted(DOT_SEGMENTS):
+            try:
+                sent[f"{name} {dot_segment!r}"] = build_list_urls(
+                    connector, page_count=1, query=dot_segment
+                )
+            except ConnectorError:
+                continue
+    assert sent == {}
+
+
 def test_the_two_builders_read_one_dot_segment_rule(monkeypatch: pytest.MonkeyPatch) -> None:
     """`_templated_url` refused dot-segments with its own literal. T175 moved it
     into `DOT_SEGMENTS`, and this shows behaviourally, not by reading source,
