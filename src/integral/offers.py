@@ -159,6 +159,10 @@ class LanguageRequirement(Strict):
     applies_to: LanguageApplication
 
 
+#: Where an offer's `source` stands relative to the employer (T75, T172).
+SourceKind = Literal["employer", "aggregator"]
+
+
 class Offer(Strict):
     """§5.2's normalised offer — the shape every connector emits.
 
@@ -171,6 +175,10 @@ class Offer(Strict):
 
     id: str = Field(pattern=_OFFER_ID_PATTERN)
     source: str = Field(min_length=1)
+    # T172. What the connector that read this offer declares in `connector.yaml`
+    # (`connectors.source_kind_of`), never inferred from its URL. `None` means
+    # nothing declared it, never "aggregator". Additive, never backfilled.
+    source_kind: SourceKind | None = None
     source_ref: str | None = None
     url: str | None = None
     fetched_at: str | None = None
