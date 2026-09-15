@@ -78,7 +78,7 @@ EXEMPT_SITES = {
     "getmanfred": "Markdown body with inline <u>; flattening it would lose 24 line breaks"
 }
 
-#: Floors, literal. 75 offers over 21 packages on 2026-09-14; 9 markup-carrying
+#: Floors, literal. 75 offers over 26 packages on 2026-09-15; 13 markup-carrying
 #: values across the six connectors that declare a markup take. Set below
 #: today's counts by a stated margin so an ordinary connector PR does not have
 #: to move them, and far enough above zero that a scan reaching one package
@@ -97,7 +97,7 @@ MINIMUM_MARKUP_VALUES_COMPARED = 6
 #: **Zero slack, unlike the two floors above**: the table only ever grows, so
 #: the first row deleted must breach this — which is T159's test for a floor
 #: that can actually fire. Raise it with the table; never lower it.
-MINIMUM_MARKUP_CONTRACTS = 57
+MINIMUM_MARKUP_CONTRACTS = 66
 
 
 #: What each member must do, as (take, input, expected output, why).
@@ -420,6 +420,88 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
         "that reason, so the result is the same on every interpreter tested "
         "rather than depending on whether html.parser flushes it via "
         "handle_comment or handle_data at EOF",
+    ),
+    # --- F1 (second-reader round 2): an earlier bare '<' must not weld a ---
+    # --- later, independent unterminated comment into surviving prose ------
+    (
+        "html_text",
+        "5 < 10 years <!-- salary 200k",
+        "5 < 10 years",
+        "REGRESSION, FIXED: the previous fix blanket-replaced every '<' from "
+        "the first unmatched one to EOF, which welded this comment's content "
+        "into prose - WHATWG 13.2.5.6 tag open state ('anything else': emit "
+        "'<', reconsume in data state) settles the bare '<'; 13.2.5.43 "
+        "comment state EOF (emit the current comment token) still drops the "
+        "comment that follows it, independently",
+    ),
+    (
+        "escaped_html_text",
+        "5 &lt; 10 years &lt;!-- internal note",
+        "5 < 10 years",
+        "the same composition through the greenhouse-shaped route this task "
+        "exists for - a comment is exactly where a CMS puts text it did not "
+        "publish, so this is T169's own defect if it leaks",
+    ),
+    (
+        "html_text",
+        "<!-- salary 200k --> 5 < 10 years",
+        "5 < 10 years",
+        "control: a comment BEFORE the bare '<' was never broken - this row "
+        "exists so a regression that only reorders the two constructs is "
+        "still caught",
+    ),
+    # --- F2 (second-reader round 2): script/style content is not markup ----
+    # --- for _neutralise_unterminated_tail either, exactly as it already ---
+    # --- is not prose for text_content (_OPAQUE_TEXT_ELEMENTS/_NON_PROSE) --
+    (
+        "html_text",
+        '<p>Intro</p><script>var s = "<!--";</script><p>The whole advert body</p>',
+        "Intro The whole advert body",
+        "REGRESSION, FIXED: a script's content is script-data-state text "
+        "(WHATWG 13.2.5.15), where '<!--' opens nothing - the previous fix "
+        "read it as an unterminated comment and dropped the rest of the "
+        "document with it (return markup[:lt]), the worst direction: total "
+        "content loss on a page `parse_html` sees whole, not a field",
+    ),
+    (
+        "html_text",
+        '<p>Intro</p><style>a[href^="<!--"]{color:red}</style><p>The whole advert body</p>',
+        "Intro The whole advert body",
+        "same for style's RAWTEXT state (WHATWG 13.2.5.3)",
+    ),
+    (
+        "html_text",
+        "<p>Intro</p><script>if (a < b) { f(); }</script><p>Body</p>",
+        "Intro Body",
+        "control: an ordinary bare '<' inside script data was never broken - "
+        "still not prose either way, via _NON_PROSE post-parse",
+    ),
+    # --- F5 (second-reader round 2, non-blocking, closed anyway): '<!--' is --
+    # --- one spelling of "contributes no text at EOF", not the only one -----
+    (
+        "html_text",
+        "x <!DOCTYPE html",
+        "x",
+        "WHATWG 13.2.5's DOCTYPE states: eof-in-doctype sets force-quirks and "
+        "still emits the DOCTYPE token - a token, not a character, so a "
+        "truncated DOCTYPE contributes no text on the same rule as a "
+        "truncated comment, not the bare-'<' rule",
+    ),
+    (
+        "html_text",
+        "x <?php echo $y",
+        "x",
+        "WHATWG tag open state, '?': unexpected-question-mark-instead-of-tag-"
+        "name - reconsume in the bogus comment state, which (like a real "
+        "comment) emits its token at EOF rather than surfacing as data",
+    ),
+    (
+        "html_text",
+        "x <!",
+        "x",
+        "WHATWG markup declaration open state, anything else: incorrectly-"
+        "opened-comment - switches to the bogus comment state right away, "
+        "same EOF rule as a real comment",
     ),
 )
 

@@ -658,6 +658,65 @@ class _TreeBuilder(HTMLParser):
             self._stack[-1].children.append(data)
 
 
+#: WHATWG's RAWTEXT state (§13.2.5.3) is entered for `style`, `xmp`, `iframe`,
+#: `noembed` and `noframes`; the script data state (§13.2.5.15) for `script`;
+#: and the RCDATA state — same family, same reason to be here — for `title`
+#: and `textarea`. In all three, `<!--`, a stray `<`, or anything else that
+#: looks like a tag or a comment is not tokenised as one: only the element's
+#: own case-insensitive end tag leaves the state. So a scan that does not know
+#: this set will mis-tokenise their content as ordinary markup — which is
+#: exactly F2: a `<!--` inside `<script>` with no later `-->` was read as an
+#: unterminated *comment* and dropped the rest of the document with it,
+#: because nothing here knew `<script>` even opened.
+#:
+#: Deliberately not read from `html.parser.HTMLParser.CDATA_CONTENT_ELEMENTS`:
+#: that attribute is itself cross-patch unstable — measured directly, it is
+#: `('script', 'style')` on 3.12.3 and 3.12.11 but `('script', 'style', 'xmp',
+#: 'iframe', 'noembed', 'noframes')` on 3.11.15 and 3.13.12 — so reading it at
+#: import time would reintroduce the exact "proxy for the property" this
+#: function exists to remove, one constant later.
+_OPAQUE_TEXT_ELEMENTS = frozenset(
+    {"script", "style", "xmp", "iframe", "noembed", "noframes", "title", "textarea"}
+)
+
+
+def _opening_tag_name(markup: str, lt: int, gt: int) -> str | None:
+    """The lower-cased tag name if `markup[lt:gt+1]` opens an element, else
+    `None` — an end tag (`</p>`) or anything that isn't a start tag opens
+    nothing."""
+    match = re.match(r"<(/?)([A-Za-z][A-Za-z0-9:_-]*)", markup[lt : gt + 1])
+    if match is None or match.group(1):
+        return None
+    return match.group(2).lower()
+
+
+def _skip_opaque_element(markup: str, tag_name: str, after_open_tag: int) -> int | None:
+    """Index just past `</tag_name...>`, searching from `after_open_tag`, or
+    `None` if no such end tag exists before EOF.
+
+    A `None` here does not mean "unterminated" in the sense the rest of this
+    function cares about: once an opaque element opens, *everything* after it
+    is that element's content until either its own end tag or the end of the
+    document — there is no comment, tag or declaration left inside for a
+    truncation to mistake for something else, so the caller is safe to stop
+    scanning altogether rather than searching for one.
+    """
+    end_open = re.compile(rf"</{re.escape(tag_name)}(?=[\t\n\f\r />]|$)", re.IGNORECASE)
+    match = end_open.search(markup, after_open_tag)
+    if match is None:
+        return None
+    close = markup.find(">", match.start())
+    return len(markup) if close == -1 else close + 1
+
+
+#: A real comment closes on `-->` (comment end state) or `--!>` (comment end
+#: bang state, §13.2.5.52) — both are searched for here, in that either order.
+#: The zero-content case (`<!-->`, comment start state, §13.2.5.44) is handled
+#: separately at the call site: it needs no search because it always closes on
+#: the very next character.
+_COMMENT_CLOSE_RE = re.compile(r"-->|--!>")
+
+
 def _neutralise_unterminated_tail(markup: str) -> str:
     """Make an EOF-truncated tag or comment survive as text, deterministically.
 
@@ -665,33 +724,48 @@ def _neutralise_unterminated_tail(markup: str) -> str:
     EOF can never become a real tag, comment, declaration or PI — there is
     nothing left in the document to close it with. *What* a tokeniser does
     with that unparseable remainder is not settled across CPython patches:
-    measured directly against three builds this repository's own CI can draw
-    (the system 3.12.3-labelled build, a downloaded 3.12.11, and 3.11.15), an
-    EOF-truncated start tag is silently discarded by one and resurfaces as
-    literal data by another, and an EOF-truncated comment reaches
-    `handle_comment` on one build and `handle_data` on another. Pinning
+    measured directly, an EOF-truncated start tag is silently discarded by
+    3.12.3/3.13.12 and resurfaces as literal data on 3.12.11 (the build
+    `uv python install 3.12` — CI's own resolution, unpinned to a patch —
+    draws in this environment), and an EOF-truncated comment reaches
+    `handle_comment` on one and `handle_data` on another. Pinning
     `MARKUP_CONTRACTS` to whichever behaviour a given CI run happens to draw
     is exactly a check pinned to a proxy for the property (CLAUDE.md's
     second-reader section) rather than to the property itself — the
     candidate should see the same text regardless of which patch of 3.12 CI
     happens to install — so this is resolved before the value ever reaches
-    `html.parser`, closed rather than enumerated:
+    `html.parser`, closed rather than enumerated. The property is: **a
+    truncated construct is resolved as the construct it is, and nothing else
+    in the document is altered.**
 
-    * a truncated comment (an `<!--` with no later `-->`) is dropped, content
-      and all. It is still a comment — a comment contributes no text whether
-      or not it manages to close, exactly the rule an ordinary, *well-formed*
-      comment already follows a few lines up in `MARKUP_CONTRACTS`. A `>`
-      inside it is literal comment content, not a close, exactly as WHATWG's
-      comment states require — only a literal `-->` ends one.
-    * anything else that opens with `<` and has no `>` anywhere after it can
-      never be a real tag either, so that `<` (and every one after it, since
-      nothing past this point can close anything) is neutralised to a
-      character reference and the remainder survives as ordinary prose — the
-      same outcome a stray, non-tag `<` already gets elsewhere in this module
-      (`5 < 10 years`). Leaving the interpreter's own EOF recovery decide is
-      fail-open in the direction that matters here: it can silently delete
-      the rest of a candidate-visible field on a bare `<` that was never
-      markup at all.
+    * Inside `_OPAQUE_TEXT_ELEMENTS` (`<script>`, `<style>`, …), nothing is a
+      tag, a comment or a declaration — only the element's own end tag ends
+      the state — so no scanning happens there at all; see that constant.
+    * A comment (`<!--`) that finds its close (`-->` or `--!>`, or closes
+      immediately as `<!-->`) is left untouched; one that does not is dropped,
+      content and all — a comment contributes no text whether or not it
+      manages to close, the same rule an ordinary, *well-formed* comment
+      already follows a few lines up in `MARKUP_CONTRACTS`. A `>` inside it is
+      literal comment content, not a close, exactly as WHATWG's comment states
+      require.
+    * `<!` not followed by `--` (bogus comment, §13.2.5.42's "anything else",
+      or a DOCTYPE, §13.2.5.53) and `<?` (also a bogus comment, tag open
+      state's "anything else") are both tokens that contribute no text
+      whether or not they close either — the *same* rule as a comment, so a
+      truncated one is dropped the same way. A terminated one is left for the
+      real parser, which already handles it (`<![CDATA[…]]>` and friends, via
+      `parse_marked_section`).
+    * Anything else that opens with `<` and has no `>` anywhere after it can
+      never be a real tag, so only **that** `<` is neutralised to a character
+      reference and scanning resumes right after it — a later, independent
+      construct further on (another `<!--`, another `<!`) must still be
+      recognised as itself rather than welded into this stray character's
+      fallout. This is F1: the previous version neutralised every `<` to EOF
+      in one blanket pass, which welded a later unterminated comment's
+      contents into prose. Leaving the interpreter's own EOF recovery decide
+      the bare case is fail-open in the direction that matters here: it can
+      silently delete the rest of a candidate-visible field on a bare `<`
+      that was never markup at all.
 
     Walked left to right rather than anchored on the document's last `>`:
     an outer, never-closed comment can itself contain `<tag>`-looking text
@@ -703,6 +777,17 @@ def _neutralise_unterminated_tail(markup: str) -> str:
     settled without asking whether it is *individually* well-formed — this
     function's only job is spotting a remainder with no closing token left
     anywhere in the document, not re-validating markup that already has one.
+
+    **Known, accepted limit (F4, second-reader round 2): a `>` inside a
+    quoted attribute value is not ordinary data to this scan** — `gt =
+    markup.find(">", lt)` finds it and treats the tag as settled there, one
+    interpreter patch (3.12.11, in this environment) then reads the rest of
+    the malformed tag as literal data. Genuinely settled rather than fixed
+    here: closing it needs attribute-value-aware scanning (tracking whether
+    `lt..gt` is inside a `"`/`'` pair), which is exactly the "re-validating
+    markup that already has one" this function declines to do, above. Rarer
+    than F1/F2 in practice, and the one case left, of 28 spec cases checked,
+    that still depends on the interpreter.
     """
     i = 0
     while True:
@@ -710,14 +795,42 @@ def _neutralise_unterminated_tail(markup: str) -> str:
         if lt == -1:
             return markup
         if markup.startswith("<!--", lt):
-            close = markup.find("-->", lt + 4)
-            if close == -1:
+            content_start = lt + 4
+            if markup[content_start : content_start + 1] == ">":
+                # comment start state, '>': abrupt-closing-of-empty-comment -
+                # closes on this single character, no search needed.
+                i = content_start + 1
+                continue
+            close = _COMMENT_CLOSE_RE.search(markup, content_start)
+            if close is None:
                 return markup[:lt]
-            i = close + 3
+            i = close.end()
+            continue
+        if markup[lt : lt + 2] in ("<!", "<?"):
+            gt = markup.find(">", lt)
+            if gt == -1:
+                # Bogus comment or DOCTYPE, EOF-truncated: still a token that
+                # contributes no text, exactly like an unterminated comment.
+                return markup[:lt]
+            i = gt + 1
             continue
         gt = markup.find(">", lt)
         if gt == -1:
-            return markup[:lt] + markup[lt:].replace("<", "&lt;")
+            # F1: neutralise only this one '<' and keep scanning - a later
+            # construct is still its own construct.
+            markup = markup[:lt] + "&lt;" + markup[lt + 1 :]
+            i = lt + 4
+            continue
+        tag_name = _opening_tag_name(markup, lt, gt)
+        if tag_name in _OPAQUE_TEXT_ELEMENTS:
+            skip_to = _skip_opaque_element(markup, tag_name, gt + 1)
+            if skip_to is None:
+                # No end tag before EOF: everything left is this element's
+                # opaque content anyway: there's nothing here left to mistake
+                # for a tag or a comment.
+                return markup
+            i = skip_to
+            continue
         i = gt + 1
 
 

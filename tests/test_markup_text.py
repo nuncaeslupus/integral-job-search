@@ -193,6 +193,20 @@ def test_an_eof_truncated_comment_still_contributes_no_text() -> None:
     assert _take("html_text", "<!-- <p>nested-looking</p> unterminated") is None
 
 
+def test_neutralise_unterminated_tail_kills_the_last_gt_anchored_mutant() -> None:
+    # F3 (second-reader round 2): the case above went through `_take`, so its
+    # verdict is produced by whichever EOF recovery `html.parser` happens to
+    # apply once _neutralise_unterminated_tail returns "" - and on 3.12.3 and
+    # 3.13.12, html.parser discards an unterminated comment on its own, so a
+    # faithful last-'>'-anchored mutant of this function (one that treats
+    # everything up to the document's LAST '>' as already settled, rather
+    # than scanning left to right) passes the same assertion by accident:
+    # measured, 19/19 on both those interpreters, 1 failed/18 passed only on
+    # 3.12.11. Asserting the function directly is a difference no tokeniser
+    # can launder, on any interpreter.
+    assert _neutralise_unterminated_tail("<!-- <p>nested-looking</p> unterminated") == ""
+
+
 def test_neutralise_unterminated_tail_is_a_no_op_on_well_formed_markup() -> None:
     # Every construct in these already finds its own '>' (or, for the entity
     # rows, has no literal '<' at all) - the function must leave them
@@ -202,8 +216,79 @@ def test_neutralise_unterminated_tail_is_a_no_op_on_well_formed_markup() -> None
         "<p>Remote</p>",
         "&lt;p&gt;Remote&lt;/p&gt;",
         "<![CDATA[Remote]]>",
+        '<script>var s = "<!--";</script><p>Remote</p>',
+        '<style>a[href^="<!--"]{color:red}</style><p>Remote</p>',
     ):
         assert _neutralise_unterminated_tail(markup) == markup
+
+
+def test_neutralise_unterminated_tail_does_not_weld_an_independent_later_construct() -> None:
+    # F1 (second-reader round 2): the fix for the row above blanket-replaced
+    # every '<' from the first unmatched one to EOF, which welded an entirely
+    # separate, later '<!--' into the same fallout - dropping the comment
+    # only when the scan happens to reach it first. Neutralising just the one
+    # bare '<' and continuing the scan keeps the two constructs independent.
+    assert _neutralise_unterminated_tail("5 < 10 years <!-- salary 200k") == "5 &lt; 10 years "
+    # And the reverse composition, which the pre-fix code never broke - a
+    # regression that only reorders the two constructs must still be caught.
+    # The (terminated) comment is left untouched here, not stripped - only an
+    # EOF-truncated construct is ever dropped by this function; a well-formed
+    # one is left for the real parser, which already removes it.
+    assert _neutralise_unterminated_tail("<!-- salary 200k --> 5 < 10 years") == (
+        "<!-- salary 200k --> 5 &lt; 10 years"
+    )
+
+
+def test_neutralise_unterminated_tail_does_not_open_a_comment_inside_script_or_style() -> None:
+    # F2 (second-reader round 2): this function runs inside `parse_html` on
+    # every fetched page, not only a JSON field's value, and it had no notion
+    # of script/RAWTEXT content - a '<!--' inside <script> or <style> with no
+    # later '-->' was read as an unterminated comment and dropped everything
+    # after it, deleting the rest of the document rather than one field.
+    assert (
+        _take(
+            "html_text",
+            '<p>Intro</p><script>var s = "<!--";</script><p>The whole advert body</p>',
+        )
+        == "Intro The whole advert body"
+    )
+    assert (
+        _take(
+            "html_text",
+            '<p>Intro</p><style>a[href^="<!--"]{color:red}</style><p>The whole advert body</p>',
+        )
+        == "Intro The whole advert body"
+    )
+    # A script/style element that is itself never closed has nothing left
+    # inside it to mistake for a tag or a comment either - the whole
+    # remainder is that element's own content, so nothing here truncates it
+    # further.
+    assert _neutralise_unterminated_tail('<p>Intro</p><script>var s = "<!--";') == (
+        '<p>Intro</p><script>var s = "<!--";'
+    )
+
+
+def test_neutralise_unterminated_tail_recognises_the_other_two_comment_closes() -> None:
+    # F6 (second-reader round 2, non-blocking): a comment can also close on
+    # `--!>` (comment end bang state, WHATWG 13.2.5.52) or, for an empty
+    # comment, on the very next '>' (abrupt-closing-of-empty-comment,
+    # 13.2.5.44) - searching only for '-->' read both as EOF-truncated and
+    # deleted everything after them. Fixed at the termination-detection
+    # level: this function now leaves both untouched (nothing after them is
+    # lost), which is as far as its own contract goes - it only decides
+    # whether a construct is terminated, it does not rewrite `html.parser`'s
+    # own comment recognition, which does not implement either spec state
+    # (measured: `html.parser` reads a well-formed `--!>`/`<!-->` close as
+    # literal DATA, not as a comment, so the bracket syntax itself still
+    # surfaces in `text_content()` - a separate, pre-existing, lower-severity
+    # gap in the stdlib parser this task does not extend to).
+    assert _neutralise_unterminated_tail("x <!-- c --!> tail") == "x <!-- c --!> tail"
+    assert _neutralise_unterminated_tail("x <!-->tail") == "x <!-->tail"
+    # The fail-closed failure mode (deleting "tail") is what's actually
+    # fixed - confirm no content is lost end to end, even though the
+    # comment's own syntax is not stripped.
+    assert _take("html_text", "x <!-- c --!> tail") == "x <!-- c --!> tail"
+    assert "tail" in (_take("html_text", "x <!-->tail") or "")
 
 
 def test_neutralise_unterminated_tail_still_reads_correctly_on_a_bare_lt() -> None:
