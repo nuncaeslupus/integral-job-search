@@ -1,7 +1,7 @@
 {
   "period_contracts_failing": 0,
   "gate_status": "measured",
-  "table_size": 11,
+  "table_size": 14,
   "vocabulary": [
     "day",
     "hour",

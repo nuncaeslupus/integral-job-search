@@ -86,29 +86,52 @@ _TABLE: dict[str, SalaryPeriod] = {
     "week": "week",
     "day": "day",
     "hour": "hour",
-    # Lever's Postings API, `salaryRange.interval` — the label Lever's own
-    # posting JSON carries, per `connectors/lever_en/connector.yaml`'s header
-    # ("`interval` is Lever's own period label (`per-year-salary`)"), and the
-    # set the task that filed this table measured on 2026-09-10 (#454). Egress
-    # to Lever's own API docs is blocked from this environment, so this table
-    # commits only the four labels this repository has direct, dated evidence
-    # for; a fifth Lever label (`per-week-salary` is sometimes described
-    # elsewhere) is deliberately left OUT rather than guessed at — an
-    # unlisted label already falls to "no stated salary" below, which is the
-    # safe side for a label nobody here has verified.
+    # Lever's Postings API reference documents `salaryRange.interval` as an
+    # enum of per-year-salary/per-hour-wage/per-month-salary/per-day-wage/
+    # per-week-salary/semi-month-salary/bi-month-salary/bi-week-salary/
+    # one-time. The five below map onto this vocabulary directly (the first
+    # four also carry this repository's own direct, dated capture, per
+    # `connectors/lever_en/connector.yaml`'s header and the #454 measurement,
+    # 2026-09-10). `semi-month-salary`, `bi-month-salary` and `bi-week-salary`
+    # are deliberately NOT here: SalaryPeriod has no twice-a-month or
+    # fortnight-shaped member for them to land on, and admitting one under
+    # the nearest wrong period would misstate the wage rather than merely
+    # omit it — refused below for that reason (see CONTRACT_CASES'
+    # semi-month-salary/bi-month-salary/bi-week-salary rows), the same way as
+    # `one-time`, not omitted for lack of evidence. Leaving a documented,
+    # representable label OUT of this table is what F2 (second-reader report
+    # on #487) found: `per-week-salary` used to be missing the same way, and
+    # a real Lever week-paid offer fell to "no salary" instead of being
+    # compared against the candidate's floor — worse than `main`, which at
+    # least kept the raw figures. An unlisted label is not the safe side; it
+    # is a hole, closed here by listing every label this table has an actual
+    # target period for and refusing, with a reason, every one it does not.
     "per-year-salary": "year",
     "per-month-salary": "month",
     "per-hour-wage": "hour",
     "per-day-wage": "day",
+    "per-week-salary": "week",
     # `one-time` is intentionally absent: it is Lever's label for a lump sum,
     # not a pay period, and `normalize_period` must refuse it rather than
     # silently drop it to "no period" (see `build_offer`).
     #
-    # Himalayas' public API, `salaryPeriod` — the only two values this
-    # library has ever captured from it, in `connectors/himalayas_en/fixture/
-    # list.html` (a dated, sampled response per that connector's `meta.yaml`).
+    # Himalayas' Remote Jobs API Reference documents `salaryPeriod` as an
+    # enum: hourly, weekly, fortnightly, monthly, annual. `annual` and
+    # `hourly` also carry this repository's own direct, dated capture, in
+    # `connectors/himalayas_en/fixture/list.html` (per that connector's
+    # `meta.yaml`). `monthly` and `weekly` were missing the same way
+    # `per-week-salary` was above (F1, same report): a documented, real
+    # Himalayas value with no table entry falls to "no stated salary" in
+    # `build_offer`, so a real monthly-paid offer below the candidate's floor
+    # was admitted instead of dropped — the floor never got to compare it.
+    # `fortnightly` is deliberately NOT here, for the same reason as Lever's
+    # semi-month/bi-* labels above: no fortnight-shaped member of
+    # SalaryPeriod exists to land it on, so it is refused below rather than
+    # guessed at (see CONTRACT_CASES' fortnightly row).
     "annual": "year",
     "hourly": "hour",
+    "monthly": "month",
+    "weekly": "week",
 }
 
 
@@ -130,13 +153,23 @@ class PeriodContract(NamedTuple):
 
     `board` and `citation` are provenance, read by nobody but a human auditing
     a failure; `raw` and `expected` are what `_check_contracts` actually
-    compares against `normalize_period`.
+    compares against `normalize_period`. `connector` names the connector
+    package (`connectors/<connector>/`) this row is direct evidence for — set
+    only on a positive row whose value is a real, board-documented word for
+    one specific connector's own vocabulary, never on a generic schema.org
+    row shared by several connectors or on a pure case/whitespace variant.
+    `tests/test_salary_period.py`'s connector-coverage test reads it to check,
+    against the real `connectors/` tree, that every package whose field map
+    actually names `salary_period` is backed by at least one such row — a
+    closed, self-growing check in place of a row count a whole board's rows
+    could be deleted out from under (F3, second-reader report on #487).
     """
 
     board: str
     raw: str | None
     expected: SalaryPeriod | None
     citation: str
+    connector: str | None = None
 
 
 #: The adversarial contract table T170's design requires: derived from each
@@ -154,12 +187,14 @@ CONTRACT_CASES: tuple[PeriodContract, ...] = (
         "YEAR",
         "year",
         'connectors/jobfluent_es/fixture/detail.html: unitText content="YEAR"',
+        connector="jobfluent_es",
     ),
     PeriodContract(
         "schema.org unitText",
         "MONTH",
         "month",
         'connectors/justjoin_en/fixture/detail.html: "unitText": "MONTH"',
+        connector="justjoin_en",
     ),
     PeriodContract(
         "schema.org unitText",
@@ -188,31 +223,49 @@ CONTRACT_CASES: tuple[PeriodContract, ...] = (
     PeriodContract("schema.org unitText", " YEAR ", "year", "same enum, padded"),
     PeriodContract("schema.org unitText", "month", "month", "same enum, lower case"),
     PeriodContract("schema.org unitText", "week", "week", "same enum, lower case"),
-    # --- Lever Postings API, `salaryRange.interval` — the exact labels T170's
-    # own filing measured from `connectors/lever_en` on 2026-09-10 (#454). ---
+    # --- Lever Postings API, `salaryRange.interval` — the four labels T170's
+    # own filing measured from `connectors/lever_en` on 2026-09-10 (#454),
+    # plus the rest of the documented enum added for F2 (#487). ---
     PeriodContract(
         "Lever salaryRange.interval",
         "per-year-salary",
         "year",
         "connectors/lever_en/connector.yaml header; #454 measurement, 2026-09-10",
+        connector="lever_en",
     ),
     PeriodContract(
         "Lever salaryRange.interval",
         "per-month-salary",
         "month",
         "connectors/lever_en/connector.yaml header; #454 measurement, 2026-09-10",
+        connector="lever_en",
     ),
     PeriodContract(
         "Lever salaryRange.interval",
         "per-hour-wage",
         "hour",
         "connectors/lever_en/connector.yaml header; #454 measurement, 2026-09-10",
+        connector="lever_en",
     ),
     PeriodContract(
         "Lever salaryRange.interval",
         "per-day-wage",
         "day",
         "connectors/lever_en/connector.yaml header; #454 measurement, 2026-09-10",
+        connector="lever_en",
+    ),
+    PeriodContract(
+        "Lever salaryRange.interval",
+        "per-week-salary",
+        "week",
+        "Lever Postings API reference: salaryRange.interval enum "
+        "(per-year-salary, per-hour-wage, per-month-salary, per-day-wage, "
+        "per-week-salary, semi-month-salary, bi-month-salary, "
+        "bi-week-salary, one-time) — F2, second-reader report on #487: "
+        "omitting a documented, representable label dropped every real "
+        "week-paid Lever offer to 'no salary' instead of comparing it "
+        "against the floor, which is worse than `main`, not safer",
+        connector="lever_en",
     ),
     PeriodContract(
         "Lever salaryRange.interval",
@@ -229,30 +282,49 @@ CONTRACT_CASES: tuple[PeriodContract, ...] = (
         "connectors/lever_en's task filing (#454): "
         '"Lever writes that field as labels: ... one-time"',
     ),
-    # A Lever-shaped label this table has no dated evidence for. The design
-    # says an unrepresentable label drops the salary rather than being
-    # guessed at — proving that is the point of this row, not an oversight
-    # that it is missing from `_TABLE`.
+    # Lever-documented labels with no matching SalaryPeriod member — refused
+    # by design, not by omission (F2, #487): SalaryPeriod has no twice-a-month
+    # or fortnight-shaped member, so none of the three has anywhere correct
+    # to land, and admitting one under the nearest wrong period would
+    # misstate the wage rather than merely drop it.
     PeriodContract(
         "Lever salaryRange.interval",
-        "per-week-salary",
+        "semi-month-salary",
         None,
-        "not in this repository's dated evidence for Lever's enum — refused, "
-        "not guessed (see _TABLE's comment)",
+        "Lever Postings API reference: salaryRange.interval enum — no "
+        "twice-a-month member of SalaryPeriod exists to map it onto",
     ),
-    # --- Himalayas' public API, `salaryPeriod` — the only two values this
-    # library has ever captured, dated in that connector's own meta.yaml. ---
+    PeriodContract(
+        "Lever salaryRange.interval",
+        "bi-month-salary",
+        None,
+        "Lever Postings API reference: salaryRange.interval enum — no "
+        "bi-monthly member of SalaryPeriod exists to map it onto",
+    ),
+    PeriodContract(
+        "Lever salaryRange.interval",
+        "bi-week-salary",
+        None,
+        "Lever Postings API reference: salaryRange.interval enum — no "
+        "fortnight-shaped member of SalaryPeriod exists to map it onto",
+    ),
+    # --- Himalayas' public API, `salaryPeriod` — the Remote Jobs API
+    # Reference's full enum (F1, #487): `annual`/`hourly` are also this
+    # library's own direct, dated capture, in that connector's own
+    # meta.yaml/fixture. ---
     PeriodContract(
         "Himalayas salaryPeriod",
         "annual",
         "year",
         'connectors/himalayas_en/fixture/list.html: "salaryPeriod": "annual"',
+        connector="himalayas_en",
     ),
     PeriodContract(
         "Himalayas salaryPeriod",
         "hourly",
         "hour",
         'connectors/himalayas_en/fixture/list.html: "salaryPeriod": "hourly"',
+        connector="himalayas_en",
     ),
     PeriodContract(
         "Himalayas salaryPeriod",
@@ -266,14 +338,48 @@ CONTRACT_CASES: tuple[PeriodContract, ...] = (
         "hour",
         "same value, padded",
     ),
-    # A Himalayas value this table has no dated capture for — same refusal
-    # rule as Lever's `per-week-salary` above.
     PeriodContract(
         "Himalayas salaryPeriod",
         "monthly",
+        "month",
+        "Himalayas Remote Jobs API Reference: salaryPeriod enum (hourly, "
+        "weekly, fortnightly, monthly, annual) — F1, second-reader report on "
+        "#487: this label was missing from _TABLE, so a real Himalayas "
+        "monthly-paid offer below the candidate's floor was admitted "
+        "instead of dropped",
+        connector="himalayas_en",
+    ),
+    PeriodContract(
+        "Himalayas salaryPeriod",
+        "weekly",
+        "week",
+        "Himalayas Remote Jobs API Reference: salaryPeriod enum (hourly, "
+        "weekly, fortnightly, monthly, annual)",
+        connector="himalayas_en",
+    ),
+    PeriodContract(
+        "Himalayas salaryPeriod",
+        "Monthly",
+        "month",
+        "same value, title case",
+    ),
+    PeriodContract(
+        "Himalayas salaryPeriod",
+        "  monthly  ",
+        "month",
+        "same value, padded",
+    ),
+    # `fortnightly` is Himalayas-documented and still refused: SalaryPeriod
+    # has no fortnight-shaped member for it to land on, so guessing it onto
+    # "week" or "month" would misstate the wage rather than merely drop it —
+    # the same refusal as Lever's semi-month/bi-* labels, not an oversight.
+    PeriodContract(
+        "Himalayas salaryPeriod",
+        "fortnightly",
         None,
-        "not in this repository's dated capture of Himalayas' salaryPeriod "
-        "values — refused, not guessed",
+        "Himalayas Remote Jobs API Reference: salaryPeriod enum (hourly, "
+        "weekly, fortnightly, monthly, annual) — no fortnight-shaped member "
+        "of SalaryPeriod exists to map it onto",
     ),
     # --- Generic fail-open shapes: nothing board-specific, everything this
     # task was filed to close a hole for. ---
@@ -320,14 +426,25 @@ CONTRACT_CASES: tuple[PeriodContract, ...] = (
         "n/a — unrelated word",
         "biweekly",
         None,
-        "not a member of any surveyed board's documented vocabulary",
+        "not literally documented by any surveyed board — Lever spells the "
+        "same concept `bi-week-salary` and Himalayas spells it "
+        "`fortnightly` (see those rows), both refused too. The reason "
+        "either way is the same and does not depend on wording: SalaryPeriod "
+        "has no fortnight-shaped member for any of the three to land on",
     ),
 )
 
-#: The floor. `CONTRACT_CASES` held 28 rows when this task landed; set below
+#: The floor. `CONTRACT_CASES` held 36 rows when this task landed; set below
 #: that so appending a case never trips it, and deleting most of the table
 #: does (T100's convention — a count committed exactly drifts on every PR that
-#: touches this file for an unrelated reason).
+#: touches this file for an unrelated reason). It is not, on its own, a
+#: substitute for the connector-coverage check in `tests/test_salary_period.
+#: py` — a floor this far below the real count can still be cleared by
+#: deleting a whole board's rows, which is exactly what F3 (second-reader
+#: report on #487) measured: every Lever row deleted from both `_TABLE` and
+#: `CONTRACT_CASES` still left this floor satisfied. That test asserts what a
+#: row count cannot: every connector whose field map names `salary_period`,
+#: derived from the real `connectors/` tree, is backed by a positive row here.
 MINIMUM_PERIOD_CONTRACTS = 20
 
 

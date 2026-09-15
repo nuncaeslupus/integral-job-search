@@ -3378,7 +3378,7 @@ def build_offer(
     salary = None
     raw_period = merged.get("salary_period")
     period = normalize_period(raw_period)
-    if raw_period and period is None:
+    if _present(raw_period) and period is None:
         pass  # a stated, unrepresentable period — no salary at all (see above)
     else:
         minimum = _as_wage(merged.get("salary_min"))

@@ -25,7 +25,13 @@ import pytest
 import integral.strings as strings
 from integral.bulk_filter import HardConstraints, PayFloor, reduce
 from integral.candidate import Salary as CandidateSalary
-from integral.connectors import Connector, build_offer, parse_connector
+from integral.connectors import (
+    Connector,
+    build_offer,
+    connector_packages,
+    load_connector,
+    parse_connector,
+)
 from integral.offers import Salary, SalaryPeriod, compute_offer_id
 from integral.salary_period import (
     _TABLE,
@@ -91,6 +97,55 @@ def test_the_table_has_both_positive_and_negative_rows() -> None:
     assert negative >= 8
 
 
+def _maps_salary_period(connector: Connector) -> bool:
+    """True if `salary_period` is a key this connector's own field map
+    names, on either page, markup or JSON route.
+
+    Mirrors `Connector._something_produces_the_offer_text`'s idiom (same
+    module) rather than duplicating a different check — "does this connector
+    produce field X" is one question asked of two different fields.
+    """
+    list_has_it = "salary_period" in connector.list.fields or (
+        connector.list.from_json is not None and "salary_period" in connector.list.from_json.fields
+    )
+    detail_has_it = connector.detail is not None and (
+        "salary_period" in connector.detail.fields
+        or (
+            connector.detail.from_json is not None
+            and "salary_period" in connector.detail.from_json.fields
+        )
+    )
+    return list_has_it or detail_has_it
+
+
+def test_every_connector_that_maps_salary_period_has_contract_coverage() -> None:
+    """F3, second-reader report on #487: `MINIMUM_PERIOD_CONTRACTS` is a row
+    count, and a row count can be cleared by deleting a whole board's rows as
+    long as enough others remain — measured there by deleting every Lever row
+    from both `_TABLE` and `CONTRACT_CASES` and finding the floor (and the
+    gate) still green.
+
+    This check cannot be cleared that way, because it is not a count: it
+    reads the real `connectors/` tree, finds every package whose own field
+    map actually names `salary_period` today, and requires each to be named
+    by at least one *positive* `CONTRACT_CASES` row via `PeriodContract.
+    connector`. Deleting a board's positive rows now fails this directly;
+    a fifth connector mapping the field grows the requirement by itself, with
+    nobody needing to remember to raise a number.
+    """
+    covered = {
+        case.connector for case in CONTRACT_CASES if case.expected is not None and case.connector
+    }
+    mapping = {
+        package.name
+        for package in connector_packages()
+        if _maps_salary_period(load_connector(package))
+    }
+    assert mapping, "expected at least one connector to map salary_period"
+    missing = mapping - covered
+    assert not missing, f"connectors mapping salary_period with no positive contract row: {missing}"
+
+
 def test_table_values_are_offer_periods() -> None:
     """Closed, not restated: every value `_TABLE` maps to is a member of
     `offers.SalaryPeriod`, derived from the `Literal` rather than a second
@@ -136,6 +191,46 @@ def test_a_connector_salary_below_the_floor_is_dropped(period: str) -> None:
     assert offer.salary.period == period
 
     floor = PayFloor(amount=1_000_000, currency="EUR", period=period)
+    reduction = reduce([offer], HardConstraints(pay_floor=floor))
+
+    assert reduction.kept == ()
+    assert len(reduction.dropped) == 1
+    assert reduction.dropped[0].rule == "below_pay_floor"
+
+
+def test_a_raw_board_period_below_the_floor_is_also_dropped() -> None:
+    """F1, second-reader report on #487: the test above pins the floor
+    comparison using the *canonical* spelling (`"month"`), which was never
+    where the fail-open lived. Before `_TABLE` mapped Himalayas' own word,
+    `"monthly"` fell to `None` in `normalize_period`, `build_offer` dropped
+    the whole salary as a stated-but-unrepresentable period, and the offer
+    reached `reduce` with no salary at all — which `_below_pay_floor` cannot
+    drop, so a real monthly-paid offer below the floor was *admitted*
+    instead of refused. Pinned here with the board's actual raw label,
+    `"monthly"`, not the vocabulary it now maps to, so a regression that
+    un-maps a real board word (as `main` shipped, and as F1 found still true
+    of `weekly`/`monthly` before this commit) fails this test even though
+    `test_a_connector_salary_below_the_floor_is_dropped` above — which never
+    passes a raw board label — would not.
+    """
+    text = "An offer paid below the floor, Himalayas' own 'monthly' word."
+    connector = _connector()
+    offer = build_offer(
+        connector,
+        list_fields={
+            "text": text,
+            "salary_min": "1",
+            "salary_max": "10",
+            "salary_currency": "EUR",
+            "salary_period": "monthly",
+        },
+        url="https://periodtest.example/jobs/5",
+        source_ref=compute_offer_id(text),
+    )
+    assert offer.salary is not None
+    assert offer.salary.period == "month"
+
+    floor = PayFloor(amount=1_000_000, currency="EUR", period="month")
     reduction = reduce([offer], HardConstraints(pay_floor=floor))
 
     assert reduction.kept == ()
@@ -221,6 +316,39 @@ def test_an_absent_period_is_unaffected() -> None:
             "salary_currency": "EUR",
         },
         url="https://periodtest.example/jobs/3",
+        source_ref=compute_offer_id(text),
+    )
+    assert offer.salary is not None
+    assert offer.salary.period is None
+    assert (offer.salary.min, offer.salary.max) == (40000.0, 50000.0)
+
+
+@pytest.mark.parametrize("raw_period", ["", " "])
+def test_a_blank_period_is_unaffected_like_an_absent_one(raw_period: str) -> None:
+    """F4, second-reader report on #487: `build_offer`'s guard used to read
+    `if raw_period and period is None:` — Python truthiness, not this
+    repository's own definition of "the field was actually stated"
+    (`connectors._present`, already written once so its two existing
+    consumers treat an empty string and a run of whitespace identically).
+    `""` is falsy, so it happened to take the safe branch; `" "` is truthy,
+    so it took the *other* one, and a real salary was dropped where the
+    empty string leaves it intact — even though `_TABLE.get` folds both to
+    the same lookup miss. Parametrized so `""` and `" "` are asserted to
+    behave identically, the way every other `_present` consumer already
+    guarantees.
+    """
+    connector = _connector()
+    text = f"A salary with a blank period ({raw_period!r})."
+    offer = build_offer(
+        connector,
+        list_fields={
+            "text": text,
+            "salary_min": "40000",
+            "salary_max": "50000",
+            "salary_currency": "EUR",
+            "salary_period": raw_period,
+        },
+        url="https://periodtest.example/jobs/6",
         source_ref=compute_offer_id(text),
     )
     assert offer.salary is not None
