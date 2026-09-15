@@ -15,9 +15,11 @@ contract mechanical rather than a convention:
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Annotated, Any, Literal, get_args
 
@@ -237,12 +239,26 @@ class Cue(Strict):
     six are rung-0 statements; collapsing them made "this job denies travel" and
     "this job is on-site" the same record, and cost `negation_recall` three of its
     nine labels (T59).
+
+    **A cue matches whole words** (T178) — read it through `finditer` / `search`,
+    never `re` on `pattern` directly. A match may not begin or end with a letter
+    on both sides of its edge, so `go` cannot fire inside "Django" or "Chicago",
+    `rust` inside "high-trust", `ret[ée]n` inside "entretenimiento" or
+    "retención", nor `our mission is` inside "Your mission is". A stem says it
+    is one: `escalab\w*`, `sprints?`. Matching is case-insensitive; a proper
+    noun that is also an ordinary word scopes the flag off, as `(?-i:Go)` does.
     """
 
     pattern: str = Field(min_length=1)
     value: float = Field(ge=-1.0, le=1.0)
     negatable: bool = False
     denies: bool = False
+
+    def finditer(self, text: str) -> Iterator[re.Match[str]]:
+        return _whole_words(self.pattern).finditer(text)
+
+    def search(self, text: str) -> re.Match[str] | None:
+        return _whole_words(self.pattern).search(text)
 
     @model_validator(mode="after")
     def _a_denial_is_not_also_negatable(self) -> Cue:
@@ -264,10 +280,29 @@ class Cue(Strict):
     @classmethod
     def _pattern_compiles(cls, pattern: str) -> str:
         try:
-            re.compile(pattern)
+            _whole_words(pattern)
         except re.error as exc:
             raise ValueError(f"cue pattern does not compile: {exc}") from exc
         return pattern
+
+
+# Letters, not `\w`: digits glued to a word are how scraped adverts lose their
+# line breaks ("Modalidad100 remoto", "inglésB2o"), and a number beside a letter
+# is not a word split in two.
+_LETTER = r"[^\W\d_]"
+# True at any position that does not have a letter on both sides.
+_NOT_INSIDE_A_WORD = rf"(?:(?<!{_LETTER})|(?!{_LETTER}))"
+
+
+@functools.cache
+def _whole_words(pattern: str) -> re.Pattern[str]:
+    """`pattern`, refused wherever its match would start or end inside a word.
+
+    The guard is inside the regex rather than a filter on its matches, so the
+    engine backtracks past a split: `(cliente|clientes)` over "clientes" yields
+    the longer alternative instead of rejecting the shorter one.
+    """
+    return re.compile(rf"{_NOT_INSIDE_A_WORD}(?:{pattern}){_NOT_INSIDE_A_WORD}", re.IGNORECASE)
 
 
 class GoldExample(Strict):
@@ -721,8 +756,7 @@ def unmatched_gold(dimensions: list[Dimension]) -> list[str]:
         for gold in dimension.extraction.gold
         if gold.derived_from == "cue"
         and not any(
-            re.search(cue.pattern, gold.span, re.IGNORECASE)
-            for cue in dimension.extraction.cues.get(gold.language, [])
+            cue.search(gold.span) for cue in dimension.extraction.cues.get(gold.language, [])
         )
     ]
 
@@ -806,7 +840,7 @@ def silent_language_slices(
         for language in SCHEMA_LANGUAGES
         if dimension.extraction.cues.get(language)
         and not any(
-            re.search(cue.pattern, str(ad["text"]), re.IGNORECASE)
+            cue.search(str(ad["text"]))
             for cue in dimension.extraction.cues[language]
             for ad in ads
             if ad["language"] == language

@@ -53,7 +53,7 @@ extraction:
       - pattern: "flexible\\s+(working\\s+)?(hours|schedule|start)|flexitime|flexible\\s+start\\s+and\\s+finish"
         value: 0.7
         negatable: true
-      - pattern: "asynchronous|async|summer\\s+hours|compressed\\s+(work\\s+)?week"
+      - pattern: "async(?:hronous)?(?!/)|summer\\s+hours|compressed\\s+(work\\s+)?week"
         value: 0.6
         negatable: false
       - pattern: "fixed\\s+(hours|schedule)"

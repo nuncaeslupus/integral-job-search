@@ -4,10 +4,10 @@
   "negation_firings_count": 8,
   "negation_firings": [
     "feinaactiva-FA92320052/seniority_expectation: 'sense experiència'",
-    "manfred-8379/process_formality: 'sprint'",
-    "manfred-8383/process_formality: 'sprint'",
+    "manfred-8379/process_formality: 'sprints'",
+    "manfred-8383/process_formality: 'sprints'",
     "manfred-8389/on_call_load: 'guardias'",
-    "manfred-8392/process_formality: 'sprint'",
+    "manfred-8392/process_formality: 'sprints'",
     "tecnoempleo-799b12ca520d03c0e743/on_call_load: 'guardias'",
     "tecnoempleo-98201f7d82b073d32d45/on_call_load: 'guardias'",
     "tecnoempleo-b57e13f992dc636ab549/on_call_load: 'guardias'"

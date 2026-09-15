@@ -137,7 +137,7 @@ def test_every_dimension_has_a_cue_that_fires_on_a_real_ad(dimensions: list[Dime
     dead = []
     for dimension in ad_side(dimensions):
         fired = any(
-            re.search(cue.pattern, ad["text"], re.I)
+            cue.search(ad["text"])
             for language, cues in dimension.extraction.cues.items()
             for cue in cues
             for ad in ads
@@ -394,4 +394,4 @@ def test_the_full_time_cue_reads_the_offered_contract_not_a_comparison(
     dimension = next(d for d in load_dimensions() if d.id == "contracted_hours")
     cue = next(c for c in dimension.extraction.cues["en"] if c.value == 0.9)
 
-    assert bool(re.search(cue.pattern, text, re.IGNORECASE)) is should_fire, why
+    assert bool(cue.search(text)) is should_fire, why

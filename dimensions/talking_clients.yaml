@@ -72,7 +72,7 @@ extraction:
       # has to be the role. The first independent read recorded this dimension
       # as passed-clean; it had read the ES and CA halves, and the English half
       # was added in the same commit and never looked at by anyone.
-      - pattern: "(technical\\s+)?account\\s+manage(r|ment)|solutions?\\s+(architect|engineer)|point\\s+of\\s+contact|customer\\s+(support|service)\\s+(role|agent|representative)|(help\\s?desk|front\\s+desk)\\s+(role|agent|technician|analyst|assistant|receptionist|representative|support|team)\\b"
+      - pattern: "(technical\\s+)?account\\s+manage(r|ment)|solutions?\\s+(architect|engineer)\\w*|point\\s+of\\s+contact|customer\\s+(support|service)\\s+(role|agent|representative)|(help\\s?desk|front\\s+desk)\\s+(role|agent|technician|analyst|assistant|receptionist|representative|support|team)\\b"
         value: 1.0
         negatable: false
       - pattern: "(work(ing)?|collaborat\\w+|partner\\w*|liais\\w+)\\s+(closely\\s+)?with\\s+[^.\\n]{0,40}(clients?|customers?|stakeholders?)"
@@ -88,7 +88,7 @@ extraction:
       - pattern: "(trato|contacto|relaci[óo]n)\\s+(directo|directa|habitual)?\\s*con\\s+(el\\s+|los\\s+|nuestros\\s+)?(cliente|clientes|usuarios|negocio)"
         value: 0.67
         negatable: true
-      - pattern: "interlocuci[óo]n|toma\\s+de\\s+requisitos|reuniones\\s+con\\s+(el\\s+)?cliente|formaci[óo]n\\s+[^.\\n]{0,30}(usuarios|clientes)|asesoramiento\\s+al?\\s+(cliente|la\\s+clientela)|assessorament\\s+a\\s+(la\\s+)?client|venta\\s+y\\s+atenci[óo]n|venda\\s+i\\s+atenci[óo]|atender\\s+a\\s+(los\\s+)?clientes|atendre\\s+(els\\s+)?clients"
+      - pattern: "interlocuci[óo]n|toma\\s+de\\s+requisitos|reuniones\\s+con\\s+(el\\s+)?cliente|formaci[óo]n\\s+[^.\\n]{0,30}(usuarios|clientes)|asesoramiento\\s+al?\\s+(cliente|la\\s+clientela)|assessorament\\s+a\\s+(la\\s+)?client\\w*|venta\\s+y\\s+atenci[óo]n|venda\\s+i\\s+atenci[óo]|atender\\s+a\\s+(los\\s+)?clientes|atendre\\s+(els\\s+)?clients"
         value: 0.67
         negatable: false
     ca:
@@ -98,7 +98,7 @@ extraction:
       - pattern: "(gesti[óo]|relaci[óo]|tracte|contacte)\\s+[^.\\n]{0,20}(amb\\s+(els\\s+)?clients?|del\\s+client)"
         value: 0.67
         negatable: true
-      - pattern: "interlocuci[óo]|requeriments\\s+de\\s+clients|acompanyar\\s+els\\s+clients|assessorament\\s+a\\s+(la\\s+)?client|asesoramiento\\s+al?\\s+(cliente|la\\s+clientela)|venda\\s+i\\s+atenci[óo]|venta\\s+y\\s+atenci[óo]n|atendre\\s+(els\\s+)?clients|atender\\s+a\\s+(los\\s+)?clientes|reunions\\s+amb\\s+(el\\s+)?client"
+      - pattern: "interlocuci[óo]|requeriments\\s+de\\s+clients|acompanyar\\s+els\\s+clients|assessorament\\s+a\\s+(la\\s+)?client\\w*|asesoramiento\\s+al?\\s+(cliente|la\\s+clientela)|venda\\s+i\\s+atenci[óo]|venta\\s+y\\s+atenci[óo]n|atendre\\s+(els\\s+)?clients|atender\\s+a\\s+(los\\s+)?clientes|reunions\\s+amb\\s+(el\\s+)?client"
         value: 0.67
         negatable: false
   gold:

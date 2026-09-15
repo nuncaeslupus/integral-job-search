@@ -62,7 +62,7 @@ extraction:
   # with no new false positive.
   cues:
     en:
-      - pattern: "permanent\\s+(contract|position|role)|full-?time\\s+employee|open-?ended\\s+contract|indefinite\\s+contract"
+      - pattern: "permanent\\s+(contract|position|role)|full-?time\\s+employees?|open-?ended\\s+contract|indefinite\\s+contract"
         value: 0.9
         negatable: true
       - pattern: "contractor|freelance"
@@ -72,23 +72,23 @@ extraction:
         value: 0.3
         negatable: false
     es:
-      - pattern: "contra(t|ct)\\w*\\s+(laboral\\s+|de\\s+trabajo\\s+|de\\s+treball\\s+)?(indefinido|indefinida|indefinit)\\b|contra(t|ct)\\w*\\s*:\\s*(indefinido|indefinit)\\b|contrataci[óo]n\\s+indefinid|contractaci[óo]\\s+indefinit"
+      - pattern: "contra(t|ct)\\w*\\s+(laboral\\s+|de\\s+trabajo\\s+|de\\s+treball\\s+)?(indefinido|indefinida|indefinit)\\b|contra(t|ct)\\w*\\s*:\\s*(indefinido|indefinit)\\b|contrataci[óo]n\\s+indefinid\\w*|contractaci[óo]\\s+indefinit\\w*"
         value: 0.9
         negatable: true
       - pattern: "aut[óo]nomo|aut[òo]nom\\b|freelance|factura(ci[óo]n)?\\s+por\\s+horas"
         value: 0.2
         negatable: false
-      - pattern: "contra(t|ct)\\w*\\s+(laboral\\s+)?(temporal|eventual)|obra\\s+y\\s+servicio|contrato\\s+en\\s+pr[áa]cticas|interinidad|sustituci[óo]n\\s+(por\\s+|de\\s+)?baja|contrato\\s+de\\s+relevo|fij[oa]\\s+discontinu"
+      - pattern: "contra(t|ct)\\w*\\s+(laboral\\s+)?(temporal|eventual)|obra\\s+y\\s+servicio|contrato\\s+en\\s+pr[áa]cticas|interinidad|sustituci[óo]n\\s+(por\\s+|de\\s+)?baja|contrato\\s+de\\s+relevo|fij[oa]\\s+discontinu\\w*"
         value: 0.3
         negatable: false
     ca:
-      - pattern: "contra(t|ct)\\w*\\s+(laboral\\s+|de\\s+treball\\s+)?(indefinit|indefinida|indefinido)\\b|contra(t|ct)\\w*\\s*:\\s*(indefinit|indefinido)\\b|contractaci[óo]\\s+indefinit|contrataci[óo]n\\s+indefinid"
+      - pattern: "contra(t|ct)\\w*\\s+(laboral\\s+|de\\s+treball\\s+)?(indefinit|indefinida|indefinido)\\b|contra(t|ct)\\w*\\s*:\\s*(indefinit|indefinido)\\b|contractaci[óo]\\s+indefinit\\w*|contrataci[óo]n\\s+indefinid\\w*"
         value: 0.9
         negatable: true
       - pattern: "aut[òo]nom\\b|aut[óo]nomo|freelance"
         value: 0.2
         negatable: false
-      - pattern: "contra(t|ct)\\w*\\s+(laboral\\s+)?(temporal|eventual)|contra(t|ct)\\w*\\s+(laboral\\s+)?per\\s+substituci|substituci[óo]\\s+(per\\s+|de\\s+)?baixa|contracte\\s+en\\s+pr[àa]ctiques|interinitat|fix\\s+discontinu"
+      - pattern: "contra(t|ct)\\w*\\s+(laboral\\s+)?(temporal|eventual)|contra(t|ct)\\w*\\s+(laboral\\s+)?per\\s+substituci\\w*|substituci[óo]\\s+(per\\s+|de\\s+)?baixa|contracte\\s+en\\s+pr[àa]ctiques|interinitat|fix\\s+discontinu\\w*"
         value: 0.3
         negatable: false
   gold:
