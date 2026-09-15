@@ -35,6 +35,8 @@ from integral.approval import (
     MINIMUM_CARRIED_DISCLOSURE_CHECKS,
     MINIMUM_CARRIED_DISCLOSURE_STATES,
     MINIMUM_DISCLOSURE_PROBES,
+    MINIMUM_INTACT_SEAM_CHECKS,
+    MINIMUM_INTACT_SEAM_STATES,
     MINIMUM_MANIFEST_DISCLOSURES_COMPARED,
     MINIMUM_PARAPHRASE_CHECKS,
     MINIMUM_PARAPHRASE_STATES,
@@ -42,6 +44,7 @@ from integral.approval import (
     PersonalDetails,
     _carried_disclosure_report,
     _disclosure_report,
+    _intact_seam_report,
     _normalised_equal,
     _paraphrase_report,
     _refuse_unbacked_disclosures,
@@ -52,12 +55,14 @@ from integral.approval import (
     payload_digest,
     prepare,
     probe_carried_disclosures_reported,
+    probe_intact_seam,
     probe_paraphrase_undecidability,
     probe_unbacked_disclosures,
     read_payload,
     record_sent,
     write_carried_disclosure_evidence,
     write_disclosure_evidence,
+    write_intact_seam_evidence,
     write_paraphrase_evidence,
 )
 from integral.cv_store import (
@@ -2122,3 +2127,85 @@ def test_the_carried_disclosure_report_fails_on_a_nonzero_metric(
     written = write_carried_disclosure_evidence(tmp_path / "T157.json")
     assert written["gate_status"] == "unmeasured"
     assert _carried_disclosure_report(written) == 1
+
+
+def test_the_intact_seam_probes_catch_every_planted_case(tmp_path: Path) -> None:
+    measured = probe_intact_seam(tmp_path / "profiles")
+
+    assert measured["intact_seam_probe_failures"] == []
+    assert measured["intact_seam_states_evaluated"] >= MINIMUM_INTACT_SEAM_STATES
+    assert measured["intact_seam_checks_evaluated"] >= MINIMUM_INTACT_SEAM_CHECKS
+    assert measured["gate_status"] == "measured"
+    assert measured["intact_seam_manufactured_findings"] == 0
+
+
+def test_the_recorded_intact_seam_evidence_clears_its_own_floors(tmp_path: Path) -> None:
+    measured = write_intact_seam_evidence(tmp_path / "T162.json")
+
+    assert measured["intact_seam_states_evaluated"] >= MINIMUM_INTACT_SEAM_STATES
+    assert measured["intact_seam_checks_evaluated"] >= MINIMUM_INTACT_SEAM_CHECKS
+    # Both signals, not the metric alone — a metric severed from the per-state
+    # assertions that feed it would still read 0 over a real regression; this
+    # is the redundant, non-circular pairing `_intact_seam_report` also checks
+    # both halves of at the CLI boundary.
+    assert measured["intact_seam_probe_failures"] == []
+    assert measured["intact_seam_manufactured_findings"] == 0
+    assert measured["gate_status"] == "measured"
+    assert json.loads((tmp_path / "T162.json").read_text(encoding="utf-8")) == measured
+
+
+def test_deleting_an_intact_seam_state_breaches_its_floor(tmp_path: Path) -> None:
+    """Both floors guard the population they name, not merely each other.
+
+    A states count that shrank by one, or a checks count that shrank by one,
+    each has to fall below its own floor on its own — pinned directly against
+    the actual measured counts rather than trusted to the constants' comments,
+    per CLAUDE.md's fixtures section on a floor counting the wrong population.
+    """
+    measured = probe_intact_seam(tmp_path / "profiles")
+
+    assert measured["intact_seam_states_evaluated"] == MINIMUM_INTACT_SEAM_STATES
+    assert measured["intact_seam_checks_evaluated"] == MINIMUM_INTACT_SEAM_CHECKS
+    assert measured["intact_seam_states_evaluated"] - 1 < MINIMUM_INTACT_SEAM_STATES
+    assert measured["intact_seam_checks_evaluated"] - 1 < MINIMUM_INTACT_SEAM_CHECKS
+
+
+def test_the_intact_seam_report_fails_on_a_nonzero_metric(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_intact_seam_report` must fail the gate itself, not merely print it."""
+    passing = {
+        "intact_seam_states_evaluated": MINIMUM_INTACT_SEAM_STATES,
+        "intact_seam_checks_evaluated": MINIMUM_INTACT_SEAM_CHECKS,
+        "intact_seam_manufactured_findings": 0,
+        "intact_seam_probe_failures": [],
+        "gate_status": "measured",
+    }
+    assert _intact_seam_report(dict(passing)) == 0
+    assert _intact_seam_report({**passing, "intact_seam_manufactured_findings": 1}) == 1
+    assert (
+        _intact_seam_report(
+            {**passing, "intact_seam_states_evaluated": 0, "gate_status": "unmeasured"}
+        )
+        == 1
+    )
+    # The checks floor, on its own, guards against a states count padded with
+    # an empty state — the "floor counting the wrong population" shape — by
+    # catching a states count that clears its own floor while the checks
+    # beneath it thin out.
+    assert _intact_seam_report({**passing, "intact_seam_checks_evaluated": 0}) == 1
+
+    monkeypatch.setattr(
+        approval,
+        "probe_intact_seam",
+        lambda root: {
+            "intact_seam_states_evaluated": 0,
+            "intact_seam_checks_evaluated": 0,
+            "intact_seam_manufactured_findings": 0,
+            "intact_seam_probe_failures": [],
+            "gate_status": "unmeasured",
+        },
+    )
+    written = write_intact_seam_evidence(tmp_path / "T162.json")
+    assert written["gate_status"] == "unmeasured"
+    assert _intact_seam_report(written) == 1
