@@ -771,6 +771,9 @@ def test_a_refused_advert_host_is_asked_once_across_employers(
     there on the first advert used to be followed by the rest of the budget,
     each row reported as "no text". The list host is another origin, so the
     second employer's list is still read; its adverts are not."""
+    import integral.sourcing as sourcing_module
+
+    monkeypatch.setattr(sourcing_module, "source_kind_of", lambda connector: "employer")
     run, _, _ = _detail_run(
         tmp_path, monkeypatch, adverts_robots="User-agent: *\nAllow: /\n", advert_status=429
     )
@@ -778,6 +781,10 @@ def test_a_refused_advert_host_is_asked_once_across_employers(
     assert (outcome.items, outcome.detail_needed, outcome.detail_fetched) == (4, 4, 1), outcome
     assert outcome.refused and "429" in outcome.refused, outcome
     assert outcome.dropped == 0 and not outcome.reached_the_board, outcome
+    # #466 B1: the list parsed every row (`items == 4`), but every one of
+    # those rows' detail pages was then refused — no offer of this board's
+    # ever reached disk, so it must not be named among the employers' own.
+    assert run.employer_boards == [], run.employer_boards
 
 
 def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> None:
