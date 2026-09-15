@@ -5,17 +5,17 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3391
+      "line": 3440
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3390
+      "line": 3439
     },
     {
       "module": "approval",
       "name": "_SHINGLE",
-      "line": 428
+      "line": 462
     },
     {
       "module": "arsenal_source",
@@ -383,6 +383,8 @@
     "annotation.EGRESS_SAMPLE",
     "annotation.MIN_IDENTIFYING_LENGTH",
     "approval.MINIMUM_DISCLOSURE_PROBES",
+    "approval.MINIMUM_INTACT_SEAM_CHECKS",
+    "approval.MINIMUM_INTACT_SEAM_STATES",
     "approval.MINIMUM_MANIFEST_DISCLOSURES_COMPARED",
     "approval.MINIMUM_PARAPHRASE_CHECKS",
     "approval.MINIMUM_PARAPHRASE_STATES",

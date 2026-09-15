@@ -1100,6 +1100,118 @@ def test_a_seam_between_two_unbacked_lines_does_not_manufacture_a_match(
     assert any(e3_text in item for item in measured["undecidable_episodes"])
 
 
+def test_intact_seam_across_documents_does_not_manufacture_a_finding(
+    store: ProfileStore,
+) -> None:
+    """T162 (#443): `intact` — `"\\n".join(surviving)` — carried the same seam
+    round four (F1, above) removed from `unbacked`, in the opposite
+    direction. `unbacked`'s seam wrongly *cleared* a real finding
+    (fail-open); `intact`'s wrongly *adds* one and blocks an otherwise-clean
+    draft (fail-closed), because `prepare` refuses to write a payload over
+    any finding at all.
+
+    `seam_head` is a skill (rendered onto both `cv.md` and `letter.md`, last
+    in each, since nothing else is chosen); `seam_tail` is the headline
+    (rendered onto both, first in each). Neither carries all eight words of
+    `phantom` alone. Both documents' own real order is headline then skill —
+    never the reverse — so the tail-of-one-document, head-of-the-next
+    pairing that manufactures `phantom` is never adjacent on any page a
+    candidate could look at.
+    """
+    seam_head = "Kilo Lima Mike November Oscar Papa Quebec Romeo"
+    seam_tail = "Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu"
+    phantom = "Oscar Papa Quebec Romeo Sierra Tango Uniform Victor"
+    master = CVMaster(
+        headline=SourcedText(text=seam_tail),
+        skills=(Skill(name=seam_head, level=None),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+    )
+    write_master(store, master)
+
+    # The whole point: a genuinely clean draft must not be refused over a
+    # shingle the join manufactured. A pre-fix build raises `ApprovalError`
+    # here.
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("Kilo",),
+        approved_episodes=(0,),
+    )
+
+    measured = measure_prepared(store, master, OFFER, payload.version)
+
+    assert not any(phantom in item for item in measured["unapproved_episodes"])
+    # Never written anywhere, whole, on any page — undecided, not silently
+    # dropped either.
+    assert any(phantom in item for item in measured["undecidable_episodes"])
+
+
+def test_intact_seam_within_one_document_does_not_manufacture_a_finding(
+    store: ProfileStore,
+) -> None:
+    """T162's other named shape: the two halves are non-adjacent on the real
+    page not because they are split across documents, but because an
+    *approved* line sits between them on the page and T156's own N2 rule
+    drops it from `surviving` — so the two halves land back to back in
+    `surviving` even though the actual page reads `alfa_text`, `WIN`,
+    `india_text`, in that order.
+    """
+    alfa_text = "Alfa Bravo Charlie Delta Echo Foxtrot Golf Hotel"
+    india_text = "India Juliet Kilo Lima Mike November Oscar Papa"
+    phantom = "Echo Foxtrot Golf Hotel India Juliet Kilo Lima"
+    master = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(
+            Skill(name=alfa_text, level=None),
+            Skill(name=WIN, level=None),
+            Skill(name=india_text, level=None),
+        ),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+    )
+    write_master(store, master)
+
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("Alfa", "India", "billing"),
+        approved_episodes=(0,),
+    )
+
+    measured = measure_prepared(store, master, OFFER, payload.version)
+
+    assert not any(phantom in item for item in measured["unapproved_episodes"])
+    assert any(phantom in item for item in measured["undecidable_episodes"])
+
+
+def test_intact_seam_fix_still_confirms_a_genuine_unsplit_carry(store: ProfileStore) -> None:
+    """The control the branch exists for: a genuine, unsplit single-line
+    carry must still be reported as a finding under the per-line rewrite,
+    exactly as `_carries(intact, episode.text)` reported it before — the
+    fix must not over-correct into the fail-open direction.
+    """
+    master = _master(store, headline=FAILURE.rstrip("."))
+    with pytest.raises(ApprovalError):
+        # FAILURE is never approved here — only WIN (index 0) is — so its
+        # full substance, sitting unsplit in the headline, must refuse the
+        # draft rather than send it as if it were undecidable.
+        _prepare(store, master, approved=(0,))
+
+    measured = measure_prepared(store, master, OFFER, 1)
+
+    assert any(
+        "the substance of a story-bank episode" in finding and FAILURE in finding
+        for finding in measured["unapproved_episodes"]
+    )
+
+
 def test_a_duplicated_approved_line_does_not_conflate_a_twin(store: ProfileStore) -> None:
     """R5-1 (#435 round 5, the blocker), route (A): `unbacked` is populated by
     a Counter test (`backed[key] == 0`), never by a text test, so an

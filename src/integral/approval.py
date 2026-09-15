@@ -294,6 +294,39 @@ shingle-overlap twin, and R8-2's one (28) is the positive direction F-2 named
 missing — a genuine case/whitespace near-copy this function must still
 confirm, pinned rather than only asserted.
 
+**T162 closes the seam `intact` carried since round three, in the opposite
+direction from every fix above.** `intact` was `"\n".join(surviving)` — the
+same shape of join round three gave `unbacked`, over the same hazard: a
+document's true adjacency is not preserved once an arbitrary subset of its
+lines is stitched back together, so a shingle can straddle a boundary the
+join manufactured rather than the page ever wrote. Round four closed that
+seam for `unbacked` (`any(_carries(line, episode.text) for line in
+unbacked)`, above); `intact` kept joining, noted at the time as "the
+docstring's named upgrade path to close, not a risk this branch's fix owed on
+its own" because the direction is the opposite one. For `unbacked` a
+manufactured match wrongly *clears* a real finding — fail-open. For `intact`
+a manufactured match wrongly *adds* one: two `surviving` lines that are never
+adjacent on any real page — split across `cv.md` and `letter.md`, or simply
+non-adjacent within one document once an approved line between them is
+excluded from `surviving` (T156's own N2 exclusion) — can still land next to
+each other in `intact` and manufacture an eight-word shingle naming an
+episode's substance that reaches no real page. `measure_prepared` then
+reports that as a finding, and `prepare` refuses to write a payload over any
+finding — so the bug costs a regeneration over a document that was already
+clean, not a leaked disclosure. Left open on round four for that reason, and
+again on round five (R5-1) by the same second reader, on the one condition
+that it get its own task rather than only this paragraph. Closed the same way
+round four closed `unbacked`: `intact` is retired, and the check reads
+`any(_carries(line, episode.text) for line in surviving)`, one real, whole
+line at a time, with no join and no seam to straddle. `probe_intact_seam`
+mirrors round four's own `seam_head`/`seam_tail`/`e3_text` fixture exactly,
+planted among `surviving` — approved, disclosed lines — rather than
+`unbacked` ones, since that is the population this branch draws from; a
+second, single-document shape plants the manufactured pair around an
+approved line excluded by N2 instead of across a document boundary, and a
+third state pins that a genuine, unsplit single-line carry — the positive
+case this branch exists for — still confirms exactly as before.
+
 **Two messages this rule prints were also false where they sit, both found
 and fixed the same round (F-3, F-4).** `undecidable_episodes`' explanatory
 text chooses between two sentences depending on whether any *unbacked* line
@@ -408,6 +441,7 @@ DEFAULT_D24_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-24.json"
 DEFAULT_T114_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T114.json"
 DEFAULT_T156_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T156.json"
 DEFAULT_T157_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T157.json"
+DEFAULT_T162_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T162.json"
 
 SCHEMA_VERSION: Literal[1] = 1
 
@@ -949,14 +983,14 @@ def measure_prepared(
     # approved or not — collected unconditionally so the undecidable
     # messages below can honestly say "anywhere on the page" rather than
     # "anywhere `surviving` or `unbacked` happens to include." `surviving`
-    # and `intact` (below) still exclude approved lines on purpose (T156's
-    # N2 fix; scanning them there would let an approved line falsely confirm
-    # a different episode again) — this list is for message wording **and**
-    # (T157 round 2, F-1, via `all_intact` below) for the `episode.text in
-    # approved` confirm branch, where N2's exclusion does not apply because
-    # that branch never raises a finding. It is never used for the
-    # unapproved-finding branch a few lines down, where N2's exclusion is
-    # still load-bearing (`intact`, not `all_intact`).
+    # still excludes approved lines on purpose (T156's N2 fix; scanning them
+    # there would let an approved line falsely confirm a different episode
+    # again) — this list is for message wording **and** (T157 round 2, F-1,
+    # via `all_intact` below) for the `episode.text in approved` confirm
+    # branch, where N2's exclusion does not apply because that branch never
+    # raises a finding. It is never used for the unapproved-finding branch a
+    # few lines down, where N2's exclusion is still load-bearing (checked
+    # against `surviving` directly, never against `all_lines`).
     all_lines: list[str] = []
     for name, body in documents.items():
         for line in _claim_lines(body):
@@ -1064,22 +1098,22 @@ def measure_prepared(
     # reading a whole-version total that a second, correctly-disclosed episode
     # can hold above zero while this one's own disclosure is still missing.
     disclosed_episode_texts: set[str] = set(disclosed)
-    intact = "\n".join(surviving)
     # F-1 (second reader, #475 round 2): the T157 branch below used to check
-    # `_carries(intact, ...)` — `intact` is `surviving`, joined, and `surviving`
-    # deliberately excludes a line that is itself `in approved` (T156's N2 fix,
-    # a few names up). N2's exclusion exists so an *approved* line cannot
-    # falsely confirm a *different*, unapproved episode's finding — a concern
-    # the T157 branch does not have, because it never raises a finding. Applied
-    # to it anyway, the exclusion was a pure undercount: a headline spelled
-    # **exactly** like the approved episode text is itself a line `in
-    # approved`, so it was dropped from `surviving` before the carried-check
-    # ever ran, and the story went to the employer verbatim while
-    # `episode_disclosures` stayed 0. `all_intact` joins `all_lines` instead —
-    # every claim line on the page, backed or not, approved or not, already
-    # collected above for the identical "is this anywhere on the page"
-    # question the shingle-match branch below asks — so an approved line
-    # carrying the story is found the same way an unapproved one already is.
+    # `_carries(intact, ...)`, where `intact` was `"\n".join(surviving)`.
+    # `surviving` deliberately excludes a line that is itself `in approved`
+    # (T156's N2 fix, a few names up). N2's exclusion exists so an *approved*
+    # line cannot falsely confirm a *different*, unapproved episode's finding
+    # — a concern the T157 branch does not have, because it never raises a
+    # finding. Applied to it anyway, the exclusion was a pure undercount: a
+    # headline spelled **exactly** like the approved episode text is itself a
+    # line `in approved`, so it was dropped from `surviving` before the
+    # carried-check ever ran, and the story went to the employer verbatim
+    # while `episode_disclosures` stayed 0. `all_intact` joins `all_lines`
+    # instead — every claim line on the page, backed or not, approved or not,
+    # already collected above for the identical "is this anywhere on the
+    # page" question the shingle-match branch below asks — so an approved
+    # line carrying the story is found the same way an unapproved one
+    # already is.
     all_intact = "\n".join(all_lines)
     for episode in master.episodes:
         if episode.text in disclosed:
@@ -1130,7 +1164,22 @@ def measure_prepared(
                 "either way, so it is reported as undecided rather than silently dropped"
             )
             continue
-        if _carries(intact, episode.text):
+        # T162: checked one `surviving` line at a time — never joined into one
+        # string — for the same reason `unbacked` is checked this way a few
+        # names down (round four, #435 F1): joining a *subset* of a
+        # document's lines can put two that were never adjacent on any real
+        # page next to each other in the joined text, and a shingle can
+        # straddle that manufactured boundary (`_words` treats a newline as
+        # ordinary whitespace, so nothing about the join stops this). This
+        # branch used to check `_carries("\n".join(surviving), episode.text)`
+        # — the seam round four closed for `unbacked`, left open here because
+        # the direction is the opposite one: a manufactured match here *adds*
+        # an unearned finding and blocks an otherwise-clean draft, rather
+        # than clearing a real one. `probe_intact_seam` mirrors round four's
+        # own `seam_head`/`seam_tail` fixture exactly, planted among
+        # `surviving` — approved, disclosed lines — rather than `unbacked`
+        # ones, since that is the population this branch draws from.
+        if any(_carries(line, episode.text) for line in surviving):
             carried += 1
             disclosed_episode_texts.add(episode.text)
             findings.append(
@@ -1190,12 +1239,12 @@ def measure_prepared(
         # module already prefers.
         #
         # Checked one `unbacked` line at a time — never joined into one
-        # string — for the reason given at `intact`, several names up:
-        # joining a *subset* of lines can put two that were never adjacent on
-        # the page next to each other, and a shingle (or a word-run
-        # equality, which is exactly as vulnerable) can straddle that
-        # manufactured boundary (round three's original defect; `_words`
-        # treats a newline as ordinary whitespace).
+        # string — for the same reason `surviving` is now checked this way a
+        # few names up (T162): joining a *subset* of lines can put two that
+        # were never adjacent on the page next to each other, and a shingle
+        # (or a word-run equality, which is exactly as vulnerable) can
+        # straddle that manufactured boundary (round three's original
+        # defect; `_words` treats a newline as ordinary whitespace).
         #
         # Thirteen states are pinned in `probe_paraphrase_undecidability` for
         # this rule specifically: N2 (12), R5-1A/B (14-15), R6-1's five
@@ -3806,6 +3855,244 @@ def _carried_disclosure_report(measured: dict[str, Any]) -> int:
 
 
 # ---------------------------------------------------------------------------
+# T162 — a manufactured seam in `intact` must not add an unearned finding
+#
+# Every state below is derived from the module docstring's own T162 section:
+# `intact` used to join a *subset* of a document's lines (`surviving`) before
+# searching it, which can put two lines that are never adjacent on any real
+# page next to each other in the joined text. Direction is the opposite of
+# round four's `unbacked` seam — a manufactured match here *adds* a finding
+# and blocks an otherwise-clean draft, never clears a real one — so every
+# ambiguous case below is resolved toward the draft staying sendable.
+
+MINIMUM_INTACT_SEAM_STATES = 3
+MINIMUM_INTACT_SEAM_CHECKS = 6
+
+
+def probe_intact_seam(root: Path) -> dict[str, Any]:
+    """Three constructed states: the seam across a document boundary, the
+    same seam within one document (an approved line excluded from
+    `surviving` by T156's own N2 rule stands between the two halves), and a
+    control that a genuine, unsplit single-line carry still confirms.
+
+    Mirrors round four's own `seam_head`/`seam_tail`/`e3_text` fixture
+    (`test_a_seam_between_two_unbacked_lines_does_not_manufacture_a_match`)
+    exactly, planted among `surviving` — approved, disclosed lines — rather
+    than `unbacked` ones, since that is the population `intact` drew from.
+    """
+    failures: list[str] = []
+    states = 0
+    checks = 0
+    manufactured = 0
+
+    def check(condition: bool, message: str) -> None:
+        nonlocal checks
+        checks += 1
+        if not condition:
+            failures.append(message)
+
+    def fresh(handle: str, master: CVMaster) -> ProfileStore:
+        nonlocal states
+        states += 1
+        identity = create_profile(root, "Probe", handle=handle, language="en")
+        store = ProfileStore(root, identity.handle)
+        write_master(store, master)
+        return store
+
+    def score(label: str, store: ProfileStore, master: CVMaster, phantom: str) -> dict[str, Any]:
+        """Prepare a state that must stay clean, then report on it.
+
+        A pre-fix build raises `ApprovalError` out of `prepare` itself — the
+        seam manufactures a finding before this function ever gets to
+        `measure_prepared` — so the refusal is caught here and folded into
+        `manufactured` the same way every other route to the numerator is,
+        rather than propagating out of the probe uncaught.
+        """
+        nonlocal manufactured
+        try:
+            prepare(
+                store,
+                master,
+                offer_id=_PROBE_OFFER,
+                advert=_PROBE_ADVERT,
+                recipient="hiring team, probe",
+                details=_FIXTURE_DETAILS,
+                asks=("Kilo", "Alfa", "reconciliation", "India"),
+                approved_episodes=(0,),
+            )
+        except ApprovalError as exc:
+            check(False, f"{label}: a clean draft was refused over the manufactured seam ({exc})")
+            manufactured += 1
+            return {"unapproved_episodes": [], "undecidable_episodes": []}
+        measured = measure_prepared(store, master, _PROBE_OFFER, 1)
+        if _named_as_finding(measured, phantom):
+            manufactured += 1
+        return measured
+
+    win = _FIXTURE_EPISODES[0].text
+
+    # 1 — the seam across a document boundary: a headline (rendered onto both
+    # `cv.md` and `letter.md`, first in each) and a skill (rendered onto both,
+    # last in each, since nothing else is chosen). Neither carries all eight
+    # words of `phantom` alone; the boundary between one document's `intact`
+    # tail and the next document's `intact` head does, and that boundary is
+    # never adjacent on any page a candidate could look at.
+    seam_head = "Kilo Lima Mike November Oscar Papa Quebec Romeo"
+    seam_tail = "Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu"
+    phantom = "Oscar Papa Quebec Romeo Sierra Tango Uniform Victor"
+    master = CVMaster(
+        headline=SourcedText(text=seam_tail),
+        skills=(Skill(name=seam_head, level=None),),
+        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom)),
+    )
+    store = fresh("intact-seam-cross-document", master)
+    measured = score("cross-document", store, master, phantom)
+    check(
+        not _named_as_finding(measured, phantom),
+        "cross-document seam: a shingle manufactured only by the document join was "
+        "reported as a confirmed finding",
+    )
+    check(
+        _named_undecidable(measured, phantom),
+        "cross-document seam: an episode this sweep has no evidence for either way "
+        "vanished with no trace instead of being reported as undecided",
+    )
+
+    # 2 — the same seam within a single document: three skills in one
+    # `Skills` section, the middle one spelled exactly like the approved
+    # episode (`win`) and therefore excluded from `surviving` by T156's own
+    # N2 rule. The candidate's actual page reads `alfa_text`, `win`,
+    # `india_text` in that order — `alfa_text` and `india_text` are never
+    # adjacent on it — but with `win`'s line dropped, `surviving` puts them
+    # back to back.
+    alfa_text = "Alfa Bravo Charlie Delta Echo Foxtrot Golf Hotel"
+    india_text = "India Juliet Kilo Lima Mike November Oscar Papa"
+    phantom2 = "Echo Foxtrot Golf Hotel India Juliet Kilo Lima"
+    master2 = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(
+            Skill(name=alfa_text, level=None),
+            Skill(name=win, level=None),
+            Skill(name=india_text, level=None),
+        ),
+        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
+    )
+    store2 = fresh("intact-seam-within-document", master2)
+    measured2 = score("within-document", store2, master2, phantom2)
+    check(
+        not _named_as_finding(measured2, phantom2),
+        "within-document seam: a shingle manufactured only by excluding the approved "
+        "line between two others was reported as a confirmed finding",
+    )
+    check(
+        _named_undecidable(measured2, phantom2),
+        "within-document seam: an episode this sweep has no evidence for either way "
+        "vanished with no trace instead of being reported as undecided",
+    )
+
+    # 3 — the control this branch exists for: a genuine, unsplit single-line
+    # carry must still confirm. An unapproved episode's full eight words sit
+    # in one CV/letter line (the headline) with nothing split across a join,
+    # so `any(_carries(line, episode.text) for line in surviving)` must find
+    # it exactly as `_carries(intact, episode.text)` used to.
+    genuine = _FIXTURE_EPISODES[1].text
+    master3 = CVMaster(
+        headline=SourcedText(text=genuine.rstrip(".")),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=genuine)),
+    )
+    store3 = fresh("intact-seam-genuine-control", master3)
+    try:
+        prepare(
+            store3,
+            master3,
+            offer_id=_PROBE_OFFER,
+            advert=_PROBE_ADVERT,
+            recipient="hiring team, probe",
+            details=_FIXTURE_DETAILS,
+            asks=("PostgreSQL",),
+            approved_episodes=(0,),
+        )
+        check(False, "genuine-carry control: an undisclosed episode's full substance sent cleanly")
+    except ApprovalError:
+        pass
+    measured3 = measure_prepared(store3, master3, _PROBE_OFFER, 1)
+    check(
+        _named_as_finding(measured3, genuine),
+        "genuine-carry control: a genuine, unsplit single-line carry was not confirmed "
+        "as a finding — the per-line rewrite over-corrected into the fail-open direction",
+    )
+
+    # 4 — the aggregate the gate reads, restated directly so a state that
+    # silently stopped asserting anything cannot leave `manufactured`
+    # unexamined.
+    check(
+        manufactured == 0,
+        f"{manufactured} constructed state(s) manufactured an unearned finding from a join seam",
+    )
+
+    return {
+        "intact_seam_states_evaluated": states,
+        "intact_seam_checks_evaluated": checks,
+        "intact_seam_manufactured_findings": manufactured,
+        "intact_seam_probe_failures": failures,
+        "gate_status": "measured" if states else "unmeasured",
+    }
+
+
+def write_intact_seam_evidence(evidence: Path = DEFAULT_T162_EVIDENCE_PATH) -> dict[str, Any]:
+    """Measure and record `status/evidence/T162.json` — beside T46's, never inside it.
+
+    Probes only, in `MINIMUM_INTACT_SEAM_STATES`'s `naming.MINIMUM_SCANNED` style:
+    the states list is the denominator, and a states list that shrank to nothing
+    must not still clear `== 0`.
+    """
+    with tempfile.TemporaryDirectory(prefix="integral-t162-") as scratch:
+        measured = probe_intact_seam(Path(scratch) / "profiles")
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _intact_seam_report(measured: dict[str, Any]) -> int:
+    """Print T162's measurement and say whether it fails the gate."""
+    print(json.dumps(measured, ensure_ascii=False))
+    failures = 0
+    for name in measured["intact_seam_probe_failures"]:
+        print(f"✗ the intact-seam boundary failed a constructed case: {name}", file=sys.stderr)
+        failures += 1
+    if measured["intact_seam_states_evaluated"] < MINIMUM_INTACT_SEAM_STATES:
+        print(
+            f"intact_seam_states_evaluated is {measured['intact_seam_states_evaluated']}, "
+            f"below the floor of {MINIMUM_INTACT_SEAM_STATES}",
+            file=sys.stderr,
+        )
+        failures += 1
+    if measured["intact_seam_checks_evaluated"] < MINIMUM_INTACT_SEAM_CHECKS:
+        print(
+            f"intact_seam_checks_evaluated is {measured['intact_seam_checks_evaluated']}, "
+            f"below the floor of {MINIMUM_INTACT_SEAM_CHECKS}",
+            file=sys.stderr,
+        )
+        failures += 1
+    if measured["intact_seam_manufactured_findings"] != 0:
+        print(
+            f"intact_seam_manufactured_findings is "
+            f"{measured['intact_seam_manufactured_findings']}, not 0",
+            file=sys.stderr,
+        )
+        failures += 1
+    if measured["gate_status"] != "measured":
+        print(
+            "no constructed state was evaluated for a manufactured join seam — nothing "
+            "was measured",
+            file=sys.stderr,
+        )
+        failures += 1
+    return 1 if failures else 0
+
+
+# ---------------------------------------------------------------------------
 # the gate — measured over the real corpus, against a stated fixture candidate
 
 # How many prepared applications the measurement also carries through the send
@@ -4119,6 +4406,11 @@ def _main(argv: list[str] | None = None) -> int:
     carried_disclosure_exit = _carried_disclosure_report(
         write_carried_disclosure_evidence(target.with_name(DEFAULT_T157_EVIDENCE_PATH.name))
     )
+    # T162's record, written on the same unconditional terms as the four above
+    # and for the same reason.
+    intact_seam_exit = _intact_seam_report(
+        write_intact_seam_evidence(target.with_name(DEFAULT_T162_EVIDENCE_PATH.name))
+    )
     return (
         1
         if (
@@ -4127,6 +4419,7 @@ def _main(argv: list[str] | None = None) -> int:
             or disclosure_exit
             or paraphrase_exit
             or carried_disclosure_exit
+            or intact_seam_exit
         )
         else 0
     )
