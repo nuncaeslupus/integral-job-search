@@ -2716,7 +2716,7 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: beside it — the floor over observed traces the name-only floor's own
 #: review round found missing.
 #: 78 since T161, whose `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` joined it
-#: the same way — this branch's own floor (committed at 76 against a
+#: the same way — this branch's own floor (originally 76, against a
 #: population of 75 base + this one) collided with main's two T158 additions
 #: at the merge, per this comment's own remedy: regenerated against the
 #: merged tree rather than picked a side (CLAUDE.md, "Two branches can write
