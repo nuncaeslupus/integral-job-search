@@ -778,6 +778,70 @@ def test_a_board_that_answered_before_failing_is_reported_as_read(
     assert "ERROR   deluge_en" in run.summary()
 
 
+def test_a_board_that_answered_before_being_refused_is_reported_as_read(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 5: the same defect R3 fixed for a timeout was still open for a
+    refusal. `_answered` excluded every refused board outright, so a 429 on
+    page two erased page one's offers from the line that says which boards
+    handed over their list — the offers were on disk with nothing crediting
+    them to any board."""
+    pages = flood_board(tmp_path / "connectors", "deluge", 40)
+    bad = "https://deluge.integral.local/jobs?page=2"
+
+    def fetch(request: ListRequest) -> Response:
+        if request.url == bad:
+            return Response(429, "Too Many Requests")
+        return Response(200, pages[request.url].html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.added > 0, run.summary()
+    assert run.unsteered == ["deluge_en"], run.summary()
+    assert "REFUSED deluge_en" in run.summary(), run.summary()
+
+
+def test_a_stale_board_that_answered_before_going_stale_is_reported_as_read(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 5: the R4-5 stale test used a zero-row page, which cannot tell
+    "excluded because empty-handed" from "excluded outright" — both read as
+    `unsteered == []`. A stale board that parsed real rows must still be
+    named as having answered, with the STALE line naming what it added
+    rather than claiming an emptiness that was never true."""
+    from integral.sourcing import _one_board
+
+    pages = flood_board(tmp_path / "connectors")
+    package = next(p for p in installed_packages(tmp_path / "connectors") if p.name == "flood_en")
+    url = "https://flood.integral.local/jobs?page=1"
+    outcome = _one_board(
+        store,
+        package,
+        None,
+        fetch=lambda request: Response(200, pages[url].html),
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=1,
+        robots=_robots(),
+        phrases=("python engineer",),
+    )
+    assert outcome.items, "the page carried no rows, so this tests the wrong rule"
+    run = Run(outcomes=[replace(outcome, stale=True)])
+    assert run.untrusted == ["flood_en"], run.summary()
+    assert run.unsteered == ["flood_en"], run.summary()
+    assert "returned their whole list: flood_en" in run.summary(), run.summary()
+    assert f"STALE   flood_en: {outcome.added} offer(s) added" in run.summary(), run.summary()
+    assert "its emptiness proves nothing" not in run.summary(), run.summary()
+
+
 def test_off_aim_rows_are_never_fetched(store: ProfileStore) -> None:
     """The filter runs before the advert page is opened — otherwise it saves
     storage and spends every request it was meant to save."""

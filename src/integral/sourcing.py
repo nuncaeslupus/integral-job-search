@@ -249,12 +249,22 @@ class Run:
 
     @staticmethod
     def _answered(outcome: BoardOutcome) -> bool:
-        """The board let us read it. A refusal and a stale connector are not
-        that, and naming either under "searched for your terms" or "returned
-        their whole list" contradicts the line printed two below (round 4,
-        R4-5) — the same conflation `parsed_nothing` exists to end.
+        """The board let us read it. An **empty-handed** refusal or stale
+        connector is not that, and naming either under "searched for your
+        terms" or "returned their whole list" contradicts the line printed two
+        below (round 4, R4-5) — the same conflation `parsed_nothing` exists to
+        end.
+
+        Empty-handed only (round 5): a board that read real rows on an
+        earlier page before a later page was refused, or before its connector
+        was found stale, did answer — `refused`/`stale` says why the round
+        stopped, not that nothing came of it. Excluding it outright named it
+        in neither list while its offers sat on disk, which is the exact
+        defect `boards_that_read_rows_without_being_reported_asked` exists to
+        catch.
         """
-        return outcome.reached_the_board and not (outcome.refused or outcome.stale)
+        gave_nothing = not (outcome.items or outcome.added)
+        return outcome.reached_the_board and not ((outcome.refused or outcome.stale) and gave_nothing)
 
     @property
     def steered(self) -> list[str]:
@@ -366,7 +376,17 @@ class Run:
             if outcome.refused:
                 lines.append(f"  REFUSED {outcome.connector}: {outcome.refused}")
             elif outcome.stale:
-                lines.append(f"  STALE   {outcome.connector}: its emptiness proves nothing")
+                if outcome.items:
+                    # Round 5: a stale connector that read real rows before
+                    # its staleness voided the rest is not "empty" — it is
+                    # already named under `unsteered`/`steered` above, and
+                    # saying so here too would contradict that line.
+                    lines.append(
+                        f"  STALE   {outcome.connector}: {outcome.added} offer(s) added "
+                        "before its connector was found stale — trust withheld for the rest"
+                    )
+                else:
+                    lines.append(f"  STALE   {outcome.connector}: its emptiness proves nothing")
             elif outcome.dropped:
                 lines.append(
                     f"  DROPPED {outcome.connector}: {outcome.dropped} of {outcome.items} "
@@ -1244,8 +1264,15 @@ def measure_flood() -> dict[str, Any]:
                 late.append(request.url)
             served.append(request.url)
             page = pages.get(request.url)
-            if request.url == _FLOOD_FAILING or page is None:
+            if page is None:
                 return Response(None, "", error="timed out")
+            if request.url == _FLOOD_FAILING:
+                # A refusal (round 5), not a transport error: deluge already
+                # has real rows on disk from page one, so this is the case
+                # `boards_that_read_rows_without_being_reported_asked` exists
+                # to catch — a timeout never reached `_answered`'s refused
+                # branch at all.
+                return Response(429, "Too Many Requests")
             return Response(200, page.html)
 
         run = source(
