@@ -41,6 +41,7 @@ from integral.connector_contract import (
 from integral.connector_shape import measure as shape_measure
 from integral.connectors import PROBE_DIRNAME
 from integral.pagination_capture import measure as pagination_measure
+from integral.repo_gate import PROBE_BASENAME
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
@@ -624,32 +625,45 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
     dashed form a reverse-DNS hostname carries, and IPv6. On the tree this
     landed on, the dashed and IPv6 readings found nothing that is not an
     address, so reading them costs no exceptions."""
-    import ipaddress
+    repo = _LIBRARY.parent
+    return _quads_in(repo, _listed_files(repo))
+
+
+def _listed_files(repo: Path) -> list[str]:
+    """What git says the repository ships right now: tracked, plus untracked and
+    not ignored, filtered to the ones that are files at this instant."""
     import subprocess
 
-    repo = _LIBRARY.parent
     listed = subprocess.run(
         ["git", "-C", str(repo), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
         check=True,
     ).stdout.decode("utf-8")
-    names = [name for name in listed.split("\0") if name and (repo / name).is_file()]
+    return [name for name in listed.split("\0") if name and (repo / name).is_file()]
+
+
+def _quads_in(repo: Path, names: list[str]) -> dict[tuple[str, str], None]:
+    """The scanning half, split out so the two rules it ends with can be pinned
+    against a `names` list a test chooses rather than against the live tree.
+
+    That split is what makes the race testable honestly: a name that is not on
+    disk *is* a file git listed a moment before it went away, so the case needs
+    no patched builtin and no writing into the working tree."""
+    import ipaddress
+
     v4 = re.compile(r"(?<![\w.])(\d{1,3})([.-])(\d{1,3})\2(\d{1,3})\2(\d{1,3})(?![\w-])")
     v6 = re.compile(r"(?<![\w:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])")
     found: dict[tuple[str, str], None] = {}
-    scanned = 0
+    skipped: list[str] = []
     for name in names:
         try:
             text = (repo / name).read_bytes().decode("latin-1")
         except FileNotFoundError:
-            # Listed above, gone by the time it is read: `repo_gate`'s
-            # evidence-stability measurement writes eight untracked probe files
-            # into the live tree and unlinks them, and under `make test`'s
-            # parallelism that happens while this scan is running. A file that
-            # vanished mid-run is not a file the repository ships. Narrow on
-            # purpose — a permission error is not this race and still raises.
+            # Listed, gone by the time it is read. Which files may do that is
+            # decided below, not here — a permission error is not this race and
+            # still raises.
+            skipped.append(name)
             continue
-        scanned += 1
         for match in v4.finditer(text):
             if text[max(0, match.start() - 2) : match.start()].rstrip().endswith("§"):
                 continue  # `§2.3.1.3`: an RFC section number, however many are cited
@@ -665,12 +679,26 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
                 continue
             if address.is_global:
                 found[(name, str(address))] = None
-    # The floor counts what was read, not what git listed. Those were the same
-    # number until the `continue` above existed; now a defect that made every
-    # read raise would leave the listing at 3800-odd and the scan at zero.
+    # Two rules, and neither implies the other.
+    #
+    # The floor is whether the scan ran at all, and its denominator is what was
+    # READ. Listing and reading were the same number until the `continue` above
+    # existed; now a defect that made every read raise would leave git's listing
+    # at its usual 1126 and the scan at zero.
+    scanned = len(names) - len(skipped)
     assert scanned > 1000, (
         f"git listed {len(names)} files and {scanned} were read — the scan did not run"
     )
+    # The second is whether that `continue` stayed narrow, and it is a rule
+    # rather than a count because a count cannot say it. `repo_gate`'s
+    # evidence-stability measurement writes probe files into the live tree and
+    # unlinks them again, and under `make test`'s parallelism that happens on
+    # another worker while this scan is running — nothing the repository ships.
+    # Any OTHER file that is listed and then gone is a git operation racing the
+    # scan, or a defect, and a gate whose whole job is to refuse committed IP
+    # literals must not drop a file and report a clean pass.
+    unexpected = sorted(n for n in skipped if Path(n).name != PROBE_BASENAME)
+    assert not unexpected, f"listed, then unreadable, and not evidence probes: {unexpected}"
     return found
 
 
@@ -708,35 +736,51 @@ def test_no_committed_file_carries_an_ip_address() -> None:
     assert not stale, f"_NOT_ADDRESSES excuses literals that no longer occur: {stale}"
 
 
-def test_the_scan_survives_a_file_that_vanishes_between_listing_and_reading(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The scan lists the tree and then reads it, and `repo_gate`'s
-    evidence-stability measurement writes eight untracked probe files into that
-    same tree and unlinks them again. `make test` runs the two on different
-    workers, so one can be listed here and deleted before it is read — a state
-    the serial suite could not reach.
+def test_the_scan_survives_a_probe_file_that_vanishes_between_listing_and_reading() -> None:
+    """`repo_gate`'s evidence-stability measurement writes probe files into the
+    live working tree and unlinks them again. `make test` puts that file and
+    this one on different xdist workers, so a probe can be listed here and be
+    gone before it is read — a state the serial suite could not reach.
 
     Pinned rather than trusted: the remedy is one `except` clause, the run it
     protects goes red a few times in a hundred, and a green suite is therefore
     the expected outcome whether the clause is there or not. Being right is not
     being pinned."""
-    real_read = Path.read_bytes
-    vanished: list[str] = []
+    repo = _LIBRARY.parent
+    names = [*_listed_files(repo), f"docs/{PROBE_BASENAME}"]
 
-    def one_file_disappears(self: Path) -> bytes:
-        if not vanished:
-            vanished.append(str(self))
-            raise FileNotFoundError(2, "No such file or directory", str(self))
-        return real_read(self)
+    found = _quads_in(repo, names)
 
-    monkeypatch.setattr(Path, "read_bytes", one_file_disappears)
-
-    found = _quads_in_every_file()
-
-    assert vanished, "nothing was read, so the vanishing was never exercised"
     sentinel = next(iter(_NOT_ADDRESSES))
-    assert sentinel in found, f"the scan stopped at {vanished[0]} instead of continuing"
+    assert sentinel in found, "the scan stopped at the vanished probe instead of continuing"
+
+
+def test_a_file_that_vanishes_and_is_not_a_probe_is_not_silently_skipped() -> None:
+    """The `except` above is for one known writer of one known filename. A file
+    that is listed and then gone for any other reason is a git operation racing
+    the scan, or a defect — and a gate whose whole job is to refuse committed IP
+    literals cannot drop a file and still report a clean pass. Widening the
+    clause to every vanished path is the reflex the first time this goes red in
+    CI, and it is the fail-open direction."""
+    repo = _LIBRARY.parent
+    names = [*_listed_files(repo), "docs/vanished-mid-scan.md"]
+
+    with pytest.raises(AssertionError, match="vanished-mid-scan"):
+        _quads_in(repo, names)
+
+
+def test_the_floor_counts_the_files_read_and_not_the_files_listed() -> None:
+    """The floor's denominator is the whole of its value, and counting git's
+    listing was green over a scan that read nothing at all. The two came apart
+    the moment a read could be skipped: a tree whose every listed file has gone
+    satisfies the narrowness rule above completely — they are all probes — so
+    the listing floor passes too, and the IP gate certifies a clean pass having
+    opened zero files."""
+    repo = _LIBRARY.parent
+    names = [f"docs/d{i}/{PROBE_BASENAME}" for i in range(1200)]
+
+    with pytest.raises(AssertionError, match="the scan did not run"):
+        _quads_in(repo, names)
 
 
 def test_the_scan_still_raises_on_a_file_it_may_not_read(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -752,7 +796,7 @@ def test_the_scan_still_raises_on_a_file_it_may_not_read(monkeypatch: pytest.Mon
     monkeypatch.setattr(Path, "read_bytes", refuse)
 
     with pytest.raises(PermissionError):
-        _quads_in_every_file()
+        _quads_in(_LIBRARY.parent, ["README.md"])
 
 
 def test_a_probe_that_is_a_regular_file_is_rejected(package: Path) -> None:

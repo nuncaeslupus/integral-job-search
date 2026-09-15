@@ -29,10 +29,11 @@ cv = [
 dev = [
     "mypy>=1.11",
     "pytest>=8.3",
-    # ~3,900 tests. `make test`'s `-n auto --dist loadfile` (Makefile, not addopts
-    # here — see [tool.pytest.ini_options] below) runs them 3x to 5x faster on a
-    # twelve-core laptop. Every review round pays the serial cost several times
-    # over (`make host-gate`, then `tools/verified_gate.sh`).
+    # ~3,900 tests. `make test` runs them 3x to 5x faster on a twelve-core
+    # laptop, under `-n auto` from the Makefile and `--dist loadfile` from
+    # [tool.pytest.ini_options] below — which says why each flag is where it is.
+    # Every review round pays the serial cost several times over
+    # (`make host-gate`, then `tools/verified_gate.sh`).
     "pytest-xdist>=3.6",
     "ruff>=0.6",
     "types-pyyaml>=6.0",

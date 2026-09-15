@@ -31,8 +31,10 @@ test:  ## run the test suite
 	# `-n auto` here, not in pyproject.toml's addopts: this target always runs the
 	# whole suite, which is where parallelism pays — 3x to 5x on a twelve-core
 	# laptop. Independent sessions re-measuring this tree landed all over that
-	# band and disagreed on the absolute seconds by ~35%, so the band is the
-	# honest unit, not a figure. A single-file invocation (`pytest tests/test_x.py`,
+	# band, and their absolute seconds disagreed as well, so the band is the
+	# honest unit and no single figure is committed here — a percentage nobody
+	# can re-derive is the same defect one decimal further out. A single-file
+	# invocation (`pytest tests/test_x.py`,
 	# what task gates and CONTRIBUTING.md use) bypasses this target and stays
 	# serial on purpose.
 	# Its companion `--dist loadfile` is NOT here — it is in addopts, where the
