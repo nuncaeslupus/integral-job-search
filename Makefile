@@ -30,15 +30,21 @@ test:  ## run the test suite
 	# which passed unnoticed for as long as the venv happened to still carry it.
 	# `-n auto --dist loadfile` here, not in pyproject.toml's addopts: this target
 	# always runs the whole suite, which is where parallelism pays — 3x to 5x on a
-	# twelve-core laptop, same pass/fail outcome every time. Independent sessions
-	# re-measuring this tree landed all over that band and disagreed on the
-	# absolute seconds by ~35%, so the band is the honest unit, not a figure.
-	# `--dist loadfile` keeps every test in a file on one worker, so a
-	# module-scoped fixture or module-level import is never split across
-	# processes — the suite is green under plain `--dist load` today and nothing
-	# here would catch that flag being dropped. A single-file invocation
-	# (`pytest tests/test_x.py`, what task gates and CONTRIBUTING.md use)
-	# bypasses this target and stays serial on purpose.
+	# twelve-core laptop. Independent sessions re-measuring this tree landed all
+	# over that band and disagreed on the absolute seconds by ~35%, so the band is
+	# the honest unit, not a figure. It is not free of consequence: running the
+	# suite concurrently made one cross-process race reachable that a single
+	# process could not reach, and the fix rides with this line rather than after
+	# it (tests/test_connector_contract.py's scan lists untracked files, and
+	# repo_gate's evidence-stability measurement deletes some of them).
+	# `--dist loadfile` keeps every test in a file on one worker, and that is
+	# load-bearing rather than a preference: tests/test_repo_gate.py is the only
+	# place in the suite that writes into the live tree, and under plain
+	# `--dist load` its three real-root cases distribute individually, find each
+	# other's probe files and skip the mutation they exist to measure. Nothing
+	# reads this recipe body, so no gate catches the flag being dropped.
+	# A single-file invocation (`pytest tests/test_x.py`, what task gates and
+	# CONTRIBUTING.md use) bypasses this target and stays serial on purpose.
 	uv run --extra dev --extra collect pytest -n auto --dist loadfile
 
 gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json

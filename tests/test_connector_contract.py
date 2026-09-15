@@ -639,7 +639,16 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
     v6 = re.compile(r"(?<![\w:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])")
     found: dict[tuple[str, str], None] = {}
     for name in names:
-        text = (repo / name).read_bytes().decode("latin-1")
+        try:
+            text = (repo / name).read_bytes().decode("latin-1")
+        except FileNotFoundError:
+            # Listed above, gone by the time it is read: `repo_gate`'s
+            # evidence-stability measurement writes eight untracked probe files
+            # into the live tree and unlinks them, and under `make test`'s
+            # parallelism that happens while this scan is running. A file that
+            # vanished mid-run is not a file the repository ships. Narrow on
+            # purpose — a permission error is not this race and still raises.
+            continue
         for match in v4.finditer(text):
             if text[max(0, match.start() - 2) : match.start()].rstrip().endswith("§"):
                 continue  # `§2.3.1.3`: an RFC section number, however many are cited
@@ -690,6 +699,37 @@ def test_no_committed_file_carries_an_ip_address() -> None:
     stale = sorted(key for key in _NOT_ADDRESSES if key not in found)
     assert not offenders, f"files carry IP addresses: {offenders}"
     assert not stale, f"_NOT_ADDRESSES excuses literals that no longer occur: {stale}"
+
+
+def test_the_scan_survives_a_file_that_vanishes_between_listing_and_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scan lists the tree and then reads it, and `repo_gate`'s
+    evidence-stability measurement writes eight untracked probe files into that
+    same tree and unlinks them again. `make test` runs the two on different
+    workers, so one can be listed here and deleted before it is read — a state
+    the serial suite could not reach.
+
+    Pinned rather than trusted: the remedy is one `except` clause, the run it
+    protects goes red a few times in a hundred, and a green suite is therefore
+    the expected outcome whether the clause is there or not. Being right is not
+    being pinned."""
+    real_read = Path.read_bytes
+    vanished: list[str] = []
+
+    def one_file_disappears(self: Path) -> bytes:
+        if not vanished:
+            vanished.append(str(self))
+            raise FileNotFoundError(2, "No such file or directory", str(self))
+        return real_read(self)
+
+    monkeypatch.setattr(Path, "read_bytes", one_file_disappears)
+
+    found = _quads_in_every_file()
+
+    assert vanished, "nothing was read, so the vanishing was never exercised"
+    sentinel = next(iter(_NOT_ADDRESSES))
+    assert sentinel in found, f"the scan stopped at {vanished[0]} instead of continuing"
 
 
 def test_a_probe_that_is_a_regular_file_is_rejected(package: Path) -> None:
