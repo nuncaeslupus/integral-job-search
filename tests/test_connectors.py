@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlsplit
 
 import pytest
 import yaml
@@ -25,9 +26,11 @@ from pydantic import ValidationError
 from integral import connector_coverage, connector_transport, connectors, process_spec, step_skills
 from integral.connectors import (
     ARRAY_PATH_CONTRACTS,
+    DOT_SEGMENTS,
     JSON_CONTENT_TYPE,
     MINIMUM_ARRAY_PATH_CONTRACTS,
     MINIMUM_PROBES,
+    QUERY_PLACEHOLDER,
     SEARCH_SOURCE,
     ConnectorError,
     FieldSelector,
@@ -2810,6 +2813,135 @@ def test_a_board_that_asks_what_to_search_for_is_not_searched_for_nothing() -> N
     for nothing in (None, "", "   "):
         with pytest.raises(ConnectorError):
             build_list_urls(connector, page_count=1, query=nothing)
+
+
+def _with_path_query_slot() -> str:
+    """The worked example with its `{query}` slot in the path, as #455's
+    `infojobs_es` has it (`…/ofertas-trabajo/{query}/barcelona`)."""
+    connector = parse_connector(VALID)
+    parts = urlsplit(connector.list.url_pattern)
+    moved = f"{parts.scheme}://{parts.netloc}{parts.path}/{{query}}/barcelona?{parts.query}"
+    return VALID.replace(connector.list.url_pattern, moved)
+
+
+@pytest.mark.parametrize("dot_segment", [".", ".."])
+def test_a_dot_segment_query_in_a_path_slot_is_refused(dot_segment: str) -> None:
+    """T175: RFC 3986 §5.2.4 removes the segment, so `…/{query}/barcelona`
+    with `..` is fetched as `…/barcelona`, carrying no search at all. It is
+    the blank query's outcome, refused the same way."""
+    connector = parse_connector(_with_path_query_slot())
+    assert QUERY_PLACEHOLDER in urlsplit(connector.list.url_pattern).path
+    with pytest.raises(ConnectorError, match="dot-segment"):
+        build_list_urls(connector, page_count=1, query=dot_segment)
+
+
+@pytest.mark.parametrize("dot_segment", [".", ".."])
+def test_a_dot_segment_query_in_the_query_string_is_a_literal_search(dot_segment: str) -> None:
+    """In the query component nothing removes it: `?q=..` asks the board for `..`."""
+    connector = parse_connector(_with_query_slot())
+    url = build_list_urls(connector, page_count=1, query=dot_segment)[0]
+    assert url.endswith(f"&q={dot_segment}")
+
+
+@pytest.mark.parametrize("dot_segment", [".", ".."])
+def test_a_slot_outside_the_path_is_read_by_urlsplit_not_by_the_first_question_mark(
+    dot_segment: str,
+) -> None:
+    """Second reader on #469, O2: the component is RFC 3986's.
+
+    A fragment slot is not in the path, so §5.2.4 never touches it and the
+    refusal must not fire. `pattern.split("?")[0]` cannot tell the two apart —
+    it reads the whole string when there is no `?` — and that is the only
+    shape where the two readings disagree.
+    """
+    connector = parse_connector(VALID)
+    # No `?` anywhere, which is the one shape where `split("?")[0]` reads the
+    # whole pattern and so calls a fragment slot a path slot.
+    moved = "https://www.examplejobs.test/jobs#{query}"
+    body = (
+        VALID.replace(connector.list.url_pattern, moved)
+        .replace("    mode: query_param\n    param: page\n", "    mode: none\n")
+        .replace("    max_pages: 5\n", "    max_pages: 1\n")
+    )
+    fragment = parse_connector(body)
+    assert fragment.list.url_pattern == moved
+    assert QUERY_PLACEHOLDER not in urlsplit(moved).path
+    assert QUERY_PLACEHOLDER in moved.split("?")[0]
+    assert build_list_urls(fragment, page_count=1, query=dot_segment)[0].endswith(f"#{dot_segment}")
+
+
+@pytest.mark.parametrize("query", ["...", ".x", "x..", "%2e%2e", " .. ", "python"])
+def test_a_path_slot_still_takes_every_query_that_is_not_a_dot_segment(query: str) -> None:
+    """Only the two dot-segments are refused. `%2e%2e` is quoted to
+    `%252e%252e` before the check, so no percent-spelling needs a case."""
+    connector = parse_connector(_with_path_query_slot())
+    url = build_list_urls(connector, page_count=1, query=query)[0]
+    assert f"/{quote(query, safe='')}/barcelona?" in url
+
+
+#: A library of 26 packages ships today. The floor is a literal with margin
+#: (T159): it refuses a scan that read nothing, and retiring a board is not a
+#: gate failure. It is not `len(connector_packages(...))`, which would be a
+#: bound derived from the thing it bounds.
+MINIMUM_PACKAGES_SCANNED_FOR_PATH_SLOTS = 20
+
+
+def test_no_path_slot_dot_segment_query_is_sent_by_any_package() -> None:
+    """T175's plan metric, `path_slot_dot_segment_queries_sent == 0`, over the
+    shipped library rather than the worked example alone.
+
+    Second reader on #469 (F1): the metric was declared in `status/plan.md`
+    and nothing carried that name, because the three tests above pin the rule
+    on a connector this file constructs. A package that grows a path slot
+    later — `infojobs_es` grew one in #455, after this rule was written — is
+    counted here without anyone remembering to add a case.
+
+    The constructed connector joins the population so the zero can never rest
+    on a library that happens to ship no path slot at all, and the scan's own
+    denominator is floored so it cannot rest on a scan that read nothing.
+    """
+    packages = connectors.connector_packages(connectors.DEFAULT_CONNECTORS_DIR)
+    assert len(packages) >= MINIMUM_PACKAGES_SCANNED_FOR_PATH_SLOTS
+
+    steerable = {"<the worked example, path slot>": parse_connector(_with_path_query_slot())}
+    for package in packages:
+        connector = load_connector(package)
+        if QUERY_PLACEHOLDER in urlsplit(connector.list.url_pattern).path:
+            steerable[package.name] = connector
+
+    sent = {}
+    for name, connector in steerable.items():
+        for dot_segment in sorted(DOT_SEGMENTS):
+            try:
+                sent[f"{name} {dot_segment!r}"] = build_list_urls(
+                    connector, page_count=1, query=dot_segment
+                )
+            except ConnectorError:
+                continue
+    assert sent == {}
+
+
+def test_the_two_builders_read_one_dot_segment_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_templated_url` refused dot-segments with its own literal. T175 moved it
+    into `DOT_SEGMENTS`, and this shows behaviourally, not by reading source,
+    that both builders read it. With the set swapped for another value, both
+    refuse that value and both let `..` through. The real set is RFC 3986
+    §3.3's two, written out here from the RFC."""
+    assert frozenset({".", ".."}) == DOT_SEGMENTS
+    monkeypatch.setattr(connectors, "DOT_SEGMENTS", frozenset({"swapped"}))
+    listing = parse_connector(_with_path_query_slot())
+    template = parse_connector(TEMPLATE_CONNECTOR)
+
+    def detail_url(value: str) -> object:
+        record = {"id": value, "slug": "x", "position": "P"}
+        (row,) = parse_list_page(template, json.dumps([record]))
+        return row.get("detail_url")
+
+    with pytest.raises(ConnectorError, match="dot-segment"):
+        build_list_urls(listing, page_count=1, query="swapped")
+    assert detail_url("swapped") is None
+    assert build_list_urls(listing, page_count=1, query="..")
+    assert detail_url("..") is not None
 
 
 def test_a_board_with_no_query_slot_reports_that_rather_than_pretending() -> None:

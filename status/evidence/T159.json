@@ -4,18 +4,8 @@
   "dynamic_population_floors": [
     {
       "module": "approval",
-      "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3391
-    },
-    {
-      "module": "approval",
-      "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3390
-    },
-    {
-      "module": "approval",
       "name": "_SHINGLE",
-      "line": 428
+      "line": 427
     },
     {
       "module": "arsenal_source",
@@ -123,6 +113,11 @@
       "line": 1144
     },
     {
+      "module": "query_capture",
+      "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
+      "line": 116
+    },
+    {
       "module": "question_bank",
       "name": "MINIMUM_PROBES",
       "line": 486
@@ -226,7 +221,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3999,
+      "line": 4018,
       "population": 15
     },
     {
@@ -262,14 +257,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2791,
+      "line": 2793,
       "population": 40
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2724,
-      "population": 79
+      "line": 2726,
+      "population": 78
     },
     {
       "module": "freshness",
@@ -470,6 +465,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 79,
+  "floors_swept_at_least": 78,
   "floors_arithmetically_checked_at_least": 36
 }
