@@ -316,16 +316,28 @@ finding — so the bug costs a regeneration over a document that was already
 clean, not a leaked disclosure. Left open on round four for that reason, and
 again on round five (R5-1) by the same second reader, on the one condition
 that it get its own task rather than only this paragraph. Closed the same way
-round four closed `unbacked`: `intact` is retired, and the check reads
+round four closed `unbacked`: `intact` is retired, and the check read
 `any(_carries(line, episode.text) for line in surviving)`, one real, whole
-line at a time, with no join and no seam to straddle. `probe_intact_seam`
+line at a time, with no join and no seam to straddle — until round 2 of the
+second reader found that unit itself too narrow: a genuine carry spanning two
+consecutive `surviving` lines in one document was lost the same way a whole
+document was too wide (F-1, second reader, #486 round 2). The check now reads
+`any(_carries("\n".join(run), episode.text) for run in surviving_runs if
+run)`, where `surviving_runs` is built once, alongside `surviving`, as its
+maximal runs of consecutive lines within one document — never the whole list
+and never a single line. The sibling `all_intact = "\n".join(all_lines)` join
+carried the identical cross-document seam one branch up, unpinned in the same
+diff that named the rule; it now draws from `all_lines_runs`, built the same
+way beside `all_lines` (F-2, second reader, #486 round 2). `probe_intact_seam`
 mirrors round four's own `seam_head`/`seam_tail`/`e3_text` fixture exactly,
 planted among `surviving` — approved, disclosed lines — rather than
 `unbacked` ones, since that is the population this branch draws from; a
 second, single-document shape plants the manufactured pair around an
-approved line excluded by N2 instead of across a document boundary, and a
-third state pins that a genuine, unsplit single-line carry — the positive
-case this branch exists for — still confirms exactly as before.
+approved line excluded by N2 instead of across a document boundary, a third
+state pins that a genuine, unsplit single-line carry — the positive case this
+branch exists for — still confirms exactly as before, a fourth pins the
+two-line carry F-1 restored, and a fifth pins that F-2's fix still refuses
+the first state's seam through the sibling branch.
 
 **Two messages this rule prints were also false where they sit, both found
 and fixed the same round (F-3, F-4).** `undecidable_episodes`' explanatory
@@ -978,6 +990,16 @@ def measure_prepared(
     documents = {path.name: path.read_text(encoding="utf-8") for path in sorted(where.glob("*.md"))}
     findings: list[str] = []
     surviving: list[str] = []
+    # F-1 (second reader, #486 round 2): the unit the carried-check below
+    # searches is a maximal run of *consecutive* claim lines within one
+    # document — never the whole `surviving` list joined (T162's own seam,
+    # closed below) and never a single line taken alone (this round's
+    # regression: a genuine carry spanning two adjacent lines went
+    # unconfirmed). A line excluded by N2, an unbacked line, or a document
+    # boundary each end a run. Built here, alongside `surviving` itself, so
+    # every call site reads the same runs rather than each reconstructing
+    # its own.
+    surviving_runs: list[list[str]] = []
     unbacked: list[str] = []
     # R8 (#435 round 8, F-3): every claim line on the page, backed or not,
     # approved or not — collected unconditionally so the undecidable
@@ -986,15 +1008,26 @@ def measure_prepared(
     # still excludes approved lines on purpose (T156's N2 fix; scanning them
     # there would let an approved line falsely confirm a different episode
     # again) — this list is for message wording **and** (T157 round 2, F-1,
-    # via `all_intact` below) for the `episode.text in approved` confirm
+    # via `all_lines_runs` below) for the `episode.text in approved` confirm
     # branch, where N2's exclusion does not apply because that branch never
     # raises a finding. It is never used for the unapproved-finding branch a
     # few lines down, where N2's exclusion is still load-bearing (checked
-    # against `surviving` directly, never against `all_lines`).
+    # against `surviving_runs` directly, never against `all_lines_runs`).
     all_lines: list[str] = []
+    # F-2 (second reader, #486 round 2): one run per document — every claim
+    # line a document actually carries, in order — built here beside
+    # `all_lines` itself rather than joined whole at the call site the way
+    # `all_intact = "\n".join(all_lines)` used to. That join could straddle
+    # a document boundary no real page ever shows, the identical seam F-1
+    # closes for `surviving`, applied to the population the
+    # approved-and-carried branch below searches.
+    all_lines_runs: list[list[str]] = []
     for name, body in documents.items():
-        for line in _claim_lines(body):
-            all_lines.append(line)
+        doc_lines = _claim_lines(body)
+        all_lines.extend(doc_lines)
+        all_lines_runs.append(doc_lines)
+        run: list[str] = []
+        for line in doc_lines:
             key = (name, line)
             if backed[key] > 0:
                 backed[key] -= 1
@@ -1005,6 +1038,8 @@ def measure_prepared(
                 # report their own approved line back as a leak.
                 if line not in approved:
                     surviving.append(line)
+                    run.append(line)
+                    continue
             else:
                 # Unbackable is unapproved. A line nothing backs is exactly what
                 # an episode looks like after the candidate tidies it out of
@@ -1018,6 +1053,13 @@ def measure_prepared(
                         else "no per-use approval backs this line"
                     )
                 )
+            # N2 exclusion or an unbacked line: either ends the run in
+            # progress, the same way a document boundary does below.
+            if run:
+                surviving_runs.append(run)
+                run = []
+        if run:
+            surviving_runs.append(run)
 
     # T114: what exempts an episode from the sweep below is a line the **document**
     # carries, never a row the manifest holds. The manifest is a record of what
@@ -1108,13 +1150,21 @@ def measure_prepared(
     # headline spelled **exactly** like the approved episode text is itself a
     # line `in approved`, so it was dropped from `surviving` before the
     # carried-check ever ran, and the story went to the employer verbatim
-    # while `episode_disclosures` stayed 0. `all_intact` joins `all_lines`
-    # instead — every claim line on the page, backed or not, approved or not,
-    # already collected above for the identical "is this anywhere on the
-    # page" question the shingle-match branch below asks — so an approved
-    # line carrying the story is found the same way an unapproved one
-    # already is.
-    all_intact = "\n".join(all_lines)
+    # while `episode_disclosures` stayed 0. The fix moved to `all_lines` —
+    # every claim line on the page, backed or not, approved or not, already
+    # collected above for the identical "is this anywhere on the page"
+    # question the shingle-match branch below asks — so an approved line
+    # carrying the story is found the same way an unapproved one already is.
+    #
+    # F-2 (second reader, #486 round 2): that fix joined `all_lines` whole
+    # (`all_intact = "\n".join(all_lines)`) — the identical seam T162 closes
+    # below for `surviving`, restated here: two claim lines from different
+    # documents are never adjacent on any real page, but joining them can
+    # still manufacture an eight-word shingle match and report a disclosure
+    # that never happened. `all_lines_runs`, built once above beside
+    # `all_lines` itself, is one run per document, never joined across a
+    # document boundary — so this branch is checked the same run-at-a-time
+    # way F-1 checks the unapproved branch below.
     for episode in master.episodes:
         if episode.text in disclosed:
             continue
@@ -1137,7 +1187,7 @@ def measure_prepared(
             # harm (the candidate confirms a send they were told is quieter
             # than it is), so this only ever adds to the count and never
             # subtracts or refuses.
-            if _carries(all_intact, episode.text):
+            if any(_carries("\n".join(run), episode.text) for run in all_lines_runs if run):
                 carried += 1
                 disclosed_episode_texts.add(episode.text)
                 continue
@@ -1164,22 +1214,30 @@ def measure_prepared(
                 "either way, so it is reported as undecided rather than silently dropped"
             )
             continue
-        # T162: checked one `surviving` line at a time — never joined into one
-        # string — for the same reason `unbacked` is checked this way a few
-        # names down (round four, #435 F1): joining a *subset* of a
-        # document's lines can put two that were never adjacent on any real
-        # page next to each other in the joined text, and a shingle can
-        # straddle that manufactured boundary (`_words` treats a newline as
-        # ordinary whitespace, so nothing about the join stops this). This
-        # branch used to check `_carries("\n".join(surviving), episode.text)`
-        # — the seam round four closed for `unbacked`, left open here because
-        # the direction is the opposite one: a manufactured match here *adds*
-        # an unearned finding and blocks an otherwise-clean draft, rather
-        # than clearing a real one. `probe_intact_seam` mirrors round four's
-        # own `seam_head`/`seam_tail` fixture exactly, planted among
-        # `surviving` — approved, disclosed lines — rather than `unbacked`
-        # ones, since that is the population this branch draws from.
-        if any(_carries(line, episode.text) for line in surviving):
+        # T162: checked one `surviving` *run* at a time — a maximal span of
+        # consecutive claim lines within a single document, built above
+        # alongside `surviving` itself — never the whole list joined and
+        # never a single line taken alone. This branch first read
+        # `_carries("\n".join(surviving), episode.text)`: joining the whole
+        # list can put two lines that were never adjacent on any real page
+        # next to each other in the joined text, and a shingle can straddle
+        # that manufactured boundary (`_words` treats a newline as ordinary
+        # whitespace, so nothing about the join stops this) — the seam this
+        # task exists to close, mirroring round four's own fix for
+        # `unbacked` (#435 F1). Narrowing straight to one line at a time
+        # over-corrected: two lines genuinely adjacent on the same page, with
+        # nothing excluded between them, are a real carry no single line
+        # confirms alone, and reporting that as undecidable rather than a
+        # finding is F-1 (second reader, #486 round 2) — a regression this
+        # module's own `genuinely_carried` ground truth already disagreed
+        # with. A run is the unit that matches both directions: never wider
+        # than one document, never narrower than what the page actually put
+        # next to what. `probe_intact_seam` mirrors round four's own
+        # `seam_head`/`seam_tail` fixture exactly, planted among `surviving`
+        # — approved, disclosed lines — rather than `unbacked` ones, since
+        # that is the population this branch draws from; a fourth state pins
+        # the restored two-line carry F-1 names.
+        if any(_carries("\n".join(run), episode.text) for run in surviving_runs if run):
             carried += 1
             disclosed_episode_texts.add(episode.text)
             findings.append(
@@ -1239,12 +1297,13 @@ def measure_prepared(
         # module already prefers.
         #
         # Checked one `unbacked` line at a time — never joined into one
-        # string — for the same reason `surviving` is now checked this way a
-        # few names up (T162): joining a *subset* of lines can put two that
-        # were never adjacent on the page next to each other, and a shingle
-        # (or a word-run equality, which is exactly as vulnerable) can
-        # straddle that manufactured boundary (round three's original
-        # defect; `_words` treats a newline as ordinary whitespace).
+        # string — for the same reason `surviving` is checked one run at a
+        # time a few names up (T162, F-1 second reader #486 round 2):
+        # joining a *subset* of lines can put two that were never adjacent
+        # on the page next to each other, and a shingle (or a word-run
+        # equality, which is exactly as vulnerable) can straddle that
+        # manufactured boundary (round three's original defect; `_words`
+        # treats a newline as ordinary whitespace).
         #
         # Thirteen states are pinned in `probe_paraphrase_undecidability` for
         # this rule specifically: N2 (12), R5-1A/B (14-15), R6-1's five
@@ -3865,15 +3924,19 @@ def _carried_disclosure_report(measured: dict[str, Any]) -> int:
 # and blocks an otherwise-clean draft, never clears a real one — so every
 # ambiguous case below is resolved toward the draft staying sendable.
 
-MINIMUM_INTACT_SEAM_STATES = 3
-MINIMUM_INTACT_SEAM_CHECKS = 6
+MINIMUM_INTACT_SEAM_STATES = 5
+MINIMUM_INTACT_SEAM_CHECKS = 9
 
 
 def probe_intact_seam(root: Path) -> dict[str, Any]:
-    """Three constructed states: the seam across a document boundary, the
+    """Five constructed states: the seam across a document boundary, the
     same seam within one document (an approved line excluded from
-    `surviving` by T156's own N2 rule stands between the two halves), and a
-    control that a genuine, unsplit single-line carry still confirms.
+    `surviving` by T156's own N2 rule stands between the two halves), a
+    control that a genuine, unsplit single-line carry still confirms, a
+    genuine two-line carry the per-line rewrite lost (F-1, second reader,
+    #486 round 2), and the identical cross-document seam manufactured by
+    the sibling approved-and-carried branch (F-2, second reader, #486
+    round 2).
 
     Mirrors round four's own `seam_head`/`seam_tail`/`e3_text` fixture
     (`test_a_seam_between_two_unbacked_lines_does_not_manufacture_a_match`)
@@ -3928,6 +3991,30 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
         if _named_as_finding(measured, phantom):
             manufactured += 1
         return measured
+
+    # F-2 (second reader, #486 round 2): state 5's own closures, duplicated
+    # here rather than imported — `probe_carried_disclosures_reported`
+    # defines the identical trio for the identical reason (T157's own
+    # construction), and each probe in this module stays self-contained
+    # rather than sharing helpers across probes.
+    def where(store: ProfileStore) -> Path:
+        return store.path(*_version_parts(_PROBE_OFFER, 1))
+
+    def drop_line(store: ProfileStore, text: str, document: str = "letter.md") -> None:
+        path = where(store) / document
+        kept = [line for line in path.read_text(encoding="utf-8").splitlines() if line != text]
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    def drop_episode_row(store: ProfileStore, text: str) -> None:
+        """Remove the manifest's row for one episode, leaving every other row."""
+        path = where(store) / "manifest.json"
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw["claims"] = [
+            claim
+            for claim in raw["claims"]
+            if not (claim["section"] == "episodes" and claim["text"] == text)
+        ]
+        path.write_text(json.dumps(raw), encoding="utf-8")
 
     win = _FIXTURE_EPISODES[0].text
 
@@ -4023,7 +4110,87 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
         "as a finding — the per-line rewrite over-corrected into the fail-open direction",
     )
 
-    # 4 — the aggregate the gate reads, restated directly so a state that
+    # 4 — F-1 (second reader, #486 round 2): the regression this task's own
+    # per-line rewrite introduced. Same `alfa_text`/`india_text`/`phantom2`
+    # as state 2, but with no `win` skill between them: nothing excluded
+    # sits between the two skill lines on the real page, so this is not a
+    # seam — it is exactly the adjacency `genuinely_carried` already
+    # confirms, and `prepare` must refuse it, the same control state 3
+    # already applies to a single line, applied here to a genuine two-line
+    # carry the per-line rewrite lost.
+    master4 = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(
+            Skill(name=alfa_text, level=None),
+            Skill(name=india_text, level=None),
+        ),
+        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
+    )
+    store4 = fresh("intact-seam-two-line-carry", master4)
+    try:
+        prepare(
+            store4,
+            master4,
+            offer_id=_PROBE_OFFER,
+            advert=_PROBE_ADVERT,
+            recipient="hiring team, probe",
+            details=_FIXTURE_DETAILS,
+            asks=("Alfa", "India"),
+            approved_episodes=(0,),
+        )
+        check(False, "two-line carry: a genuine carry spanning two adjacent lines sent cleanly")
+    except ApprovalError:
+        pass
+    measured4 = measure_prepared(store4, master4, _PROBE_OFFER, 1)
+    check(
+        _named_as_finding(measured4, phantom2),
+        "two-line carry: a genuine carry spanning two lines truly adjacent on the page was "
+        "not confirmed as a finding — the per-line rewrite over-corrected into the fail-open "
+        "direction",
+    )
+
+    # 5 — F-2 (second reader, #486 round 2): the sibling join in the
+    # approved-and-carried branch (`all_intact = "\n".join(all_lines)`,
+    # T157) carries the identical cross-document seam state 1 closes —
+    # state 1's own geometry, `phantom` approved instead of left
+    # unapproved, so the branch that must never raise a finding is the one
+    # exercised. Approving `phantom` writes it its own dedicated line and
+    # manifest row; T157's own `drop_episode_row`/`drop_line` construction
+    # strips both, leaving only the manufactured `cv.md`-tail/`letter.md`-
+    # head join as anything that could confirm it.
+    master5 = CVMaster(
+        headline=SourcedText(text=seam_tail),
+        skills=(Skill(name=seam_head, level=None),),
+        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom)),
+    )
+    store5 = fresh("intact-seam-approved-xdoc", master5)
+    prepare(
+        store5,
+        master5,
+        offer_id=_PROBE_OFFER,
+        advert=_PROBE_ADVERT,
+        recipient="hiring team, probe",
+        details=_FIXTURE_DETAILS,
+        asks=("Kilo", "Alfa", "reconciliation", "India"),
+        approved_episodes=(0, 1),
+    )
+    drop_episode_row(store5, phantom)
+    drop_line(store5, phantom)
+    measured5 = measure_prepared(store5, master5, _PROBE_OFFER, 1)
+    if phantom in measured5["disclosed_episode_texts"]:
+        manufactured += 1
+    check(
+        phantom not in measured5["disclosed_episode_texts"],
+        "approved cross-document seam: a disclosure manufactured only by the document "
+        "join was counted as a confirmed disclosure",
+    )
+    check(
+        _named_undecidable(measured5, phantom),
+        "approved cross-document seam: an approved episode this sweep has no evidence "
+        "for either way vanished with no trace instead of being reported as undecided",
+    )
+
+    # 6 — the aggregate the gate reads, restated directly so a state that
     # silently stopped asserting anything cannot leave `manufactured`
     # unexamined.
     check(
