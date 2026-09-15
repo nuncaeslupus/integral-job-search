@@ -107,6 +107,20 @@ class Location(Strict):
     remote: str | None = None
 
 
+#: T170. A board states a pay period in its own words — Lever's
+#: `per-year-salary`, Himalayas' `annual`, schema.org's `MONTH` — and before
+#: this type existed `period` accepted any string, so `bulk_filter`'s
+#: `offer.salary.period == floor.period` compared a candidate's `year`/`month`
+#: floor against words no connector ever wrote, and the floor dropped nothing:
+#: fail-open (#454). Closing the type is what makes that comparison possible —
+#: `salary_period.normalize_period` is the one place every board's word is
+#: mapped onto a member of this `Literal`, and nothing else may construct a
+#: `Salary` with a period outside it. `typing.get_args(SalaryPeriod)` is the
+#: vocabulary itself, read rather than restated, everywhere a floor, a
+#: catalogue or a test needs to know its members.
+SalaryPeriod = Literal["year", "month", "week", "day", "hour"]
+
+
 class Salary(Strict):
     """§5.2's `salary` object.
 
@@ -117,12 +131,19 @@ class Salary(Strict):
     — silently turning "we estimated this" into "the employer stated this".
     Forcing the caller to write `stated=` every time is what keeps that
     decision visible at every call site instead of buried in a default.
+
+    `period` is `SalaryPeriod | None`, not a bare string (T170): a period
+    stated in a board's own words is normalised to this vocabulary before it
+    ever reaches a `Salary`, or it is not stated at all — see
+    `salary_period.normalize_period`. Pydantic enforces this at every
+    construction site, connectors included, which is what stops a new
+    connector from reintroducing a raw board label by forgetting to call it.
     """
 
     min: float | None = None
     max: float | None = None
     currency: str | None = None
-    period: str | None = None
+    period: SalaryPeriod | None = None
     stated: bool
 
 

@@ -1333,7 +1333,12 @@ def test_one_broken_json_block_does_not_lose_the_others() -> None:
 def test_a_json_salary_reaches_the_offer_as_real_numbers() -> None:
     """The point of the route: `minValue` is a number, so nothing has to be
     split out of a string, and `Salary` carries figures rather than a `stated`
-    flag with nothing behind it."""
+    flag with nothing behind it.
+
+    `unitText` arrives as schema.org's `"MONTH"` and is normalised to `"month"`
+    (T170) — `build_offer` maps every board's own period word onto
+    `offers.SalaryPeriod` before a `Salary` is ever built, which is also what
+    lets a candidate's `year`/`month` pay floor compare against it at all."""
     connector = parse_connector(JSON_DETAIL_CONNECTOR)
     offer = build_offer(
         connector,
@@ -1342,7 +1347,7 @@ def test_a_json_salary_reaches_the_offer_as_real_numbers() -> None:
     )
     assert offer.salary is not None
     assert (offer.salary.min, offer.salary.max) == (15000.0, 21500.0)
-    assert (offer.salary.currency, offer.salary.period) == ("PLN", "MONTH")
+    assert (offer.salary.currency, offer.salary.period) == ("PLN", "month")
     assert offer.salary.stated is True
 
 

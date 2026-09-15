@@ -103,6 +103,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from integral.dimensions import Language
 from integral.offers import Location, Offer, Salary, SourceKind, compute_offer_id
+from integral.salary_period import normalize_period
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -3366,17 +3367,30 @@ def build_offer(
     # produced `Salary(stated=True)` carrying no numbers at all. That is worse
     # than no salary: `stated` is what the ranking reads to mean "the employer
     # said", and it would be saying it about nothing.
+    #
+    # T170: `raw_period` is normalised to `offers.SalaryPeriod` here, once, for
+    # every connector. A period the board *stated* but this vocabulary cannot
+    # represent (Lever's `one-time`, or any label `salary_period.normalize_period`
+    # does not recognise) is not "no period" — it is a wage this system refuses
+    # to guess the unit of, so the whole salary is dropped rather than kept with
+    # a blanked-out period. An *absent* `salary_period` field is unaffected:
+    # `period` stays `None`, exactly as it did before this table existed.
     salary = None
-    minimum = _as_wage(merged.get("salary_min"))
-    maximum = _as_wage(merged.get("salary_max"))
-    if minimum is not None or maximum is not None:
-        salary = Salary(
-            min=minimum,
-            max=maximum,
-            currency=merged.get("salary_currency"),
-            period=merged.get("salary_period"),
-            stated=True,
-        )
+    raw_period = merged.get("salary_period")
+    period = normalize_period(raw_period)
+    if raw_period and period is None:
+        pass  # a stated, unrepresentable period — no salary at all (see above)
+    else:
+        minimum = _as_wage(merged.get("salary_min"))
+        maximum = _as_wage(merged.get("salary_max"))
+        if minimum is not None or maximum is not None:
+            salary = Salary(
+                min=minimum,
+                max=maximum,
+                currency=merged.get("salary_currency"),
+                period=period,
+                stated=True,
+            )
     try:
         return Offer(
             id=compute_offer_id(text),

@@ -1,0 +1,14 @@
+{
+  "period_contracts_failing": 0,
+  "gate_status": "measured",
+  "table_size": 11,
+  "vocabulary": [
+    "day",
+    "hour",
+    "month",
+    "week",
+    "year"
+  ],
+  "defects": [],
+  "period_contracts_at_least": 20
+}

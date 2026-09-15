@@ -1,8 +1,8 @@
 {
   "candidate_facing_strings_without_a_translation": 0,
   "stale_translations": 0,
-  "candidate_facing_strings_evaluated": 48,
-  "strings_scanned": 24,
+  "candidate_facing_strings_evaluated": 54,
+  "strings_scanned": 27,
   "languages_served": [
     "es",
     "ca"
