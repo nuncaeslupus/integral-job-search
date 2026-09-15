@@ -650,12 +650,75 @@ class _TreeBuilder(HTMLParser):
             self._stack[-1].children.append(data)
 
 
+def _neutralise_unterminated_tail(markup: str) -> str:
+    """Make an EOF-truncated tag or comment survive as text, deterministically.
+
+    A construct that opens with `<` and never finds its closing token before
+    EOF can never become a real tag, comment, declaration or PI — there is
+    nothing left in the document to close it with. *What* a tokeniser does
+    with that unparseable remainder is not settled across CPython patches:
+    measured directly against three builds this repository's own CI can draw
+    (the system 3.12.3-labelled build, a downloaded 3.12.11, and 3.11.15), an
+    EOF-truncated start tag is silently discarded by one and resurfaces as
+    literal data by another, and an EOF-truncated comment reaches
+    `handle_comment` on one build and `handle_data` on another. Pinning
+    `MARKUP_CONTRACTS` to whichever behaviour a given CI run happens to draw
+    is exactly a check pinned to a proxy for the property (CLAUDE.md's
+    second-reader section) rather than to the property itself — the
+    candidate should see the same text regardless of which patch of 3.12 CI
+    happens to install — so this is resolved before the value ever reaches
+    `html.parser`, closed rather than enumerated:
+
+    * a truncated comment (an `<!--` with no later `-->`) is dropped, content
+      and all. It is still a comment — a comment contributes no text whether
+      or not it manages to close, exactly the rule an ordinary, *well-formed*
+      comment already follows a few lines up in `MARKUP_CONTRACTS`. A `>`
+      inside it is literal comment content, not a close, exactly as WHATWG's
+      comment states require — only a literal `-->` ends one.
+    * anything else that opens with `<` and has no `>` anywhere after it can
+      never be a real tag either, so that `<` (and every one after it, since
+      nothing past this point can close anything) is neutralised to a
+      character reference and the remainder survives as ordinary prose — the
+      same outcome a stray, non-tag `<` already gets elsewhere in this module
+      (`5 < 10 years`). Leaving the interpreter's own EOF recovery decide is
+      fail-open in the direction that matters here: it can silently delete
+      the rest of a candidate-visible field on a bare `<` that was never
+      markup at all.
+
+    Walked left to right rather than anchored on the document's last `>`:
+    an outer, never-closed comment can itself contain `<tag>`-looking text
+    whose own `>` would otherwise be mistaken for the point everything is
+    "closed up to" — `<!-- <p>looks closed</p> but is not -->`'s outer
+    comment has no real close (this constructed one does, on purpose, so it
+    stays a no-op; a copy with the trailing `-->` deleted is what the tests
+    exercise). Every ordinary `<...>` this scan passes over is treated as
+    settled without asking whether it is *individually* well-formed — this
+    function's only job is spotting a remainder with no closing token left
+    anywhere in the document, not re-validating markup that already has one.
+    """
+    i = 0
+    while True:
+        lt = markup.find("<", i)
+        if lt == -1:
+            return markup
+        if markup.startswith("<!--", lt):
+            close = markup.find("-->", lt + 4)
+            if close == -1:
+                return markup[:lt]
+            i = close + 3
+            continue
+        gt = markup.find(">", lt)
+        if gt == -1:
+            return markup[:lt] + markup[lt:].replace("<", "&lt;")
+        i = gt + 1
+
+
 def parse_html(html: str) -> Node:
     """Turn a page of markup into a `Node` tree. `HTMLParser` tokenises;
     nothing it produces is ever executed — every tag becomes a `Node`, every
     run of text becomes a string, full stop."""
     builder = _TreeBuilder()
-    builder.feed(html)
+    builder.feed(_neutralise_unterminated_tail(html))
     builder.close()
     return builder.root
 

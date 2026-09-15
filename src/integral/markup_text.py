@@ -396,21 +396,30 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
     (
         "html_text",
         "a <b 10 years",
-        "a",
-        "WHATWG tag open state: EOF inside an incomplete tag is a parse error "
-        "that discards the tag and everything after it. html.parser matched "
-        "this only from 3.12.12's WHATWG-alignment backport - an earlier "
-        "pinning of this row to the pre-backport behaviour (emitting the "
-        "remainder as data) passed on an older 3.12.x and failed on CI's newer "
-        "patch, which is what this row now asserts instead",
+        "a <b 10 years",
+        "FIXED, not pinned: an EOF-truncated tag has no settled cross-patch "
+        "behaviour (html.parser has been measured to discard it, and "
+        "separately to resurface it as data, on different CPython 3.12 "
+        "builds this repository's own CI can draw) - so connectors.py's "
+        "_neutralise_unterminated_tail() now recovers it as literal prose "
+        "before parsing, deterministically, rather than pinning this row to "
+        "whichever interpreter behaviour a given CI run happens to draw. "
+        "Silently truncating the rest of a candidate-visible field on a bare "
+        "'<' that was never markup at all is the FAIL-OPEN case this repo "
+        "weights over a fail-closed one",
     ),
     (
         "html_text",
         "<p>Remote</p><!-- unterminated",
         "Remote",
-        "same family: WHATWG's comment state discards an unterminated comment "
-        "at EOF entirely rather than emitting its content, and html.parser has "
-        "matched that since the same 3.12.12 backport",
+        "GENUINE CEILING, argued from the already-settled rule a few rows up "
+        "rather than from any interpreter's EOF recovery: a comment "
+        "contributes no text whether or not it manages to close, exactly "
+        "like the terminated '<!-- salary 200k -->' row above. "
+        "_neutralise_unterminated_tail() drops an EOF-truncated '<!--' for "
+        "that reason, so the result is the same on every interpreter tested "
+        "rather than depending on whether html.parser flushes it via "
+        "handle_comment or handle_data at EOF",
     ),
 )
 

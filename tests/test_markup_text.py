@@ -15,7 +15,14 @@ import pytest
 from pydantic import ValidationError
 
 from integral import markup_text
-from integral.connectors import JsonSource, Node, _take, parse_connector, parse_html
+from integral.connectors import (
+    JsonSource,
+    Node,
+    _neutralise_unterminated_tail,
+    _take,
+    parse_connector,
+    parse_html,
+)
 
 
 def test_no_fixture_offer_text_carries_markup() -> None:
@@ -159,3 +166,64 @@ def test_a_malformed_marked_section_ends_at_the_next_gt() -> None:
     # rather than either raising or discarding everything to EOF.
     assert _take("html_text", "<p>a</p><![foo]><p>b</p>") == "a b"
     assert _take("html_text", "<p>a</p><![data[b]<p>c</p>") == "a c"
+
+
+def test_an_eof_truncated_tag_survives_as_prose() -> None:
+    # An EOF-truncated start tag has no settled behaviour across CPython
+    # patches (measured: silently discarded by one build, resurfaced as data
+    # by another), so pinning MARKUP_CONTRACTS to either is a check against a
+    # proxy for the property. _neutralise_unterminated_tail() makes the
+    # outcome deterministic instead: the '<' can never open a real tag (there
+    # is no '>' left to close it with), so it is neutralised and the rest of
+    # the field survives - the fail-open direction this repo weights.
+    assert _take("html_text", "a <b 10 years") == "a <b 10 years"
+    assert _take("html_text", "5 years <b experience needed") == "5 years <b experience needed"
+    # An EOF-truncated end tag is the same family.
+    assert _take("html_text", "Remote </b 10 years") == "Remote </b 10 years"
+
+
+def test_an_eof_truncated_comment_still_contributes_no_text() -> None:
+    # The other half of the same fix, argued from the rule an ordinary,
+    # *terminated* comment already follows a few lines up in
+    # MARKUP_CONTRACTS: a comment is never text, whether or not it manages to
+    # close. Kept deterministic rather than left to whichever of
+    # handle_comment/handle_data a given interpreter flushes it through at
+    # EOF.
+    assert _take("html_text", "<p>Remote</p><!-- unterminated") == "Remote"
+    assert _take("html_text", "<!-- <p>nested-looking</p> unterminated") is None
+
+
+def test_neutralise_unterminated_tail_is_a_no_op_on_well_formed_markup() -> None:
+    # Every construct in these already finds its own '>' (or, for the entity
+    # rows, has no literal '<' at all) - the function must leave them
+    # byte-for-byte untouched rather than rewrite markup that was never
+    # pathological.
+    for markup in (
+        "<p>Remote</p>",
+        "&lt;p&gt;Remote&lt;/p&gt;",
+        "<![CDATA[Remote]]>",
+    ):
+        assert _neutralise_unterminated_tail(markup) == markup
+
+
+def test_neutralise_unterminated_tail_still_reads_correctly_on_a_bare_lt() -> None:
+    # `5 < 10 years` DOES have its lone '<' rewritten to '&lt;' here (it has
+    # no '>' anywhere after it either, the same shape as the pathological
+    # cases) - that is not the no-op the rows above get, but it must still
+    # read back as exactly the same text once html.parser resolves the
+    # reference, since this '<' was already destined to survive as a literal
+    # character rather than open anything.
+    assert _neutralise_unterminated_tail("5 < 10 years") != "5 < 10 years"
+    assert _take("html_text", "5 < 10 years") == "5 < 10 years"
+
+
+def test_neutralise_unterminated_tail_actually_transforms_the_pathological_inputs() -> None:
+    # A no-op fix would still make the two MARKUP_CONTRACTS rows above pass
+    # coincidentally if parse_html's own tolerance happened to agree - it
+    # doesn't here, but this pins the function itself to actually act,
+    # so a future refactor that quietly turns it into pass-through is caught
+    # at this seam rather than only by however html.parser happens to behave.
+    assert _neutralise_unterminated_tail("a <b 10 years") != "a <b 10 years"
+    assert _neutralise_unterminated_tail("<p>Remote</p><!-- unterminated") != (
+        "<p>Remote</p><!-- unterminated"
+    )
