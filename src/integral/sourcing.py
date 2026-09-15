@@ -48,6 +48,7 @@ import time
 import unicodedata
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -273,6 +274,61 @@ class BoardOutcome:
         )
 
 
+#: `BoardOutcome` fields that are never "a row that never became an offer":
+#: totals (`items`, `added`), the offer count itself, and board/request
+#: metadata. Named as an exclusion rather than the inclusion T172 wrote
+#: (`dropped + off_aim + unopened + over_ceiling`, by hand, at both call
+#: sites) — CLAUDE.md's own record on this shape: "an enumeration has no
+#: last element … a twin derived from `dataclasses.fields` so a field added
+#: later is varied without anyone remembering to." A fifth way for a row to
+#: fail to become an offer joins `_unrealized_rows` (and both of its callers)
+#: the moment it is declared on the dataclass; nothing here has to change.
+_NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
+    {
+        "connector",
+        "url",
+        "steered",
+        "query",
+        "status",
+        "items",
+        "added",
+        "drop_reason",
+        "stale",
+        "refused",
+        "skipped",
+        "error",
+        "detail_needed",
+        "detail_fetched",
+        "employers_failed",
+        "source_kind",
+    }
+)
+
+
+def _fields_outside(cls: type, excluded: frozenset[str]) -> tuple[str, ...]:
+    """Every field `cls` (a dataclass) declares, except the names in `excluded`.
+
+    The idiom `tests/test_review_reader.py`'s `_twin_varying_every_non_input_field`
+    uses for "every field but the named inputs": inclusion is the default, so a
+    field added to the dataclass later is picked up on its own, with no call
+    site to update. Order follows declaration order.
+    """
+    return tuple(f.name for f in dataclass_fields(cls) if f.name not in excluded)
+
+
+#: The "row that never became an offer" partition, derived once from
+#: `BoardOutcome` itself rather than hand-listed at each of its two call
+#: sites (`Run.employer_boards`, `measure_flood`'s `rows_not_accounted_for`).
+_UNREALIZED_ROW_FIELDS = _fields_outside(BoardOutcome, _NOT_AN_UNREALIZED_ROW_FIELD)
+
+
+def _unrealized_rows(outcome: BoardOutcome) -> int:
+    """Rows `outcome` parsed that never became an offer, summed across every
+    `BoardOutcome` field the dataclass itself marks as such (see
+    `_UNREALIZED_ROW_FIELDS`)."""
+    return sum(getattr(outcome, name) for name in _UNREALIZED_ROW_FIELDS)
+
+
 @dataclass
 class Run:
     """A whole sourcing pass, reported rather than summed into one number."""
@@ -326,7 +382,16 @@ class Run:
     @staticmethod
     def _answered(outcome: BoardOutcome) -> bool:
         """The board let us read it, or read enough that some of what it
-        handed over reached disk.
+        handed over reached disk **in parsed form**.
+
+        That is the one-sentence property this and `reached_the_board` and
+        `employer_boards` are all pinned against, stated once here because
+        round 6's second-reader report caught two of the three disagreeing
+        about it: a board's work counts as reported when the board answered
+        at all, and — for a stale connector specifically — when it parsed at
+        least one row, whether or not that row survived dedup. Staleness
+        excuses an outcome only when there was truly nothing to attribute,
+        never when real rows came back and happened to be re-sighted.
 
         Round 4 (R4-5) excluded every refused or stale outcome from both
         `steered` and `unsteered`, unconditionally — which silently
@@ -344,18 +409,24 @@ class Run:
         case on its own, so it no longer needs to. `stale` is the one flag
         `reached_the_board` does not fold in, because staleness says
         nothing about whether the round otherwise succeeded — so it is
-        still gated here, on the same `added` signal (offers actually
-        reaching disk, not merely rows parsed) rather than `items`: a stale
-        connector that parsed rows nobody ended up adding (all re-sighted,
-        say) is exactly as unproductive as one that parsed nothing, and
-        `added` — not `items` — is the property both this and
-        `reached_the_board` are pinned against. Naming a productive but
+        still gated here, but on `items`, not `added`: round 6's F1 measured
+        a stale board every one of whose rows was re-sighted
+        (`items == 120, added == 0`) and found it excluded from `unsteered`
+        with the only line about it reading "its emptiness proves nothing" —
+        over 120 real, parsed rows. That is the same shape
+        `employer_boards`'s own docstring already calls "a result this
+        board produced" for `added == 0` (#462 rounds 2 and 3, G3 and
+        H1/H2); this function disagreed with that stance about the identical
+        signal, and it was the one that had it backwards. `items`, not
+        `added`, is what "the connector's emptiness proves nothing" is
+        actually about: whether it parsed anything at all, not whether what
+        it parsed later deduplicated to zero. Naming a productive but
         refused-or-stale board under "searched for your terms" or "returned
         their whole list" does not contradict the REFUSED/STALE line
         printed two below; the two report different things — one where the
         offers came from, the other why the board stopped.
         """
-        return outcome.reached_the_board and not (outcome.stale and not outcome.added)
+        return outcome.reached_the_board and not (outcome.stale and not outcome.items)
 
     @property
     def steered(self) -> list[str]:
@@ -409,7 +480,8 @@ class Run:
         named here it would claim results it never gave. Not `items` either:
         a row that builds no offer is not a result. And not `added`, which is
         0 for a re-sighting that is still a result this board produced (#462
-        rounds 2 and 3, G3 and H1/H2).
+        rounds 2 and 3, G3 and H1/H2) — the same stance `_answered` states
+        for the identical `added == 0` signal.
 
         `dropped` alone was a complete partition of "not an offer" until
         T167 added `off_aim`, `unopened` and `over_ceiling` — three more ways
@@ -418,13 +490,48 @@ class Run:
         board every one of whose rows was off-aim or past the ceiling still
         satisfied `items > dropped` with `dropped == 0`, and registered a
         result it never gave.
+
+        Round 6's second-reader report (F2): that four-term subtraction was
+        hand-listed here **and** independently hand-listed again in
+        `measure_flood`'s `rows_not_accounted_for`, and two of the four terms
+        (`unopened`, `over_ceiling`) were asserted by no test in either
+        place — dropping either left every evidence key unmoved. `_unrealized_rows`
+        (module level, derived from `BoardOutcome`'s own fields via
+        `_fields_outside`) replaces both hand-listings with one definition, so
+        a fifth bucket a future task adds joins both call sites the moment it
+        is declared.
         """
         return self._boards(
-            lambda o: (
-                o.source_kind == "employer"
-                and o.items > o.dropped + o.off_aim + o.unopened + o.over_ceiling
-            )
+            lambda o: (o.source_kind == "employer" and o.items > _unrealized_rows(o))
         )
+
+    @property
+    def unaccounted_for(self) -> list[str]:
+        """Boards whose read reached disk (rows parsed, or offers added) but
+        that appear in neither `steered` nor `unsteered`.
+
+        The mirror `measure_flood` checks (round 3, R3): excluding a board
+        from every disposition without saying why attributes real offers, or
+        real parsed rows, to nothing — the same failure `deluge_en` supplying
+        30 offers under only an ERROR line was.
+
+        Scoped to `reached_the_board`, the same predicate `_answered` already
+        requires before naming a board anywhere. A board `reached_the_board`
+        correctly excludes — T174's refused-with-nothing-ever-added case,
+        `items > 0` and `added == 0` — belongs in neither list *on purpose*,
+        and this must not flag it: round 6's F1 measured exactly that
+        (`getmanfred_es`, `items == 3, added == 0, refused`) against the old,
+        unscoped population (`o.items or o.added`) and found it flagged here
+        in the same run `tests/test_sourcing.py` asserts, forty lines away,
+        that the board must not be listed as reached — the same test file
+        asserting an invariant and its own negation. Filtering by
+        `reached_the_board` first closes that: this and `steered`/`unsteered`
+        now agree on the same one-sentence property `_answered` states.
+        """
+        population = {
+            o.connector for o in self.outcomes if o.reached_the_board and (o.items or o.added)
+        }
+        return sorted(population - set(self.steered) - set(self.unsteered))
 
     @property
     def refused(self) -> list[str]:
@@ -1557,8 +1664,19 @@ def measure_flood() -> dict[str, Any]:
             if len(on_disk()) >= OFFER_CEILING:
                 late.append(request.url)
             served.append(request.url)
+            if request.url == _FLOOD_FAILING:
+                # A real refusal (round 6, F1/E-M4), not a transport error: a
+                # transport error sets `.error`, which `_answered`'s and
+                # `reached_the_board`'s exclusion logic never inspects, so a
+                # regression that blanket-excludes every `refused` board
+                # (round 4's own defect, reinstated) had nothing here to act
+                # on and `flood_violations` could not move. Deluge already has
+                # real offers on disk from page one when this fires — exactly
+                # F1's shape — so this is now the fixture that closes the
+                # gap the round-6 report named.
+                return Response(429, "", error=None)
             page = pages.get(request.url)
-            if request.url == _FLOOD_FAILING or page is None:
+            if page is None:
                 return Response(None, "", error="timed out")
             return Response(200, page.html)
 
@@ -1588,19 +1706,22 @@ def measure_flood() -> dict[str, Any]:
         ),
         # The mirror (round 3, R3): a board that read rows and is reported as
         # neither searched nor handing over its list. One direction alone let
-        # `deluge_en` supply 30 offers and be named only as an ERROR.
-        "boards_that_read_rows_without_being_reported_asked": len(
-            {o.connector for o in run.outcomes if o.items or o.added}
-            - set(run.steered)
-            - set(run.unsteered)
-        ),
+        # `deluge_en` supply 30 offers and be named only as an ERROR. `Run.
+        # unaccounted_for` is the same check `Run` itself exposes (round 6,
+        # F1) — scoped to `reached_the_board` so a board T174 deliberately
+        # excludes (refused, nothing ever added) is not double-counted as a
+        # violation of a rule it was never meant to satisfy.
+        "boards_that_read_rows_without_being_reported_asked": len(run.unaccounted_for),
         "rows_served_not_reported": abs(
             sum(o.items for o in run.outcomes)
             - sum(len(page.matching) + len(page.off_aim) for page in answered)
         ),
+        # Round 6, F2: `_unrealized_rows` is the same derived partition
+        # `Run.employer_boards` uses, so a bucket added to `BoardOutcome`
+        # later moves both instead of only the one someone remembered to
+        # update.
         "rows_not_accounted_for": sum(
-            abs(o.items - (o.off_aim + o.over_ceiling + o.unopened + o.dropped + o.added))
-            for o in run.outcomes
+            abs(o.items - (_unrealized_rows(o) + o.added)) for o in run.outcomes
         ),
         "off_aim_rows_misreported": abs(
             sum(o.off_aim for o in run.outcomes) - sum(len(page.off_aim) for page in answered)

@@ -32,6 +32,7 @@ from integral.robots import Robots
 from integral.sourcing import (
     FETCH_LOG,
     OFFER_CEILING,
+    BoardOutcome,
     Fetch,
     Response,
     Run,
@@ -722,6 +723,50 @@ def test_a_stale_board_with_rows_is_still_named_in_unsteered(
     assert "returned their whole list: flood_en" in run.summary(), run.summary()
 
 
+def test_a_stale_board_whose_rows_were_all_re_sighted_is_still_named_in_unsteered(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 6, F1(a): the fixture above only ever tests `added > 0`, so the
+    stale limb's fix (`_answered` gating on `added`, not `items`) could not
+    be told apart from the narrower one this needs. A page that parsed real
+    rows but re-sighted every one of them (`items > 0`, `added == 0` — a
+    board whose whole page is already on disk from an earlier run) used to
+    read exactly like a connector that parsed nothing: excluded from
+    `unsteered`, with the only line about it reading "its emptiness proves
+    nothing" over rows that were, in fact, parsed. `run.unaccounted_for`
+    (the mirror `measure_flood` checks) must agree that nothing was lost.
+
+    Gating on `items` instead of `added` closes it: staleness is about
+    whether the connector parsed anything at all, never about whether what
+    it parsed survived dedup — the stance `employer_boards`'s own docstring
+    already took for the identical `added == 0` signal (#462 rounds 2 and
+    3, G3/H1-H2); `_answered` used to disagree with it.
+    """
+    from integral.sourcing import _one_board
+
+    pages = flood_board(tmp_path / "connectors")
+    package = next(p for p in installed_packages(tmp_path / "connectors") if p.name == "flood_en")
+    outcome = _one_board(
+        store,
+        package,
+        None,
+        fetch=lambda request: Response(200, pages[request.url].html),
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=1,
+        robots=_robots(),
+        phrases=("python engineer",),
+    )
+    assert outcome.items > 0, outcome
+    resighted = replace(outcome, stale=True, added=0)
+    run = Run(outcomes=[resighted])
+    assert run.untrusted == ["flood_en"], run.summary()
+    assert run.unsteered == ["flood_en"], run.summary()
+    assert run.unaccounted_for == [], run.summary()
+    assert "returned their whole list: flood_en" in run.summary(), run.summary()
+    assert "STALE   flood_en: its emptiness proves nothing" in run.summary(), run.summary()
+
+
 def test_a_board_refused_after_rows_is_still_named_in_unsteered(
     store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1033,6 +1078,89 @@ def test_the_flood_gate_measures_and_reads_clean() -> None:
 
 
 # ---------------------------------------------------------------------------
+# T172/T167 — `Run.employer_boards`'s partition, and the fields it is derived from
+
+
+def test_the_unrealized_row_fields_are_derived_not_hand_listed() -> None:
+    """Round 6, F2: `employer_boards` and `measure_flood`'s
+    `rows_not_accounted_for` each hand-listed the same four `BoardOutcome`
+    field names, separately. `_fields_outside` is the idiom
+    `tests/test_review_reader.py`'s `_twin_varying_every_non_input_field`
+    already uses for the identical shape (its `_INPUT_FIELDS`): a field is
+    included by default, so a bucket added to the dataclass later needs no
+    matching addition at either call site — only a name in the exclusion set
+    would leave one out, and this proves the function reads
+    `dataclasses.fields`, not a private, hand-typed tuple of its own."""
+    from dataclasses import dataclass as make_dataclass
+    from dataclasses import fields as dc_fields
+
+    from integral.sourcing import _fields_outside
+
+    @make_dataclass
+    class Sample:
+        kept_out: int = 0
+        also_kept_out: int = 0
+        picked_up: int = 0
+        picked_up_too: int = 0
+
+    result = _fields_outside(Sample, frozenset({"kept_out", "also_kept_out"}))
+    assert result == ("picked_up", "picked_up_too")
+    assert set(result) == {f.name for f in dc_fields(Sample)} - {"kept_out", "also_kept_out"}
+
+
+def test_the_board_outcome_unrealized_row_fields_are_todays_four_terms() -> None:
+    """Pins what `_UNREALIZED_ROW_FIELDS` resolves to today — `dropped`,
+    `off_aim`, `unopened`, `over_ceiling` — so a change to `BoardOutcome` or
+    to the exclusion set it is derived against is visible here, not only in
+    `employer_boards`'s or `rows_not_accounted_for`'s behaviour."""
+    from integral.sourcing import _UNREALIZED_ROW_FIELDS
+
+    assert set(_UNREALIZED_ROW_FIELDS) == {"dropped", "off_aim", "unopened", "over_ceiling"}
+
+
+@pytest.mark.parametrize("bucket", ["dropped", "off_aim", "unopened", "over_ceiling"])
+def test_employer_boards_excludes_a_board_whose_rows_are_all_one_bucket(bucket: str) -> None:
+    """Round 6, F2: T172's partition (`items > dropped+off_aim+unopened+
+    over_ceiling`) hand-listed four terms, and dropping either `unopened` or
+    `over_ceiling` from it left every test and every evidence key unmoved —
+    nothing exercised an employer board whose rows were consumed by exactly
+    one of those two buckets alone (the `ATTRIBUTION_BOARDS` matrix that
+    incidentally pins `off_aim` and `dropped` has no construction that
+    produces either). Each of the four buckets now gets its own board, in
+    isolation, so dropping any one of them — or a fifth bucket landing
+    outside the derived set — is caught here directly."""
+    outcome = replace(
+        BoardOutcome(
+            connector="acme_en",
+            url=None,
+            steered=False,
+            source_kind="employer",
+            items=10,
+        ),
+        **{bucket: 10},
+    )
+    run = Run(outcomes=[outcome])
+    assert run.employer_boards == [], (bucket, run.summary())
+
+
+def test_employer_boards_includes_a_board_none_of_whose_rows_are_fully_accounted_for() -> None:
+    """The control for the parametrized exclusion above: a board whose rows
+    are not entirely consumed by the four buckets still names as an
+    employer board — the subtraction excludes boards, it does not exclude
+    all of them."""
+    outcome = BoardOutcome(
+        connector="acme_en",
+        url=None,
+        steered=False,
+        source_kind="employer",
+        items=10,
+        added=10,
+    )
+    run = Run(outcomes=[outcome])
+    assert run.employer_boards == ["acme_en"], run.summary()
+
+
+# ---------------------------------------------------------------------------
 # T130 — the advert's own page
 
 
@@ -1318,6 +1446,11 @@ def test_a_host_that_refused_is_not_asked_again_by_the_next_phrase(
     asked_boards = [o for o in run.outcomes if o.skipped is None]
     assert asked_boards, run.summary()
     assert all(o.refused and "429" in o.refused for o in asked_boards), run.summary()
+    # T174's own task file left this the obligation of "whichever PR lands
+    # second" (#458). Nothing reached disk from any board, so nothing was
+    # searched — a phrase whose every board was refused before answering
+    # must not be listed as one this run actually asked.
+    assert run.searched == [], run.summary()
 
 
 def test_a_refused_advert_page_stops_the_next_phrases_list_too(store: ProfileStore) -> None:
@@ -1398,6 +1531,54 @@ def test_a_refused_board_is_not_listed_as_reached(store: ProfileStore) -> None:
     trabajos = next(o for o in advert.outcomes if o.connector == "trabajos_es")
     assert trabajos.refused and trabajos.added > 0, trabajos
     assert "trabajos_es" in advert.steered, advert.summary()
+
+
+def test_unaccounted_for_agrees_with_a_refused_boards_own_disposition(
+    store: ProfileStore,
+) -> None:
+    """Round 6, F1(b): the mirror `measure_flood` checks used to be built
+    from `{o.connector for o in outcomes if o.items or o.added}`, unscoped
+    by `reached_the_board`. On this exact fixture (`getmanfred_es`, real ES
+    captures, `items == 3, added == 0`, refused before any offer was ever
+    built) that population flagged the board as "read rows without being
+    reported asked" in the very run `test_a_refused_board_is_not_listed_
+    as_reached` (above) asserts, forty lines apart, must not list it as
+    reached — one test file asserting an invariant and its own negation.
+
+    Scoping the population by `reached_the_board` — the same predicate
+    `_answered` already requires before naming a board anywhere — makes
+    `Run.unaccounted_for` and `steered`/`unsteered`'s own exclusion agree.
+    """
+    advert = _run(store, _answer_with_detail(detail_status=429))
+    getmanfred = next(o for o in advert.outcomes if o.connector == "getmanfred_es")
+    assert getmanfred.items > 0 and not getmanfred.added and getmanfred.refused, getmanfred
+    assert "getmanfred_es" not in advert.steered + advert.unsteered, advert.summary()
+    assert advert.unaccounted_for == [], advert.summary()
+
+
+def test_the_flood_gate_catches_a_reinstated_refused_or_stale_exclusion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 5's own report closed with: "the `boards_that_read_rows_
+    without_being_reported_asked` component and `_answered` must agree …
+    otherwise the next round re-discovers this through the gate." That is
+    what round 6 found: the shipped fix generalized only for the one
+    429-with-`added>0` case actually re-run, and reinstating round 4's own
+    blanket exclusion (`not (refused or stale)`, unconditional) left
+    `flood_violations` at a clean 0 — the gate could not catch its own named
+    defect. `_FLOOD_FAILING` (deluge, page two) now answers with a real
+    refusal rather than a transport error, so deluge — which already has
+    page-one's offers on disk — is exactly F1's shape, and this mutation
+    must move the gate rather than pass silently.
+    """
+
+    def blanket(outcome: Any) -> bool:
+        return outcome.reached_the_board and not (outcome.refused or outcome.stale)
+
+    monkeypatch.setattr(Run, "_answered", staticmethod(blanket))
+    measured = measure_flood()
+    assert measured["flood_violations"] > 0, measured
+    assert measured["boards_that_read_rows_without_being_reported_asked"] > 0, measured
 
 
 def test_the_advert_page_gets_its_own_clients_headers(store: ProfileStore) -> None:
