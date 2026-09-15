@@ -1137,7 +1137,7 @@ def test_employer_boards_excludes_a_board_whose_rows_are_all_one_bucket(bucket: 
             source_kind="employer",
             items=10,
         ),
-        **{bucket: 10},
+        **{bucket: 10},  # type: ignore[arg-type]
     )
     run = Run(outcomes=[outcome])
     assert run.employer_boards == [], (bucket, run.summary())

@@ -501,9 +501,7 @@ class Run:
         a fifth bucket a future task adds joins both call sites the moment it
         is declared.
         """
-        return self._boards(
-            lambda o: (o.source_kind == "employer" and o.items > _unrealized_rows(o))
-        )
+        return self._boards(lambda o: o.source_kind == "employer" and o.items > _unrealized_rows(o))
 
     @property
     def unaccounted_for(self) -> list[str]:
