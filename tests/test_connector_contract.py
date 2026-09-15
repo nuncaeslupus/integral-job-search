@@ -634,10 +634,10 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
         check=True,
     ).stdout.decode("utf-8")
     names = [name for name in listed.split("\0") if name and (repo / name).is_file()]
-    assert len(names) > 1000, f"git listed {len(names)} files — the scan did not run"
     v4 = re.compile(r"(?<![\w.])(\d{1,3})([.-])(\d{1,3})\2(\d{1,3})\2(\d{1,3})(?![\w-])")
     v6 = re.compile(r"(?<![\w:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])")
     found: dict[tuple[str, str], None] = {}
+    scanned = 0
     for name in names:
         try:
             text = (repo / name).read_bytes().decode("latin-1")
@@ -649,6 +649,7 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
             # vanished mid-run is not a file the repository ships. Narrow on
             # purpose — a permission error is not this race and still raises.
             continue
+        scanned += 1
         for match in v4.finditer(text):
             if text[max(0, match.start() - 2) : match.start()].rstrip().endswith("§"):
                 continue  # `§2.3.1.3`: an RFC section number, however many are cited
@@ -664,6 +665,12 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
                 continue
             if address.is_global:
                 found[(name, str(address))] = None
+    # The floor counts what was read, not what git listed. Those were the same
+    # number until the `continue` above existed; now a defect that made every
+    # read raise would leave the listing at 3800-odd and the scan at zero.
+    assert scanned > 1000, (
+        f"git listed {len(names)} files and {scanned} were read — the scan did not run"
+    )
     return found
 
 
@@ -730,6 +737,22 @@ def test_the_scan_survives_a_file_that_vanishes_between_listing_and_reading(
     assert vanished, "nothing was read, so the vanishing was never exercised"
     sentinel = next(iter(_NOT_ADDRESSES))
     assert sentinel in found, f"the scan stopped at {vanished[0]} instead of continuing"
+
+
+def test_the_scan_still_raises_on_a_file_it_may_not_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The guard above catches `FileNotFoundError` and not `OSError`, and a
+    narrowness that lives in a comment is a narrowness nobody checks. Widening
+    it is the reflex the first time this raises in CI — and a scan whose whole
+    job is to refuse committed IP literals, skipping the files it could not
+    read, is fail-open in a gate."""
+
+    def refuse(self: Path) -> bytes:
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(Path, "read_bytes", refuse)
+
+    with pytest.raises(PermissionError):
+        _quads_in_every_file()
 
 
 def test_a_probe_that_is_a_regular_file_is_rejected(package: Path) -> None:

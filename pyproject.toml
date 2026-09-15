@@ -116,10 +116,22 @@ exclude = [
 ]
 
 [tool.pytest.ini_options]
-# No `-n auto` here: addopts applies to every invocation in the repo, including
-# the single-file gate calls most task files and CONTRIBUTING.md use
-# (`pytest tests/test_x.py`) — under `--dist loadfile` a whole file lands on one
-# worker anyway, so the other eleven start up and do nothing but add ~1.5-2.4s.
-# `make test` passes the parallel flags explicitly instead, see Makefile.
+# `--dist loadfile` and deliberately not `-n auto`. addopts applies to every
+# invocation in the repo, including the single-file gate calls most task files
+# and CONTRIBUTING.md use (`pytest tests/test_x.py`), and `-n auto` would make
+# each of those start twelve workers to run one file — so `-n` stays in the
+# Makefile. `--dist` alone is inert without workers, which is what makes this
+# line free: measured on this tree, a single-file run is byte-for-byte what it
+# was (25 tests, 18.3s, no worker spawned), and a gate naming a file that does
+# not exist still gets `ERROR: file or directory not found` at exit 4 rather
+# than the weaker `no tests ran`.
+#
+# What it buys is the one thing a recipe cannot pin. `make test`'s parallelism
+# is only safe file-by-file — tests/test_repo_gate.py is the sole place in the
+# suite that writes into the live working tree — and nothing in this repository
+# reads a Makefile recipe body, so the flag written there was unenforced by
+# construction. Here it holds for every `-n` run, including one somebody types
+# by hand.
+addopts = "--dist loadfile"
 testpaths = ["tests"]
 pythonpath = ["src"]
